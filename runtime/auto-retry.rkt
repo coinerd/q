@@ -30,9 +30,9 @@
                                             #:max-delay-ms exact-nonnegative-integer?
                                             #:on-retry (or/c procedure? #f)
                                             #:per-type-budgets hash?)
-                             any/c)]
+                             retry-policy?)]
                        [with-retry-policy
-                        (->* (any/c procedure?) (#:on-retry (or/c procedure? #f)) any/c)]
+                        (->* (retry-policy? procedure?) (#:on-retry (or/c procedure? #f)) any/c)]
                        [make-default-retry-policy
                         (->* ()
                              (#:max-retries exact-nonnegative-integer?
@@ -40,7 +40,7 @@
                                             #:rate-limit-base-delay-ms exact-nonnegative-integer?
                                             #:max-delay-ms exact-nonnegative-integer?
                                             #:per-type-budgets hash?)
-                             any/c)])
+                             retry-policy?)])
          ;; Configuration
          default-max-retries
          default-base-delay-ms

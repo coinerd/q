@@ -85,8 +85,8 @@
                               string? ; session-id
                               (or/c path-string? path?) ; log-path
                               (or/c cancellation-token? #f) ; token
-                              any/c) ; config
-                             (#:permission-config any/c)
+                              session-config?) ; config
+                             (#:permission-config (or/c permission-config? #f))
                              (listof message?))]))
 ;; Pure helpers (W2 #4192)
 (provide classify-tool-results
