@@ -106,7 +106,19 @@
            (->* (gsd-session-ctx? symbol?) (#:event (or/c symbol? #f)) (or/c ok-result? err-result?))]
           [gsm-ctx-reset! (-> gsd-session-ctx? (or/c ok-result? err-result?))]
           [gsm-ctx-history (-> gsd-session-ctx? list?)]
-          [gsm-ctx-valid-next-states (-> gsd-session-ctx? (listof symbol?))]))
+          [gsm-ctx-valid-next-states (-> gsd-session-ctx? (listof symbol?))]
+          ;; Context-aware API extended (v0.57.1 W7)
+          [gsm-ctx-transition-to! (-> gsd-session-ctx? symbol? (or/c ok-result? err-result?))]
+          [gsm-ctx-snapshot (-> gsd-session-ctx? gsd-runtime-state?)]
+          [gsm-ctx-wave-executor (-> gsd-session-ctx? any/c)]
+          [gsm-ctx-set-wave-executor! (-> gsd-session-ctx? any/c void?)]
+          [gsm-ctx-total-waves (-> gsd-session-ctx? exact-nonnegative-integer?)]
+          [gsm-ctx-set-total-waves! (-> gsd-session-ctx? exact-nonnegative-integer? void?)]
+          [gsm-ctx-current-wave (-> gsd-session-ctx? exact-nonnegative-integer?)]
+          [gsm-ctx-set-current-wave! (-> gsd-session-ctx? exact-nonnegative-integer? void?)]
+          [gsm-ctx-completed-waves (-> gsd-session-ctx? set?)]
+          [gsm-ctx-mark-wave-complete! (-> gsd-session-ctx? exact-nonnegative-integer? void?)]
+          [gsm-ctx-state-restore! (-> gsd-session-ctx? gsd-runtime-state? void?)]))
 
 ;; ============================================================
 ;; States and transitions
@@ -459,3 +471,54 @@
      (set-box! (gsd-session-ctx-history-box ctx)
                (cons (list old 'idle (current-seconds)) (unbox (gsd-session-ctx-history-box ctx))))
      (ok-result old 'idle))))
+
+;; Auto-routing multi-step transition (ctx-aware)
+(define (gsm-ctx-transition-to! ctx target)
+  (define current (gsm-ctx-current ctx))
+  (cond
+    [(eq? current target) (ok-result current target)]
+    [else
+     (define path (find-transition-path current target))
+     (if path
+         (for/fold ([result (ok-result current current)]) ([step path])
+           (gsm-ctx-transition! ctx step))
+         (gsm-ctx-transition! ctx target))]))
+
+;; Snapshot (ctx-aware)
+(define (gsm-ctx-snapshot ctx)
+  (gsd-ctx-state-snapshot ctx))
+
+;; Wave operations (ctx-aware)
+(define (gsm-ctx-wave-executor ctx)
+  (gsd-runtime-state-wave-executor (gsd-ctx-state-snapshot ctx)))
+
+(define (gsm-ctx-set-wave-executor! ctx exec)
+  (gsd-ctx-state-update! ctx
+                         (lambda (state) (struct-copy gsd-runtime-state state [wave-executor exec]))))
+
+(define (gsm-ctx-total-waves ctx)
+  (gsd-runtime-state-total-waves (gsd-ctx-state-snapshot ctx)))
+
+(define (gsm-ctx-set-total-waves! ctx n)
+  (gsd-ctx-state-update! ctx (lambda (state) (struct-copy gsd-runtime-state state [total-waves n]))))
+
+(define (gsm-ctx-current-wave ctx)
+  (gsd-runtime-state-current-wave (gsd-ctx-state-snapshot ctx)))
+
+(define (gsm-ctx-set-current-wave! ctx n)
+  (gsd-ctx-state-update! ctx (lambda (state) (struct-copy gsd-runtime-state state [current-wave n]))))
+
+(define (gsm-ctx-completed-waves ctx)
+  (gsd-runtime-state-completed-waves (gsd-ctx-state-snapshot ctx)))
+
+(define (gsm-ctx-mark-wave-complete! ctx idx)
+  (gsd-ctx-state-update! ctx
+                         (lambda (state)
+                           (struct-copy gsd-runtime-state
+                                        state
+                                        [completed-waves
+                                         (set-add (gsd-runtime-state-completed-waves state) idx)]))))
+
+;; State restore (ctx-aware)
+(define (gsm-ctx-state-restore! ctx snapshot)
+  (gsd-ctx-set-state! ctx snapshot))
