@@ -326,3 +326,56 @@
   (define surfaces (runner-ref 'repo-surface-files))
   (check-not-false (member "info.rkt" surfaces))
   (check-not-false (member "README.md" surfaces)))
+
+;; ---------------------------------------------------------------------------
+;; W0: False-green sentinel tests
+;; ---------------------------------------------------------------------------
+
+(test-case "file-has-rackunit-tests?: detects test-case without run-tests"
+  (define has-tests? (runner-ref 'file-has-rackunit-tests?))
+  (define tmp (make-temporary-file "false-green-test-~a.rkt"))
+  (call-with-output-file tmp
+                         #:exists 'truncate/replace
+                         (lambda (out)
+                           (displayln "#lang racket" out)
+                           (displayln "(require rackunit)" out)
+                           (displayln "(test-case \"example\" (check-equal? 1 1))" out)))
+  (check-true (has-tests? tmp))
+  (delete-file tmp))
+
+(test-case "file-has-rackunit-tests?: detects bare check- forms without run-tests"
+  (define has-tests? (runner-ref 'file-has-rackunit-tests?))
+  (define tmp (make-temporary-file "false-green-check-~a.rkt"))
+  (call-with-output-file tmp
+                         #:exists 'truncate/replace
+                         (lambda (out)
+                           (displayln "#lang racket" out)
+                           (displayln "(require rackunit)" out)
+                           (displayln "(check-equal? (+ 1 1) 2)" out)
+                           (displayln "(check-true #t)" out)))
+  (check-true (has-tests? tmp))
+  (delete-file tmp))
+
+(test-case "file-has-rackunit-tests?: returns #f for file with run-tests"
+  (define has-tests? (runner-ref 'file-has-rackunit-tests?))
+  (define tmp (make-temporary-file "false-green-hassetup-~a.rkt"))
+  (call-with-output-file tmp
+                         #:exists 'truncate/replace
+                         (lambda (out)
+                           (displayln "#lang racket" out)
+                           (displayln "(require rackunit rackunit/text-ui)" out)
+                           (displayln "(test-case \"example\" (check-equal? 1 1))" out)
+                           (displayln "(run-tests tests)" out)))
+  (check-false (has-tests? tmp))
+  (delete-file tmp))
+
+(test-case "file-has-rackunit-tests?: returns #f for file with no tests"
+  (define has-tests? (runner-ref 'file-has-rackunit-tests?))
+  (define tmp (make-temporary-file "false-green-notest-~a.rkt"))
+  (call-with-output-file tmp
+                         #:exists 'truncate/replace
+                         (lambda (out)
+                           (displayln "#lang racket/base" out)
+                           (displayln "(displayln \"hello\")" out)))
+  (check-false (has-tests? tmp))
+  (delete-file tmp))
