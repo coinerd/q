@@ -10,11 +10,11 @@
 
 ;; Layer definitions with max boundary exceptions
 ((layers (runtime
-          (max-exceptions . 10)
+          (max-exceptions . 16)
           (forbidden-from . (llm tools extensions))
           (rationale
            .
-           "Runtime should not import upward into tools/extensions except via turn-orchestrator.rkt"))
+           "Runtime should not import upward into tools/extensions except via documented exceptions (includes iteration/ submodules and layer-adapters)"))
          (tui (max-exceptions . 0)
               (forbidden-from . (llm tools))
               (allowed-from . (runtime agent extensions util)))
@@ -29,6 +29,16 @@
  (known-exceptions
   (runtime . ((agent-session.rkt . "extension registry + DI parameter setup")
               (iteration/loop-state.rkt . "typed require from extensions/api.rkt for opaque ExtRegistry")
+              (iteration/loop-config.rkt
+               . "typed require of tool-registry? and extension-registry? for loop config")
+              (iteration/loop-phases.rkt
+               . "typed require of extension-registry? for phase dispatch")
+              (iteration/main-loop.rkt
+               . "typed require of tool-registry? and extension-registry? for main loop")
+              (iteration/step-interpreter.rkt
+               . "typed require of permission-config? for step-level permission checks")
+              (layer-adapters.rkt
+               . "explicit adapter facade routing tool/extension deps behind contained boundary")
               (session-lifecycle.rkt
                . "injection-event-topic import (extracted from agent-session/iteration)")
               (runtime-helpers.rkt . "hook dispatch for session events")

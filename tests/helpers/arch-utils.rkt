@@ -21,7 +21,8 @@
          line-count
          char-count
          count-provides
-         q-dir)
+         q-dir
+         rkt-files-in-recursive)
 
 ;; ============================================================
 ;; Read-based S-expression require parser
@@ -91,6 +92,18 @@
   (if (directory-exists? (build-path q-dir dir))
       (filter (λ (f) (regexp-match? #rx"\\.rkt$" (path->string f)))
               (directory-list (build-path q-dir dir) #:build? #t))
+      '()))
+
+;; Recursive variant — includes files in subdirectories.
+(define (rkt-files-in-recursive dir)
+  (define base (build-path q-dir dir))
+  (if (directory-exists? base)
+      (let loop ([path base])
+        (append* (for/list ([f (in-list (directory-list path #:build? #t))])
+                   (cond
+                     [(directory-exists? f) (loop f)]
+                     [(regexp-match? #rx"\\.rkt$" (path->string f)) (list f)]
+                     [else '()]))))
       '()))
 
 (define (line-count filepath)
