@@ -12,10 +12,13 @@
          "../llm/provider.rkt"
          "../llm/model.rkt")
 
-(provide (contract-out [make-model-request (-> any/c any/c any/c any/c)]
-                       [provider-send (-> any/c any/c any/c)]
-                       [model-response-content (-> any/c any/c)]
-                       [model-response-stop-reason (-> any/c any/c)]
-                       [make-model-response (-> any/c any/c any/c any/c any/c)]
+(provide (contract-out [make-model-request (-> list? list? hash? model-request?)])
+         model-request?
+         (contract-out [provider-send (-> provider? model-request? model-response?)]
+                       [model-response-content (-> model-response? list?)]
+                       [model-response-stop-reason (-> model-response? (or/c string? #f))]
+                       [make-model-response (-> list? hash? string? (or/c string? #f) model-response?)]
                        [make-mock-provider
-                        (->* (any/c) (#:name string? #:stream-chunks any/c) any/c)]))
+                        (->* (model-response?)
+                             (#:name string? #:stream-chunks (or/c list? #f))
+                             provider?)]))
