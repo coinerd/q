@@ -60,7 +60,11 @@
          bytes->string*
          clean-stale-bytecode!
          file-has-rackunit-tests?
-         parse-args)
+         parse-args
+         ;; Shard classifiers (W14)
+         arch-file?
+         runtime-file?
+         extensions-file?)
 
 ;; ---------------------------------------------------------------------------
 ;; Struct: test-file-result
@@ -171,6 +175,30 @@
         (let ([parent (simplify-path (build-path orig ".."))])
           (if (directory-exists? (build-path parent "tests")) parent orig)))))
 
+(define (arch-file? f)
+  (or (string-contains? f "arch-")
+      (string-contains? f "boundary")
+      (string-contains? f "fitness")
+      (string-contains? f "hotspot")
+      (file-has-suite-tag? f "arch")))
+
+(define (runtime-file? f)
+  (or (string-contains? f "runtime")
+      (string-contains? f "session")
+      (string-contains? f "compaction")
+      (string-contains? f "iteration")
+      (string-contains? f "turn-")
+      (string-contains? f "tool-coord")
+      (file-has-suite-tag? f "runtime")))
+
+(define (extensions-file? f)
+  (or (string-contains? f "extensions/")
+      (string-contains? f "gsd-")
+      (string-contains? f "define-extension")
+      (string-contains? f "wave-executor")
+      (string-contains? f "hook-")
+      (file-has-suite-tag? f "extensions")))
+
 (define (collect-test-files suite #:extra-files [extra-files #f])
   (cond
     [(pair? extra-files) extra-files]
@@ -189,6 +217,9 @@
        [(tui) (filter tui-file? all-files)]
        [(smoke) (filter (lambda (f) (not (smoke-excluded? f))) all-files)]
        [(security) (filter security-file? all-files)]
+       [(arch) (filter arch-file? all-files)]
+       [(runtime) (filter runtime-file? all-files)]
+       [(extensions) (filter extensions-file? all-files)]
        [else '("tests/")])]))
 
 ;; ---------------------------------------------------------------------------
@@ -543,7 +574,8 @@
   (displayln "  --jobs N          Number of parallel jobs (default: processor-count)")
   (displayln "  --sequential      Run tests sequentially (jobs=1)")
   (displayln "  --timeout SECS    Per-file timeout in seconds")
-  (displayln "  --suite <name>    Run test suite: all (default), fast, slow, tui, smoke")
+  (displayln
+   "  --suite <name>    Run test suite: all (default), fast, slow, tui, smoke, security, arch, runtime, extensions")
   (displayln "  --strict          Enable strict zero-test detection (default: on)")
   (displayln "  --repeat N        Run suite N times (exit 1 if any run fails)")
   (displayln "  --help            Show this help message")
