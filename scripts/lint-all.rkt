@@ -45,7 +45,8 @@
         (list "release-readiness" "scripts/lint-release-readiness.rkt" '() #f)
         (list "doc-freshness" "scripts/lint-doc-freshness.rkt" '() #f)
         (list "widened-ledger" "scripts/lint-widened-ledger.rkt" '() #t)
-        (list "contract-changes" "scripts/lint-contract-changes.rkt" '("--diff" "HEAD") #t)))
+        (list "contract-changes" "scripts/lint-contract-changes.rkt" '("--diff" "HEAD") #t)
+        (list "hotspot" "scripts/hotspot-report.rkt" '("--ci") #t)))
 
 ;; ── Helpers ──
 
