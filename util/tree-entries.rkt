@@ -9,20 +9,20 @@
 (require racket/contract
          "message.rkt")
 
-(provide (contract-out [make-branch-entry (-> string? string? string? any/c)]
+(provide (contract-out [make-branch-entry (-> string? string? string? message?)]
                        [branch-entry? (-> any/c boolean?)]
-                       [branch-entry-parent-entry-id (-> any/c (or/c string? #f))]
-                       [branch-entry-name (-> any/c (or/c string? #f))]
-                       [make-tree-navigation-entry (-> string? string? string? any/c)]
+                       [branch-entry-parent-entry-id (-> message? (or/c string? #f))]
+                       [branch-entry-name (-> message? (or/c string? #f))]
+                       [make-tree-navigation-entry (-> string? string? string? message?)]
                        [tree-navigation-entry? (-> any/c boolean?)]
-                       [tree-navigation-entry-target-entry-id (-> any/c (or/c string? #f))]
-                       [tree-navigation-entry-from-entry-id (-> any/c (or/c string? #f))]
+                       [tree-navigation-entry-target-entry-id (-> message? (or/c string? #f))]
+                       [tree-navigation-entry-from-entry-id (-> message? (or/c string? #f))]
                        [make-branch-summary-entry
-                        (-> string? (or/c string? #f) string? any/c exact-nonnegative-integer? any/c)]
-                       [branch-summary-entry-summary (-> any/c (or/c string? #f))]
-                       [branch-summary-entry-entry-range (-> any/c any/c)]
+                        (-> string? (or/c string? #f) string? any/c exact-nonnegative-integer? message?)]
+                       [branch-summary-entry-summary (-> message? (or/c string? #f))]
+                       [branch-summary-entry-entry-range (-> message? any/c)]
                        [branch-summary-entry-token-count
-                        (-> any/c (or/c exact-nonnegative-integer? #f))]
+                        (-> message? (or/c exact-nonnegative-integer? #f))]
                        [tree-entry? (-> any/c boolean?)]))
 
 ;; ============================================================
