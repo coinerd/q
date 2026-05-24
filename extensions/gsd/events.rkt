@@ -9,7 +9,12 @@
 (require racket/match
          (only-in "../../util/errors.rkt" raise-extension-error)
          (only-in "../../agent/event-structs/base.rkt" typed-event?)
-         (only-in "../../agent/event-emitter.rkt" event-struct->hasheq))
+         (only-in "../../agent/event-emitter.rkt" event-struct->hasheq)
+         (only-in "session-state.rkt"
+                  gsd-session-ctx?
+                  gsd-session-ctx-event-bus-box
+                  gsd-default-ctx
+                  gsd-ctx-event-bus))
 
 (provide gsd-event-names
          emit-gsd-event!
@@ -19,7 +24,9 @@
          set-gsd-event-bus!
          ;; For testing: event collector
          make-event-collector
-         collector-events)
+         collector-events
+         ctx-emit-gsd-event!
+         resolve-gsd-event-bus)
 
 ;; ============================================================
 ;; Event taxonomy
@@ -66,15 +73,61 @@
   (define bus (unbox gsd-event-bus-box))
   (define wrapped
     (if (typed-event? data)
-        (hasheq 'event event-name
-                'correlation-id (current-gsd-correlation-id)
-                'timestamp (current-inexact-milliseconds)
-                'data (event-struct->hasheq data)
-                '__typed #t)
-        (hasheq 'event event-name
-                'correlation-id (current-gsd-correlation-id)
-                'timestamp (current-inexact-milliseconds)
-                'data data)))
+        (hasheq 'event
+                event-name
+                'correlation-id
+                (current-gsd-correlation-id)
+                'timestamp
+                (current-inexact-milliseconds)
+                'data
+                (event-struct->hasheq data)
+                '__typed
+                #t)
+        (hasheq 'event
+                event-name
+                'correlation-id
+                (current-gsd-correlation-id)
+                'timestamp
+                (current-inexact-milliseconds)
+                'data
+                data)))
+  (bus event-name wrapped))
+
+;; ============================================================
+;; Context-aware event emission (v0.57.1 W5)
+;; ============================================================
+
+;; Resolve event bus: prefer ctx-specific bus, fallback to global.
+(define (resolve-gsd-event-bus ctx)
+  (define ctx-bus (and ctx (gsd-ctx-event-bus ctx)))
+  (or ctx-bus (unbox gsd-event-bus-box)))
+
+;; Emit to a specific session context's event bus.
+;; Falls back to global gsd-event-bus-box if ctx has no bus set.
+(define (ctx-emit-gsd-event! ctx event-name data)
+  (unless (memq event-name gsd-event-names)
+    (raise-extension-error (format "Unknown event: ~a" event-name) 'gsd 'emit-event))
+  (define bus (resolve-gsd-event-bus ctx))
+  (define wrapped
+    (if (typed-event? data)
+        (hasheq 'event
+                event-name
+                'correlation-id
+                (current-gsd-correlation-id)
+                'timestamp
+                (current-inexact-milliseconds)
+                'data
+                (event-struct->hasheq data)
+                '__typed
+                #t)
+        (hasheq 'event
+                event-name
+                'correlation-id
+                (current-gsd-correlation-id)
+                'timestamp
+                (current-inexact-milliseconds)
+                'data
+                data)))
   (bus event-name wrapped))
 
 ;; ============================================================
