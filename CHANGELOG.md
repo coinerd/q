@@ -1,6 +1,50 @@
 # Changelog
 
-## v0.57.0 — 2026-05-24
+## v0.57.1 — 2026-05-24
+
+### Architecture Audit Metrics Remediation Series (v0.57.0–v0.57.5)
+
+**v0.57.0 — Metric Baseline + Characterization (W0–W5)**
+- event bus unification: two separate event bus mechanisms unified via `ctx-emit-gsd-event!`
+- GSD session isolation: `current-gsd-ctx` Racket parameter, nested semaphore deadlock fix
+- extension context wiring: `turn-orchestrator.rkt` passes `current-gsd-ctx` to `make-extension-ctx`
+- fitness gate: static scan with allowed-module baselines for global GSD mutations
+
+**v0.57.1 — GSD Session Isolation (W5–W9)**
+- 6 waves completing event bus unification, GSD session isolation, extension context wiring
+
+**v0.57.2 — Runtime Boundaries + Resilience (W10–W14)**
+- dependency policy path fix for subdirectory entries
+- arch-fitness threshold calibration
+- contract precision: `with-retry-policy` return type kept as `any/c`
+- CI topology: arch (10), runtime (91), extensions (56) shard suites
+
+**v0.57.3 — TUI Hotspot Decomposition (W15–W20)**
+- extracted `tui-ctx` struct to `tui/context.rkt` (91 lines)
+- extracted selection/mouse/tree-overlay to `tui/selection.rkt` (210 lines)
+- extracted `handle-user-submit!` to `tui/submit-handler.rkt` (95 lines), fixed contract lie
+- extracted `process-tui-message!` to `tui/message-dispatch.rkt` (63 lines)
+- extracted command handlers to `tui/commands/general.rkt` and `tui/commands/runtime-control.rkt`
+- extracted key dispatch to `tui/keybindings/key-dispatch.rkt` (234 lines)
+- tui-keybindings.rkt: 633 → 190 lines (70% reduction)
+
+**v0.57.4 — Contract Precision + Typed Boundary Pilot (W21–W24)**
+- contract target inventory: 850 any/c across 145 files, 40% struct accessor returns
+- utility/tool contract tightening: model-bridge (19→4), tree-entries (15→6), scheduler-strategy (15→13), loop-result (7→2)
+- migrated `util/loop-result.rkt` to Typed Racket per ADR 0014
+- F2 trend report: 882 → 812 any/c (-7.9% net reduction)
+
+**v0.57.5 — Architecture Fitness Hardening + Release Confidence (W25–W28)**
+- boundary exception blocking gate: owner + revisit-by metadata required for all exceptions
+- hotspot budget policy: block-threshold 20000, risk notes required for high-scoring files
+- documentation sync: architecture overview updated for TUI decomposition, contract metrics
+- series retrospective and release gate
+
+**Metrics Summary**
+- any/c: 882 → 812 (-7.9%, 143 files)
+- TUI hotspot: 633 → 190 lines (70% reduction in keybindings.rkt)
+- Architecture gate tests: 5 boundary + 6 hotspot = 11 blocking gate tests
+- New modules: 8 TUI decomposition modules, 1 Typed Racket migration
 
 ### Architecture Audit Metrics + Characterization Baseline
 
