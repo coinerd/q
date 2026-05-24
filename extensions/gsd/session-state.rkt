@@ -132,6 +132,10 @@
 
 (define gsd-default-ctx (make-gsd-context))
 
+;; v0.57.1 W7: Active context parameter for ctx-aware handler dispatch.
+;; Defaults to gsd-default-ctx. Tests can parameterize to isolated contexts.
+(define current-gsd-ctx (make-parameter gsd-default-ctx))
+
 ;; H-05: gsd-state-sem removed — collapsed into per-ctx semaphore.
 
 ;; ============================================================
@@ -222,6 +226,7 @@
          gsd-session-ctx-sem
          ;; Global default context (plain)
          gsd-default-ctx
+         current-gsd-ctx
          ;; Functions (contracted)
          (contract-out [make-gsd-context (-> gsd-session-ctx?)]
                        [ctx-read (-> gsd-session-ctx? procedure? any)]
