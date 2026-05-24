@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.57.0 — 2026-05-24
+
+### Architecture Audit Metrics + Characterization Baseline
+
+- added `rkt-files-in-recursive` to `tests/helpers/arch-utils.rkt` — scans runtime subdirectories (21 files previously invisible to flat scan)
+- updated `docs/architecture/dependency-policy.rktd`: documented 5+ subdirectory upward imports, bumped `max-exceptions` from 10 to 16
+- created `scripts/hotspot-report.rkt`: computes `score = change-frequency × LOC` via git log, supports `--all`, `--ci` (non-blocking), `--json` modes
+- registered hotspot report as non-blocking CI check in `scripts/lint-all.rkt`
+- added 8 GSD session isolation characterization tests documenting `gsd-default-ctx` global singleton leakage
+- added 8 TUI hotspot characterization tests documenting `handle-user-submit!` contract lie (returns thread, claims tui-ctx?)
+- added 8 retry/error classification characterization tests discovering structured 5xx `'server` vs `'server-error` category mismatch bug
+- wrote metric baseline report at `docs/reports/v0.57.0-metric-baseline.md` (882 any/c, top 10 hotspots, 32 new characterization tests)
+
 ## v0.55.10 — 2026-05-23
 
 ### Parallel Test Isolation Fix
