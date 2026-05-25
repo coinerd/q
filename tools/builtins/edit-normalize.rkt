@@ -204,11 +204,31 @@
            (values start score)
            (values best-start best-score)))]))
 
+(define (normalize-text-keep-trailing-nl s opts)
+  (define text (normalize-text s opts))
+  (define last-idx (sub1 (string-length s)))
+  (define ends-with-nl?
+    (and (>= last-idx 0)
+         (or (char=? (string-ref s last-idx) #\newline)
+             (and (>= last-idx 1)
+                  (char=? (string-ref s (sub1 last-idx)) #\return)
+                  (char=? (string-ref s last-idx) #\newline)))))
+  (define lines (string-split s "\n" #:trim? #f))
+  (define has-boundary-blanks?
+    (or (and (> (length lines) 1) (string=? (car lines) ""))
+        (and (> (length lines) 2) (string=? (list-ref lines (- (length lines) 2)) ""))))
+  (if (and ends-with-nl?
+           (not has-boundary-blanks?)
+           (or (zero? (string-length text))
+               (not (char=? (string-ref text (sub1 (string-length text))) #\newline))))
+      (string-append text "\n")
+      text))
+
 (define (fuzzy-find-match content
                           old-text
                           #:threshold (threshold 0.85)
                           #:options (opts default-normalization-options))
-  (define normalized-old/precheck (normalize-text old-text opts))
+  (define normalized-old/precheck (normalize-text-keep-trailing-nl old-text opts))
   (define exact-start
     (and (positive? (string-length normalized-old/precheck)) (substring-index content old-text)))
   (cond

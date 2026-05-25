@@ -246,3 +246,58 @@
                    "prune-old-backups should use string-suffix? instead of string-contains?")
   ;; Cleanup
   (delete-directory/files tmp-dir))
+
+;; ============================================================
+;; Fuzzy edit integration (v0.58.0 W1)
+;; ============================================================
+
+(test-case "tool-edit fuzzy replaces text with trailing whitespace drift"
+  (define tmp (make-temporary-file "q-test-edit-~a.txt"))
+  (display-to-file "alpha  \nbeta" tmp #:exists 'replace)
+  (define result (tool-edit (hasheq 'path tmp 'old-text "alpha\n" 'new-text "gamma\n" 'fuzzy? #t)))
+  (check-false (tool-result-is-error? result) (format "~a" result))
+  (check-equal? (file->string tmp) "gamma\nbeta")
+  (delete-file tmp))
+
+(test-case "tool-edit fuzzy replaces text with CRLF drift"
+  (define tmp (make-temporary-file "q-test-edit-~a.txt"))
+  (display-to-file "alpha\r\nbeta" tmp #:exists 'replace)
+  (define result
+    (tool-edit (hasheq 'path tmp 'old-text "alpha\nbeta" 'new-text "gamma\nbeta" 'fuzzy? #t)))
+  (check-false (tool-result-is-error? result) (format "~a" result))
+  (check-equal? (file->string tmp) "gamma\nbeta")
+  (delete-file tmp))
+
+(test-case "tool-edit fuzzy replaces text with tab-space drift"
+  (define tmp (make-temporary-file "q-test-edit-~a.txt"))
+  (display-to-file "\tfoo" tmp #:exists 'replace)
+  (define result (tool-edit (hasheq 'path tmp 'old-text "  foo" 'new-text "  bar" 'fuzzy? #t)))
+  (check-false (tool-result-is-error? result) (format "~a" result))
+  ;; fuzzy match replaces the normalized-equivalent span with new-text verbatim
+  (check-equal? (file->string tmp) "  bar")
+  (delete-file tmp))
+
+(test-case "tool-edit fuzzy still errors when both exact and fuzzy fail"
+  (define tmp (make-temporary-file "q-test-edit-~a.txt"))
+  (display-to-file "alpha" tmp #:exists 'replace)
+  (define result (tool-edit (hasheq 'path tmp 'old-text "beta" 'new-text "gamma" 'fuzzy? #t)))
+  (check-pred tool-result-is-error? result)
+  (check-true (string-contains? (hash-ref (car (tool-result-content result)) 'text) "not found"))
+  (delete-file tmp))
+
+(test-case "tool-edit fuzzy is off by default"
+  (define tmp (make-temporary-file "q-test-edit-~a.txt"))
+  (display-to-file "alpha  \nbeta" tmp #:exists 'replace)
+  (define result (tool-edit (hasheq 'path tmp 'old-text "alpha\n" 'new-text "gamma\n")))
+  (check-pred tool-result-is-error? result)
+  (check-true (string-contains? (hash-ref (car (tool-result-content result)) 'text) "not found"))
+  (delete-file tmp))
+
+(test-case "tool-edit fuzzy preserves line-count integrity"
+  (define tmp (make-temporary-file "q-test-edit-~a.txt"))
+  (display-to-file "line1\nline2  \nline3" tmp #:exists 'replace)
+  (define result
+    (tool-edit (hasheq 'path tmp 'old-text "line2\n" 'new-text "LINE2A\nLINE2B\n" 'fuzzy? #t)))
+  (check-false (tool-result-is-error? result) (format "~a" result))
+  (check-equal? (file->string tmp) "line1\nLINE2A\nLINE2B\nline3")
+  (delete-file tmp))
