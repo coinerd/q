@@ -174,4 +174,7 @@
        (owner . "runtime"))
       ("scripts/run-tests.rkt"
        (risk . "Parallel test runner with subprocess orchestration, output parsing, and suite management")
-       (owner . "tools"))))))
+       (owner . "tools"))
+      ("sandbox/subprocess.rkt"
+       (risk . "Shell subprocess execution with resource limits, timeout handling, and output capture; security-sensitive boundary")
+       (owner . "hardening"))))))
