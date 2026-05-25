@@ -135,6 +135,59 @@
       (check-false (string-contains? text "\u2191")))
 
     ;; --------------------------------------------------------
+    ;; Context pressure indicator (v0.58.1 W1)
+    ;; --------------------------------------------------------
+    (test-case "context pressure shows percentage when available"
+      (define state
+        (struct-copy ui-state
+                     (initial-ui-state)
+                     [context-pressure-level 'green]
+                     [context-pressure-percent 45.0]))
+      (define result (render-status-bar state 80))
+      (define text (styled-segment-text (first-segment result)))
+      (check-true (string-contains? text "ctx:45%")))
+
+    (test-case "context pressure yellow shows ! marker"
+      (define state
+        (struct-copy ui-state
+                     (initial-ui-state)
+                     [context-pressure-level 'yellow]
+                     [context-pressure-percent 70.0]))
+      (define result (render-status-bar state 80))
+      (define text (styled-segment-text (first-segment result)))
+      (check-true (string-contains? text "ctx:70!%")))
+
+    (test-case "context pressure red shows !! marker"
+      (define state
+        (struct-copy ui-state
+                     (initial-ui-state)
+                     [context-pressure-level 'red]
+                     [context-pressure-percent 90.0]))
+      (define result (render-status-bar state 80))
+      (define text (styled-segment-text (first-segment result)))
+      (check-true (string-contains? text "ctx:90!!%")))
+
+    (test-case "context pressure disabled falls back to token count"
+      (parameterize ([current-show-context-pressure? #f])
+        (define state
+          (struct-copy ui-state
+                       (initial-ui-state)
+                       [context-pressure-level 'green]
+                       [context-pressure-percent 45.0]
+                       [context-tokens 12000]))
+        (define result (render-status-bar state 80))
+        (define text (styled-segment-text (first-segment result)))
+        (check-true (string-contains? text "ctx:1.2K"))
+        (check-false (string-contains? text "%"))))
+
+    (test-case "no pressure data falls back to token count"
+      (define state (struct-copy ui-state (initial-ui-state) [context-tokens 500]))
+      (define result (render-status-bar state 80))
+      (define text (styled-segment-text (first-segment result)))
+      (check-true (string-contains? text "ctx:500"))
+      (check-false (string-contains? text "%")))
+
+    ;; --------------------------------------------------------
     ;; Width fitting (v0.28.17: single segment fills width)
     ;; --------------------------------------------------------
     (test-case "single segment length fits within width"

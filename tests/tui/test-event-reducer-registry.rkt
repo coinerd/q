@@ -94,3 +94,15 @@
   (check-equal? (ui-state-status-message st1) "Compacting...")
   (define st2 (apply-event-to-state st1 (make-test-event "compaction.completed" (hash))))
   (check-false (ui-state-status-message st2)))
+
+(test-case "context.pressure sets pressure level and percent"
+  (define st0 (initial-ui-state))
+  (define st1
+    (apply-event-to-state st0
+                          (make-test-event "context.pressure"
+                                           (hasheq 'level 'yellow 'usage-percent 72.5))))
+  (check-equal? (ui-state-context-pressure-level st1) 'yellow)
+  (check-= (ui-state-context-pressure-percent st1) 72.5 0.01))
+
+(test-case "context.pressure registered"
+  (check-true (event-reducer-registered? "context.pressure")))

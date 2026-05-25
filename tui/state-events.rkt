@@ -376,6 +376,13 @@
   (define path (hash-ref payload 'path "?"))
   (append-entry state (make-entry 'system (format "[archived] ~a" path) (event-time evt) (hash))))
 
+(define (handle-context-pressure state evt)
+  (define payload (event-payload evt))
+  (struct-copy ui-state
+               state
+               [context-pressure-level (hash-ref payload 'level #f)]
+               [context-pressure-percent (hash-ref payload 'usage-percent #f)]))
+
 (define (handle-context-mid-turn-over-budget state evt)
   (define payload (event-payload evt))
   (define estimated (hash-ref payload 'estimated-tokens "?"))
@@ -476,6 +483,7 @@
 (register-event-reducer! "auto-retry.context-reduced" handle-auto-retry-lifecycle)
 (register-event-reducer! "model.stream.thinking" handle-model-stream-thinking)
 (register-event-reducer! "model.stream.completed" handle-model-stream-completed)
+(register-event-reducer! "context.pressure" handle-context-pressure)
 
 ;; ============================================================
 ;; Event reduction dispatch
