@@ -27,7 +27,7 @@
 
 ;; Helper: get transcript entry types from a state
 (define (transcript-types state)
-  (map transcript-entry-kind (ui-state-transcript state)))
+  (map transcript-entry-kind (reverse (ui-state-transcript state))))
 
 ;; Helper: get transcript entry texts from a state
 (define (transcript-texts state)
