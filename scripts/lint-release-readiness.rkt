@@ -97,9 +97,10 @@
      #f]
     [else
      (define content (file->string "CHANGELOG.md"))
-     (define pattern (regexp (format "## ~a" (regexp-quote ver))))
+     (define bare-pattern (regexp (format "## ~a" (regexp-quote ver))))
+     (define v-prefix-pattern (regexp (format "## v~a" (regexp-quote ver))))
      (cond
-       [(regexp-match? pattern content)
+       [(or (regexp-match? bare-pattern content) (regexp-match? v-prefix-pattern content))
         (printf "  [PASS] CHANGELOG has entry for ~a~n" ver)
         #t]
        [else

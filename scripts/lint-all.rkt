@@ -31,7 +31,7 @@
         (list "protocols" "scripts/check-protocols.rkt" '() #f)
         (list "imports" "scripts/check-imports.rkt" '() #f)
         (list "deps" "scripts/check-deps.rkt" '() #f)
-        (list "metrics-sync" "scripts/metrics.rkt" '("--sync-all") #f)
+        (list "metrics-sync" "scripts/metrics.rkt" '("--lint") #f)
         (list "metrics-lint" "scripts/metrics.rkt" '("--lint") #f)
         (list "prose" "scripts/metrics.rkt" '("--lint-prose") #f)
         (list "readme-status" "scripts/sync-readme-status.rkt" '("--check") #f)

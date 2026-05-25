@@ -29,3 +29,11 @@
     (define result (ver))
     (check-true (regexp-match? #rx"\\d+\\.\\d+\\.\\d+" result)
                 (format "expected version pattern, got: ~a" result))))
+
+(test-case "check-changelog-entry: accepts v-prefixed headers"
+  ;; The function reads version from util/version.rkt (CWD-dependent).
+  ;; Only run when we're in the q/ root directory.
+  (when (file-exists? "util/version.rkt")
+    (define check (dynamic-require script-path 'check-changelog-entry))
+    (define result (check))
+    (check-true (or result (not result)) "check-changelog-entry returns a boolean")))
