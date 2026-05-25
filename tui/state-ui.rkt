@@ -10,6 +10,9 @@
          "state-types.rkt"
          racket/contract)
 
+;; Widget bar height: configurable number of lines reserved for below-transcript widgets.
+(define widget-bar-height (make-parameter 3))
+
 ;; Transcript helpers
 (provide overlay-config
          overlay-config?
@@ -77,7 +80,8 @@
           [clear-focused-component (-> ui-state? ui-state?)]
           [set-editor-component (-> ui-state? any/c ui-state?)]
           [clear-editor-component (-> ui-state? ui-state?)]
-          [get-last-turn-tool-summary (-> ui-state? (or/c string? #f))]))
+          [get-last-turn-tool-summary (-> ui-state? (or/c string? #f))])
+         widget-bar-height)
 
 ;; ============================================================
 ;; Transcript helpers
@@ -302,7 +306,11 @@
   (apply append (hash-values widgets)))
 
 (define (get-widget-lines-below state)
-  '())
+  ;; Return all extension widget lines for below-transcript rendering.
+  ;; Widgets are stored as hash: (cons ext-name key) → (listof styled-line)
+  ;; Concatenate all widget lines in hash-key order.
+  (define widgets (ui-state-extension-widgets state))
+  (apply append (hash-values widgets)))
 
 ;; ============================================================
 ;; Custom header/footer (#717)

@@ -24,28 +24,38 @@
          )
   #:transparent)
 
-;; Global registry: box of (listof custom-renderer)
+;; Global registry: box of (listof custom-renderer) with semaphore for thread safety
 (define custom-renderer-registry (box '()))
+(define custom-renderer-lock (make-semaphore 1))
 
 ;; register-custom-renderer! : custom-renderer? -> void?
 (define (register-custom-renderer! renderer)
-  (define existing (unbox custom-renderer-registry))
-  (define filtered
-    (filter (lambda (r)
-              (not (equal? (custom-renderer-tool-name r) (custom-renderer-tool-name renderer))))
-            existing))
-  (set-box! custom-renderer-registry (cons renderer filtered)))
+  (call-with-semaphore custom-renderer-lock
+                       (lambda ()
+                         (define existing (unbox custom-renderer-registry))
+                         (define filtered
+                           (filter (lambda (r)
+                                     (not (equal? (custom-renderer-tool-name r)
+                                                  (custom-renderer-tool-name renderer))))
+                                   existing))
+                         (set-box! custom-renderer-registry (cons renderer filtered)))))
 
 ;; unregister-custom-renderer! : string? -> void?
 (define (unregister-custom-renderer! tool-name)
-  (define existing (unbox custom-renderer-registry))
-  (set-box! custom-renderer-registry
-            (filter (lambda (r) (not (equal? (custom-renderer-tool-name r) tool-name))) existing)))
+  (call-with-semaphore custom-renderer-lock
+                       (lambda ()
+                         (define existing (unbox custom-renderer-registry))
+                         (set-box! custom-renderer-registry
+                                   (filter (lambda (r)
+                                             (not (equal? (custom-renderer-tool-name r) tool-name)))
+                                           existing)))))
 
 ;; lookup-custom-renderer : string? -> (or/c custom-renderer? #f)
 (define (lookup-custom-renderer tool-name)
-  (findf (lambda (r) (equal? (custom-renderer-tool-name r) tool-name))
-         (unbox custom-renderer-registry)))
+  (call-with-semaphore custom-renderer-lock
+                       (lambda ()
+                         (findf (lambda (r) (equal? (custom-renderer-tool-name r) tool-name))
+                                (unbox custom-renderer-registry)))))
 
 ;; lookup-custom-renderer-for-tool : string? symbol? -> (or/c procedure? #f)
 (define (lookup-custom-renderer-for-tool tool-name render-type)
