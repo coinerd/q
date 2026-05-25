@@ -49,27 +49,30 @@
                 #:filter (lambda (evt) (equal? (event-ev evt) "fork.requested")))
 
     ;; Subscribe to compact.requested — compact the session context
-    (subscribe!
-     bus
-     (lambda (evt)
-       (with-handlers ([exn:fail? (lambda (e)
-                                    (emit-session-event! bus
-                                                         (agent-session-session-id sess)
-                                                         "session.compact.failed"
-                                                         (hasheq 'error (exn-message e))))])
-         (define log-path (session-log-path-for sess))
-         (when (file-exists? log-path)
-           (define history (load-session-log log-path))
-           (when (and (not (null? history)) (not (agent-session-compacting? sess)))
-             (guarded-set-compacting! sess #t)
-             (define compact-result (compact-history history))
-             (guarded-set-compacting! sess #f)
-             (emit-session-event! bus
-                                  (agent-session-session-id sess)
-                                  "session.compact.completed"
-                                  (hasheq 'removedCount
-                                          (compaction-result-removed-count compact-result)))))))
-     #:filter (lambda (evt) (equal? (event-ev evt) "compact.requested")))
+    (subscribe! bus
+                (lambda (evt)
+                  (with-handlers ([exn:fail? (lambda (e)
+                                               (emit-session-event! bus
+                                                                    (agent-session-session-id sess)
+                                                                    "session.compact.failed"
+                                                                    (hasheq 'error
+                                                                            (exn-message e))))])
+                    (define log-path (session-log-path-for sess))
+                    (when (file-exists? log-path)
+                      (define history (load-session-log log-path))
+                      (when (and (not (null? history)) (not (agent-session-compacting? sess)))
+                        (guarded-set-compacting! sess #t)
+                        (define compact-result (compact-history history))
+                        (guarded-set-compacting! sess #f)
+                        (emit-session-event! bus
+                                             (agent-session-session-id sess)
+                                             "session.compact.completed"
+                                             (hasheq 'removedCount
+                                                     (compaction-result-removed-count compact-result)
+                                                     'keptCount
+                                                     (length (compaction-result-kept-messages
+                                                              compact-result))))))))
+                #:filter (lambda (evt) (equal? (event-ev evt) "compact.requested")))
     (void)))
 
 ;; ============================================================

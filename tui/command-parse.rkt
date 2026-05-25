@@ -53,7 +53,7 @@
         (cons 'clear 'none)
         ;; Session
         "/compact"
-        (cons 'compact 'none)
+        (cons 'compact 'optional)
         "/interrupt"
         (cons 'interrupt 'none)
         "/stop"

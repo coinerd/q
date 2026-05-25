@@ -277,7 +277,7 @@
        ['clear
         (set-box! (cmd-ctx-state-box cctx) (handle-clear-command cctx state))
         'continue]
-       ['compact (handle-compact-command cctx state)]
+       ['compact (handle-compact-command cctx state args)]
        ['status
         (set-box! (cmd-ctx-state-box cctx) (handle-status-command cctx state))
         'continue]
@@ -287,12 +287,10 @@
        ['leaves (handle-leaves-command cctx)]
        ['name (handle-name-command cctx)]
        ['sessions (handle-sessions-tui-command cctx #f)]
-       ['retry
-        (handle-retry-command cctx state)]
+       ['retry (handle-retry-command cctx state)]
        ['activate (handle-activate-command cctx)]
        ['deactivate (handle-deactivate-command cctx)]
        ['reload (handle-reload-command cctx)]
-       ['quit
-        (handle-quit-command cctx)]
+       ['quit (handle-quit-command cctx)]
        ['unknown (process-extension-command cctx state)]
        [else 'continue])]))
