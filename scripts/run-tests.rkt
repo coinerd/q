@@ -111,7 +111,11 @@
 
 ;; Path-based slow patterns — matched against the full path, not just basename.
 ;; Used for tests that are integration-level (need full runtime mock) or hang.
-(define path-slow-patterns '("/workflows/")) ;; workflow integration tests need full mock provider
+;; v0.58.5 characterization: all 30 workflow tests hang under fast-suite due to
+;; requiring full runtime initialization (mock provider, session lifecycle, etc).
+;; The blanket /workflows/ exclusion is correct — do not narrow without fixing
+;; the mock provider to support isolated execution.
+(define path-slow-patterns '("/workflows/"))
 
 (define (slow-file? f)
   (define base (file-name-from-path f))
