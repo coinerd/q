@@ -163,6 +163,19 @@
       (let ([base (file-name-from-path f)])
         (and base (string-contains? (path->string base) "provider")))))
 
+(define support-test-module-names
+  '("event-simulator.rkt" "mock-tui-session.rkt" "state-assertions.rkt" "workflow-harness.rkt"))
+
+(define (support-test-module? f)
+  (define s
+    (if (path? f)
+        (path->string f)
+        f))
+  (define base (file-name-from-path s))
+  (or (string-contains? s "/helpers/")
+      (string-contains? s "/fixtures/")
+      (and base (member (path->string base) support-test-module-names) #t)))
+
 ;; Base directory for resolving test paths.
 ;; orig-dir gives CWD when invoked directly, but under `raco test --process`
 ;; it may point at the test file's directory. We detect which case we're in:
@@ -208,7 +221,8 @@
                   #:when (and (file-exists? f)
                               (let ([s (path->string f)])
                                 (and (string-suffix? s ".rkt")
-                                     (not (string-contains? s "/compiled/"))))))
+                                     (not (string-contains? s "/compiled/"))
+                                     (not (support-test-module? s))))))
          (path->string (find-relative-path base-dir f))))
      (case suite
        [(all) all-files]
@@ -251,7 +265,13 @@
   (cond
     [(pair? all-matches)
      (define passed (for/sum ([m (in-list all-matches)]) (string->number (cadr m))))
-     (define failed (for/sum ([m (in-list all-matches)]) (string->number (caddr m))))
+     (define failed
+       (for/sum ([m (in-list all-matches)])
+                (+ (string->number (caddr m))
+                   (let ([errors (list-ref m 3)])
+                     (if errors
+                         (string->number errors)
+                         0)))))
      (values passed failed (+ passed failed))]
     [else
      ;; Fall back to legacy raco test format
@@ -269,15 +289,24 @@
              (string->number (cadr m))
              n)))
 
-     (values passed failed (+ passed failed))]))
+     (cond
+       [(> (+ passed failed) 0) (values passed failed (+ passed failed))]
+       [else
+        ;; rackunit `run-test` prints result structs rather than summary counts.
+        (define result-successes (length (regexp-match* #rx"#<test-success>" output)))
+        (define result-failures
+          (+ (length (regexp-match* #rx"#<test-failure>" output))
+             (length (regexp-match* #rx"#<test-error>" output))))
+        (values result-successes result-failures (+ result-successes result-failures))])]))
 
 ;; Normalize parsed counters against process exit status.
-;; Some test files intentionally print intermediate rackunit sub-suite summaries
-;; containing non-zero failure counts while still exiting 0 overall.
+;; Parsed rackunit failures/errors are release-blocking even if a legacy test
+;; file forgot to propagate `run-tests`' non-zero result to the process exit.
 (define (normalize-counts exit-code passed failed total)
-  (if (and (= exit-code 0) (> failed 0))
-      (values passed 0 passed)
-      (values passed failed total)))
+  (values passed failed total))
+
+(define (effective-exit-code exit-code failed)
+  (if (and (= exit-code 0) (> failed 0)) 1 exit-code))
 
 ;; ---------------------------------------------------------------------------
 ;; extract-failure-lines - pull FAILURE context blocks from output
@@ -318,9 +347,12 @@
 ;; but NOT files that have (run-tests ...) — those are self-contained.
 (define (file-has-rackunit-tests? path)
   (and (file-exists? path)
-       (let ([content (file->string path)])
-         (and (or (regexp-match? #rx"\\(test-case" content) (regexp-match? #rx"\\(check-" content))
-              (not (regexp-match? #rx"\\(run-tests" content))))))
+       (let* ([content (file->string path)]
+              [has-rackunit-forms? (or (regexp-match? #rx"\\(test-case" content)
+                                       (regexp-match? #rx"\\(check-" content))]
+              [module-plus-test? (regexp-match? #px"\\(module\\+\\s+test\\b" content)]
+              [self-running? (regexp-match? #rx"\\(run-tests" content)])
+         (and has-rackunit-forms? (or module-plus-test? (not self-running?))))))
 
 ;; Common result extraction from a running process.
 ;; Handles timeout logic and stdout/stderr parsing uniformly.
@@ -351,8 +383,9 @@
         (define-values (parsed-passed parsed-failed parsed-total) (parse-raco-output merged-bytes))
         (define-values (passed failed total)
           (normalize-counts exit-code parsed-passed parsed-failed parsed-total))
+        (define effective-code (effective-exit-code exit-code failed))
         (test-file-result test-path
-                          exit-code
+                          effective-code
                           stdout-bytes
                           stderr-bytes
                           (elapsed)
@@ -368,7 +401,15 @@
      (define-values (parsed-passed parsed-failed parsed-total) (parse-raco-output merged-bytes))
      (define-values (passed failed total)
        (normalize-counts exit-code parsed-passed parsed-failed parsed-total))
-     (test-file-result test-path exit-code stdout-bytes stderr-bytes (elapsed) passed failed total)]))
+     (define effective-code (effective-exit-code exit-code failed))
+     (test-file-result test-path
+                       effective-code
+                       stdout-bytes
+                       stderr-bytes
+                       (elapsed)
+                       passed
+                       failed
+                       total)]))
 
 (define (run-single-file test-path #:timeout [timeout #f])
   (define resolved-path
@@ -619,8 +660,35 @@
 ;; Pre-flight: stale bytecode cleanup
 ;; ---------------------------------------------------------------------------
 
+(define (compiled-zo-source-candidates compiled-dir zo)
+  (define parent (path-only compiled-dir))
+  (define base-path (file-name-from-path zo))
+  (define base
+    (if base-path
+        (path->string base-path)
+        ""))
+  (define stem (regexp-replace #rx"\\.zo$" base ""))
+  (filter values
+          (list (and (regexp-match? #rx"_rkt$" stem)
+                     (build-path parent (regexp-replace #rx"_rkt$" stem ".rkt")))
+                (and (regexp-match? #rx"_rktl$" stem)
+                     (build-path parent (regexp-replace #rx"_rktl$" stem ".rktl")))
+                (and (regexp-match? #rx"_scrbl$" stem)
+                     (build-path parent (regexp-replace #rx"_scrbl$" stem ".scrbl")))
+                (path-replace-extension (path-replace-suffix zo "") #".rkt")
+                (path-replace-extension (path-replace-suffix zo "") #".rktl"))))
+
+(define (stale-compiled-zo? compiled-dir zo)
+  (and (file-exists? zo)
+       (string-suffix? (path->string zo) ".zo")
+       (let* ([candidates (compiled-zo-source-candidates compiled-dir zo)]
+              [existing-sources (filter file-exists? candidates)])
+         (or (null? existing-sources)
+             (for/or ([src (in-list existing-sources)])
+               (> (file-or-directory-modify-seconds src) (file-or-directory-modify-seconds zo)))))))
+
 (define (clean-stale-bytecode! root)
-  "Delete compiled/ directories when any .zo is older than its source .rkt.
+  "Delete compiled/ directories with stale or orphan .zo files.
   This prevents instantiate-linklet mismatches after module moves or renames."
   (define cleaned 0)
   (for ([d (in-directory root)])
@@ -628,14 +696,7 @@
       (define zo-files (directory-list d #:build? #t))
       (define stale?
         (for/or ([zo (in-list zo-files)])
-          (and (file-exists? zo)
-               (let* ([base (path-replace-suffix zo "")]
-                      [rkt (path-replace-extension base #".rkt")]
-                      [rktl (path-replace-extension base #".rktl")]
-                      [src (or (and (file-exists? rkt) rkt) (and (file-exists? rktl) rktl) #f)])
-                 (and src
-                      (> (file-or-directory-modify-seconds src)
-                         (file-or-directory-modify-seconds zo)))))))
+          (stale-compiled-zo? d zo)))
       (when stale?
         (delete-directory/files d)
         (set! cleaned (add1 cleaned)))))

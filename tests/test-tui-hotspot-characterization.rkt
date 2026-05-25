@@ -7,14 +7,12 @@
 ;; Pins current TUI hotspot behavior to de-risk decomposition in v0.57.3.
 ;;
 ;; Key decisions documented:
-;; D1: handle-user-submit! contract says (-> tui-ctx? string? tui-ctx?) but
-;;     actually returns a thread object (from the thread spawn). The contract
-;;     throws exn:fail:contract? when called — proven by D1.
+;; D1: handle-user-submit! contract is now truthful: (-> tui-ctx? string? void?).
+;;     It mutates the TUI state box and starts runner work internally.
 ;; D2: handle-key dispatches configurable keymap first, then falls through to
 ;;     hardcoded behavior. Fallthrough is the primary path for submit.
 ;; D3: check-busy-watchdog is pure and testable.
-;; D4: handle-user-submit! is NOT safely callable due to contract lie.
-;;     v0.57.3 must fix contract to (-> tui-ctx? string? (or/c thread? void?)).
+;; D4: handle-user-submit! is safely callable and returns void.
 
 (require rackunit
          rackunit/text-ui
@@ -52,21 +50,19 @@
 (define tui-hotspot-characterization-suite
   (test-suite "tui-hotspot-characterization"
 
-    ;; D1: handle-user-submit! contract lies — produces thread, not tui-ctx?
-    (test-case "CHAR: handle-user-submit! contract violation (returns thread not tui-ctx)"
-      ;; Contract claims (-> tui-ctx? string? tui-ctx?) but the function spawns
-      ;; a thread and returns the thread object. This throws exn:fail:contract.
-      ;; v0.57.3 must fix: either return void? or (or/c thread? void?).
+    ;; D1: handle-user-submit! has a truthful void contract and mutates state.
+    (test-case "CHAR: handle-user-submit! returns void and sets busy transcript state"
       (define ctx (make-test-tui-ctx))
-      (check-exn exn:fail:contract?
-                 (lambda () (handle-user-submit! ctx "hello"))
-                 "handle-user-submit! breaks its own contract — returns thread not tui-ctx"))
+      (define result-box (box 'unset))
+      (check-not-exn (lambda () (set-box! result-box (handle-user-submit! ctx "hello"))))
+      (check-pred void? (unbox result-box))
+      (define state (unbox (tui-ctx-ui-state-box ctx)))
+      (check-true (ui-state-busy? state))
+      (check-true (for/or ([entry (in-list (ui-state-transcript state))])
+                    (and (eq? (transcript-entry-kind entry) 'user)
+                         (string=? (transcript-entry-text entry) "hello")))))
 
-    ;; D2: handle-user-submit! sets busy before throwing contract
-    ;; (Can't test this because contract check fails on return.
-    ;;  The busy state IS set inside the function before the thread returns,
-    ;;  but contract check happens on the return value.)
-    ;; Documented: the implementation sets busy at line 302 before spawning thread.
+    ;; D2: handle-user-submit! sets busy before runner completion.
 
     ;; D3: handle-key with regular character inserts into input state
     (test-case "CHAR: handle-key with char modifies input state"
@@ -109,12 +105,11 @@
 
     ;; D8: Duplicate submit documentation
     (test-case "CHAR: document duplicate submit debounce (500ms window)"
-      ;; The duplicate debounce is inside handle-user-submit! which can't be
-      ;; called due to D1 contract lie. Document behavior:
+      ;; The duplicate debounce is inside handle-user-submit!:
       ;; - If last transcript entry is 'user with same text and < 500ms old
       ;; - Adds "Duplicate input ignored" system entry
       ;; - Does NOT call runner
-      ;; v0.57.3 should extract debounce to a testable pure function.
+      ;; Future decomposition should extract debounce to a testable pure function.
       (check-true #t "documented — see comments"))
 
     ;; D9: Document call sites for v0.57.3 decomposition
@@ -125,7 +120,7 @@
       ;;   tui/commands.rkt (16031) — 391 LOC
       ;;
       ;; Decomposition plan:
-      ;;   1. Fix handle-user-submit! contract: -> void? or (or/c thread? void?)
+      ;;   1. Keep handle-user-submit! contract pinned to -> void?
       ;;   2. Extract debounce logic to pure function
       ;;   3. Extract busy-queue logic to pure function
       ;;   4. Extract keymap fallthrough to explicit dispatch table

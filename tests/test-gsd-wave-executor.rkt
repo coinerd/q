@@ -16,6 +16,7 @@
 ;; ============================================================
 
 (define (make-test-plan n)
+  (wave-gate-clear!)
   (gsd-plan (for/list ([i (in-range n)])
               (gsd-wave i (format "Wave ~a" i) 'pending "" '("file.rkt") '() "test" '()))
             ""

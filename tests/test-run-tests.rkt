@@ -100,6 +100,14 @@
   (check-equal? failed 0)
   (check-equal? total 0))
 
+(test-case "parse-raco-output: rackunit run-test result list"
+  (define parse (runner-ref 'parse-raco-output))
+  (define-values (passed failed total)
+    (parse #"'(#<test-success> #<test-success> #<test-success>)\n"))
+  (check-equal? passed 3)
+  (check-equal? failed 0)
+  (check-equal? total 3))
+
 (test-case "parse-raco-output: singular 'test passed' / 'test failed'"
   (define parse (runner-ref 'parse-raco-output))
   (define-values (passed failed total) (parse #"1 test passed\n1 test failed\n"))
@@ -122,13 +130,13 @@
   (check-equal? failed 0)
   (check-equal? total 13))
 
-(test-case "parse-raco-output: rackunit/text-ui with failures"
+(test-case "parse-raco-output: rackunit/text-ui counts failures and errors"
   (define parse (runner-ref 'parse-raco-output))
   (define-values (passed failed total)
     (parse #"5 success(es) 2 failure(s) 1 error(s) 8 test(s) run\n"))
   (check-equal? passed 5)
-  (check-equal? failed 2)
-  (check-equal? total 7))
+  (check-equal? failed 3)
+  (check-equal? total 8))
 
 ;; ---------------------------------------------------------------------------
 ;; 13.1: extract-failure-lines
@@ -252,7 +260,7 @@
   (define result (run "tests/nonexistent-test-file-xyz.rkt" #:timeout 10000))
   (check-not-equal? ((runner-ref 'test-file-result-exit-code) result) 0))
 
-(test-case "run-single-file: exit=0 normalizes non-zero parsed failures"
+(test-case "run-single-file: exit=0 with parsed failures is not false-green"
   (define run (runner-ref 'run-single-file))
   (define tmp (make-temporary-file "run-tests-anomaly-~a.rkt"))
   (call-with-output-file
@@ -260,13 +268,12 @@
    #:exists 'truncate/replace
    (lambda (out)
      (display "#lang racket/base\n" out)
-     (display "(displayln \"5 success(es) 1 failure(s) 0 error(s) 6 test(s) run\")\n" out)))
+     (display "(displayln \"5 success(es) 1 failure(s) 1 error(s) 7 test(s) run\")\n" out)))
   (define result (run tmp #:timeout 10000))
   (delete-file tmp)
-  (check-equal? ((runner-ref 'test-file-result-exit-code) result) 0)
-  (check-equal? ((runner-ref 'test-file-result-failed) result) 0)
-  (check-equal? ((runner-ref 'test-file-result-total) result)
-                ((runner-ref 'test-file-result-passed) result)))
+  (check-equal? ((runner-ref 'test-file-result-exit-code) result) 1)
+  (check-equal? ((runner-ref 'test-file-result-failed) result) 2)
+  (check-equal? ((runner-ref 'test-file-result-total) result) 7))
 
 ;; ---------------------------------------------------------------------------
 ;; 13.3: collect-test-files (suite filtering)
@@ -398,6 +405,47 @@
                            (displayln "(displayln \"hello\")" out)))
   (check-false (has-tests? tmp))
   (delete-file tmp))
+
+;; ---------------------------------------------------------------------------
+;; W2: Runner truthfulness/isolation regressions
+;; ---------------------------------------------------------------------------
+
+(test-case "file-has-rackunit-tests?: module+ test with run-tests needs raco discovery"
+  (define has-tests? (runner-ref 'file-has-rackunit-tests?))
+  (define tmp (make-temporary-file "module-plus-test-~a.rkt"))
+  (call-with-output-file
+   tmp
+   #:exists 'truncate/replace
+   (lambda (out)
+     (displayln "#lang racket" out)
+     (displayln "(require rackunit rackunit/text-ui)" out)
+     (displayln "(define suite (test-suite \"s\" (test-case \"ok\" (check-equal? 1 1))))" out)
+     (displayln "(module+ test (run-tests suite))" out)))
+  (check-true (has-tests? tmp))
+  (delete-file tmp))
+
+(test-case "collect-test-files: excludes helper and fixture modules"
+  (define collect (runner-ref 'collect-test-files))
+  (define fast-files (collect 'fast))
+  (for ([f (in-list fast-files)])
+    (check-false (string-contains? f "/helpers/") (format "helper should be excluded: ~a" f))
+    (check-false (string-contains? f "/fixtures/") (format "fixture should be excluded: ~a" f)))
+  (check-false (member "tests/tui/event-simulator.rkt" fast-files))
+  (check-false (member "tests/tui/mock-tui-session.rkt" fast-files))
+  (check-false (member "tests/tui/state-assertions.rkt" fast-files))
+  (check-false (member "tests/tui/workflow-harness.rkt" fast-files)))
+
+(test-case "clean-stale-bytecode!: removes orphan compiled directory"
+  (define clean! (runner-ref 'clean-stale-bytecode!))
+  (define tmp-dir (make-temporary-file "compiled-orphan-~a" 'directory))
+  (define compiled-dir (build-path tmp-dir "compiled"))
+  (make-directory compiled-dir)
+  (call-with-output-file (build-path compiled-dir "missing_rkt.zo")
+                         #:exists 'truncate/replace
+                         (lambda (out) (display "stale" out)))
+  (check-equal? (clean! tmp-dir) 1)
+  (check-false (directory-exists? compiled-dir))
+  (delete-directory/files tmp-dir #:must-exist? #f))
 
 ;; ---- 14.x: Architecture shard suite classification ----
 
