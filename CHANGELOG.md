@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.58.3 — 2026-05-25
+
+### Rich TUI Extension Widgets
+
+Milestone enabling extensions to inject rich, interactive UI components
+into the TUI with thread-safe registries, widget lifecycle, and layout regions.
+
+**W0 — Thread-safe Registries + Below-transcript Slot**
+- `extensions/custom-renderer-registry.rkt`: Added semaphore for thread-safe mutations
+  (register/unregister/lookup wrapped in `call-with-semaphore`)
+- `tui/state-ui.rkt`: `get-widget-lines-below` returns actual widget lines (was stub returning `'()`)
+- `widget-bar-height` parameter (default 3) for configurable below-transcript slot
+- 5 new tests: 2 thread-safety, 3 below-transcript rendering
+
+**W1 — Widget Lifecycle Protocol**
+- `extensions/widget-lifecycle.rkt`: Full lifecycle protocol with mount/render/input/unmount
+- `widget-lifecycle` struct with idempotent mount/unmount callbacks
+- Thread-safe registry: register/unregister/lookup/list lifecycle widgets
+- Focus management: `focusable-lifecycle-widgets`, `cycle-lifecycle-focus`
+- Input routing: `route-lifecycle-input` delivers key events to focused widget
+- `widget->component` conversion for integration with q-component system
+- 18 tests covering lifecycle, registry, focus, and input routing
+
+**W2 — Layout Regions Integration**
+- `tui/layout.rkt`: 5-region layout computation (header, transcript, widget-bar, input, overlay)
+- Height allocation: fixed header (1), fixed input (3), configurable widget-bar, flexible transcript
+- `clip-to-region` for truncating/padding lines to region height
+- 13 tests covering layout computation, edge cases, and stacking
+
 ## v0.58.2 — 2026-05-25
 
 ### OAuth2 Login, OpenRouter Provider & Provider Registry
