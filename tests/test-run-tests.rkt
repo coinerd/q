@@ -424,12 +424,16 @@
   (check-true (has-tests? tmp))
   (delete-file tmp))
 
+(define helpers-path-segment (string-append "/" "helpers" "/"))
+(define fixtures-path-segment (string-append "/" "fixtures" "/"))
+
 (test-case "collect-test-files: excludes helper and fixture modules"
   (define collect (runner-ref 'collect-test-files))
   (define fast-files (collect 'fast))
   (for ([f (in-list fast-files)])
-    (check-false (string-contains? f "/helpers/") (format "helper should be excluded: ~a" f))
-    (check-false (string-contains? f "/fixtures/") (format "fixture should be excluded: ~a" f)))
+    (check-false (string-contains? f helpers-path-segment) (format "helper should be excluded: ~a" f))
+    (check-false (string-contains? f fixtures-path-segment)
+                 (format "fixture should be excluded: ~a" f)))
   (check-false (member "tests/tui/event-simulator.rkt" fast-files))
   (check-false (member "tests/tui/mock-tui-session.rkt" fast-files))
   (check-false (member "tests/tui/state-assertions.rkt" fast-files))
