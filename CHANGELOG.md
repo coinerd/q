@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.58.5 — 2026-05-25
+
+### Quality & Debt Remediation
+
+Final v0.58.x quality milestone focused on nil-guard hardening,
+workflow-test characterization, contract tightening, and release readiness.
+
+**W0 — Centralized Nil-Guard**
+- Added `message-meta-safe` helper returning an empty hash when message metadata is `#f`
+- Migrated 22 message metadata call sites across utilities, runtime, CLI, and compactor code
+- Added regression tests covering safe metadata access with missing metadata
+
+**W1 — Workflow Test Characterization**
+- Characterized all 30 `tests/workflows/` files under the fast-suite harness
+- Confirmed blanket workflow exclusion is currently required due full runtime/mock-provider bootstrap
+- Documented the exclusion rationale in `scripts/run-tests.rkt` to prevent unsafe narrowing
+
+**W2 — Contract Tightening Push**
+- Reduced raw `any/c` count from 676 to 597 (target: ≤600)
+- Reduced reader-based contract metrics from 818 to 662 any/c in contract forms
+- Tightened high-value GSD, context assembly, session-index, GitHub helper, UI surface, and event contracts
+- Added event-contract and GitHub-helper regression tests
+
 ## v0.58.4 — 2026-05-25
 
 ### Image Processing Pipeline
