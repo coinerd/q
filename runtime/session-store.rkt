@@ -210,7 +210,7 @@
        [#f
         (write-session-version-header! log-path)
         CURRENT-SESSION-VERSION]
-       [(? session-info-entry?) (hash-ref (message-meta first-entry) 'version 1)]
+       [(? session-info-entry?) (hash-ref (message-meta-safe first-entry) 'version 1)]
        [_
         (migrate-session-log! log-path 1 CURRENT-SESSION-VERSION)
         CURRENT-SESSION-VERSION])]))

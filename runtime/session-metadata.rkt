@@ -13,7 +13,7 @@
          (only-in "../util/protocol-types.rkt"
                   message?
                   message-content
-                  message-meta
+                  message-meta-safe
                   message-kind
                   make-message
                   make-text-part
@@ -64,13 +64,13 @@
   (define name-entries (filter session-name-entry? entries))
   (if (null? name-entries)
       #f
-      (hash-ref (message-meta (car (reverse name-entries))) 'name #f)))
+      (hash-ref (message-meta-safe (car (reverse name-entries))) 'name #f)))
 
 ;; Check if an entry is a session-name entry.
 (define (session-name-entry? entry)
   (and (message? entry)
        (eq? (message-kind entry) 'session-info)
-       (hash-has-key? (message-meta entry) 'name)))
+       (hash-has-key? (message-meta-safe entry) 'name)))
 
 ;; ============================================================
 ;; #711: Entry labeling
@@ -103,11 +103,11 @@
   (define label-entries
     (filter (lambda (e)
               (and (eq? (message-kind e) 'entry-label)
-                   (equal? (hash-ref (message-meta e) 'target-id #f) target-entry-id)))
+                   (equal? (hash-ref (message-meta-safe e) 'target-id #f) target-entry-id)))
             entries))
   (if (null? label-entries)
       #f
-      (let ([raw (hash-ref (message-meta (car (reverse label-entries))) 'label-type #f)])
+      (let ([raw (hash-ref (message-meta-safe (car (reverse label-entries))) 'label-type #f)])
         (if (string? raw)
             (string->symbol raw)
             raw))))
@@ -121,8 +121,8 @@
 (define (list-labeled-entries entries)
   (filter-map (lambda (e)
                 (and (entry-label? e)
-                     (let ([raw (hash-ref (message-meta e) 'label-type #f)])
-                       (cons (hash-ref (message-meta e) 'target-id #f)
+                     (let ([raw (hash-ref (message-meta-safe e) 'label-type #f)])
+                       (cons (hash-ref (message-meta-safe e) 'target-id #f)
                              (if (string? raw)
                                  (string->symbol raw)
                                  raw)))))

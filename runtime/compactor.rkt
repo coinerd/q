@@ -166,7 +166,7 @@
 (define (find-previous-file-tracker messages)
   (or (for/first ([m (in-list (reverse messages))]
                   #:when (eq? (message-kind m) 'compaction-summary))
-        (define meta (message-meta m))
+        (define meta (message-meta-safe m))
         (hash-ref meta 'fileTracker (hasheq)))
       (hasheq)))
 

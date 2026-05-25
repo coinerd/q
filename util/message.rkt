@@ -17,16 +17,24 @@
          message-content
          message-timestamp
          message-meta
-         (contract-out [make-message
-                        (-> any/c (or/c string? symbol? #f) symbol? symbol? (listof any/c) any/c any/c message?)])
+         (contract-out
+          [make-message
+           (-> any/c (or/c string? symbol? #f) symbol? symbol? (listof any/c) any/c any/c message?)])
          message->jsexpr
-         jsexpr->message)
+         jsexpr->message
+         message-meta-safe)
 
 ;; ============================================================
 ;; Message struct
 ;; ============================================================
 
 (struct message (id parent-id role kind content timestamp meta) #:transparent)
+
+;; Safe accessor for message-meta: returns empty hash if meta is #f.
+;; This eliminates a class of bugs where (hash-ref (message-meta msg) ...)
+;; would crash when meta is #f.
+(define (message-meta-safe msg)
+  (or (message-meta msg) (hash)))
 
 (define (make-message id parent-id role kind content timestamp meta)
   (message id parent-id role kind content timestamp meta))
