@@ -14,7 +14,7 @@
          racket/string
          racket/set
          "../util/protocol-types.rkt"
-         (only-in "../util/message.rkt" message-meta)
+         (only-in "../util/message.rkt" message-meta-safe)
          "../llm/token-budget.rkt")
 
 ;; Token estimation
@@ -96,7 +96,7 @@
 
 ;; Get importance from message meta (default: 'normal)
 (define (message-importance msg)
-  (hash-ref (or (message-meta msg) (hash)) 'importance 'normal))
+  (hash-ref (message-meta-safe msg) 'importance 'normal))
 
 ;; Check if message has elevated importance
 (define (message-elevated-importance? msg)

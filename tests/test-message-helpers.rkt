@@ -69,7 +69,33 @@
     (test-case "get-tool-call-ids returns empty for no tool calls"
       (define msg
         (make-message "m8" #f 'assistant 'message (list (make-text-part "hi")) 1000 (hasheq)))
-      (check-equal? (get-tool-call-ids msg) '()))))
+      (check-equal? (get-tool-call-ids msg) '()))
+
+    ;; ============================================================
+    ;; message-meta-safe
+    ;; ============================================================
+
+    (test-case "message-meta-safe returns meta hash when present"
+      (define msg
+        (make-message "m1"
+                      #f
+                      'user
+                      'message
+                      (list (make-text-part "hi"))
+                      1000
+                      (hasheq 'role 'test 'val 42)))
+      (check-equal? (hash-ref (message-meta-safe msg) 'role) 'test)
+      (check-equal? (hash-ref (message-meta-safe msg) 'val) 42))
+
+    (test-case "message-meta-safe returns empty hash when meta is #f"
+      (define msg (make-message "m2" #f 'user 'message (list (make-text-part "hi")) 1000 #f))
+      (define result (message-meta-safe msg))
+      (check-true (hash? result))
+      (check-equal? (hash-keys result) '()))
+
+    (test-case "message-meta-safe with hash-ref default returns value"
+      (define msg (make-message "m3" #f 'user 'message (list (make-text-part "hi")) 1000 #f))
+      (check-equal? (hash-ref (message-meta-safe msg) 'missing 'default) 'default))))
 
 (module+ main
   (run-tests message-helper-tests))

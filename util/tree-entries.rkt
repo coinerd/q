@@ -9,21 +9,21 @@
 (require racket/contract
          "message.rkt")
 
-(provide (contract-out [make-branch-entry (-> string? string? string? message?)]
-                       [branch-entry? (-> any/c boolean?)]
-                       [branch-entry-parent-entry-id (-> message? (or/c string? #f))]
-                       [branch-entry-name (-> message? (or/c string? #f))]
-                       [make-tree-navigation-entry (-> string? string? string? message?)]
-                       [tree-navigation-entry? (-> any/c boolean?)]
-                       [tree-navigation-entry-target-entry-id (-> message? (or/c string? #f))]
-                       [tree-navigation-entry-from-entry-id (-> message? (or/c string? #f))]
-                       [make-branch-summary-entry
-                        (-> string? (or/c string? #f) string? any/c exact-nonnegative-integer? message?)]
-                       [branch-summary-entry-summary (-> message? (or/c string? #f))]
-                       [branch-summary-entry-entry-range (-> message? any/c)]
-                       [branch-summary-entry-token-count
-                        (-> message? (or/c exact-nonnegative-integer? #f))]
-                       [tree-entry? (-> any/c boolean?)]))
+(provide (contract-out
+          [make-branch-entry (-> string? string? string? message?)]
+          [branch-entry? (-> any/c boolean?)]
+          [branch-entry-parent-entry-id (-> message? (or/c string? #f))]
+          [branch-entry-name (-> message? (or/c string? #f))]
+          [make-tree-navigation-entry (-> string? string? string? message?)]
+          [tree-navigation-entry? (-> any/c boolean?)]
+          [tree-navigation-entry-target-entry-id (-> message? (or/c string? #f))]
+          [tree-navigation-entry-from-entry-id (-> message? (or/c string? #f))]
+          [make-branch-summary-entry
+           (-> string? (or/c string? #f) string? any/c exact-nonnegative-integer? message?)]
+          [branch-summary-entry-summary (-> message? (or/c string? #f))]
+          [branch-summary-entry-entry-range (-> message? any/c)]
+          [branch-summary-entry-token-count (-> message? (or/c exact-nonnegative-integer? #f))]
+          [tree-entry? (-> any/c boolean?)]))
 
 ;; ============================================================
 ;; Tree entry types (#1314)
@@ -45,10 +45,10 @@
   (and (message? msg) (eq? (message-kind msg) 'branch)))
 
 (define (branch-entry-parent-entry-id msg)
-  (hash-ref (message-meta msg) 'parentEntryId #f))
+  (hash-ref (message-meta-safe msg) 'parentEntryId #f))
 
 (define (branch-entry-name msg)
-  (hash-ref (message-meta msg) 'branchName #f))
+  (hash-ref (message-meta-safe msg) 'branchName #f))
 
 ;; tree-navigation-entry: marks navigation to a different branch
 (define (make-tree-navigation-entry id from-entry-id target-entry-id)
@@ -64,10 +64,10 @@
   (and (message? msg) (eq? (message-kind msg) 'tree-navigation)))
 
 (define (tree-navigation-entry-target-entry-id msg)
-  (hash-ref (message-meta msg) 'targetEntryId #f))
+  (hash-ref (message-meta-safe msg) 'targetEntryId #f))
 
 (define (tree-navigation-entry-from-entry-id msg)
-  (hash-ref (message-meta msg) 'fromEntryId #f))
+  (hash-ref (message-meta-safe msg) 'fromEntryId #f))
 
 ;; branch-summary-entry: LLM-generated summary of a branch
 (define (make-branch-summary-entry id parent-id summary entry-range token-count)
@@ -80,13 +80,13 @@
                 (hasheq 'summary summary 'entryRange entry-range 'tokenCount token-count)))
 
 (define (branch-summary-entry-summary msg)
-  (hash-ref (message-meta msg) 'summary #f))
+  (hash-ref (message-meta-safe msg) 'summary #f))
 
 (define (branch-summary-entry-entry-range msg)
-  (hash-ref (message-meta msg) 'entryRange #f))
+  (hash-ref (message-meta-safe msg) 'entryRange #f))
 
 (define (branch-summary-entry-token-count msg)
-  (hash-ref (message-meta msg) 'tokenCount #f))
+  (hash-ref (message-meta-safe msg) 'tokenCount #f))
 
 ;; tree-entry? — matches any tree entry type
 (define (tree-entry? msg)

@@ -43,7 +43,7 @@
       (let ([first-entry (read-first-log-entry path)])
         (cond
           [(not first-entry) current-session-version]
-          [(session-info-entry? first-entry) (hash-ref (message-meta first-entry) 'version 1)]
+          [(session-info-entry? first-entry) (hash-ref (message-meta-safe first-entry) 'version 1)]
           [else 1]))))
 
 ;; Check if a message is a session-info entry (version header)

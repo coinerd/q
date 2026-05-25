@@ -47,7 +47,7 @@
   (define models
     (remove-duplicates (filter values
                                (for/list ([m (in-list messages)])
-                                 (hash-ref (message-meta m) 'model #f)))))
+                                 (hash-ref (message-meta-safe m) 'model #f)))))
 
   ;; Flatten all content parts across all messages
   (define all-parts (apply append (map message-content messages)))
@@ -67,7 +67,7 @@
     (for/fold ([prompt-tot 0]
                [completion-tot 0])
               ([m (in-list messages)])
-      (define usage (hash-ref (message-meta m) 'usage #f))
+      (define usage (hash-ref (message-meta-safe m) 'usage #f))
       (if usage
           (values (+ prompt-tot (hash-ref usage 'prompt 0))
                   (+ completion-tot (hash-ref usage 'completion 0)))

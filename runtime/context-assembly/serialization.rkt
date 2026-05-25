@@ -15,7 +15,7 @@
                   message-kind
                   message-role
                   message-content
-                  message-meta
+                  message-meta-safe
                   make-message
                   make-text-part)
          (only-in "../../util/content-parts.rkt" text-part text-part? text-part-text)
@@ -89,7 +89,7 @@
                             metadata))
 
 (define (gsd-progress-message? m)
-  (or (hash-ref (message-meta m) 'gsd-pin #f)
+  (or (hash-ref (message-meta-safe m) 'gsd-pin #f)
       (and (memq (message-role m) '(tool assistant))
            (let ([txt (string-join (for/list ([part (message-content m)]
                                               #:when (text-part? part))

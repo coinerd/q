@@ -28,10 +28,10 @@
   (and (message? msg) (eq? (message-kind msg) 'custom-message)))
 
 (define (custom-entry-extension msg)
-  (hash-ref (message-meta msg) 'extension #f))
+  (hash-ref (message-meta-safe msg) 'extension #f))
 
 (define (custom-entry-key msg)
-  (hash-ref (message-meta msg) 'key #f))
+  (hash-ref (message-meta-safe msg) 'key #f))
 
 (define (custom-entry-data msg)
-  (hash-ref (message-meta msg) 'data #f))
+  (hash-ref (message-meta-safe msg) 'data #f))
