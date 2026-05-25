@@ -146,7 +146,9 @@
           [clear-streaming (-> ui-state? ui-state?)]
           ;; String helpers
           [truncate-string (-> string? exact-nonnegative-integer? string?)]
-          [extract-arg-summary (-> (or/c string? hash?) string?)]))
+          [extract-arg-summary (-> (or/c string? hash?) string?)])
+         ui-state-context-pressure-level
+         ui-state-context-pressure-percent)
 
 ;; Forward declarations for types referenced in contracts but defined elsewhere
 ;; (These are provided by other modules and re-exported through state.rkt)
@@ -229,7 +231,9 @@
          editor-component ; (or/c #f q-component?) — custom editor for input area (#1150)
          ;; --- Budget group ---
          context-tokens ; (or/c #f integer?) — estimated token count from context events (v0.19.12 W1)
-         cost-tracker) ; (or/c #f cost-tracker?) — mutable cost accumulator (G8.4)
+         cost-tracker
+         context-pressure-level
+         context-pressure-percent) ; (or/c #f cost-tracker?) — mutable cost accumulator (G8.4)
   #:transparent)
 
 ;; Overlay state for modal/popup UI elements (command palette, etc.)
@@ -361,7 +365,9 @@
             #f ; focused-component
             #f ; editor-component
             #f ; context-tokens
-            (make-cost-tracker)))
+            (make-cost-tracker)
+            #f
+            #f))
 
 ;; ============================================================
 ;; Backward-compatible streaming accessors (v0.38.6)

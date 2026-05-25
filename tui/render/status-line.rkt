@@ -14,7 +14,12 @@
          "message-layout.rkt")
 
 (provide render-status-bar
-         render-input-line)
+         render-input-line
+         current-show-context-pressure?)
+
+;; ── Parameter ──
+
+(define current-show-context-pressure? (make-parameter #t))
 
 ;; ── Token formatting helper ──
 
@@ -45,6 +50,8 @@
   (define scroll-off (ui-state-scroll-offset state))
   (define ctx-tokens (ui-state-context-tokens state))
   (define cost-trk (ui-state-cost-tracker state))
+  (define ctx-pressure-level (ui-state-context-pressure-level state))
+  (define ctx-pressure-pct (ui-state-context-pressure-percent state))
 
   ;; Build state indicator based on busy state
   (define state-indicator
@@ -76,8 +83,17 @@
   (define inv-text (string-append " q" busy-marker " " session-label state-indicator queue-text))
 
   ;; Normal-style segments (context + cost + scroll)
-  ;; Always show context tokens — default to 0 when not yet built
-  (define ctx-part (format " ctx:~a" (format-tokens (or ctx-tokens 0))))
+  ;; Show context pressure percentage when available, else token count
+  (define ctx-part
+    (cond
+      [(and (current-show-context-pressure?) ctx-pressure-pct (real? ctx-pressure-pct))
+       (define level-marker
+         (case ctx-pressure-level
+           [(yellow) "!"]
+           [(red) "!!"]
+           [else ""]))
+       (format " ctx:~a~a%" (inexact->exact (round ctx-pressure-pct)) level-marker)]
+      [else (format " ctx:~a" (format-tokens (or ctx-tokens 0)))]))
   (define cost-part
     (if (and cost-trk (positive? (cost-tracker-input-tokens-total cost-trk)))
         (format " ~a" (format-cost (cost-tracker-total cost-trk)))
