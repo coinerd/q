@@ -47,9 +47,11 @@
 ;; Extract the target file path from a tool call's arguments.
 (define (extract-tool-target-path tc)
   (define args (tool-call-arguments tc))
-  (cond
-    [(hash? args) (or (hash-ref args 'path #f) (hash-ref args 'file #f))]
-    [else #f]))
+  (define raw
+    (cond
+      [(hash? args) (or (hash-ref args 'path #f) (hash-ref args 'file #f))]
+      [else #f]))
+  (if (and (string? raw) (string=? raw "")) #f raw))
 
 ;; take-at-most: imported from util/shared.rkt (v0.32.1 Wave 1 DRY)
 

@@ -133,10 +133,13 @@
               status-str))]
     ;; Authentication
     [(= status-code 401)
-     (raise-http-error! (format "~a API authentication failed (401)" provider-name) status-code)]
+     (define error-text (safe-extract-error-text response-bytes))
+     (raise-http-error! (format "~a API authentication failed (401): ~a" provider-name error-text)
+                        status-code)]
     ;; Forbidden
     [(= status-code 403)
-     (raise-http-error! (format "~a API forbidden (403)" provider-name) status-code)]
+     (define error-text (safe-extract-error-text response-bytes))
+     (raise-http-error! (format "~a API forbidden (403): ~a" provider-name error-text) status-code)]
     ;; Rate limited
     [(= status-code 429)
      (define error-text (safe-extract-error-text response-bytes))
