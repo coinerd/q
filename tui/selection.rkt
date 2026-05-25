@@ -39,9 +39,10 @@
        (define-values (start-col start-row end-col end-row) (normalize-selection-range anchor end))
        ;; Get rendered lines for the transcript area
        (define-values (cols rows) (tui-screen-size))
-       (define layout (compute-layout cols rows))
-       (define trans-y (tui-layout-transcript-start-row layout))
-       (define trans-height (tui-layout-transcript-height layout))
+       (define layout (compute-layout rows cols))
+       (define transcript-region (layout-transcript layout))
+       (define trans-y (layout-region-y transcript-region))
+       (define trans-height (layout-region-height transcript-region))
        (define-values (all-lines _state*) (render-transcript state trans-height cols))
        ;; BUG-57: Compute pad-count for correct coordinate mapping
        (define visible-lines
