@@ -13,8 +13,11 @@
          racket/format
          json
          racket/file
+         racket/port
          racket/path
-         net/uri-codec)
+         net/uri-codec
+         net/http-client
+         net/url)
 
 ;; OAuth config struct
 (provide oauth-config
@@ -41,9 +44,9 @@
           [valid-oauth-config? (-> any/c boolean?)]
           ;; URL generation
           [oauth-authorize-url (-> oauth-config? string? string?)]
-          ;; Token exchange (stub)
-          [oauth-exchange-code (-> oauth-config? string? any)]
-          ;; Token refresh (stub)
+          ;; Token exchange
+          [oauth-exchange-code (->* (oauth-config? string?) (#:code-verifier (or/c string? #f)) any)]
+          ;; Token refresh
           [oauth-refresh-token (-> oauth-config? oauth-token? any)]
           ;; Token persistence
           [oauth-token-file-path (-> path?)]
@@ -83,10 +86,9 @@
 ;; Feature availability
 ;; ═══════════════════════════════════════════════════════════════════
 
-;; Returns #f — OAuth token exchange/refresh are stubs pending HTTP client.
-;; Callers should check this before offering OAuth login flows.
+;; Returns #t — OAuth token exchange/refresh now implemented.
 (define (oauth-available?)
-  #f)
+  #t)
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Validation
@@ -125,22 +127,88 @@
 
 ;; Exchange authorization code for token.
 ;; Returns oauth-token on success, #f on failure.
-;; STUB: Requires an HTTP client library (e.g. libcurl or net/http)
-;; to perform the actual POST to the token endpoint.
-;; W5.6 (M-03): Explicit error — callers must handle, not silently get #f
-(define (oauth-exchange-code cfg code)
-  (raise-credential-error "OAuth token exchange not yet implemented; requires HTTP client library"
-                          "oauth"
-                          "exchange-code"))
+(define (oauth-exchange-code cfg code #:code-verifier [code-verifier #f])
+  (define token-url (oauth-config-token-url cfg))
+  (define redirect-uri (format "http://localhost:~a/callback" (oauth-config-redirect-port cfg)))
+  (define body-parts
+    (append (list (cons 'grant_type "authorization_code")
+                  (cons 'code code)
+                  (cons 'client_id (oauth-config-client-id cfg))
+                  (cons 'redirect_uri redirect-uri))
+            (if (oauth-config-client-secret cfg)
+                (list (cons 'client_secret (oauth-config-client-secret cfg)))
+                '())
+            (if code-verifier
+                (list (cons 'code_verifier code-verifier))
+                '())))
+  (define body-str (alist->form-urlencoded body-parts))
+  (define body-bytes (string->bytes/utf-8 body-str))
+  (with-handlers ([exn:fail? (lambda (e) #f)])
+    (define u (string->url token-url))
+    (define host (url-host u))
+    (define ssl? (equal? (url-scheme u) "https"))
+    (define path-str
+      (string-append "/" (string-join (map (lambda (p) (path/param-path p)) (url-path u)) "/")))
+    (define-values (status _headers response-in)
+      (http-sendrecv host
+                     path-str
+                     #:ssl? ssl?
+                     #:method #"POST"
+                     #:headers (list "Content-Type: application/x-www-form-urlencoded")
+                     #:data body-bytes))
+    (define response-bytes (port->bytes response-in))
+    (close-input-port response-in)
+    (define response-json (bytes->jsexpr response-bytes))
+    (define access-token (hash-ref response-json 'access_token #f))
+    (cond
+      [(not access-token) #f]
+      [else
+       (define expires-in (hash-ref response-json 'expires_in 3600))
+       (oauth-token access-token
+                    (hash-ref response-json 'refresh_token "")
+                    (+ (current-seconds) expires-in)
+                    (hash-ref response-json 'token_type "Bearer")
+                    (hash-ref response-json 'scope ""))])))
 
 ;; Refresh an expired token.
 ;; Returns oauth-token on success, #f on failure.
-;; STUB: Same HTTP client dependency as oauth-exchange-code.
-;; W5.6 (M-03): Explicit error — callers must handle, not silently get #f
 (define (oauth-refresh-token cfg tok)
-  (raise-credential-error "OAuth token refresh not yet implemented; requires HTTP client library"
-                          "oauth"
-                          "refresh-token"))
+  (define token-url (oauth-config-token-url cfg))
+  (define body-parts
+    (append (list (cons 'grant_type "refresh_token")
+                  (cons 'refresh_token (oauth-token-refresh-token tok))
+                  (cons 'client_id (oauth-config-client-id cfg)))
+            (if (oauth-config-client-secret cfg)
+                (list (cons 'client_secret (oauth-config-client-secret cfg)))
+                '())))
+  (define body-str (alist->form-urlencoded body-parts))
+  (define body-bytes (string->bytes/utf-8 body-str))
+  (with-handlers ([exn:fail? (lambda (e) #f)])
+    (define u (string->url token-url))
+    (define host (url-host u))
+    (define ssl? (equal? (url-scheme u) "https"))
+    (define path-str
+      (string-append "/" (string-join (map (lambda (p) (path/param-path p)) (url-path u)) "/")))
+    (define-values (status _headers response-in)
+      (http-sendrecv host
+                     path-str
+                     #:ssl? ssl?
+                     #:method #"POST"
+                     #:headers (list "Content-Type: application/x-www-form-urlencoded")
+                     #:data body-bytes))
+    (define response-bytes (port->bytes response-in))
+    (close-input-port response-in)
+    (define response-json (bytes->jsexpr response-bytes))
+    (define access-token (hash-ref response-json 'access_token #f))
+    (cond
+      [(not access-token) #f]
+      [else
+       (define expires-in (hash-ref response-json 'expires_in 3600))
+       (oauth-token access-token
+                    (hash-ref response-json 'refresh_token (oauth-token-refresh-token tok))
+                    (+ (current-seconds) expires-in)
+                    (hash-ref response-json 'token_type "Bearer")
+                    (hash-ref response-json 'scope ""))])))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Serialization helpers
