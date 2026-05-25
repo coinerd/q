@@ -263,4 +263,46 @@
 ;; Run
 ;; ============================================================
 
+;; Robustness: invalid regex pattern returns error, not crash
+(test-case "invalid regex pattern returns error"
+  (with-temp-dir (λ (dir)
+                   (define f (build-path dir "regex.txt"))
+                   (write-string-to-file f "alpha\n")
+                   (define r (tool-grep (hasheq 'pattern "[" 'path (path->string f))))
+                   (check-true (result-is-error? r))
+                   (define c (string-join (result-content r) ""))
+                   (check-true (regexp-match? #rx"[Ii]nvalid|[Pp]attern" c)))))
+
+;; Exact-match coverage: literal metacharacters treated as literals
+(test-case "exact match treats metacharacters as literals"
+  (with-temp-dir (λ (dir)
+                   (define f (build-path dir "exact.txt"))
+                   (write-string-to-file f "alpha[1]\nbeta\n[1] gamma\n")
+                   (define r (tool-grep (hasheq 'pattern "[1]" 'path (path->string f) 'exact? #t)))
+                   (check-false (result-is-error? r))
+                   (define d (result-details r))
+                   (check-equal? (hash-ref d 'total-matches) 2))))
+
+;; Exact-match coverage: case-insensitive exact match
+(test-case "exact match case-insensitive"
+  (with-temp-dir
+   (λ (dir)
+     (define f (build-path dir "exactci.txt"))
+     (write-string-to-file f "Hello\nhello\nHELLO\n")
+     (define r
+       (tool-grep (hasheq 'pattern "hello" 'path (path->string f) 'exact? #t 'case-insensitive? #t)))
+     (check-false (result-is-error? r))
+     (define d (result-details r))
+     (check-equal? (hash-ref d 'total-matches) 3))))
+
+;; Edge case: empty pattern matches every line
+(test-case "empty pattern matches every line"
+  (with-temp-dir (λ (dir)
+                   (define f (build-path dir "empty-pattern.txt"))
+                   (write-string-to-file f "alpha\nbeta\ngamma\n")
+                   (define r (tool-grep (hasheq 'pattern "" 'path (path->string f) 'context-lines 0)))
+                   (check-false (result-is-error? r))
+                   (define d (result-details r))
+                   (check-equal? (hash-ref d 'total-matches) 3))))
+
 (run-tests grep-tests)
