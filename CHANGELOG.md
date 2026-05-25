@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.58.0 — 2026-05-25
+
+### Fuzzy-Match Edit Tool + Tool Robustness
+
+Milestone delivering fuzzy normalization for the edit tool and robustness improvements for grep/find.
+
+**W0 — Fuzzy Normalization Library**
+- Created `tools/builtins/edit-normalize.rkt` with configurable normalization pipeline
+- Pipeline stages: CRLF→LF, trailing whitespace strip, blank-line collapse, tabs→spaces, boundary blank trimming
+- LCS-based `similarity-score` and `fuzzy-find-match` with coordinate mapping back to original file positions
+- Empty-normalized safety guards and CRLF opt-out independence
+- 42 tests in `tests/test-edit-normalize.rkt`
+
+**W1 — Edit Tool Integration**
+- Integrated `edit-normalize.rkt` into `tools/builtins/edit.rkt` as exact-match-first fallback
+- Added `current-fuzzy-edit-enabled?` parameter (default `#f`) and `fuzzy?` argument
+- Coordinate-based replacement via substring splice when fuzzy match succeeds
+- Line-count integrity preserved; backup + auto-revert safeguards unchanged
+- 6 new fuzzy integration tests in `tests/test-tool-edit.rkt`
+
+**W2 — Grep/Find Robustness & Exact-Match Coverage**
+- Grep: added `exact?` argument for literal substring matching (uses `regexp-quote`)
+- Grep: invalid regex patterns now return error instead of crashing
+- Find: clamp negative `max-depth` to 0, negative `max-results` to 1
+- Find: empty `name` pattern treated as match-all
+- 7 new tests covering regex edge cases, exact match, and boundary conditions
+
+**Metrics**
+- Edit tool: 42 normalization tests + 27 edit tests (all pass)
+- Grep: 19 tests (all pass)
+- Find: 19 tests (all pass)
+
 ## v0.57.7 — 2026-05-25
 
 ### Remaining Test Failures and Audit Closure
