@@ -23,10 +23,14 @@
                   [set-edit-limit! set-current-max-old-text-len!])
          (only-in "../../util/path-helpers.rkt" expand-home-path)
          (only-in "../../util/error-sanitizer.rkt" sanitize-error-message)
-         (only-in "builtin-helpers.rkt" require-safe-path!))
+         (only-in "builtin-helpers.rkt" require-safe-path!)
+         "edit-normalize.rkt")
+
+(define current-fuzzy-edit-enabled? (make-parameter #f))
 
 (provide current-max-old-text-len
          set-current-max-old-text-len!
+         current-fuzzy-edit-enabled?
          (contract-out [tool-edit (->* (hash?) (any/c) any/c)]))
 
 ;; --------------------------------------------------
@@ -234,14 +238,25 @@
              (current-max-old-text-len)))]
           [_
            (define occurrences (count-occurrences content old-text))
-           (match occurrences
-             [0 (make-error-result (make-not-found-error path old-text content))]
-             [(? (lambda (n) (> n 1)))
+           (define fuzzy-allowed?
+             (or (hash-ref args 'fuzzy? (current-fuzzy-edit-enabled?)) (current-fuzzy-edit-enabled?)))
+           (define fuzzy-match
+             (and (zero? occurrences) fuzzy-allowed? (fuzzy-find-match content old-text)))
+           (cond
+             [(and (zero? occurrences) (not fuzzy-match))
+              (make-error-result (make-not-found-error path old-text content))]
+             [(> occurrences 1)
               (make-error-result
                (format "old-text appears ~a times in ~a; be more specific" occurrences path))]
-             [1
+             [else
+              ;; occurrences = 1 or fuzzy-match succeeded
               (define backup-path (save-backup path content))
-              (define new-content (string-replace content old-text new-text #:all? #f))
+              (define new-content
+                (if fuzzy-match
+                    (string-append (substring content 0 (car fuzzy-match))
+                                   new-text
+                                   (substring content (cdr fuzzy-match)))
+                    (string-replace content old-text new-text #:all? #f)))
               (define expected-delta (- (line-count new-text) (line-count old-text)))
               (define actual-delta (- (line-count new-content) (line-count content)))
               (define delta-diff (abs (- actual-delta expected-delta)))
@@ -270,15 +285,16 @@
                    (call-with-output-file path
                                           (lambda (out) (display new-content out))
                                           #:exists 'replace)
-                   (make-success-result
-                    (list (format "Edited ~a (replaced ~a occurrence)" path occurrences))
-                    (hasheq 'path
-                            path
-                            'replacements
-                            1
-                            'old-length
-                            (string-length old-text)
-                            'new-length
-                            (string-length new-text)
-                            'backup
-                            (or backup-path ""))))])])])])]))
+                   (make-success-result (list (format "Edited ~a (replaced ~a occurrence)"
+                                                      path
+                                                      (if fuzzy-match 1 occurrences)))
+                                        (hasheq 'path
+                                                path
+                                                'replacements
+                                                1
+                                                'old-length
+                                                (string-length old-text)
+                                                'new-length
+                                                (string-length new-text)
+                                                'backup
+                                                (or backup-path ""))))])])])])]))
