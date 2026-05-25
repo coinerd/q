@@ -96,12 +96,12 @@
         ;; 4. Parse optional arguments
         (define name-pattern (hash-ref args 'name #f))
         (define type-filter (hash-ref args 'type "any"))
-        (define max-depth (hash-ref args 'max-depth 10))
-        (define max-results (hash-ref args 'max-results 100))
+        (define max-depth (max 0 (hash-ref args 'max-depth 10)))
+        (define max-results (max 1 (hash-ref args 'max-results 100)))
 
-        ;; Compile glob pattern if provided
+        ;; Compile glob pattern if provided (empty string → match all)
         (define name-re
-          (if name-pattern
+          (if (and name-pattern (positive? (string-length name-pattern)))
               (glob->regexp name-pattern #:allow-slash? #t)
               #f))
 
@@ -123,15 +123,16 @@
 ;; Tool definition via define-tool macro
 ;; --------------------------------------------------
 
-(define-tool find
-  #:description "Recursively list files and directories matching a name pattern. Supports glob patterns and type filtering."
-  #:required ("path")
-  #:properties
-    [(path "string" "Root directory to search")
-     (name "string" "Name pattern (glob, optional)")
-     (type "string" "Type filter: 'file', 'dir', or 'any' (default)")
-     (max-depth "integer" "Maximum directory depth to search (default 10)")
-     (max-results "integer" "Maximum results to return (default 100)")]
-  find-handler)
+(define-tool
+ find
+ #:description
+ "Recursively list files and directories matching a name pattern. Supports glob patterns and type filtering."
+ #:required ("path")
+ #:properties [(path "string" "Root directory to search")
+               (name "string" "Name pattern (glob, optional)")
+               (type "string" "Type filter: 'file', 'dir', or 'any' (default)")
+               (max-depth "integer" "Maximum directory depth to search (default 10)")
+               (max-results "integer" "Maximum results to return (default 100)")]
+ find-handler)
 
 (provide find)

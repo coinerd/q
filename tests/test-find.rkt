@@ -236,4 +236,37 @@
 ;; Run
 ;; ============================================================
 
+;; Robustness: negative max-depth clamps to 0
+(test-case "negative max-depth clamps to 0"
+  (with-temp-dir (λ (dir)
+                   (create-file dir "l0.txt")
+                   (create-file dir "sub/l1.txt")
+                   (define r (tool-find (hasheq 'path (path->string dir) 'max-depth -1)))
+                   (check-false (result-is-error? r))
+                   (define c (result-content r))
+                   (check-not-false (member "l0.txt" c))
+                   (check-not-false (member "sub" c))
+                   (check-false (member "sub/l1.txt" c)))))
+
+;; Robustness: negative max-results clamps to 1
+(test-case "negative max-results clamps to 1"
+  (with-temp-dir (λ (dir)
+                   (create-file dir "a.txt")
+                   (create-file dir "b.txt")
+                   (define r (tool-find (hasheq 'path (path->string dir) 'max-results -5)))
+                   (check-false (result-is-error? r))
+                   (check-equal? (length (result-content r)) 1)
+                   (check-equal? (hash-ref (result-details r) 'total-found) 2)
+                   (check-true (hash-ref (result-details r) 'truncated?)))))
+
+;; Edge case: empty name pattern matches all
+(test-case "empty name pattern matches all"
+  (with-temp-dir (λ (dir)
+                   (create-file dir "a.txt")
+                   (create-file dir "b.rkt")
+                   (define r (tool-find (hasheq 'path (path->string dir) 'name "")))
+                   (check-false (result-is-error? r))
+                   (define c (result-content r))
+                   (check-equal? (length c) 2))))
+
 (run-tests find-tests)

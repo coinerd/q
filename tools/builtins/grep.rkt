@@ -25,6 +25,7 @@
 (define DEFAULT-CASE-INSENSITIVE #f)
 (define DEFAULT-MAX-RESULTS 50)
 (define DEFAULT-CONTEXT-LINES 2)
+(define DEFAULT-EXACT #f)
 
 ;; ============================================================
 ;; Internal helpers
@@ -37,11 +38,16 @@
     (define s (path->string part))
     (or (hidden-name? s) (member s skip-dirs))))
 
-;; Compile the regex pattern
-(define (compile-pattern pattern case-insensitive?)
-  (if case-insensitive?
-      (regexp (string-append "(?i:" pattern ")"))
-      (regexp pattern)))
+;; Compile the regex pattern. Returns #f on invalid regex.
+(define (compile-pattern pattern case-insensitive? exact?)
+  (with-handlers ([exn:fail? (lambda (e) #f)])
+    (define effective-pattern
+      (if exact?
+          (regexp-quote pattern)
+          pattern))
+    (if case-insensitive?
+        (regexp (string-append "(?i:" effective-pattern ")"))
+        (regexp effective-pattern))))
 
 ;; ============================================================
 ;; Core search in a single file
@@ -148,23 +154,26 @@
      (define case-insensitive? (hash-ref args 'case-insensitive? DEFAULT-CASE-INSENSITIVE))
      (define max-results (hash-ref args 'max-results DEFAULT-MAX-RESULTS))
      (define context-lines (hash-ref args 'context-lines DEFAULT-CONTEXT-LINES))
+     (define exact? (hash-ref args 'exact? DEFAULT-EXACT))
 
      ;; 2. Compile pattern
-     (define pattern-rx (compile-pattern pattern case-insensitive?))
-
-     ;; 3. Resolve path
-     (define the-path (string->path path-str))
-
+     (define pattern-rx (compile-pattern pattern case-insensitive? exact?))
      (cond
-       [(not (or (file-exists? the-path) (directory-exists? the-path)))
-        (make-error-result (format "Path not found: ~a" path-str))]
-       [(file-exists? the-path)
-        ;; Single file search
-        (search-single-file the-path path-str pattern-rx context-lines max-results 1)]
-       [(directory-exists? the-path)
-        ;; Directory search
-        (search-directory the-path path-str pattern-rx glob-pattern context-lines max-results)]
-       [else (make-error-result (format "Path not found: ~a" path-str))])]))
+       [(not pattern-rx) (make-error-result (format "Invalid pattern: ~a" pattern))]
+       [else
+        ;; 3. Resolve path
+        (define the-path (string->path path-str))
+
+        (cond
+          [(not (or (file-exists? the-path) (directory-exists? the-path)))
+           (make-error-result (format "Path not found: ~a" path-str))]
+          [(file-exists? the-path)
+           ;; Single file search
+           (search-single-file the-path path-str pattern-rx context-lines max-results 1)]
+          [(directory-exists? the-path)
+           ;; Directory search
+           (search-directory the-path path-str pattern-rx glob-pattern context-lines max-results)]
+          [else (make-error-result (format "Path not found: ~a" path-str))])])]))
 
 ;; ============================================================
 ;; Single file search
