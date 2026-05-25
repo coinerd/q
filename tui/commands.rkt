@@ -67,7 +67,8 @@
                   handle-compact-command
                   handle-interrupt-command
                   handle-retry-command
-                  handle-quit-command))
+                  handle-quit-command
+                  handle-login-command))
 
 ;; Re-export all public APIs
 (provide cmd-ctx
@@ -278,6 +279,7 @@
         (set-box! (cmd-ctx-state-box cctx) (handle-clear-command cctx state))
         'continue]
        ['compact (handle-compact-command cctx state args)]
+       ['login (handle-login-command cctx state args)]
        ['status
         (set-box! (cmd-ctx-state-box cctx) (handle-status-command cctx state))
         'continue]

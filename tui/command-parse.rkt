@@ -94,6 +94,9 @@
         (cons 'retry 'none)
         "/r"
         (cons 'retry 'none)
+        ;; Auth
+        "/login"
+        (cons 'login 'optional)
         ;; Extensions (multi-arg: parsed manually in handler)
         "/activate"
         (cons 'activate 'none)

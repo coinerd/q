@@ -45,9 +45,10 @@
           ;; URL generation
           [oauth-authorize-url (-> oauth-config? string? string?)]
           ;; Token exchange
-          [oauth-exchange-code (->* (oauth-config? string?) (#:code-verifier (or/c string? #f)) any)]
+          [oauth-exchange-code
+           (->* (oauth-config? string?) (#:code-verifier (or/c string? #f)) (or/c oauth-token? #f))]
           ;; Token refresh
-          [oauth-refresh-token (-> oauth-config? oauth-token? any)]
+          [oauth-refresh-token (-> oauth-config? oauth-token? (or/c oauth-token? #f))]
           ;; Token persistence
           [oauth-token-file-path (-> path?)]
           [load-oauth-tokens (->* () ((or/c path-string? path?)) hash?)]
