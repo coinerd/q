@@ -451,7 +451,7 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 
 
-**v0.57.1** — Architecture Audit Metrics Remediation Series (v0.57.0–v0.57.5)
+**v0.57.1** — Audit Remediation and Release Closure
 
 **v0.57.0** — Architecture Audit Metrics + Characterization Baseline
 
