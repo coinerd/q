@@ -1,5 +1,41 @@
 # Changelog
 
+## v0.58.2 — 2026-05-25
+
+### OAuth2 Login, OpenRouter Provider & Provider Registry
+
+Milestone adding OAuth2 browser-based login flow, OpenRouter as a first-class provider,
+and a declarative provider registry schema.
+
+**W0 — OAuth2 HTTP Callback Server**
+- `runtime/oauth-callback.rkt`: HTTP callback server with PKCE + CSRF state, ephemeral port
+- `runtime/oauth.rkt`: Real `oauth-exchange-code` and `oauth-refresh-token` using `net/http-client`
+- Base64/base64url encoding helpers for PKCE
+- 12 tests covering callback server, PKCE, token persistence, expiry
+
+**W1 — `/login` Command & Provider Selection**
+- `tui/commands/runtime-control.rkt`: `handle-login-command` with provider selection
+- Cross-platform browser launch (macOS/Linux/Windows) via `process`
+- Background thread: callback server → browser → code exchange → token storage
+- Known provider configs: openai, anthropic, google, openrouter
+- `tests/test-login-command.rkt`: 4 tests + 3 additional OAuth tests
+
+**W2 — OpenRouter Provider**
+- `llm/openrouter.rkt`: Provider wrapper delegating to OpenAI-compatible adapter
+- Static model catalog for offline selection (gpt-4o-mini, claude-3.5-sonnet, gemini-2.0-flash)
+- Provider factory dispatch for `openrouter` provider name
+- 6 tests covering construction, config, request body shape, factory dispatch
+
+**W3 — Provider Registry Schema**
+- `runtime/providers.rktd`: Machine-readable schema for 5 built-in providers
+  (openai, anthropic, gemini, azure, openrouter) with base-url, default-model,
+  auth-type, factory, and model catalogs
+- `runtime/provider-schema.rkt`: `load-builtin-providers!` populates registry from schema
+  with placeholder providers and full model metadata
+- `provider-is-placeholder?` detects unconfigured providers
+- `builtin-provider-config` retrieves provider metadata by name
+- 14 tests covering schema loading, registry population, model registration, placeholder upgrade
+
 ## v0.58.1 — 2026-05-25
 
 ### Context Pressure Signaling & `/compact` Command

@@ -86,10 +86,9 @@
      (define code (extract-callback-code line expected-state))
      (cond
        [code
-        (fprintf out
-                 "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n"
-                 "<html><body><h2>Authorization successful!</h2>"
-                 "<p>You can close this tab.</p></body></html>")
+        (display "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n" out)
+        (display "<html><body><h2>Authorization successful!</h2>" out)
+        (display "<p>You can close this tab.</p></body></html>" out)
         (channel-put result-chan code)]
        [else
         (fprintf out "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n\r\nOAuth error")

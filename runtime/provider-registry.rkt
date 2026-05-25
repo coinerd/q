@@ -14,6 +14,7 @@
          racket/match
          racket/list
          racket/string
+         racket/runtime-path
          "../llm/provider.rkt"
          "../llm/model.rkt")
 
