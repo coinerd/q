@@ -109,10 +109,16 @@
               "sync-readme" ;; file I/O tests, slow under load
               ))
 
+;; Path-based slow patterns — matched against the full path, not just basename.
+;; Used for tests that are integration-level (need full runtime mock) or hang.
+(define path-slow-patterns '("/workflows/")) ;; workflow integration tests need full mock provider
+
 (define (slow-file? f)
   (define base (file-name-from-path f))
-  (for/or ([p (in-list slow-patterns)])
-    (and base (string-contains? (path->string base) p))))
+  (or (for/or ([p (in-list slow-patterns)])
+        (and base (string-contains? (path->string base) p)))
+      (for/or ([p (in-list path-slow-patterns)])
+        (string-contains? f p))))
 
 (define (tui-file? f)
   (string-contains? f "/tui/"))
