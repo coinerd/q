@@ -99,8 +99,8 @@
 
 ;; Resolve event bus: prefer ctx-specific bus, fallback to global.
 (define (resolve-gsd-event-bus ctx)
-  (define ctx-bus (and ctx (gsd-ctx-event-bus ctx)))
-  (or ctx-bus (unbox gsd-event-bus-box)))
+  (define ctx-bus (and ctx (unbox (gsd-session-ctx-event-bus-box ctx))))
+  (or (and ctx-bus (procedure? ctx-bus) ctx-bus) (unbox gsd-event-bus-box)))
 
 ;; Emit to a specific session context's event bus.
 ;; Falls back to global gsd-event-bus-box if ctx has no bus set.

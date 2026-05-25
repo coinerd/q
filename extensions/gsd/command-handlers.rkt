@@ -44,6 +44,7 @@
          (only-in "../gsd/archive.rkt" ensure-state-md!)
          (only-in "../gsd/events.rkt"
                   [emit-gsd-event! events:emit-gsd-event!]
+                  [ctx-emit-gsd-event! events:ctx-emit-gsd-event!]
                   [set-gsd-event-bus! events:set-gsd-event-bus!])
          (only-in "event-structs.rkt"
                   make-gsd-mode-changed-event
@@ -59,7 +60,8 @@
                   set-pinned-dir!
                   set-edit-limit!
                   current-gsd-event-bus
-                  set-gsd-event-bus!))
+                  set-gsd-event-bus!
+                  current-gsd-ctx))
 
 (provide (contract-out [register-gsd-commands (-> any/c any/c)]
                        [handle-execute-command (-> any/c any/c)]
@@ -140,7 +142,8 @@
     [(status) (handle-gsd-status)]
     [(replan)
      (define cmd-result (cmd-replan))
-     (events:emit-gsd-event!
+     (events:ctx-emit-gsd-event!
+      (current-gsd-ctx)
       'gsd.mode.changed
       (make-gsd-mode-changed-event #:session-id "" #:turn-id 0 #:mode 'exploring))
      (hook-amend (hasheq 'text (or (gsd-command-result-message cmd-result) "")))]
@@ -157,8 +160,10 @@
      (hook-amend (hasheq 'text (or (gsd-command-result-message skip-result) "")))]
     [(reset)
      (define cmd-result (cmd-reset))
-     (events:emit-gsd-event! 'gsd.mode.changed
-                             (make-gsd-mode-changed-event #:session-id "" #:turn-id 0 #:mode 'idle))
+     (events:ctx-emit-gsd-event!
+      (current-gsd-ctx)
+      'gsd.mode.changed
+      (make-gsd-mode-changed-event #:session-id "" #:turn-id 0 #:mode 'idle))
      (hook-amend (hasheq 'text (or (gsd-command-result-message cmd-result) "")))]
     [(wave-done)
      (define wd-args (gsd-cmd-wave-done-wave-arg parsed))
@@ -167,7 +172,8 @@
        (define data (gsd-command-result-data cmd-result))
        (define wave-idx (and (hash? data) (hash-ref data 'wave #f)))
        (when wave-idx
-         (events:emit-gsd-event!
+         (events:ctx-emit-gsd-event!
+          (current-gsd-ctx)
           'gsd.wave.completed
           (make-gsd-wave-completed-event #:session-id "" #:turn-id 0 #:wave wave-idx))))
      ;; SAL-06: Set gsd-pin so progress messages survive context assembly
@@ -177,13 +183,14 @@
      (define cmd-result (cmd-done base-dir force?))
      (when (gsd-success? cmd-result)
        (define data (gsd-command-result-data cmd-result))
-       (events:emit-gsd-event! 'gsd.plan.archived
-                               (make-gsd-plan-archived-event #:session-id ""
-                                                             #:turn-id 0
-                                                             #:path
-                                                             (if (hash? data)
-                                                                 (hash-ref data 'archive-path "")
-                                                                 ""))))
+       (events:ctx-emit-gsd-event! (current-gsd-ctx)
+                                   'gsd.plan.archived
+                                   (make-gsd-plan-archived-event #:session-id ""
+                                                                 #:turn-id 0
+                                                                 #:path
+                                                                 (if (hash? data)
+                                                                     (hash-ref data 'archive-path "")
+                                                                     ""))))
      ;; SAL-06: Set gsd-pin on plan-archive (done) messages
      (hook-amend (hasheq 'text (or (gsd-command-result-message cmd-result) "") 'gsd-pin #t))]
     [(plan-submit) (handle-plan-submit result base-dir input-text parsed)]
@@ -205,10 +212,12 @@
      (define plan
        (or plan-from-index
            (let ([waves (parse-waves-from-markdown plan-content)]) (gsd-plan waves "" '() '()))))
-     (events:emit-gsd-event! 'gsd.plan.parsed
-                             (make-gsd-plan-parsed-event #:session-id ""
-                                                         #:turn-id 0
-                                                         #:wave-count (length (gsd-plan-waves plan))))
+     (events:ctx-emit-gsd-event! (current-gsd-ctx)
+                                 'gsd.plan.parsed
+                                 (make-gsd-plan-parsed-event #:session-id ""
+                                                             #:turn-id 0
+                                                             #:wave-count
+                                                             (length (gsd-plan-waves plan))))
      (define norm-result (normalize-plan plan))
      (match norm-result
        [(? string?)
@@ -217,25 +226,27 @@
                              norm-result
                              "\n\nFix the plan before using /go."))]
        [_
-        (events:emit-gsd-event! 'gsd.plan.normalized
-                                (make-gsd-plan-normalized-event
-                                 #:session-id ""
-                                 #:turn-id 0
-                                 #:wave-count (length (gsd-normalized-plan-waves norm-result))))
+        (events:ctx-emit-gsd-event! (current-gsd-ctx)
+                                    'gsd.plan.normalized
+                                    (make-gsd-plan-normalized-event
+                                     #:session-id ""
+                                     #:turn-id 0
+                                     #:wave-count (length (gsd-normalized-plan-waves norm-result))))
         (define validation (validate-normalized-plan norm-result))
         (define validated-plan? (gsd-validated-plan? validation))
-        (events:emit-gsd-event! 'gsd.plan.validated
-                                (make-gsd-plan-validated-event
-                                 #:session-id ""
-                                 #:turn-id 0
-                                 #:wave-count 0
-                                 #:valid? validated-plan?
-                                 #:error-count (if validated-plan?
-                                                   0
-                                                   (length (validation-errors validation)))
-                                 #:warning-count (if validated-plan?
-                                                     0
-                                                     (length (validation-warnings validation)))))
+        (events:ctx-emit-gsd-event! (current-gsd-ctx)
+                                    'gsd.plan.validated
+                                    (make-gsd-plan-validated-event
+                                     #:session-id ""
+                                     #:turn-id 0
+                                     #:wave-count 0
+                                     #:valid? validated-plan?
+                                     #:error-count (if validated-plan?
+                                                       0
+                                                       (length (validation-errors validation)))
+                                     #:warning-count (if validated-plan?
+                                                         0
+                                                         (length (validation-warnings validation)))))
         (match validated-plan?
           [#f
            (list 'error
@@ -252,7 +263,8 @@
      "go"
      (lambda ()
        (set-gsd-mode! 'executing)
-       (events:emit-gsd-event!
+       (events:ctx-emit-gsd-event!
+        (current-gsd-ctx)
         'gsd.mode.changed
         (make-gsd-mode-changed-event #:session-id "" #:turn-id 0 #:mode 'executing))
        (set-edit-limit! 1200)
@@ -266,12 +278,13 @@
        (gsm-set-wave-executor! exec)
        (list exec wis))
      (lambda (e snap)
-       (events:emit-gsd-event! 'gsd.mode.changed
-                               (make-gsd-mode-changed-event #:session-id ""
-                                                            #:turn-id 0
-                                                            #:mode (gsm-current)
-                                                            #:reason "transaction-rollback"
-                                                            #:error (exn-message e))))))
+       (events:ctx-emit-gsd-event! (current-gsd-ctx)
+                                   'gsd.mode.changed
+                                   (make-gsd-mode-changed-event #:session-id ""
+                                                                #:turn-id 0
+                                                                #:mode (gsm-current)
+                                                                #:reason "transaction-rollback"
+                                                                #:error (exn-message e))))))
   (cond
     [(gsd-failed? result) (list 'error (gsd-command-result-message result))]
     [else
@@ -359,8 +372,10 @@
   (when saved-dir
     (set-pinned-dir! saved-dir))
   (set-gsd-mode! 'planning)
-  (events:emit-gsd-event! 'gsd.mode.changed
-                          (make-gsd-mode-changed-event #:session-id "" #:turn-id 0 #:mode 'planning))
+  (events:ctx-emit-gsd-event!
+   (current-gsd-ctx)
+   'gsd.mode.changed
+   (make-gsd-mode-changed-event #:session-id "" #:turn-id 0 #:mode 'planning))
   (set-edit-limit! 500)
   ;; Auto-create STATE.md if missing (#2164)
   (ensure-state-md! base-dir)

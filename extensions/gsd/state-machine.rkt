@@ -18,12 +18,13 @@
          racket/set
          "runtime-state-types.rkt"
          (only-in "policy.rkt" blocked-tools-for gsd-decide-action policy-allowed?)
-         (only-in "events.rkt" emit-gsd-event! current-gsd-correlation-id)
+         (only-in "events.rkt" emit-gsd-event! ctx-emit-gsd-event! current-gsd-correlation-id)
          (only-in "event-structs.rkt"
                   make-gsd-transition-attempted-event
                   make-gsd-transition-succeeded-event
                   make-gsd-transition-failed-event)
          (only-in "session-state.rkt"
+                  current-gsd-ctx
                   current-gsd-history
                   set-gsd-history!
                   gsd-state-snapshot
@@ -215,7 +216,8 @@
    (lambda ()
      (define state (unbox (gsd-session-ctx-state-box gsd-default-ctx)))
      (define current (gsd-runtime-state-mode state))
-     (emit-gsd-event!
+     (ctx-emit-gsd-event!
+      (current-gsd-ctx)
       'gsd.transition.attempted
       (make-gsd-transition-attempted-event #:session-id "" #:turn-id 0 #:from current #:to target))
      (define-values (result new-state) (compute-next-gsm-state state target #:event event))
@@ -224,20 +226,22 @@
         (define new-mode (gsd-runtime-state-mode new-state))
         (set-box! (gsd-session-ctx-state-box gsd-default-ctx) new-state)
         (set-gsd-history! (cons (list current new-mode (current-seconds)) (current-gsd-history)))
-        (emit-gsd-event! 'gsd.transition.succeeded
-                         (make-gsd-transition-succeeded-event #:session-id ""
-                                                              #:turn-id 0
-                                                              #:from current
-                                                              #:to new-mode))
+        (ctx-emit-gsd-event! (current-gsd-ctx)
+                             'gsd.transition.succeeded
+                             (make-gsd-transition-succeeded-event #:session-id ""
+                                                                  #:turn-id 0
+                                                                  #:from current
+                                                                  #:to new-mode))
         result]
        [else
-        (emit-gsd-event! 'gsd.transition.failed
-                         (make-gsd-transition-failed-event
-                          #:session-id ""
-                          #:turn-id 0
-                          #:from current
-                          #:to target
-                          #:reason (format "invalid: ~a -> ~a" current target)))
+        (ctx-emit-gsd-event! (current-gsd-ctx)
+                             'gsd.transition.failed
+                             (make-gsd-transition-failed-event
+                              #:session-id ""
+                              #:turn-id 0
+                              #:from current
+                              #:to target
+                              #:reason (format "invalid: ~a -> ~a" current target)))
         result]))))
 
 ;; FF-01: Auto-routing transition — finds shortest path via BFS and follows it.
@@ -433,7 +437,8 @@
    (lambda ()
      (define state (unbox (gsd-session-ctx-state-box ctx)))
      (define current (gsd-runtime-state-mode state))
-     (emit-gsd-event!
+     (ctx-emit-gsd-event!
+      ctx
       'gsd.transition.attempted
       (make-gsd-transition-attempted-event #:session-id "" #:turn-id 0 #:from current #:to target))
      (define-values (result new-state) (compute-next-gsm-state state target #:event event))
@@ -444,20 +449,22 @@
         (set-box! (gsd-session-ctx-history-box ctx)
                   (cons (list current new-mode (current-seconds))
                         (unbox (gsd-session-ctx-history-box ctx))))
-        (emit-gsd-event! 'gsd.transition.succeeded
-                         (make-gsd-transition-succeeded-event #:session-id ""
-                                                              #:turn-id 0
-                                                              #:from current
-                                                              #:to new-mode))
+        (ctx-emit-gsd-event! ctx
+                             'gsd.transition.succeeded
+                             (make-gsd-transition-succeeded-event #:session-id ""
+                                                                  #:turn-id 0
+                                                                  #:from current
+                                                                  #:to new-mode))
         result]
        [else
-        (emit-gsd-event! 'gsd.transition.failed
-                         (make-gsd-transition-failed-event
-                          #:session-id ""
-                          #:turn-id 0
-                          #:from current
-                          #:to target
-                          #:reason (format "invalid: ~a -> ~a" current target)))
+        (ctx-emit-gsd-event! ctx
+                             'gsd.transition.failed
+                             (make-gsd-transition-failed-event
+                              #:session-id ""
+                              #:turn-id 0
+                              #:from current
+                              #:to target
+                              #:reason (format "invalid: ~a -> ~a" current target)))
         result]))))
 
 (define (gsm-ctx-reset! ctx)
