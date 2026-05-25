@@ -62,7 +62,9 @@
                   retry-exhausted?
                   retry-exhausted-attempts
                   retry-exhausted-total-delay-ms
-                  retry-exhausted-error-history))
+                  retry-exhausted-error-history)
+         (only-in "../llm/token-budget.rkt" estimate-context-tokens)
+         (only-in "context-pressure.rkt" check-context-pressure))
 
 (provide (contract-out
           [run-prompt!
@@ -344,6 +346,10 @@
   ;; 2. Check token budget and compact if needed
   (define context-after-compact
     (maybe-compact-context sess context-with-system token-budget-threshold))
+
+  ;; 2a. Emit context-pressure event for TUI/extensions
+  (define token-count (estimate-context-tokens context-after-compact))
+  (check-context-pressure sess token-count token-budget-threshold)
 
   ;; 3. Ensure session directory exists before iteration writes assistant messages
   (ensure-persisted!-fn sess)
