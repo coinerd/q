@@ -11,18 +11,36 @@
          "../../agent/event-bus.rkt"
          "context.rkt")
 
-;; Handle /compact — request compaction
-(define (handle-compact-command cctx state)
-  (define entry (make-system-entry "[compact requested]"))
-  (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
-  (when (cmd-ctx-event-bus cctx)
-    (publish! (cmd-ctx-event-bus cctx)
-              (make-event "compact.requested"
-                          (inexact->exact (truncate (/ (current-inexact-milliseconds) 1000)))
-                          (or (ui-state-session-id state) "")
-                          #f
-                          (hash))))
-  'continue)
+;; Handle /compact — request compaction with optional --dry-run
+(define (handle-compact-command cctx state [args '()])
+  ;; Block during active tool loop
+  (cond
+    [(ui-state-busy? state)
+     (define entry (make-error-entry "Cannot compact while a tool is running. Wait for completion."))
+     (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+     (set-box! (cmd-ctx-needs-redraw-box cctx) #t)
+     'continue]
+    [else
+     (define dry-run? (member "--dry-run" args))
+     (cond
+       [dry-run?
+        (define transcript (ui-state-transcript state))
+        (define entry-count (length transcript))
+        (define msg
+          (format "[compact dry-run: ~a transcript entries would be compacted]" entry-count))
+        (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state (make-system-entry msg)))
+        'continue]
+       [else
+        (define entry (make-system-entry "[compact requested]"))
+        (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+        (when (cmd-ctx-event-bus cctx)
+          (publish! (cmd-ctx-event-bus cctx)
+                    (make-event "compact.requested"
+                                (inexact->exact (truncate (/ (current-inexact-milliseconds) 1000)))
+                                (or (ui-state-session-id state) "")
+                                #f
+                                (hash))))
+        'continue])]))
 
 ;; Handle /interrupt — interrupt current operation
 (define (handle-interrupt-command cctx state)
@@ -43,10 +61,7 @@
   (cond
     [last-prompt
      (define entry
-       (make-entry 'system
-                   (format "[retry: resubmitting]")
-                   (current-inexact-milliseconds)
-                   (hash)))
+       (make-entry 'system (format "[retry: resubmitting]") (current-inexact-milliseconds) (hash)))
      (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
      ;; v0.14.2 Wave 2: Enrich retry with tool summary from previous turn
      (define tool-summary (get-last-turn-tool-summary (unbox (cmd-ctx-state-box cctx))))
@@ -64,11 +79,12 @@
                              (define sid (ui-state-session-id (unbox (cmd-ctx-state-box cctx))))
                              (when (and bus sid)
                                (publish! bus
-                                         (make-event "runtime.error"
-                                                     (current-inexact-milliseconds)
-                                                     sid
-                                                     #f
-                                                     (hasheq 'error (exn-message e) 'errorType 'internal-error)))
+                                         (make-event
+                                          "runtime.error"
+                                          (current-inexact-milliseconds)
+                                          sid
+                                          #f
+                                          (hasheq 'error (exn-message e) 'errorType 'internal-error)))
                                (publish! bus
                                          (make-event "turn.completed"
                                                      (current-inexact-milliseconds)

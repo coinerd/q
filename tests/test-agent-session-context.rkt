@@ -348,6 +348,10 @@
       (check-not-equal? (length (unbox compact-events))
                         0
                         "compact.requested should trigger session.compact.completed")
+      (define completed-evt (car (unbox compact-events)))
+      (define payload (event-payload completed-evt))
+      (check-true (hash-has-key? payload 'removedCount) "completed event should have removedCount")
+      (check-true (hash-has-key? payload 'keptCount) "completed event should have keptCount")
       (close-session! sess)
       (delete-directory/files tmpdir))))
 
