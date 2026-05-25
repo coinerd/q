@@ -1,56 +1,107 @@
 #lang racket/base
 
-;; tui/layout.rkt — Panel composition and screen geometry
+;; tui/layout.rkt — 5-region TUI layout computation (#5257, #5258)
 ;;
-;; Pure functions that compute which panels go where on screen.
-;; No terminal I/O.
+;; Defines the terminal layout as five stacked regions:
+;;   1. Header      — fixed height (status bar)
+;;   2. Transcript  — flexible height (scrollable message history)
+;;   3. Widget bar  — fixed height (lifecycle widgets, below transcript)
+;;   4. Input       — fixed height (command/prompt entry)
+;;   5. Overlay     — floating, absolute-positioned (dialogs)
+;;
+;; Height allocation:
+;;   - Header: 1 line
+;;   - Input: 3 lines (input + border + spacing)
+;;   - Widget bar: configurable via widget-bar-height parameter (default 3)
+;;   - Transcript: remaining space = terminal-height - header - widget-bar - input
+;;   - Overlay: not counted — drawn on top of other regions
 
-;; Layout computation
-(provide compute-layout
-         compute-layout-with-widgets
+(require racket/contract
+         racket/list
+         "state-ui.rkt")
 
-         ;; Layout struct
-         tui-layout
-         tui-layout?
-         tui-layout-cols
-         tui-layout-rows
-         tui-layout-header-row
-         tui-layout-transcript-start-row
-         tui-layout-transcript-height
-         tui-layout-status-row
-         tui-layout-input-row)
+;; ═══════════════════════════════════════════════════════════════════
+;; Layout region struct
+;; ═══════════════════════════════════════════════════════════════════
 
-;; Screen layout: where each panel starts and how tall it is
-(struct tui-layout
-        (cols rows ; screen dimensions
-              header-row ; row number for header (0-based)
-              transcript-start-row ; row number for transcript start (0-based)
-              transcript-height ; number of rows available for transcript
-              status-row ; row number for status bar (0-based)
-              input-row ; row number for input line (0-based)
-              )
+(struct layout-region
+        (name ; symbol — region identifier
+         y ; exact-nonnegative-integer — top row
+         height ; exact-nonnegative-integer — number of lines
+         width ; exact-nonnegative-integer — number of columns
+         )
   #:transparent)
 
-;; Compute layout given screen dimensions
-;; Layout (0-based row numbers):
-;;   Row 0..H-3:   Transcript (H-2 lines)
-;;   Row H-2:      Status bar (1 line)
-;;   Row H-1:      Input line (1 line)
-(define (compute-layout cols rows)
-  (compute-layout-with-widgets cols rows 0))
+;; ═══════════════════════════════════════════════════════════════════
+;; Layout computation
+;; ═══════════════════════════════════════════════════════════════════
 
-;; Compute layout accounting for widget container rows.
-;; widget-rows-above: number of widget lines above input.
-(define (compute-layout-with-widgets cols rows [widget-rows-above 0])
-  (define min-height 3) ; Need at least 1 transcript + status + input
-  (define actual-rows (max min-height rows))
-  (define non-transcript (+ 2 widget-rows-above)) ; status + input (no header)
-  (define transcript-h (max 1 (- actual-rows non-transcript)))
-  (tui-layout cols
-              actual-rows
-              #f ; header-row: #f = no header (v0.28.14)
-              0 ; transcript-start-row
-              transcript-h ; transcript-height
-              (+ transcript-h widget-rows-above) ; status-row
-              (+ 1 transcript-h widget-rows-above) ; input-row
-              ))
+;; Height constants
+(define header-height 1)
+(define input-height 3)
+
+;; Compute the 5-region layout for a given terminal size.
+;; Returns a hash of region-name -> layout-region.
+(define (compute-layout term-height
+                        term-width
+                        #:widget-bar-h [widget-bar-h (widget-bar-height)]
+                        #:has-widgets? [has-widgets? #f])
+  (define effective-widget-h (if (and has-widgets? (> widget-bar-h 0)) widget-bar-h 0))
+  (define fixed-height (+ header-height effective-widget-h input-height))
+  (define transcript-height (max 0 (- term-height fixed-height)))
+  (hasheq
+   'header
+   (layout-region 'header 0 header-height term-width)
+   'transcript
+   (layout-region 'transcript header-height transcript-height term-width)
+   'widget-bar
+   (layout-region 'widget-bar (+ header-height transcript-height) effective-widget-h term-width)
+   'input
+   (layout-region 'input
+                  (+ header-height transcript-height effective-widget-h)
+                  input-height
+                  term-width)))
+
+;; Get transcript region from layout
+(define (layout-transcript layout)
+  (hash-ref layout 'transcript))
+
+;; Get widget-bar region from layout
+(define (layout-widget-bar layout)
+  (hash-ref layout 'widget-bar))
+
+;; Get header region from layout
+(define (layout-header layout)
+  (hash-ref layout 'header))
+
+;; Get input region from layout
+(define (layout-input layout)
+  (hash-ref layout 'input))
+
+;; Clip lines to a region's height.
+(define (clip-to-region lines region)
+  (takef (append lines (make-list (layout-region-height region) ""))
+         (lambda (_) #t)
+         (layout-region-height region)))
+
+;; ═══════════════════════════════════════════════════════════════════
+;; Provides
+;; ═══════════════════════════════════════════════════════════════════
+
+(provide layout-region
+         layout-region?
+         layout-region-name
+         layout-region-y
+         layout-region-height
+         layout-region-width
+         header-height
+         input-height
+         (contract-out [compute-layout
+                        (->* (exact-positive-integer? exact-positive-integer?)
+                             (#:widget-bar-h exact-nonnegative-integer? #:has-widgets? boolean?)
+                             hash?)]
+                       [layout-transcript (-> hash? layout-region?)]
+                       [layout-widget-bar (-> hash? layout-region?)]
+                       [layout-header (-> hash? layout-region?)]
+                       [layout-input (-> hash? layout-region?)]
+                       [clip-to-region (-> (listof any/c) layout-region? (listof any/c))]))
