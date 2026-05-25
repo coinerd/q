@@ -40,7 +40,7 @@
            (-> any/c
                ui-state?
                input-state?
-               tui-layout?
+               hash?
                (values exact-nonnegative-integer?
                        exact-nonnegative-integer?
                        ui-state?
@@ -258,13 +258,16 @@
 ;; Returns: (values cursor-col cursor-row ui-state frame-lines)
 ;;   frame-lines is (listof string) — plain text for each row, for diffing
 (define (render-frame! ubuf ui-state input-st layout)
-  (define cols (tui-layout-cols layout))
-  (define rows (tui-layout-rows layout))
-  (define header-row (tui-layout-header-row layout))
-  (define transcript-start-row (tui-layout-transcript-start-row layout))
-  (define transcript-height (tui-layout-transcript-height layout))
-  (define status-row (tui-layout-status-row layout))
-  (define input-row (tui-layout-input-row layout))
+  (define header-region (layout-header layout))
+  (define transcript-region (layout-transcript layout))
+  (define input-region (layout-input layout))
+  (define cols (layout-region-width header-region))
+  (define rows (+ (layout-region-y input-region) (layout-region-height input-region)))
+  (define header-row (layout-region-y header-region))
+  (define transcript-start-row (layout-region-y transcript-region))
+  (define transcript-height (layout-region-height transcript-region))
+  (define status-row (layout-region-y input-region))
+  (define input-row (min (sub1 rows) (add1 status-row)))
 
   ;; Get the ubuf operations
   (define ubuf-clear! (current-ubuf-clear))

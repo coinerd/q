@@ -173,7 +173,11 @@
 
   (define-values (cols rows) (tui-screen-size))
   (define widget-lines (get-widget-lines-above state))
-  (define layout (compute-layout-with-widgets cols rows (length widget-lines)))
+  (define layout
+    (compute-layout rows
+                    cols
+                    #:widget-bar-h (length widget-lines)
+                    #:has-widgets? (positive? (length widget-lines))))
 
   ;; Render to ubuf (returns cursor position, state, frame lines)
   (define-values (cursor-col cursor-row state* frame-lines)

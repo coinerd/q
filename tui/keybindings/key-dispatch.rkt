@@ -73,15 +73,15 @@
      'handled]
     [(tui.navigation.page-up page-up)
      (define-values (_cols rows) (tui-screen-size))
-     (define layout (compute-layout _cols rows))
+     (define layout (compute-layout rows _cols))
      (set-box! (tui-ctx-ui-state-box ctx)
-               (scroll-up state (max 1 (tui-layout-transcript-height layout))))
+               (scroll-up state (max 1 (layout-region-height (layout-transcript layout)))))
      'handled]
     [(tui.navigation.page-down page-down)
      (define-values (_cols rows) (tui-screen-size))
-     (define layout (compute-layout _cols rows))
+     (define layout (compute-layout rows _cols))
      (set-box! (tui-ctx-ui-state-box ctx)
-               (scroll-down state (max 1 (tui-layout-transcript-height layout))))
+               (scroll-down state (max 1 (layout-region-height (layout-transcript layout)))))
      'handled]
     [(scroll-top)
      (set-box! (tui-ctx-ui-state-box ctx) (scroll-to-top state))
@@ -216,16 +216,16 @@
        [(pgup kp-pgup)
         (let ()
           (define-values (_cols rows) (tui-screen-size))
-          (define layout (compute-layout _cols rows))
+          (define layout (compute-layout rows _cols))
           (set-box! (tui-ctx-ui-state-box ctx)
-                    (scroll-up state (max 1 (tui-layout-transcript-height layout)))))
+                    (scroll-up state (max 1 (layout-region-height (layout-transcript layout))))))
         'continue]
        [(pgdn kp-pgdn)
         (let ()
           (define-values (_cols rows) (tui-screen-size))
-          (define layout (compute-layout _cols rows))
+          (define layout (compute-layout rows _cols))
           (set-box! (tui-ctx-ui-state-box ctx)
-                    (scroll-down state (max 1 (tui-layout-transcript-height layout)))))
+                    (scroll-down state (max 1 (layout-region-height (layout-transcript layout))))))
         'continue]
        [else 'continue])]
     [_ 'continue]))
