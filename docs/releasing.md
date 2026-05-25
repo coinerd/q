@@ -1,4 +1,4 @@
-<!-- verified-against: 0.24.9 --># Release Process
+<!-- verified-against: 0.57.1 --># Release Process
 
 This document describes how to cut a new release of **q**.
 
@@ -31,12 +31,20 @@ q follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (**MAJOR.MI
 Before starting a release, verify every item below:
 
 - [ ] All tests pass: `racket scripts/run-tests.rkt` from the `q/` root
+- [ ] Fast suite green: `racket scripts/run-tests.rkt --suite fast`
+- [ ] TUI suite green: `racket scripts/run-tests.rkt --suite tui`
+- [ ] Arch suite green: `racket scripts/run-tests.rkt --suite arch`
+- [ ] Lint-all green and read-only: `racket scripts/lint-all.rkt` (exit 0, no worktree mutations)
+- [ ] Contract changes tracked: `racket scripts/lint-contract-changes.rkt`
+- [ ] Widened ledger clean: `racket scripts/lint-widened-ledger.rkt`
+- [ ] Release readiness: `racket scripts/lint-release-readiness.rkt` (on main, clean worktree, tag not yet exists)
 - [ ] Version bumped in `util/version.rkt` (canonical source)
 - [ ] Run `racket scripts/sync-version.rkt --write` to propagate to `info.rkt` and `README.md`
 - [ ] Run `racket scripts/lint-version.rkt` to verify consistency
 - [ ] `CHANGELOG.md` updated with the new version entry
 - [ ] `README.md` metrics (test count, module count) updated
 - [ ] Clean git status (`git status` shows no uncommitted changes)
+- [ ] Repeat-3 green: `racket scripts/run-tests.rkt --suite fast` passes 3 times consecutively
 
 ## Release Steps
 
@@ -46,7 +54,7 @@ Edit the canonical source:
 
 ```racket
 ;; util/version.rkt
-(define q-version "0.24.9")```
+(define q-version "0.57.6")```
 
 Then propagate:
 
@@ -65,12 +73,12 @@ racket scripts/lint-version.rkt  # verify
 
 ```bash
 git add -A
-git commit -m "Release v0.24.9"```
+git commit -m "Release v0.57.6"```
 
 ### 4. Tag
 
 ```bash
-git tag -a v0.24.9 -m "Release v0.24.9"```
+git tag -a v0.57.6 -m "Release v0.57.6"```
 
 ### 5. Push
 

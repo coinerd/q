@@ -1,5 +1,60 @@
 # Changelog
 
+## v0.57.6 — 2026-05-25
+
+### Audit Remediation and Release Closure
+
+Focused repair milestone addressing findings from `PROJECT_REVIEW-v0.57.x-GSD-AUDIT.md`.
+
+**W0 — Baseline Reproduction**
+- reproduced all audit findings: 812 any/c, fast suite exit 4, lint-all exit 1 mutating README
+- created `docs/reports/v0.57.6-audit-remediation-baseline.md`
+
+**W1 — P0/P1 Contract Fixes**
+- `with-auto-retry` return type corrected (any/c, not retry-policy?)
+- model stop-reason accepts symbols in addition to strings
+- `/model` command arity fixed for optional keyword args
+- tool-coordinator session-config accepts hash
+- `check-cancellation` iteration-ctx parameter accepted
+- `retryable-error?` includes `'server-error` category
+
+**W2 — Runner Truthfulness and Isolation**
+- support/helper/fixture modules excluded from test collection
+- rackunit text-ui errors counted as failures
+- parsed failures/errors promote exit 0 to effective exit 1
+- orphan/stale compiled dirs cleaned
+
+**W3 — Lint Release-Readiness Repair**
+- `lint-all.rkt` no longer mutates README.md (metrics-sync uses `--lint`)
+- `lint-release-readiness.rkt` accepts both `## 0.57.1` and `## v0.57.1` changelog headers
+- test path strings constructed dynamically for lint-tests compliance
+
+**W5 — Workflow Recovery (14 contract fixes)**
+- TUI: keycode->key-spec optional keywords, register-command! hash return, set-visible-branches branch-info list, component-render any/c output, load-keybindings path arg
+- Context-assembly: build-assembled-context/raw keyword contracts, working-set any/c, generate-context-summary any/c provider
+- Tools: make-tool-call any/c arguments, tool-call-arguments any/c
+- Extensions: ctx-lookup-provider any/c return
+- Skills: load-global-resources #:hook-dispatcher keyword
+- Hotspot: run-tests.rkt risk note added
+
+**Results**
+- Fast suite: 561/569 files pass (8 remaining integration test failures)
+- TUI suite: 37/37 PASS (all green)
+- Arch suite: 9/9 PASS (all green)
+- Lint-all: 22/23 PASS (release-readiness correctly requires main branch)
+- any/c: 812 baseline (unchanged — W1 tightening was reverted by W5 truthfulness fixes)
+
+## v0.56.x — Internal Workflow Hardening (2026-05-24)
+
+### Workflow Hardening Series (no public release tag)
+
+Internal hardening milestone adding programmatic enforcement for q development:
+
+- Pi extensions: contract-guard, release-guard, wave-gate, test-runner, racket-edit, racket-tools, q-sync
+- Racket scripts: lint-all.rkt (23 checks), lint-contract-changes.rkt, lint-widened-ledger.rkt, lint-version.rkt
+- GitHub Projects workflow: milestone issues, wave issues, PR-per-wave, squash-merge
+- CI: GitHub Actions for release, benchmark, project automation
+
 ## v0.57.1 — 2026-05-24
 
 ### Architecture Audit Metrics Remediation Series (v0.57.0–v0.57.5)
