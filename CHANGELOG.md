@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.58.1 — 2026-05-25
+
+### Context Pressure Signaling & `/compact` Command
+
+Milestone giving users visibility and control over context compaction.
+
+**W0 — Context Pressure Event System**
+- Created `agent/event-structs/context-pressure-events.rkt`: `context-pressure-event` typed event
+- Created `runtime/context-pressure.rkt`: `check-context-pressure` computes green/yellow/red level
+  from token count vs budget (thresholds: <60% green, 60-80% yellow, >80% red)
+- Wired `check-context-pressure` into `run-prompt-internal` after `maybe-compact-context`
+- 6 tests covering thresholds, event emission, percentage accuracy
+
+**W1 — TUI Status Bar Integration**
+- Added `context-pressure-level` and `context-pressure-percent` to `ui-state` struct
+- `render-status-bar` shows `[ctx: 45%]` when pressure data available
+- Warning markers: `!` for yellow, `!!` for red
+- `current-show-context-pressure?` parameter (default `#t`)
+- Falls back to raw token count when disabled or unavailable
+- 7 tests covering rendering at all levels and fallback modes
+
+**W2 — `/compact` Command**
+- `/compact` now accepts `--dry-run` argument (shows transcript entry count preview)
+- Blocked during active tool loop (`ui-state-busy?`)
+- `session.compact.completed` event now includes `keptCount` alongside `removedCount`
+- 3 tests for event emission, dry-run, and busy blocking
+
 ## v0.58.0 — 2026-05-25
 
 ### Fuzzy-Match Edit Tool + Tool Robustness
