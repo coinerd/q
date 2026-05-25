@@ -7,7 +7,8 @@
 (require rackunit
          "../extensions/custom-renderer-registry.rkt"
          "../tui/render.rkt"
-         "../tui/state.rkt")
+         "../tui/state.rkt"
+         "../tui/state-ui.rkt")
 
 ;; ============================================================
 ;; Registry API
@@ -108,3 +109,64 @@
   (check > (length lines) 0)
   ;; Should use default rendering (contains the text)
   (check-not-false (string-contains? (styled-line->text (car lines)) "default-tool running")))
+
+;; ============================================================
+;; Thread safety — #5250
+;; ============================================================
+
+(test-case "concurrent register/unregister does not corrupt registry"
+  (define iterations 100)
+  (define thds
+    (for/list ([i (in-range 4)])
+      (thread (lambda ()
+                (for ([j (in-range iterations)])
+                  (define tool-name (format "ct-~a-~a" i j))
+                  (define r (custom-renderer tool-name #f #f))
+                  (register-custom-renderer! r)
+                  (lookup-custom-renderer tool-name)
+                  (unregister-custom-renderer! tool-name))))))
+  (for-each thread-wait thds)
+  ;; Registry should be consistent — no ct- entries left
+  (check-false (lookup-custom-renderer "ct-0-0")))
+
+(test-case "concurrent lookups during registration are consistent"
+  (unregister-custom-renderer! "lkup-test")
+  (define r0 (custom-renderer "lkup-test" (lambda (_) '()) #f))
+  (register-custom-renderer! r0)
+  (define results (box '()))
+  (define thds
+    (for/list ([_ (in-range 10)])
+      (thread (lambda ()
+                (define found (lookup-custom-renderer "lkup-test"))
+                (set-box! results (cons found (unbox results)))))))
+  (for-each thread-wait thds)
+  ;; All lookups should find the renderer
+  (for ([v (in-list (unbox results))])
+    (check-not-false v))
+  (unregister-custom-renderer! "lkup-test"))
+
+;; ============================================================
+;; Below-transcript widget rendering — #5251
+;; ============================================================
+
+(test-case "get-widget-lines-below returns extension widget lines"
+  (define st0 (initial-ui-state))
+  ;; Initially empty
+  (check-equal? (get-widget-lines-below st0) '())
+  ;; Set a widget
+  (define st1 (set-extension-widget st0 'my-ext 'status '("line1" "line2")))
+  (define below (get-widget-lines-below st1))
+  (check-equal? (length below) 2)
+  (check-equal? (car below) "line1"))
+
+(test-case "get-widget-lines-below merges multiple extensions"
+  (define st0 (initial-ui-state))
+  (define st1 (set-extension-widget st0 'ext-a 'key1 '("a1")))
+  (define st2 (set-extension-widget st1 'ext-b 'key2 '("b1" "b2")))
+  (define below (get-widget-lines-below st2))
+  (check-equal? (length below) 3))
+
+(test-case "widget-bar-height parameter has default 3"
+  (check-equal? (widget-bar-height) 3)
+  (parameterize ([widget-bar-height 5])
+    (check-equal? (widget-bar-height) 5)))
