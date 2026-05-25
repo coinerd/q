@@ -6,9 +6,14 @@
 ;; Extracted from commands.rkt (W19) to thin the commands parent.
 
 (require racket/hash
+         racket/string
+         racket/system
          "../state.rkt"
          "../../util/protocol-types.rkt"
          "../../agent/event-bus.rkt"
+         "../../runtime/oauth.rkt"
+         "../../runtime/oauth-callback.rkt"
+         "../../runtime/auth-store.rkt"
          "context.rkt")
 
 ;; Handle /compact — request compaction with optional --dry-run
@@ -102,7 +107,128 @@
   (set-box! (cmd-ctx-running-box cctx) #f)
   'quit)
 
+;; Handle /login — OAuth2 login flow
+(define (handle-login-command cctx state [args '()])
+  (cond
+    [(not (oauth-available?))
+     (set-box! (cmd-ctx-state-box cctx)
+               (add-transcript-entry state
+                                     (make-error-entry "OAuth not available. Check configuration.")))
+     'continue]
+    [else
+     (define provider-name
+       (if (and (pair? args) (not (string=? (car args) "")))
+           (car args)
+           #f))
+     (define cfg (and provider-name (get-oauth-config provider-name)))
+     (cond
+       [(and provider-name (not cfg))
+        (set-box! (cmd-ctx-state-box cctx)
+                  (add-transcript-entry state
+                                        (make-error-entry (format "Unknown OAuth provider: ~a"
+                                                                  provider-name))))
+        'continue]
+       [else
+        ;; Show "logging in..." message
+        (define wait-msg
+          (if provider-name
+              (format "[logging in to ~a...]" provider-name)
+              "[login: use /login <provider> to start OAuth flow]"))
+        (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state (make-system-entry wait-msg)))
+        (when cfg
+          ;; Start OAuth flow in background thread
+          (thread
+           (lambda ()
+             (with-handlers ([exn:fail? (lambda (e)
+                                          (set-box! (cmd-ctx-state-box cctx)
+                                                    (add-transcript-entry
+                                                     (unbox (cmd-ctx-state-box cctx))
+                                                     (make-error-entry (format "Login failed: ~a"
+                                                                               (exn-message e)))))
+                                          (set-box! (cmd-ctx-needs-redraw-box cctx) #t))])
+               (define-values (port state-param verifier get-code)
+                 (start-callback-server #:timeout 120))
+               (define auth-url
+                 (oauth-authorize-url (struct-copy oauth-config cfg [redirect-port port])
+                                      state-param))
+               ;; Open browser
+               (open-browser auth-url)
+               ;; Wait for callback
+               (define code (get-code))
+               (cond
+                 [code
+                  (define tok (oauth-exchange-code cfg code #:code-verifier verifier))
+                  (cond
+                    [tok
+                     (store-oauth-token! (or provider-name "default") tok)
+                     (set-box! (cmd-ctx-state-box cctx)
+                               (add-transcript-entry
+                                (unbox (cmd-ctx-state-box cctx))
+                                (make-system-entry (format "[login successful: ~a]"
+                                                           (or provider-name "default")))))
+                     (set-box! (cmd-ctx-needs-redraw-box cctx) #t)]
+                    [else
+                     (set-box! (cmd-ctx-state-box cctx)
+                               (add-transcript-entry
+                                (unbox (cmd-ctx-state-box cctx))
+                                (make-error-entry "Login failed: token exchange returned no token.")))
+                     (set-box! (cmd-ctx-needs-redraw-box cctx) #t)])]
+                 [else
+                  (set-box! (cmd-ctx-state-box cctx)
+                            (add-transcript-entry
+                             (unbox (cmd-ctx-state-box cctx))
+                             (make-error-entry "Login timed out or was denied.")))
+                  (set-box! (cmd-ctx-needs-redraw-box cctx) #t)])))))
+        'continue])]))
+
+;; Get OAuth config for a known provider.
+;; Returns oauth-config or #f.
+(define (get-oauth-config provider-name)
+  (define known-providers
+    (hash "openai"
+          (oauth-config "https://auth0.openai.com/authorize"
+                        "https://auth0.openai.com/oauth/token"
+                        #f
+                        ""
+                        '("openid" "email" "profile")
+                        8089)
+          "anthropic"
+          (oauth-config "https://console.anthropic.com/oauth/authorize"
+                        "https://console.anthropic.com/oauth/token"
+                        #f
+                        ""
+                        '("openid")
+                        8089)
+          "google"
+          (oauth-config "https://accounts.google.com/o/oauth2/v2/auth"
+                        "https://oauth2.googleapis.com/token"
+                        #f
+                        ""
+                        '("openid" "email" "profile")
+                        8089)
+          "openrouter"
+          (oauth-config "https://openrouter.ai/auth"
+                        "https://openrouter.ai/api/v1/auth/token"
+                        #f
+                        ""
+                        '("openid")
+                        8089)))
+  (hash-ref known-providers provider-name #f))
+
+;; Open browser cross-platform.
+(define (open-browser url)
+  (define cmd
+    (case (system-type 'os)
+      [(macosx) (format "open '~a'" url)]
+      [(unix) (format "xdg-open '~a'" url)]
+      [(windows) (format "start '~a'" url)]
+      [else #f]))
+  (when cmd
+    (with-handlers ([exn:fail? (lambda (e) (void))])
+      (process cmd))))
+
 (provide handle-compact-command
          handle-interrupt-command
          handle-retry-command
-         handle-quit-command)
+         handle-quit-command
+         handle-login-command)
