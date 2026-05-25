@@ -8,6 +8,7 @@
          racket/list
          racket/set
          (only-in "../../util/protocol-types.rkt"
+                  message?
                   message-id
                   message-parent-id
                   message-content
@@ -15,17 +16,18 @@
                   text-part-text)
          "schema.rkt")
 
-(provide (contract-out [lookup-entry (-> any/c any/c any/c)]
-                       [children-of (-> any/c any/c (listof any/c))]
-                       [leaf-nodes (-> any/c (listof any/c))]
-                       [resolve-active-leaf (-> any/c any/c)]
-                       [active-leaf (-> any/c any/c)]
-                       [get-branch (-> any/c any/c (or/c list? #f))]
-                       [find-common-ancestor (-> any/c any/c any/c any/c)]
-                       [collect-branch-entries
-                        (-> any/c any/c any/c exact-nonnegative-integer? (listof any/c))]
-                       [estimate-entry-tokens (-> any/c exact-nonnegative-integer?)]
-                       [leaf-depth (-> any/c any/c (or/c exact-nonnegative-integer? #f))]))
+(provide (contract-out
+          [lookup-entry (-> session-index? string? (or/c message? #f))]
+          [children-of (-> session-index? string? (listof message?))]
+          [leaf-nodes (-> session-index? (listof message?))]
+          [resolve-active-leaf (-> session-index? (or/c message? #f))]
+          [active-leaf (-> session-index? (or/c message? #f))]
+          [get-branch (-> session-index? string? (or/c (listof message?) #f))]
+          [find-common-ancestor (-> session-index? string? string? (or/c string? #f))]
+          [collect-branch-entries
+           (-> session-index? string? string? exact-nonnegative-integer? (listof message?))]
+          [estimate-entry-tokens (-> message? exact-nonnegative-integer?)]
+          [leaf-depth (-> session-index? string? (or/c exact-nonnegative-integer? #f))]))
 
 (define (lookup-entry idx id)
   (hash-ref (session-index-by-id idx) id #f))

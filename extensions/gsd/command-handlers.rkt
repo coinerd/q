@@ -64,11 +64,11 @@
                   current-gsd-ctx))
 
 (provide (contract-out
-          [register-gsd-commands (-> any/c any/c)]
-          [handle-execute-command (-> hash? any/c)]
-          [handle-go-command (-> (or/c path-string? #f) string? any/c)]
-          [handle-gsd-status (-> any/c)]
-          [handle-artifact-command (-> string? string? (or/c path-string? #f) hash? any/c)]
+          [register-gsd-commands (-> extension-ctx? hook-result?)]
+          [handle-execute-command (-> hash? hook-result?)]
+          [handle-go-command (-> (or/c path-string? #f) string? hook-result?)]
+          [handle-gsd-status (-> hook-result?)]
+          [handle-artifact-command (-> string? string? (or/c path-string? #f) hash? hook-result?)]
           [dispatch-gsd-command
            (-> (or/c parsed-gsd-command? #f) string? (or/c path-string? #f) (values symbol? any/c))]))
 
