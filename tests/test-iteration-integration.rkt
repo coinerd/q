@@ -156,14 +156,14 @@
 
 (test-case "check-cancellation: returns #f when nothing cancelled"
   (define bus (make-event-bus))
-  (define ctx (iteration-ctx 3 0 0 5 10))
+  (define ctx '())
   (define tok (make-cancellation-token))
   (define result (check-cancellation tok #f #f bus "test-session" 3 ctx))
   (check-false result))
 
 (test-case "check-cancellation: returns loop-result when token cancelled"
   (define bus (make-event-bus))
-  (define ctx (iteration-ctx 3 0 0 5 10))
+  (define ctx '())
   (define tok (make-cancellation-token))
   (cancel-token! tok)
   (define result (check-cancellation tok #f #f bus "test-session" 3 ctx))
@@ -172,7 +172,7 @@
 
 (test-case "check-cancellation: returns loop-result on force-shutdown"
   (define bus (make-event-bus))
-  (define ctx (iteration-ctx 3 0 0 5 10))
+  (define ctx '())
   (define force-check (lambda () #t))
   (define result (check-cancellation #f force-check #f bus "test-session" 3 ctx))
   (check-true (loop-result? result))
@@ -180,7 +180,7 @@
 
 (test-case "check-cancellation: returns loop-result on graceful shutdown"
   (define bus (make-event-bus))
-  (define ctx (iteration-ctx 3 0 0 5 10))
+  (define ctx '())
   (define shutdown-check (lambda () #t))
   (define result (check-cancellation #f #f shutdown-check bus "test-session" 3 ctx))
   (check-true (loop-result? result))
