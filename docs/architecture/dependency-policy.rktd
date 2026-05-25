@@ -171,4 +171,7 @@
        (owner . "runtime"))
       ("runtime/session-lifecycle.rkt"
        (risk . "Session lifecycle FSM; high state complexity")
-       (owner . "runtime"))))))
+       (owner . "runtime"))
+      ("scripts/run-tests.rkt"
+       (risk . "Parallel test runner with subprocess orchestration, output parsing, and suite management")
+       (owner . "tools"))))))

@@ -7,17 +7,17 @@
 
 (require racket/contract)
 
-(provide (contract-out
-          [tool-call? (-> any/c boolean?)]
-          [tool-call-id (-> tool-call? (or/c string? #f))]
-          [tool-call-name (-> tool-call? (or/c string? #f))]
-          [tool-call-arguments (-> tool-call? (or/c hash? list?))]
-          [make-tool-call (-> (or/c string? #f) (or/c string? #f) (or/c hash? list?) tool-call?)]
-          [tool-result? (-> any/c boolean?)]
-          [tool-result-content (-> tool-result? (or/c string? hash? list?))]
-          [tool-result-details (-> tool-result? (or/c hash? #f))]
-          [tool-result-is-error? (-> tool-result? boolean?)]
-          [make-tool-result (-> (or/c string? hash? list?) (or/c hash? #f) boolean? tool-result?)])
+(provide (contract-out [tool-call? (-> any/c boolean?)]
+                       [tool-call-id (-> tool-call? (or/c string? #f))]
+                       [tool-call-name (-> tool-call? (or/c string? #f))]
+                       [tool-call-arguments (-> tool-call? any/c)]
+                       [make-tool-call (-> (or/c string? #f) (or/c string? #f) any/c tool-call?)]
+                       [tool-result? (-> any/c boolean?)]
+                       [tool-result-content (-> tool-result? (or/c string? hash? list?))]
+                       [tool-result-details (-> tool-result? (or/c hash? #f))]
+                       [tool-result-is-error? (-> tool-result? boolean?)]
+                       [make-tool-result
+                        (-> (or/c string? hash? list?) (or/c hash? #f) boolean? tool-result?)])
          tool-call
          tool-result)
 

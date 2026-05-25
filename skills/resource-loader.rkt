@@ -26,7 +26,7 @@
 (provide (struct-out resource)
          (struct-out resource-set)
          (contract-out [empty-resource-set (-> resource-set?)]
-                       [load-global-resources (->* () (path-string?) any/c)]
+                       [load-global-resources (->* () (path-string? #:hook-dispatcher any/c) any/c)]
                        [load-project-resources (->* () (path-string?) any/c)]
                        [merge-resources (-> resource-set? resource-set? resource-set?)]
                        [skill-summary-text (-> list? string?)]

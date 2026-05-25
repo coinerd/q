@@ -34,11 +34,10 @@
                       #:handle-input (or/c procedure? #f)
                       #:wants-focus? boolean?)
                 q-component?)]
-          [component-render
-           (-> q-component? ui-state? exact-nonnegative-integer? (listof styled-line?))]
+          [component-render (-> q-component? ui-state? exact-nonnegative-integer? (listof any/c))]
           [component-invalidate! (-> q-component? void?)]
           [component-compose
-           (-> (listof q-component?) ui-state? exact-nonnegative-integer? (listof styled-line?))]
+           (-> (listof q-component?) ui-state? exact-nonnegative-integer? (listof any/c))]
           [component-cached-width (-> q-component? (or/c exact-nonnegative-integer? #f))]
           [component-handle-input (-> q-component? any/c ui-state? (values ui-state? any/c))]
           [input-consumed (-> any/c)]
