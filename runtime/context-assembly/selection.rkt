@@ -248,7 +248,7 @@
   (define summary-msg
     (and summary-obj
          (let* ([summary-text (context-summary-text summary-obj)]
-                [summary-tokens (base-estimate summary-text)])
+                [summary-tokens (quotient (string-length summary-text) 4)])
            ;; Only inject if summary doesn't exceed 10% of budget
            (and (<= summary-tokens (* 0.1 max-tokens))
                 (make-message (format "ctx-summary-~a-~a"

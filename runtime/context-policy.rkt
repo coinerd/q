@@ -96,7 +96,7 @@
 
 ;; Get importance from message meta (default: 'normal)
 (define (message-importance msg)
-  (hash-ref (message-meta msg) 'importance 'normal))
+  (hash-ref (or (message-meta msg) (hash)) 'importance 'normal))
 
 ;; Check if message has elevated importance
 (define (message-elevated-importance? msg)
