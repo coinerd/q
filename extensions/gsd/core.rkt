@@ -32,7 +32,7 @@
          (only-in "wave-docs.rkt" mark-wave-status!)
          (only-in "session-state.rkt" gsd-state-update!)
          (only-in "runtime-state-types.rkt" gsd-runtime-state-mode)
-         (only-in "events.rkt" emit-gsd-event! current-gsd-correlation-id)
+         (only-in "events.rkt" emit-gsd-event! ctx-emit-gsd-event! current-gsd-correlation-id)
          (only-in "event-structs.rkt"
                   make-gsd-command-received-event
                   make-gsd-command-completed-event
@@ -48,7 +48,8 @@
                   set-pinned-dir!
                   set-edit-limit!
                   set-gsd-event-bus!
-                  set-plan-data!))
+                  set-plan-data!
+                  current-gsd-ctx))
 
 (define (reset-all-gsd-state!)
   (reset-gsm!)
@@ -146,7 +147,8 @@
     (if (string? command)
         (string->symbol command)
         command))
-  (emit-gsd-event!
+  (ctx-emit-gsd-event!
+   (current-gsd-ctx)
    'gsd.command.received
    (make-gsd-command-received-event #:session-id "" #:turn-id 0 #:command cmd #:args args))
   (define corr-id (gensym 'gsd-cmd))
@@ -174,12 +176,13 @@
         [(gsd) (gsd-show-status)]
         [else #f]))
     (when result
-      (emit-gsd-event! 'gsd.command.completed
-                       (make-gsd-command-completed-event #:session-id ""
-                                                         #:turn-id 0
-                                                         #:command cmd
-                                                         #:success
-                                                         (gsd-command-result-success result))))
+      (ctx-emit-gsd-event! (current-gsd-ctx)
+                           'gsd.command.completed
+                           (make-gsd-command-completed-event #:session-id ""
+                                                             #:turn-id 0
+                                                             #:command cmd
+                                                             #:success
+                                                             (gsd-command-result-success result))))
     result))
 
 ;; /plan <text> → exploring
@@ -305,13 +308,14 @@
 ;; /done → archive completed plan
 ;; force? skips the wave completion check.
 (define (cmd-done base-dir [force? #f])
-  (with-gsd-transaction 'archive
-                        (lambda () (archive-completed-plan! base-dir force?))
-                        (lambda (e snapshot)
-                          (emit-gsd-event! 'gsd.archive.failed
-                                           (make-gsd-archive-failed-event #:session-id ""
-                                                                          #:turn-id 0
-                                                                          #:error (exn-message e))))))
+  (with-gsd-transaction
+   'archive
+   (lambda () (archive-completed-plan! base-dir force?))
+   (lambda (e snapshot)
+     (ctx-emit-gsd-event!
+      (current-gsd-ctx)
+      'gsd.archive.failed
+      (make-gsd-archive-failed-event #:session-id "" #:turn-id 0 #:error (exn-message e))))))
 
 ;; ============================================================
 ;; Write guard (hardened — DD-6)
