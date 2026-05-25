@@ -16,7 +16,7 @@
          "session-types.rkt")
 (require "session-mutation.rkt")
 
-(provide (contract-out [wire-session-event-handlers! (-> any/c any/c void?)]))
+(provide (contract-out [wire-session-event-handlers! (-> agent-session? procedure? void?)]))
 
 ;; ============================================================
 ;; Event bus wiring

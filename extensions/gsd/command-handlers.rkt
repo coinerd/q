@@ -63,12 +63,14 @@
                   set-gsd-event-bus!
                   current-gsd-ctx))
 
-(provide (contract-out [register-gsd-commands (-> any/c any/c)]
-                       [handle-execute-command (-> any/c any/c)]
-                       [handle-go-command (-> any/c any/c any/c)]
-                       [handle-gsd-status (-> any/c)]
-                       [handle-artifact-command (-> any/c any/c any/c any/c any/c)]
-                       [dispatch-gsd-command (-> any/c any/c any/c (values symbol? any/c))]))
+(provide (contract-out
+          [register-gsd-commands (-> any/c any/c)]
+          [handle-execute-command (-> hash? any/c)]
+          [handle-go-command (-> (or/c path-string? #f) string? any/c)]
+          [handle-gsd-status (-> any/c)]
+          [handle-artifact-command (-> string? string? (or/c path-string? #f) hash? any/c)]
+          [dispatch-gsd-command
+           (-> (or/c parsed-gsd-command? #f) string? (or/c path-string? #f) (values symbol? any/c))]))
 
 ;; ============================================================
 ;; Command registration
