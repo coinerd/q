@@ -9,6 +9,7 @@
 (require rackunit
          racket/list
          (only-in "../runtime/tool-coordinator.rkt" handle-tool-calls-pending)
+         (only-in "../runtime/session-config.rkt" hash->session-config)
          (only-in "../tools/tool.rkt" make-tool make-tool-registry register-tool! make-success-result)
          (only-in "../util/protocol-types.rkt" make-message make-tool-call-part)
          (only-in "../util/ids.rkt" generate-id)
@@ -54,7 +55,15 @@
                   (set-box! collected-durations
                             (cons (hash-ref payload 'durationMs 0) (unbox collected-durations))))))
   (define new-msgs (list (make-assistant-msg-with-sleep 50)))
-  (handle-tool-calls-pending new-msgs '() #f reg bus "test-session" "/tmp/test.log" #f (hash))
+  (handle-tool-calls-pending new-msgs
+                             '()
+                             #f
+                             reg
+                             bus
+                             "test-session"
+                             "/tmp/test.log"
+                             #f
+                             (hash->session-config (hash)))
   (define durations (unbox collected-durations))
   (check-equal? (length durations) 1)
   (check-true (> (car durations) 0)))
@@ -71,7 +80,15 @@
                   (set-box! collected-durations
                             (cons (hash-ref payload 'durationMs 0) (unbox collected-durations))))))
   (define new-msgs (list (make-assistant-msg-with-sleep 80)))
-  (handle-tool-calls-pending new-msgs '() #f reg bus "test-session" "/tmp/test.log" #f (hash))
+  (handle-tool-calls-pending new-msgs
+                             '()
+                             #f
+                             reg
+                             bus
+                             "test-session"
+                             "/tmp/test.log"
+                             #f
+                             (hash->session-config (hash)))
   (define durations (unbox collected-durations))
   (check-equal? (length durations) 1)
   (define dur (car durations))

@@ -30,7 +30,7 @@
                                             #:max-delay-ms exact-nonnegative-integer?
                                             #:on-retry (or/c procedure? #f)
                                             #:per-type-budgets hash?)
-                             retry-policy?)]
+                             any/c)]
                        [with-retry-policy
                         (->* (retry-policy? procedure?) (#:on-retry (or/c procedure? #f)) any/c)]
                        [make-default-retry-policy
@@ -118,7 +118,7 @@
      (match (provider-error? exn)
        [#t
         (define cat (provider-error-category exn))
-        (memq cat '(rate-limit timeout server network))]
+        (and (memq cat '(rate-limit timeout server server-error network)) #t)]
        [_
         ;; String fallback for non-structured errors
         (define msg (exn-message exn))

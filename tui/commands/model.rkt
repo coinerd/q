@@ -12,7 +12,7 @@
          "context.rkt")
 (require racket/contract)
 
-(provide (contract-out [handle-model-command (-> any/c any/c)]))
+(provide (contract-out [handle-model-command (->* (any/c) ((or/c string? #f)) any/c)]))
 
 ;; ============================================================
 ;; /model command handler

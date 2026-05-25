@@ -14,11 +14,10 @@
 
 (provide (contract-out [make-model-request (-> list? list? hash? model-request?)])
          model-request?
-         (contract-out [provider-send (-> provider? model-request? model-response?)]
-                       [model-response-content (-> model-response? list?)]
-                       [model-response-stop-reason (-> model-response? (or/c string? #f))]
-                       [make-model-response (-> list? hash? string? (or/c string? #f) model-response?)]
-                       [make-mock-provider
-                        (->* (model-response?)
-                             (#:name string? #:stream-chunks (or/c list? #f))
-                             provider?)]))
+         (contract-out
+          [provider-send (-> provider? model-request? model-response?)]
+          [model-response-content (-> model-response? list?)]
+          [model-response-stop-reason (-> model-response? (or/c symbol? #f))]
+          [make-model-response (-> list? hash? string? (or/c symbol? #f) model-response?)]
+          [make-mock-provider
+           (->* (model-response?) (#:name string? #:stream-chunks (or/c list? #f)) provider?)]))
