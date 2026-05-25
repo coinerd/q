@@ -16,6 +16,7 @@
          "../llm/gemini.rkt"
          "../llm/anthropic.rkt"
          "../llm/azure-openai.rkt"
+         "../llm/openrouter.rkt"
          racket/string
          net/url)
 
@@ -51,6 +52,7 @@
     [(equal? prov-name "gemini") (make-gemini-provider config)]
     [(equal? prov-name "anthropic") (make-anthropic-provider config)]
     [(equal? prov-name "azure") (make-azure-openai-provider config)]
+    [(equal? prov-name "openrouter") (make-openrouter-provider config)]
     [else (make-openai-compatible-provider config)]))
 
 ;; Helper: Check if a provider is a mock provider (name = "mock").
