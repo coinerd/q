@@ -64,14 +64,15 @@
          (all-from-out "command-types.rkt")
          ;; Functions (contracted)
          (contract-out [gsd-command-dispatch
-                        (-> (or/c symbol? string?) any/c (or/c gsd-command-result? #f))]
+                        (-> (or/c symbol? string?) (or/c string? #f) (or/c gsd-command-result? #f))]
                        [gsd-write-guard (-> path-string? path-string? policy-decision?)]
                        [gsd-show-status (-> gsd-command-result?)]
                        [cmd-replan (-> gsd-command-result?)]
-                       [cmd-skip (-> any/c gsd-command-result?)]
+                       [cmd-skip (-> (or/c string? #f) gsd-command-result?)]
                        [cmd-reset (-> gsd-command-result?)]
                        [cmd-done (->* ((or/c path-string? #f)) (boolean?) gsd-command-result?)]
-                       [cmd-wave-done (-> (or/c path-string? #f) any/c gsd-command-result?)]
+                       [cmd-wave-done
+                        (-> (or/c path-string? #f) (or/c string? #f) gsd-command-result?)]
                        [reset-all-gsd-state! (-> void?)])
          ;; with-gsd-transaction not in contract-out because it passes
          ;; through multi-value thunk results; (-> any/c any/c any/c any/c)

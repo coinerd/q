@@ -13,29 +13,37 @@
          racket/list)
 
 ;; Raco command helpers
-(provide (contract-out [run-raco (->* ((listof any/c)) (any/c) (values any/c any/c any/c))]
+(provide (contract-out [run-raco
+                        (->* ((listof (or/c string? symbol? path?)))
+                             ((or/c path-string? #f))
+                             (values exact-integer? string? string?))]
                        [find-raco (-> (or/c path? #f))]
-                       [run-command (->* (any/c (listof any/c)) (any/c) (values any/c any/c any/c))]
-                       [raco-fmt (-> any/c (values any/c any/c any/c))]
-                       [raco-make (-> any/c (values any/c any/c any/c))]
-                       [raco-test (-> any/c (values any/c any/c any/c))]
-                       [raco-expand (-> any/c (values any/c any/c any/c))]
+                       [run-command
+                        (->* ((or/c path-string? path?) (listof (or/c string? symbol? path?)))
+                             ((or/c path-string? #f))
+                             (values exact-integer? string? string?))]
+                       [raco-fmt (-> path-string? (values exact-integer? string? string?))]
+                       [raco-make (-> path-string? (values exact-integer? string? string?))]
+                       [raco-test (-> path-string? (values exact-integer? string? string?))]
+                       [raco-expand (-> path-string? (values exact-integer? string? string?))]
                        ;; File I/O helpers
-                       [read-file-string (-> any/c string?)]
-                       [write-file-string! (-> any/c any/c any/c)]
-                       [backup-file (-> any/c any/c)]
-                       [restore-backup! (-> any/c any/c any/c)]
+                       [read-file-string (-> path-string? string?)]
+                       [write-file-string! (-> path-string? string? void?)]
+                       [backup-file (-> string? string?)]
+                       [restore-backup! (-> path-string? path-string? void?)]
                        ;; S-expression helpers
-                       [read-all-forms (-> string? (listof any/c))]
+                       [read-all-forms (-> string? list?)]
                        [form->string (-> any/c string?)]
-                       [find-form-boundaries (-> string? (listof any/c))]
+                       [find-form-boundaries (-> string? (listof pair?))]
                        [find-form-end
-                        (-> (listof string?) exact-nonnegative-integer? (values any/c any/c))]
+                        (-> (listof string?)
+                            exact-nonnegative-integer?
+                            (values exact-nonnegative-integer? integer?))]
                        ;; Pattern matching and template substitution
                        [pattern-matches? (-> any/c any/c boolean?)]
                        [apply-template (-> any/c any/c any/c any/c)]
-                       [collect-bindings (-> any/c any/c (listof any/c))]
-                       [subst-bindings (-> (listof any/c) any/c any/c)]))
+                       [collect-bindings (-> any/c any/c (listof pair?))]
+                       [subst-bindings (-> (listof pair?) any/c any/c)]))
 
 ;; ============================================================
 ;; Raco command helpers

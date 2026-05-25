@@ -23,7 +23,7 @@
          json
          ;; SEC-16 (v0.22.0): consolidated shell-quote
          (only-in "../../util/shell-quote.rkt" shell-quote)
-         (only-in "../tool-api.rkt" make-success-result make-error-result))
+         (only-in "../tool-api.rkt" make-success-result make-error-result tool-result?))
 
 ;; Parameter (plain)
 (provide gh-binary-path
@@ -32,20 +32,24 @@
          ;; Re-export (plain)
          shell-quote
          ;; Functions (contracted)
-         (contract-out [valid-identifier? (-> any/c boolean?)]
-                       [valid-number? (-> any/c boolean?)]
-                       [valid-state? (-> any/c boolean?)]
-                       [valid-method? (-> any/c boolean?)]
-                       [run-command (->* (any/c) #:rest (listof any/c) (values any/c any/c any/c))]
-                       [gh-binary (-> any/c)]
-                       [git-binary (-> any/c)]
-                       [gh-unavailable-error (-> any/c)]
-                       [gh-exec-result (->* () #:rest (listof any/c) (values any/c any/c any/c))]
-                       [git-exec-result (->* () #:rest (listof any/c) (values any/c any/c any/c))]
-                       [gh-success (->* () #:rest (listof any/c) any/c)]
-                       [gh-success-json (->* () #:rest (listof any/c) any/c)]
-                       [git-success (->* () #:rest (listof any/c) any/c)]
-                       [get-repo-info (-> (values any/c any/c))]))
+         (contract-out
+          [valid-identifier? (-> any/c boolean?)]
+          [valid-number? (-> any/c boolean?)]
+          [valid-state? (-> any/c boolean?)]
+          [valid-method? (-> any/c boolean?)]
+          [run-command
+           (->* ((or/c path-string? path?))
+                #:rest (listof string?)
+                (values exact-integer? string? string?))]
+          [gh-binary (-> (or/c path? #f))]
+          [git-binary (-> (or/c path? #f))]
+          [gh-unavailable-error (-> tool-result?)]
+          [gh-exec-result (->* () #:rest (listof string?) (values exact-integer? string? string?))]
+          [git-exec-result (->* () #:rest (listof string?) (values exact-integer? string? string?))]
+          [gh-success (->* () #:rest (listof string?) tool-result?)]
+          [gh-success-json (->* () #:rest (listof string?) tool-result?)]
+          [git-success (->* () #:rest (listof string?) tool-result?)]
+          [get-repo-info (-> (values (or/c string? #f) (or/c string? #f)))]))
 
 ;; ============================================================
 ;; Configuration

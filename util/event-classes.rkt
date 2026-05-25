@@ -23,9 +23,9 @@
           [compaction-started-event? (-> any/c boolean?)]
           [compaction-completed-event? (-> any/c boolean?)]
           ;; Constructors with optional #:turn-id keyword
-          [make-stream-text-event (->* (string? any/c) (#:turn-id (or/c string? #f)) event?)]
-          [make-stream-tool-call-event (->* (string? any/c) (#:turn-id (or/c string? #f)) event?)]
-          [make-stream-thinking-event (->* (string? any/c) (#:turn-id (or/c string? #f)) event?)]
+          [make-stream-text-event (->* (string? hash?) (#:turn-id (or/c string? #f)) event?)]
+          [make-stream-tool-call-event (->* (string? hash?) (#:turn-id (or/c string? #f)) event?)]
+          [make-stream-thinking-event (->* (string? hash?) (#:turn-id (or/c string? #f)) event?)]
           ;; Constructors with no optional args
           [make-tool-start-event (-> string? string? string? event?)]
           [make-tool-end-event (-> string? string? string? event?)]

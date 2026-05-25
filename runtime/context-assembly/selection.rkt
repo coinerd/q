@@ -16,6 +16,7 @@
          racket/set
          (only-in "../../util/protocol-types.rkt"
                   message
+                  message?
                   message-id
                   message-kind
                   message-role
@@ -35,9 +36,11 @@
                   context-summary?
                   context-summary-text
                   context-summary-entry-count
+                  summary-cache?
                   context-summary-from-id
                   context-summary-to-id)
-         (only-in "../../util/errors.rkt" warn-deprecated!))
+         (only-in "../../util/errors.rkt" warn-deprecated!)
+         (only-in "../../llm/provider.rkt" provider?))
 
 ;; R10: Call-options struct bundling keyword args for build-assembled-context
 (struct context-assembly-call-options
@@ -68,32 +71,48 @@
                                  estimate-proc))
 
 (provide (struct-out context-assembly-call-options)
-         (contract-out [make-context-assembly-call-options (-> any/c)]
-                       [build-assembled-context
-                        (->* [any/c any/c]
-                             [#:cache any/c
-                              #:provider any/c
-                              #:model-name any/c
-                              #:trace-callback any/c
-                              #:working-set any/c
-                              #:generate-summary-proc any/c
-                              #:generate-catalog-proc any/c
-                              #:estimate-text-proc any/c]
-                             any/c)]
-                       [build-assembled-context/raw
-                        (->* [any/c any/c any/c #:memo any/c]
-                             [#:estimate-text-proc any/c
-                              #:generate-summary-proc any/c
-                              #:generate-catalog-proc any/c
-                              #:provider any/c
-                              #:model-name any/c
-                              #:cache any/c
-                              #:trace any/c]
-                             any/c)]
-                       [build-assembled-context/v2 (-> any/c any/c any/c any/c)]
-                       [build-session-context (-> any/c any/c)]
-                       [select-messages
-                        (-> list? list? exact-nonnegative-integer? procedure? (values list? list?))]))
+         (contract-out
+          [make-context-assembly-call-options
+           (->* ()
+                (#:cache (or/c summary-cache? #f)
+                         #:provider (or/c provider? #f)
+                         #:model-name (or/c string? #f)
+                         #:trace-callback (or/c procedure? #f)
+                         #:working-set (or/c working-set? #f)
+                         #:generate-summary-proc (or/c procedure? #f)
+                         #:generate-catalog-proc (or/c procedure? #f)
+                         #:estimate-text-proc (or/c procedure? #f))
+                context-assembly-call-options?)]
+          [build-assembled-context
+           (->* [any/c context-assembly-config?]
+                [#:cache (or/c summary-cache? #f)
+                 #:provider (or/c provider? #f)
+                 #:model-name (or/c string? #f)
+                 #:trace-callback (or/c procedure? #f)
+                 #:working-set (or/c working-set? #f)
+                 #:generate-summary-proc (or/c procedure? #f)
+                 #:generate-catalog-proc (or/c procedure? #f)
+                 #:estimate-text-proc (or/c procedure? #f)]
+                context-result?)]
+          [build-assembled-context/raw
+           (->* [(listof message?) context-assembly-config? (or/c working-set? #f) #:memo hash?]
+                [#:estimate-text-proc (or/c procedure? #f)
+                 #:generate-summary-proc (or/c procedure? #f)
+                 #:generate-catalog-proc (or/c procedure? #f)
+                 #:provider (or/c provider? #f)
+                 #:model-name (or/c string? #f)
+                 #:cache (or/c summary-cache? #f)
+                 #:trace (or/c procedure? #f)]
+                context-result?)]
+          [build-assembled-context/v2
+           (-> any/c context-assembly-config? context-assembly-call-options? context-result?)]
+          [build-session-context (-> any/c (listof message?))]
+          [select-messages
+           (-> (listof message?)
+               (listof message?)
+               exact-nonnegative-integer?
+               procedure?
+               (values (listof message?) (listof message?)))]))
 
 ;; F23: Pure selection function — testable without infrastructure.
 ;; Takes pinned messages, removable messages, a budget, and an estimation function.

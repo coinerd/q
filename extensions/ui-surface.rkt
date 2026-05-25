@@ -11,7 +11,7 @@
 ;; ui-callback-registry struct.
 
 (require racket/contract
-         (only-in "../tui/state.rkt" ui-state ui-state-extension-widgets))
+         (only-in "../tui/state.rkt" ui-state ui-state? ui-state-extension-widgets))
 
 ;; Setter/Getter parameter callbacks
 ;; M-08: Registry struct and accessor (for advanced use)
@@ -22,19 +22,19 @@
          current-ui-registry
 
          ;; Setter/Getter callbacks
-         (contract-out [ui-set-footer! (-> any/c (or/c string? (listof any/c)) void?)]
-                       [ui-set-header! (-> any/c (or/c string? (listof any/c)) void?)]
-                       [ui-clear-footer! (-> any/c void?)]
-                       [ui-clear-header! (-> any/c void?)]
+         (contract-out [ui-set-footer! (-> box? (or/c string? (listof any/c)) void?)]
+                       [ui-set-header! (-> box? (or/c string? (listof any/c)) void?)]
+                       [ui-clear-footer! (-> box? void?)]
+                       [ui-clear-header! (-> box? void?)]
                        ;; Rendering callbacks
                        [ui-make-styled-line (-> (listof any/c) any/c)]
                        [ui-make-styled-segment (-> string? any/c any/c)]
                        ;; Status message callback (dialog-api)
-                       [ui-set-status-message! (-> any/c string? void?)]
+                       [ui-set-status-message! (-> box? string? void?)]
                        ;; Widget callbacks (widget-api)
-                       [ui-set-extension-widget! (-> any/c symbol? any/c any/c any/c)]
-                       [ui-remove-extension-widget! (-> any/c symbol? any/c any/c)]
-                       [ui-remove-all-extension-widgets! (-> any/c symbol? any/c)]
+                       [ui-set-extension-widget! (-> ui-state? symbol? any/c any/c ui-state?)]
+                       [ui-remove-extension-widget! (-> ui-state? symbol? any/c ui-state?)]
+                       [ui-remove-all-extension-widgets! (-> ui-state? symbol? ui-state?)]
                        ;; Installation (called by TUI during init)
                        [install-ui-callbacks! (-> hash? void?)]
                        ;; Check if callbacks are installed
