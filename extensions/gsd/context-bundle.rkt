@@ -16,11 +16,11 @@
 ;; Config (plain)
 (provide max-bundle-size
          ;; Functions (contracted)
-         (contract-out [assemble-context (-> any/c any/c any/c string?)]
-                       [explorer-bundle (-> any/c any/c string?)]
-                       [executor-bundle (-> any/c any/c string?)]
-                       [verifier-bundle (-> any/c any/c string?)]
-                       [bundle-size-warning? (-> any/c boolean?)]))
+         (contract-out [assemble-context (-> symbol? hash? hash? string?)]
+                       [explorer-bundle (-> hash? hash? string?)]
+                       [executor-bundle (-> hash? hash? string?)]
+                       [verifier-bundle (-> hash? hash? string?)]
+                       [bundle-size-warning? (-> string? boolean?)]))
 
 ;; ============================================================
 ;; Configuration
