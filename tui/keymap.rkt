@@ -24,7 +24,7 @@
          keymap?
          (contract-out
           [keycode->key-spec
-           (-> (or/c string? symbol?) #:ctrl boolean? #:shift boolean? #:alt boolean? key-spec?)]
+           (->* [(or/c string? symbol?)] [#:ctrl boolean? #:shift boolean? #:alt boolean?] key-spec?)]
           [key-spec->keycode (-> key-spec? symbol?)]
           [key-spec=? (-> key-spec? key-spec? boolean?)]
           [parse-key-string (-> string? key-spec?)]
@@ -37,7 +37,7 @@
           [keymap-merge (-> keymap? keymap? void?)]
           [default-keymap (-> keymap?)]
           [load-user-keymap (-> (or/c keymap? #f))]
-          [load-keybindings (->* [] [keymap?] (or/c keymap? #f))]
+          [load-keybindings (->* [] [(or/c path-string? #f)] (or/c keymap? #f))]
           [shortcut-specs->keymap (-> (listof hash?) keymap?)]
           ;; #1189: Namespaced actions
           [namespaced-action? (-> any/c boolean?)]

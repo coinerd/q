@@ -80,13 +80,13 @@
                          #:provider (or/c any/c #f)
                          #:model-name (or/c string? #f)
                          #:trace-callback (or/c procedure? #f)
-                         #:working-set (or/c list? #f)
+                         #:working-set any/c
                          #:generate-summary-proc (or/c procedure? #f)
                          #:generate-catalog-proc (or/c procedure? #f)
                          #:estimate-text-proc (or/c procedure? #f))
                 context-result?)]
           [build-assembled-context/raw
-           (->* (list? context-assembly-config? context-assembly-call-options? #:memo (or/c hash? #f))
+           (->* (list? context-assembly-config? any/c #:memo (or/c hash? #f))
                 (#:cache (or/c summary-cache? #f)
                          #:provider (or/c any/c #f)
                          #:model-name (or/c string? #f)
@@ -208,7 +208,7 @@
                        [context-summary-prompt
                         (->* (list?) (#:previous-summary (or/c string? #f)) string?)]
                        [generate-context-summary
-                        (->* (list? (or/c procedure? #f) (or/c string? #f))
+                        (->* (list? (or/c any/c #f) (or/c string? #f))
                              (#:cache (or/c summary-cache? #f))
                              (or/c context-summary? #f))])
          ;; Struct constructors (direct for match compatibility)

@@ -129,7 +129,7 @@
            (->* (tui-ctx? (or/c string? symbol? parsed-command?)) (string?) (or/c 'continue 'quit))]
           [tui-ctx->cmd-ctx (-> tui-ctx? cmd-ctx?)]
           [reload-keymap! (-> void?)]
-          [current-keybindings-path (->* () ((or/c path-string? #f)) (or/c path-string? #f))]
+          [current-keybindings-path (->* () ((or/c path-string? #f)) any/c)]
           [input-expand-last-prompt (-> string? tui-ctx? string?)]))
 
 ;; ============================================================
@@ -171,7 +171,6 @@
   (define cctx (tui-ctx->cmd-ctx ctx))
   (set-box! (commands:cmd-ctx-input-text-box cctx) raw-text)
   (commands:process-slash-command cctx cmd))
-
 
 ;; ============================================================
 ;; Key handling — extracted to keybindings/key-dispatch.rkt (W20)

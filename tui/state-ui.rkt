@@ -36,7 +36,7 @@
           [ui-model-label (-> ui-state? string?)]
           [ui-status-text (-> ui-state? string?)]
           [set-current-branch (-> ui-state? (or/c string? #f) ui-state?)]
-          [set-visible-branches (-> ui-state? (listof string?) ui-state?)]
+          [set-visible-branches (-> ui-state? (listof branch-info?) ui-state?)]
           [clear-visible-branches (-> ui-state? ui-state?)]
           [show-overlay
            (->* (ui-state? symbol? any/c)

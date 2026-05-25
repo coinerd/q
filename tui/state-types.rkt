@@ -146,7 +146,7 @@
           [clear-streaming (-> ui-state? ui-state?)]
           ;; String helpers
           [truncate-string (-> string? exact-nonnegative-integer? string?)]
-          [extract-arg-summary (-> string? string?)]))
+          [extract-arg-summary (-> (or/c string? hash?) string?)]))
 
 ;; Forward declarations for types referenced in contracts but defined elsewhere
 ;; (These are provided by other modules and re-exported through state.rkt)
@@ -434,12 +434,17 @@
       (string-append (substring s 0 (- max-len 1)) "…")))
 
 (define (extract-arg-summary args-str)
-  (with-handlers ([exn:fail? (lambda (_) (truncate-string args-str 60))])
-    (define h (read-json (open-input-string args-str)))
-    (cond
-      [(hash? h)
-       (define vals (hash-values h))
-       (if (null? vals)
-           "(no args)"
-           (truncate-string (format "~a" (car vals)) 60))]
-      [else (truncate-string (format "~a" h) 60)])))
+  (define (summarize-hash h)
+    (define vals (hash-values h))
+    (if (null? vals)
+        "(no args)"
+        (truncate-string (format "~a" (car vals)) 60)))
+  (cond
+    [(hash? args-str) (summarize-hash args-str)]
+    [(string? args-str)
+     (with-handlers ([exn:fail? (lambda (_) (truncate-string args-str 60))])
+       (define h (read-json (open-input-string args-str)))
+       (cond
+         [(hash? h) (summarize-hash h)]
+         [else (truncate-string (format "~a" h) 60)]))]
+    [else (truncate-string (format "~a" args-str) 60)]))

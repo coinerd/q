@@ -97,24 +97,24 @@
  ;; Overlay positioning tests
  ;; ──────────────────────────────
  (test-case "overlay-compute-bounds top-left"
-   (define ov (overlay-state 'test '() "" 'top-left 40 10 2))
+   (define ov (overlay-state 'test '() "" 'top-left 40 10 2 #f))
    (define-values (x y w h) (overlay-compute-bounds ov 120 40))
    (check-equal? x 2)
    (check-equal? y 2)
    (check-equal? w 40)
    (check-equal? h 10))
  (test-case "overlay-compute-bounds mid-center"
-   (define ov (overlay-state 'test '() "" 'mid-center 40 10 0))
+   (define ov (overlay-state 'test '() "" 'mid-center 40 10 0 #f))
    (define-values (x y w h) (overlay-compute-bounds ov 120 40))
    (check-equal? x 40) ; (120-40)/2
    (check-equal? y 15)) ; (40-10)/2
  (test-case "overlay-compute-bounds bottom-right"
-   (define ov (overlay-state 'test '() "" 'bottom-right 30 8 1))
+   (define ov (overlay-state 'test '() "" 'bottom-right 30 8 1 #f))
    (define-values (x y w h) (overlay-compute-bounds ov 100 30))
    (check-equal? x 69) ; 100-30-1
    (check-equal? y 21)) ; 30-8-1
  (test-case "overlay-compute-bounds percentage sizing"
-   (define ov (overlay-state 'test '() "" 'mid-center (cons 'pct 0.5) (cons 'pct 0.3) 0))
+   (define ov (overlay-state 'test '() "" 'mid-center (cons 'pct 0.5) (cons 'pct 0.3) 0 #f))
    (define-values (x y w h) (overlay-compute-bounds ov 100 40))
    (check-equal? w 50) ; 50% of 100
    (check-equal? h 12)) ; 30% of 40

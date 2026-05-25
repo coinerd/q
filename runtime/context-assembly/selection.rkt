@@ -69,8 +69,27 @@
 
 (provide (struct-out context-assembly-call-options)
          (contract-out [make-context-assembly-call-options (-> any/c)]
-                       [build-assembled-context (-> any/c any/c any/c)]
-                       [build-assembled-context/raw (-> any/c any/c any/c #:memo any/c any/c)]
+                       [build-assembled-context
+                        (->* [any/c any/c]
+                             [#:cache any/c
+                              #:provider any/c
+                              #:model-name any/c
+                              #:trace-callback any/c
+                              #:working-set any/c
+                              #:generate-summary-proc any/c
+                              #:generate-catalog-proc any/c
+                              #:estimate-text-proc any/c]
+                             any/c)]
+                       [build-assembled-context/raw
+                        (->* [any/c any/c any/c #:memo any/c]
+                             [#:estimate-text-proc any/c
+                              #:generate-summary-proc any/c
+                              #:generate-catalog-proc any/c
+                              #:provider any/c
+                              #:model-name any/c
+                              #:cache any/c
+                              #:trace any/c]
+                             any/c)]
                        [build-assembled-context/v2 (-> any/c any/c any/c any/c)]
                        [build-session-context (-> any/c any/c)]
                        [select-messages

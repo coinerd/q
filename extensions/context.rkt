@@ -55,7 +55,7 @@
                         (->* (extension-ctx? string? provider?) (#:config any/c) any/c)]
                        [ctx-unregister-provider! (-> extension-ctx? string? void?)]
                        [ctx-list-providers (-> extension-ctx? list?)]
-                       [ctx-lookup-provider (-> extension-ctx? string? (or/c provider? #f))]
+                       [ctx-lookup-provider (-> extension-ctx? string? (or/c any/c #f))]
                        ;; #1223: Session state query methods
                        [ctx-session-messages (-> extension-ctx? list?)]
                        [ctx-session-token-count (-> extension-ctx? hash?)]

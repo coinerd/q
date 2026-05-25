@@ -19,7 +19,7 @@
          cmd-entry-args-spec
          cmd-entry-aliases
          (contract-out [make-command-registry (-> hash?)]
-                       [register-command! (-> hash? cmd-entry? void?)]
+                       [register-command! (-> hash? cmd-entry? hash?)]
                        [lookup-command (-> hash? string? any/c)]
                        [resolve-command (-> hash? string? (values any/c any/c))]
                        [all-commands (-> hash? (listof cmd-entry?))]

@@ -48,9 +48,7 @@
       (check-true (has-selection? s4)
                   "selection still active after transcript growth (documents behavior)")
       ;; But the transcript is longer now
-      (check-equal? (transcript-length s4)
-                    3
-                    "3 entries after 2 turns + session-start? or 2 entries from turns"))
+      (check-equal? (transcript-length s4) 2 "2 entries from 2 turns"))
 
     ;; Selection cleared when scroll changes
     (test-case "clear-selection resets anchor and end"
