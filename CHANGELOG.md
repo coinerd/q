@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.58.4 — 2026-05-25
+
+### Image Processing Pipeline
+
+Subprocess-based image resizing for multimodal LLM input with
+provider-specific format adapters.
+
+**W0 — Image Detection + Resize Pipeline**
+- `extensions/image-pipeline.rkt`: Detect available tools (ImageMagick, sips, ffmpeg)
+- `resize-image`: Aspect-ratio-preserving resize with cache by (path, max-dims, format)
+- `image-metadata`: Dimensions, format, size extraction
+- `estimate-image-tokens`: OpenAI-style 85-tokens-per-512x512-tile estimation
+- `supported-image-file?`: Extension-based format detection (PNG, JPEG, GIF, WebP)
+- Configuration: `max-image-width` (2048), `max-image-height` (2048), `max-image-bytes` (5MB)
+- 20 tests covering tool detection, shell escaping, token estimation, metadata
+
+**W1 — Provider-Specific Image Format Adapters**
+- `extensions/image-format.rkt`: Provider-specific image message formatting
+- OpenAI: `image_url` with data URI (also Azure, openai-compatible)
+- Anthropic: `source` block with `type: "base64"` + `media_type`
+- Gemini: `inlineData` with `mimeType`
+- `format-image-for-provider`: dispatch by provider symbol with aliases
+- `build-multimodal-content`: complete multi-modal message construction
+- 13 tests covering all formats, aliases, and unknown provider fallback
+
 ## v0.58.3 — 2026-05-25
 
 ### Rich TUI Extension Widgets
