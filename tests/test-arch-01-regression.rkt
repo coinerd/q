@@ -9,21 +9,19 @@
 (require rackunit
          rackunit/text-ui
          (only-in "../runtime/tool-coordinator.rkt" handle-tool-calls-pending)
+         (only-in "../runtime/session-config.rkt" hash->session-config)
          (only-in "../tools/tool.rkt" make-tool make-tool-registry register-tool! make-success-result)
          (only-in "../util/protocol-types.rkt" make-message make-tool-call-part)
          (only-in "../util/ids.rkt" generate-id)
          (only-in "../util/event.rkt" event-event event-payload)
-         (only-in "../tools/permission-gate.rkt" make-default-permission-config
-                  permission-config?)
+         (only-in "../tools/permission-gate.rkt" make-default-permission-config permission-config?)
          "../agent/event-bus.rkt")
 
 (define (make-echo-tool)
-  (make-tool
-   "echo"
-   "Echo tool for testing"
-   (hasheq 'type "object" 'properties (hasheq) 'required '())
-   (lambda (args _ctx)
-     (make-success-result "ok"))))
+  (make-tool "echo"
+             "Echo tool for testing"
+             (hasheq 'type "object" 'properties (hasheq) 'required '())
+             (lambda (args _ctx) (make-success-result "ok"))))
 
 (define (make-assistant-msg-with-call tool-name)
   (make-message (generate-id)
@@ -55,9 +53,16 @@
       (define new-msgs (list (make-assistant-msg-with-call "echo")))
       ;; This call would previously crash
       (define result
-        (handle-tool-calls-pending new-msgs '() #f reg bus
-                                    "test-session" "/tmp/test.log" #f (hash)
-                                    #:permission-config perm-cfg))
+        (handle-tool-calls-pending new-msgs
+                                   '()
+                                   #f
+                                   reg
+                                   bus
+                                   "test-session"
+                                   "/tmp/test.log"
+                                   #f
+                                   (hash->session-config (hash))
+                                   #:permission-config perm-cfg))
       ;; Verify the tool actually executed
       (check-pred list? result)
       ;; Give event bus a moment to deliver
@@ -75,8 +80,15 @@
       (define new-msgs (list (make-assistant-msg-with-call "echo")))
       ;; Default path — no #:permission-config supplied
       (define result
-        (handle-tool-calls-pending new-msgs '() #f reg bus
-                                    "test-session" "/tmp/test.log" #f (hash)))
+        (handle-tool-calls-pending new-msgs
+                                   '()
+                                   #f
+                                   reg
+                                   bus
+                                   "test-session"
+                                   "/tmp/test.log"
+                                   #f
+                                   (hash->session-config (hash))))
       (check-pred list? result)
       (check-true (unbox completed?) "default perm-cfg path should work"))))
 

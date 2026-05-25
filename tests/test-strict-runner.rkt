@@ -18,18 +18,16 @@
       (check-equal? (test-file-result-total r) 5))
 
     (test-case "normalize-counts preserves good results"
-      (define-values (passed failed total)
-        (normalize-counts 0 10 0 10))
+      (define-values (passed failed total) (normalize-counts 0 10 0 10))
       (check-equal? passed 10)
       (check-equal? failed 0)
       (check-equal? total 10))
 
-    (test-case "normalize-counts detects silent failures"
-      (define-values (passed failed total)
-        (normalize-counts 0 8 2 10))
+    (test-case "normalize-counts preserves parsed failures"
+      (define-values (passed failed total) (normalize-counts 0 8 2 10))
       (check-equal? passed 8)
-      (check-equal? failed 0)
-      (check-equal? total 8))
+      (check-equal? failed 2)
+      (check-equal? total 10))
 
     (test-case "summary-exit-code: 0 when no failures"
       (check-equal? (summary-exit-code 0 0) 0))
