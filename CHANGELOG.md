@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.59.0 — 2026-05-25
+
+### Security, Stability & Workflow Remediation
+
+TUI layout fixes, provider/image hardening, OAuth fail-closed, and
+release gate.
+
+**W0 — Runner Root Resolution**
+- Rewrote `resolve-base-dir` in `scripts/run-tests.rkt` to prefer `q/` child over monorepo root
+- Added `normalize-test-path` to strip `q/` prefix from CLI test arguments
+- Expanded TUI suite discovery to match top-level `test-tui-*.rkt` files
+- Removed blanket provider exclusion from smoke suite for schema regression visibility
+- Added runner regression tests for repo-root and q-root invocation
+
+**W1 — TUI Layout Compatibility & Clipping**
+- Fixed `clip-to-region` arity (was using `takef` instead of `take`)
+- Established canonical `(height, width)` argument order for `compute-layout`
+- Added minimum terminal height clamping (4 rows)
+- Fixed `tui-layout-input-row` to return text entry row
+- Updated all callers to canonical arg order
+
+**W2 — Provider Schema, Image Boolean, Command Parity**
+- `supported-image-file?` now returns exact `#t`/`#f` boolean (was truthy tail)
+- Added `/login` to command parity expected list
+- Verified provider schema loads correctly
+
+**W3 — Historical Reports, OAuth Fail-Closed, Image Guard**
+- Added `docs/reports/` to version lint skip paths
+- OAuth login rejects placeholder configs without real client IDs
+- Image resize errors when no processing tools available
+
 ## v0.58.5 — 2026-05-25
 
 ### Quality & Debt Remediation
