@@ -76,19 +76,17 @@
                (kill-thread server-thread)))
            #t)))
 
-  ;; Serve in a background thread — one-shot: stop after first result
+  ;; Serve in a background thread — accept connections until the listener is
+  ;; closed by try-complete! (or the timeout thread).  The loop terminates
+  ;; because tcp-accept raises exn:fail after tcp-close, caught by the
+  ;; enclosing with-handlers.
   (set! server-thread
         (thread (lambda ()
                   (with-handlers ([exn:fail? (lambda (e) (void))])
                     (let loop ()
                       (define-values (in out) (tcp-accept listener))
                       (thread (lambda () (handle-connection in out state try-complete!)))
-                      ;; Check if already completed before accepting more
-                      (unless (zero? (semaphore-wait (make-semaphore 0))
-                                     ;; semaphore-wait on fresh 0-sema always blocks;
-                                     ;; we just check if completion-sema is drained
-                                     )
-                        (loop)))))))
+                      (loop))))))
 
   ;; Auto-shutdown after timeout
   (thread (lambda ()

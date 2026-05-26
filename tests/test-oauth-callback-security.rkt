@@ -239,7 +239,65 @@ Host: localhost
              (close-output-port out)
              (close-input-port in))))
         (define code (get-code))
-        (check-equal? code "iter-code" "each iteration must get the correct code")))))
+        (check-equal? code "iter-code" "each iteration must get the correct code")))
+
+    ;; ============================================================
+    ;; W1: Cleanup independence + nonblocking completion (#5497)
+    ;; ============================================================
+
+    (test-case "cleanup is independent of consumer (#5497)"
+      ;; The listener must be closed BEFORE get-code is called,
+      ;; so resources are reclaimed even if the consumer delays.
+      (define-values (port state verifier get-code) (start-callback-server #:timeout 10))
+      (thread
+       (lambda ()
+         (sync (alarm-evt (+ (current-inexact-milliseconds) 200)))
+         (with-handlers ([exn:fail? (lambda (e) (void))])
+           (define-values (in out) (tcp-connect "127.0.0.1" port))
+           (fprintf out
+                    "GET /callback?code=cleanup-test&state=~a HTTP/1.1\r\nHost: localhost\r\n\r\n"
+                    state)
+           (flush-output out)
+           (close-output-port out)
+           (close-input-port in))))
+      ;; Wait for server to process callback and close listener
+      (sync (alarm-evt (+ (current-inexact-milliseconds) 800)))
+      ;; Listener should be closed — new connections must fail
+      (define probe
+        (with-handlers ([exn:fail? (lambda (e) 'connection-failed)])
+          (define-values (in out) (tcp-connect "127.0.0.1" port))
+          (close-input-port in)
+          (close-output-port out)
+          'connected))
+      (check-eq? probe 'connection-failed "listener must be closed before consumer calls get-code")
+      ;; Consumer can still get the code (delayed read from channel)
+      (define code (get-code))
+      (check-equal? code "cleanup-test" "delayed consumer must still receive code after cleanup"))
+
+    (test-case "nonblocking completion: get-code returns immediately after callback (#5497)"
+      ;; Once the callback has been processed, get-code should not block
+      ;; — the result is already on the channel.
+      (define-values (port state verifier get-code) (start-callback-server #:timeout 10))
+      (thread
+       (lambda ()
+         (sync (alarm-evt (+ (current-inexact-milliseconds) 200)))
+         (with-handlers ([exn:fail? (lambda (e) (void))])
+           (define-values (in out) (tcp-connect "127.0.0.1" port))
+           (fprintf out
+                    "GET /callback?code=nonblock-code&state=~a HTTP/1.1\r\nHost: localhost\r\n\r\n"
+                    state)
+           (flush-output out)
+           (close-output-port out)
+           (close-input-port in))))
+      ;; Wait for callback to be fully processed
+      (sync (alarm-evt (+ (current-inexact-milliseconds) 800)))
+      ;; get-code should return immediately (result already on channel)
+      (define before (current-inexact-milliseconds))
+      (define code (get-code))
+      (define after (current-inexact-milliseconds))
+      (check-equal? code "nonblock-code")
+      (check-true (< (- after before) 500)
+                  (format "get-code should return immediately, but took ~a ms" (- after before))))))
 
 (module+ main
   (run-tests security-tests))
