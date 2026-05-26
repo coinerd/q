@@ -8,7 +8,8 @@
 ;;   - Anthropic: source block with type "base64" and media_type
 ;;   - Gemini: inlineData with mimeType
 
-(require racket/string
+(require racket/contract
+         racket/string
          "image-input.rkt")
 
 ;; ═══════════════════════════════════════════════════════════════════
@@ -58,8 +59,8 @@
 ;; Provides
 ;; ═══════════════════════════════════════════════════════════════════
 
-(provide format-image-openai
-         format-image-anthropic
-         format-image-gemini
-         format-image-for-provider
-         build-multimodal-content)
+(provide (contract-out [format-image-openai (-> string? string? hash?)]
+                       [format-image-anthropic (-> string? string? hash?)]
+                       [format-image-gemini (-> string? string? hash?)]
+                       [format-image-for-provider (-> symbol? string? string? hash?)]
+                       [build-multimodal-content (-> symbol? string? path-string? (listof hash?))]))
