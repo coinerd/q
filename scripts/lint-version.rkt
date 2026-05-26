@@ -106,6 +106,10 @@
         (string-contains? (if (path? filename)
                               (path->string filename)
                               filename)
+                          "docs/reports/")
+        (string-contains? (if (path? filename)
+                              (path->string filename)
+                              filename)
                           "docs/adr/")))
   ;; historical-line? is now provided by version-guard.rkt
   ;; Skip lines inside fenced code blocks (``` ... ```)
