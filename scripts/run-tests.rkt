@@ -653,6 +653,7 @@
    "  --suite <name>    Run test suite: all (default), fast, slow, tui, smoke, security, arch, runtime, extensions, workflows")
   (displayln "  --strict          Enable strict zero-test detection (default: on)")
   (displayln "  --repeat N        Run suite N times (exit 1 if any run fails)")
+  (displayln "  --record-gate-evidence  Write .gate-evidence/<suite>.passed on success")
   (displayln "  --help            Show this help message")
   (newline)
   (displayln "Suites:")
@@ -675,24 +676,29 @@
              [strict? #t] ;; Always-on strict mode (W0: false-green sentinel)
              [suite 'all]
              [extra '()]
-             [repeat 1])
+             [repeat 1]
+             [record-gate? #f])
     (match rest
-      ['() (values jobs sequential? timeout strict? suite (reverse extra) repeat)]
+      ['() (values jobs sequential? timeout strict? suite (reverse extra) repeat record-gate?)]
       [(list "--help" _ ...)
        (usage)
        (exit 0)]
-      [(list "--strict" rest ...) (loop rest jobs sequential? timeout #t suite extra repeat)]
+      [(list "--strict" rest ...)
+       (loop rest jobs sequential? timeout #t suite extra repeat record-gate?)]
       [(list "--jobs" n rest ...)
-       (loop rest (string->number n) sequential? timeout strict? suite extra repeat)]
-      [(list "--sequential" rest ...) (loop rest 1 #t timeout strict? suite extra repeat)]
+       (loop rest (string->number n) sequential? timeout strict? suite extra repeat record-gate?)]
+      [(list "--sequential" rest ...)
+       (loop rest 1 #t timeout strict? suite extra repeat record-gate?)]
       [(list "--timeout" secs rest ...)
-       (loop rest jobs sequential? (string->number secs) strict? suite extra repeat)]
+       (loop rest jobs sequential? (string->number secs) strict? suite extra repeat record-gate?)]
       [(list "--suite" name rest ...)
-       (loop rest jobs sequential? timeout strict? (string->symbol name) extra repeat)]
+       (loop rest jobs sequential? timeout strict? (string->symbol name) extra repeat record-gate?)]
       [(list "--repeat" n rest ...)
-       (loop rest jobs sequential? timeout strict? suite extra (string->number n))]
+       (loop rest jobs sequential? timeout strict? suite extra (string->number n) record-gate?)]
+      [(list "--record-gate-evidence" rest ...)
+       (loop rest jobs sequential? timeout strict? suite extra repeat #t)]
       [(list arg rest ...)
-       (loop rest jobs sequential? timeout strict? suite (cons arg extra) repeat)])))
+       (loop rest jobs sequential? timeout strict? suite (cons arg extra) repeat record-gate?)])))
 
 ;; ---------------------------------------------------------------------------
 ;; Pre-flight: stale bytecode cleanup
@@ -837,8 +843,26 @@
     (printf ";; Run ~a/~a: PASS~n" repeat-num repeat-total))
   exit-code)
 
+;; ---------------------------------------------------------------------------
+;; Gate evidence recording
+;; ---------------------------------------------------------------------------
+
+(define (record-gate-evidence! suite-label)
+  (define evid-dir (build-path (current-directory) ".gate-evidence"))
+  (unless (directory-exists? evid-dir)
+    (make-directory evid-dir))
+  (define ver
+    (let ([m (regexp-match #rx"define q-version \"([^\"]+)\"" (file->string "util/version.rkt"))])
+      (or (and m (cadr m)) "unknown")))
+  (define evidence-file (build-path evid-dir (format "~a.passed" suite-label)))
+  (with-output-to-file evidence-file
+                       (lambda () (printf "~a ~a~n" ver (current-seconds)))
+                       #:exists 'truncate)
+  (printf ";; gate evidence recorded: ~a (v~a)~n" suite-label ver))
+
 (define (main args)
-  (define-values (jobs sequential? timeout strict? suite extra-files repeat) (parse-args args))
+  (define-values (jobs sequential? timeout strict? suite extra-files repeat record-gate?)
+    (parse-args args))
 
   ;; Pre-flight: clear stale bytecode to avoid linklet mismatches
   (define cleaned-dirs (clean-stale-bytecode! (current-directory)))
@@ -881,6 +905,10 @@
     (define exit-code (run-suite-once suite-files jobs timeout-ms strict? suite-label run-num repeat))
     (unless (zero? exit-code)
       (exit exit-code)))
+
+  ;; Record gate evidence if requested
+  (when record-gate?
+    (record-gate-evidence! suite-label))
 
   (exit 0))
 
