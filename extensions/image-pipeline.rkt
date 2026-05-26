@@ -20,6 +20,11 @@
 (define max-image-height (make-parameter 2048))
 (define max-image-bytes (make-parameter (* 5 1024 1024)))
 
+;; Timeout parameters (seconds) for subprocess operations
+(define image-probe-timeout (make-parameter 5))
+(define image-metadata-timeout (make-parameter 10))
+(define image-resize-timeout (make-parameter 30))
+
 ;; Resize cache: (path, max-w, max-h, fmt) -> output-path
 (define image-resize-cache (make-parameter (make-hash)))
 
@@ -63,16 +68,24 @@
 
 ;; Run a subprocess with argv list. Returns (values success? stdout-bytes).
 ;; Captures stdout and stderr. Never passes through a shell.
-(define (run-argv cmd+args)
+;; Optional timeout in seconds — kills subprocess on expiry.
+(define (run-argv cmd+args #:timeout [timeout-secs #f])
   (define cmd (car cmd+args))
   (define args (cdr cmd+args))
   (define-values (sp stdout-in stdin-out stderr-in) (apply subprocess #f #f #f cmd args))
   (close-output-port stdin-out)
+  (define timeout-thread
+    (and timeout-secs
+         (thread (lambda ()
+                   (sleep timeout-secs)
+                   (with-handlers ([exn:fail? void])
+                     (subprocess-kill sp #t))))))
+  (subprocess-wait sp)
+  (when timeout-thread
+    (kill-thread timeout-thread))
   (define stdout-bytes (port->bytes stdout-in))
-  (define stderr-bytes (port->bytes stderr-in))
   (close-input-port stdout-in)
   (close-input-port stderr-in)
-  (subprocess-wait sp)
   (values (eq? (subprocess-status sp) 0) stdout-bytes))
 
 ;; Resolve tool name to absolute path, or #f if not found.
@@ -87,7 +100,7 @@
   (define path (resolve-tool tool-name))
   (and path
        (let ()
-         (define-values (ok _) (run-argv (list path version-flag)))
+         (define-values (ok _) (run-argv (list path version-flag) #:timeout (image-probe-timeout)))
          ok)))
 
 (define (detect-image-tools)
@@ -130,7 +143,7 @@
        (if (equal? (path->string (file-name-from-path identify-path)) "magick")
            (list identify-path "identify" "-format" "%w %h" (path->string p))
            (list identify-path "-format" "%w %h" (path->string p))))
-     (define-values (ok out-bytes) (run-argv args))
+     (define-values (ok out-bytes) (run-argv args #:timeout (image-metadata-timeout)))
      (define out (bytes->string/utf-8 out-bytes #\?))
      (define parts (string-split (string-trim out) " "))
      (if (and ok (>= (length parts) 2))
@@ -143,7 +156,8 @@
     [(not sips-path) (cons 0 0)]
     [else
      (define-values (ok out-bytes)
-       (run-argv (list sips-path "-g" "pixelWidth" "-g" "pixelHeight" (path->string p))))
+       (run-argv #:timeout (image-metadata-timeout)
+                 (list sips-path "-g" "pixelWidth" "-g" "pixelHeight" (path->string p))))
      (define out (bytes->string/utf-8 out-bytes #\?))
      (define w-match (regexp-match #rx"pixelWidth:\\s*([0-9]+)" out))
      (define h-match (regexp-match #rx"pixelHeight:\\s*([0-9]+)" out))
@@ -164,10 +178,17 @@
      (define-values (sp stdout-in stdin-out stderr-in)
        (subprocess #f #f #f ffmpeg-path "-i" (path->string p)))
      (close-output-port stdin-out)
+     ;; Timeout thread kills ffmpeg if it hangs
+     (define timeout-thread
+       (thread (lambda ()
+                 (sleep (image-metadata-timeout))
+                 (with-handlers ([exn:fail? void])
+                   (subprocess-kill sp #t)))))
+     (subprocess-wait sp)
+     (kill-thread timeout-thread)
      (define stderr-bytes (port->bytes stderr-in))
      (close-input-port stdout-in)
      (close-input-port stderr-in)
-     (subprocess-wait sp)
      ;; Parse first NxN dimension from stderr output (no grep/head pipeline)
      (define stderr-str (bytes->string/utf-8 stderr-bytes #\?))
      (define m (regexp-match #rx"([0-9]+)x([0-9]+)" stderr-str))
@@ -255,7 +276,7 @@
        (if (equal? (path->string (file-name-from-path convert-path)) "magick")
            (list convert-path "convert" (path->string p) "-resize" resize-arg (path->string out-path))
            (list convert-path (path->string p) "-resize" resize-arg (path->string out-path))))
-     (define-values (ok _) (run-argv args))
+     (define-values (ok _) (run-argv args #:timeout (image-resize-timeout)))
      (if ok
          out-path
          (begin
@@ -271,6 +292,7 @@
      (copy-file p out-path #t)
      (define-values (ok _)
        (run-argv
+        #:timeout (image-resize-timeout)
         (list sips-path "--resampleHeightWidthMax" (number->string max-w) (path->string out-path))))
      (if ok
          out-path
@@ -287,6 +309,7 @@
      (define scale-arg (format "~a:~a:force_original_aspect_ratio=decrease" max-w max-h))
      (define-values (ok _)
        (run-argv
+        #:timeout (image-resize-timeout)
         (list ffmpeg-path "-y" "-i" (path->string p) "-vf" scale-arg (path->string out-path))))
      (if ok
          out-path
@@ -321,4 +344,7 @@
          extract-dimensions
          make-temp-output-path
          run-argv
-         resolve-tool)
+         resolve-tool
+         image-probe-timeout
+         image-metadata-timeout
+         image-resize-timeout)

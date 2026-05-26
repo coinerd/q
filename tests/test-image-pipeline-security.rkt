@@ -93,3 +93,30 @@
   (require rackunit/text-ui)
   (run-tests (test-suite "security"
                (dynamic-require "tests/test-image-pipeline-security.rkt" #f))))
+
+;; ═══════════════════════════════════════════════════════════════════
+;; Timeout tests
+;; ═══════════════════════════════════════════════════════════════════
+
+(test-case "run-argv respects timeout and kills subprocess"
+  ;; Sleep for 10 seconds but timeout at 1 second
+  (define-values (ok out) (run-argv (list "/bin/sleep" "10") #:timeout 1))
+  (check-false ok "subprocess killed by timeout"))
+
+(test-case "run-argv succeeds when subprocess finishes before timeout"
+  (define-values (ok out) (run-argv (list "/bin/echo" "fast") #:timeout 5))
+  (check-true ok)
+  (check-true (regexp-match? #"fast" out)))
+
+(test-case "timeout parameters have reasonable defaults"
+  (check-equal? (image-probe-timeout) 5)
+  (check-equal? (image-metadata-timeout) 10)
+  (check-equal? (image-resize-timeout) 30))
+
+(test-case "timeout parameters are configurable"
+  (parameterize ([image-probe-timeout 2]
+                 [image-metadata-timeout 5]
+                 [image-resize-timeout 15])
+    (check-equal? (image-probe-timeout) 2)
+    (check-equal? (image-metadata-timeout) 5)
+    (check-equal? (image-resize-timeout) 15)))
