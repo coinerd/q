@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.59.8 — 2026-05-26
+
+### Workflow Fixture Integrity + Release Enforcement
+
+Make workflow tests and release readiness enforceable, not merely available.
+
+**W0 — Mock Provider Fail-Loud Contract**
+- Change default `#:exhaustion-behavior` from `'done` to `'error`
+- Script exhaustion now raises an error instead of silently returning placeholder
+- Tests that need silent exhaustion must opt-in with `#:exhaustion-behavior 'done`
+- All 15 existing workflow tests pass with new default
+- Add test-mock-provider-fail-loud.rkt with 7 contract tests
+
+**W1 — Integrate Workflow Timeout and Cleanup Wrappers**
+- with-workflow-timeout now handles exceptions from worker thread
+- Add `#:context` parameter for diagnostic output on timeout
+- with-workflow-cleanup respects `workflow-debug?` parameter for debugging
+- Add test-workflow-timeout-cleanup.rkt with 8 tests
+
+**W2 — Release-Readiness Strict CI Wiring**
+- CI release-readiness job runs all 4 gate suites with `--record-gate-evidence`
+- Invokes `lint-release-readiness.rkt --strict` after gate evidence is recorded
+- Add 3 tests for gate evidence enforcement: stale, wrong version, missing suite
+
 ## v0.59.7 — 2026-05-26
 
 ### Security Completion
