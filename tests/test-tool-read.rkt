@@ -5,6 +5,7 @@
 (require rackunit
          "../tools/builtins/read.rkt"
          "../tools/tool.rkt"
+         "../util/safe-mode-state.rkt"
          racket/file)
 
 ;; ============================================================
@@ -69,9 +70,20 @@
 ;; TEST-02: Additional coverage — path traversal, symlink, large file
 ;; ============================================================
 
-(test-case "tool-read: path traversal returns error"
-  (define result (tool-read (hasheq 'path "../../etc/passwd")))
-  (check-pred tool-result-is-error? result))
+(test-case "tool-read: path traversal returns error in safe mode"
+  (define project-root-dir (make-temporary-file "q-read-root-~a" 'directory))
+  (define outside-file (make-temporary-file "q-read-outside-~a.txt"))
+  (display-to-file "outside" outside-file #:exists 'replace)
+  (dynamic-wind void
+                (lambda ()
+                  (parameterize ([current-safe-mode-config (make-safe-mode-config #:active #t
+                                                                                  #:project-root
+                                                                                  project-root-dir)])
+                    (define result (tool-read (hasheq 'path outside-file)))
+                    (check-pred tool-result-is-error? result)))
+                (lambda ()
+                  (delete-file outside-file)
+                  (delete-directory/files project-root-dir))))
 
 (test-case "tool-read: symlink resolves correctly"
   (define tmp (make-temporary-file "q-test-symlink-~a.txt"))
