@@ -221,7 +221,49 @@
       (define lines (render-all-lifecycle-widgets state 80))
       (check-equal? (length lines) 3)
       (unregister-lifecycle-widget! 'render-1)
-      (unregister-lifecycle-widget! 'render-2))))
+      (unregister-lifecycle-widget! 'render-2))
+
+    ;; ============================================================
+    ;; Negative contract tests
+    ;; ============================================================
+
+    (test-case "make-widget-lifecycle rejects non-symbol id"
+      (check-exn exn:fail:contract? (lambda () (make-widget-lifecycle "bad-id" (lambda (s w) '())))))
+
+    (test-case "make-widget-lifecycle rejects non-procedure render-fn"
+      (check-exn exn:fail:contract? (lambda () (make-widget-lifecycle 'test "not-a-proc"))))
+
+    (test-case "make-widget-lifecycle rejects non-procedure mount-fn"
+      (check-exn exn:fail:contract?
+                 (lambda () (make-widget-lifecycle 'test (lambda (s w) '()) #:mount "not-a-proc"))))
+
+    (test-case "make-widget-lifecycle rejects non-procedure unmount-fn"
+      (check-exn exn:fail:contract?
+                 (lambda () (make-widget-lifecycle 'test (lambda (s w) '()) #:unmount "not-a-proc"))))
+
+    (test-case "widget-mount! rejects non-widget"
+      (check-exn exn:fail:contract? (lambda () (widget-mount! "not-a-widget"))))
+
+    (test-case "widget-unmount! rejects non-widget"
+      (check-exn exn:fail:contract? (lambda () (widget-unmount! 42))))
+
+    (test-case "widget-render rejects non-widget"
+      (check-exn exn:fail:contract? (lambda () (widget-render 'not-a-widget (initial-ui-state) 80))))
+
+    (test-case "widget-handle-input rejects non-widget"
+      (check-exn exn:fail:contract? (lambda () (widget-handle-input 'nope "a" (initial-ui-state)))))
+
+    (test-case "register-lifecycle-widget! rejects non-widget"
+      (check-exn exn:fail:contract? (lambda () (register-lifecycle-widget! "not-a-widget"))))
+
+    (test-case "unregister-lifecycle-widget! rejects non-symbol"
+      (check-exn exn:fail:contract? (lambda () (unregister-lifecycle-widget! "not-a-symbol"))))
+
+    (test-case "lookup-lifecycle-widget rejects non-symbol"
+      (check-exn exn:fail:contract? (lambda () (lookup-lifecycle-widget 42))))
+
+    (test-case "widget->component rejects non-widget"
+      (check-exn exn:fail:contract? (lambda () (widget->component 'nope))))))
 
 (module+ main
   (run-tests widget-lifecycle-tests))
