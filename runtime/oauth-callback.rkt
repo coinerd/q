@@ -24,7 +24,8 @@
                 (values exact-positive-integer? string? string? (-> (or/c string? #f))))])
          base64url-encode-bytes
          parse-query
-         safe-decode)
+         safe-decode
+         hash-base64url)
 
 ;; ============================================================
 ;; PKCE (Proof Key for Code Exchange) — RFC 7636

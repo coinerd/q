@@ -157,11 +157,13 @@
                                           (set-box! (cmd-ctx-needs-redraw-box cctx) #t))])
                (define-values (port state-param verifier get-code)
                  (start-callback-server #:timeout 120))
+               (define challenge (hash-base64url verifier))
                (define auth-url
                  (oauth-authorize-url (struct-copy oauth-config cfg [redirect-port port])
-                                      state-param))
+                                      state-param
+                                      challenge))
                ;; Open browser
-               (open-browser auth-url)
+               (launch-browser auth-url)
                ;; Wait for callback
                (define code (get-code))
                (cond
@@ -224,21 +226,35 @@
                         8089)))
   (hash-ref known-providers provider-name #f))
 
-;; Open browser cross-platform.
+;; Open browser cross-platform using argv (no shell string injection).
+;; The url is passed as a direct argument to the browser command.
 (define (open-browser url)
-  (define cmd
+  (define cmd+args
     (case (system-type 'os)
-      [(macosx) (format "open '~a'" url)]
-      [(unix) (format "xdg-open '~a'" url)]
-      [(windows) (format "start '~a'" url)]
+      [(macosx) (list "open" url)]
+      [(unix) (list "xdg-open" url)]
+      [(windows) (list "cmd" "/c" "start" "" url)]
       [else #f]))
-  (when cmd
+  (when cmd+args
     (with-handlers ([exn:fail? (lambda (e) (void))])
-      (process cmd))))
+      (apply process cmd+args))))
+
+;; Injectable browser launcher for testing.
+;; When set, called instead of open-browser.
+(define current-browser-launcher (make-parameter #f))
+
+;; Launch browser or test mock.
+(define (launch-browser url)
+  (define launcher (current-browser-launcher))
+  (if launcher
+      (launcher url)
+      (open-browser url)))
 
 (provide handle-compact-command
          handle-interrupt-command
          handle-retry-command
          handle-quit-command
          handle-login-command
-         get-oauth-config)
+         get-oauth-config
+         current-browser-launcher
+         launch-browser)
