@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.59.7 — 2026-05-26
+
+### Security Completion
+
+Finish incomplete OAuth and image security remediation from v0.59.x audit.
+
+**W0 — OAuth Callback Atomic One-Shot Cleanup**
+- Replace unsynchronized box-based state with semaphore for atomic completion
+- try-complete! ensures only first handler wins; listener closes before result delivery
+- Add delayed-consumer, concurrent double-callback, and iteration tests (3 new tests)
+
+**W1 — Safe Browser Launch and Login Failure Visibility**
+- Replace (apply process cmd+args) with subprocess for safe argv execution
+- Windows: powershell Start-Process instead of cmd /c start
+- open-browser returns boolean (#t/#f) with error reporting
+- Export open-browser for testing; add 3 new tests
+
+**W2 — Image Option-Injection and Subprocess Operand Safety**
+- Add 5 adversarial tests: dash-prefixed filenames, shell metacharacters, newlines
+- Fix source path resolution in security tests
+- Fix module+ main for raco test compatibility
+
+**W3 — Image Format Contracts and Cache Thread Safety**
+- Add contract-out to image-format.rkt for all 5 public APIs
+- Create test-image-format-contracts.rkt with 12 tests (6 positive, 6 negative)
+- Make detected-tools cache thread-safe with semaphore
 ## v0.59.6 — 2026-05-26
 
 ### Truthful Closure Hotfix
