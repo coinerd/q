@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.59.1 — 2026-05-25
+
+### OAuth Security Rewrite
+
+RFC 7636 PKCE, CSPRNG primitives, one-shot callback server, safe browser launch,
+and mock HTTP transport for deterministic OAuth testing.
+
+**W0 — RFC7636 PKCE + CSPRNG Primitives**
+- Replaced pseudo-random `random-base64url` with CSPRNG via `/dev/urandom`
+- Replaced hand-rolled base64 with standard `net/base64` + `file/sha1` for SHA-256 PKCE
+- RFC 7636 Appendix B test vector passes
+- Added 8 security regression tests
+
+**W1 — Callback Server Lifecycle, Query Decoding, CSRF**
+- Replaced custom query parser with `net/uri-codec` safe percent-decoding
+- Keys kept as strings (attacker-controlled), not symbols
+- Made callback server one-shot: closes listener after first result
+- Added `result-put?` guard to prevent double channel-put
+- Added 8 new tests: percent-decoding, one-shot closure, CSRF, deterministic timeout
+
+**W2 — Safe Browser Launch + PKCE Auth URL**
+- Replaced shell string browser launch with argv-based `process` call
+- Added injectable `current-browser-launcher` for testing
+- `oauth-authorize-url` now accepts optional `code-challenge` for PKCE S256
+- Login handler generates and passes PKCE challenge
+
+**W3 — OAuth Exchange/Refresh Transport Tests**
+- Added injectable `current-oauth-http-sendrecv` for mock HTTP transport
+- HTTP status logging on non-2xx responses (was silently swallowed)
+- Fixed 4 stale stub tests, added 6 mock transport tests
+- All 48 OAuth tests green
+
 ## v0.59.0 — 2026-05-25
 
 ### Security, Stability & Workflow Remediation
