@@ -8,6 +8,7 @@
 ;; Returns structured results for assertion.
 
 (require racket/file
+         racket/match
          racket/port
          (prefix-in sdk: "../../../interfaces/sdk.rkt")
          "../../../agent/event-bus.rkt"
@@ -36,7 +37,34 @@
          run-workflow
          run-workflow-multi-turn
          workflow-session-log-path
-         workflow-session-entries)
+         workflow-session-entries
+         with-workflow-timeout
+         with-workflow-cleanup)
+
+;; ============================================================
+;; Timeout and cleanup helpers
+;; ============================================================
+
+;; with-workflow-timeout : ((-> A) #:timeout-ms exact-nonnegative-integer? #:on-timeout (-> A) -> A)
+;; Wraps a thunk with a wall-clock timeout. If the thunk does not complete
+;; within timeout-ms, calls on-timeout instead.
+(define (with-workflow-timeout
+         thunk
+         #:timeout-ms [timeout-ms 30000]
+         #:on-timeout
+         [on-timeout (lambda () (error 'with-workflow-timeout "timed out after ~a ms" timeout-ms))])
+  (define result-ch (make-channel))
+  (define timeout-evt (alarm-evt (+ (current-inexact-milliseconds) timeout-ms)))
+  (thread (lambda () (channel-put result-ch (list 'ok (thunk)))))
+  (match (sync/timeout (/ timeout-ms 1000.0) result-ch)
+    [(list 'ok v) v]
+    [#f (on-timeout)]
+    [_ (on-timeout)]))
+
+;; with-workflow-cleanup : ((or/c path? #f) (or/c path? #f) (-> A) -> A)
+;; Runs thunk, then cleans up project-dir and session-dir even on exception.
+(define (with-workflow-cleanup project-dir session-dir thunk)
+  (dynamic-wind void thunk (lambda () (cleanup-temp-project! project-dir session-dir))))
 
 ;; ============================================================
 ;; Result struct
