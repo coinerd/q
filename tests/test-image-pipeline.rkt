@@ -109,13 +109,6 @@
       (check-exn exn:fail? (lambda () (image-metadata "/nonexistent/file.png"))))
 
     ;; ============================================================
-    ;; Resize cache
-    ;; ============================================================
-
-    (test-case "image-resize-cache is a parameter with a hash"
-      (check-true (hash? (image-resize-cache))))
-
-    ;; ============================================================
     ;; Configuration parameters
     ;; ============================================================
 
