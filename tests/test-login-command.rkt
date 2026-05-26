@@ -7,7 +7,8 @@
          "../tui/commands/runtime-control.rkt"
          "../tui/commands/context.rkt"
          "../tui/state.rkt"
-         "../runtime/oauth.rkt")
+         "../runtime/oauth.rkt"
+         "../runtime/oauth-callback.rkt")
 
 (define (make-test-cctx)
   (cmd-ctx (box (initial-ui-state)) (box #t) #f #f (box #f) #f (box #f) #f (box "") #f #f))
@@ -40,7 +41,6 @@
       (define state (unbox (cmd-ctx-state-box cctx)))
       (define result (handle-login-command cctx state '("openai")))
       (check-equal? result 'continue)
-      ;; Should show config error since built-in config has no real client ID
       (define new-state (unbox (cmd-ctx-state-box cctx)))
       (define transcript (ui-state-transcript new-state))
       (check-true (for/or ([e (in-list transcript)])
@@ -50,11 +50,53 @@
       (check-true (oauth-available?)))
 
     (test-case "/login with placeholder config shows config error (#5334)"
-      ;; All built-in configs have client-id = #f, so valid-oauth-config? should be #f
       (define cfg (get-oauth-config "openai"))
       (when cfg
         (check-false (valid-oauth-config? cfg)
-                     "Built-in OAuth config should fail validation without real client ID")))))
+                     "Built-in OAuth config should fail validation without real client ID")))
+
+    ;; ============================================================
+    ;; W2: Safe browser launch (#5349, #5350)
+    ;; ============================================================
+
+    (test-case "browser launcher is injectable (#5350)"
+      (define launched? (box #f))
+      (parameterize ([current-browser-launcher (lambda (url)
+                                                 (set-box! launched? #t)
+                                                 (check-true (string? url)))])
+        (launch-browser "https://example.com")
+        (check-true (unbox launched?) "mock launcher should have been called")))
+
+    ;; ============================================================
+    ;; W2: Auth URL includes PKCE (#5351)
+    ;; ============================================================
+
+    (test-case "oauth-authorize-url without challenge has no PKCE params"
+      (define cfg
+        (oauth-config "https://auth.example.com/authorize"
+                      "https://auth.example.com/token"
+                      "test-client"
+                      "test-secret"
+                      '("openid")
+                      8089))
+      (define url (oauth-authorize-url cfg "test-state"))
+      (check-false (string-contains? url "code_challenge")
+                   "URL without challenge should not have code_challenge"))
+
+    (test-case "oauth-authorize-url with challenge includes PKCE S256 (#5351)"
+      (define cfg
+        (oauth-config "https://auth.example.com/authorize"
+                      "https://auth.example.com/token"
+                      "test-client"
+                      "test-secret"
+                      '("openid")
+                      8089))
+      (define-values (verifier challenge) (generate-pkce))
+      (define url (oauth-authorize-url cfg "test-state" challenge))
+      (check-true (string-contains? url "code_challenge=")
+                  "URL with challenge must include code_challenge")
+      (check-true (string-contains? url "code_challenge_method=S256")
+                  "URL must specify S256 method"))))
 
 (module+ main
   (run-tests login-tests))

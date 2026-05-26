@@ -43,7 +43,7 @@
           [oauth-token-expired? (->* (oauth-token?) (exact-integer?) boolean?)]
           [valid-oauth-config? (-> any/c boolean?)]
           ;; URL generation
-          [oauth-authorize-url (-> oauth-config? string? string?)]
+          [oauth-authorize-url (->* (oauth-config? string?) ((or/c string? #f)) string?)]
           ;; Token exchange
           [oauth-exchange-code
            (->* (oauth-config? string?) (#:code-verifier (or/c string? #f)) (or/c oauth-token? #f))]
@@ -113,14 +113,22 @@
 ;; ═══════════════════════════════════════════════════════════════════
 
 ;; Generate the authorization URL for browser redirect.
+;; Includes PKCE code_challenge when challenge is provided.
 ;; W5.7 (S4-06): URI-encode all query parameters
-(define (oauth-authorize-url cfg state-param)
-  (format "~a?client_id=~a&redirect_uri=~a&response_type=code&scope=~a&state=~a"
-          (oauth-config-authorize-url cfg)
-          (uri-encode (oauth-config-client-id cfg))
-          (uri-encode (format "http://localhost:~a/callback" (oauth-config-redirect-port cfg)))
-          (uri-encode (string-join (oauth-config-scopes cfg) " "))
-          (uri-encode state-param)))
+(define (oauth-authorize-url cfg state-param [code-challenge #f])
+  (define base-url
+    (format "~a?client_id=~a&redirect_uri=~a&response_type=code&scope=~a&state=~a"
+            (oauth-config-authorize-url cfg)
+            (uri-encode (oauth-config-client-id cfg))
+            (uri-encode (format "http://localhost:~a/callback" (oauth-config-redirect-port cfg)))
+            (uri-encode (string-join (oauth-config-scopes cfg) " "))
+            (uri-encode state-param)))
+  (if code-challenge
+      (string-append base-url
+                     "&code_challenge="
+                     (uri-encode code-challenge)
+                     "&code_challenge_method=S256")
+      base-url))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Token exchange & refresh (stubs)
