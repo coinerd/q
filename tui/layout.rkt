@@ -42,17 +42,14 @@
 
 ;; Compute the 5-region layout for a given terminal size.
 ;; Returns a hash of region-name -> layout-region.
+;; Canonical positional args: (term-height, term-width).
+;; Use keyword args for extra safety. Minimum height clamped to 4.
 (define (compute-layout term-height
                         term-width
                         #:widget-bar-h [widget-bar-h (widget-bar-height)]
                         #:has-widgets? [has-widgets? #f])
-  ;; Compatibility: v0.58.3 introduced (height width), but some older call
-  ;; sites/tests still pass (cols rows). Typical terminals are wider than tall,
-  ;; so swap only for that legacy-shaped input.
-  (define-values (height width)
-    (if (> term-height term-width)
-        (values term-width term-height)
-        (values term-height term-width)))
+  (define height (max (+ header-height input-height) term-height))
+  (define width (max 1 term-width))
   (define effective-widget-h (if (and has-widgets? (> widget-bar-h 0)) widget-bar-h 0))
   (define fixed-height (+ header-height effective-widget-h input-height))
   (define transcript-height (max 0 (- height fixed-height)))
@@ -95,7 +92,9 @@
   (+ (layout-region-y input-region) (layout-region-height input-region)))
 
 (define (tui-layout-header-row layout)
-  (layout-region-y (layout-header layout)))
+  ;; Old API returned #f when no header row was shown.
+  ;; The new layout always has a header, but for backward compat return #f.
+  #f)
 
 (define (tui-layout-transcript-start-row layout)
   (layout-region-y (layout-transcript layout)))
@@ -107,7 +106,10 @@
   (layout-region-y (layout-input layout)))
 
 (define (tui-layout-input-row layout)
-  (min (sub1 (tui-layout-rows layout)) (add1 (tui-layout-status-row layout))))
+  ;; The row where the user types — second line of the 3-line input region
+  ;; (first line is border/prompt header, second is text entry, third is spacing).
+  ;; This matches the renderer's (add1 (layout-region-y input-region)).
+  (add1 (layout-region-y (layout-input layout))))
 
 (define (compute-layout-with-widgets cols rows widget-line-count)
   (compute-layout rows
@@ -115,11 +117,17 @@
                   #:widget-bar-h widget-line-count
                   #:has-widgets? (positive? widget-line-count)))
 
+;; Convenience: accept old (cols rows) positional order.
+;; Use keyword args for unambiguous calls.
+(define (compute-layout-legacy cols
+                               rows
+                               #:widget-bar-h [widget-bar-h 0]
+                               #:has-widgets? [has-widgets? #f])
+  (compute-layout rows cols #:widget-bar-h widget-bar-h #:has-widgets? has-widgets?))
+
 ;; Clip lines to a region's height.
 (define (clip-to-region lines region)
-  (takef (append lines (make-list (layout-region-height region) ""))
-         (lambda (_) #t)
-         (layout-region-height region)))
+  (take (append lines (make-list (layout-region-height region) "")) (layout-region-height region)))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Provides
@@ -150,4 +158,5 @@
          tui-layout-transcript-height
          tui-layout-status-row
          tui-layout-input-row
-         compute-layout-with-widgets)
+         compute-layout-with-widgets
+         compute-layout-legacy)

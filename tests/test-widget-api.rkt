@@ -21,7 +21,7 @@
 ;; ============================================================
 
 (test-case "compute-layout: basic layout unchanged"
-  (define l (compute-layout 80 24))
+  (define l (compute-layout 24 80))
   (check-equal? (tui-layout-cols l) 80)
   (check-equal? (tui-layout-rows l) 24)
   (check-equal? (tui-layout-header-row l) #f)
@@ -42,7 +42,7 @@
   (check-equal? (tui-layout-input-row l) 23))
 
 (test-case "compute-layout-with-widgets: zero widgets = same as basic"
-  (define l0 (compute-layout 80 24))
+  (define l0 (compute-layout 24 80))
   (define l0w (compute-layout-with-widgets 80 24 0))
   (check-equal? (tui-layout-transcript-height l0) (tui-layout-transcript-height l0w))
   (check-equal? (tui-layout-status-row l0) (tui-layout-status-row l0w)))
@@ -158,7 +158,7 @@
 (test-case "integration: widgets shrink transcript and shift input"
   (define state-box (box (initial-ui-state)))
   ;; No widgets: standard layout
-  (define l0 (compute-layout 80 24))
+  (define l0 (compute-layout 24 80))
   (define th0 (tui-layout-transcript-height l0))
   ;; Add 2 widget lines
   (define lines
