@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.59.3 — 2026-05-25
+
+### Public API Contracts + Widget Lifecycle Safety
+
+Widget lifecycle contracts, thread-safe replacement, and tightened API boundaries.
+
+**W0 — Widget Lifecycle Contracts**
+- Added `contract-out` for all 16 public widget lifecycle APIs
+- Contracts validate: symbol id, procedure callbacks, widget? args, symbol? registry keys
+- Added 12 negative contract tests
+
+**W1 — Widget Lifecycle Locking and Replacement Semantics**
+- User callbacks (unmount) now run OUTSIDE the registry lock — no deadlock
+- Registering a widget with existing id unmounts old widget first
+- Added 3 concurrency tests: replacement unmounts old, concurrent no-deadlock, independent mount state
+
+**W2 — Remaining Contract Advisories**
+- `context-pressure-level` return type constrained to `(or/c 'green 'yellow 'red)`
+- `message-meta-safe` now has contract `(-> message? hash?)`
+- All affected tests pass
+
 ## v0.59.2 — 2026-05-25
 
 ### Image Pipeline Hardening
