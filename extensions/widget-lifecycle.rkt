@@ -170,22 +170,28 @@
 ;; Provides
 ;; ═══════════════════════════════════════════════════════════════════
 
-(provide widget-lifecycle
+(provide (contract-out
+          [make-widget-lifecycle
+           (->* (symbol? (-> any/c exact-nonnegative-integer? (listof any/c)))
+                (#:mount (-> void?)
+                         #:input (or/c #f (-> any/c any/c (values any/c any/c)))
+                         #:unmount (-> void?))
+                widget-lifecycle?)]
+          [widget-mount! (-> widget-lifecycle? void?)]
+          [widget-render (-> widget-lifecycle? any/c exact-nonnegative-integer? (listof any/c))]
+          [widget-handle-input (-> widget-lifecycle? any/c any/c (values any/c any/c))]
+          [widget-unmount! (-> widget-lifecycle? void?)]
+          [widget-mounted? (-> widget-lifecycle? boolean?)]
+          [widget->component (-> widget-lifecycle? q-component?)]
+          [register-lifecycle-widget! (-> widget-lifecycle? void?)]
+          [unregister-lifecycle-widget! (-> symbol? void?)]
+          [lookup-lifecycle-widget (-> symbol? (or/c widget-lifecycle? #f))]
+          [list-lifecycle-widgets (-> (listof widget-lifecycle?))]
+          [render-all-lifecycle-widgets (-> any/c exact-nonnegative-integer? (listof any/c))]
+          [focusable-lifecycle-widgets (-> (listof widget-lifecycle?))]
+          [cycle-lifecycle-focus (->* () (exact-integer?) (or/c symbol? #f))]
+          [route-lifecycle-input (-> any/c any/c (values any/c any/c))])
+         widget-lifecycle
          widget-lifecycle?
          widget-lifecycle-id
-         make-widget-lifecycle
-         widget-mount!
-         widget-render
-         widget-handle-input
-         widget-unmount!
-         widget-mounted?
-         widget->component
-         register-lifecycle-widget!
-         unregister-lifecycle-widget!
-         lookup-lifecycle-widget
-         list-lifecycle-widgets
-         render-all-lifecycle-widgets
-         focusable-lifecycle-widgets
-         cycle-lifecycle-focus
-         current-lifecycle-focus
-         route-lifecycle-input)
+         current-lifecycle-focus)
