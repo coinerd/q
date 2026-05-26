@@ -5,18 +5,19 @@
 ;;
 ;; Verifies that all pre-release conditions are met:
 ;;   1. Version sync: util/version.rkt, info.rkt, README.md agree
-;;   2. No duplicate git tag: tag for current version must NOT already exist
-;;   3. CHANGELOG entry: CHANGELOG.md has an entry for the current version
-;;   4. Doc freshness: no stale docs (lint-doc-freshness check)
-;;   5. Metrics sync: contract metrics are up-to-date
+;;   2. CHANGELOG entry: CHANGELOG.md has an entry for the current version
+;;   3. Git clean: no uncommitted changes
+;;   4. On main branch
+;;   5. (strict mode) Tag does not already exist
+;;   6. (strict mode) Gate evidence: recent passing results for required suites
 ;;
 ;; Exit codes:
 ;;   0 — all checks pass, ready to release
 ;;   1 — one or more checks failed
 ;;
 ;; Usage:
-;;   racket scripts/lint-release-readiness.rkt
-;;   racket scripts/lint-release-readiness.rkt --fix   # auto-fix what's possible
+;;   racket scripts/lint-release-readiness.rkt           # dev mode
+;;   racket scripts/lint-release-readiness.rkt --strict   # release mode (gate evidence + tag check)
 
 (provide get-canonical-version
          get-info-version
@@ -24,7 +25,9 @@
          check-tag-unique
          check-changelog-entry
          check-git-clean
-         check-main-branch)
+         check-main-branch
+         check-gate-evidence
+         required-gate-suites)
 
 (require racket/file
          racket/string
@@ -138,26 +141,87 @@
      #f]))
 
 ;; ---------------------------------------------------------------------------
+;; Check 6: Gate evidence (required suites have recent passing results)
+;; ---------------------------------------------------------------------------
+
+(define required-gate-suites '("fast" "tui" "arch" "workflows"))
+
+(define (gate-evidence-dir)
+  (build-path ".gate-evidence"))
+
+(define (check-gate-evidence)
+  (define evid-dir (gate-evidence-dir))
+  (cond
+    [(not (directory-exists? evid-dir))
+     (printf "  [FAIL] no .gate-evidence/ directory — run test suites with --record-gate-evidence~n")
+     #f]
+    [else
+     (define ver (get-canonical-version))
+     (define results
+       (for/list ([suite (in-list required-gate-suites)])
+         (define evidence-file (build-path evid-dir (format "~a.passed" suite)))
+         (cond
+           [(not (file-exists? evidence-file))
+            (printf "  [FAIL] gate evidence missing: ~a~n" suite)
+            #f]
+           [else
+            (define content (file->string evidence-file))
+            (define parts (string-split content " "))
+            (define ev-version (and (>= (length parts) 1) (car parts)))
+            (define ev-time (and (>= (length parts) 2) (string->number (cadr parts))))
+            (define now (current-seconds))
+            (define max-age 7200) ;; 2 hours
+            (cond
+              [(not (equal? ev-version ver))
+               (printf "  [FAIL] gate evidence for ~a is stale (version ~a, expected ~a)~n"
+                       suite
+                       ev-version
+                       ver)
+               #f]
+              [(and ev-time (> (- now ev-time) max-age))
+               (printf "  [FAIL] gate evidence for ~a is too old (~a seconds)~n"
+                       suite
+                       (- now ev-time))
+               #f]
+              [else
+               (printf "  [PASS] gate evidence: ~a (v~a)~n" suite ev-version)
+               #t])])))
+     (andmap values results)]))
+
+;; ---------------------------------------------------------------------------
 ;; Main
 ;; ---------------------------------------------------------------------------
 
 (define (main)
   (define argv (vector->list (current-command-line-arguments)))
-  (define fix? (member "--fix" argv))
+  (define strict? (member "--strict" argv))
 
   (unless (file-exists? "util/version.rkt")
     (displayln "ERROR: Run from q/ project root (util/version.rkt not found)")
     (exit 1))
 
   (define ver (get-canonical-version))
-  (printf "~n── Release Readiness Check (v~a) ──~n" ver)
+  (printf "~n── Release Readiness Check (v~a) ~a──~n" ver (if strict? "[STRICT] " ""))
+
+  (define base-results
+    (list (check-version-sync) (check-changelog-entry) (check-git-clean) (check-main-branch)))
+
+  ;; Tag check: only fail in strict/release mode (not ordinary dev lint)
+  (define tag-result
+    (if strict?
+        (check-tag-unique)
+        #t))
+
+  ;; Gate evidence: only in strict mode
+  (define gate-result
+    (if strict?
+        (check-gate-evidence)
+        #t))
 
   (define results
-    (list (check-version-sync)
-          (check-tag-unique)
-          (check-changelog-entry)
-          (check-git-clean)
-          (check-main-branch)))
+    (if strict?
+        (append base-results (list tag-result gate-result))
+        base-results))
 
   (define passed (count values results))
   (define failed (- (length results) passed))

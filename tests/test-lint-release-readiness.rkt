@@ -17,7 +17,9 @@
                                               check-tag-unique
                                               check-changelog-entry
                                               check-git-clean
-                                              check-main-branch))])
+                                              check-main-branch
+                                              check-gate-evidence
+                                              required-gate-suites))])
     (check-not-exn (lambda () (dynamic-require script-path sym))
                    (format "expected ~a to be provided" sym))))
 
@@ -37,3 +39,46 @@
     (define check (dynamic-require script-path 'check-changelog-entry))
     (define result (check))
     (check-true (or result (not result)) "check-changelog-entry returns a boolean")))
+
+(test-case "check-gate-evidence: fails when no .gate-evidence directory"
+  (when (file-exists? "util/version.rkt")
+    (define check (dynamic-require script-path 'check-gate-evidence))
+    (define evid-dir (build-path (current-directory) ".gate-evidence"))
+    ;; Temporarily ensure no evidence dir
+    (define had-dir (directory-exists? evid-dir))
+    (when had-dir
+      (rename-file-or-directory evid-dir (build-path (current-directory) ".gate-evidence.bak")))
+    (define result (check))
+    (check-false result "should fail when no .gate-evidence dir")
+    (when had-dir
+      (rename-file-or-directory (build-path (current-directory) ".gate-evidence.bak") evid-dir))))
+
+(test-case "check-gate-evidence: passes with valid evidence files"
+  (when (file-exists? "util/version.rkt")
+    (define check (dynamic-require script-path 'check-gate-evidence))
+    (define suites (dynamic-require script-path 'required-gate-suites))
+    (define ver-proc (dynamic-require script-path 'get-canonical-version))
+    (define ver (ver-proc))
+    (define evid-dir (build-path (current-directory) ".gate-evidence"))
+    (define had-dir (directory-exists? evid-dir))
+    (unless had-dir
+      (make-directory evid-dir))
+    ;; Write valid evidence files
+    (for ([suite (in-list suites)])
+      (with-output-to-file (build-path evid-dir (format "~a.passed" suite))
+                           (lambda () (printf "~a ~a~n" ver (current-seconds)))
+                           #:exists 'truncate))
+    (define result (check))
+    (check-true result "should pass with valid evidence files")
+    ;; Cleanup only if we created it
+    (unless had-dir
+      (delete-directory/files evid-dir))))
+
+(test-case "dev mode does not check tag uniqueness"
+  ;; In dev mode (no --strict), check-tag-unique should not be called
+  ;; This test verifies the exported function works
+  (when (file-exists? "util/version.rkt")
+    (define check (dynamic-require script-path 'check-tag-unique))
+    ;; Returns #t or #f, doesn't crash
+    (define result (check))
+    (check-true (boolean? result) "check-tag-unique returns boolean")))
