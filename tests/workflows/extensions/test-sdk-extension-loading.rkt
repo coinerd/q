@@ -7,6 +7,7 @@
 
 (require rackunit
          rackunit/text-ui
+         racket/runtime-path
          "../../workflows/fixtures/mock-provider.rkt"
          "../../workflows/fixtures/workflow-runner.rkt"
          "../../../agent/event-bus.rkt"
@@ -16,9 +17,9 @@
 
 ;; ── Helpers ──
 
+(define-runtime-path here-dir ".")
 (define (extension-path name)
-  (build-path (or (current-load-relative-directory) (current-directory))
-              (format "../../../extensions/~a.rkt" name)))
+  (build-path here-dir ".." ".." ".." "extensions" (format "~a.rkt" name)))
 
 ;; ── Test Suite ──
 
@@ -47,7 +48,7 @@
       ;; Load extensions via path list
       (define gsd-path (extension-path "gsd-planning"))
       (unless (file-exists? gsd-path)
-        ((error 'test "Extension not found:" gsd-path)))
+        (error 'test "Extension not found: ~a" gsd-path))
 
       (define prov
         (make-scripted-provider

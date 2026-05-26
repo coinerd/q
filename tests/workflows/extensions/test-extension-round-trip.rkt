@@ -9,6 +9,7 @@
 (require rackunit
          rackunit/text-ui
          racket/file
+         racket/runtime-path
          "../../workflows/fixtures/mock-provider.rkt"
          "../../workflows/fixtures/workflow-runner.rkt"
          "../../../agent/event-bus.rkt"
@@ -18,9 +19,9 @@
 
 ;; ── Helpers ──
 
+(define-runtime-path here-dir ".")
 (define (extension-path name)
-  (build-path (or (current-load-relative-directory) (current-directory))
-              (format "../../../extensions/~a.rkt" name)))
+  (build-path here-dir ".." ".." ".." "extensions" (format "~a.rkt" name)))
 
 (define gsd-planning-path (extension-path "gsd-planning"))
 

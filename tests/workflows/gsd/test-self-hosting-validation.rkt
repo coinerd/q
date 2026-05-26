@@ -15,6 +15,7 @@
          (only-in "../../../extensions/loader.rkt" load-extension!)
          "../../../tools/tool.rkt"
          "../../../agent/event-bus.rkt"
+         "../../../util/event.rkt"
          (only-in "../../../tools/builtins/skill-router.rkt" tool-skill-route)
          "../fixtures/mock-provider.rkt"
          "../fixtures/workflow-runner.rkt")
@@ -59,7 +60,7 @@
       (define bus (make-event-bus))
       (define received '())
       (subscribe! bus (lambda (evt) (set! received (cons evt received))))
-      (publish! bus (hasheq 'type "test" 'data "hello"))
+      (publish! bus (make-event 'test (current-inexact-milliseconds) #f #f (hasheq 'data "hello")))
       (check-equal? (length received) 1))
 
     (test-case "dogfood sample tasks are valid JSON"
