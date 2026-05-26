@@ -59,7 +59,8 @@
            (->* (string? oauth-config?) (#:path (or/c path-string? path?)) (or/c oauth-token? #f))]
           ;; Serialization helpers
           [oauth-token->jsexpr (-> oauth-token? hash?)]
-          [jsexpr->oauth-token (-> any/c (or/c oauth-token? #f))]))
+          [jsexpr->oauth-token (-> any/c (or/c oauth-token? #f))])
+         current-oauth-http-sendrecv)
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Structs
@@ -131,7 +132,23 @@
       base-url))
 
 ;; ═══════════════════════════════════════════════════════════════════
-;; Token exchange & refresh (stubs)
+;; Injectable HTTP transport (for testing)
+;; ═══════════════════════════════════════════════════════════════════
+
+;; Injectable HTTP transport. When set, called instead of http-sendrecv.
+;; Signature: (-> string? string? #:ssl? boolean? #:method bytes? #:headers (listof string?) #:data bytes?
+;;                (values bytes? (listof string?) input-port?))
+(define current-oauth-http-sendrecv (make-parameter #f))
+
+;; Perform HTTP POST for token operations. Uses injected transport if available.
+(define (oauth-http-post host path ssl? headers body-bytes)
+  (define transport (current-oauth-http-sendrecv))
+  (if transport
+      (transport host path #:ssl? ssl? #:method #"POST" #:headers headers #:data body-bytes)
+      (http-sendrecv host path #:ssl? ssl? #:method #"POST" #:headers headers #:data body-bytes)))
+
+;; ═══════════════════════════════════════════════════════════════════
+;; Token exchange & refresh
 ;; ═══════════════════════════════════════════════════════════════════
 
 ;; Exchange authorization code for token.
@@ -159,14 +176,15 @@
     (define path-str
       (string-append "/" (string-join (map (lambda (p) (path/param-path p)) (url-path u)) "/")))
     (define-values (status _headers response-in)
-      (http-sendrecv host
-                     path-str
-                     #:ssl? ssl?
-                     #:method #"POST"
-                     #:headers (list "Content-Type: application/x-www-form-urlencoded")
-                     #:data body-bytes))
+      (oauth-http-post host
+                       path-str
+                       ssl?
+                       (list "Content-Type: application/x-www-form-urlencoded")
+                       body-bytes))
     (define response-bytes (port->bytes response-in))
     (close-input-port response-in)
+    (unless (regexp-match? #rx#"^HTTP/1.[01] 2" status)
+      (log-warning "oauth-exchange-code: non-2xx status: ~a" status))
     (define response-json (bytes->jsexpr response-bytes))
     (define access-token (hash-ref response-json 'access_token #f))
     (cond
@@ -199,14 +217,15 @@
     (define path-str
       (string-append "/" (string-join (map (lambda (p) (path/param-path p)) (url-path u)) "/")))
     (define-values (status _headers response-in)
-      (http-sendrecv host
-                     path-str
-                     #:ssl? ssl?
-                     #:method #"POST"
-                     #:headers (list "Content-Type: application/x-www-form-urlencoded")
-                     #:data body-bytes))
+      (oauth-http-post host
+                       path-str
+                       ssl?
+                       (list "Content-Type: application/x-www-form-urlencoded")
+                       body-bytes))
     (define response-bytes (port->bytes response-in))
     (close-input-port response-in)
+    (unless (regexp-match? #rx#"^HTTP/1.[01] 2" status)
+      (log-warning "oauth-refresh-token: non-2xx status: ~a" status))
     (define response-json (bytes->jsexpr response-bytes))
     (define access-token (hash-ref response-json 'access_token #f))
     (cond
