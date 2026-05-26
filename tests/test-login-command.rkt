@@ -95,8 +95,31 @@
       (define url (oauth-authorize-url cfg "test-state" challenge))
       (check-true (string-contains? url "code_challenge=")
                   "URL with challenge must include code_challenge")
-      (check-true (string-contains? url "code_challenge_method=S256")
-                  "URL must specify S256 method"))))
+
+      (check-true (string-contains? url "code_challenge_method=S256") "URL must specify S256 method"))
+
+    (test-case "browser launch errors are catchable (#5464)"
+      ;; Injected launcher can raise errors — launch-browser doesn't catch them
+      (define saved-launcher (current-browser-launcher))
+      (current-browser-launcher (lambda (url) (error "test-launcher-fail")))
+      (check-exn exn:fail?
+                 (lambda () (launch-browser "https://example.com"))
+                 "injected launcher errors must propagate")
+      (current-browser-launcher saved-launcher))
+
+    (test-case "browser launch uses injectable launcher for testing (#5464)"
+      (define captured-url #f)
+      (define saved-launcher (current-browser-launcher))
+      (current-browser-launcher (lambda (url) (set! captured-url url)))
+      (launch-browser "https://test.example.com/oauth")
+      (check-equal? captured-url
+                    "https://test.example.com/oauth"
+                    "injected launcher must receive the URL")
+      (current-browser-launcher saved-launcher))
+
+    (test-case "open-browser returns boolean (#5464)"
+      (define result (open-browser "https://example.com"))
+      (check-true (or (eq? result #t) (eq? result #f)) "open-browser must return a boolean"))))
 
 (module+ main
   (run-tests login-tests))

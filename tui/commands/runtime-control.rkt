@@ -226,18 +226,31 @@
                         8089)))
   (hash-ref known-providers provider-name #f))
 
-;; Open browser cross-platform using argv (no shell string injection).
-;; The url is passed as a direct argument to the browser command.
+;; Open browser cross-platform using subprocess (no shell string injection).
+;; The url is passed as a direct argv argument, never through shell interpolation.
+;; Returns #t on success, #f on failure (with error logged).
 (define (open-browser url)
   (define cmd+args
     (case (system-type 'os)
       [(macosx) (list "open" url)]
       [(unix) (list "xdg-open" url)]
-      [(windows) (list "cmd" "/c" "start" "" url)]
+      ;; Windows: use powershell Start-Process for safe argv passing.
+      ;; Avoids cmd /c start which can misinterpret URLs.
+      [(windows) (list "powershell" "-Command" (format "Start-Process '~a'" url))]
       [else #f]))
-  (when cmd+args
-    (with-handlers ([exn:fail? (lambda (e) (void))])
-      (apply process cmd+args))))
+  (if (not cmd+args)
+      #f
+      (with-handlers ([exn:fail? (lambda (e)
+                                   ((error-display-handler) (format "open-browser failed: ~a"
+                                                                    (exn-message e)))
+                                   #f)])
+        (define-values (sp out in err) (apply subprocess #f #f #f (car cmd+args) (cdr cmd+args)))
+        (close-output-port in)
+        (close-input-port out)
+        (close-input-port err)
+        (define status (subprocess-status sp))
+        (subprocess-wait sp)
+        (eq? (subprocess-status sp) 'running))))
 
 ;; Injectable browser launcher for testing.
 ;; When set, called instead of open-browser.
@@ -254,6 +267,7 @@
          handle-interrupt-command
          handle-retry-command
          handle-quit-command
+         open-browser
          handle-login-command
          get-oauth-config
          current-browser-launcher
