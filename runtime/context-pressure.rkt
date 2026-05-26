@@ -12,10 +12,12 @@
          "../agent/event-structs/context-pressure-events.rkt"
          "session-types.rkt")
 
-(provide (contract-out
-          [check-context-pressure
-           (-> agent-session? exact-nonnegative-integer? exact-nonnegative-integer? symbol?)]
-          [context-pressure-level (-> real? symbol?)]))
+(provide (contract-out [check-context-pressure
+                        (-> agent-session?
+                            exact-nonnegative-integer?
+                            exact-nonnegative-integer?
+                            (or/c 'green 'yellow 'red))]
+                       [context-pressure-level (-> real? (or/c 'green 'yellow 'red))]))
 
 ;; ============================================================
 ;; Thresholds

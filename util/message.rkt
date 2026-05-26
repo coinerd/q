@@ -19,10 +19,10 @@
          message-meta
          (contract-out
           [make-message
-           (-> any/c (or/c string? symbol? #f) symbol? symbol? (listof any/c) any/c any/c message?)])
+           (-> any/c (or/c string? symbol? #f) symbol? symbol? (listof any/c) any/c any/c message?)]
+          [message-meta-safe (-> message? hash?)])
          message->jsexpr
-         jsexpr->message
-         message-meta-safe)
+         jsexpr->message)
 
 ;; ============================================================
 ;; Message struct
