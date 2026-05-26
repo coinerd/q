@@ -59,6 +59,11 @@
       (check-true (supported-image-file? "anim.gif"))
       (check-true (supported-image-file? "image.webp")))
 
+    (test-case "supported-image-file? returns exact boolean (#5330)"
+      ;; Must return #t/#f, not a truthy tail from member
+      (check-equal? (supported-image-file? "test.png") #t)
+      (check-equal? (supported-image-file? "test.rkt") #f))
+
     (test-case "supported-image-file? rejects non-image formats"
       (check-false (supported-image-file? "test.rkt"))
       (check-false (supported-image-file? "data.json"))
