@@ -6,6 +6,7 @@
 
 (require rackunit
          racket/file
+         racket/port
          "../runtime/oauth.rkt")
 
 ;; ═══════════════════════════════════════════════════════════════════
@@ -108,10 +109,13 @@
   (check-true (string-prefix? url "https://auth.example.com/authorize?")))
 
 ;; ═══════════════════════════════════════════════════════════════════
-;; Token exchange/refresh stub tests
+;; Token exchange/refresh tests (with mock transport)
 ;; ═══════════════════════════════════════════════════════════════════
 
-(test-case "oauth-exchange-code raises error (stub)"
+(test-case "oauth-available? returns #t"
+  (check-true (oauth-available?)))
+
+(test-case "oauth-exchange-code returns #f for HTTP error (#5353)"
   (define cfg
     (oauth-config "https://example.com/auth"
                   "https://example.com/token"
@@ -119,12 +123,50 @@
                   "secret"
                   '("scope")
                   8089))
-  (check-exn exn:fail? (lambda () (oauth-exchange-code cfg "some-auth-code"))))
+  (parameterize ([current-oauth-http-sendrecv
+                  (lambda (host path #:ssl? ssl? #:method method #:headers headers #:data data)
+                    (values #"HTTP/1.1 400 Bad Request"
+                            '()
+                            (open-input-string (bytes->string/utf-8
+                                                (string->bytes/utf-8
+                                                 "{\"error\":\"invalid_grant\"}")))))])
+    (check-false (oauth-exchange-code cfg "some-auth-code"))))
 
-(test-case "oauth-available? returns #f (stub)"
-  (check-false (oauth-available?)))
+(test-case "oauth-exchange-code returns token on success (#5353)"
+  (define cfg
+    (oauth-config "https://example.com/auth"
+                  "https://example.com/token"
+                  "client-id"
+                  "secret"
+                  '("scope")
+                  8089))
+  (parameterize
+      ([current-oauth-http-sendrecv
+        (lambda (host path #:ssl? ssl? #:method method #:headers headers #:data data)
+          (values
+           #"HTTP/1.1 200 OK"
+           '()
+           (open-input-string
+            "{\"access_token\":\"tok-abc\",\"refresh_token\":\"ref-xyz\",\"expires_in\":3600,\"token_type\":\"Bearer\",\"scope\":\"openid\"}")))])
+    (define tok (oauth-exchange-code cfg "auth-code" #:code-verifier "my-verifier"))
+    (check-true (oauth-token? tok))
+    (check-equal? (oauth-token-access-token tok) "tok-abc")
+    (check-equal? (oauth-token-refresh-token tok) "ref-xyz")))
 
-(test-case "oauth-refresh-token raises error (stub)"
+(test-case "oauth-exchange-code returns #f on network error (#5354)"
+  (define cfg
+    (oauth-config "https://example.com/auth"
+                  "https://example.com/token"
+                  "client-id"
+                  "secret"
+                  '("scope")
+                  8089))
+  (parameterize ([current-oauth-http-sendrecv
+                  (lambda (host path #:ssl? ssl? #:method method #:headers headers #:data data)
+                    (error "connection refused"))])
+    (check-false (oauth-exchange-code cfg "some-auth-code"))))
+
+(test-case "oauth-refresh-token returns #f for HTTP error (#5353)"
   (define cfg
     (oauth-config "https://example.com/auth"
                   "https://example.com/token"
@@ -133,7 +175,35 @@
                   '("scope")
                   8089))
   (define tok (oauth-token "access" "refresh" 1000 "Bearer" "openid"))
-  (check-exn exn:fail? (lambda () (oauth-refresh-token cfg tok))))
+  (parameterize ([current-oauth-http-sendrecv
+                  (lambda (host path #:ssl? ssl? #:method method #:headers headers #:data data)
+                    (values #"HTTP/1.1 401 Unauthorized"
+                            '()
+                            (open-input-string "{\"error\":\"invalid_client\"}")))])
+    (check-false (oauth-refresh-token cfg tok))))
+
+(test-case "oauth-refresh-token returns refreshed token on success (#5353)"
+  (define cfg
+    (oauth-config "https://example.com/auth"
+                  "https://example.com/token"
+                  "client-id"
+                  "secret"
+                  '("scope")
+                  8089))
+  (define tok (oauth-token "old-access" "old-refresh" 1000 "Bearer" "openid"))
+  (parameterize
+      ([current-oauth-http-sendrecv
+        (lambda (host path #:ssl? ssl? #:method method #:headers headers #:data data)
+          (values
+           #"HTTP/1.1 200 OK"
+           '()
+           (open-input-string
+            "{\"access_token\":\"new-access\",\"expires_in\":7200,\"token_type\":\"Bearer\"}")))])
+    (define refreshed (oauth-refresh-token cfg tok))
+    (check-true (oauth-token? refreshed))
+    (check-equal? (oauth-token-access-token refreshed) "new-access")
+    ;; refresh_token preserved when not in response
+    (check-equal? (oauth-token-refresh-token refreshed) "old-refresh")))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Serialization tests
@@ -205,7 +275,7 @@
   (check-equal? (oauth-token-access-token result) "valid-access")
   (delete-file tmp))
 
-(test-case "get-valid-oauth-token raises for expired token (stub refresh)"
+(test-case "get-valid-oauth-token returns #f when refresh fails (#5354)"
   (define tmp (make-temporary-file "oauth-test-~a.json"))
   (delete-file tmp)
   (define tok
@@ -218,8 +288,13 @@
                   "secret"
                   '("openid")
                   8089))
-  ;; oauth-refresh-token raises, so get-valid propagates the error
-  (check-exn exn:fail? (lambda () (get-valid-oauth-token "expired-provider" cfg #:path tmp)))
+  ;; With mock transport returning error, refresh should return #f (not raise)
+  (parameterize ([current-oauth-http-sendrecv
+                  (lambda (host path #:ssl? ssl? #:method method #:headers headers #:data data)
+                    (values #"HTTP/1.1 401 Unauthorized"
+                            '()
+                            (open-input-string "{\"error\":\"invalid_client\"}")))])
+    (check-false (get-valid-oauth-token "expired-provider" cfg #:path tmp)))
   (delete-file tmp))
 
 (test-case "get-valid-oauth-token returns #f for missing provider"
