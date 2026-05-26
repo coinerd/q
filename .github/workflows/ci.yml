@@ -325,8 +325,20 @@ jobs:
         with:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
 
-      - name: Release readiness check
-        run: racket scripts/lint-release-readiness.rkt
+      - name: Run fast suite with gate evidence
+        run: racket scripts/run-tests.rkt --suite fast --record-gate-evidence
+
+      - name: Run TUI suite with gate evidence
+        run: racket scripts/run-tests.rkt --suite tui --record-gate-evidence
+
+      - name: Run arch suite with gate evidence
+        run: racket scripts/run-tests.rkt --suite arch --record-gate-evidence
+
+      - name: Run workflows suite with gate evidence
+        run: racket scripts/run-tests.rkt --suite workflows --record-gate-evidence
+
+      - name: Strict release readiness check
+        run: racket scripts/lint-release-readiness.rkt --strict
 
       - name: Triple-gate (3x full suite)
         run: racket scripts/run-tests.rkt --repeat 3 2>&1 | tee triple-gate.log
