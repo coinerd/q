@@ -91,7 +91,7 @@
       (define msg (make-message "m2" #f 'user 'message (list (make-text-part "hi")) 1000 #f))
       (define result (message-meta-safe msg))
       (check-true (hash? result))
-      (check-equal? (hash-keys result) '()))
+      (check-equal? (sort (hash-keys result) symbol<?) '()))
 
     (test-case "message-meta-safe with hash-ref default returns value"
       (define msg (make-message "m3" #f 'user 'message (list (make-text-part "hi")) 1000 #f))

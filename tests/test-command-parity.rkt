@@ -12,7 +12,7 @@
          (only-in "../tui/command-parse.rkt" make-command-table))
 
 (define tui-table (make-command-table))
-(define tui-names (hash-keys tui-table))
+(define tui-names (sort (hash-keys tui-table) string<?))
 
 ;; TUI commands that should exist in the command table
 (define expected-commands
@@ -64,7 +64,7 @@
       (for ([cmd '("/help" "/quit" "/clear" "/compact" "/switch" "/model")])
         (check hash-has-key? tui-table cmd (format "Core command ~a missing from TUI table" cmd))))
     (test-case "all TUI commands are in expected list -- no stale entries"
-      (for ([cmd (in-list (hash-keys tui-table))])
+      (for ([cmd (in-list (sort (hash-keys tui-table) string<?))])
         (check member
                cmd
                expected-commands
