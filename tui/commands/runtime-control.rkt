@@ -226,18 +226,23 @@
                         8089)))
   (hash-ref known-providers provider-name #f))
 
+;; Build browser launch argv.  The URL must always be its own argv element,
+;; never interpolated into a shell/Powershell command string.
+(define (browser-command+args os url)
+  (case os
+    [(macosx) (list "open" url)]
+    [(unix) (list "xdg-open" url)]
+    ;; Windows: use a constant PowerShell command and pass the URL through
+    ;; PowerShell's argv vector.  Do not interpolate attacker-controlled URL
+    ;; text into the command passed to -Command.
+    [(windows) (list "powershell" "-NoProfile" "-Command" "Start-Process -FilePath $args[0]" url)]
+    [else #f]))
+
 ;; Open browser cross-platform using subprocess (no shell string injection).
 ;; The url is passed as a direct argv argument, never through shell interpolation.
 ;; Returns #t on success, #f on failure (with error logged).
 (define (open-browser url)
-  (define cmd+args
-    (case (system-type 'os)
-      [(macosx) (list "open" url)]
-      [(unix) (list "xdg-open" url)]
-      ;; Windows: use powershell Start-Process for safe argv passing.
-      ;; Avoids cmd /c start which can misinterpret URLs.
-      [(windows) (list "powershell" "-Command" (format "Start-Process '~a'" url))]
-      [else #f]))
+  (define cmd+args (browser-command+args (system-type 'os) url))
   (if (not cmd+args)
       #f
       (with-handlers ([exn:fail? (lambda (e)
@@ -248,7 +253,6 @@
         (close-output-port in)
         (close-input-port out)
         (close-input-port err)
-        (define status (subprocess-status sp))
         (subprocess-wait sp)
         (eq? (subprocess-status sp) 'running))))
 
@@ -271,4 +275,5 @@
          handle-login-command
          get-oauth-config
          current-browser-launcher
-         launch-browser)
+         launch-browser
+         browser-command+args)

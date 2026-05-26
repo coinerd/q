@@ -117,6 +117,16 @@
                     "injected launcher must receive the URL")
       (current-browser-launcher saved-launcher))
 
+    (test-case "browser command keeps malicious URL as argv data (#5496)"
+      (define malicious-url "https://example.com/?q='; rm -rf /; echo '")
+      (for ([os (in-list '(macosx unix windows))])
+        (define cmd+args (browser-command+args os malicious-url))
+        (check-equal? (last cmd+args) malicious-url)
+        (check-equal? (length (filter (lambda (arg) (string=? arg malicious-url)) cmd+args)) 1)
+        (check-false (for/or ([arg (in-list (drop-right cmd+args 1))])
+                       (string-contains? arg malicious-url))
+                     (format "~a command arguments must not interpolate URL" os))))
+
     (test-case "open-browser returns boolean (#5464)"
       (define result (open-browser "https://example.com"))
       (check-true (or (eq? result #t) (eq? result #f)) "open-browser must return a boolean"))))
