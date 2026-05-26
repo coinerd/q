@@ -16,25 +16,38 @@
 
 ;; TUI commands that should exist in the command table
 (define expected-commands
-  (list "/help" "/h" "/?"    ;; help
-        "/quit" "/q" "/exit" ;; quit
-        "/clear" "/cls"      ;; clear
-        "/compact"           ;; compact
-        "/switch"            ;; switch
-        "/model" "/m"        ;; model
-        "/status" "/st" "/info" ;; status
-        "/retry" "/r"        ;; retry
-        "/cancel" "/stop" "/interrupt" ;; interrupt
-        "/fork"              ;; fork
-        "/history"           ;; history
-        "/branches"          ;; branches
-        "/leaves"            ;; leaves
-        "/children"          ;; children
-        "/tree"              ;; tree
-        "/sessions"          ;; sessions
-        "/reload"            ;; reload
-        "/name"              ;; name
-        "/activate" "/a"     ;; activate
+  (list "/help"
+        "/h"
+        "/?" ;; help
+        "/quit"
+        "/q"
+        "/exit" ;; quit
+        "/clear"
+        "/cls" ;; clear
+        "/compact" ;; compact
+        "/switch" ;; switch
+        "/model"
+        "/m" ;; model
+        "/status"
+        "/st"
+        "/info" ;; status
+        "/retry"
+        "/r" ;; retry
+        "/cancel"
+        "/stop"
+        "/interrupt" ;; interrupt
+        "/fork" ;; fork
+        "/history" ;; history
+        "/branches" ;; branches
+        "/leaves" ;; leaves
+        "/children" ;; children
+        "/tree" ;; tree
+        "/sessions" ;; sessions
+        "/reload" ;; reload
+        "/name" ;; name
+        "/activate"
+        "/a" ;; activate
+        "/login" ;; login (#5331)
         ))
 
 (define parity-suite
@@ -42,16 +55,19 @@
 
     (test-case "expected TUI commands are parseable"
       (for ([cmd (in-list expected-commands)])
-        (check hash-has-key? tui-table cmd
-          (format "Expected command ~a not found in TUI command table" cmd))))
+        (check hash-has-key?
+               tui-table
+               cmd
+               (format "Expected command ~a not found in TUI command table" cmd))))
 
     (test-case "TUI command table has core commands"
       (for ([cmd '("/help" "/quit" "/clear" "/compact" "/switch" "/model")])
-        (check hash-has-key? tui-table cmd
-          (format "Core command ~a missing from TUI table" cmd))))
+        (check hash-has-key? tui-table cmd (format "Core command ~a missing from TUI table" cmd))))
     (test-case "all TUI commands are in expected list -- no stale entries"
       (for ([cmd (in-list (hash-keys tui-table))])
-        (check member cmd expected-commands
-          (format "TUI command ~a not in expected list -- stale or untested?" cmd))))))
+        (check member
+               cmd
+               expected-commands
+               (format "TUI command ~a not in expected list -- stale or untested?" cmd))))))
 
 (run-tests parity-suite)

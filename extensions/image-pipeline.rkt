@@ -64,7 +64,7 @@
                                 (string->path path)
                                 path))
         #""))
-  (member ext '(#".png" #".jpg" #".jpeg" #".gif" #".webp")))
+  (and (member ext '(#".png" #".jpg" #".jpeg" #".gif" #".webp")) #t))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Tool detection
