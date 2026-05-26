@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.59.5 — 2026-05-25
+
+### Release Process Hardening + Final Audit Closure
+
+Prevent recurrence of false-green releases and close the v0.59.x remediation campaign.
+
+**W0 — Release-Readiness Blocks Red Gates**
+- Added `--strict` flag to `lint-release-readiness.rkt` for release mode
+- Strict mode requires gate evidence (`.gate-evidence/<suite>.passed`) and tag check
+- Dev mode (default): no tag check, no gate evidence check
+- Added `check-gate-evidence`: validates version match and freshness (<2 hours)
+- Added `--record-gate-evidence` flag to `run-tests.rkt`
+- Added `.gate-evidence/` to `.gitignore`
+- Expanded release readiness tests to 6 covering gate evidence and dev/strict modes
+
+**W1 — Planning/Audit Consistency**
+- Published v0.59.x finding matrix: all 18 C/M/L findings resolved
+- All 6 milestones complete with test evidence
+
+**W2 — Final Audit and Release**
+- Published `AUDIT-v0.59.x-POST-REMEDIATION.md`
+- Verdict: APPROVED
+
 ## v0.59.4 — 2026-05-25
 
 ### Workflow Test Hang/Isolation Remediation
