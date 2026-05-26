@@ -115,7 +115,8 @@
       (string-contains? s "/docs/ecosystem/")
       (string-contains? s "/docs/demos/")
       (string-contains? s "/docs/adr/")
-      (string-contains? s "/docs/security.md")))
+      (string-contains? s "/docs/security.md")
+      (string-contains? s "/docs/reports/")))
 
 ;; historical-line? is now provided by version-guard.rkt
 

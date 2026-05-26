@@ -51,7 +51,11 @@
   (or (string-contains? str " ")
       (string-contains-char? str #\\)
       ;; Unicode right arrow (→)
-      (regexp-match? #rx"\u2192" str)))
+      (regexp-match? #rx"\u2192" str)
+      ;; URL paths (query strings, percent-encoded) — not filesystem
+      (regexp-match? #rx"^/[a-z]+\\?" str)
+      ;; Fixture paths used in test suites
+      (string=? str "/fixtures/")))
 
 (define (test-fixture-path? str)
   ;; Test fixtures for nonexistent or fake paths — not real dependencies
