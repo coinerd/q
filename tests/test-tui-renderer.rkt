@@ -229,7 +229,7 @@
       (define ubuf (make-mock-ubuf 80 24))
       (define state (initial-ui-state))
       (define input-st (initial-input-state))
-      (define layout (compute-layout 80 24))
+      (define layout (compute-layout 24 80))
       (run-render-frame! ubuf state input-st layout)
       ;; Status bar is at status-row (row 22 for 80x24)
       (define status-str (mock-ubuf-row-string ubuf (tui-layout-status-row layout)))
@@ -240,7 +240,7 @@
       (define ubuf (make-mock-ubuf 40 10))
       (define state (initial-ui-state))
       (define input-st (initial-input-state))
-      (define layout (compute-layout 40 10))
+      (define layout (compute-layout 10 40))
       (run-render-frame! ubuf state input-st layout)
       ;; Status bar should have inverse style: bg=7
       (define status-row-num (tui-layout-status-row layout))
@@ -256,7 +256,7 @@
           (mock-ubuf-set-cell! ubuf col row #\X #f #f 7 0)))
       (define state (initial-ui-state))
       (define input-st (initial-input-state))
-      (define layout (compute-layout 40 10))
+      (define layout (compute-layout 10 40))
       (run-render-frame! ubuf state input-st layout)
       ;; Status bar should be drawn with new content
       (define status-str (mock-ubuf-row-string ubuf (tui-layout-status-row layout)))
@@ -269,7 +269,7 @@
       (define ubuf (make-mock-ubuf 80 24))
       (define state (add-transcript-entry (initial-ui-state) (make-entry 'user "Hello" 0 (hash))))
       (define input-st (initial-input-state))
-      (define layout (compute-layout 80 24))
+      (define layout (compute-layout 24 80))
       (run-render-frame! ubuf state input-st layout)
       ;; Check transcript area (row 2 onwards)
       ;; The user entry should appear with "> " prefix
@@ -284,7 +284,7 @@
         (add-transcript-entry (initial-ui-state)
                               (make-entry 'assistant "Assistant response" 0 (hash))))
       (define input-st (initial-input-state))
-      (define layout (compute-layout 80 24))
+      (define layout (compute-layout 24 80))
       (run-render-frame! ubuf state input-st layout)
       ;; Assistant message should be visible
       (define found-assistant?
@@ -297,7 +297,7 @@
       (define state
         (add-transcript-entry (initial-ui-state) (make-entry 'error "Error occurred" 0 (hash))))
       (define input-st (initial-input-state))
-      (define layout (compute-layout 80 24))
+      (define layout (compute-layout 24 80))
       (run-render-frame! ubuf state input-st layout)
       ;; Error message should be visible
       (define found-error?
@@ -311,7 +311,7 @@
       (define state
         (add-transcript-entry (initial-ui-state) (make-entry 'assistant long-text 0 (hash))))
       (define input-st (initial-input-state))
-      (define layout (compute-layout 40 10))
+      (define layout (compute-layout 10 40))
       (run-render-frame! ubuf state input-st layout)
       ;; The line should be truncated/padded to 40 columns
       (define row2-str (mock-ubuf-row-string ubuf 1))
@@ -323,7 +323,7 @@
         (for/fold ([s (initial-ui-state)]) ([msg '("First" "Second" "Third")])
           (add-transcript-entry s (make-entry 'assistant msg 0 (hash)))))
       (define input-st (initial-input-state))
-      (define layout (compute-layout 80 24))
+      (define layout (compute-layout 24 80))
       (run-render-frame! ubuf state input-st layout)
       ;; Should show the last entries that fit
       (define found-entries
@@ -343,7 +343,7 @@
       (define ubuf (make-mock-ubuf 80 24))
       (define state (initial-ui-state #:session-id "test-session" #:model-name "gpt-4"))
       (define input-st (initial-input-state))
-      (define layout (compute-layout 80 24))
+      (define layout (compute-layout 24 80))
       (define status-row-num (tui-layout-status-row layout))
       (run-render-frame! ubuf state input-st layout)
       (define status-str (mock-ubuf-row-string ubuf status-row-num))
@@ -354,7 +354,7 @@
       (define ubuf (make-mock-ubuf 80 24))
       (define state (initial-ui-state #:session-id "s1"))
       (define input-st (initial-input-state))
-      (define layout (compute-layout 80 24))
+      (define layout (compute-layout 24 80))
       (define status-row-num (tui-layout-status-row layout))
       (run-render-frame! ubuf state input-st layout)
       (define inverse-count
@@ -365,7 +365,7 @@
       (define ubuf (make-mock-ubuf 80 24))
       (define state (set-busy (initial-ui-state #:session-id "s1") #t))
       (define input-st (initial-input-state))
-      (define layout (compute-layout 80 24))
+      (define layout (compute-layout 24 80))
       (define status-row-num (tui-layout-status-row layout))
       (run-render-frame! ubuf state input-st layout)
       (define status-str (mock-ubuf-row-string ubuf status-row-num))
@@ -380,7 +380,7 @@
       (define ubuf (make-mock-ubuf 80 24))
       (define state (initial-ui-state))
       (define input-st (input-insert-char (input-insert-char (initial-input-state) #\h) #\i))
-      (define layout (compute-layout 80 24))
+      (define layout (compute-layout 24 80))
       (define input-row-num (tui-layout-input-row layout))
       (run-render-frame! ubuf state input-st layout)
       (define input-str (mock-ubuf-row-string ubuf input-row-num))
@@ -391,7 +391,7 @@
       (define ubuf (make-mock-ubuf 80 24))
       (define state (initial-ui-state))
       (define input-st (input-insert-char (initial-input-state) #\x))
-      (define layout (compute-layout 80 24))
+      (define layout (compute-layout 24 80))
       (define input-row-num (tui-layout-input-row layout))
       (run-render-frame! ubuf state input-st layout)
       (define bold-count (mock-ubuf-row-style-count ubuf input-row-num mock-cell-bold))
@@ -401,7 +401,7 @@
       (define ubuf (make-mock-ubuf 80 24))
       (define state (initial-ui-state))
       (define input-st (initial-input-state))
-      (define layout (compute-layout 80 24))
+      (define layout (compute-layout 24 80))
       (define input-row-num (tui-layout-input-row layout))
       (run-render-frame! ubuf state input-st layout)
       (define input-str (mock-ubuf-row-string ubuf input-row-num))
@@ -412,7 +412,7 @@
       (define state (initial-ui-state))
       (define input-st (input-insert-char (input-insert-char (initial-input-state) #\a) #\b))
       ;; cursor should be at position 2 (after "ab")
-      (define layout (compute-layout 80 24))
+      (define layout (compute-layout 24 80))
       (define-values (cursor-col cursor-row) (run-render-frame! ubuf state input-st layout))
       ;; cursor-row should be input row
       (check-equal? cursor-row (tui-layout-input-row layout))
@@ -426,7 +426,7 @@
       (define ubuf (make-mock-ubuf 20 4))
       (define state (initial-ui-state))
       (define input-st (initial-input-state))
-      (define layout (compute-layout 20 4))
+      (define layout (compute-layout 4 20))
       ;; Should not error on minimum size
       (check-not-exn (lambda () (run-render-frame! ubuf state input-st layout))))
 
@@ -434,7 +434,7 @@
       (define ubuf (make-mock-ubuf 200 50))
       (define state (initial-ui-state))
       (define input-st (initial-input-state))
-      (define layout (compute-layout 200 50))
+      (define layout (compute-layout 50 200))
       ;; Should not error on large size
       (check-not-exn (lambda () (run-render-frame! ubuf state input-st layout))))
 
@@ -442,7 +442,7 @@
       (define ubuf (make-mock-ubuf 80 10))
       (define state (initial-ui-state))
       (define input-st (initial-input-state))
-      (define layout (compute-layout 80 10))
+      (define layout (compute-layout 10 80))
       (run-render-frame! ubuf state input-st layout)
       ;; Empty transcript cells have bg=0 (ANSI black)
       (define trans-start (tui-layout-transcript-start-row layout))
@@ -453,7 +453,7 @@
       (define ubuf (make-mock-ubuf 80 10))
       (define state (initial-ui-state))
       (define input-st (initial-input-state))
-      (define layout (compute-layout 80 10))
+      (define layout (compute-layout 10 80))
       (run-render-frame! ubuf state input-st layout)
       (define status-y (tui-layout-status-row layout))
       (define cell (mock-ubuf-cell ubuf 1 status-y))
@@ -465,7 +465,7 @@
         (for/fold ([s (initial-ui-state)]) ([i (in-range 100)])
           (add-transcript-entry s (make-entry 'system (format "Line ~a" i) 0 (hash)))))
       (define input-st (initial-input-state))
-      (define layout (compute-layout 80 24))
+      (define layout (compute-layout 24 80))
       ;; Should only show the visible portion without error
       (check-not-exn (lambda () (run-render-frame! ubuf state input-st layout))))
 
@@ -476,7 +476,7 @@
       (define ubuf (make-mock-ubuf 80 24))
       (define state (set-streaming-text (initial-ui-state) "Partial response..."))
       (define input-st (initial-input-state))
-      (define layout (compute-layout 80 24))
+      (define layout (compute-layout 24 80))
       (run-render-frame! ubuf state input-st layout)
       ;; Streaming text should appear in transcript area (rows 2–22)
       (define found-streaming?
@@ -517,7 +517,7 @@
                      [transcript
                       (list (transcript-entry 'user (make-string 500 #\X) 0 (hasheq) #f))]))
       (define input-st (initial-input-state))
-      (define layout (compute-layout 40 10))
+      (define layout (compute-layout 10 40))
       ;; Should not raise — render wraps/truncates
       (check-not-exn (lambda () (run-render-frame! ubuf state input-st layout))))))
 
@@ -538,7 +538,7 @@
           (make-test-event "tool.execution.completed" (hasheq 'name "read" 'result "file data"))))
   (define state (simulate-events s0 events))
   (define input-st (initial-input-state))
-  (define layout (compute-layout 80 24))
+  (define layout (compute-layout 24 80))
   ;; Should not raise
   (check-not-exn (lambda () (run-render-frame! ubuf state input-st layout)))
   ;; Verify transcript has all 3 entries
@@ -556,7 +556,7 @@
   ;; Add streaming text to simulate mid-stream state
   (define state (set-streaming-text (simulate-events s0 events) "New answer streaming"))
   (define input-st (initial-input-state))
-  (define layout (compute-layout 80 24))
+  (define layout (compute-layout 24 80))
   ;; Should not raise — streaming text renders below committed entries
   (check-not-exn (lambda () (run-render-frame! ubuf state input-st layout)))
   ;; Verify state has streaming text
@@ -580,7 +580,7 @@
                         (hasheq 'name (format "tool~a" i) 'result (format "data-~a" i))))))
   (define state (simulate-events s0 (append base-events (apply append tool-events))))
   (define input-st (initial-input-state))
-  (define layout (compute-layout 40 5))
+  (define layout (compute-layout 5 40))
   ;; Should not raise even with small transcript area
   (check-not-exn (lambda () (run-render-frame! ubuf state input-st layout)))
   ;; Verify transcript has all entries
@@ -644,7 +644,7 @@
       (styled-line (list (styled-segment (format "Option ~a" i) '())))))
   (define state (show-overlay (initial-ui-state) 'command-palette overlay-content ""))
   (define input-st (initial-input-state))
-  (define layout (compute-layout 40 8))
+  (define layout (compute-layout 8 40))
   ;; Should render without error even when overlay exceeds height
   (check-not-exn (lambda () (run-render-frame! ubuf state input-st layout))))
 
@@ -659,7 +659,7 @@
               (styled-line (list (styled-segment (format "Widget line ~a" i) '()))))))
   (define state (struct-copy ui-state (initial-ui-state) [extension-widgets widgets]))
   (define input-st (initial-input-state))
-  (define layout (compute-layout 80 24))
+  (define layout (compute-layout 24 80))
   ;; Should render without error (widgets may be truncated)
   (check-not-exn (lambda () (run-render-frame! ubuf state input-st layout)))
 
@@ -686,7 +686,7 @@
             (make-test-event "model.stream.thinking" (hasheq 'delta " step 2"))))
     (define state (simulate-events s0 events))
     (define input-st (initial-input-state))
-    (define layout (compute-layout 80 24))
+    (define layout (compute-layout 24 80))
     (check-not-exn (lambda () (run-render-frame! ubuf state input-st layout))))
 
   (test-case "turn.completed clears streaming-thinking"

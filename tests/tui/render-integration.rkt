@@ -93,7 +93,7 @@
 ;; Render a mock session to a frame (returns frame-lines)
 (define (render-mock-frame ui-state input-st cols rows)
   (define ubuf (make-mock-ubuf cols rows))
-  (define layout (compute-layout cols rows))
+  (define layout (compute-layout rows cols))
   (parameterize ([current-ubuf-clear mock-ubuf-clear!]
                  [current-ubuf-putstring mock-ubuf-putstring!])
     (define-values (_cur-col _cur-row _new-state frame-lines)
@@ -118,7 +118,7 @@
       (define ist (initial-input-state))
       (define cols 80)
       (define rows 24)
-      (define layout (compute-layout cols rows))
+      (define layout (compute-layout rows cols))
       ;; Add a user message and assistant response
       (define state-with-messages
         (let* ([s (add-transcript-entry state (make-entry 'user "Hello!" 1000 (hash)))]
@@ -138,7 +138,7 @@
       (define ist (initial-input-state))
       (define cols 80)
       (define rows 24)
-      (define layout (compute-layout cols rows))
+      (define layout (compute-layout rows cols))
       ;; Simulate a tool result with embedded newlines (the bug scenario)
       (define state-with-tool
         (let* ([s (add-transcript-entry state (make-entry 'user "Read this file" 1000 (hash)))]
@@ -172,7 +172,7 @@
       (define ist (initial-input-state))
       (define cols 80)
       (define rows 24)
-      (define layout (compute-layout cols rows))
+      (define layout (compute-layout rows cols))
       ;; Simulate streaming: state has streaming-text set
       (define state-streaming (set-busy (set-streaming-text state "Thinking about this...") #t))
       (define frame-lines (render-mock-frame state-streaming ist cols rows))
@@ -201,7 +201,7 @@
       (define ist (initial-input-state))
       (define cols 80)
       (define rows 24)
-      (define layout (compute-layout cols rows))
+      (define layout (compute-layout rows cols))
       ;; Add 50 transcript entries
       (define state-with-many
         (for/fold ([s state]) ([i (in-range 50)])
@@ -228,7 +228,7 @@
       (define ist (initial-input-state))
       (define cols 80)
       (define rows 24)
-      (define layout (compute-layout cols rows))
+      (define layout (compute-layout rows cols))
       ;; Simulate: tool call → error → retry → success
       (define state-with-errors
         (let* ([s (add-transcript-entry state (make-entry 'user "Fix the bug" 1000 (hash)))]
