@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.59.4 — 2026-05-25
+
+### Workflow Test Hang/Isolation Remediation
+
+Convert deferred workflow-test problem into a reliable, diagnosable workflow suite.
+
+**W0 — Workflow Suite Characterization and Runner Support**
+- Added `--suite workflows` to test runner
+- `workflows-file?` predicate matches `/workflows/` excluding `/fixtures/`
+- Updated stale comment: workflows do NOT hang, just need 60s timeout
+- Characterization: 20/24 pass with 60s timeout, 4 known failures fixed in W3
+
+**W1 — Workflow Fixture Timeouts and Cleanup Safety**
+- Added `with-workflow-timeout`: wall-clock timeout wrapper with on-timeout callback
+- Added `with-workflow-cleanup`: dynamic-wind cleanup for project/session dirs
+
+**W2 — Mock Provider Contract Cleanup**
+- Added `#:exhaustion-behavior` keyword to `make-scripted-provider`
+- Default `'done`: silently returns "done" (backward compatible)
+- `'error`: raises error when script entries are exhausted
+
+**W3 — Fix Four Workflow Correctness Failures**
+- Fixed `test-self-hosting-validation`: use `make-event` instead of raw hash for `publish!`
+- Fixed `test-sdk-extension-loading`: error format string, `define-runtime-path`
+- Fixed `test-extension-round-trip`: `define-runtime-path` for extension resolution
+- Fixed `test-planning-workflow`: `define-runtime-path` for extension resolution
+- All 24/24 workflow tests now pass
+
+**W4 — Workflow CI and Fast-Suite Policy**
+- Added Gate 5b 'workflows' CI job: `--suite workflows --sequential --timeout 60`
+- Uploads workflow test log as artifact for diagnosis
+- Workflows intentionally excluded from fast suite via `path-slow-patterns`
+
 ## v0.59.3 — 2026-05-25
 
 ### Public API Contracts + Widget Lifecycle Safety
