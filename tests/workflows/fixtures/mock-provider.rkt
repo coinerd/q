@@ -47,15 +47,21 @@
 (define (make-scripted-provider
          script
          #:name [name "scripted-mock"]
-         #:usage [usage (hasheq 'prompt_tokens 10 'completion_tokens 5 'total_tokens 15)])
+         #:usage [usage (hasheq 'prompt_tokens 10 'completion_tokens 5 'total_tokens 15)]
+         #:exhaustion-behavior [exhaustion 'done])
   (define idx (box 0))
 
   (define (next-entry!)
     (define i (unbox idx))
     (set-box! idx (add1 i))
-    (if (< i (length script))
-        (list-ref script i)
-        (hasheq 'type "text" 'text "done")))
+    (cond
+      [(< i (length script)) (list-ref script i)]
+      [(eq? exhaustion 'error)
+       (error 'scripted-provider
+              "script exhausted at index ~a (script length: ~a)"
+              i
+              (length script))]
+      [else (hasheq 'type "text" 'text "done")]))
 
   (define (entry->content entry)
     (define typ (hash-ref entry 'type "text"))
