@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.59.6 — 2026-05-26
+
+### Truthful Closure Hotfix
+
+Restore truthful gate reporting and fix regression tests that drifted during v0.59.x remediation.
+
+**W0 — Reproduce and Freeze Red-Gate Failures**
+- Baseline characterization: 6 failing test files, lint 20/23 pass, any/c 680
+
+**W1 — Runner parse-args Fix**
+- Fixed 3 test-run-tests.rkt tests for 8-value parse-args return (record-gate?)
+- Added 2 new tests for --record-gate-evidence flag
+
+**W2 — TUI/Widget/Arch Gate Restoration**
+- test-widget-api.rkt: fixed layout expectations for header-height=1 era
+- tests/tui/input.rkt: relaxed pc? arg-kind check for optional commands
+- dependency-policy.rktd: added widget-lifecycle.rkt exception, bumped max-exceptions
+
+**W3 — Historical Report Restoration**
+- Fixed v0.57.0 and v0.57.6 report version references corrupted by sync-version
+- test-registry-snapshot.rkt: sorted hash-keys for deterministic ordering
+
+**W4 — Lint/Metrics/Finding Matrix Truth**
+- sync-version.rkt: skip docs/reports/ from version sync (prevents future corruption)
+- lint-tests.rkt: recognize URL paths and /fixtures/ as non-file-paths
+- test-command-parity.rkt, test-message-helpers.rkt: sorted hash-keys
+- Lint-all: 21/22 pass (only release-readiness on branch fails)
 ## v0.59.5 — 2026-05-25
 
 ### Release Process Hardening + Final Audit Closure
