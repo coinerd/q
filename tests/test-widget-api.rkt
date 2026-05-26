@@ -25,21 +25,21 @@
   (check-equal? (tui-layout-cols l) 80)
   (check-equal? (tui-layout-rows l) 24)
   (check-equal? (tui-layout-header-row l) #f)
-  (check-equal? (tui-layout-transcript-start-row l) 0)
-  (check-equal? (tui-layout-status-row l) 22)
-  (check-equal? (tui-layout-input-row l) 23))
+  (check-equal? (tui-layout-transcript-start-row l) 1)
+  (check-equal? (tui-layout-status-row l) 21)
+  (check-equal? (tui-layout-input-row l) 22))
 
 (test-case "compute-layout-with-widgets: adjusts for widget rows"
   (define l (compute-layout-with-widgets 80 24 3))
   (check-equal? (tui-layout-cols l) 80)
   (check-equal? (tui-layout-rows l) 24)
-  ;; non-transcript = 2 (status+input, no header) + 3 (widgets) = 5
-  ;; transcript-height = 24 - 5 = 19
-  (check-equal? (tui-layout-transcript-height l) 19)
-  ;; status-row = 0 + 19 + 3 = 22
-  (check-equal? (tui-layout-status-row l) 22)
-  ;; input-row = 0 + 19 + 3 + 1 = 23
-  (check-equal? (tui-layout-input-row l) 23))
+  ;; non-transcript = header(1) + input(3) + widgets(3) = 7
+  ;; transcript-height = 24 - 7 = 17
+  (check-equal? (tui-layout-transcript-height l) 17)
+  ;; status-row = header(1) + transcript(17) + widgets(3) = 21
+  (check-equal? (tui-layout-status-row l) 21)
+  ;; input-row = status-row + 1 = 22
+  (check-equal? (tui-layout-input-row l) 22))
 
 (test-case "compute-layout-with-widgets: zero widgets = same as basic"
   (define l0 (compute-layout 24 80))
@@ -47,9 +47,10 @@
   (check-equal? (tui-layout-transcript-height l0) (tui-layout-transcript-height l0w))
   (check-equal? (tui-layout-status-row l0) (tui-layout-status-row l0w)))
 
-(test-case "compute-layout-with-widgets: clamps transcript to min 1"
+(test-case "compute-layout-with-widgets: tiny terminal has zero transcript height"
   (define l (compute-layout-with-widgets 80 4 3))
-  (check-equal? (tui-layout-transcript-height l) 1))
+  ;; height=4, fixed(header=1 + widgets=3 + input=3)=7 > 4, transcript=max(0,4-7)=0
+  (check-equal? (tui-layout-transcript-height l) 0))
 
 ;; ============================================================
 ;; #714: Widget state management
