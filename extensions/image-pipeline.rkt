@@ -121,16 +121,19 @@
           (cons 'ffmpeg (probe-tool "ffmpeg" "-version"))))
   (map car (filter cdr tools)))
 
-(define detected-tools #f)
+(define detected-tools-box (box #f))
+(define tools-semaphore (make-semaphore 1))
 
 (define (available-image-tools)
-  (or detected-tools
-      (begin
-        (set! detected-tools (detect-image-tools))
-        detected-tools)))
+  (call-with-semaphore tools-semaphore
+                       (lambda ()
+                         (or (unbox detected-tools-box)
+                             (let ([tools (detect-image-tools)])
+                               (set-box! detected-tools-box tools)
+                               tools)))))
 
 (define (reset-image-tools!)
-  (set! detected-tools #f))
+  (call-with-semaphore tools-semaphore (lambda () (set-box! detected-tools-box #f))))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Image metadata (no shell strings, no pipelines)
