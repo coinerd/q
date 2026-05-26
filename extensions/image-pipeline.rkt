@@ -10,7 +10,8 @@
          racket/path
          racket/string
          racket/port
-         racket/list)
+         racket/list
+         racket/contract)
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Configuration parameters
@@ -27,6 +28,15 @@
 
 ;; Resize cache: (path, max-w, max-h, fmt) -> output-path
 (define image-resize-cache (make-parameter (make-hash)))
+
+;; Semaphore for thread-safe cache access
+(define cache-semaphore (make-semaphore 1))
+
+(define (cache-ref key)
+  (call-with-semaphore cache-semaphore (lambda () (hash-ref (image-resize-cache) key #f))))
+
+(define (cache-set! key val)
+  (call-with-semaphore cache-semaphore (lambda () (hash-set! (image-resize-cache) key val))))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Utility helpers
@@ -242,7 +252,7 @@
            "No image processing tools available (install ImageMagick, sips, or ffmpeg)"))
   ;; Check cache first
   (define cache-key (list p max-w max-h out-fmt))
-  (define cached (hash-ref (image-resize-cache) cache-key #f))
+  (define cached (cache-ref cache-key))
   (cond
     [(and cached (file-exists? cached)) cached]
     [else
@@ -251,7 +261,7 @@
      (define h (hash-ref meta 'height 0))
      (cond
        [(and (<= w max-w) (<= h max-h) (<= (hash-ref meta 'size-bytes 0) (max-image-bytes)))
-        (hash-set! (image-resize-cache) cache-key p)
+        (cache-set! cache-key p)
         p]
        [else
         (define resized
@@ -262,7 +272,7 @@
             [(member 'ffmpeg tools) (resize-ffmpeg p max-w max-h out-fmt)]
             [else p]))
         (when resized
-          (hash-set! (image-resize-cache) cache-key resized))
+          (cache-set! cache-key resized))
         resized])]))
 
 (define (resize-imagemagick p max-w max-h fmt)
@@ -330,21 +340,32 @@
 ;; Provides
 ;; ═══════════════════════════════════════════════════════════════════
 
-(provide detect-image-tools
-         available-image-tools
-         reset-image-tools!
-         image-metadata
-         resize-image
-         estimate-image-tokens
-         supported-image-file?
+(provide (contract-out
+          [detect-image-tools (-> (listof symbol?))]
+          [available-image-tools (-> (listof symbol?))]
+          [reset-image-tools! (-> void?)]
+          [image-metadata (-> (or/c path-string? path?) hash?)]
+          [resize-image
+           (->* ((or/c path-string? path?))
+                (#:max-width exact-positive-integer?
+                             #:max-height exact-positive-integer?
+                             #:output-format (or/c 'auto 'png 'jpeg 'jpg 'webp 'gif))
+                (or/c path-string? path? #f))]
+          [estimate-image-tokens
+           (-> exact-nonnegative-integer? exact-nonnegative-integer? exact-nonnegative-integer?)]
+          [supported-image-file? (-> path-string? boolean?)]
+          [run-argv
+           (->* ((cons/c path-string? (listof string?)))
+                (#:timeout (or/c exact-positive-integer? #f))
+                (values boolean? bytes?))]
+          [resolve-tool (-> string? (or/c path? #f))]
+          [extract-dimensions
+           (-> path? (cons/c exact-nonnegative-integer? exact-nonnegative-integer?))])
          max-image-width
          max-image-height
          max-image-bytes
          image-resize-cache
-         extract-dimensions
          make-temp-output-path
-         run-argv
-         resolve-tool
          image-probe-timeout
          image-metadata-timeout
          image-resize-timeout)
