@@ -47,6 +47,16 @@
     (when (file-exists? p)
       (delete-file p))))
 
+;; Ensure path is absolute before passing to subprocess.
+;; Prevents option injection: a relative path like "-resize.png" could be
+;; interpreted as a command-line flag by ImageMagick, ffmpeg, or sips.
+(define (ensure-absolute-path p)
+  (define resolved
+    (if (string? p)
+        (string->path p)
+        p))
+  (simplify-path (path->complete-path resolved)))
+
 (define (make-temp-output-path src-path fmt)
   (define ext
     (case fmt
@@ -154,8 +164,8 @@
     [else
      (define args
        (if (equal? (path->string (file-name-from-path identify-path)) "magick")
-           (list identify-path "identify" "-format" "%w %h" (path->string p))
-           (list identify-path "-format" "%w %h" (path->string p))))
+           (list identify-path "identify" "-format" "%w %h" (path->string (ensure-absolute-path p)))
+           (list identify-path "-format" "%w %h" (path->string (ensure-absolute-path p)))))
      (define-values (ok out-bytes) (run-argv args #:timeout (image-metadata-timeout)))
      (define out (bytes->string/utf-8 out-bytes #\?))
      (define parts (string-split (string-trim out) " "))
@@ -170,7 +180,12 @@
     [else
      (define-values (ok out-bytes)
        (run-argv #:timeout (image-metadata-timeout)
-                 (list sips-path "-g" "pixelWidth" "-g" "pixelHeight" (path->string p))))
+                 (list sips-path
+                       "-g"
+                       "pixelWidth"
+                       "-g"
+                       "pixelHeight"
+                       (path->string (ensure-absolute-path p)))))
      (define out (bytes->string/utf-8 out-bytes #\?))
      (define w-match (regexp-match #rx"pixelWidth:\\s*([0-9]+)" out))
      (define h-match (regexp-match #rx"pixelHeight:\\s*([0-9]+)" out))
@@ -189,7 +204,7 @@
     [else
      ;; ffmpeg -i writes probe info to stderr; we capture it
      (define-values (sp stdout-in stdin-out stderr-in)
-       (subprocess #f #f #f ffmpeg-path "-i" (path->string p)))
+       (subprocess #f #f #f ffmpeg-path "-i" (path->string (ensure-absolute-path p))))
      (close-output-port stdin-out)
      ;; Timeout thread kills ffmpeg if it hangs
      (define timeout-thread
@@ -235,7 +250,7 @@
           'size-bytes
           size-bytes
           'path
-          (path->string p)))
+          (path->string (ensure-absolute-path p))))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Image resizing (argv-based, no shell strings)
@@ -287,8 +302,17 @@
      (define resize-arg (format "~ax~a>" max-w max-h))
      (define args
        (if (equal? (path->string (file-name-from-path convert-path)) "magick")
-           (list convert-path "convert" (path->string p) "-resize" resize-arg (path->string out-path))
-           (list convert-path (path->string p) "-resize" resize-arg (path->string out-path))))
+           (list convert-path
+                 "convert"
+                 (path->string (ensure-absolute-path p))
+                 "-resize"
+                 resize-arg
+                 (path->string out-path))
+           (list convert-path
+                 (path->string (ensure-absolute-path p))
+                 "-resize"
+                 resize-arg
+                 (path->string out-path))))
      (define-values (ok _) (run-argv args #:timeout (image-resize-timeout)))
      (if ok
          out-path
@@ -321,9 +345,14 @@
      (define out-path (make-temp-output-path p fmt))
      (define scale-arg (format "~a:~a:force_original_aspect_ratio=decrease" max-w max-h))
      (define-values (ok _)
-       (run-argv
-        #:timeout (image-resize-timeout)
-        (list ffmpeg-path "-y" "-i" (path->string p) "-vf" scale-arg (path->string out-path))))
+       (run-argv #:timeout (image-resize-timeout)
+                 (list ffmpeg-path
+                       "-y"
+                       "-i"
+                       (path->string (ensure-absolute-path p))
+                       "-vf"
+                       scale-arg
+                       (path->string out-path))))
      (if ok
          out-path
          (begin
@@ -367,8 +396,8 @@
          max-image-width
          max-image-height
          max-image-bytes
-         image-resize-cache
          make-temp-output-path
          image-probe-timeout
          image-metadata-timeout
-         image-resize-timeout)
+         image-resize-timeout
+         ensure-absolute-path)
