@@ -48,7 +48,7 @@
          script
          #:name [name "scripted-mock"]
          #:usage [usage (hasheq 'prompt_tokens 10 'completion_tokens 5 'total_tokens 15)]
-         #:exhaustion-behavior [exhaustion 'done])
+         #:exhaustion-behavior [exhaustion 'error])
   (define idx (box 0))
 
   (define (next-entry!)
