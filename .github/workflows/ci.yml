@@ -279,6 +279,41 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
 
   # ────────────────────────────────────────────────────────────
+  # Gate 5b: Workflow integration suite (v0.59.4)
+  # Provides diagnostics for integration health
+  # ────────────────────────────────────────────────────────────
+  workflows:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-racket
+        with:
+          racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
+
+      - name: Clear stale bytecode
+        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true
+
+      - name: Workflow integration suite
+        run: racket scripts/run-tests.rkt --suite workflows --sequential --timeout 60 2>&1 | tee workflow-output.log
+
+      - name: Workflow failure summary
+        if: failure()
+        run: |
+          echo "## Workflow Test Failures" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          grep -A 4 'FAILURE\|ERROR' workflow-output.log >> $GITHUB_STEP_SUMMARY || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload workflow log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: workflow-test-output
+          path: workflow-output.log
+          retention-days: 7
+
+  # ────────────────────────────────────────────────────────────
   # Gate 6: Release-readiness check (v0.56.1)
   # ────────────────────────────────────────────────────────────
   release-readiness:
