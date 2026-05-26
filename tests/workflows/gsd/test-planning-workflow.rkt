@@ -9,6 +9,7 @@
          rackunit/text-ui
          racket/file
          racket/port
+         racket/runtime-path
          json
          "../../../extensions/gsd-planning.rkt"
          "../../../extensions/context.rkt"
@@ -34,9 +35,8 @@
       (when (directory-exists? dir)
         (delete-directory/files dir)))))
 
-(define gsd-ext-path
-  (build-path (or (current-load-relative-directory) (current-directory))
-              "../../../extensions/gsd-planning.rkt"))
+(define-runtime-path here-dir ".")
+(define gsd-ext-path (build-path here-dir ".." ".." ".." "extensions" "gsd-planning.rkt"))
 
 (define (plan-file-exists? dir)
   (file-exists? (build-path dir ".planning" "PLAN.md")))
