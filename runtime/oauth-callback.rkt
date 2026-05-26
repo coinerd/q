@@ -12,6 +12,7 @@
          racket/tcp
          file/sha1
          net/base64
+         net/uri-codec
          "../util/errors.rkt")
 
 (provide (contract-out
@@ -21,7 +22,9 @@
            (->* ()
                 (#:timeout exact-positive-integer?)
                 (values exact-positive-integer? string? string? (-> (or/c string? #f))))])
-         base64url-encode-bytes)
+         base64url-encode-bytes
+         parse-query
+         safe-decode)
 
 ;; ============================================================
 ;; PKCE (Proof Key for Code Exchange) — RFC 7636
@@ -42,28 +45,35 @@
 ;; ============================================================
 
 ;; Start a one-shot callback server on an ephemeral port.
+;; The server closes after the first callback (success or failure) or timeout.
 ;; Returns (values port state code-verifier get-code).
 (define (start-callback-server #:timeout [timeout 120])
   (define state (generate-state))
   (define code-verifier (random-base64url 32))
   (define result-chan (make-channel))
+  (define done? (box #f))
+  (define result-put? (box #f))
   (define listener (tcp-listen 0 5 #t "127.0.0.1"))
   (define-values (_host port _rhost _rport) (tcp-addresses listener #t))
 
-  ;; Serve in a background thread
+  ;; Serve in a background thread — one-shot: stop after first result
   (define server-thread
     (thread (lambda ()
               (with-handlers ([exn:fail? (lambda (e) (void))])
                 (let loop ()
                   (define-values (in out) (tcp-accept listener))
-                  (thread (lambda () (handle-connection in out state result-chan)))
-                  (loop))))))
+                  (thread (lambda ()
+                            (handle-connection in out state result-chan listener done? result-put?)))
+                  (unless (unbox done?)
+                    (loop)))))))
 
   ;; Auto-shutdown after timeout
   (thread (lambda ()
             (sync (alarm-evt (+ (current-inexact-milliseconds) (* timeout 1000))))
             (with-handlers ([exn:fail? (lambda (e) (void))])
-              (channel-put result-chan #f)
+              (set-box! done? #t)
+              (unless (unbox result-put?)
+                (channel-put result-chan #f))
               (tcp-close listener)
               (kill-thread server-thread))))
 
@@ -77,7 +87,8 @@
 ;; ============================================================
 
 ;; Handle a single HTTP connection on the callback port.
-(define (handle-connection in out expected-state result-chan)
+;; One-shot: closes listener and sets done? after first result.
+(define (handle-connection in out expected-state result-chan listener done? result-put?)
   (define line
     (with-handlers ([exn:fail? (lambda (e) #f)])
       (read-line in)))
@@ -85,19 +96,25 @@
     [(not line)
      (close-input-port in)
      (close-output-port out)]
+    [(unbox done?)
+     ;; Already handled; discard
+     (close-input-port in)
+     (close-output-port out)]
     [else
+     (set-box! done? #t)
      (define code (extract-callback-code line expected-state))
      (cond
        [code
         (display "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n" out)
         (display "<html><body><h2>Authorization successful!</h2>" out)
-        (display "<p>You can close this tab.</p></body></html>" out)
-        (channel-put result-chan code)]
-       [else
-        (fprintf out "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n\r\nOAuth error")
-        (channel-put result-chan #f)])
+        (display "<p>You can close this tab.</p></body></html>" out)]
+       [else (fprintf out "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n\r\nOAuth error")])
+     (set-box! result-put? #t)
+     (channel-put result-chan code)
      (close-input-port in)
-     (close-output-port out)]))
+     (close-output-port out)
+     (with-handlers ([exn:fail? (lambda (e) (void))])
+       (tcp-close listener))]))
 
 ;; Extract the authorization code from the callback request line.
 (define (extract-callback-code request-line expected-state)
@@ -109,24 +126,25 @@
     (define query (parse-query uri))
     (define received-state
       (cond
-        [(assoc 'state query)
+        [(assoc "state" query)
          =>
          cdr]
         [else ""]))
     (define code
       (cond
-        [(assoc 'code query)
+        [(assoc "code" query)
          =>
          cdr]
         [else ""]))
-    (define error-param (assoc 'error query))
+    (define error-param (assoc "error" query))
     (cond
       [error-param #f]
       [(not (equal? received-state expected-state)) #f]
       [(string=? code "") #f]
       [else code])))
 
-;; Parse query string from URI.
+;; Parse query string from URI with safe percent-decoding.
+;; Keys are kept as strings (attacker-controlled) not symbols.
 (define (parse-query uri)
   (define qmark (string-index-of uri #\?))
   (cond
@@ -141,8 +159,13 @@
      (for/list ([pair (in-list (string-split clean "&"))])
        (define eq-idx (string-index-of pair #\=))
        (if eq-idx
-           (cons (string->symbol (substring pair 0 eq-idx)) (substring pair (add1 eq-idx)))
-           (cons (string->symbol pair) "")))]))
+           (cons (safe-decode (substring pair 0 eq-idx)) (safe-decode (substring pair (add1 eq-idx))))
+           (cons (safe-decode pair) "")))]))
+
+;; Safely decode a URI component. Falls back to raw string on decode error.
+(define (safe-decode s)
+  (with-handlers ([exn:fail? (lambda (e) s)])
+    (uri-decode s)))
 
 ;; Find first index of char in string.
 (define (string-index-of str ch)
