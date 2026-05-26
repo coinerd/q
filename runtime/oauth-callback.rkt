@@ -10,6 +10,8 @@
          racket/string
          racket/port
          racket/tcp
+         file/sha1
+         net/base64
          "../util/errors.rkt")
 
 (provide (contract-out
@@ -18,7 +20,8 @@
           [start-callback-server
            (->* ()
                 (#:timeout exact-positive-integer?)
-                (values exact-positive-integer? string? string? (-> (or/c string? #f))))]))
+                (values exact-positive-integer? string? string? (-> (or/c string? #f))))])
+         base64url-encode-bytes)
 
 ;; ============================================================
 ;; PKCE (Proof Key for Code Exchange) — RFC 7636
@@ -151,59 +154,25 @@
 ;; Helpers
 ;; ============================================================
 
-;; Random base64url string of n bytes.
+;; Random base64url string of n bytes using CSPRNG (/dev/urandom).
 (define (random-base64url n)
-  (define bs (make-bytes n))
-  (for ([i (in-range n)])
-    (bytes-set! bs i (random 256)))
+  (define bs (csprng-bytes n))
   (base64url-encode-bytes bs))
 
-;; Base64url encode bytes.
+;; Read n cryptographically-secure random bytes from /dev/urandom.
+(define (csprng-bytes n)
+  (call-with-input-file "/dev/urandom" (lambda (p) (read-bytes n p))))
+
+;; Base64url encode bytes using standard library.
 (define (base64url-encode-bytes bs)
-  (define b64 (base64-enc bs))
+  (define b64 (base64-encode bs))
   (define s (string-trim (bytes->string/utf-8 b64)))
   (define clean (string-replace (string-replace s "+" "-") "/" "_"))
   (string-replace clean "=" ""))
 
-;; Simple base64 encoder.
-(define (base64-enc bs)
-  (define table "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/")
-  (define n (bytes-length bs))
-  (define out (make-string (* 4 (quotient (+ n 2) 3)) #\=))
-  (for ([i (in-range (quotient n 3))])
-    (define j (* i 3))
-    (define v
-      (+ (arithmetic-shift (bytes-ref bs j) 16)
-         (arithmetic-shift (bytes-ref bs (+ j 1)) 8)
-         (bytes-ref bs (+ j 2))))
-    (string-set! out (* i 4) (string-ref table (bitwise-and (arithmetic-shift v -18) 63)))
-    (string-set! out (+ (* i 4) 1) (string-ref table (bitwise-and (arithmetic-shift v -12) 63)))
-    (string-set! out (+ (* i 4) 2) (string-ref table (bitwise-and (arithmetic-shift v -6) 63)))
-    (string-set! out (+ (* i 4) 3) (string-ref table (bitwise-and v 63))))
-  (when (>= (remainder n 3) 1)
-    (define j (* (quotient n 3) 3))
-    (define v (arithmetic-shift (bytes-ref bs j) 16))
-    (define i4 (* (quotient n 3) 4))
-    (string-set! out i4 (string-ref table (bitwise-and (arithmetic-shift v -18) 63)))
-    (string-set! out (+ i4 1) (string-ref table (bitwise-and (arithmetic-shift v -12) 63))))
-  (when (= (remainder n 3) 2)
-    (define j (* (quotient n 3) 3))
-    (define v (+ (arithmetic-shift (bytes-ref bs j) 16) (arithmetic-shift (bytes-ref bs (+ j 1)) 8)))
-    (define i4 (* (quotient n 3) 4))
-    (string-set! out (+ i4 2) (string-ref table (bitwise-and (arithmetic-shift v -6) 63))))
-  (string->bytes/utf-8 out))
-
-;; Deterministic hash for PKCE challenge (base64url of a hash).
+;; RFC 7636 PKCE challenge: BASE64URL(SHA256(input))
+;; Uses real SHA-256 via file/sha1 library.
 (define (hash-base64url input)
   (define bs (string->bytes/utf-8 input))
-  (define hashed (make-bytes 32))
-  (for ([i (in-range 32)])
-    (bytes-set! hashed
-                i
-                (modulo (+ (if (< i (bytes-length bs))
-                               (bytes-ref bs i)
-                               0)
-                           (* i 137)
-                           42)
-                        256)))
+  (define hashed (sha256-bytes bs))
   (base64url-encode-bytes hashed))
