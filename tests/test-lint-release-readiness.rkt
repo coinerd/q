@@ -82,3 +82,65 @@
     ;; Returns #t or #f, doesn't crash
     (define result (check))
     (check-true (boolean? result) "check-tag-unique returns boolean")))
+
+(test-case "check-gate-evidence: fails for stale evidence (#5471)"
+  (when (file-exists? "util/version.rkt")
+    (define check (dynamic-require script-path 'check-gate-evidence))
+    (define suites (dynamic-require script-path 'required-gate-suites))
+    (define ver-proc (dynamic-require script-path 'get-canonical-version))
+    (define ver (ver-proc))
+    (define evid-dir (build-path (current-directory) ".gate-evidence"))
+    (define had-dir (directory-exists? evid-dir))
+    (unless had-dir
+      (make-directory evid-dir))
+    ;; Write stale evidence files (3 hours old)
+    (for ([suite (in-list suites)])
+      (with-output-to-file (build-path evid-dir (format "~a.passed" suite))
+                           (lambda () (printf "~a ~a~n" ver (- (current-seconds) 10800)))
+                           #:exists 'truncate))
+    (define result (check))
+    (check-false result "should fail for stale evidence (> 2 hours)")
+    (unless had-dir
+      (delete-directory/files evid-dir))))
+
+(test-case "check-gate-evidence: fails for wrong version (#5471)"
+  (when (file-exists? "util/version.rkt")
+    (define check (dynamic-require script-path 'check-gate-evidence))
+    (define suites (dynamic-require script-path 'required-gate-suites))
+    (define evid-dir (build-path (current-directory) ".gate-evidence"))
+    (define had-dir (directory-exists? evid-dir))
+    (unless had-dir
+      (make-directory evid-dir))
+    ;; Write evidence with wrong version
+    (for ([suite (in-list suites)])
+      (with-output-to-file (build-path evid-dir (format "~a.passed" suite))
+                           (lambda () (printf "0.0.1 ~a~n" (current-seconds)))
+                           #:exists 'truncate))
+    (define result (check))
+    (check-false result "should fail for wrong version in evidence")
+    (unless had-dir
+      (delete-directory/files evid-dir))))
+
+(test-case "check-gate-evidence: fails for missing suite evidence (#5471)"
+  (when (file-exists? "util/version.rkt")
+    (define check (dynamic-require script-path 'check-gate-evidence))
+    (define ver-proc (dynamic-require script-path 'get-canonical-version))
+    (define ver (ver-proc))
+    (define evid-dir (build-path (current-directory) ".gate-evidence"))
+    (define had-dir (directory-exists? evid-dir))
+    (unless had-dir
+      (make-directory evid-dir))
+    ;; Write evidence for only 3 of 4 suites
+    (for ([suite (in-list '("fast" "tui" "arch"))])
+      (with-output-to-file (build-path evid-dir (format "~a.passed" suite))
+                           (lambda () (printf "~a ~a~n" ver (current-seconds)))
+                           #:exists 'truncate))
+    ;; Delete workflows evidence if it exists
+    (define wf-evid (build-path evid-dir "workflows.passed"))
+    (when (file-exists? wf-evid)
+      (delete-file wf-evid))
+    (define result (check))
+    (check-false result "should fail when a suite evidence file is missing")
+    ;; Cleanup
+    (unless had-dir
+      (delete-directory/files evid-dir))))
