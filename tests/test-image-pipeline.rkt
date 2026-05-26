@@ -36,17 +36,26 @@
       (check-true (list? t2)))
 
     ;; ============================================================
-    ;; Shell escaping
+    ;; Subprocess execution (argv-based)
     ;; ============================================================
 
-    (test-case "shell-escape-path wraps in single quotes"
-      (check-equal? (shell-escape-path "/tmp/foo.png") "'/tmp/foo.png'"))
+    (test-case "resolve-tool returns path for known tools"
+      (check-true (or (path? (resolve-tool "ls")) (not (resolve-tool "ls"))))
+      ;; On any Unix, ls should exist
+      (when (file-exists? "/bin/ls")
+        (check-true (path? (resolve-tool "ls")))))
 
-    (test-case "shell-escape-path escapes embedded single quotes"
-      (check-equal? (shell-escape-path "/tmp/it's.png") "'/tmp/it'\''s.png'"))
+    (test-case "resolve-tool returns #f for nonexistent tools"
+      (check-false (resolve-tool "nonexistent-tool-xyz-123")))
 
-    (test-case "shell-escape-path handles path objects"
-      (check-equal? (shell-escape-path (string->path "/tmp/bar.jpg")) "'/tmp/bar.jpg'"))
+    (test-case "run-argv executes subprocess with argv list"
+      (define-values (ok out) (run-argv (list "/bin/echo" "hello world")))
+      (check-true ok)
+      (check-true (string-contains? (bytes->string/utf-8 out) "hello world")))
+
+    (test-case "run-argv handles failure exit code"
+      (define-values (ok out) (run-argv (list "/bin/false")))
+      (check-false ok))
 
     ;; ============================================================
     ;; Supported image file detection
