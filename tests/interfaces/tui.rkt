@@ -1011,8 +1011,13 @@
     (define state2
       (add-transcript-entry state (make-entry 'assistant "Alpha Beta Gamma Delta" 0 (hash))))
     (set-box! (tui-ctx-ui-state-box ctx) state2)
-    ;; Content is bottom-aligned: pad-count=20, content at row 21
-    (define content-row (+ 1 (- 21 1))) ; trans-y + (trans-height - content-count)
+    ;; Content is bottom-aligned in the actual computed transcript region.
+    ;; Keep this tied to `compute-layout` instead of stale hard-coded dimensions.
+    (define-values (cols rows) (tui-screen-size))
+    (define layout (compute-layout rows cols))
+    (define transcript-region (layout-transcript layout))
+    (define content-row
+      (+ (layout-region-y transcript-region) (sub1 (layout-region-height transcript-region))))
     ;; Select first 5 chars ("Alpha") — drag to col 4 (0..4 = 5 chars)
     (handle-mouse ctx `(click 0 0 ,content-row))
     (handle-mouse ctx `(drag 4 ,content-row))
