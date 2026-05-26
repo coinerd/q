@@ -10,7 +10,8 @@
          racket/string
          racket/file
          racket/path
-         racket/runtime-path)
+         racket/runtime-path
+         racket/system)
 
 ;; Path segments used by smoke-suite filtering in run-tests.rkt
 ;; Constructed without literal absolute-path patterns to satisfy lint-tests.rkt
@@ -298,6 +299,45 @@
   (define collect (runner-ref 'collect-test-files))
   (define files (collect 'all #:extra-files '("tests/test-version.rkt")))
   (check-equal? files '("tests/test-version.rkt")))
+
+(test-case "collect-test-files: tui suite includes top-level TUI tests"
+  (define collect (runner-ref 'collect-test-files))
+  (define files (collect 'tui))
+  (check-not-false (member "tests/test-tui-layout.rkt" files))
+  (check-not-false (member "tests/tui/test-keybindings-binder.rkt" files)))
+
+(test-case "collect-test-files: smoke suite includes provider schema regression tests"
+  (define collect (runner-ref 'collect-test-files))
+  (define files (collect 'smoke))
+  (check-not-false (member "tests/test-provider-registry-schema.rkt" files)))
+
+(test-case "run-tests CLI works from repo root with q-prefixed test path"
+  (define repo-root (simplify-path (build-path (path-only runner-path) ".." "..")))
+  (define racket-bin (find-executable-path "racket"))
+  (define exit-code
+    (parameterize ([current-directory repo-root])
+      (system*/exit-code racket-bin
+                         (build-path repo-root "q" "scripts" "run-tests.rkt")
+                         "q/tests/test-version.rkt"
+                         "--jobs"
+                         "1"
+                         "--timeout"
+                         "30")))
+  (check-equal? exit-code 0))
+
+(test-case "run-tests CLI works from q root with tests-prefixed path"
+  (define q-root (simplify-path (build-path (path-only runner-path) "..")))
+  (define racket-bin (find-executable-path "racket"))
+  (define exit-code
+    (parameterize ([current-directory q-root])
+      (system*/exit-code racket-bin
+                         (build-path q-root "scripts" "run-tests.rkt")
+                         "tests/test-version.rkt"
+                         "--jobs"
+                         "1"
+                         "--timeout"
+                         "30")))
+  (check-equal? exit-code 0))
 
 ;; ---------------------------------------------------------------------------
 ;; v0.55.10 regression: mutating-patterns includes self-hosting + restore guard

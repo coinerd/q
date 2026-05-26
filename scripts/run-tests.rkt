@@ -125,7 +125,10 @@
         (string-contains? f p))))
 
 (define (tui-file? f)
-  (string-contains? f "/tui/"))
+  (define base (file-name-from-path f))
+  (or (string-contains? f "/tui/")
+      (string-contains? f "/interfaces/tui.rkt")
+      (and base (string-prefix? (path->string base) "test-tui-"))))
 
 ;; Tests that mutate repo files or run self-healing linters should not run in
 ;; parallel with other tests, otherwise clean-tree assumptions can race.
@@ -167,11 +170,7 @@
                               (and (string? line) (string-contains? line target)))))))
 
 (define (smoke-excluded? f)
-  (or (slow-file? f)
-      (string-contains? f "/workflows/")
-      (string-contains? f "/interfaces/")
-      (let ([base (file-name-from-path f)])
-        (and base (string-contains? (path->string base) "provider")))))
+  (or (slow-file? f) (string-contains? f "/workflows/") (string-contains? f "/interfaces/")))
 
 (define support-test-module-names
   '("event-simulator.rkt" "mock-tui-session.rkt" "state-assertions.rkt" "workflow-harness.rkt"))
@@ -187,16 +186,36 @@
       (and base (member (path->string base) support-test-module-names) #t)))
 
 ;; Base directory for resolving test paths.
-;; orig-dir gives CWD when invoked directly, but under `raco test --process`
-;; it may point at the test file's directory. We detect which case we're in:
-;; if orig-dir has a tests/ subdirectory, it's the project root; otherwise
-;; try the parent (handles orig-dir = q/tests/ or q/scripts/).
-(define base-dir
-  (let ([orig (find-system-path 'orig-dir)])
-    (if (directory-exists? (build-path orig "tests"))
-        orig
-        (let ([parent (simplify-path (build-path orig ".."))])
-          (if (directory-exists? (build-path parent "tests")) parent orig)))))
+;; The runner must work from both the monorepo root (`racket q/scripts/run-tests.rkt`)
+;; and the q repo root (`cd q && racket scripts/run-tests.rkt`).  Resolve the q
+;; root by probing the current/original directory, its parent, and a `q/` child.
+(define (q-root-candidate? p)
+  (and (directory-exists? (build-path p "tests"))
+       (file-exists? (build-path p "scripts" "run-tests.rkt"))))
+
+(define (resolve-base-dir orig)
+  (define parent (simplify-path (build-path orig "..")))
+  (define candidates
+    ;; Prefer q/ children before the current directory so invoking from the
+    ;; monorepo root does not accidentally select legacy top-level tests/.
+    (list (simplify-path (build-path orig "q")) (simplify-path (build-path parent "q")) orig parent))
+  (or (for/first ([candidate (in-list candidates)]
+                  #:when (q-root-candidate? candidate))
+        candidate)
+      orig))
+
+(define base-dir (resolve-base-dir (find-system-path 'orig-dir)))
+
+(define (normalize-test-path f)
+  (define s
+    (if (path? f)
+        (path->string f)
+        f))
+  (cond
+    [(absolute-path? s) s]
+    [(string-prefix? s "q/tests/") (substring s 2)]
+    [(string-prefix? s "./q/tests/") (substring s 4)]
+    [else s]))
 
 (define (arch-file? f)
   (or (string-contains? f "arch-")
@@ -224,7 +243,7 @@
 
 (define (collect-test-files suite #:extra-files [extra-files #f])
   (cond
-    [(pair? extra-files) extra-files]
+    [(pair? extra-files) (map normalize-test-path extra-files)]
     [else
      (define all-files
        (for/list ([f (in-directory (build-path base-dir "tests"))]
@@ -821,7 +840,7 @@
 
   (define suite-files
     (if (pair? extra-files)
-        extra-files
+        (map normalize-test-path extra-files)
         (collect-test-files suite)))
 
   (unless (pair? suite-files)
