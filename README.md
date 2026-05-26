@@ -3,7 +3,7 @@
 > A local-first, extensible coding agent runtime written in Racket
 
 [![CI](https://github.com/coinerd/q/actions/workflows/ci.yml/badge.svg)](https://github.com/coinerd/q/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.59.2-blue.svg)](https://github.com/coinerd/q)
+[![Version](https://img.shields.io/badge/version-0.59.3-blue.svg)](https://github.com/coinerd/q)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-Racket-red.svg)](https://racket-lang.org)
 
@@ -203,7 +203,7 @@ bin/q --model gpt-5.4 "write a test"
 ### Verify
 
 ```bash
-bin/q --version            # q version 0.59.2
+bin/q --version            # q version 0.59.3
 raco test tests/           # run the full test suite
 ```
 
@@ -276,7 +276,7 @@ q/
 |--------|-------|
 | Test files | 650 |
 | Source modules | 465 |
-| Source lines | 72722 |
+| Source lines | 72724 |
 | Test lines | 110718 |
 | Test assertions | 17353 |
 | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |
@@ -461,6 +461,9 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 
 
+
+
+**v0.59.3** — Public API Contracts + Widget Lifecycle Safety
 
 **v0.59.2** — Image Pipeline Hardening
 
