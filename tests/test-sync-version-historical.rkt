@@ -10,7 +10,10 @@
 (require rackunit
          racket/file
          racket/port
+         racket/runtime-path
          (only-in "../scripts/version-guard.rkt" historical-line?))
+
+(define-runtime-path q-root "..")
 
 ;; ---------------------------------------------------------------------------
 ;; 7 positive pattern tests
@@ -57,7 +60,7 @@
 
 (test-case "sync-version --all skips docs/reports historical reports"
   (define root (make-temporary-file "sync-version-reports-~a" 'directory))
-  (define script-path (build-path (current-directory) "scripts" "sync-version.rkt"))
+  (define script-path (build-path q-root "scripts" "sync-version.rkt"))
   (dynamic-wind
    void
    (lambda ()
