@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.59.2 — 2026-05-25
+
+### Image Pipeline Hardening
+
+Shell injection elimination, subprocess timeouts, and thread-safe image cache.
+
+**W0 — Remove Shell Execution**
+- Replaced all `system()` shell string calls with `subprocess()` argv lists
+- Replaced `ffmpeg ... | grep | head` pipeline with Racket-side parsing
+- Added `find-executable-path` for tool resolution
+- Removed `shell-escape-path` (no longer needed)
+- Added 9 security tests: injection resistance, no shell strings in source
+
+**W1 — Timeouts, Cleanup, Resource Bounds**
+- Added `image-probe-timeout` (5s), `image-metadata-timeout` (10s), `image-resize-timeout` (30s)
+- `run-argv` supports `#:timeout` — kills subprocess on expiry
+- ffmpeg extract-dimensions also timeout-guarded
+- Fixed `subprocess-kill` arity (needs `force?` argument)
+
+**W2 — Public Contracts and Thread-Safe Cache**
+- Added `contract-out` for all public image pipeline functions
+- Thread-safe cache via semaphore-protected `cache-ref`/`cache-set!`
+- All 34 image tests pass (21 pipeline + 13 security)
+
 ## v0.59.1 — 2026-05-25
 
 ### OAuth Security Rewrite
