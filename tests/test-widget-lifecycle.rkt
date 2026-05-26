@@ -263,7 +263,65 @@
       (check-exn exn:fail:contract? (lambda () (lookup-lifecycle-widget 42))))
 
     (test-case "widget->component rejects non-widget"
-      (check-exn exn:fail:contract? (lambda () (widget->component 'nope))))))
+      (check-exn exn:fail:contract? (lambda () (widget->component 'nope))))
+
+    ;; ============================================================
+    ;; Replacement semantics and concurrency
+    ;; ============================================================
+
+    (test-case "register replaces and unmounts old widget"
+      (unregister-lifecycle-widget! 'replace-unmount)
+      (define unmounted? (box #f))
+      (define w1
+        (make-widget-lifecycle 'replace-unmount
+                               (lambda (st w) '("w1"))
+                               #:unmount (lambda () (set-box! unmounted? #t))))
+      (define w2 (make-widget-lifecycle 'replace-unmount (lambda (st w) '("w2"))))
+      (register-lifecycle-widget! w1)
+      (widget-mount! w1)
+      (check-true (widget-mounted? w1))
+      ;; Registering w2 should unmount w1
+      (register-lifecycle-widget! w2)
+      (check-true (unbox unmounted?) "old widget was unmounted on replacement")
+      (define found (lookup-lifecycle-widget 'replace-unmount))
+      (check-equal? (widget-lifecycle-id found) 'replace-unmount)
+      ;; The new widget should be found
+      (define state (initial-ui-state))
+      (define lines (widget-render found state 80))
+      (check-equal? lines '("w2"))
+      (unregister-lifecycle-widget! 'replace-unmount))
+
+    (test-case "concurrent register/unregister does not deadlock"
+      ;; Launch many threads doing register/unregister — must complete within timeout
+      (define n 20)
+      (define done (box 0))
+      (for ([i (in-range n)])
+        (thread (lambda ()
+                  (define id (string->symbol (format "conc-~a" (modulo i 5))))
+                  (define w (make-widget-lifecycle id (lambda (st w) '())))
+                  (register-lifecycle-widget! w)
+                  (lookup-lifecycle-widget id)
+                  (list-lifecycle-widgets)
+                  (unregister-lifecycle-widget! id)
+                  (set-box! done (add1 (unbox done))))))
+      ;; Wait for all threads to finish (with generous timeout)
+      (sync/timeout 10 (alarm-evt (+ (current-inexact-milliseconds) 10000)))
+      (check-equal? (unbox done) n "all concurrent operations completed")
+      ;; Cleanup
+      (for ([i (in-range 5)])
+        (unregister-lifecycle-widget! (string->symbol (format "conc-~a" i)))))
+
+    (test-case "mount state box is independent per widget"
+      (define w1 (make-widget-lifecycle 'indep-1 (lambda (st w) '())))
+      (define w2 (make-widget-lifecycle 'indep-2 (lambda (st w) '())))
+      (widget-mount! w1)
+      (check-true (widget-mounted? w1))
+      (check-false (widget-mounted? w2))
+      (widget-mount! w2)
+      (check-true (widget-mounted? w2))
+      (widget-unmount! w1)
+      (check-false (widget-mounted? w1))
+      (check-true (widget-mounted? w2)))))
 
 (module+ main
   (run-tests widget-lifecycle-tests))

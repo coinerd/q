@@ -89,29 +89,41 @@
 (define lifecycle-widget-registry (box '()))
 (define lifecycle-widget-lock (make-semaphore 1))
 
-;; Register a lifecycle widget.
+;; Register a lifecycle widget. If a widget with the same id exists,
+;; unmounts the old widget OUTSIDE the lock, then registers the new one.
 (define (register-lifecycle-widget! w)
-  (call-with-semaphore lifecycle-widget-lock
-                       (lambda ()
-                         (define existing (unbox lifecycle-widget-registry))
-                         (define filtered
-                           (filter (lambda (existing-w)
-                                     (not (eq? (widget-lifecycle-id existing-w)
-                                               (widget-lifecycle-id w))))
-                                   existing))
-                         (set-box! lifecycle-widget-registry (cons w filtered)))))
+  (define old-widget
+    (call-with-semaphore
+     lifecycle-widget-lock
+     (lambda ()
+       (define existing (unbox lifecycle-widget-registry))
+       (define old
+         (findf (lambda (ew) (eq? (widget-lifecycle-id ew) (widget-lifecycle-id w))) existing))
+       (define filtered
+         (filter (lambda (existing-w)
+                   (not (eq? (widget-lifecycle-id existing-w) (widget-lifecycle-id w))))
+                 existing))
+       (set-box! lifecycle-widget-registry (cons w filtered))
+       old)))
+  ;; Unmount old widget OUTSIDE the lock to avoid deadlock / callback under lock
+  (when old-widget
+    (widget-unmount! old-widget)))
 
 ;; Unregister and unmount a lifecycle widget.
+;; Unmount callback runs OUTSIDE the lock.
 (define (unregister-lifecycle-widget! id)
-  (call-with-semaphore
-   lifecycle-widget-lock
-   (lambda ()
-     (define existing (unbox lifecycle-widget-registry))
-     (define to-remove (findf (lambda (w) (eq? (widget-lifecycle-id w) id)) existing))
-     (when to-remove
-       (widget-unmount! to-remove))
-     (set-box! lifecycle-widget-registry
-               (filter (lambda (w) (not (eq? (widget-lifecycle-id w) id))) existing)))))
+  (define removed-widget
+    (call-with-semaphore
+     lifecycle-widget-lock
+     (lambda ()
+       (define existing (unbox lifecycle-widget-registry))
+       (define to-remove (findf (lambda (w) (eq? (widget-lifecycle-id w) id)) existing))
+       (set-box! lifecycle-widget-registry
+                 (filter (lambda (w) (not (eq? (widget-lifecycle-id w) id))) existing))
+       to-remove)))
+  ;; Unmount OUTSIDE the lock
+  (when removed-widget
+    (widget-unmount! removed-widget)))
 
 ;; Lookup a lifecycle widget by id.
 (define (lookup-lifecycle-widget id)
