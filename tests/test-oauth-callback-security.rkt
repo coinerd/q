@@ -160,7 +160,86 @@
     (test-case "deterministic timeout returns #f (#5347)"
       (define-values (port state verifier get-code) (start-callback-server #:timeout 1))
       (define code (get-code))
-      (check-false code "timeout must return #f"))))
+      (check-false code "timeout must return #f"))
+
+    ;; ============================================================
+    ;; W0: Atomic one-shot + delayed consumer (#5463)
+    ;; ============================================================
+
+    (test-case "delayed consumer: callback before get-code still works (#5463)"
+      ;; Callback arrives immediately; get-code is called after
+      (define-values (port state verifier get-code) (start-callback-server #:timeout 10))
+      (thread
+       (lambda ()
+         (with-handlers ([exn:fail? (lambda (e) (void))])
+           (define-values (in out) (tcp-connect "127.0.0.1" port))
+           (fprintf out "GET /callback?code=delayed-code&state=~a HTTP/1.1
+Host: localhost
+
+" state)
+           (flush-output out)
+           (close-output-port out)
+           (close-input-port in))))
+      ;; Wait a moment to let callback arrive and be processed
+      (sync (alarm-evt (+ (current-inexact-milliseconds) 500)))
+      (define code (get-code))
+      (check-equal? code "delayed-code" "delayed consumer must still receive code"))
+
+    (test-case "concurrent double callback: only first wins (#5463)"
+      (define-values (port state verifier get-code) (start-callback-server #:timeout 10))
+      ;; Send two callbacks nearly simultaneously
+      (thread
+       (lambda ()
+         (with-handlers ([exn:fail? (lambda (e) (void))])
+           (define-values (in out) (tcp-connect "127.0.0.1" port))
+           (fprintf out "GET /callback?code=first-code&state=~a HTTP/1.1
+Host: localhost
+
+" state)
+           (flush-output out)
+           (close-output-port out)
+           (close-input-port in))))
+      (thread
+       (lambda ()
+         (sync (alarm-evt (+ (current-inexact-milliseconds) 100)))
+         (with-handlers ([exn:fail? (lambda (e) (void))])
+           (define-values (in out) (tcp-connect "127.0.0.1" port))
+           (fprintf out "GET /callback?code=second-code&state=~a HTTP/1.1
+Host: localhost
+
+" state)
+           (flush-output out)
+           (close-output-port out)
+           (close-input-port in))))
+      (define code (get-code))
+      (check-equal? code "first-code" "first callback must win")
+      ;; Second connection should fail after server shuts down
+      (sync (alarm-evt (+ (current-inexact-milliseconds) 500)))
+      (define third-connect
+        (with-handlers ([exn:fail? (lambda (e) 'connection-failed)])
+          (define-values (in out) (tcp-connect "127.0.0.1" port))
+          (close-input-port in)
+          (close-output-port out)
+          'connected))
+      (check-eq? third-connect 'connection-failed "server must close after first result"))
+
+    (test-case "atomic completion: no unsynchronized shared state (#5463)"
+      ;; Verify the semaphore model: multiple rapid connections don't corrupt state
+      (for ([_ (in-range 5)])
+        (define-values (port state verifier get-code) (start-callback-server #:timeout 5))
+        (thread
+         (lambda ()
+           (with-handlers ([exn:fail? (lambda (e) (void))])
+             (define-values (in out) (tcp-connect "127.0.0.1" port))
+             (fprintf out "GET /callback?code=iter-code&state=~a HTTP/1.1
+Host: localhost
+
+" state)
+             (flush-output out)
+             (close-output-port out)
+             (close-input-port in))))
+        (define code (get-code))
+        (check-equal? code "iter-code" "each iteration must get the correct code")))))
 
 (module+ main
   (run-tests security-tests))

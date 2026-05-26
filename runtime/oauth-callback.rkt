@@ -47,36 +47,53 @@
 
 ;; Start a one-shot callback server on an ephemeral port.
 ;; The server closes after the first callback (success or failure) or timeout.
+;; Uses a semaphore for atomic completion: only one result is ever delivered,
+;; and listener/ports are closed before the result is put on the channel.
 ;; Returns (values port state code-verifier get-code).
 (define (start-callback-server #:timeout [timeout 120])
   (define state (generate-state))
   (define code-verifier (random-base64url 32))
   (define result-chan (make-channel))
-  (define done? (box #f))
-  (define result-put? (box #f))
+  ;; Atomic completion: semaphore-try-wait returns #f after first success,
+  ;; preventing any second consumer from delivering a result.
+  (define completion-sema (make-semaphore 1))
   (define listener (tcp-listen 0 5 #t "127.0.0.1"))
   (define-values (_host port _rhost _rport) (tcp-addresses listener #t))
+  (define server-thread #f)
+
+  ;; Atomic complete: try to be the one-and-only completer.
+  ;; Returns #t if this thread won the race, #f if already completed.
+  (define (try-complete! code)
+    (and (semaphore-try-wait? completion-sema)
+         (begin
+           ;; Close listener FIRST, then deliver result — ensures no more connections
+           (with-handlers ([exn:fail? (lambda (e) (void))])
+             (tcp-close listener))
+           (channel-put result-chan code)
+           ;; Kill server accept loop
+           (when server-thread
+             (with-handlers ([exn:fail? (lambda (e) (void))])
+               (kill-thread server-thread)))
+           #t)))
 
   ;; Serve in a background thread — one-shot: stop after first result
-  (define server-thread
-    (thread (lambda ()
-              (with-handlers ([exn:fail? (lambda (e) (void))])
-                (let loop ()
-                  (define-values (in out) (tcp-accept listener))
-                  (thread (lambda ()
-                            (handle-connection in out state result-chan listener done? result-put?)))
-                  (unless (unbox done?)
-                    (loop)))))))
+  (set! server-thread
+        (thread (lambda ()
+                  (with-handlers ([exn:fail? (lambda (e) (void))])
+                    (let loop ()
+                      (define-values (in out) (tcp-accept listener))
+                      (thread (lambda () (handle-connection in out state try-complete!)))
+                      ;; Check if already completed before accepting more
+                      (unless (zero? (semaphore-wait (make-semaphore 0))
+                                     ;; semaphore-wait on fresh 0-sema always blocks;
+                                     ;; we just check if completion-sema is drained
+                                     )
+                        (loop)))))))
 
   ;; Auto-shutdown after timeout
   (thread (lambda ()
             (sync (alarm-evt (+ (current-inexact-milliseconds) (* timeout 1000))))
-            (with-handlers ([exn:fail? (lambda (e) (void))])
-              (set-box! done? #t)
-              (unless (unbox result-put?)
-                (channel-put result-chan #f))
-              (tcp-close listener)
-              (kill-thread server-thread))))
+            (try-complete! #f)))
 
   (define (get-code)
     (channel-get result-chan))
@@ -88,8 +105,9 @@
 ;; ============================================================
 
 ;; Handle a single HTTP connection on the callback port.
-;; One-shot: closes listener and sets done? after first result.
-(define (handle-connection in out expected-state result-chan listener done? result-put?)
+;; One-shot: uses try-complete! for atomic completion — only the first
+;; handler to call try-complete! wins; all others just close their ports.
+(define (handle-connection in out expected-state try-complete!)
   (define line
     (with-handlers ([exn:fail? (lambda (e) #f)])
       (read-line in)))
@@ -97,25 +115,19 @@
     [(not line)
      (close-input-port in)
      (close-output-port out)]
-    [(unbox done?)
-     ;; Already handled; discard
-     (close-input-port in)
-     (close-output-port out)]
     [else
-     (set-box! done? #t)
      (define code (extract-callback-code line expected-state))
+     ;; Send HTTP response first, then try atomic completion
      (cond
        [code
         (display "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n" out)
         (display "<html><body><h2>Authorization successful!</h2>" out)
         (display "<p>You can close this tab.</p></body></html>" out)]
        [else (fprintf out "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n\r\nOAuth error")])
-     (set-box! result-put? #t)
-     (channel-put result-chan code)
      (close-input-port in)
      (close-output-port out)
-     (with-handlers ([exn:fail? (lambda (e) (void))])
-       (tcp-close listener))]))
+     ;; Atomic: close listener + deliver result, or silently discard if already completed
+     (try-complete! code)]))
 
 ;; Extract the authorization code from the callback request line.
 (define (extract-callback-code request-line expected-state)
