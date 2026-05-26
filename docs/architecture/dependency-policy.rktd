@@ -9,79 +9,73 @@
 ;;           deep-module-conventions
 
 ;; Layer definitions with max boundary exceptions
-((layers (runtime
-          (max-exceptions . 12)
-          (forbidden-from . (llm tools extensions))
-          (rationale
-           .
-           "Runtime should not import upward into tools/extensions except via documented exceptions (includes iteration/ submodules and layer-adapters)"))
-         (tui (max-exceptions . 0)
-              (forbidden-from . (llm tools))
-              (allowed-from . (runtime agent extensions util)))
-         (extensions (max-exceptions . 2)
-                     (forbidden-from . (tui))
-                     (rationale . "Extensions may import from runtime/core but never TUI"))
-         (llm (max-exceptions . 0)
-              (forbidden-from . (runtime tools extensions))
-              (rationale . "LLM providers are leaf modules with no upward imports")))
+((layers
+  (runtime
+   (max-exceptions . 12)
+   (forbidden-from . (llm tools extensions))
+   (rationale
+    . "Runtime should not import upward into tools/extensions except via documented exceptions (includes iteration/ submodules and layer-adapters)"))
+  (tui (max-exceptions . 0)
+       (forbidden-from . (llm tools))
+       (allowed-from . (runtime agent extensions util)))
+  (extensions (max-exceptions . 5)
+              (forbidden-from . (tui))
+              (rationale . "Extensions may import from runtime/core but never TUI"))
+  (llm (max-exceptions . 0)
+       (forbidden-from . (runtime tools extensions))
+       (rationale . "LLM providers are leaf modules with no upward imports")))
  ;; Known boundary exceptions (files that violate layer rules for documented reasons)
  ;; Format: ((filename (rationale . "...") (owner . "...") (revisit-by . "YYYY-MM-DD")) ...)
  ;; Owner: responsible module/component. Revisit-by: date to reassess necessity.
  ;; Gate test: undocumented exceptions (missing owner/revisit-by) will FAIL.
  (known-exceptions
-  (runtime . ((layer-adapters.rkt
-               (rationale . "explicit adapter facade routing tool/extension deps behind contained boundary")
-               (owner . "runtime")
-               (revisit-by . "2026-07-01"))
-              (iteration/loop-state.rkt
-               (rationale . "typed require from extensions/api.rkt for opaque ExtRegistry")
-               (owner . "iteration")
-               (revisit-by . "2026-08-01"))
-              (agent-session.rkt
-               (rationale . "list-extensions via adapter (re-exports extension listing)")
-               (owner . "runtime")
-               (revisit-by . "2026-07-01"))
-              (session-lifecycle.rkt
-               (rationale . "injection-event-topic import (extracted from agent-session/iteration)")
-               (owner . "runtime")
-               (revisit-by . "2026-07-01"))
-              (runtime-helpers.rkt
-               (rationale . "hook dispatch for session events (via adapter)")
-               (owner . "runtime")
-               (revisit-by . "2026-07-01"))
-              (tool-coordinator.rkt
-               (rationale . "tool execution orchestration (all imports via adapter)")
-               (owner . "tools")
-               (revisit-by . "2026-07-01"))
-              (turn-orchestrator.rkt
-               (rationale . "context assembly + provider turn (imports via adapter)")
-               (owner . "runtime")
-               (revisit-by . "2026-07-01"))
-              (session-config.rkt
-               (rationale . "central typed config (imports via adapter)")
-               (owner . "runtime")
-               (revisit-by . "2026-07-01"))
-              (package.rkt
-               (rationale . "package audit reads extension manifests")
-               (owner . "extensions")
-               (revisit-by . "2026-08-01"))
-              (extension-catalog.rkt
-               (rationale . "extension loading/discovery")
-               (owner . "extensions")
-               (revisit-by . "2026-08-01"))
-              (session-switch.rkt
-               (rationale . "dynamic-require to extensions for lazy loading (avoids circular dependency)")
-               (owner . "runtime")
-               (revisit-by . "2026-07-01"))))
+  (runtime
+   . ((layer-adapters.rkt
+       (rationale . "explicit adapter facade routing tool/extension deps behind contained boundary")
+       (owner . "runtime")
+       (revisit-by . "2026-07-01"))
+      (iteration/loop-state.rkt
+       (rationale . "typed require from extensions/api.rkt for opaque ExtRegistry")
+       (owner . "iteration")
+       (revisit-by . "2026-08-01"))
+      (agent-session.rkt (rationale . "list-extensions via adapter (re-exports extension listing)")
+                         (owner . "runtime")
+                         (revisit-by . "2026-07-01"))
+      (session-lifecycle.rkt
+       (rationale . "injection-event-topic import (extracted from agent-session/iteration)")
+       (owner . "runtime")
+       (revisit-by . "2026-07-01"))
+      (runtime-helpers.rkt (rationale . "hook dispatch for session events (via adapter)")
+                           (owner . "runtime")
+                           (revisit-by . "2026-07-01"))
+      (tool-coordinator.rkt (rationale . "tool execution orchestration (all imports via adapter)")
+                            (owner . "tools")
+                            (revisit-by . "2026-07-01"))
+      (turn-orchestrator.rkt (rationale . "context assembly + provider turn (imports via adapter)")
+                             (owner . "runtime")
+                             (revisit-by . "2026-07-01"))
+      (session-config.rkt (rationale . "central typed config (imports via adapter)")
+                          (owner . "runtime")
+                          (revisit-by . "2026-07-01"))
+      (package.rkt (rationale . "package audit reads extension manifests")
+                   (owner . "extensions")
+                   (revisit-by . "2026-08-01"))
+      (extension-catalog.rkt (rationale . "extension loading/discovery")
+                             (owner . "extensions")
+                             (revisit-by . "2026-08-01"))
+      (session-switch.rkt
+       (rationale . "dynamic-require to extensions for lazy loading (avoids circular dependency)")
+       (owner . "runtime")
+       (revisit-by . "2026-07-01"))))
   (extensions
    .
-   ((dialog-api.rkt
-     (rationale . "TUI dialog interface")
-     (owner . "tui")
-     (revisit-by . "2026-07-01"))
-    (ui-surface.rkt
-     (rationale . "TUI UI surface interface")
-     (owner . "tui")
+   ((dialog-api.rkt (rationale . "TUI dialog interface") (owner . "tui") (revisit-by . "2026-07-01"))
+    (ui-surface.rkt (rationale . "TUI UI surface interface")
+                    (owner . "tui")
+                    (revisit-by . "2026-07-01"))
+    (widget-lifecycle.rkt
+     (rationale . "Imports tui/component.rkt for q-component? type and make-q-component bridge")
+     (owner . "extensions")
      (revisit-by . "2026-07-01"))
     (context.rkt
      (rationale . "imports runtime/session-types.rkt for context assembly (bidirectional — fragile)")
@@ -169,12 +163,13 @@
    . (("runtime/agent-session.rkt"
        (risk . "Central session orchestration; high fan-in, hard to decompose further")
        (owner . "runtime"))
-      ("runtime/session-lifecycle.rkt"
-       (risk . "Session lifecycle FSM; high state complexity")
-       (owner . "runtime"))
+      ("runtime/session-lifecycle.rkt" (risk . "Session lifecycle FSM; high state complexity")
+                                       (owner . "runtime"))
       ("scripts/run-tests.rkt"
-       (risk . "Parallel test runner with subprocess orchestration, output parsing, and suite management")
+       (risk
+        . "Parallel test runner with subprocess orchestration, output parsing, and suite management")
        (owner . "tools"))
       ("sandbox/subprocess.rkt"
-       (risk . "Shell subprocess execution with resource limits, timeout handling, and output capture; security-sensitive boundary")
+       (risk
+        . "Shell subprocess execution with resource limits, timeout handling, and output capture; security-sensitive boundary")
        (owner . "hardening"))))))
