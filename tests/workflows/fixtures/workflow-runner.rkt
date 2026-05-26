@@ -39,7 +39,11 @@
          workflow-session-log-path
          workflow-session-entries
          with-workflow-timeout
-         with-workflow-cleanup)
+         with-workflow-cleanup
+         workflow-debug?)
+
+;; Debug mode: when #t, temp dirs are preserved after workflow runs
+(define workflow-debug? (make-parameter #f))
 
 ;; ============================================================
 ;; Timeout and cleanup helpers
@@ -52,19 +56,30 @@
          thunk
          #:timeout-ms [timeout-ms 30000]
          #:on-timeout
-         [on-timeout (lambda () (error 'with-workflow-timeout "timed out after ~a ms" timeout-ms))])
+         [on-timeout (lambda () (error 'with-workflow-timeout "timed out after ~a ms" timeout-ms))]
+         #:context [context ""])
   (define result-ch (make-channel))
-  (define timeout-evt (alarm-evt (+ (current-inexact-milliseconds) timeout-ms)))
-  (thread (lambda () (channel-put result-ch (list 'ok (thunk)))))
-  (match (sync/timeout (/ timeout-ms 1000.0) result-ch)
+  (define worker-thread
+    (thread (lambda ()
+              (with-handlers ([exn:fail? (lambda (e) (channel-put result-ch (list 'error e)))])
+                (channel-put result-ch (list 'ok (thunk)))))))
+  (define result (sync/timeout (/ timeout-ms 1000.0) result-ch))
+  (match result
     [(list 'ok v) v]
-    [#f (on-timeout)]
+    [(list 'error e) (raise e)]
+    [#f
+     (kill-thread worker-thread)
+     (on-timeout)]
     [_ (on-timeout)]))
 
 ;; with-workflow-cleanup : ((or/c path? #f) (or/c path? #f) (-> A) -> A)
 ;; Runs thunk, then cleans up project-dir and session-dir even on exception.
 (define (with-workflow-cleanup project-dir session-dir thunk)
-  (dynamic-wind void thunk (lambda () (cleanup-temp-project! project-dir session-dir))))
+  (dynamic-wind void
+                thunk
+                (lambda ()
+                  (unless (workflow-debug?)
+                    (cleanup-temp-project! project-dir session-dir)))))
 
 ;; ============================================================
 ;; Result struct
