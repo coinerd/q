@@ -178,6 +178,11 @@
   (define p (if (string? path) path path))
   (unless (file-exists? p)
     (error 'resize-image "File not found: ~a" p))
+  ;; Fail-closed: if no image tools available, don't attempt resize
+  (define tools (available-image-tools))
+  (when (null? tools)
+    (error 'resize-image
+           "No image processing tools available (install ImageMagick, sips, or ffmpeg)"))
   ;; Check cache first
   (define cache-key (list p max-w max-h out-fmt))
   (define cached (hash-ref (image-resize-cache) cache-key #f))
@@ -192,7 +197,6 @@
         (hash-set! (image-resize-cache) cache-key p)
         p]
        [else
-        (define tools (available-image-tools))
         (define resized
           (cond
             [(or (member 'imagemagick tools) (member 'magick tools))

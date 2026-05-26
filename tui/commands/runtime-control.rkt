@@ -128,6 +128,15 @@
                                         (make-error-entry (format "Unknown OAuth provider: ~a"
                                                                   provider-name))))
         'continue]
+       [(and cfg (not (valid-oauth-config? cfg)))
+        (set-box!
+         (cmd-ctx-state-box cctx)
+         (add-transcript-entry
+          state
+          (make-error-entry
+           (format "OAuth provider ~a not configured — missing client ID. Use API key auth instead."
+                   provider-name))))
+        'continue]
        [else
         ;; Show "logging in..." message
         (define wait-msg
@@ -231,4 +240,5 @@
          handle-interrupt-command
          handle-retry-command
          handle-quit-command
-         handle-login-command)
+         handle-login-command
+         get-oauth-config)

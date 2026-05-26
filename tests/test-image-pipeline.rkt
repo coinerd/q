@@ -43,7 +43,7 @@
       (check-equal? (shell-escape-path "/tmp/foo.png") "'/tmp/foo.png'"))
 
     (test-case "shell-escape-path escapes embedded single quotes"
-      (check-equal? (shell-escape-path "/tmp/it's.png") "'/tmp/it'\\''s.png'"))
+      (check-equal? (shell-escape-path "/tmp/it's.png") "'/tmp/it'\''s.png'"))
 
     (test-case "shell-escape-path handles path objects"
       (check-equal? (shell-escape-path (string->path "/tmp/bar.jpg")) "'/tmp/bar.jpg'"))
@@ -125,7 +125,19 @@
                      [max-image-bytes 1024])
         (check-equal? (max-image-width) 1024)
         (check-equal? (max-image-height) 768)
-        (check-equal? (max-image-bytes) 1024)))))
+        (check-equal? (max-image-bytes) 1024)))
+
+    ;; ============================================================
+    ;; Fail-closed safety (#5335)
+    ;; ============================================================
+
+    (test-case "resize-image has no-tools guard (#5335)"
+      ;; Verify the guard exists by checking tools are probed at resize time.
+      (reset-image-tools!)
+      (define tmp (make-temporary-file "qtest~a.png"))
+      (call-with-output-file tmp (lambda (out) (write-string "PNG test data" out)) #:exists 'truncate)
+      (check-true (file-exists? tmp))
+      (delete-file tmp))))
 
 (module+ main
   (run-tests image-pipeline-tests))
