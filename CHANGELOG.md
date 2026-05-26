@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.59.9 — 2026-05-26
+
+### Final Truth Gate Hotfix
+
+Restore final gate truth before security/workflow enforcement continues.
+
+**W0 — Red Gate Reproduction**
+- Published final truth gate reproduction report
+- Verified provider schema red gate no longer reproduces
+- Reproduced TUI drag-selection red gate and lint/report drift
+
+**W1 — Provider Schema Guardrail Verification**
+- Re-ran provider schema targeted checks
+- Published guardrail evidence showing no active provider schema regression
+
+**W2 — TUI Interface Red-Gate Repair**
+- Fixed stale hard-coded TUI drag-selection test geometry
+- Verified TUI interface file and full TUI suite are green
+
+**W3 — README Metrics and Lint Truth**
+- Re-synchronized README static metrics through the approved metrics path
+- Confirmed metrics-sync and metrics-lint pass truthfully
+
+**W4 — Historical Report and Finding Matrix Truth**
+- Restored v0.57.6 historical report version values
+- Corrected v0.59.x finding matrix milestone traceability
+- Added regression coverage proving docs/reports are excluded from global version sync
+
 ## v0.59.8 — 2026-05-26
 
 ### Workflow Fixture Integrity + Release Enforcement
