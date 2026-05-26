@@ -64,7 +64,8 @@
          ;; Shard classifiers (W14)
          arch-file?
          runtime-file?
-         extensions-file?)
+         extensions-file?
+         workflows-file?)
 
 ;; ---------------------------------------------------------------------------
 ;; Struct: test-file-result
@@ -110,11 +111,11 @@
               ))
 
 ;; Path-based slow patterns — matched against the full path, not just basename.
-;; Used for tests that are integration-level (need full runtime mock) or hang.
-;; v0.58.5 characterization: all 30 workflow tests hang under fast-suite due to
-;; requiring full runtime initialization (mock provider, session lifecycle, etc).
-;; The blanket /workflows/ exclusion is correct — do not narrow without fixing
-;; the mock provider to support isolated execution.
+;; Used for tests that are integration-level (need full runtime mock) or slow.
+;; v0.59.4 characterization: workflow tests are integration-level but do NOT hang
+;; with explicit timeouts (20 passed, 4 failed, 0 timeouts in 180s).
+;; The /workflows/ exclusion from fast suite is intentional: they need full runtime
+;; and are available via `--suite workflows`.
 (define path-slow-patterns '("/workflows/"))
 
 (define (slow-file? f)
@@ -241,6 +242,9 @@
       (string-contains? f "hook-")
       (file-has-suite-tag? f "extensions")))
 
+(define (workflows-file? f)
+  (and (string-contains? f "/workflows/") (not (string-contains? f "/fixtures/"))))
+
 (define (collect-test-files suite #:extra-files [extra-files #f])
   (cond
     [(pair? extra-files) (map normalize-test-path extra-files)]
@@ -263,6 +267,7 @@
        [(arch) (filter arch-file? all-files)]
        [(runtime) (filter runtime-file? all-files)]
        [(extensions) (filter extensions-file? all-files)]
+       [(workflows) (filter workflows-file? all-files)]
        [else '("tests/")])]))
 
 ;; ---------------------------------------------------------------------------
@@ -645,7 +650,7 @@
   (displayln "  --sequential      Run tests sequentially (jobs=1)")
   (displayln "  --timeout SECS    Per-file timeout in seconds")
   (displayln
-   "  --suite <name>    Run test suite: all (default), fast, slow, tui, smoke, security, arch, runtime, extensions")
+   "  --suite <name>    Run test suite: all (default), fast, slow, tui, smoke, security, arch, runtime, extensions, workflows")
   (displayln "  --strict          Enable strict zero-test detection (default: on)")
   (displayln "  --repeat N        Run suite N times (exit 1 if any run fails)")
   (displayln "  --help            Show this help message")
@@ -656,7 +661,11 @@
   (displayln "  slow    Only sandbox/subprocess tests")
   (displayln "  tui     Files in tests/tui/")
   (displayln "  smoke   Fast minus workflows/, interfaces/, and provider tests")
-  (displayln "  security  All security/permission/sandbox/safe-mode tests"))
+  (displayln "  security  All security/permission/sandbox/safe-mode tests")
+  (displayln "  arch    Architecture boundary/fitness tests")
+  (displayln "  runtime Runtime/session/compaction/iteration tests")
+  (displayln "  extensions Extension/GSD/hook tests")
+  (displayln "  workflows All tests/workflows/ excluding fixtures (integration-level)"))
 
 (define (parse-args args)
   (let loop ([rest args]

@@ -541,3 +541,18 @@
   (define collect (runner-ref 'collect-test-files))
   (define ext-files (collect 'extensions))
   (check-true (> (length ext-files) 0)))
+
+(test-case "workflows-file?: matches workflow tests excluding fixtures"
+  (define wf-file? (runner-ref 'workflows-file?))
+  (check-true (wf-file? "tests/workflows/tools/test-tool-read-workflow.rkt"))
+  (check-true (wf-file? "tests/workflows/gsd/test-planning-workflow.rkt"))
+  (check-false (wf-file? "tests/workflows/fixtures/mock-provider.rkt"))
+  (check-false (wf-file? "tests/test-event-bus.rkt")))
+
+(test-case "collect-test-files: workflows suite non-empty and excludes fixtures"
+  (define collect (runner-ref 'collect-test-files))
+  (define wf-files (collect 'workflows))
+  (check-true (> (length wf-files) 0) "workflows suite has files")
+  (for ([f (in-list wf-files)])
+    (check-false (string-contains? f "/fixtures/")
+                 (format "workflows suite included fixture: ~a" f))))
