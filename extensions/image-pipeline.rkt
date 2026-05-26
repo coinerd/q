@@ -3,14 +3,12 @@
 ;; extensions/image-pipeline.rkt — Image processing pipeline (#5265, #5266)
 ;;
 ;; Subprocess-based image resizing for multimodal LLM input.
-;; Detects available system tools (ImageMagick, sips, ffmpeg),
-;; resizes images to fit within provider limits, extracts metadata,
-;; and caches resized results.
+;; SECURITY: All subprocess calls use argv lists (never shell strings).
+;; Tool paths resolved via find-executable-path. No shell injection possible.
 
 (require racket/file
          racket/path
          racket/string
-         racket/system
          racket/port
          racket/list)
 
@@ -26,15 +24,8 @@
 (define image-resize-cache (make-parameter (make-hash)))
 
 ;; ═══════════════════════════════════════════════════════════════════
-;; Utility helpers (defined first — used by later functions)
+;; Utility helpers
 ;; ═══════════════════════════════════════════════════════════════════
-
-(define (shell-escape-path p)
-  (define s
-    (if (path? p)
-        (path->string p)
-        p))
-  (string-append "'" (string-replace s "'" "'\\''") "'"))
 
 (define (delete-file* p)
   (with-handlers ([exn:fail? void])
@@ -67,15 +58,37 @@
   (and (member ext '(#".png" #".jpg" #".jpeg" #".gif" #".webp")) #t))
 
 ;; ═══════════════════════════════════════════════════════════════════
+;; Safe subprocess execution (argv-based, no shell strings)
+;; ═══════════════════════════════════════════════════════════════════
+
+;; Run a subprocess with argv list. Returns (values success? stdout-bytes).
+;; Captures stdout and stderr. Never passes through a shell.
+(define (run-argv cmd+args)
+  (define cmd (car cmd+args))
+  (define args (cdr cmd+args))
+  (define-values (sp stdout-in stdin-out stderr-in) (apply subprocess #f #f #f cmd args))
+  (close-output-port stdin-out)
+  (define stdout-bytes (port->bytes stdout-in))
+  (define stderr-bytes (port->bytes stderr-in))
+  (close-input-port stdout-in)
+  (close-input-port stderr-in)
+  (subprocess-wait sp)
+  (values (eq? (subprocess-status sp) 0) stdout-bytes))
+
+;; Resolve tool name to absolute path, or #f if not found.
+(define (resolve-tool tool-name)
+  (find-executable-path tool-name))
+
+;; ═══════════════════════════════════════════════════════════════════
 ;; Tool detection
 ;; ═══════════════════════════════════════════════════════════════════
 
 (define (probe-tool tool-name version-flag)
-  (define out (open-output-string))
-  (define err (open-output-string))
-  (parameterize ([current-output-port out]
-                 [current-error-port err])
-    (system (format "~a ~a 2>/dev/null" tool-name version-flag))))
+  (define path (resolve-tool tool-name))
+  (and path
+       (let ()
+         (define-values (ok _) (run-argv (list path version-flag)))
+         ok)))
 
 (define (detect-image-tools)
   (define tools
@@ -97,7 +110,7 @@
   (set! detected-tools #f))
 
 ;; ═══════════════════════════════════════════════════════════════════
-;; Image metadata
+;; Image metadata (no shell strings, no pipelines)
 ;; ═══════════════════════════════════════════════════════════════════
 
 (define (extract-dimensions p)
@@ -109,35 +122,58 @@
     [else (cons 0 0)]))
 
 (define (extract-dimensions-imagemagick p)
-  (define cmd (format "identify -format '%w %h' ~a 2>/dev/null" (shell-escape-path (path->string p))))
-  (define out (with-output-to-string (lambda () (system cmd))))
-  (define parts (string-split (string-trim out) " "))
-  (if (>= (length parts) 2)
-      (cons (string->number (car parts)) (string->number (cadr parts)))
-      (cons 0 0)))
+  (define identify-path (or (resolve-tool "identify") (resolve-tool "magick")))
+  (cond
+    [(not identify-path) (cons 0 0)]
+    [else
+     (define args
+       (if (equal? (path->string (file-name-from-path identify-path)) "magick")
+           (list identify-path "identify" "-format" "%w %h" (path->string p))
+           (list identify-path "-format" "%w %h" (path->string p))))
+     (define-values (ok out-bytes) (run-argv args))
+     (define out (bytes->string/utf-8 out-bytes #\?))
+     (define parts (string-split (string-trim out) " "))
+     (if (and ok (>= (length parts) 2))
+         (cons (or (string->number (car parts)) 0) (or (string->number (cadr parts)) 0))
+         (cons 0 0))]))
 
 (define (extract-dimensions-sips p)
-  (define cmd
-    (format "sips -g pixelWidth -g pixelHeight ~a 2>/dev/null" (shell-escape-path (path->string p))))
-  (define out (with-output-to-string (lambda () (system cmd))))
-  (define w-match (regexp-match #rx"pixelWidth:\\s*([0-9]+)" out))
-  (define h-match (regexp-match #rx"pixelHeight:\\s*([0-9]+)" out))
-  (cons (if w-match
-            (string->number (cadr w-match))
-            0)
-        (if h-match
-            (string->number (cadr h-match))
-            0)))
+  (define sips-path (resolve-tool "sips"))
+  (cond
+    [(not sips-path) (cons 0 0)]
+    [else
+     (define-values (ok out-bytes)
+       (run-argv (list sips-path "-g" "pixelWidth" "-g" "pixelHeight" (path->string p))))
+     (define out (bytes->string/utf-8 out-bytes #\?))
+     (define w-match (regexp-match #rx"pixelWidth:\\s*([0-9]+)" out))
+     (define h-match (regexp-match #rx"pixelHeight:\\s*([0-9]+)" out))
+     (cons (if w-match
+               (string->number (cadr w-match))
+               0)
+           (if h-match
+               (string->number (cadr h-match))
+               0))]))
 
 (define (extract-dimensions-ffmpeg p)
-  (define cmd
-    (format "ffmpeg -i ~a 2>&1 | grep -o '[0-9]\\+x[0-9]\\+' | head -1"
-            (shell-escape-path (path->string p))))
-  (define out (with-output-to-string (lambda () (system cmd))))
-  (define m (regexp-match #rx"([0-9]+)x([0-9]+)" out))
-  (if m
-      (cons (string->number (cadr m)) (string->number (caddr m)))
-      (cons 0 0)))
+  ;; No shell pipeline — capture stderr (ffmpeg writes to stderr) and parse in Racket
+  (define ffmpeg-path (resolve-tool "ffmpeg"))
+  (cond
+    [(not ffmpeg-path) (cons 0 0)]
+    [else
+     ;; ffmpeg -i writes probe info to stderr; we capture it
+     (define-values (sp stdout-in stdin-out stderr-in)
+       (subprocess #f #f #f ffmpeg-path "-i" (path->string p)))
+     (close-output-port stdin-out)
+     (define stderr-bytes (port->bytes stderr-in))
+     (close-input-port stdout-in)
+     (close-input-port stderr-in)
+     (subprocess-wait sp)
+     ;; Parse first NxN dimension from stderr output (no grep/head pipeline)
+     (define stderr-str (bytes->string/utf-8 stderr-bytes #\?))
+     (define m (regexp-match #rx"([0-9]+)x([0-9]+)" stderr-str))
+     (if m
+         (cons (or (string->number (cadr m)) 0) (or (string->number (caddr m)) 0))
+         (cons 0 0))]))
 
 (define (image-metadata path)
   (define p
@@ -168,7 +204,7 @@
           (path->string p)))
 
 ;; ═══════════════════════════════════════════════════════════════════
-;; Image resizing
+;; Image resizing (argv-based, no shell strings)
 ;; ═══════════════════════════════════════════════════════════════════
 
 (define (resize-image path
@@ -209,46 +245,54 @@
         resized])]))
 
 (define (resize-imagemagick p max-w max-h fmt)
-  (define out-path (make-temp-output-path p fmt))
-  (define cmd
-    (format "convert ~a -resize ~ax~a\\> ~a 2>/dev/null"
-            (shell-escape-path p)
-            max-w
-            max-h
-            (shell-escape-path out-path)))
-  (define ok (system cmd))
-  (if ok
-      out-path
-      (begin
-        (delete-file* out-path)
-        #f)))
+  (define convert-path (or (resolve-tool "convert") (resolve-tool "magick")))
+  (cond
+    [(not convert-path) #f]
+    [else
+     (define out-path (make-temp-output-path p fmt))
+     (define resize-arg (format "~ax~a>" max-w max-h))
+     (define args
+       (if (equal? (path->string (file-name-from-path convert-path)) "magick")
+           (list convert-path "convert" (path->string p) "-resize" resize-arg (path->string out-path))
+           (list convert-path (path->string p) "-resize" resize-arg (path->string out-path))))
+     (define-values (ok _) (run-argv args))
+     (if ok
+         out-path
+         (begin
+           (delete-file* out-path)
+           #f))]))
 
 (define (resize-sips p max-w max-h)
-  (define out-path (make-temp-output-path p 'png))
-  (copy-file p out-path #t)
-  (define cmd
-    (format "sips --resampleHeightWidthMax ~a ~a 2>/dev/null" max-w (shell-escape-path out-path)))
-  (define ok (system cmd))
-  (if ok
-      out-path
-      (begin
-        (delete-file* out-path)
-        #f)))
+  (define sips-path (resolve-tool "sips"))
+  (cond
+    [(not sips-path) #f]
+    [else
+     (define out-path (make-temp-output-path p 'png))
+     (copy-file p out-path #t)
+     (define-values (ok _)
+       (run-argv
+        (list sips-path "--resampleHeightWidthMax" (number->string max-w) (path->string out-path))))
+     (if ok
+         out-path
+         (begin
+           (delete-file* out-path)
+           #f))]))
 
 (define (resize-ffmpeg p max-w max-h fmt)
-  (define out-path (make-temp-output-path p fmt))
-  (define cmd
-    (format "ffmpeg -y -i ~a -vf 'scale=~a:~a:force_original_aspect_ratio=decrease' ~a 2>/dev/null"
-            (shell-escape-path p)
-            max-w
-            max-h
-            (shell-escape-path out-path)))
-  (define ok (system cmd))
-  (if ok
-      out-path
-      (begin
-        (delete-file* out-path)
-        #f)))
+  (define ffmpeg-path (resolve-tool "ffmpeg"))
+  (cond
+    [(not ffmpeg-path) #f]
+    [else
+     (define out-path (make-temp-output-path p fmt))
+     (define scale-arg (format "~a:~a:force_original_aspect_ratio=decrease" max-w max-h))
+     (define-values (ok _)
+       (run-argv
+        (list ffmpeg-path "-y" "-i" (path->string p) "-vf" scale-arg (path->string out-path))))
+     (if ok
+         out-path
+         (begin
+           (delete-file* out-path)
+           #f))]))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Token estimation
@@ -274,6 +318,7 @@
          max-image-height
          max-image-bytes
          image-resize-cache
-         shell-escape-path
          extract-dimensions
-         make-temp-output-path)
+         make-temp-output-path
+         run-argv
+         resolve-tool)
