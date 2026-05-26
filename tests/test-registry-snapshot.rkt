@@ -26,16 +26,18 @@
       (define reg (make-tool-registry))
       (register-tool! reg (make-test-tool "foo"))
       (register-tool! reg (make-test-tool "bar"))
-      (define result (with-registry-snapshot reg (lambda (snap) (hash-keys snap))))
+      (define result (sort (with-registry-snapshot reg (lambda (snap) (hash-keys snap))) string<?))
       (check-not-false (member "foo" result))
       (check-not-false (member "bar" result)))
 
     (test-case "snapshot is isolated from mutations"
       (define reg (make-tool-registry))
       (register-tool! reg (make-test-tool "before"))
-      (define snap-tools (with-registry-snapshot reg (lambda (snap) (hash-keys snap))))
+      (define snap-tools
+        (sort (with-registry-snapshot reg (lambda (snap) (hash-keys snap))) string<?))
       (register-tool! reg (make-test-tool "after"))
-      (define snap-after (with-registry-snapshot reg (lambda (snap) (hash-keys snap))))
+      (define snap-after
+        (sort (with-registry-snapshot reg (lambda (snap) (hash-keys snap))) string<?))
       ;; First snapshot should not contain "after"
       (check-false (member "after" snap-tools))
       ;; Second snapshot should contain both
