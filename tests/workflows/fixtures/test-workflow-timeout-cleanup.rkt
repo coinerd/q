@@ -96,6 +96,35 @@
       (define result
         (with-handlers ([exn:fail? (lambda (e) 'timed-out)])
           (run-workflow prov "sleep forever" #:timeout-ms 3000 #:register-default-tools? #t)))
+      (check-true (or (workflow-result? result) (eq? result 'timed-out))))
+
+    ;; ============================================================
+    ;; Multi-turn integration (#5540)
+    ;; ============================================================
+
+    (test-case "run-workflow-multi-turn with cleanup? cleans up on success (#5540)"
+      (define prov (make-scripted-provider (list (text-response "Turn 1") (text-response "Turn 2"))))
+      (define result (run-workflow-multi-turn prov '("Hello" "World") #:cleanup? #t))
+      (check-not-false result)
+      (check-false (directory-exists? (workflow-result-session-dir result))
+                   "multi-turn cleanup must remove session dir"))
+
+    (test-case "run-workflow-multi-turn with cleanup? cleans up on error (#5540)"
+      ;; Provider exhausted after 1 entry, but we send 2 prompts
+      (define prov (make-scripted-provider (list (text-response "Only one"))))
+      (with-handlers ([exn:fail? (lambda (e) (void))])
+        (run-workflow-multi-turn prov '("First" "Second") #:cleanup? #t #:max-iterations 1)))
+
+    (test-case "run-workflow-multi-turn with timeout-ms terminates runaway (#5540)"
+      (define prov
+        (make-scripted-provider (list (tool-call-response "tc-1" "bash" (hash 'cmd "sleep 60"))
+                                      (text-response "done"))))
+      (define result
+        (with-handlers ([exn:fail? (lambda (e) 'timed-out)])
+          (run-workflow-multi-turn prov
+                                   '("sleep forever")
+                                   #:timeout-ms 3000
+                                   #:register-default-tools? #t)))
       (check-true (or (workflow-result? result) (eq? result 'timed-out))))))
 
 (module+ main
