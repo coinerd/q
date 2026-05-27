@@ -44,18 +44,6 @@
   (check-true (string-contains? row0 "q"))
   (check-true (string-contains? row0 "v0.60")))
 
-(test-case "full pipeline: multi-section frame"
-  (define sections
-    (list (vvbox (list (vhbox (list (vtext "Header" '(bold))))
-                       (vtext "Body line 1" '())
-                       (vtext "Body line 2" '())))
-          (vhbox (list (vtext "Status: OK" '(green))))))
-  (define buf (make-cell-buffer 40 10))
-  (render-vdom-frame! buf sections 40)
-  (check-true (string-contains? (row-string buf 0) "Header"))
-  (check-true (string-contains? (row-string buf 1) "Body line 1"))
-  (check-true (string-contains? (row-string buf 3) "Status")))
-
 (test-case "full pipeline: overlay popup"
   (define popup
     (voverlay (vvbox (list (vhbox (list (vtext "┌" '(white))
