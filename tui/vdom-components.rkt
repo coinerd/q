@@ -9,11 +9,13 @@
 
 (require racket/contract
          racket/string
+         racket/list
          "vdom.rkt"
          "vdom-layout.rkt"
          "component.rkt"
          "state.rkt"
          "render/message-layout.rkt"
+         "render/diff-render.rkt"
          "palette.rkt")
 
 ;; ============================================================
@@ -22,11 +24,30 @@
 
 (define (make-transcript-vdom-component)
   (make-q-component (lambda (st width)
-                      ;; For now, return a placeholder vvbox.
-                      ;; Full implementation will iterate messages and build vnodes.
-                      (list (vtext "Transcript" '(dim))))
+                      ;; Production: use render-transcript to get styled-lines, convert to vnodes.
+                      ;; transcript-height is a large value; the caller clips to visible area.
+                      (define-values (styled-lines _st) (render-transcript st 1000 width))
+                      (define vnodes (styled-lines->vnodes styled-lines))
+                      vnodes)
                     #:id 'transcript-vdom
                     #:vdom? #t))
+
+;; Convert styled-lines to a list of vnode rows (one vhbox per line).
+(define (styled-lines->vnodes lines)
+  (for/list ([line (in-list lines)])
+    (styled-line->vnode line)))
+
+;; Convert a single styled-line to a vhbox of vtext segments.
+(define (styled-line->vnode line)
+  (define segs (styled-line-segments line))
+  (cond
+    [(null? segs) (vhbox (list (vtext "" '())))]
+    [(= (length segs) 1)
+     (define seg (car segs))
+     (vhbox (list (vtext (styled-segment-text seg) (styled-segment-style seg))))]
+    [else
+     (vhbox (for/list ([seg (in-list segs)])
+              (vtext (styled-segment-text seg) (styled-segment-style seg))))]))
 
 ;; ============================================================
 ;; Status bar component — renders model info, status line
@@ -122,6 +143,8 @@
 ;; ============================================================
 
 (provide (contract-out [make-transcript-vdom-component (-> q-component?)]
+                       [styled-lines->vnodes (-> (listof styled-line?) (listof vnode?))]
+                       [styled-line->vnode (-> styled-line? vnode?)]
                        [make-status-bar-vdom-component (-> q-component?)]
                        [make-input-box-vdom-component (-> q-component?)]
                        [make-header-vdom-component (-> q-component?)]

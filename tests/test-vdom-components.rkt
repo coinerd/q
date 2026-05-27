@@ -9,7 +9,9 @@
          "../tui/vdom-components.rkt"
          "../tui/component.rkt"
          "../tui/cell-buffer.rkt"
-         "../tui/state.rkt")
+         "../tui/state.rkt"
+         "../tui/state-types.rkt"
+         "../tui/render/message-layout.rkt")
 
 ;; ============================================================
 ;; Component construction
@@ -111,5 +113,66 @@
   (define buf (make-cell-buffer 80 10))
   (render-vdom-to-buffer! (vvbox vnodes) buf 80)
   ;; Should have content in at least row 0
+  (define row0 (cell-buffer-row-string buf 0))
+  (check-true (> (string-length (string-trim row0)) 0)))
+
+;; ============================================================
+;; Production TranscriptComponent tests
+;; ============================================================
+
+(test-case "production transcript renders entries as vnodes"
+  (define st0 (initial-ui-state))
+  (define st1 (add-transcript-entry st0 (transcript-entry 'user "Hello" 0 (hash) #f)))
+  (define st2 (add-transcript-entry st1 (transcript-entry 'assistant "Hi there!" 0 (hash) #f)))
+  (define comp (make-transcript-vdom-component))
+  (define result (component-render comp st2 80))
+  (check-true (andmap vnode? result))
+  ;; Should have multiple rows (user + assistant entries)
+  (check-true (> (length result) 0)))
+
+(test-case "production transcript with empty state returns vnodes"
+  (define comp (make-transcript-vdom-component))
+  (define result (component-render comp (initial-ui-state) 80))
+  (check-true (andmap vnode? result)))
+
+(test-case "styled-line->vnode converts single segment"
+  (define sl (styled-line (list (styled-segment "Hello" '(bold)))))
+  (define v (styled-line->vnode sl))
+  (check-true (vhbox? v))
+  (define children (vhbox-children v))
+  (check-equal? (length children) 1)
+  (check-equal? (vtext-text (car children)) "Hello")
+  (check-equal? (vtext-style (car children)) '(bold)))
+
+(test-case "styled-line->vnode converts multi-segment line"
+  (define sl (styled-line (list (styled-segment "Hello " '()) (styled-segment "World" '(bold)))))
+  (define v (styled-line->vnode sl))
+  (check-true (vhbox? v))
+  (define children (vhbox-children v))
+  (check-equal? (length children) 2)
+  (check-equal? (vtext-text (car children)) "Hello ")
+  (check-equal? (vtext-style (cadr children)) '(bold)))
+
+(test-case "styled-line->vnode handles empty segments"
+  (define sl (styled-line '()))
+  (define v (styled-line->vnode sl))
+  (check-true (vhbox? v)))
+
+(test-case "styled-lines->vnodes converts list"
+  (define lines
+    (list (styled-line (list (styled-segment "Line 1" '())))
+          (styled-line (list (styled-segment "Line 2" '(bold))))))
+  (define vnodes (styled-lines->vnodes lines))
+  (check-equal? (length vnodes) 2)
+  (check-true (andmap vhbox? vnodes)))
+
+(test-case "production transcript renders to cell buffer"
+  (define st0 (initial-ui-state))
+  (define st1 (add-transcript-entry st0 (transcript-entry 'user "Test message" 0 (hash) #f)))
+  (define comp (make-transcript-vdom-component))
+  (define vnodes (component-render comp st1 80))
+  (define buf (make-cell-buffer 80 10))
+  (render-vdom-to-buffer! (vvbox vnodes) buf 80)
+  ;; Should have content in at least one row
   (define row0 (cell-buffer-row-string buf 0))
   (check-true (> (string-length (string-trim row0)) 0)))
