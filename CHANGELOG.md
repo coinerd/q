@@ -1,4 +1,15 @@
 # Changelog
+
+## v0.62.0 — 2026-05-27
+
+### Component Lifecycle & State in Production
+
+- **Persistent component registry**: `tui-ctx` now has a `component-registry-box` field. Header and status-bar vdom components are created once on first render and persist across all subsequent frames, enabling component caching and local state management.
+- **Component state tracking**: The registered transcript component uses `component-state-ref/set!` to track `render-count` and `last-width` across frames — proving the per-component local state mechanism works in production.
+- **`component-render` with caching**: Production render loop now calls `component-render` (which checks cache by width) instead of calling render-fn directly for header and status-bar components.
+- **`render-frame-vdom!` accepts `#:component-registry`**: Optional keyword argument allows tests to inject a component registry and verify persistence across frames.
+- **New tests**: 2 new test cases verifying component identity persistence and state accumulation across frames.
+
 ## v0.61.8 — 2026-05-27
 
 ### Native TUI Final Cleanup
