@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.62.2 — 2026-05-27
+
+### HTML Render Backend + Architecture Validation
+
+- **HTML render backend**: New `tui/vdom-html-render.rkt` converts vdom trees and styled-lines to HTML/CSS strings. Supports all vnode types (vtext, vhbox, vvbox, vfill, voverlay), ANSI-to-CSS color mapping, and full HTML document generation.
+- **Backend-agnostic architecture validated**: `test-vdom-backend-parity.rkt` proves that the same `vdom-layout` output produces structurally equivalent content through both the cell-buffer (terminal) and HTML backends.
+- **Documentation updated**: ADR-0016 updated with multi-backend pipeline diagram. Architecture overview updated with component lifecycle and key dispatch layers.
+- **New modules**: `tui/vdom-html-render.rkt` (HTML render backend)
+- **New tests**: 18 HTML render tests, 7 backend parity tests
+
+
 ## v0.62.1 — 2026-05-27
 
 ### Key Dispatch Through Components
