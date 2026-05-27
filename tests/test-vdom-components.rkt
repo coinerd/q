@@ -27,6 +27,30 @@
   (check-true (q-component-vdom? comp))
   (check-equal? (q-component-id comp) 'status-bar-vdom))
 
+(test-case "production status bar renders model name"
+  (define st (initial-ui-state #:model-name "gpt-4o"))
+  (define comp (make-status-bar-vdom-component))
+  (define result (component-render comp st 80))
+  (check-true (andmap vnode? result))
+  (check-equal? (length result) 1))
+
+(test-case "production status bar renders session label"
+  (define st (initial-ui-state #:session-id "test-sess" #:model-name "gpt-4o"))
+  (define comp (make-status-bar-vdom-component))
+  (define result (component-render comp st 80))
+  (check-true (andmap vnode? result))
+  (define v (car result))
+  (check-true (vhbox? v)))
+
+(test-case "production status bar renders to cell buffer"
+  (define st (initial-ui-state #:model-name "gpt-4o"))
+  (define comp (make-status-bar-vdom-component))
+  (define vnodes (component-render comp st 80))
+  (define buf (make-cell-buffer 80 1))
+  (render-vdom-to-buffer! (vvbox vnodes) buf 80)
+  (define row0 (cell-buffer-row-string buf 0))
+  (check-true (> (string-length (string-trim row0)) 0)))
+
 (test-case "input box component is vdom"
   (define comp (make-input-box-vdom-component))
   (check-true (q-component-vdom? comp))

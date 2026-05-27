@@ -16,6 +16,7 @@
          "state.rkt"
          "render/message-layout.rkt"
          "render/diff-render.rkt"
+         "render/status-line.rkt"
          "palette.rkt")
 
 ;; ============================================================
@@ -54,15 +55,12 @@
 ;; ============================================================
 
 (define (make-status-bar-vdom-component)
-  (make-q-component
-   (lambda (st width)
-     (define model-name (or (ui-state-model-name st) "no-model"))
-     (define mode (ui-state-mode st))
-     (define status-text (format " ~a | ~a " model-name mode))
-     (define fill-w (max 0 (- width (string-length status-text) 1)))
-     (list (vhbox (list (vtext status-text '(bold)) (vfill* fill-w) (vtext " " '())))))
-   #:id 'status-bar-vdom
-   #:vdom? #t))
+  (make-q-component (lambda (st width)
+                      ;; Production: use render-status-bar from status-line.rkt
+                      (define styled-line-result (render-status-bar st width))
+                      (list (styled-line->vnode styled-line-result)))
+                    #:id 'status-bar-vdom
+                    #:vdom? #t))
 
 ;; ============================================================
 ;; Input box component — renders the input area
