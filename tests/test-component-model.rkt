@@ -130,6 +130,37 @@
    (define vdom-comp (make-q-component (lambda (s w) (list (vtext "vdom" '()))) #:vdom? #t))
    (define classic-comp (make-q-component (lambda (s w) (list (list (cons 'text "classic"))))))
    (define result (component-compose (list vdom-comp classic-comp) (initial-ui-state) 80))
-   (check-equal? (length result) 2)))
+   (check-equal? (length result) 2))
+ (test-case "component-state-ref returns default for missing key"
+   (define comp (make-q-component (lambda (s w) '())))
+   (check-equal? (component-state-ref comp 'foo) #f)
+   (check-equal? (component-state-ref comp 'foo 42) 42))
+ (test-case "component-state-set! stores and retrieves values"
+   (define comp (make-q-component (lambda (s w) '())))
+   (component-state-set! comp 'counter 0)
+   (check-equal? (component-state-ref comp 'counter) 0)
+   (component-state-set! comp 'counter 5)
+   (check-equal? (component-state-ref comp 'counter) 5))
+ (test-case "component state persists across renders"
+   (define render-count 0)
+   (define comp
+     (make-q-component (lambda (s w)
+                         (set! render-count (add1 render-count))
+                         (define prev (component-state-ref comp 'renders 0))
+                         (component-state-set! comp 'renders (add1 prev))
+                         (list (vtext (format "render #~a" (add1 prev)) '())))
+                       #:vdom? #t))
+   (component-render comp (initial-ui-state) 80)
+   (check-equal? (component-state-ref comp 'renders) 1)
+   (component-invalidate! comp)
+   (component-render comp (initial-ui-state) 80)
+   (check-equal? (component-state-ref comp 'renders) 2))
+ (test-case "each component has independent state"
+   (define comp1 (make-q-component (lambda (s w) '())))
+   (define comp2 (make-q-component (lambda (s w) '())))
+   (component-state-set! comp1 'key 'val1)
+   (component-state-set! comp2 'key 'val2)
+   (check-equal? (component-state-ref comp1 'key) 'val1)
+   (check-equal? (component-state-ref comp2 'key) 'val2)))
 
 (run-tests test-component-model)
