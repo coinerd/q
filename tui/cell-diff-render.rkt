@@ -68,12 +68,15 @@
   (define rows (cell-buffer-rows buf))
   (when sync?
     (terminal-sync-begin!))
+  ;; Disable auto-wrap to prevent last-column wrap glitch
+  (display "\x1b[?7l" out)
   ;; Home cursor
   (display "\x1b[H" out)
   (define prev-sgr #f)
   (for ([row (in-range rows)])
     (when (> row 0)
-      (newline out))
+      ;; Use cursor positioning instead of newline to avoid wrap issues
+      (display (format "\x1b[~a;1H" (add1 row)) out))
     (for ([col (in-range cols)])
       (define cell (cell-buffer-ref buf col row))
       (define sgr (cell->sgr cell))
@@ -82,6 +85,8 @@
         (set! prev-sgr sgr))
       (display (string (cell-char cell)) out)))
   (display "\x1b[0m" out)
+  ;; Re-enable auto-wrap
+  (display "\x1b[?7h" out)
   (when sync?
     (terminal-sync-end!)))
 

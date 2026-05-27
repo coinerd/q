@@ -161,7 +161,6 @@
                     (tui-ctx-session-dir ctx)
                     (tui-ctx-needs-redraw-box ctx)
                     (tui-ctx-model-registry-box ctx)
-                    tui-ctx-previous-frame-box
                     (tui-ctx-last-prompt-box ctx)
                     (tui-ctx-session-runner ctx)
                     (box "")

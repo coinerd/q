@@ -71,8 +71,8 @@
   (define result (get-output-string out))
   ;; Should contain the text
   (check-true (string-contains? result "Hello"))
-  ;; Should start with home cursor
-  (check-true (string-prefix? result "\x1b[H")))
+  ;; Should contain home cursor after wrap-disable
+  (check-true (string-contains? result "\x1b[H")))
 
 ;; ============================================================
 ;; Smart render threshold
@@ -90,8 +90,8 @@
   (define out (open-output-string))
   (render-smart! a b out #:sync? #f)
   (define result (get-output-string out))
-  ;; Full render starts with home cursor
-  (check-true (string-prefix? result "\x1b[H")))
+  ;; Full render contains home cursor (after wrap-disable)
+  (check-true (string-contains? result "\x1b[H")))
 
 (test-case "render-smart! uses delta render when < 50% changed"
   (define a (make-cell-buffer 10 5)) ; 50 cells
@@ -109,4 +109,4 @@
   (define out (open-output-string))
   (render-smart! #f buf out #:sync? #f)
   (define result (get-output-string out))
-  (check-true (string-prefix? result "\x1b[H")))
+  (check-true (string-contains? result "\x1b[H")))

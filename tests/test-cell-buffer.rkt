@@ -201,3 +201,45 @@
   (define elapsed (- (current-inexact-milliseconds) start))
   ;; Should complete in well under 100ms
   (check-true (< elapsed 100.0) (format "Buffer fill took ~ams (expected < 100ms)" elapsed)))
+
+;; ============================================================
+;; Snapshot
+;; ============================================================
+
+(test-case "cell-buffer-snapshot creates independent copy"
+  (define buf (make-cell-buffer 10 3))
+  (cell-buffer-set! buf 0 0 #:char #\H #:fg 2)
+  (cell-buffer-set! buf 1 0 #:char #\i #:fg 2)
+  (cell-buffer-set! buf 5 1 #:char #\X #:bold #t)
+  (define snap (cell-buffer-snapshot buf))
+  ;; Dimensions match
+  (check-equal? (cell-buffer-cols snap) 10)
+  (check-equal? (cell-buffer-rows snap) 3)
+  ;; Content matches
+  (check-equal? (cell-char (cell-buffer-ref snap 0 0)) #\H)
+  (check-equal? (cell-fg (cell-buffer-ref snap 0 0)) 2)
+  (check-equal? (cell-bold? (cell-buffer-ref snap 5 1)) #t)
+  ;; Snapshot is independent — mutating original does not affect snapshot
+  (cell-buffer-set! buf 0 0 #:char #\Z)
+  (check-equal? (cell-char (cell-buffer-ref snap 0 0)) #\H)
+  (check-equal? (cell-char (cell-buffer-ref buf 0 0)) #\Z))
+
+(test-case "cell-buffer-snapshot of empty buffer works"
+  (define buf (make-cell-buffer 5 2))
+  (define snap (cell-buffer-snapshot buf))
+  (for* ([r (in-range 2)]
+         [c (in-range 5)])
+    (check-equal? (cell-char (cell-buffer-ref snap c r)) #\space)))
+
+(test-case "snapshot of modified cell preserves all attributes"
+  (define buf (make-cell-buffer 3 1))
+  (cell-buffer-set! buf 1 0 #:char #\! #:fg 1 #:bg 4 #:bold #t #:underline #t #:italic #t #:blink #t)
+  (define snap (cell-buffer-snapshot buf))
+  (define cell (cell-buffer-ref snap 1 0))
+  (check-equal? (cell-char cell) #\!)
+  (check-equal? (cell-fg cell) 1)
+  (check-equal? (cell-bg cell) 4)
+  (check-true (cell-bold? cell))
+  (check-true (cell-underline? cell))
+  (check-true (cell-italic? cell))
+  (check-true (cell-blink? cell)))

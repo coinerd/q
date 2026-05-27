@@ -79,7 +79,7 @@
          make-paste-event
          paste-event?
 
-         ;; Raw message constructors (vectors, compatible with tui-term message API)
+         ;; Raw message constructors (vector-based message API)
          make-tkeymsg-raw
          make-tsizemsg-raw
          make-tmousemsg-raw
@@ -90,7 +90,7 @@
          tmousemsg-cx
          tmousemsg-cy
 
-         ;; UTF-8 support (compatibility stubs — tui-term handles UTF-8 internally)
+         ;; UTF-8 support (native stubs for UTF-8 byte handling)
          utf8-high-byte?
          utf8-lead-byte-count
          utf8-continuation-byte?
@@ -103,8 +103,7 @@
 ;; UTF-8 support (compatibility stubs)
 ;; ============================================================
 ;; These functions were used with charterm which required manual
-;; UTF-8 handling. tui-term handles UTF-8 internally, so these
-;; are provided as stubs for backward compatibility.
+;; UTF-8 handling. Provided as stubs for backward compatibility.
 
 ;; Check if a char represents a byte > 127 (UTF-8 lead or continuation)
 (define (utf8-high-byte? ch)
@@ -166,7 +165,7 @@
 ;; ============================================================
 ;; Raw message constructors (compatible with tkeymsg?/tsizemsg? predicates)
 ;; ============================================================
-;; When tui-term is unavailable, we use simple vectors as message structs.
+;; Vector-based message structs for terminal input events.
 
 (define (make-tkeymsg-raw key)
   (vector 'tkeymsg key))
@@ -616,10 +615,10 @@
            (make-tmousemsg-raw cb cx cy)])])]))
 
 ;; ============================================================
-;; Raw stdin reading (when tui-term is unavailable)
+;; Raw stdin reading
 ;; ============================================================
 
-;; Real stdin-based input when tui-term is unavailable.
+;; Native stdin-based input using buffered reading.
 ;; Uses buffered reading (Issue #409) for efficient stdin parsing.
 ;; Reads raw bytes from stdin, decodes ANSI escape sequences,
 ;; and returns tkeymsg/tsizemsg structs (as vectors).

@@ -80,11 +80,11 @@
 ;; Ubuf operations (parameterized for testability)
 ;; ============================================================
 
-;; Parameter for ubuf-clear! function
+;; Parameter for ubuf-clear! function (operates on cell-buffer)
 (define current-ubuf-clear (make-parameter (lambda (ubuf) (void))))
 
 ;; Parameter for ubuf-putstring! function
-;; Signature matches tui-ubuf: (ubuf x y str #:fg #:bg #:bold #:underline ...)
+;; Signature matches cell-buffer: (buf col row str #:fg #:bg #:bold #:underline ...)
 (define current-ubuf-putstring
   (make-parameter (lambda (ubuf
                            x

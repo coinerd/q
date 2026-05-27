@@ -99,11 +99,14 @@
   (define rows (cell-buffer-rows ubuf))
   (define out (tui-output-port))
   (terminal-sync-begin!)
+  ;; Disable auto-wrap to prevent last-column wrap glitch
+  (display "\x1b[?7l" out)
   ;; Move cursor to origin and clear screen
   (display "\x1b[H" out)
   (for ([row (in-range rows)])
     (when (> row 0)
-      (newline out))
+      ;; Use cursor positioning instead of newline to avoid wrap issues
+      (display (format "\x1b[~a;1H" (add1 row)) out))
     (define prev-fg #f)
     (define prev-bg #f)
     (define prev-bold? #f)
@@ -133,6 +136,8 @@
         (set! prev-underline? underline?))
       (display (string (cell-char cell)) out)))
   (display "\x1b[0m" out)
+  ;; Re-enable auto-wrap
+  (display "\x1b[?7h" out)
   (terminal-sync-end!))
 
 ;; ============================================================
@@ -172,18 +177,8 @@
   (unbox (tui-ctx-term-box ctx)))
 
 ;; ============================================================
-;; Frame rendering (ubuf-based)
+;; Frame rendering (cell-buffer-based)
 ;; ============================================================
-
-;; Deep copy a single cell vector
-(define (vector-copy-cell c)
-  (vector (vector-ref c 0)
-          (vector-ref c 1)
-          (vector-ref c 2)
-          (vector-ref c 3)
-          (vector-ref c 4)
-          (vector-ref c 5)
-          (vector-ref c 6)))
 
 ;; Render the complete frame to the terminal using ubuf.
 ;; Hides cursor during redraw to prevent flicker, shows after.
@@ -218,25 +213,7 @@
         (define out (tui-output-port))
         (render-smart! prev-ubuf ubuf out #:sync? #t)
         ;; Store snapshot for next diff
-        (define snapshot (make-cell-buffer (cell-buffer-cols ubuf) (cell-buffer-rows ubuf)))
-        (for* ([r (in-range (cell-buffer-rows ubuf))]
-               [c (in-range (cell-buffer-cols ubuf))])
-          (define idx (+ (* r (cell-buffer-cols ubuf)) c))
-          (vector-set! (cell-buffer-cells snapshot)
-                       idx
-                       ((lambda (v)
-                          (build-vector (vector-length v)
-                                        (lambda (i)
-                                          (let ([c (vector-ref v i)])
-                                            (vector (vector-ref c 0)
-                                                    (vector-ref c 1)
-                                                    (vector-ref c 2)
-                                                    (vector-ref c 3)
-                                                    (vector-ref c 4)
-                                                    (vector-ref c 5)
-                                                    (vector-ref c 6))))))
-                        (vector-ref (cell-buffer-cells ubuf) idx))))
-        (set-box! (tui-ctx-prev-ubuf-box ctx) snapshot))
+        (set-box! (tui-ctx-prev-ubuf-box ctx) (cell-buffer-snapshot ubuf)))
       ;; Row-level frame diff (fallback)
       (let ()
         (define prev-frame (unbox (tui-ctx-previous-frame-box ctx)))

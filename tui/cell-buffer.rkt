@@ -125,6 +125,32 @@
        (eq? (cell-blink? a) (cell-blink? b))))
 
 ;; ============================================================
+;; Snapshot — deep-copy all cells into a new buffer
+;; ============================================================
+
+;; Create an independent copy of the entire cell buffer.
+;; Each 7-element cell vector is shallow-copied (sufficient
+;; since cells contain only immutable scalars: char, int, bool).
+(define (cell-buffer-snapshot buf)
+  (define cols (cell-buffer-cols buf))
+  (define rows (cell-buffer-rows buf))
+  (define snap (make-cell-buffer cols rows))
+  (for* ([r (in-range rows)]
+         [c (in-range cols)])
+    (define idx (+ (* r cols) c))
+    (vector-set! (cell-buffer-cells snap)
+                 idx
+                 (let ([src (vector-ref (cell-buffer-cells buf) idx)])
+                   (vector (vector-ref src 0)
+                           (vector-ref src 1)
+                           (vector-ref src 2)
+                           (vector-ref src 3)
+                           (vector-ref src 4)
+                           (vector-ref src 5)
+                           (vector-ref src 6)))))
+  snap)
+
+;; ============================================================
 ;; Row helpers
 ;; ============================================================
 
@@ -194,6 +220,9 @@
 
          ;; Cell comparison
          cell-equal?
+
+         ;; Snapshot
+         cell-buffer-snapshot
 
          ;; Row helpers
          cell-buffer-row-string

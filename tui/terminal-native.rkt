@@ -3,7 +3,7 @@
 ;; q/tui/terminal-native.rkt — Native terminal I/O (no external dependencies)
 ;;
 ;; Provides all terminal control functions using direct ANSI escape sequences,
-;; stty commands, and native Racket I/O. No dynamic-require of tui-term.
+;; stty commands, and native Racket I/O.
 ;;
 ;; Replaces the former terminal-bridge.rkt dynamic-loading module.
 ;;

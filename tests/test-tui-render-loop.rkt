@@ -13,7 +13,10 @@
          "../tui/tui-render-loop.rkt"
          "../tui/tui-keybindings.rkt"
          "../tui/sgr.rkt"
-         "../tui/terminal.rkt")
+         "../tui/terminal.rkt"
+         "../tui/cell-buffer.rkt"
+         "../tui/cell-diff.rkt"
+         "../tui/cell-diff-render.rkt")
 
 (define test-tui-render-loop
   (test-suite "tui/tui-render-loop"
@@ -115,6 +118,41 @@
         (check-true (string-contains? output "\x1b[?2026h")
                     "sync begin escape present when supported")
         (check-true (string-contains? output "\x1b[?2026l")
-                    "sync end escape present when supported")))))
+                    "sync end escape present when supported")))
+
+    ;; --------------------------------------------------
+    ;; Test 7: Cell-diff snapshot integration
+    ;; --------------------------------------------------
+    (test-case "cell-buffer-snapshot produces independent copy for diffing"
+      ;; Simulates the snapshot logic in render-frame! cell-diff branch
+      (define buf (make-cell-buffer 20 5))
+      (cell-buffer-putstring! buf 0 0 "Hello" #:fg 2)
+      (cell-buffer-putstring! buf 0 1 "World" #:fg 3 #:bold #t)
+      ;; Snapshot (same as render-frame! does)
+      (define snap (cell-buffer-snapshot buf))
+      ;; Mutate original
+      (cell-buffer-putstring! buf 0 0 "XXXXX" #:fg 1)
+      ;; Snapshot should be unchanged
+      (check-equal? (cell-char (cell-buffer-ref snap 0 0)) #\H)
+      (check-equal? (cell-fg (cell-buffer-ref snap 0 0)) 2)
+      (check-equal? (cell-char (cell-buffer-ref buf 0 0)) #\X))
+
+    (test-case "cell-diff snapshot → diff → render produces output"
+      ;; End-to-end test of the cell-diff pipeline
+      (define prev (make-cell-buffer 10 3))
+      (cell-buffer-putstring! prev 0 0 "AAA" #:fg 1)
+      ;; Snapshot prev
+      (define snap (cell-buffer-snapshot prev))
+      ;; Mutate to create current
+      (cell-buffer-putstring! prev 0 0 "BBB" #:fg 2)
+      ;; Diff
+      (define deltas (diff-cell-buffers snap prev))
+      (check-true (> (length deltas) 0) "should detect changes")
+      ;; Render to string
+      (define out (open-output-string))
+      (render-smart! snap prev out #:sync? #t)
+      (define output (get-output-string out))
+      (check-true (> (string-length output) 0) "should produce output")
+      (check-not-false (string-contains? output "B") "should contain new character"))))
 
 (run-tests test-tui-render-loop)

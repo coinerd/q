@@ -1,4 +1,34 @@
 # Changelog
+## v0.60.6 — 2026-05-27
+
+### Native TUI Bugfix — Snapshot Crash + cmd-ctx Arity + Auto-wrap Glitch
+
+Fix critical TUI crash caused by erroneous double-nested cell-vector copy in the
+snapshot code, fix cmd-ctx arity mismatch that broke every slash command, and fix
+terminal auto-wrap glitch causing last-column line breaks.
+
+**W0 — Fix Snapshot Copy Bug**
+- Fix `vector-ref` contract violation in `tui-render-loop.rkt` snapshot code
+- Replace broken double-nested `build-vector` with canonical `cell-buffer-snapshot`
+
+**W0b — Fix cmd-ctx arity crash**
+- Remove stray `tui-ctx-previous-frame-box` accessor from `tui-ctx->cmd-ctx` (12→11 args)
+- Fixes all slash commands crashing at runtime
+
+**W1 — Extract cell-buffer-snapshot + Integration Tests**
+- Add `cell-buffer-snapshot` to `cell-buffer.rkt` — canonical deep-copy API
+- 3 snapshot tests + 2 cell-diff pipeline integration tests
+
+**W2 — Stale Comment Cleanup + Auto-wrap Fix**
+- Update 8 tui-term/tui-ubuf references across 4 source files
+- Disable terminal auto-wrap (DECAWM) during full-buffer render with `\x1b[?7l`/`\x1b[?7h`
+- Replace `newline` between rows with explicit cursor positioning
+- Prevents last-column character wrapping to next line
+
+**W3 — Version Bump + Gate**
+- Version 0.60.5 → 0.60.6
+- Fast suite: 571/572 (1 pre-existing doc freshness failure)
+
 ## v0.60.5 — 2026-05-27
 
 ### Native TUI Cleanup and Documentation
