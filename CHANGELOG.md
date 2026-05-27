@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.62.3 — 2026-05-28
+
+### Audit Findings Remediation
+
+Addresses 4 findings from independent audit of v0.61.8 + v0.62.x series:
+
+- **F1**: Wire `cycle-focus` to M-Tab (forward) and S-Tab (backward) keybindings
+  in `key-dispatch.rkt`. Focus cycling now works via keyboard.
+- **F2**: Shadow `scroll-offset` from `ui-state` into transcript component state
+  via `component-state-set!`, proving state persistence for scroll-relevant data.
+- **F3**: Rename test-tui-terminal.rkt suite from "TUI Terminal Adapter (tui-term)"
+  to "TUI Terminal (Native)". Remove stale tui-ubuf comments from test-tui-renderer.rkt.
+- **F4**: Fix architecture overview version drift (v0.62.1 → v0.62.3).
+
+Also fixes 13 pre-existing doc version drifts and info.rkt version (0.61.7 → 0.62.2).
+
 ## v0.62.2 — 2026-05-27
 
 ### HTML Render Backend + Architecture Validation
