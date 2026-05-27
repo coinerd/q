@@ -31,7 +31,8 @@
          "../tui/cell-diff-render.rkt"
          "../tui/vdom-render.rkt"
          (prefix-in vdom-comp: "../tui/vdom-components.rkt")
-         (only-in "../tui/component.rkt" q-component-render-fn)
+         (only-in "../tui/component.rkt" q-component-render-fn component-render component-invalidate!)
+         (only-in "../tui/context.rkt" tui-ctx-component-registry-box)
          (only-in "../tui/render.rkt"
                   render-transcript
                   render-status-bar
@@ -69,14 +70,12 @@
                        [render-frame! (-> tui-ctx? void?)]
                        [draw-frame (-> tui-ctx? void?)]
                        [render-frame-vdom!
-                        (-> any/c
-                            ui-state?
-                            input-state?
-                            hash?
-                            (values exact-nonnegative-integer?
-                                    exact-nonnegative-integer?
-                                    ui-state?
-                                    (listof string?)))]
+                        (->* (any/c ui-state? input-state? hash?)
+                             (#:component-registry (or/c (hash/c symbol? any/c) #f))
+                             (values exact-nonnegative-integer?
+                                     exact-nonnegative-integer?
+                                     ui-state?
+                                     (listof string?)))]
                        [next-message (->* (tui-ctx?) (#:timeout number?) (or/c any/c #f))]
                        [tui-main-loop (-> tui-ctx? void?)]
                        [drain-events! (-> tui-ctx? void?)])
@@ -138,7 +137,7 @@
 ;; Render the complete frame to the terminal using ubuf.
 ;; Hides cursor during redraw to prevent flicker, shows after.
 ;; Clears needs-redraw flag after drawing.
-(define (render-frame-vdom! ubuf ui-state input-st layout)
+(define (render-frame-vdom! ubuf ui-state input-st layout #:component-registry [comp-registry #f])
   ;; Render a complete frame using the vdom pipeline.
   (define header-region (layout-header layout))
   (define transcript-region (layout-transcript layout))
@@ -151,13 +150,19 @@
   (define status-y (layout-region-y input-region))
   (define input-y (min (sub1 rows) (add1 status-y)))
 
+  ;; Get component from registry (if available) or create ephemeral
+  (define (get-comp id make-fn)
+    (if comp-registry
+        (hash-ref comp-registry id (lambda () (make-fn)))
+        (make-fn)))
+
   ;; 1. Clear the buffer
   (cell-buffer-clear! ubuf)
 
   ;; 2. Draw header row via vdom component
   (when header-row
-    (define header-comp (vdom-comp:make-header-vdom-component))
-    (define header-vnodes ((q-component-render-fn header-comp) ui-state cols))
+    (define header-comp (get-comp 'header-vdom vdom-comp:make-header-vdom-component))
+    (define header-vnodes (component-render header-comp ui-state cols))
     (render-vdom-section-to-buffer! header-vnodes ubuf cols header-row 1))
 
   ;; 3. Render transcript → styled-lines → vnodes → cell-buffer
@@ -202,13 +207,13 @@
         (render-vdom-to-buffer! vn ubuf cols #:start-row widget-y))))
 
   ;; 5. Draw status bar via vdom component
-  (define status-comp (vdom-comp:make-status-bar-vdom-component))
-  (define status-vnodes ((q-component-render-fn status-comp) ui-state cols))
+  (define status-comp (get-comp 'status-bar-vdom vdom-comp:make-status-bar-vdom-component))
+  (define status-vnodes (component-render status-comp ui-state cols))
   (render-vdom-section-to-buffer! status-vnodes ubuf cols status-y 1)
 
   ;; 6. Draw input line via vdom component
   (define input-comp (vdom-comp:make-input-vdom-component/istate input-st))
-  (define input-vnodes ((q-component-render-fn input-comp) ui-state cols))
+  (define input-vnodes (component-render input-comp ui-state cols))
   (render-vdom-section-to-buffer! input-vnodes ubuf cols input-y 1)
 
   ;; 7. Draw overlay if active (via vdom section renderer)
@@ -250,9 +255,19 @@
                     #:widget-bar-h (length widget-lines)
                     #:has-widgets? (positive? (length widget-lines))))
 
+  ;; Initialize component registry on first render
+  (define reg-box (tui-ctx-component-registry-box ctx))
+  (when (not (unbox reg-box))
+    (set-box! reg-box
+              (hash 'header-vdom
+                    (vdom-comp:make-header-vdom-component)
+                    'status-bar-vdom
+                    (vdom-comp:make-status-bar-vdom-component))))
+  (define comp-registry (unbox reg-box))
+
   ;; Render to ubuf — always use vdom path
   (define-values (cursor-col cursor-row state* frame-lines)
-    (render-frame-vdom! ubuf state inp layout))
+    (render-frame-vdom! ubuf state inp layout #:component-registry comp-registry))
 
   ;; Write back state with updated render cache
   (set-box! (tui-ctx-ui-state-box ctx) state*)

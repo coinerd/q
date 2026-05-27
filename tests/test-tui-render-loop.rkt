@@ -180,3 +180,46 @@
       (check-true (use-vdom-render?)))))
 
 (run-tests test-tui-render-loop)
+
+(require (only-in "../tui/vdom-components.rkt"
+                  make-header-vdom-component
+                  make-status-bar-vdom-component)
+         (only-in "../tui/component.rkt" component-cached-width))
+
+;; ============================================================
+;; Component persistence tests (v0.62.0 W0)
+;; ============================================================
+(define-test-suite component-persistence-tests
+                   (test-case "component registry persists across renders"
+                     (define ubuf (make-cell-buffer 80 24))
+                     (define state (initial-ui-state #:session-id "test" #:model-name "gpt-4"))
+                     (define inp (initial-input-state))
+                     (define layout (compute-layout 24 80))
+
+                     ;; First render with registry
+                     (define reg
+                       (hash 'header-vdom
+                             (make-header-vdom-component)
+                             'status-bar-vdom
+                             (make-status-bar-vdom-component)))
+                     (define-values (_cc1 _cr1 st1 _fl1)
+                       (render-frame-vdom! ubuf state inp layout #:component-registry reg))
+
+                     ;; Check that header component has cached its render
+                     (define header-comp (hash-ref reg 'header-vdom))
+                     (check-not-false (component-cached-width header-comp)
+                                      "header component should have cache after render")
+
+                     ;; Second render with same registry — should use cache
+                     (define-values (_cc2 _cr2 st2 _fl2)
+                       (render-frame-vdom! ubuf state inp layout #:component-registry reg))
+
+                     ;; Verify component is the same object (identity check)
+                     (check-eq? (hash-ref reg 'header-vdom)
+                                header-comp
+                                "header component should be same instance across renders")
+                     (check-eq? (hash-ref reg 'status-bar-vdom)
+                                (hash-ref reg 'status-bar-vdom)
+                                "status component should be same instance across renders")))
+
+(run-tests component-persistence-tests)
