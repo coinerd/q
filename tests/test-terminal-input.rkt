@@ -195,12 +195,12 @@
     (check-equal? (vector-ref result 0) 'tkeymsg)
     (check-equal? (vector-ref result 1) 'escape)))
 
-(test-case "stub-byte-ready? works on string port"
+(test-case "default-byte-ready? works on string port"
   (define in (open-input-string ""))
   (parameterize ([current-input-port in])
     ;; char-ready? on an empty string port returns #t (EOF is ready)
     ;; This just checks the function doesn't crash
-    (check-true (boolean? (stub-byte-ready?)))))
+    (check-true (boolean? (default-byte-ready?)))))
 
 ;; ============================================================
 ;; CSI modifier handling (#422)

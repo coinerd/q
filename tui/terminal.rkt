@@ -147,7 +147,7 @@
 
 (define read-msg (or read-msg-fn real-stdin-read-msg))
 
-(define byte-ready? (or byte-ready-fn stub-byte-ready?))
+(define byte-ready? (or byte-ready-fn default-byte-ready?))
 
 ;; ============================================================
 ;; Lifecycle

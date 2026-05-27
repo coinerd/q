@@ -45,7 +45,7 @@
           ;; Mouse event support
           [parse-mouse-event (-> any/c any/c)]
           [decode-mouse-x10 (-> exact-integer? exact-integer? exact-integer? any/c)]
-          [decode-mouse-tui-term (-> any/c any/c)]
+          [decode-mouse-message (-> any/c any/c)]
           [normalize-selection-range
            (-> any/c any/c (values exact-integer? exact-integer? exact-integer? exact-integer?))]
           ;; IME cursor markers
@@ -183,8 +183,8 @@
     [(and (<= button 2) (not motion?)) (list 'mouse 'click button x y)]
     [else #f]))
 
-;; Decode a tui-term tmousemsg struct into q's internal mouse event format.
-(define (decode-mouse-tui-term msg)
+;; Decode a native tmousemsg into q's internal mouse event format.
+(define (decode-mouse-message msg)
   (with-safe-fallback #f
                       (define kind (tmousemsg-kind msg))
                       (define x (tmousemsg-pos-x msg))
