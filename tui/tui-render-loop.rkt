@@ -72,6 +72,15 @@
                        [tui-ctx-term (-> tui-ctx? any/c)]
                        [render-frame! (-> tui-ctx? void?)]
                        [draw-frame (-> tui-ctx? void?)]
+                       [render-frame-vdom!
+                        (-> any/c
+                            ui-state?
+                            input-state?
+                            hash?
+                            (values exact-nonnegative-integer?
+                                    exact-nonnegative-integer?
+                                    ui-state?
+                                    (listof string?)))]
                        [next-message (->* (tui-ctx?) (#:timeout number?) (or/c any/c #f))]
                        [tui-main-loop (-> tui-ctx? void?)]
                        [drain-events! (-> tui-ctx? void?)])
