@@ -189,11 +189,10 @@
       (load-extension! ext-reg gsd-ext-path)
 
       (define result
-        (run-workflow
-         (make-scripted-provider (list (hash 'role 'assistant 'content "Done." 'tool_calls (list))))
-         "Hello with planning"
-         #:extension-registry ext-reg
-         #:max-iterations 3))
+        (run-workflow (make-scripted-provider (list (text-response "Done.")))
+                      "Hello with planning"
+                      #:extension-registry ext-reg
+                      #:max-iterations 3))
 
       (check-not-false (workflow-result-output result))
       (check-true (file-exists? (workflow-result-session-log result)) "Session log should exist"))))
