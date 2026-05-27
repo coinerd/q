@@ -277,6 +277,9 @@
                            ov-content)])
         ov-lines)))
 
+;; Legacy frame render using frame-vec (ANSI string buffer).
+;; Used by parity tests and render integration tests.
+;; Production code uses render-frame-vdom! in tui-render-loop.rkt.
 (define (render-frame! ubuf ui-state input-st layout)
   (define header-region (layout-header layout))
   (define transcript-region (layout-transcript layout))
