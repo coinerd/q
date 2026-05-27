@@ -161,6 +161,9 @@
     (render-vdom-section-to-buffer! header-vnodes ubuf cols header-row 1))
 
   ;; 3. Render transcript → styled-lines → vnodes → cell-buffer
+  ;; NOTE: Direct render-transcript call is required because it returns (values styled-lines ui-state*)
+  ;; where ui-state* carries the updated render cache. The transcript vdom component wrapper
+  ;; (make-transcript-vdom-component) discards this state, so it can only be used in test scenarios.
   (define-values (trans-lines-raw ui-state*) (render-transcript ui-state transcript-height cols))
   (define visible-lines-raw
     (if (> (length trans-lines-raw) transcript-height)
