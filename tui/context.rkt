@@ -31,7 +31,8 @@
          extension-registry-box ; (or/c (boxof (or/c extension-registry? #f)) #f)
          session-queue-box ; (boxof (or/c queue? #f)) — agent queue for followup during streaming (G3.1)
          session-factory-runner ; (or/c (string -> void) #f) — creates fresh session for /go
-         component-registry-box) ; (boxof (or/c (hash/c symbol? q-component?) #f)) — persistent components
+         component-registry-box ; (boxof (or/c (hash/c symbol? q-component?) #f)) — persistent components
+         focused-component-id-box) ; (boxof (or/c symbol? #f)) — currently focused component
   #:transparent)
 
 (define (make-tui-ctx #:event-bus [bus #f]
@@ -58,11 +59,20 @@
            (box ext-reg) ; extension-registry-box
            (box sess-queue) ; session-queue-box
            factory
-           (box #f))) ; component-registry-box - lazy init on first render
+           (box #f) ; component-registry-box - lazy init on first render
+           (box #f))) ; focused-component-id-box - no component focused initially
 
 ;; Mark that the frame needs redraw.
 (define (mark-dirty! ctx)
   (set-box! (tui-ctx-needs-redraw-box ctx) #t))
+
+;; Get the currently focused component id (or #f if none).
+(define (tui-ctx-focused-component-id ctx)
+  (unbox (tui-ctx-focused-component-id-box ctx)))
+
+;; Set the focused component id.
+(define (tui-ctx-set-focused-component! ctx id)
+  (set-box! (tui-ctx-focused-component-id-box ctx) id))
 
 (provide tui-ctx
          tui-ctx?
@@ -84,6 +94,7 @@
          tui-ctx-session-queue-box
          tui-ctx-session-factory-runner
          tui-ctx-component-registry-box
+         tui-ctx-focused-component-id-box
          (contract-out [make-tui-ctx
                         (->* ()
                              (#:event-bus (or/c event-bus? #f)
@@ -94,4 +105,6 @@
                                           #:session-queue any/c
                                           #:session-factory-runner any/c)
                              tui-ctx?)]
-                       [mark-dirty! (-> tui-ctx? void?)]))
+                       [mark-dirty! (-> tui-ctx? void?)]
+                       [tui-ctx-focused-component-id (-> tui-ctx? (or/c symbol? #f))]
+                       [tui-ctx-set-focused-component! (-> tui-ctx? (or/c symbol? #f) void?)]))

@@ -6,7 +6,11 @@
          rackunit/text-ui
          "../tui/component.rkt"
          "../tui/state.rkt"
-         "../tui/vdom.rkt")
+         "../tui/vdom.rkt"
+         (only-in "../tui/context.rkt"
+                  make-tui-ctx
+                  tui-ctx-focused-component-id
+                  tui-ctx-set-focused-component!))
 
 (define-test-suite
  test-component-model
@@ -183,6 +187,18 @@
   (check-equal? (component-state-ref comp 'scroll) 2)
   ;; Cache hit on same width — state unchanged (no re-render)
   (define r3 (component-render comp (initial-ui-state) 40))
+  (check-equal? (component-state-ref comp 'scroll) 2)
   (check-equal? (component-state-ref comp 'scroll) 2))
+(define-test-suite focus-tracking-tests
+                   (test-case "tui-ctx focus tracking starts as #f"
+                     (define ctx (make-tui-ctx))
+                     (check-false (tui-ctx-focused-component-id ctx)))
+                   (test-case "tui-ctx set and get focused component"
+                     (define ctx (make-tui-ctx))
+                     (tui-ctx-set-focused-component! ctx 'input-vdom)
+                     (check-equal? (tui-ctx-focused-component-id ctx) 'input-vdom)
+                     (tui-ctx-set-focused-component! ctx #f)
+                     (check-false (tui-ctx-focused-component-id ctx))))
 
+(run-tests focus-tracking-tests)
 (run-tests test-component-model)
