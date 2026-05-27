@@ -11,11 +11,6 @@
          "../tui/terminal-native.rkt")
 
 ;; ============================================================
-;; tui-term-available? is always #f (native-only)
-;; ============================================================
-
-(test-case "tui-term-available? is #f (native-only)"
-  (check-false tui-term-available?))
 
 ;; ============================================================
 ;; make-tty-term returns a value
@@ -115,9 +110,6 @@
 ;; ============================================================
 ;; Mouse message accessors
 ;; ============================================================
-
-(test-case "tmousemsg-tui-term? is always #f"
-  (check-false (tmousemsg-tui-term? (vector 'tmousemsg 'press 10 20 #t #f #f))))
 
 (test-case "tmousemsg-kind extracts kind from vector"
   (define msg (vector 'tmousemsg 'press 10 20 #t #f #f))

@@ -42,7 +42,6 @@
          tcmdmsg-cmd
 
          ;; Mouse message accessors
-         tmousemsg-tui-term?
          tmousemsg-kind
          tmousemsg-pos-x
          tmousemsg-pos-y
@@ -50,19 +49,13 @@
          tmousemsg-middle?
          tmousemsg-right?
 
-         ;; Legacy compat (always #f — no tui-term)
-         tui-term-available?
          read-msg-fn
          byte-ready-fn)
 
 ;; ============================================================
-;; Compatibility constants (always native, no tui-term)
+;; Compatibility (native-only, no external packages)
 ;; ============================================================
 
-;; Always #f — tui-term is never used
-(define tui-term-available? #f)
-
-;; No tui-term message functions available
 (define read-msg-fn #f)
 (define byte-ready-fn #f)
 
@@ -160,11 +153,6 @@
 ;; Mouse message accessors (native)
 ;; ============================================================
 ;; Native mouse messages are vectors: #(tmousemsg kind x y left? middle? right?)
-;; tui-term struct-based mouse messages are no longer supported.
-
-(define (tmousemsg-tui-term? msg)
-  ;; Always #f — no tui-term structs in native mode
-  #f)
 
 (define (tmousemsg-kind msg)
   (if (and (vector? msg) (> (vector-length msg) 1) (eq? (vector-ref msg 0) 'tmousemsg))
