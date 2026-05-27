@@ -27,7 +27,8 @@
          check-git-clean
          check-main-branch
          check-gate-evidence
-         required-gate-suites)
+         required-gate-suites
+         parse-argv)
 
 (require racket/file
          racket/string
@@ -192,27 +193,49 @@
 ;; Main
 ;; ---------------------------------------------------------------------------
 
+(define (parse-argv argv)
+  (define strict? (member "--strict" argv))
+  (define context-idx (index-of argv "--context"))
+  (define context
+    (if context-idx
+        (let ([next (and (< context-idx (sub1 (length argv))) (list-ref argv (add1 context-idx)))])
+          (if (member next '("pre-tag" "tag-publish"))
+              (string->symbol next)
+              #f))
+        #f))
+  (values strict? context))
+
 (define (main)
   (define argv (vector->list (current-command-line-arguments)))
-  (define strict? (member "--strict" argv))
+  (define-values (strict? context) (parse-argv argv))
 
   (unless (file-exists? "util/version.rkt")
     (displayln "ERROR: Run from q/ project root (util/version.rkt not found)")
     (exit 1))
 
+  (when (and strict? context (not (member context '(pre-tag tag-publish))))
+    (displayln "ERROR: --context must be 'pre-tag' or 'tag-publish'")
+    (exit 1))
+
   (define ver (get-canonical-version))
-  (printf "~n── Release Readiness Check (v~a) ~a──~n" ver (if strict? "[STRICT] " ""))
+  (define context-label
+    (cond
+      [(not strict?) ""]
+      [context (format "[~a] " context)]
+      [else "[STRICT] "]))
+  (printf "~n── Release Readiness Check (v~a) ~a──~n" ver context-label)
 
   (define base-results
     (list (check-version-sync) (check-changelog-entry) (check-git-clean) (check-main-branch)))
 
-  ;; Tag check: only fail in strict/release mode (not ordinary dev lint)
+  ;; Tag check: only in pre-tag context (not tag-publish, not dev)
+  ;; tag-publish context: tag already exists by design
   (define tag-result
-    (if strict?
-        (check-tag-unique)
-        #t))
+    (cond
+      [(and strict? (or (not context) (eq? context 'pre-tag))) (check-tag-unique)]
+      [else #t]))
 
-  ;; Gate evidence: only in strict mode
+  ;; Gate evidence: in strict mode only
   (define gate-result
     (if strict?
         (check-gate-evidence)
