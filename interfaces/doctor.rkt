@@ -265,48 +265,9 @@
 ;; ============================================================
 
 (define (check-tui-packages)
-  ;; q uses tui-term and tui-ubuf as optional TUI backends.
-  ;; They may be installed but fail to compile on some Racket versions.
-  ;; Use dynamic-require for pkg/lib to avoid hard dependency.
-  (define table
-    (with-handlers ([exn:fail? (λ (e)
-                                 (log-warning "doctor: failed to load pkg-table: ~a" (exn-message e))
-                                 #f)])
-      ((dynamic-require 'pkg/lib 'installed-pkg-table))))
-  (define (pkg-installed? name)
-    (and table (hash-has-key? table name)))
-  (define (mod-loadable? mod-path)
-    (with-handlers ([exn:fail?
-                     (λ (e)
-                       (log-warning "doctor: module ~a not loadable: ~a" mod-path (exn-message e))
-                       #f)])
-      (dynamic-require mod-path #f)
-      #t))
-  (define tui-term-installed? (pkg-installed? "tui-term"))
-  (define tui-ubuf-installed? (pkg-installed? "tui-ubuf"))
-  (define tui-term-loadable? (mod-loadable? 'tui-term))
-  (define tui-ubuf-loadable? (mod-loadable? 'tui-ubuf))
-  (cond
-    [(and tui-term-loadable? tui-ubuf-loadable?)
-     (check-result "TUI" 'ok "tui-term + tui-ubuf available")]
-    [(and tui-term-installed? tui-ubuf-installed? (not tui-term-loadable?) (not tui-ubuf-loadable?))
-     (check-result "TUI" 'warning "tui-term + tui-ubuf installed but broken (may need newer Racket)")]
-    [(or tui-term-loadable? tui-ubuf-loadable?)
-     (check-result "TUI"
-                   'warning
-                   (format "~a loadable, ~anot — TUI may be degraded"
-                           (if tui-term-loadable? "tui-term" "")
-                           (if tui-ubuf-loadable? "tui-ubuf " "tui-term ")))]
-    [(or tui-term-installed? tui-ubuf-installed?)
-     (check-result "TUI"
-                   'warning
-                   (format "~a installed but broken (may need newer Racket)"
-                           (if tui-term-installed? "tui-term" "tui-ubuf")))]
-    [else
-     (check-result
-      "TUI"
-      'warning
-      "tui-term/tui-ubuf not installed — TUI mode will not work (raco pkg install tui-term tui-ubuf)")]))
+  ;; q now uses native TUI — no external tui-term/tui-ubuf required.
+  ;; Check if they're still installed (informational only).
+  (check-result "TUI" 'ok "native terminal I/O (no external packages needed)"))
 
 ;; ============================================================
 ;; run-doctor — main entry point
