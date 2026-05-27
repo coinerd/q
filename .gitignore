@@ -4,6 +4,7 @@ compiled/
 *.dep
 *.rktd
 !docs/architecture/*.rktd
+!runtime/providers.rktd
 
 # Coverage reports
 coverage/
