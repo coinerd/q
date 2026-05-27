@@ -183,43 +183,74 @@
 
 (require (only-in "../tui/vdom-components.rkt"
                   make-header-vdom-component
-                  make-status-bar-vdom-component)
-         (only-in "../tui/component.rkt" component-cached-width))
+                  make-status-bar-vdom-component
+                  make-transcript-vdom-component)
+         (only-in "../tui/component.rkt" component-cached-width component-state-ref))
 
 ;; ============================================================
 ;; Component persistence tests (v0.62.0 W0)
 ;; ============================================================
-(define-test-suite component-persistence-tests
-                   (test-case "component registry persists across renders"
-                     (define ubuf (make-cell-buffer 80 24))
-                     (define state (initial-ui-state #:session-id "test" #:model-name "gpt-4"))
-                     (define inp (initial-input-state))
-                     (define layout (compute-layout 24 80))
+(define-test-suite
+ component-persistence-tests
+ (test-case "component registry persists across renders"
+   (define ubuf (make-cell-buffer 80 24))
+   (define state (initial-ui-state #:session-id "test" #:model-name "gpt-4"))
+   (define inp (initial-input-state))
+   (define layout (compute-layout 24 80))
 
-                     ;; First render with registry
-                     (define reg
-                       (hash 'header-vdom
-                             (make-header-vdom-component)
-                             'status-bar-vdom
-                             (make-status-bar-vdom-component)))
-                     (define-values (_cc1 _cr1 st1 _fl1)
-                       (render-frame-vdom! ubuf state inp layout #:component-registry reg))
+   ;; First render with registry
+   (define hdr-c (make-header-vdom-component))
+   (define sts-c (make-status-bar-vdom-component))
+   (define reg (make-hash (list (cons 'header-vdom hdr-c) (cons 'status-bar-vdom sts-c))))
+   (define-values (_cc1 _cr1 st1 _fl1)
+     (render-frame-vdom! ubuf state inp layout #:component-registry reg))
 
-                     ;; Check that header component has cached its render
-                     (define header-comp (hash-ref reg 'header-vdom))
-                     (check-not-false (component-cached-width header-comp)
-                                      "header component should have cache after render")
+   ;; Check that header component has cached its render
+   (define header-comp (hash-ref reg 'header-vdom))
+   (check-not-false (component-cached-width header-comp)
+                    "header component should have cache after render")
 
-                     ;; Second render with same registry — should use cache
-                     (define-values (_cc2 _cr2 st2 _fl2)
-                       (render-frame-vdom! ubuf state inp layout #:component-registry reg))
+   ;; Second render with same registry — should use cache
+   (define-values (_cc2 _cr2 st2 _fl2)
+     (render-frame-vdom! ubuf state inp layout #:component-registry reg))
 
-                     ;; Verify component is the same object (identity check)
-                     (check-eq? (hash-ref reg 'header-vdom)
-                                header-comp
-                                "header component should be same instance across renders")
-                     (check-eq? (hash-ref reg 'status-bar-vdom)
-                                (hash-ref reg 'status-bar-vdom)
-                                "status component should be same instance across renders")))
+   ;; Verify component is the same object (identity check)
+   (check-eq? (hash-ref reg 'header-vdom)
+              header-comp
+              "header component should be same instance across renders")
+   (check-eq? (hash-ref reg 'status-bar-vdom)
+              (hash-ref reg 'status-bar-vdom)
+              "status component should be same instance across renders"))
+ (test-case "transcript component state persists across frames"
+   (define ubuf (make-cell-buffer 80 24))
+   (define state (initial-ui-state #:session-id "test" #:model-name "gpt-4"))
+   (define inp (initial-input-state))
+   (define layout (compute-layout 24 80))
+
+   ;; Registry includes transcript component
+   (define hdr-c2 (make-header-vdom-component))
+   (define sts-c2 (make-status-bar-vdom-component))
+   (define trn-c (make-transcript-vdom-component))
+   (define reg
+     (make-hash
+      (list (cons 'header-vdom hdr-c2) (cons 'status-bar-vdom sts-c2) (cons 'transcript-vdom trn-c))))
+   (define trans-comp (hash-ref reg 'transcript-vdom))
+
+   ;; First render
+   (render-frame-vdom! ubuf state inp layout #:component-registry reg)
+   (define count-1 (component-state-ref trans-comp 'render-count 0))
+   (check-equal? count-1 1 "render-count should be 1 after first render")
+   (check-equal? (component-state-ref trans-comp 'last-width 0) 80 "last-width should be 80")
+
+   ;; Second render
+   (render-frame-vdom! ubuf state inp layout #:component-registry reg)
+   (define count-2 (component-state-ref trans-comp 'render-count 0))
+   (check-equal? count-2 2 "render-count should be 2 after second render")
+
+   ;; Third render — state continues to accumulate
+   (render-frame-vdom! ubuf state inp layout #:component-registry reg)
+   (check-equal? (component-state-ref trans-comp 'render-count 0)
+                 3
+                 "render-count should be 3 after third render")))
 
 (run-tests component-persistence-tests)

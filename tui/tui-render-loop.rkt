@@ -31,7 +31,12 @@
          "../tui/cell-diff-render.rkt"
          "../tui/vdom-render.rkt"
          (prefix-in vdom-comp: "../tui/vdom-components.rkt")
-         (only-in "../tui/component.rkt" q-component-render-fn component-render component-invalidate!)
+         (only-in "../tui/component.rkt"
+                  q-component-render-fn
+                  component-render
+                  component-invalidate!
+                  component-state-ref
+                  component-state-set!)
          (only-in "../tui/context.rkt" tui-ctx-component-registry-box)
          (only-in "../tui/render.rkt"
                   render-transcript
@@ -169,6 +174,15 @@
   ;; NOTE: Direct render-transcript call is required because it returns (values styled-lines ui-state*)
   ;; where ui-state* carries the updated render cache. The transcript vdom component wrapper
   ;; (make-transcript-vdom-component) discards this state, so it can only be used in test scenarios.
+  ;; However, the registered transcript component's state-box is used for frame-level metadata.
+  (define trans-comp (and comp-registry (hash-ref comp-registry 'transcript-vdom #f)))
+  (define trans-frame-count
+    (if trans-comp
+        (add1 (component-state-ref trans-comp 'render-count 0))
+        1))
+  (when trans-comp
+    (component-state-set! trans-comp 'render-count trans-frame-count)
+    (component-state-set! trans-comp 'last-width cols))
   (define-values (trans-lines-raw ui-state*) (render-transcript ui-state transcript-height cols))
   (define visible-lines-raw
     (if (> (length trans-lines-raw) transcript-height)
@@ -262,7 +276,9 @@
               (hash 'header-vdom
                     (vdom-comp:make-header-vdom-component)
                     'status-bar-vdom
-                    (vdom-comp:make-status-bar-vdom-component))))
+                    (vdom-comp:make-status-bar-vdom-component)
+                    'transcript-vdom
+                    (vdom-comp:make-transcript-vdom-component))))
   (define comp-registry (unbox reg-box))
 
   ;; Render to ubuf — always use vdom path
