@@ -2,7 +2,7 @@
 
 ## Version
 
-v0.62.0
+v0.62.1
 
 ## Native TUI Stack
 
@@ -31,25 +31,37 @@ Key files: `tui/terminal-native.rkt`, `tui/cell-buffer.rkt`, `tui/cell-diff.rkt`
 
 ### Render Pipeline (since v0.61.5)
 
-The TUI uses a fully vdom-mediated render path. All sections go through
-the component → vnode → buffer pipeline (since v0.61.5):
+The TUI uses a fully vdom-mediated, multi-backend render path. Components persist
+across frames with local state, and the same vdom output can target multiple backends.
 
 ```
 ui-state → render-frame-vdom!
-              ├── Header    → component → vnodes → render-vdom-section-to-buffer!
-              ├── Status    → component → vnodes → render-vdom-section-to-buffer!
-              ├── Input     → component → vnodes → render-vdom-section-to-buffer!
-              ├── Transcript → render-transcript → styled-lines → styled-lines->vnodes
-              │               → render-vdom-section-to-buffer!  (ui-state cache preserved)
-              ├── Overlay   → styled-lines → styled-lines->vnodes → render-vdom-section-to-buffer!
-              └── Widgets   → render-vdom-to-buffer! (per vnode)
+              ├── Header    → component (cached) → vnodes
+              ├── Status    → component (cached) → vnodes
+              ├── Input     → component → vnodes
+              ├── Transcript → render-transcript → styled-lines
+              ├── Overlay   → styled-lines
+              └── Widgets   → vnodes
          ↓
-      cell-buffer (new frame)
+      vdom-layout → styled-lines
          ↓
-      diff-cell-buffers (prev vs new) → deltas
-         ↓
-      render-smart! → batched ANSI output (terminal)
+         ├── cell-buffer (terminal)
+         │     ↓ diff → deltas → batched ANSI output
+         │
+         └── html-render (HTML/CSS)
+               ↓ HTML string (web preview)
+               └── (future: gui-easy native widgets)
 ```
+
+Component lifecycle (since v0.62.0):
+- Components created once, stored in `tui-ctx-component-registry-box`
+- `component-render` uses cache (invalidates on width/state change)
+- `component-state-ref/set!` for per-component local state
+
+Key dispatch (since v0.62.1):
+- `focused-component-id-box` on `tui-ctx` tracks which component receives keys
+- `handle-key` checks focused component first, falls back to keymap
+- Opt-in via `wants-focus? #t` + `handle-input-fn`
 
 Zero direct `render-styled-line-to-buffer!` calls in production path.
 Transcript retains direct `render-transcript` call for ui-state render cache side effect.
