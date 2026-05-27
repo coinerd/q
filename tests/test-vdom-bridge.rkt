@@ -82,9 +82,9 @@
 ;; use-vdom-render? parameter
 ;; ============================================================
 
-(test-case "use-vdom-render? parameter default is #f"
-  (check-false (use-vdom-render?)))
+(test-case "use-vdom-render? parameter default is #t"
+  (check-true (use-vdom-render?)))
 
 (test-case "use-vdom-render? can be set"
-  (parameterize ([use-vdom-render? #t])
-    (check-true (use-vdom-render?))))
+  (parameterize ([use-vdom-render? #f])
+    (check-false (use-vdom-render?))))

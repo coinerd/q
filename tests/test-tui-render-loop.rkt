@@ -16,7 +16,11 @@
          "../tui/terminal.rkt"
          "../tui/cell-buffer.rkt"
          "../tui/cell-diff.rkt"
-         "../tui/cell-diff-render.rkt")
+         "../tui/cell-diff-render.rkt"
+         "../tui/state.rkt"
+         "../tui/input.rkt"
+         "../tui/layout.rkt"
+         "../tui/vdom-bridge.rkt")
 
 (define test-tui-render-loop
   (test-suite "tui/tui-render-loop"
@@ -153,6 +157,26 @@
       (render-smart! snap prev out #:sync? #t)
       (define output (get-output-string out))
       (check-true (> (string-length output) 0) "should produce output")
-      (check-not-false (string-contains? output "B") "should contain new character"))))
+      (check-not-false (string-contains? output "B") "should contain new character"))
+
+    ;; ============================================================
+    ;; Legacy path removal tests
+    ;; ============================================================
+
+    (test-case "render-frame-vdom! is the only render path"
+      ;; Verify render-frame-vdom! works correctly as sole render path
+      (define ubuf (make-cell-buffer 80 24))
+      (define st (initial-ui-state))
+      (define inp (initial-input-state))
+      (define layout (compute-layout 24 80))
+      (define-values (cursor-col cursor-row st* frame-lines) (render-frame-vdom! ubuf st inp layout))
+      (check-true (exact-nonnegative-integer? cursor-col))
+      (check-true (exact-nonnegative-integer? cursor-row))
+      (check-true (ui-state? st*))
+      ;; frame-lines is now always empty (legacy removed)
+      (check-equal? frame-lines '()))
+
+    (test-case "use-vdom-render? defaults to #t"
+      (check-true (use-vdom-render?)))))
 
 (run-tests test-tui-render-loop)
