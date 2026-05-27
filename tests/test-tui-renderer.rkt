@@ -22,10 +22,10 @@
 ;; ============================================================
 
 ;; A mock cell holding character and style attributes
-;; Matches tui-ubuf: fg/bg as integers, bold, underline
+;; Matches cell-buffer: fg/bg as integers, bold, underline
 (struct mock-cell (char bold underline fg bg) #:transparent #:mutable)
 
-;; Create an empty cell (default fg=7, bg=0 like tui-ubuf)
+;; Create an empty cell (default fg=7, bg=0)
 (define (make-empty-cell)
   (mock-cell #\space #f #f 7 0))
 
@@ -64,7 +64,7 @@
     (mock-ubuf-set-cell! ubuf col row #\space #f #f 7 0)))
 
 ;; Put a string to the mock ubuf
-;; Matches real tui-ubuf signature exactly:
+;; Matches cell-buffer signature exactly:
 ;;   (ubuf x y str #:fg [7] #:bg [0] #:bold [#f] #:underline [#f] #:italic [#f] #:blink [#f])
 (define (mock-ubuf-putstring! ubuf
                               col
