@@ -1,4 +1,26 @@
 # Changelog
+## v0.61.2 — 2026-05-27
+
+### Native TUI M3 — Cell-Diff Batch Optimization + Benchmarking
+
+**W0 — Batch consecutive cell writes** (PR #5678)
+- render-deltas-to-port! now batches consecutive same-row, same-SGR cells
+- 200-char line: 1 cursor move instead of 200 (200x reduction in cursor ops)
+- 5 new batch tests
+
+**W1 — SGR change batching verification** (PR #5679)
+- 3 tests confirming SGR dedup works correctly
+- Consecutive same-style cells share one SGR sequence
+
+**W2 — Streaming benchmark** (PR #5680)
+- New bench-streaming-render.rkt with 3 benchmarks
+- Batched rendering 38.7% faster than per-cell
+- VDOM pipeline overhead < 0.01ms/frame
+
+**W3 — Gate + Version Bump**
+- All 170 TUI tests pass
+- Version 0.61.1 → 0.61.2
+
 ## v0.61.1 — 2026-05-27
 
 ### Native TUI M2 — Production VDOM Components
