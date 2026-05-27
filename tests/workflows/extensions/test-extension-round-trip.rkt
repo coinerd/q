@@ -56,7 +56,7 @@
                              "function"
                              'function
                              (hash 'name "planning-read" 'arguments "{\"artifact\": \"PLAN.md\"}"))))
-           (hash 'role 'assistant 'content "Plan reviewed." 'tool_calls (list))))
+           (text-response "Plan reviewed.")))
          "Check the plan"
          #:extension-registry ext-reg
          #:files (list (cons ".planning/PLAN.md" "# Plan\nWave 1: Do stuff"))
@@ -75,11 +75,10 @@
       (load-extension! ext-reg gsd-planning-path)
 
       (define result
-        (run-workflow
-         (make-scripted-provider (list (hash 'role 'assistant 'content "Done." 'tool_calls (list))))
-         "Hello"
-         #:extension-registry ext-reg
-         #:max-iterations 3))
+        (run-workflow (make-scripted-provider (list (text-response "Done.")))
+                      "Hello"
+                      #:extension-registry ext-reg
+                      #:max-iterations 3))
 
       ;; Session log should exist and be valid
       (check-true (file-exists? (workflow-result-session-log result)) "Session log should exist")
@@ -96,8 +95,7 @@
                              (lambda (out) (display "You are a test skill assistant.\n" out)))
 
       (define result
-        (run-workflow (make-scripted-provider
-                       (list (hash 'role 'assistant 'content "Using test skill." 'tool_calls (list))))
+        (run-workflow (make-scripted-provider (list (text-response "Using test skill.")))
                       "Hello"
                       #:skills-dir tmp-dir
                       #:max-iterations 3))
@@ -113,12 +111,11 @@
         (fail "gsd-planning extension not found"))
 
       (define result
-        (run-workflow-multi-turn
-         (make-scripted-provider (list (hash 'role 'assistant 'content "Turn 1" 'tool_calls (list))
-                                       (hash 'role 'assistant 'content "Turn 2" 'tool_calls (list))))
-         '("First" "Second")
-         #:extensions (list gsd-planning-path)
-         #:max-iterations 3))
+        (run-workflow-multi-turn (make-scripted-provider (list (text-response "Turn 1")
+                                                               (text-response "Turn 2")))
+                                 '("First" "Second")
+                                 #:extensions (list gsd-planning-path)
+                                 #:max-iterations 3))
 
       (check-false (workflow-result-output result))
       (check-true (file-exists? (workflow-result-session-log result))))))
