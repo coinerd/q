@@ -6,14 +6,14 @@ v0.61.6
 
 ## Native TUI Stack
 
-The TUI layer uses a six-layer native Racket architecture (no external dependencies).
+The TUI layer uses a seven-layer native Racket architecture (no external dependencies).
 See ADR-0016 for full details.
 
 ```
 ┌───────────────────────────────────────┐
 │       Bridge (vdom-bridge.rkt)        │  Integration with render loop
 ├───────────────────────────────────────┤
-│    Components (vdom-components.rkt)   │  Typed zone components
+│    Components (vdom-components.rkt)   │  Typed zone components + state bag
 ├───────────────────────────────────────┤
 │   Virtual DOM (vdom*.rkt, 3 files)    │  vnode trees + layout + render
 ├───────────────────────────────────────┤
@@ -27,19 +27,22 @@ See ADR-0016 for full details.
 
 Key files: `tui/terminal-native.rkt`, `tui/cell-buffer.rkt`, `tui/cell-diff.rkt`,
 `tui/cell-diff-render.rkt`, `tui/vdom.rkt`, `tui/vdom-layout.rkt`,
-`tui/vdom-render.rkt`, `tui/vdom-bridge.rkt`, `tui/vdom-components.rkt`
+`tui/vdom-render.rkt`, `tui/vdom-bridge.rkt`, `tui/vdom-components.rkt`, `tui/component.rkt`
 
-### Render Pipeline (since v0.61.3)
+### Render Pipeline (since v0.61.5)
 
-The TUI uses a single render path (legacy path removed in v0.61.3):
+The TUI uses a fully vdom-mediated render path. All sections go through
+the component → vnode → buffer pipeline (since v0.61.5):
 
 ```
 ui-state → render-frame-vdom!
-              ├── Header    → cell-buffer-putstring!
-              ├── Transcript → render-transcript → styled-lines → render-styled-line-to-buffer!
-              ├── Status    → render-status-bar → styled-lines → render-styled-line-to-buffer!
-              ├── Input     → render-input-line → styled-lines → render-styled-line-to-buffer!
-              └── Overlay   → overlay content → render-styled-line-to-buffer!
+              ├── Header    → component → vnodes → render-vdom-section-to-buffer!
+              ├── Status    → component → vnodes → render-vdom-section-to-buffer!
+              ├── Input     → component → vnodes → render-vdom-section-to-buffer!
+              ├── Transcript → render-transcript → styled-lines → styled-lines->vnodes
+              │               → render-vdom-section-to-buffer!  (ui-state cache preserved)
+              ├── Overlay   → styled-lines → styled-lines->vnodes → render-vdom-section-to-buffer!
+              └── Widgets   → render-vdom-to-buffer! (per vnode)
          ↓
       cell-buffer (new frame)
          ↓
@@ -47,6 +50,9 @@ ui-state → render-frame-vdom!
          ↓
       render-smart! → batched ANSI output (terminal)
 ```
+
+Zero direct `render-styled-line-to-buffer!` calls in production path.
+Transcript retains direct `render-transcript` call for ui-state render cache side effect.
 
 Key optimizations:
 - **Batch rendering**: Consecutive same-row/same-SGR cells → single cursor move (37% faster)
