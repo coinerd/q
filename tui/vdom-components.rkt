@@ -17,6 +17,7 @@
          "render/message-layout.rkt"
          "render/diff-render.rkt"
          "render/status-line.rkt"
+         (only-in "input.rkt" initial-input-state)
          "palette.rkt")
 
 ;; ============================================================
@@ -68,9 +69,12 @@
 
 (define (make-input-box-vdom-component)
   (make-q-component (lambda (st width)
-                      ;; Input area is managed separately (keystroke-driven, not in ui-state).
-                      ;; This provides an empty vdom placeholder for the input zone.
-                      (list (vtext "> " '(green))))
+                      ;; Production: use render-input-line from status-line.rkt
+                      ;; We need the input-state, which is passed separately in render-frame-vdom!
+                      ;; For component API, we store it in the ui-state's focused-component slot.
+                      ;; For now, this returns a prompt placeholder; the actual text comes from
+                      ;; render-frame-vdom! which calls render-input-line directly.
+                      (list (styled-line->vnode (render-input-line (initial-input-state) width))))
                     #:id 'input-box-vdom
                     #:vdom? #t))
 

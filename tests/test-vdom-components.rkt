@@ -56,6 +56,21 @@
   (check-true (q-component-vdom? comp))
   (check-equal? (q-component-id comp) 'input-box-vdom))
 
+(test-case "production input box renders prompt"
+  (define comp (make-input-box-vdom-component))
+  (define result (component-render comp (initial-ui-state) 80))
+  (check-true (andmap vnode? result))
+  (check-equal? (length result) 1))
+
+(test-case "production input box renders to cell buffer"
+  (define comp (make-input-box-vdom-component))
+  (define vnodes (component-render comp (initial-ui-state) 80))
+  (define buf (make-cell-buffer 80 1))
+  (render-vdom-to-buffer! (vvbox vnodes) buf 80)
+  (define row0 (cell-buffer-row-string buf 0))
+  ;; Should contain "q> " prompt
+  (check-not-false (string-contains? row0 "q>")))
+
 (test-case "header component is vdom"
   (define comp (make-header-vdom-component))
   (check-true (q-component-vdom? comp))
