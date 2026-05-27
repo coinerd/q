@@ -201,3 +201,53 @@
   (define cursor-re (format "~a\\[[0-9]+;[0-9]+H" (integer->char 27)))
   (define cursor-moves (regexp-match* (regexp cursor-re) result))
   (check-equal? (length cursor-moves) 1))
+
+;; ============================================================
+;; SGR deduplication tests
+;; ============================================================
+
+(test-case "sgr dedup: consecutive same-style cells emit one SGR"
+  (define a (make-cell-buffer 10 1))
+  (define b (make-cell-buffer 10 1))
+  ;; All same style (fg=7, bg=0)
+  (cell-buffer-set! b 0 0 #:char #\A #:fg 7)
+  (cell-buffer-set! b 1 0 #:char #\B #:fg 7)
+  (cell-buffer-set! b 2 0 #:char #\C #:fg 7)
+  (define deltas (diff-cell-buffers a b))
+  (define out (open-output-string))
+  (render-deltas-to-port! deltas b out #:sync? #f)
+  (define result (get-output-string out))
+  ;; Count SGR sequences (\x1b[...m)
+  (define sgr-re (format "~a\\[[0-9;]+m" (integer->char 27)))
+  (define sgrs (regexp-match* (regexp sgr-re) result))
+  ;; Should have exactly 2 SGRs: one style set + one reset at end
+  (check-equal? (length sgrs) 2))
+
+(test-case "sgr dedup: style change emits new SGR"
+  (define a (make-cell-buffer 10 1))
+  (define b (make-cell-buffer 10 1))
+  ;; Two different styles
+  (cell-buffer-set! b 0 0 #:char #\A #:fg 7)
+  (cell-buffer-set! b 1 0 #:char #\B #:fg 31) ; different fg
+  (cell-buffer-set! b 2 0 #:char #\C #:fg 7) ; back to original
+  (define deltas (diff-cell-buffers a b))
+  (define out (open-output-string))
+  (render-deltas-to-port! deltas b out #:sync? #f)
+  (define result (get-output-string out))
+  ;; Count SGR sequences
+  (define sgr-re (format "~a\\[[0-9;]+m" (integer->char 27)))
+  (define sgrs (regexp-match* (regexp sgr-re) result))
+  ;; Should have 4 SGRs: fg7, fg31, fg7, reset
+  (check-equal? (length sgrs) 4))
+
+(test-case "sgr dedup: full buffer render deduplicates SGR"
+  (define buf (make-cell-buffer 10 1))
+  ;; All default cells — same SGR for all
+  (cell-buffer-putstring! buf 0 0 "AAAAAAAAAA")
+  (define out (open-output-string))
+  (render-buffer-to-port! buf out #:sync? #f)
+  (define result (get-output-string out))
+  ;; Count SGR sequences — should be 2 (one set + one reset)
+  (define sgr-re (format "~a\\[[0-9;]+m" (integer->char 27)))
+  (define sgrs (regexp-match* (regexp sgr-re) result))
+  (check-equal? (length sgrs) 2))
