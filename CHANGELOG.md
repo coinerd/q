@@ -1,4 +1,18 @@
 # Changelog
+## v0.61.8 — 2026-05-27
+
+### Native TUI Final Cleanup
+
+- **Removed dead `render-frame!`**: Legacy terminal render path (renderer.rkt) removed. Production uses vdom-mediated `render-frame-vdom!` exclusively.
+- **Removed DI parameters**: `current-ubuf-clear`, `current-ubuf-putstring` parameterized injection replaced with direct `cell-buffer` calls.
+- **Removed `renderer:` prefix import**: Dead `prefix-in renderer:` removed from tui-render-loop.rkt.
+- **Removed shelfware exports**: `render-frame-components`, `make-vdom-frame-component` (vdom-components.rkt), `render-vdom-frame!` (vdom-bridge.rkt) removed. No production consumers.
+- **Removed `render-components` struct**: Dead `render-components`/`make-render-components`/`render-components-status`/`render-components-invalidate!` removed from renderer.rkt.
+- **Documented transcript vdom decision**: Direct `render-transcript` call retained because it returns `(values styled-lines ui-state*)` needed for render cache. The transcript vdom component wrapper is test-only.
+- **Cleaned stale naming**: "ubuf-style" → "cell-buffer" in frame-diff.rkt.
+- **Removed dead test files**: `test-vdom-parity.rkt`, `tui/render-integration.rkt` removed.
+- **Pruned dead test cases**: 27 `render-frame!` tests removed from `test-tui-renderer.rkt`, 3 `make-vdom-frame-component` tests removed from `test-vdom-components.rkt`, 5 `render-components` tests removed from `test-component.rkt`.
+
 ## v0.61.7 — 2026-05-27
 
 ### Native TUI Final — Architecture Polish & Documentation
