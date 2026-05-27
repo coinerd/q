@@ -40,19 +40,46 @@
   (when sync?
     (terminal-sync-begin!))
   (define prev-sgr #f)
-  (for ([d (in-list deltas)])
-    (define col (cell-delta-col d))
-    (define row (cell-delta-row d))
-    (define new-cell (cell-delta-new-cell d))
-    ;; Position cursor: CSI row+1 ; col+1 H
-    (display (format "\x1b[~a;~aH" (add1 row) (add1 col)) out)
-    ;; Apply SGR only if changed
-    (define sgr (cell->sgr new-cell))
-    (unless (equal? sgr prev-sgr)
-      (display sgr out)
-      (set! prev-sgr sgr))
-    ;; Write character
-    (display (string (cell-char new-cell)) out))
+  ;; Batch consecutive deltas in same row with same SGR into one cursor move + string
+  (let loop ([remaining deltas])
+    (cond
+      [(null? remaining) (void)]
+      [else
+       (define d (car remaining))
+       (define col (cell-delta-col d))
+       (define row (cell-delta-row d))
+       (define new-cell (cell-delta-new-cell d))
+       (define sgr (cell->sgr new-cell))
+       ;; Position cursor: CSI row+1 ; col+1 H
+       (display (format "\x1b[~a;~aH" (add1 row) (add1 col)) out)
+       ;; Apply SGR only if changed
+       (unless (equal? sgr prev-sgr)
+         (display sgr out)
+         (set! prev-sgr sgr))
+       ;; Collect consecutive cells in same row with same SGR
+       (define chars (list (cell-char new-cell)))
+       (let gather ([rest (cdr remaining)]
+                    [acc chars]
+                    [next-col (add1 col)])
+         (cond
+           [(null? rest)
+            ;; Emit batch
+            (display (list->string (reverse acc)) out)
+            (loop rest)]
+           [else
+            (define nd (car rest))
+            (define nd-col (cell-delta-col nd))
+            (define nd-row (cell-delta-row nd))
+            (define nd-cell (cell-delta-new-cell nd))
+            (define nd-sgr (cell->sgr nd-cell))
+            (cond
+              [(and (= nd-row row) (= nd-col next-col) (equal? nd-sgr sgr))
+               ;; Same row, consecutive column, same style — batch
+               (gather (cdr rest) (cons (cell-char nd-cell) acc) (add1 next-col))]
+              [else
+               ;; Batch ends — emit accumulated chars
+               (display (list->string (reverse acc)) out)
+               (loop rest)])]))]))
   ;; Reset SGR at end
   (display "\x1b[0m" out)
   (when sync?
