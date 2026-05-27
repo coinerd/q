@@ -15,7 +15,8 @@
          racket/list
          "render.rkt"
          "state.rkt"
-         (only-in "render/message-layout.rkt" styled-line?))
+         (only-in "render/message-layout.rkt" styled-line?)
+         "vdom.rkt")
 
 ;; Struct
 (provide q-component
@@ -26,13 +27,15 @@
          q-component-id
          q-component-handle-input-fn
          q-component-wants-focus?
+         q-component-vdom?
          (contract-out
           [make-q-component
            (->* (procedure?)
                 (#:id symbol?
                       #:invalidate-fn procedure?
                       #:handle-input (or/c procedure? #f)
-                      #:wants-focus? boolean?)
+                      #:wants-focus? boolean?
+                      #:vdom? boolean?)
                 q-component?)]
           [component-render (-> q-component? ui-state? exact-nonnegative-integer? (listof any/c))]
           [component-invalidate! (-> q-component? void?)]
@@ -56,12 +59,13 @@
 ;; ═══════════════════════════════════════════════════════════════════
 
 (struct q-component
-        (render-fn ; ui-state width → (listof styled-line)
+        (render-fn ; ui-state width → (listof styled-line) or (listof vnode?)
          invalidate-fn ; → void
          cache-box ; (boxof (or/c #f (cons width lines)))
          id ; symbol
          handle-input-fn ; (or/c #f (data ui-state → (values ui-state input-result)))
-         wants-focus?) ; boolean — whether this component can receive focus
+         wants-focus? ; boolean — whether this component can receive focus
+         vdom?) ; boolean — #t when render-fn returns vnodes
   #:transparent)
 
 ;; ═══════════════════════════════════════════════════════════════════
@@ -72,8 +76,9 @@
                           #:id [id 'anonymous]
                           #:invalidate-fn [invalidate-fn void]
                           #:handle-input [handle-input-fn #f]
-                          #:wants-focus? [wants-focus? #f])
-  (q-component render-fn invalidate-fn (box #f) id handle-input-fn wants-focus?))
+                          #:wants-focus? [wants-focus? #f]
+                          #:vdom? [vdom? #f])
+  (q-component render-fn invalidate-fn (box #f) id handle-input-fn wants-focus? vdom?))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Operations
