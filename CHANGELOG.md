@@ -1,4 +1,38 @@
 # Changelog
+## v0.59.10 — 2026-05-27
+
+### Security/Workflow Enforcement Closure
+
+Harden browser launch, OAuth callback, image pipeline, provider schema,
+workflow runner, and CI release pipeline.
+
+**W0 — Safe Browser Launch Closure**
+- Extract `browser-command+args` for safe argv construction
+- Windows: pass URLs as PowerShell $args data, not interpolated strings
+- Malicious URL regression tests for macOS, Unix, Windows
+
+**W1 — OAuth Callback Nonblocking Atomic Lifecycle**
+- Remove dead `semaphore-wait(make-semaphore 0)` from accept loop
+- Clean loop terminates on `tcp-close` exception
+- Cleanup independence and nonblocking completion tests
+
+**W2 — Image Operand Safety and Cache Boundary**
+- `ensure-absolute-path` prevents option injection from dash-prefixed filenames
+- Hide `image-resize-cache` from exports (synchronized-only access)
+- Adversarial operand safety tests
+
+**W3 — Strict Provider Schema Validation**
+- `validate-provider-entry` rejects malformed provider definitions
+- `load-providers-schema` filters bad entries with warning log
+- Migrate workflow tests from raw hashes to `text-response` constructor
+
+**W4 — Workflow Runner Timeout/Cleanup Integration**
+- `run-workflow` accepts `#:timeout-ms` and `#:cleanup?` kwargs
+- Integration tests for cleanup on success, error, and timeout
+
+**W5 — Release.yml Strict Readiness Enforcement**
+- Release pipeline records gate evidence for all 4 suites
+- `lint-release-readiness.rkt --strict` gate before release proceeds
 
 ## v0.59.9 — 2026-05-26
 
