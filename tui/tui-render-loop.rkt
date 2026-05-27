@@ -163,7 +163,7 @@
     (define header-vnodes ((q-component-render-fn header-comp) ui-state cols))
     (render-vdom-section-to-buffer! header-vnodes ubuf cols header-row 1))
 
-  ;; 3. Render transcript via section renderer → styled-lines → cell-buffer
+  ;; 3. Render transcript → styled-lines → vnodes → cell-buffer
   (define-values (trans-lines-raw ui-state*) (render-transcript ui-state transcript-height cols))
   (define visible-lines-raw
     (if (> (length trans-lines-raw) transcript-height)
@@ -181,25 +181,25 @@
                                    transcript-start-row
                                    pad-count)
         visible-lines-raw))
-  ;; Render padding lines
-  (for ([i (in-range pad-count)])
-    (render-styled-line-to-buffer! (plain-line (make-string cols #\space))
-                                   ubuf
-                                   cols
-                                   (+ transcript-start-row i)))
-  ;; Render transcript lines
-  (for ([line (in-list trans-lines)]
-        [i (in-naturals)])
-    (render-styled-line-to-buffer! line ubuf cols (+ transcript-start-row pad-count i)))
+  ;; Convert styled-lines to vnodes and render via section renderer
+  (define trans-pad-vnodes
+    (for/list ([_ (in-range pad-count)])
+      (vdom-comp:styled-line->vnode (plain-line ""))))
+  (define trans-content-vnodes (vdom-comp:styled-lines->vnodes trans-lines))
+  (render-vdom-section-to-buffer! (append trans-pad-vnodes trans-content-vnodes)
+                                  ubuf
+                                  cols
+                                  transcript-start-row)
 
-  ;; 4. Draw widget lines
+  ;; 4. Draw widget lines via vdom section renderer
   (define widget-lines (get-widget-lines-above ui-state))
   (when (> (length widget-lines) 0)
-    (for ([line (in-list widget-lines)]
+    (define widget-vnodes (vdom-comp:styled-lines->vnodes widget-lines))
+    (for ([vn (in-list widget-vnodes)]
           [i (in-naturals)])
       (define widget-y (+ transcript-start-row transcript-height i))
       (when (< widget-y status-y)
-        (render-styled-line-to-buffer! line ubuf cols widget-y))))
+        (render-vdom-to-buffer! vn ubuf cols #:start-row widget-y))))
 
   ;; 5. Draw status bar via vdom component
   (define status-comp (vdom-comp:make-status-bar-vdom-component))
@@ -211,7 +211,7 @@
   (define input-vnodes ((q-component-render-fn input-comp) ui-state cols))
   (render-vdom-section-to-buffer! input-vnodes ubuf cols input-y 1)
 
-  ;; 7. Draw overlay if active
+  ;; 7. Draw overlay if active (via vdom section renderer)
   (define overlay (ui-state-active-overlay ui-state))
   (when overlay
     (define ov-content (overlay-state-content overlay))
@@ -219,12 +219,17 @@
       (if (> (length ov-content) transcript-height)
           (take-right ov-content transcript-height)
           ov-content))
+    ;; Convert overlay content to vnodes with background style
+    (define ov-vnodes
+      (for/list ([line (in-list ov-lines)]
+                 [_ (in-naturals)])
+        #:break (>= _ transcript-height)
+        (vdom-comp:styled-line->vnode line)))
+    ;; Clear overlay area with bg=8 then render content
     (for ([i (in-range transcript-height)])
       (cell-buffer-putstring! ubuf 0 (+ transcript-start-row i) (make-string cols #\space) #:bg 8))
-    (for ([line (in-list ov-lines)]
-          [i (in-naturals)])
-      #:break (>= i transcript-height)
-      (render-styled-line-to-buffer! line ubuf cols (+ transcript-start-row i))))
+    (when (pair? ov-vnodes)
+      (render-vdom-section-to-buffer! ov-vnodes ubuf cols transcript-start-row (length ov-vnodes))))
 
   ;; 8. Return cursor position
   (define-values (_visible-text _scroll-offset cursor-display-col)
