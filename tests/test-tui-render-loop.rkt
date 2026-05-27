@@ -253,4 +253,33 @@
                  3
                  "render-count should be 3 after third render")))
 
+(define-test-suite scroll-offset-state-tests
+                   (test-case "scroll-offset shadows into component state across frames"
+                     (define ubuf (make-cell-buffer 80 24))
+                     (define state-0 (initial-ui-state #:session-id "test" #:model-name "gpt-4"))
+                     ;; Simulate scroll: set scroll-offset = 5
+                     (define state-scrolled (struct-copy ui-state state-0 [scroll-offset 5]))
+                     (define inp (initial-input-state))
+                     (define layout (compute-layout 24 80))
+
+                     ;; Registry includes transcript component
+                     (define trn-c2 (make-transcript-vdom-component))
+                     (define reg2
+                       (make-hash (list (cons 'header-vdom (make-header-vdom-component))
+                                        (cons 'status-bar-vdom (make-status-bar-vdom-component))
+                                        (cons 'transcript-vdom trn-c2))))
+
+                     ;; Render with scroll-offset = 5
+                     (render-frame-vdom! ubuf state-scrolled inp layout #:component-registry reg2)
+                     (check-equal? (component-state-ref trn-c2 'last-scroll-offset 0)
+                                   5
+                                   "scroll-offset should be shadowed as 5 in component state")
+
+                     ;; Render with scroll-offset = 0 (reset)
+                     (render-frame-vdom! ubuf state-0 inp layout #:component-registry reg2)
+                     (check-equal? (component-state-ref trn-c2 'last-scroll-offset -1)
+                                   0
+                                   "scroll-offset should be shadowed as 0 after reset")))
+
+(run-tests scroll-offset-state-tests)
 (run-tests component-persistence-tests)

@@ -182,7 +182,10 @@
         1))
   (when trans-comp
     (component-state-set! trans-comp 'render-count trans-frame-count)
-    (component-state-set! trans-comp 'last-width cols))
+    (component-state-set! trans-comp 'last-width cols)
+    ;; Shadow scroll-offset from ui-state into component state
+    ;; This proves component-state-ref/set! works for scroll-relevant data
+    (component-state-set! trans-comp 'last-scroll-offset (ui-state-scroll-offset ui-state)))
   (define-values (trans-lines-raw ui-state*) (render-transcript ui-state transcript-height cols))
   (define visible-lines-raw
     (if (> (length trans-lines-raw) transcript-height)
