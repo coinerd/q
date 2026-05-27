@@ -88,3 +88,29 @@
   (check-true (string-contains? (row-string buf 0) "Header"))
   (check-true (string-contains? (row-string buf 0) "End"))
   (check-true (string-prefix? (row-string buf 1) "Body")))
+
+;; ============================================================
+;; Section rendering with positioning
+;; ============================================================
+
+(test-case "render-vdom-section-to-buffer! positions at start-row"
+  (define vnodes (list (vtext "Line1" '()) (vtext "Line2" '())))
+  (define buf (make-cell-buffer 20 5))
+  (render-vdom-section-to-buffer! vnodes buf 20 2) ; start at row 2
+  (check-true (string-prefix? (row-string buf 2) "Line1"))
+  (check-true (string-prefix? (row-string buf 3) "Line2")))
+
+(test-case "render-vdom-section-to-buffer! clips to max-rows"
+  (define vnodes (list (vtext "A" '()) (vtext "B" '()) (vtext "C" '()) (vtext "D" '())))
+  (define buf (make-cell-buffer 20 6))
+  (render-vdom-section-to-buffer! vnodes buf 20 1 2) ; max 2 rows
+  (check-true (string-prefix? (row-string buf 1) "C")) ; takes last 2: C, D
+  (check-true (string-prefix? (row-string buf 2) "D")))
+
+(test-case "render-vdom-section-to-buffer! pads with blanks"
+  (define vnodes (list (vtext "Only" '())))
+  (define buf (make-cell-buffer 20 6))
+  (render-vdom-section-to-buffer! vnodes buf 20 0 3) ; max 3 rows, only 1 line
+  (check-true (string-prefix? (row-string buf 0) "")) ; padding row
+  (check-true (string-prefix? (row-string buf 1) "")) ; padding row
+  (check-true (string-prefix? (row-string buf 2) "Only"))) ; content at bottom

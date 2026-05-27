@@ -18,7 +18,8 @@
          "render/diff-render.rkt"
          "render/status-line.rkt"
          (only-in "input.rkt" initial-input-state)
-         "palette.rkt")
+         "palette.rkt"
+         "layout.rkt")
 
 ;; ============================================================
 ;; Transcript component — renders conversation messages
@@ -115,9 +116,57 @@
                     #:vdom? #t))
 
 ;; ============================================================
-;; Compose all vdom components into a frame
+;; Compose all vdom components into a frame with layout positioning
 ;; ============================================================
 
+;; Render a complete frame by composing section components with layout.
+;; Each component renders to vnodes, positioned at the correct row offset.
+;; Returns a list of (cons row-offset vnodes) pairs for the caller to
+;; write to the cell buffer via render-vdom-section-to-buffer!.
+(define (render-frame-components header-comp
+                                 transcript-comp
+                                 status-comp
+                                 input-comp
+                                 ui-state
+                                 input-state
+                                 layout)
+  (define header-region (layout-header layout))
+  (define transcript-region (layout-transcript layout))
+  (define input-region (layout-input layout))
+  (define cols (layout-region-width header-region))
+  (define rows (+ (layout-region-y input-region) (layout-region-height input-region)))
+  (define header-row (layout-region-y header-region))
+  (define transcript-start-row (layout-region-y transcript-region))
+  (define transcript-height (layout-region-height transcript-region))
+  (define status-y (layout-region-y input-region))
+  (define input-y (min (sub1 rows) (add1 status-y)))
+
+  ;; Render each section component to vnodes
+  (define header-vnodes
+    (if header-comp
+        ((q-component-render-fn header-comp) ui-state cols)
+        '()))
+  (define transcript-vnodes
+    (if transcript-comp
+        ((q-component-render-fn transcript-comp) ui-state cols)
+        '()))
+  (define status-vnodes
+    (if status-comp
+        ((q-component-render-fn status-comp) ui-state cols)
+        '()))
+  ;; Input component receives input-state via ui-state temporary slot
+  (define input-vnodes
+    (if input-comp
+        ((q-component-render-fn input-comp) ui-state cols)
+        '()))
+
+  ;; Return sections as positioned groups: (vnodes start-row [max-height])
+  (list (list header-vnodes header-row #f)
+        (list transcript-vnodes transcript-start-row transcript-height)
+        (list status-vnodes status-y #f)
+        (list input-vnodes input-y #f)))
+
+;; Backward-compatible frame component (no layout positioning — naive stacking)
 (define (make-vdom-frame-component header-comp transcript-comp status-comp input-comp)
   (make-q-component (lambda (st width)
                       (define header-lines
@@ -160,4 +209,13 @@
                             (or/c q-component? #f)
                             (or/c q-component? #f)
                             (or/c q-component? #f)
-                            q-component?)]))
+                            q-component?)]
+                       [render-frame-components
+                        (-> (or/c q-component? #f)
+                            (or/c q-component? #f)
+                            (or/c q-component? #f)
+                            (or/c q-component? #f)
+                            any/c
+                            any/c
+                            hash?
+                            (listof list?))]))
