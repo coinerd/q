@@ -7,11 +7,10 @@
 ;; Dependency chain: tui-init.rkt → tui-render-loop.rkt → tui-keybindings.rkt
 ;;
 ;; Provides:
-;;   render-ubuf-to-terminal! — cell-buffer → terminal output with SGR fix
 ;;   tui-ctx-init-terminal!    — terminal + cell-buffer initialization
 ;;   tui-ctx-resize-ubuf!      — resize cell-buffer on terminal resize
 ;;   tui-ctx-ubuf, tui-ctx-term — ubuf/term accessors
-;;   render-frame!, draw-frame  — frame rendering
+;;   render-frame!, draw-frame  — frame rendering (vdom + cell-diff)
 ;;   next-message               — terminal message adapter
 ;;   tui-main-loop              — main event loop
 ;;   drain-events!              — runtime event draining
@@ -62,7 +61,6 @@
          decode-mouse-message
          current-busy-watchdog-ms
          (contract-out [check-busy-watchdog (-> any/c number? number? (or/c any/c #f))]
-                       [render-ubuf-to-terminal! (-> tui-ctx? void?)]
                        [tui-ctx-init-terminal! (-> tui-ctx? void?)]
                        [tui-ctx-resize-ubuf! (-> tui-ctx? void?)]
                        [tui-ctx-ubuf (-> tui-ctx? any/c)]
@@ -97,63 +95,6 @@
 (define last-render-ms (box 0.0))
 
 ;; Native cell-buffer operations (no dynamic-require)
-(define make-ubuf make-cell-buffer)
-(define ubuf-clear! cell-buffer-clear!)
-(define ubuf-putstring! cell-buffer-putstring!)
-
-;; ============================================================
-;; Render ubuf to terminal
-;; ============================================================
-
-;; Render cell buffer to terminal.
-;; Iterates through cells and emits minimal ANSI sequences.
-;; Uses DEC 2026 (Synchronized Output) when available.
-(define (render-ubuf-to-terminal! ctx)
-  (define ubuf (tui-ctx-ubuf ctx))
-  (define cols (cell-buffer-cols ubuf))
-  (define rows (cell-buffer-rows ubuf))
-  (define out (tui-output-port))
-  (terminal-sync-begin!)
-  ;; Disable auto-wrap to prevent last-column wrap glitch
-  (display "\x1b[?7l" out)
-  ;; Move cursor to origin and clear screen
-  (display "\x1b[H" out)
-  (for ([row (in-range rows)])
-    (when (> row 0)
-      ;; Use cursor positioning instead of newline to avoid wrap issues
-      (display (format "\x1b[~a;1H" (add1 row)) out))
-    (define prev-fg #f)
-    (define prev-bg #f)
-    (define prev-bold? #f)
-    (define prev-underline? #f)
-    (for ([col (in-range cols)])
-      (define cell (cell-buffer-ref ubuf col row))
-      (define fg (cell-fg cell))
-      (define bg (cell-bg cell))
-      (define bold? (cell-bold? cell))
-      (define underline? (cell-underline? cell))
-      ;; Only emit SGR when attributes change
-      (unless (and (= fg prev-fg)
-                   (= bg prev-bg)
-                   (eq? bold? prev-bold?)
-                   (eq? underline? prev-underline?))
-        (display "\x1b[0" out)
-        (when bold?
-          (display ";1" out))
-        (when underline?
-          (display ";4" out))
-        (display (format ";38;5;~a" fg) out)
-        (display (format ";48;5;~a" (if (= bg 0) 16 bg)) out)
-        (display "m" out)
-        (set! prev-fg fg)
-        (set! prev-bg bg)
-        (set! prev-bold? bold?)
-        (set! prev-underline? underline?))
-      (display (string (cell-char cell)) out)))
-  (display "\x1b[0m" out)
-  ;; Re-enable auto-wrap
-  (display "\x1b[?7h" out)
-  (terminal-sync-end!))
 
 ;; ============================================================
 ;; Terminal/ubuf lifecycle helpers
@@ -164,11 +105,11 @@
   (define term (tui-term-open))
   (set-box! (tui-ctx-term-box ctx) term)
   (define-values (cols rows) (tui-screen-size))
-  (define ubuf (make-ubuf cols rows))
+  (define ubuf (make-cell-buffer cols rows))
   (set-box! (tui-ctx-ubuf-box ctx) ubuf)
-  ;; Configure renderer to use real ubuf operations
-  (renderer:current-ubuf-clear ubuf-clear!)
-  (renderer:current-ubuf-putstring ubuf-putstring!)
+  ;; Configure renderer to use cell-buffer operations
+  (renderer:current-ubuf-clear cell-buffer-clear!)
+  (renderer:current-ubuf-putstring cell-buffer-putstring!)
   ;; Enable mouse tracking for scroll wheel support
   (enable-mouse-tracking)
   ;; Detect synchronized output support
@@ -178,7 +119,7 @@
 ;; Resize ubuf when terminal size changes
 (define (tui-ctx-resize-ubuf! ctx)
   (define-values (cols rows) (tui-screen-size))
-  (define ubuf (make-ubuf cols rows))
+  (define ubuf (make-cell-buffer cols rows))
   (set-box! (tui-ctx-ubuf-box ctx) ubuf)
   ;; Clear previous frame on resize to force full redraw
   (set-box! (tui-ctx-previous-frame-box ctx) #f))

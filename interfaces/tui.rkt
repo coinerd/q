@@ -52,7 +52,6 @@
 
          ;; ── from tui-render-loop.rkt ──
          fix-sgr-bg-black
-         render-ubuf-to-terminal!
          render-frame!
          draw-frame
          tui-ctx-resize-ubuf!
