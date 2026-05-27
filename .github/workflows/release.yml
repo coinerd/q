@@ -30,6 +30,21 @@ jobs:
       - name: Run tests
         run: STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt --jobs 4 2>&1 | tee test-output.log
 
+      - name: Record gate evidence (arch)
+        run: racket scripts/run-tests.rkt --suite arch --record-gate-evidence
+
+      - name: Record gate evidence (workflows)
+        run: racket scripts/run-tests.rkt --suite workflows --jobs 4 --timeout 90 --record-gate-evidence
+
+      - name: Record gate evidence (tui)
+        run: racket scripts/run-tests.rkt --suite tui --jobs 4 --timeout 60 --record-gate-evidence
+
+      - name: Record gate evidence (fast)
+        run: racket scripts/run-tests.rkt --suite fast --jobs 4 --timeout 120 --record-gate-evidence
+
+      - name: Strict release readiness
+        run: racket scripts/lint-release-readiness.rkt --strict
+
       - name: Test failure summary
         if: failure()
         run: |
