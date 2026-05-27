@@ -42,25 +42,13 @@
 
       ;; Set up a temp project with .planning/PLAN.md
       (define result
-        (run-workflow
-         (make-scripted-provider
-          (list
-           (hash 'role
-                 'assistant
-                 'content
-                 "I'll read the plan."
-                 'tool_calls
-                 (list (hash 'id
-                             "tc-1"
-                             'type
-                             "function"
-                             'function
-                             (hash 'name "planning-read" 'arguments "{\"artifact\": \"PLAN.md\"}"))))
-           (text-response "Plan reviewed.")))
-         "Check the plan"
-         #:extension-registry ext-reg
-         #:files (list (cons ".planning/PLAN.md" "# Plan\nWave 1: Do stuff"))
-         #:max-iterations 5))
+        (run-workflow (make-scripted-provider
+                       (list (tool-call-response "tc-1" "planning-read" (hash 'artifact "PLAN.md"))
+                             (text-response "Plan reviewed.")))
+                      "Check the plan"
+                      #:extension-registry ext-reg
+                      #:files (list (cons ".planning/PLAN.md" "# Plan\nWave 1: Do stuff"))
+                      #:max-iterations 5))
 
       (check-not-false (workflow-result-output result))
       (check-equal? (loop-result-termination-reason (workflow-result-output result))

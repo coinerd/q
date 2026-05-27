@@ -13,6 +13,7 @@
          (only-in "../../../llm/model.rkt" make-model-response stream-chunk make-stream-chunk))
 
 (provide make-scripted-provider
+         validate-script-entry
          text-response
          tool-call-response
          done-response
@@ -44,11 +45,35 @@
 ;;   (list (tool-call-response "tc-1" "read" (hash 'path "foo.rkt"))
 ;;         (text-response "The file contains hello world"))
 
+(define (validate-script-entry entry)
+  ;; Strict validation: every entry must have a recognized 'type and required fields.
+  (unless (hash? entry)
+    (error 'scripted-provider "entry must be a hash, got: ~v" entry))
+  (define typ (hash-ref entry 'type #f))
+  (unless typ
+    (error 'scripted-provider "entry missing required 'type key: ~v" entry))
+  (unless (member typ '("text" "tool-call" "done" "error"))
+    (error 'scripted-provider "entry has unknown 'type: ~a (entry: ~v)" typ entry))
+  (case typ
+    [("text")
+     (unless (hash-has-key? entry 'text)
+       (error 'scripted-provider "text entry missing 'text key: ~v" entry))]
+    [("tool-call")
+     (unless (hash-has-key? entry 'id)
+       (error 'scripted-provider "tool-call entry missing 'id key: ~v" entry))
+     (unless (hash-has-key? entry 'name)
+       (error 'scripted-provider "tool-call entry missing 'name key: ~v" entry))]
+    [("error")
+     (unless (hash-has-key? entry 'message)
+       (error 'scripted-provider "error entry missing 'message key: ~v" entry))]))
+
 (define (make-scripted-provider
          script
          #:name [name "scripted-mock"]
          #:usage [usage (hasheq 'prompt_tokens 10 'completion_tokens 5 'total_tokens 15)]
          #:exhaustion-behavior [exhaustion 'error])
+  (for ([entry (in-list script)])
+    (validate-script-entry entry))
   (define idx (box 0))
 
   (define (next-entry!)

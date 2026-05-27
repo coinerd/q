@@ -66,6 +66,42 @@
       (check-equal? (hash-ref er 'type) "error")
       (check-equal? (hash-ref er 'message) "oops"))
 
+    (test-case "malformed entry: missing type errors with strict validation (#5537)"
+      (define raw-entry (hasheq 'text "hello"))
+      (check-exn exn:fail?
+                 (lambda () (make-scripted-provider (list raw-entry)))
+                 "entry without 'type must error in strict mode"))
+
+    (test-case "malformed entry: unknown type errors with strict validation (#5537)"
+      (define bad-entry (hasheq 'type "unknown-type" 'text "hello"))
+      (check-exn exn:fail?
+                 (lambda () (make-scripted-provider (list bad-entry)))
+                 "entry with unknown 'type must error in strict mode"))
+
+    (test-case "malformed entry: text entry missing text field (#5537)"
+      (define bad-text (hasheq 'type "text"))
+      (check-exn exn:fail?
+                 (lambda () (make-scripted-provider (list bad-text)))
+                 "text entry without 'text must error in strict mode"))
+
+    (test-case "malformed entry: tool-call missing required fields (#5537)"
+      (define partial-tc (hasheq 'type "tool-call" 'name "read"))
+      (check-exn exn:fail?
+                 (lambda () (make-scripted-provider (list partial-tc)))
+                 "tool-call entry without 'id must error in strict mode"))
+
+    (test-case "malformed entry: error entry missing message (#5537)"
+      (define bad-err (hasheq 'type "error"))
+      (check-exn exn:fail?
+                 (lambda () (make-scripted-provider (list bad-err)))
+                 "error entry without 'message must error in strict mode"))
+
+    (test-case "strict mode rejects raw hash entries without constructors (#5537)"
+      (define raw-hash (hasheq 'foo "bar" 'baz 42))
+      (check-exn exn:fail?
+                 (lambda () (make-scripted-provider (list raw-hash)))
+                 "raw hash without 'type must be rejected"))
+
     (test-case "provider name is configurable"
       (define p (make-scripted-provider '() #:name "test-provider"))
       (check-equal? (provider-name p) "test-provider"))))
