@@ -2,7 +2,7 @@
 
 ;; BOUNDARY: io
 
-;; test-tui-terminal.rkt — Tests for tui-term based terminal adapter
+;; test-tui-terminal.rkt — Tests for native TUI terminal adapter
 ;;
 ;; These tests verify:
 ;;   1. Terminal lifecycle functions exist and have correct signatures
@@ -28,7 +28,7 @@
 ;; ============================================================
 
 (define terminal-tests
-  (test-suite "TUI Terminal Adapter (tui-term)"
+  (test-suite "TUI Terminal (Native)"
 
     ;; ============================================================
     ;; 1. Terminal lifecycle (open/close)
