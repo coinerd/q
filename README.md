@@ -93,8 +93,7 @@ cd q
 # 3. Install dependencies
 raco pkg install --auto
 
-# 4. (Optional) Enhanced TUI rendering — works without these via built-in fallbacks
-raco pkg install tui-term tui-ubuf
+# 4. TUI uses native Racket (no external deps needed)
 ```
 
 See [docs/install.md](docs/install.md) for the one-command installer and detailed instructions.
@@ -275,8 +274,8 @@ q/
 | Metric | Value |
 |--------|-------|
 | Test files | 667 |
-| Source modules | 474 |
-| Source lines | 74302 |
+| Source modules | 473 |
+| Source lines | 74050 |
 | Test lines | 114148 |
 | Test assertions | 17830 |
 | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |

@@ -44,11 +44,14 @@ extension API versions.
 | Local (llama.cpp server) | 0.24.9 | Stable |
 ## TUI Dependencies
 
-| Dependency | Min Version | Required For |
-|------------|-------------|--------------|
-| `tui-term` | 0.1 | Terminal abstraction |
-| `tui-ubuf` | 0.1 | Unicode buffer |
-| `charterm` | 1.0 | Direct terminal I/O (fallback) |
+All TUI functionality is implemented natively in Racket — no external packages required.
+
+| Component | Module | Description |
+|-----------|--------|-------------|
+| Terminal I/O | `tui/terminal-native.rkt` | ANSI sequences, raw mode, mouse |
+| Cell Buffer | `tui/cell-buffer.rkt` | 2D cell grid with style attributes |
+| Cell Diff | `tui/cell-diff.rkt`, `tui/cell-diff-render.rkt` | Incremental rendering |
+| Virtual DOM | `tui/vdom*.rkt` | vnode trees, layout, component system |
 
 ## Updating This Matrix
 

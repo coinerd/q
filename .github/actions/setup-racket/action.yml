@@ -39,5 +39,4 @@ runs:
           echo "Installing local package from $PWD ..."
           raco pkg install --auto --batch "$PWD"
         fi
-        # Extra TUI deps (may already be installed as transitive deps)
-        raco pkg install --auto --batch tui-term tui-ubuf 2>/dev/null || true
+        # TUI uses native Racket implementations (no external deps needed)
