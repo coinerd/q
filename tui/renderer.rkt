@@ -20,16 +20,16 @@
          "component.rkt"
          (only-in "theme.rkt" current-tui-theme theme-ref theme-color->sgr))
 ;;
-;; Renders styled-lines to a tui-ubuf buffer.
-;; No terminal I/O directly — all output goes through ubuf.
+;; Renders styled-lines to a native cell buffer.
+;; No terminal I/O directly — all output goes through the buffer.
 ;;
-;; tui-ubuf ubuf-putstring! signature:
+;; cell-buffer-putstring! signature:
 ;;   (ubuf-putstring! ub x y str
 ;;     #:fg [fg 7]  #:bg [bg 0]
 ;;     #:bold [bold #f]  #:underline [underline #f]
 ;;     #:italic [italic #f]  #:blink [blink #f])
 ;;
-;; NOTE: tui-ubuf has NO #:inverse, #:dim, or #:reset keywords.
+;; NOTE: cell buffer has NO #:inverse, #:dim, or #:reset keywords.
 ;;   inverse = swap fg/bg (fg=0, bg=7)
 ;;   dim     = fg=8 (dark gray)
 ;;   reset   = fg=7, bg=0, bold=#f (default values)
