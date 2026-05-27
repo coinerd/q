@@ -1,4 +1,40 @@
 # Changelog
+## v0.61.1 — 2026-05-27
+
+### Native TUI M2 — Production VDOM Components
+
+Upgrade all vdom components from placeholders to production-quality:
+- TranscriptComponent uses render-transcript for real styled-lines→vnodes
+- StatusBarComponent uses render-status-bar with full status info
+- InputBoxComponent uses render-input-line with q> prompt
+- HeaderComponent matches renderer.rkt inverse-style header exactly
+- Extracted render-header-line() and render-overlay-lines() from renderer.rkt
+
+**W0 — Production TranscriptComponent** (PR #5672)
+- Uses render-transcript, converts styled-lines→vnodes via helpers
+- Adds styled-lines->vnodes, styled-line->vnode exports
+- 7 new tests
+
+**W1 — Production StatusBarComponent** (PR #5673)
+- Uses render-status-bar from status-line.rkt
+- 3 new tests
+
+**W2 — Production InputBoxComponent** (PR #5674)
+- Uses render-input-line from status-line.rkt
+- 2 new tests
+
+**W3 — Production Header + Overlay** (PR #5675)
+- Header matches renderer.rkt exactly: " q " inverse
+- 2 new tests
+
+**W4 — Renderer refactor** (PR #5676)
+- Extract render-header-line and render-overlay-lines
+- 4 new tests
+
+**W5 — Gate + Version Bump**
+- All 150 TUI tests pass
+- Version 0.61.0 → 0.61.1
+
 ## v0.61.0 — 2026-05-27
 
 ### Native TUI M1 — VDOM Render Path + Parity Tests
