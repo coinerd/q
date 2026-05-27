@@ -4,6 +4,31 @@
 
 v0.60.4
 
+## Native TUI Stack
+
+The TUI layer uses a six-layer native Racket architecture (no external dependencies).
+See ADR-0016 for full details.
+
+```
+┌───────────────────────────────────────┐
+│       Bridge (vdom-bridge.rkt)        │  Integration with render loop
+├───────────────────────────────────────┤
+│    Components (vdom-components.rkt)   │  Typed zone components
+├───────────────────────────────────────┤
+│   Virtual DOM (vdom*.rkt, 3 files)    │  vnode trees + layout + render
+├───────────────────────────────────────┤
+│   Cell Diff (cell-diff*.rkt, 2 files) │  Incremental rendering
+├───────────────────────────────────────┤
+│    Cell Buffer (cell-buffer.rkt)      │  2D cell grid storage
+├───────────────────────────────────────┤
+│  Terminal I/O (terminal-native.rkt)   │  ANSI sequences, raw mode
+└───────────────────────────────────────┘
+```
+
+Key files: `tui/terminal-native.rkt`, `tui/cell-buffer.rkt`, `tui/cell-diff.rkt`,
+`tui/cell-diff-render.rkt`, `tui/vdom.rkt`, `tui/vdom-layout.rkt`,
+`tui/vdom-render.rkt`, `tui/vdom-bridge.rkt`, `tui/vdom-components.rkt`
+
 ## Layer Diagram
 
 ```
