@@ -2,7 +2,7 @@
 
 ## Version
 
-v0.62.1
+v0.62.2
 
 ## Native TUI Stack
 
@@ -58,7 +58,7 @@ Component lifecycle (since v0.62.0):
 - `component-render` uses cache (invalidates on width/state change)
 - `component-state-ref/set!` for per-component local state
 
-Key dispatch (since v0.62.1):
+Key dispatch (since v0.62.2):
 - `focused-component-id-box` on `tui-ctx` tracks which component receives keys
 - `handle-key` checks focused component first, falls back to keymap
 - Opt-in via `wants-focus? #t` + `handle-input-fn`

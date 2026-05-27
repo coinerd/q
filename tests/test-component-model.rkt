@@ -214,7 +214,64 @@
    (set-box! (tui-ctx-component-registry-box ctx) (make-hash (list (cons 'test-focusable test-comp))))
    (tui-ctx-set-focused-component! ctx 'test-focusable)
    (handle-key ctx #\a)
-   (check-equal? (unbox key-log) '(#\a))))
+   (check-equal? (unbox key-log) '(#\a)))
+ ;; ──────────────────────────────
+ ;; Focus cycling via cycle-focus
+ ;; ──────────────────────────────
+ (test-case "cycle-focus returns #f when no focusable components"
+   (define comp (make-q-component (lambda (s w) '()) #:wants-focus? #f))
+   (check-false (cycle-focus (list comp) #f)))
+ (test-case "cycle-focus cycles forward through focusable components"
+   (define c1 (make-q-component (lambda (s w) '()) #:id 'a #:wants-focus? #t))
+   (define c2 (make-q-component (lambda (s w) '()) #:id 'b #:wants-focus? #t))
+   (define c3 (make-q-component (lambda (s w) '()) #:id 'c #:wants-focus? #t))
+   (define comps (list c1 c2 c3))
+   ;; Start from #f → first focusable
+   (check-equal? (cycle-focus comps #f 1) 'a)
+   ;; From a → b
+   (check-equal? (cycle-focus comps 'a 1) 'b)
+   ;; From b → c
+   (check-equal? (cycle-focus comps 'b 1) 'c)
+   ;; From c → wraps to a
+   (check-equal? (cycle-focus comps 'c 1) 'a))
+ (test-case "cycle-focus cycles backward through focusable components"
+   (define c1 (make-q-component (lambda (s w) '()) #:id 'a #:wants-focus? #t))
+   (define c2 (make-q-component (lambda (s w) '()) #:id 'b #:wants-focus? #t))
+   (define c3 (make-q-component (lambda (s w) '()) #:id 'c #:wants-focus? #t))
+   (define comps (list c1 c2 c3))
+   ;; From #f → index -1, backward: modulo(-1 + (-1), 3) = modulo(-2, 3) = 1 → b
+   (check-equal? (cycle-focus comps #f -1) 'b)
+   ;; From c → b
+   (check-equal? (cycle-focus comps 'c -1) 'b)
+   ;; From a → wraps to c
+   (check-equal? (cycle-focus comps 'a -1) 'c))
+ (test-case "M-Tab (alt-tab) cycles focus in tui-ctx via handle-key"
+   (define c1 (make-q-component (lambda (s w) '()) #:id 'comp-a #:wants-focus? #t))
+   (define c2 (make-q-component (lambda (s w) '()) #:id 'comp-b #:wants-focus? #t))
+   (define ctx (make-tui-ctx))
+   (set-box! (tui-ctx-component-registry-box ctx)
+             (make-hash (list (cons 'comp-a c1) (cons 'comp-b c2))))
+   ;; No focus yet → first focusable
+   (handle-key ctx 'alt-tab)
+   (check-equal? (tui-ctx-focused-component-id ctx) 'comp-a)
+   ;; Forward → second
+   (handle-key ctx 'alt-tab)
+   (check-equal? (tui-ctx-focused-component-id ctx) 'comp-b)
+   ;; Forward → wraps to first
+   (handle-key ctx 'alt-tab)
+   (check-equal? (tui-ctx-focused-component-id ctx) 'comp-a))
+ (test-case "S-Tab (shift-tab) cycles focus backward via handle-key"
+   (define c1 (make-q-component (lambda (s w) '()) #:id 'comp-a #:wants-focus? #t))
+   (define c2 (make-q-component (lambda (s w) '()) #:id 'comp-b #:wants-focus? #t))
+   (define ctx (make-tui-ctx))
+   (set-box! (tui-ctx-component-registry-box ctx)
+             (make-hash (list (cons 'comp-a c1) (cons 'comp-b c2))))
+   ;; Start from #f -> backward from -1: modulo(-1 + (-1), 2) = 0 -> comp-a
+   (handle-key ctx 'shift-tab)
+   (check-equal? (tui-ctx-focused-component-id ctx) 'comp-a)
+   ;; Backward from comp-a -> comp-b
+   (handle-key ctx 'shift-tab)
+   (check-equal? (tui-ctx-focused-component-id ctx) 'comp-b)))
 
 (run-tests focus-tracking-tests)
 (run-tests test-component-model)

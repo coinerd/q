@@ -22,7 +22,9 @@
          (only-in "../component.rkt"
                   component-handle-input
                   q-component-handle-input-fn
-                  input-consumed?))
+                  input-consumed?
+                  cycle-focus
+                  focusable-components))
 
 ;; Dispatch a keymap action to the appropriate handler.
 ;; Returns 'handled if handled (maps to 'continue in handle-key),
@@ -208,6 +210,28 @@
                                       (hash))))
               (set-box! (tui-ctx-ui-state-box ctx)
                         (clear-streaming (set-pending-tool-name (set-busy state #f) #f)))))
+        'continue]
+       [(alt-tab)
+        ;; Cycle focus forward through focusable components
+        (let ()
+          (define reg-box (tui-ctx-component-registry-box ctx))
+          (define reg (and reg-box (unbox reg-box)))
+          (when reg
+            (define comps (hash-values reg))
+            (define current (tui-ctx-focused-component-id ctx))
+            (define next-id (cycle-focus comps current 1))
+            (tui-ctx-set-focused-component! ctx next-id)))
+        'continue]
+       [(shift-tab)
+        ;; Cycle focus backward through focusable components
+        (let ()
+          (define reg-box (tui-ctx-component-registry-box ctx))
+          (define reg (and reg-box (unbox reg-box)))
+          (when reg
+            (define comps (hash-values reg))
+            (define current (tui-ctx-focused-component-id ctx))
+            (define prev-id (cycle-focus comps current -1))
+            (tui-ctx-set-focused-component! ctx prev-id)))
         'continue]
        [(left kp-left)
         (set-box! (tui-ctx-input-state-box ctx) (input-cursor-left inp))
