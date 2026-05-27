@@ -5,7 +5,8 @@
 (require rackunit
          rackunit/text-ui
          "../tui/component.rkt"
-         "../tui/state.rkt")
+         "../tui/state.rkt"
+         "../tui/vdom.rkt")
 
 (define-test-suite
  test-component-model
@@ -101,6 +102,34 @@
    (check-false (ui-state-focused-component s1)))
  (test-case "focused-component defaults to #f"
    (define s0 (initial-ui-state))
-   (check-false (ui-state-focused-component s0))))
+   (check-false (ui-state-focused-component s0)))
+ ;; ──────────────────────────────
+ ;; vdom mode components
+ ;; ──────────────────────────────
+ (test-case "make-q-component with #:vdom? #t"
+   (define comp
+     (make-q-component (lambda (state width) (list (vtext "Hello vdom" '(bold))))
+                       #:id 'vdom-test
+                       #:vdom? #t))
+   (check-true (q-component-vdom? comp))
+   (check-false (q-component-vdom? (make-q-component (lambda (s w) '()))))
+   (define result (component-render comp (initial-ui-state) 80))
+   (check-equal? (length result) 1)
+   (check-true (vtext? (car result))))
+ (test-case "component-render caches vdom output"
+   (define call-count (box 0))
+   (define comp
+     (make-q-component (lambda (state width)
+                         (set-box! call-count (add1 (unbox call-count)))
+                         (list (vtext "cached" '())))
+                       #:vdom? #t))
+   (component-render comp (initial-ui-state) 80)
+   (component-render comp (initial-ui-state) 80)
+   (check-equal? (unbox call-count) 1))
+ (test-case "component-compose mixes vdom and styled-line components"
+   (define vdom-comp (make-q-component (lambda (s w) (list (vtext "vdom" '()))) #:vdom? #t))
+   (define classic-comp (make-q-component (lambda (s w) (list (list (cons 'text "classic"))))))
+   (define result (component-compose (list vdom-comp classic-comp) (initial-ui-state) 80))
+   (check-equal? (length result) 2)))
 
 (run-tests test-component-model)
