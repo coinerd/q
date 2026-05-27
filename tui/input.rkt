@@ -86,7 +86,7 @@
           ;; Mouse events
           [parse-mouse-event (-> any/c (or/c mouse-event? #f))]
           [decode-mouse-x10 (-> exact-integer? exact-integer? exact-integer? (or/c list? #f))]
-          [decode-mouse-tui-term (-> any/c (or/c list? #f))]
+          [decode-mouse-message (-> any/c (or/c list? #f))]
           ;; Selection helpers
           [normalize-selection-range
            (-> (cons/c exact-nonnegative-integer? exact-nonnegative-integer?)

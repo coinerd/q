@@ -59,7 +59,7 @@
 ;; ── Ubuf/terminal lifecycle ──
 (provide fix-sgr-bg-black
          decode-mouse-x10
-         decode-mouse-tui-term
+         decode-mouse-message
          current-busy-watchdog-ms
          (contract-out [check-busy-watchdog (-> any/c number? number? (or/c any/c #f))]
                        [render-ubuf-to-terminal! (-> tui-ctx? void?)]
@@ -356,7 +356,7 @@
     ;; Resize message
     [(tsizemsg? msg) (list 'resize (tsizemsg-cols msg) (tsizemsg-rows msg))]
     ;; Mouse message — native vector dispatch
-    [(tmousemsg? msg) (decode-mouse-tui-term msg)]
+    [(tmousemsg? msg) (decode-mouse-message msg)]
     ;; Command message (redraw, etc.)
     [(tcmdmsg? msg)
      (case (tcmdmsg-cmd msg)

@@ -50,7 +50,7 @@
 
          real-stdin-read-msg
          decode-sgr-mouse
-         stub-byte-ready?
+         default-byte-ready?
          buffered-read-byte
          input-buffer-reset!
          input-buffer-length
@@ -100,10 +100,9 @@
          utf8-accumulator-length)
 
 ;; ============================================================
-;; UTF-8 support (compatibility stubs)
+;; UTF-8 support functions
 ;; ============================================================
-;; These functions were used with charterm which required manual
-;; UTF-8 handling. Provided as stubs for backward compatibility.
+;; These functions handle UTF-8 decoding for terminal input.
 
 ;; Check if a char represents a byte > 127 (UTF-8 lead or continuation)
 (define (utf8-high-byte? ch)
@@ -663,5 +662,5 @@
      (make-tkeymsg-raw (integer->char b))]
     [_ #f]))
 
-(define (stub-byte-ready?)
+(define (default-byte-ready?)
   (char-ready? (current-input-port)))
