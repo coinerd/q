@@ -70,12 +70,13 @@
 
 (define (make-input-box-vdom-component)
   (make-q-component (lambda (st width)
-                      ;; Production: use render-input-line from status-line.rkt
-                      ;; We need the input-state, which is passed separately in render-frame-vdom!
-                      ;; For component API, we store it in the ui-state's focused-component slot.
-                      ;; For now, this returns a prompt placeholder; the actual text comes from
-                      ;; render-frame-vdom! which calls render-input-line directly.
                       (list (styled-line->vnode (render-input-line (initial-input-state) width))))
+                    #:id 'input-box-vdom
+                    #:vdom? #t))
+
+;; Production input component factory — captures input-state from caller.
+(define (make-input-vdom-component/istate input-st)
+  (make-q-component (lambda (st width) (list (styled-line->vnode (render-input-line input-st width))))
                     #:id 'input-box-vdom
                     #:vdom? #t))
 
@@ -199,6 +200,7 @@
                        [styled-line->vnode (-> styled-line? vnode?)]
                        [make-status-bar-vdom-component (-> q-component?)]
                        [make-input-box-vdom-component (-> q-component?)]
+                       [make-input-vdom-component/istate (-> any/c q-component?)]
                        [make-header-vdom-component (-> q-component?)]
                        [make-overlay-vdom-component
                         (->* (q-component? #:anchor q-component?)
