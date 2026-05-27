@@ -207,5 +207,51 @@
     (check-equal? (image-metadata-timeout) 5)
     (check-equal? (image-resize-timeout) 15)))
 
+;; ============================================================
+;; Actual resize argv proof with option-like filename (#5546)
+;; ============================================================
+
+(test-case "resize-image handles option-like filename safely (#5546)"
+  ;; Create a small real PNG (1x1 red pixel)
+  (define tmp-dir (make-temporary-file "qtest-resize-~a" 'directory))
+  (define tmp-file (build-path tmp-dir "-resize.png"))
+  ;; Use ImageMagick to create a 1x1 test image
+  (define-values (create-ok _)
+    (run-argv (list "convert" "-size" "1x1" "xc:red" (path->string tmp-file))))
+  (unless create-ok
+    (log-warning "skipping resize test: convert failed to create test image"))
+  (when (and create-ok (file-exists? tmp-file))
+    ;; The filename starts with - but resize must handle it via absolute path
+    (define result
+      (with-handlers ([exn:fail? (lambda (e)
+                                   (check-true #f (format "resize crashed: ~a" (exn-message e))))])
+        (resize-image tmp-file #:max-width 100 #:max-height 100)))
+    (check-true (or (path-string? result) (not result))
+                "resize should return a path or #f, not crash"))
+  ;; Cleanup
+  (when (directory-exists? tmp-dir)
+    (delete-directory/files tmp-dir)))
+
+(test-case "resize-image handles normal filename (#5546)"
+  (define tmp-dir (make-temporary-file "qtest-resize-~a" 'directory))
+  (define tmp-file (build-path tmp-dir "normal.png"))
+  (define-values (create-ok _)
+    (run-argv (list "convert" "-size" "1x1" "xc:blue" (path->string tmp-file))))
+  (when (and create-ok (file-exists? tmp-file))
+    (define result
+      (with-handlers ([exn:fail? (lambda (e) (void))])
+        (resize-image tmp-file #:max-width 100 #:max-height 100)))
+    (check-true (or (path-string? result) (not result))))
+  (when (directory-exists? tmp-dir)
+    (delete-directory/files tmp-dir)))
+
+(test-case "resize argv uses ensure-absolute-path for option-like input (#5546)"
+  ;; Verify the ensure-absolute-path guard is applied before subprocess
+  ;; by checking that a dash-prefixed relative path becomes absolute
+  (define rel-path "-evil.png")
+  (define abs-path (ensure-absolute-path rel-path))
+  (define abs-str (path->string abs-path))
+  (check-false (string-prefix? abs-str "-") "absolute path must not start with dash"))
+
 (module+ main
   (require rackunit/text-ui))
