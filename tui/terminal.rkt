@@ -8,15 +8,12 @@
 ;; where terminal control is unavailable.
 ;;
 ;; Architecture: This facade re-exports the full public API from
-;;   - terminal-bridge.rkt  (raw terminal I/O, screen-size queries)
+;;   - terminal-native.rkt  (raw terminal I/O, screen-size queries)
 ;;   - terminal-input.rkt   (key reading, escape-sequence parsing)
 ;; and adds drawing primitives, style helpers, screen-size caching,
 ;; lifecycle management, and key helpers on top.
 ;;
-;; The stub pattern: when tui-term is not installed, terminal-bridge.rkt
-;; provides no-op stubs so the TUI module tree compiles and loads without
-;; error. Runtime callers should check `tui-term-available?` before using
-;; drawing functions.
+;; All terminal I/O is native — no external tui-term dependency.
 ;;
 ;; The public API (provide) is identical to the original monolithic module
 ;; before the refactor into bridge + input + facade.
@@ -26,7 +23,7 @@
          racket/string
          racket/list
          "clipboard.rkt"
-         "terminal-bridge.rkt"
+         "terminal-native.rkt"
          "terminal-input.rkt")
 
 ;; Lifecycle
@@ -148,7 +145,7 @@
          input-buffer-length)
 
 ;; ============================================================
-;; Input selection (bridge between terminal-bridge and terminal-input)
+;; Input selection (native terminal-input)
 ;; ============================================================
 
 (define read-msg (or read-msg-fn real-stdin-read-msg))
