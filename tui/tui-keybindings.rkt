@@ -45,6 +45,7 @@
                   tui-ctx-ubuf-box
                   tui-ctx-model-registry-box
                   tui-ctx-previous-frame-box
+                  tui-ctx-prev-ubuf-box
                   tui-ctx-last-prompt-box
                   tui-ctx-extension-registry-box
                   tui-ctx-session-queue-box
@@ -82,6 +83,8 @@
          tui-ctx-ubuf-box
          tui-ctx-model-registry-box
          tui-ctx-previous-frame-box
+         tui-ctx-previous-frame-box
+         tui-ctx-prev-ubuf-box
          tui-ctx-last-prompt-box
          tui-ctx-extension-registry-box
          tui-ctx-session-queue-box
@@ -158,6 +161,7 @@
                     (tui-ctx-session-dir ctx)
                     (tui-ctx-needs-redraw-box ctx)
                     (tui-ctx-model-registry-box ctx)
+                    tui-ctx-previous-frame-box
                     (tui-ctx-last-prompt-box ctx)
                     (tui-ctx-session-runner ctx)
                     (box "")

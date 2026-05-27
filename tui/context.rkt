@@ -26,6 +26,7 @@
          ubuf-box ; (boxof any) — ubuf buffer for output
          model-registry-box ; (boxof (or/c model-registry? #f)) — model registry for /model
          previous-frame-box ; (boxof (or/c (listof string) #f)) — last rendered frame for diffing
+         prev-ubuf-box ; (boxof (or/c any/c #f)) — previous cell buffer for cell-level diffing
          last-prompt-box ; (boxof (or/c string? #f)) — last user prompt for /retry
          extension-registry-box ; (or/c (boxof (or/c extension-registry? #f)) #f)
          session-queue-box ; (boxof (or/c queue? #f)) — agent queue for followup during streaming (G3.1)
@@ -51,6 +52,7 @@
            (box #f) ; ubuf-box - set when buffer created
            (box reg) ; model-registry-box
            (box #f) ; previous-frame-box - #f means no previous frame
+           (box #f) ; prev-ubuf-box - previous cell buffer for cell-diff
            (box #f) ; last-prompt-box - #f until first submit
            (box ext-reg) ; extension-registry-box
            (box sess-queue) ; session-queue-box
@@ -74,6 +76,7 @@
          tui-ctx-ubuf-box
          tui-ctx-model-registry-box
          tui-ctx-previous-frame-box
+         tui-ctx-prev-ubuf-box
          tui-ctx-last-prompt-box
          tui-ctx-extension-registry-box
          tui-ctx-session-queue-box
