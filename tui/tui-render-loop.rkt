@@ -31,6 +31,8 @@
          "../tui/cell-diff.rkt"
          "../tui/cell-diff-render.rkt"
          "../tui/vdom-render.rkt"
+         (prefix-in vdom-comp: "../tui/vdom-components.rkt")
+         (only-in "../tui/component.rkt" q-component-render-fn)
          (only-in "../tui/render.rkt"
                   render-transcript
                   render-status-bar
@@ -155,14 +157,11 @@
   ;; 1. Clear the buffer
   (cell-buffer-clear! ubuf)
 
-  ;; 2. Draw header row
+  ;; 2. Draw header row via vdom component
   (when header-row
-    (cell-buffer-putstring! ubuf
-                            0
-                            header-row
-                            (format " q ~a" (make-string (max 0 (- cols 3)) #\space))
-                            #:fg 0
-                            #:bg 7))
+    (define header-comp (vdom-comp:make-header-vdom-component))
+    (define header-vnodes ((q-component-render-fn header-comp) ui-state cols))
+    (render-vdom-section-to-buffer! header-vnodes ubuf cols header-row 1))
 
   ;; 3. Render transcript via section renderer → styled-lines → cell-buffer
   (define-values (trans-lines-raw ui-state*) (render-transcript ui-state transcript-height cols))
@@ -202,13 +201,15 @@
       (when (< widget-y status-y)
         (render-styled-line-to-buffer! line ubuf cols widget-y))))
 
-  ;; 5. Draw status bar
-  (define status-line (render-status-bar ui-state cols))
-  (render-styled-line-to-buffer! status-line ubuf cols status-y)
+  ;; 5. Draw status bar via vdom component
+  (define status-comp (vdom-comp:make-status-bar-vdom-component))
+  (define status-vnodes ((q-component-render-fn status-comp) ui-state cols))
+  (render-vdom-section-to-buffer! status-vnodes ubuf cols status-y 1)
 
-  ;; 6. Draw input line
-  (define input-line (render-input-line input-st cols))
-  (render-styled-line-to-buffer! input-line ubuf cols input-y)
+  ;; 6. Draw input line via vdom component
+  (define input-comp (vdom-comp:make-input-vdom-component/istate input-st))
+  (define input-vnodes ((q-component-render-fn input-comp) ui-state cols))
+  (render-vdom-section-to-buffer! input-vnodes ubuf cols input-y 1)
 
   ;; 7. Draw overlay if active
   (define overlay (ui-state-active-overlay ui-state))
