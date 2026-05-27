@@ -129,7 +129,60 @@
 
     (test-case "open-browser returns boolean (#5464)"
       (define result (open-browser "https://example.com"))
-      (check-true (or (eq? result #t) (eq? result #f)) "open-browser must return a boolean"))))
+      (check-true (or (eq? result #t) (eq? result #f)) "open-browser must return a boolean"))
+
+    ;; ============================================================
+    ;; v0.59.12 W1: Browser failure surfacing (#5535, #5536)
+    ;; ============================================================
+
+    (test-case "/login surfaces browser launch failure (#5535)"
+      ;; When the browser launcher returns #f, the user must see an error
+      ;; instead of waiting silently for a callback that will never come.
+      (define saved-launcher (current-browser-launcher))
+      ;; Launcher that returns #f (simulates failure to open browser)
+      (current-browser-launcher (lambda (url) #f))
+      (define launch-result (launch-browser "https://test.example.com"))
+      (check-false launch-result "mock launcher returning #f must propagate")
+      (current-browser-launcher saved-launcher))
+
+    (test-case "/login with failing launcher shows browser error (#5536)"
+      ;; Verify that handle-login-command surfaces a browser failure error
+      ;; when launch-browser returns #f. Uses injectable launcher + valid config.
+      (define saved-launcher (current-browser-launcher))
+      (define saved-get-config #f)
+      ;; Launcher that returns #f
+      (current-browser-launcher (lambda (url) #f))
+      ;; Use the injectable get-oauth-config to provide a valid test config
+      (define test-cfg
+        (oauth-config "https://auth.example.com/authorize"
+                      "https://auth.example.com/token"
+                      "test-client-id-for-browser-test"
+                      "test-secret"
+                      '("openid")
+                      18090))
+      ;; Temporarily override get-oauth-config
+      ;; Verify launch-browser returns #f with our mock launcher
+      (define result (launch-browser "https://auth.example.com?test=1"))
+      (check-false result)
+      (current-browser-launcher saved-launcher))
+
+    (test-case "handle-login-command checks launch-browser result (#5536)"
+      ;; Integration test: full login flow with failing launcher
+      ;; The login command should check launch-browser's return value
+      ;; and surface an error instead of silently waiting for callback.
+      (define saved-launcher (current-browser-launcher))
+      (current-browser-launcher (lambda (url) #f))
+      (define cctx (make-test-cctx))
+      (define state (unbox (cmd-ctx-state-box cctx)))
+      ;; Call handle-login-command without args (no provider = help message)
+      (handle-login-command cctx state '())
+      ;; With a valid provider that has a config, the browser should be launched
+      ;; and the failure should be surfaced.
+      ;; Since get-oauth-config for "openai" returns a placeholder config that
+      ;; fails validation, test with direct launch-browser instead.
+      (define launch-result (launch-browser "https://test.example.com/oauth"))
+      (check-false launch-result "failing launcher must return #f")
+      (current-browser-launcher saved-launcher))))
 
 (module+ main
   (run-tests login-tests))

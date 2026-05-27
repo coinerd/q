@@ -162,34 +162,47 @@
                  (oauth-authorize-url (struct-copy oauth-config cfg [redirect-port port])
                                       state-param
                                       challenge))
-               ;; Open browser
-               (launch-browser auth-url)
-               ;; Wait for callback
-               (define code (get-code))
+               ;; Open browser — check result to surface failure
+               (define browser-result (launch-browser auth-url))
                (cond
-                 [code
-                  (define tok (oauth-exchange-code cfg code #:code-verifier verifier))
+                 [(not browser-result)
+                  (set-box!
+                   (cmd-ctx-state-box cctx)
+                   (add-transcript-entry
+                    (unbox (cmd-ctx-state-box cctx))
+                    (make-error-entry
+                     (format "Could not open browser for ~a login. Please open this URL manually: ~a"
+                             (or provider-name "provider")
+                             auth-url))))
+                  (set-box! (cmd-ctx-needs-redraw-box cctx) #t)]
+                 [else
+                  ;; Wait for callback
+                  (define code (get-code))
                   (cond
-                    [tok
-                     (store-oauth-token! (or provider-name "default") tok)
-                     (set-box! (cmd-ctx-state-box cctx)
-                               (add-transcript-entry
-                                (unbox (cmd-ctx-state-box cctx))
-                                (make-system-entry (format "[login successful: ~a]"
-                                                           (or provider-name "default")))))
-                     (set-box! (cmd-ctx-needs-redraw-box cctx) #t)]
+                    [code
+                     (define tok (oauth-exchange-code cfg code #:code-verifier verifier))
+                     (cond
+                       [tok
+                        (store-oauth-token! (or provider-name "default") tok)
+                        (set-box! (cmd-ctx-state-box cctx)
+                                  (add-transcript-entry
+                                   (unbox (cmd-ctx-state-box cctx))
+                                   (make-system-entry (format "[login successful: ~a]"
+                                                              (or provider-name "default")))))
+                        (set-box! (cmd-ctx-needs-redraw-box cctx) #t)]
+                       [else
+                        (set-box! (cmd-ctx-state-box cctx)
+                                  (add-transcript-entry
+                                   (unbox (cmd-ctx-state-box cctx))
+                                   (make-error-entry
+                                    "Login failed: token exchange returned no token.")))
+                        (set-box! (cmd-ctx-needs-redraw-box cctx) #t)])]
                     [else
                      (set-box! (cmd-ctx-state-box cctx)
                                (add-transcript-entry
                                 (unbox (cmd-ctx-state-box cctx))
-                                (make-error-entry "Login failed: token exchange returned no token.")))
-                     (set-box! (cmd-ctx-needs-redraw-box cctx) #t)])]
-                 [else
-                  (set-box! (cmd-ctx-state-box cctx)
-                            (add-transcript-entry
-                             (unbox (cmd-ctx-state-box cctx))
-                             (make-error-entry "Login timed out or was denied.")))
-                  (set-box! (cmd-ctx-needs-redraw-box cctx) #t)])))))
+                                (make-error-entry "Login timed out or was denied.")))
+                     (set-box! (cmd-ctx-needs-redraw-box cctx) #t)])])))))
         'continue])]))
 
 ;; Get OAuth config for a known provider.
