@@ -76,6 +76,24 @@
   (check-true (q-component-vdom? comp))
   (check-equal? (q-component-id comp) 'header-vdom))
 
+(test-case "production header renders inverse-style header"
+  (define comp (make-header-vdom-component))
+  (define result (component-render comp (initial-ui-state) 80))
+  (check-true (andmap vnode? result))
+  (check-true (vhbox? (car result)))
+  ;; The header should have inverse style
+  (define children (vhbox-children (car result)))
+  (check-not-false (member 'inverse (vtext-style (car children)))))
+
+(test-case "production header renders to cell buffer"
+  (define comp (make-header-vdom-component))
+  (define vnodes (component-render comp (initial-ui-state) 80))
+  (define buf (make-cell-buffer 80 1))
+  (render-vdom-to-buffer! (vvbox vnodes) buf 80)
+  (define row0 (cell-buffer-row-string buf 0))
+  ;; Should contain "q" in the header
+  (check-not-false (string-contains? row0 "q")))
+
 ;; ============================================================
 ;; Component rendering returns vnodes
 ;; ============================================================
