@@ -20,6 +20,8 @@
 (require "../util/error-helpers.rkt")
 (require racket/contract
          racket/bytes
+         racket/string
+         racket/list
          "../tui/terminal.rkt"
          "../tui/state.rkt"
          "../tui/input.rkt"
@@ -30,6 +32,16 @@
          "../tui/cell-buffer.rkt"
          "../tui/cell-diff.rkt"
          "../tui/cell-diff-render.rkt"
+         "../tui/vdom-bridge.rkt"
+         "../tui/vdom-render.rkt"
+         (only-in "../tui/render.rkt"
+                  render-transcript
+                  render-status-bar
+                  render-input-line
+                  styled-line->ansi
+                  styled-line->text
+                  plain-line
+                  apply-selection-highlight)
          "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
          "../tui/tui-keybindings.rkt"
@@ -183,6 +195,106 @@
 ;; Render the complete frame to the terminal using ubuf.
 ;; Hides cursor during redraw to prevent flicker, shows after.
 ;; Clears needs-redraw flag after drawing.
+(define (render-frame-vdom! ubuf ui-state input-st layout)
+  ;; Render a complete frame using the vdom pipeline.
+  (define header-region (layout-header layout))
+  (define transcript-region (layout-transcript layout))
+  (define input-region (layout-input layout))
+  (define cols (layout-region-width header-region))
+  (define rows (+ (layout-region-y input-region) (layout-region-height input-region)))
+  (define header-row (layout-region-y header-region))
+  (define transcript-start-row (layout-region-y transcript-region))
+  (define transcript-height (layout-region-height transcript-region))
+  (define status-y (layout-region-y input-region))
+  (define input-y (min (sub1 rows) (add1 status-y)))
+
+  ;; 1. Clear the buffer
+  (cell-buffer-clear! ubuf)
+
+  ;; 2. Draw header row
+  (when header-row
+    (cell-buffer-putstring! ubuf
+                            0
+                            header-row
+                            (format " q ~a" (make-string (max 0 (- cols 3)) #\space))
+                            #:fg 0
+                            #:bg 7))
+
+  ;; 3. Render transcript via section renderer → styled-lines → cell-buffer
+  (define-values (trans-lines-raw ui-state*) (render-transcript ui-state transcript-height cols))
+  (define visible-lines-raw
+    (if (> (length trans-lines-raw) transcript-height)
+        (take-right trans-lines-raw transcript-height)
+        trans-lines-raw))
+  (define pad-count (- transcript-height (length visible-lines-raw)))
+  (define sel (ui-state-selection ui-state))
+  (define sel-anchor (selection-state-anchor sel))
+  (define sel-end (selection-state-end sel))
+  (define trans-lines
+    (if (and sel-anchor sel-end)
+        (apply-selection-highlight visible-lines-raw
+                                   sel-anchor
+                                   sel-end
+                                   transcript-start-row
+                                   pad-count)
+        visible-lines-raw))
+  ;; Render padding lines
+  (for ([i (in-range pad-count)])
+    (render-styled-line-to-buffer! (plain-line (make-string cols #\space))
+                                   ubuf
+                                   cols
+                                   (+ transcript-start-row i)))
+  ;; Render transcript lines
+  (for ([line (in-list trans-lines)]
+        [i (in-naturals)])
+    (render-styled-line-to-buffer! line ubuf cols (+ transcript-start-row pad-count i)))
+
+  ;; 4. Draw widget lines
+  (define widget-lines (get-widget-lines-above ui-state))
+  (when (> (length widget-lines) 0)
+    (for ([line (in-list widget-lines)]
+          [i (in-naturals)])
+      (define widget-y (+ transcript-start-row transcript-height i))
+      (when (< widget-y status-y)
+        (render-styled-line-to-buffer! line ubuf cols widget-y))))
+
+  ;; 5. Draw status bar
+  (define status-line (render-status-bar ui-state cols))
+  (render-styled-line-to-buffer! status-line ubuf cols status-y)
+
+  ;; 6. Draw input line
+  (define input-line (render-input-line input-st cols))
+  (render-styled-line-to-buffer! input-line ubuf cols input-y)
+
+  ;; 7. Draw overlay if active
+  (define overlay (ui-state-active-overlay ui-state))
+  (when overlay
+    (define ov-content (overlay-state-content overlay))
+    (define ov-lines
+      (if (> (length ov-content) transcript-height)
+          (take-right ov-content transcript-height)
+          ov-content))
+    (for ([i (in-range transcript-height)])
+      (cell-buffer-putstring! ubuf 0 (+ transcript-start-row i) (make-string cols #\space) #:bg 8))
+    (for ([line (in-list ov-lines)]
+          [i (in-naturals)])
+      #:break (>= i transcript-height)
+      (render-styled-line-to-buffer! line ubuf cols (+ transcript-start-row i))))
+
+  ;; 8. Build frame-lines for row-level diffing fallback
+  (define frame-vec (make-vector rows ""))
+  ;; Build simplified frame-lines (plain text) for row-diff compatibility
+  (for ([r (in-range rows)])
+    (define line-strs
+      (for/list ([c (in-range cols)])
+        (string (cell-char (cell-buffer-ref ubuf c r)))))
+    (vector-set! frame-vec r (string-join line-strs "")))
+
+  ;; 9. Return cursor position
+  (define-values (_visible-text _scroll-offset cursor-display-col)
+    (input-visible-window input-st cols))
+  (values cursor-display-col input-y ui-state* (vector->list frame-vec)))
+
 (define (render-frame! ctx)
   (define state (unbox (tui-ctx-ui-state-box ctx)))
   (define inp (unbox (tui-ctx-input-state-box ctx)))
@@ -197,9 +309,11 @@
                     #:widget-bar-h (length widget-lines)
                     #:has-widgets? (positive? (length widget-lines))))
 
-  ;; Render to ubuf (returns cursor position, state, frame lines)
+  ;; Render to ubuf — choose path based on use-vdom-render?
   (define-values (cursor-col cursor-row state* frame-lines)
-    (renderer:render-frame! ubuf state inp layout))
+    (if (use-vdom-render?)
+        (render-frame-vdom! ubuf state inp layout)
+        (renderer:render-frame! ubuf state inp layout)))
 
   ;; Write back state with updated render cache
   (set-box! (tui-ctx-ui-state-box ctx) state*)
