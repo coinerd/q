@@ -9,6 +9,7 @@
 ;; Pipeline: vnode → vdom-layout → styled-lines → vdom-render → cell-buffer
 
 (require racket/contract
+         racket/list
          racket/string
          "vdom.rkt"
          "vdom-layout.rkt"
@@ -69,6 +70,34 @@
            (loop (add1 i) (+ width cw)))])))
 
 ;; ============================================================
+;; Section rendering: component vnodes → cell-buffer at position
+;; ============================================================
+
+;; Render a list of vnodes to the cell buffer at a specific start-row,
+;; clipping to max-rows lines. Pads with blank lines if fewer than max-rows.
+;; This is the key bridge between vdom components and the cell buffer.
+(define (render-vdom-section-to-buffer! vnodes buf width start-row [max-rows #f])
+  (define styled-lines (apply append (map (lambda (v) (vdom-layout v width)) vnodes)))
+  (define clipped
+    (if max-rows
+        (if (> (length styled-lines) max-rows)
+            (take-right styled-lines max-rows)
+            styled-lines)
+        styled-lines))
+  (define pad-count
+    (if max-rows
+        (- max-rows (length clipped))
+        0))
+  ;; Render padding
+  (for ([i (in-range pad-count)])
+    (render-styled-line-to-buffer! (plain-line "") buf width (+ start-row i)))
+  ;; Render content lines
+  (for ([line (in-list clipped)]
+        [i (in-naturals)])
+    (render-styled-line-to-buffer! line buf width (+ start-row pad-count i)))
+  (void))
+
+;; ============================================================
 ;; Full pipeline: vnode → cell-buffer
 ;; ============================================================
 
@@ -91,5 +120,9 @@
           [render-vdom-to-buffer!
            (->* (vnode? cell-buffer? exact-nonnegative-integer?)
                 (#:start-row exact-nonnegative-integer?)
+                void?)]
+          [render-vdom-section-to-buffer!
+           (->* ((listof vnode?) cell-buffer? exact-nonnegative-integer? exact-nonnegative-integer?)
+                (exact-nonnegative-integer?)
                 void?)])
          truncate-to-visible-width)
