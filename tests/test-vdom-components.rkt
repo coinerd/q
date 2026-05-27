@@ -128,27 +128,6 @@
   (check-true (andmap vnode? result))
   (check-true (voverlay? (car result))))
 
-;; ============================================================
-;; Frame composition
-;; ============================================================
-
-(test-case "frame component composes all zones"
-  (define frame
-    (make-vdom-frame-component (make-header-vdom-component)
-                               (make-transcript-vdom-component)
-                               (make-status-bar-vdom-component)
-                               (make-input-box-vdom-component)))
-  (check-true (q-component-vdom? frame))
-  (define result (component-render frame (initial-ui-state) 80))
-  (check-true (andmap vnode? result))
-  (check-true (vvbox? (car result))))
-
-(test-case "frame component with #f zones"
-  (define frame (make-vdom-frame-component #f #f (make-status-bar-vdom-component) #f))
-  (define result (component-render frame (initial-ui-state) 80))
-  (check-true (andmap vnode? result)))
-
-;; ============================================================
 ;; Full pipeline: component → vdom → layout → buffer
 ;; ============================================================
 
@@ -160,20 +139,6 @@
   (define row0 (cell-buffer-row-string buf 0))
   (check-true (> (string-length row0) 0)))
 
-(test-case "frame renders complete layout to buffer"
-  (define frame
-    (make-vdom-frame-component (make-header-vdom-component)
-                               (make-transcript-vdom-component)
-                               (make-status-bar-vdom-component)
-                               (make-input-box-vdom-component)))
-  (define vnodes (component-render frame (initial-ui-state) 80))
-  (define buf (make-cell-buffer 80 10))
-  (render-vdom-to-buffer! (vvbox vnodes) buf 80)
-  ;; Should have content in at least row 0
-  (define row0 (cell-buffer-row-string buf 0))
-  (check-true (> (string-length (string-trim row0)) 0)))
-
-;; ============================================================
 ;; Production TranscriptComponent tests
 ;; ============================================================
 

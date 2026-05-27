@@ -25,20 +25,6 @@
 ;; ============================================================
 
 ;; Render a list of vnodes (one per section) to a cell buffer.
-;; Each vnode produces styled-lines which are rendered sequentially.
-;; Sections: header-lines, transcript-lines, status-line, input-lines.
-(define (render-vdom-frame! buf sections width #:header-count [header-count 0])
-  (define section-vnodes
-    (for/list ([sec (in-list sections)])
-      (if (vnode? sec)
-          sec
-          (vvbox '()))))
-  (define start-row 0)
-  (for ([vnode (in-list section-vnodes)])
-    (define lines (vdom-layout vnode width))
-    (render-styled-lines-to-buffer! lines buf width #:start-row start-row)
-    (set! start-row (+ start-row (length lines)))))
-
 ;; ============================================================
 ;; Convenience: convert styled-line to vnode
 ;; ============================================================
@@ -57,9 +43,5 @@
 ;; ============================================================
 
 (provide use-vdom-render?
-         (contract-out [render-vdom-frame!
-                        (->* (cell-buffer? (listof any/c) exact-nonnegative-integer?)
-                             (#:header-count exact-nonnegative-integer?)
-                             void?)]
-                       [styled-line->vnode (-> styled-line? vnode?)]
+         (contract-out [styled-line->vnode (-> styled-line? vnode?)]
                        [styled-lines->vnode (-> (listof styled-line?) vnode?)]))
