@@ -67,7 +67,7 @@
          (all-from-out "submit-handler.rkt"))
 
 ;; ============================================================
-;; Cell buffer (native — replaces tui-ubuf)
+;; Cell buffer (native)
 ;; ============================================================
 
 ;; Minimum render interval in milliseconds.

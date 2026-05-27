@@ -6,7 +6,7 @@
 ;;
 ;; Tests for:
 ;;   - decode-mouse-x10: X10 protocol decoding
-;;   - decode-mouse-tui-term: tui-term struct decoding (with mock)
+;;   - decode-mouse-tui-term: tui-term struct decoding (legacy) (with mock)
 ;;   - SGR mouse protocol constants in terminal.rkt
 ;;   - Error guard in handle-mouse
 ;;   - Bounds validation in selection-text
@@ -16,8 +16,8 @@
          "../../tui/input.rkt")
 
 ;; ── Helper: create a mock tui-term tmousemsg ──
-;; tui-term's tmousemsg is an actual struct, but we can't create one
-;; without tui-term loaded. We test decode-mouse-tui-term indirectly
+;; native tmousemsg is an actual struct, but we can't create one
+;; in native mode. We test decode-mouse-tui-term indirectly
 ;; by testing the X10 path and the error resilience.
 
 (define mouse-bridge-tests
@@ -65,10 +65,10 @@
     ;; Since tui-term structs aren't available in test context,
     ;; decode-mouse-tui-term should gracefully return #f for non-structs
 
-    (test-case "decode-mouse-tui-term: returns #f for non-tui-term input"
-      ;; A plain vector should not match tui-term struct predicate
-      (define result (decode-mouse-tui-term #(tmousemsg press (1 2) #t #f #f)))
-      (check-false result))
+    (test-case "decode-mouse-tui-term: decodes native vector input"
+      ;; Native vectors are decoded properly
+      (define result (decode-mouse-tui-term #(tmousemsg press 10 20 #t #f #f)))
+      (check-true (list? result)))
 
     ;; ── Edge cases ──
 

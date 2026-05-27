@@ -105,7 +105,6 @@
          tmousemsg-cx
          tmousemsg-cy
          ;; Mouse events — native vector accessors
-         tmousemsg-tui-term?
          tmousemsg-kind
          tmousemsg-pos-x
          tmousemsg-pos-y

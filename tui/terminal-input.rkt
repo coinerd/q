@@ -4,7 +4,7 @@
 ;;
 ;; Handles raw stdin input reading, ANSI escape sequence parsing,
 ;; key/mouse event generation, and UTF-8 accumulator state.
-;; These are the "real stdin" fallbacks used when tui-term is unavailable.
+;; Native terminal input handling (raw mode, ANSI decoding).
 ;;
 ;; Extracted from terminal.rkt for separation of concerns.
 
