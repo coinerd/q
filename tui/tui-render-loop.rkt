@@ -1,15 +1,15 @@
 #lang racket/base
 
-;; q/tui/tui-render-loop.rkt — Main render loop, ubuf lifecycle, event draining
+;; q/tui/tui-render-loop.rkt — Main render loop, cell-buffer lifecycle, event draining
 ;;
 ;; Extracted from interfaces/tui.rkt for modularity (Issue #194).
 ;;
 ;; Dependency chain: tui-init.rkt → tui-render-loop.rkt → tui-keybindings.rkt
 ;;
 ;; Provides:
-;;   render-ubuf-to-terminal! — ubuf → terminal output with SGR fix
-;;   tui-ctx-init-terminal!    — terminal + ubuf initialization
-;;   tui-ctx-resize-ubuf!      — resize ubuf on terminal resize
+;;   render-ubuf-to-terminal! — cell-buffer → terminal output with SGR fix
+;;   tui-ctx-init-terminal!    — terminal + cell-buffer initialization
+;;   tui-ctx-resize-ubuf!      — resize cell-buffer on terminal resize
 ;;   tui-ctx-ubuf, tui-ctx-term — ubuf/term accessors
 ;;   render-frame!, draw-frame  — frame rendering
 ;;   next-message               — terminal message adapter
@@ -27,6 +27,7 @@
          (prefix-in renderer: "../tui/renderer.rkt")
          "../tui/layout.rkt"
          "../tui/frame-diff.rkt"
+         "../tui/cell-buffer.rkt"
          "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
          "../tui/tui-keybindings.rkt"
@@ -63,11 +64,8 @@
          (all-from-out "submit-handler.rkt"))
 
 ;; ============================================================
-;; Ubuf FFI/stubs
+;; Cell buffer (native — replaces tui-ubuf)
 ;; ============================================================
-
-;; Import tui-ubuf for output buffering (dynamically with fallback)
-(define tui-ubuf-available? (with-safe-fallback #f (collection-path "tui") #t))
 
 ;; Minimum render interval in milliseconds.
 ;; Coalesces rapid state changes (e.g., streaming) into single frames.
@@ -77,49 +75,58 @@
 ;; Track last render timestamp for debouncing.
 (define last-render-ms (box 0.0))
 
-(define make-ubuf-fn
-  (and tui-ubuf-available? (with-safe-fallback #f (dynamic-require 'tui/ubuf 'make-ubuf))))
-
-(define ubuf-clear!-fn
-  (and tui-ubuf-available? (with-safe-fallback #f (dynamic-require 'tui/ubuf 'ubuf-clear!))))
-
-(define ubuf-putstring!-fn
-  (and tui-ubuf-available? (with-safe-fallback #f (dynamic-require 'tui/ubuf 'ubuf-putstring!))))
-
-(define display-ubuf!-fn
-  (and tui-ubuf-available? (with-safe-fallback #f (dynamic-require 'tui/ubuf/output 'display-ubuf!))))
-
-;; Fallback stubs for when tui-ubuf is not available
-(define (stub-make-ubuf cols rows)
-  (make-hash `((cols . ,cols) (rows . ,rows))))
-(define (stub-ubuf-clear! ubuf)
-  (void))
-(define (stub-ubuf-putstring! ubuf col row str . attrs)
-  (void))
-(define (stub-display-ubuf! ubuf port . opts)
-  (void))
-
-(define make-ubuf (or make-ubuf-fn stub-make-ubuf))
-(define ubuf-clear! (or ubuf-clear!-fn stub-ubuf-clear!))
-(define ubuf-putstring! (or ubuf-putstring!-fn stub-ubuf-putstring!))
-(define display-ubuf! (or display-ubuf!-fn stub-display-ubuf!))
+;; Native cell-buffer operations (no dynamic-require)
+(define make-ubuf make-cell-buffer)
+(define ubuf-clear! cell-buffer-clear!)
+(define ubuf-putstring! cell-buffer-putstring!)
 
 ;; ============================================================
 ;; Render ubuf to terminal
 ;; ============================================================
 
-;; Render ubuf to terminal with bg=0 replaced by terminal default bg.
-;; Captures display-ubuf! output, post-processes SGR sequences,
-;; then writes the fixed output to the real terminal.
-;; Uses DEC mode 2026 (Synchronized Output) when available to
-;; prevent torn frames during rapid streaming output.
-(define (render-ubuf-to-terminal! ubuf)
-  (define out (open-output-bytes))
-  (display-ubuf! ubuf out #:only-dirty #f #:linear #f)
-  (define bs (get-output-bytes out))
-  (define str (bytes->string/utf-8 bs))
+;; Render cell buffer to terminal.
+;; Iterates through cells and emits minimal ANSI sequences.
+;; Uses DEC 2026 (Synchronized Output) when available.
+(define (render-ubuf-to-terminal! ctx)
+  (define ubuf (tui-ctx-ubuf ctx))
+  (define cols (cell-buffer-cols ubuf))
+  (define rows (cell-buffer-rows ubuf))
+  (define out (tui-output-port))
   (terminal-sync-begin!)
-  (display (fix-sgr-bg-black str) (tui-output-port))
+  ;; Move cursor to origin and clear screen
+  (display "\x1b[H" out)
+  (for ([row (in-range rows)])
+    (when (> row 0)
+      (newline out))
+    (define prev-fg #f)
+    (define prev-bg #f)
+    (define prev-bold? #f)
+    (define prev-underline? #f)
+    (for ([col (in-range cols)])
+      (define cell (cell-buffer-ref ubuf col row))
+      (define fg (cell-fg cell))
+      (define bg (cell-bg cell))
+      (define bold? (cell-bold? cell))
+      (define underline? (cell-underline? cell))
+      ;; Only emit SGR when attributes change
+      (unless (and (= fg prev-fg)
+                   (= bg prev-bg)
+                   (eq? bold? prev-bold?)
+                   (eq? underline? prev-underline?))
+        (display "\x1b[0" out)
+        (when bold?
+          (display ";1" out))
+        (when underline?
+          (display ";4" out))
+        (display (format ";38;5;~a" fg) out)
+        (display (format ";48;5;~a" (if (= bg 0) 16 bg)) out)
+        (display "m" out)
+        (set! prev-fg fg)
+        (set! prev-bg bg)
+        (set! prev-bold? bold?)
+        (set! prev-underline? underline?))
+      (display (string (cell-char cell)) out)))
+  (display "\x1b[0m" out)
   (terminal-sync-end!))
 
 ;; ============================================================
@@ -195,7 +202,7 @@
     [(null? diffs) (void)]
     [(and (= (length diffs) 1) (eq? (diff-cmd-type (car diffs)) 'full))
      ;; Full redraw needed (first frame or resize)
-     (render-ubuf-to-terminal! ubuf)]
+     (render-ubuf-to-terminal! ctx)]
     [else
      ;; Incremental: write only changed lines
      (for ([cmd (in-list diffs)])
