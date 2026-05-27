@@ -214,7 +214,8 @@
 ;; Contracts and exports
 ;; ============================================================
 
-(provide (contract-out [make-transcript-vdom-component (-> q-component?)]
+(provide (contract-out [make-transcript-vdom-component
+                        (->* () (#:height exact-nonnegative-integer?) q-component?)]
                        [styled-lines->vnodes (-> (listof styled-line?) (listof vnode?))]
                        [styled-line->vnode (-> styled-line? vnode?)]
                        [make-status-bar-vdom-component (-> q-component?)]

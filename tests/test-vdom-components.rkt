@@ -226,10 +226,13 @@
 (test-case "production transcript renders to cell buffer"
   (define st0 (initial-ui-state))
   (define st1 (add-transcript-entry st0 (transcript-entry 'user "Test message" 0 (hash) #f)))
-  (define comp (make-transcript-vdom-component))
-  (define vnodes (component-render comp st1 80))
+  (define comp (make-transcript-vdom-component #:height 10))
+  (define vnodes ((q-component-render-fn comp) st1 80))
   (define buf (make-cell-buffer 80 10))
-  (render-vdom-to-buffer! (vvbox vnodes) buf 80)
+  ;; Render only the first 10 vnodes (height-clipped)
+  (for ([vn (in-list (take vnodes (min (length vnodes) 10)))]
+        [i (in-naturals)])
+    (render-vdom-to-buffer! vn buf 80 #:start-row i))
   ;; Should have content in at least one row
-  (define row0 (cell-buffer-row-string buf 0))
+  (define row0 (cell-buffer-row-string buf 9))
   (check-true (> (string-length (string-trim row0)) 0)))
