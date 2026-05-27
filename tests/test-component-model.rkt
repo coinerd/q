@@ -10,7 +10,9 @@
          (only-in "../tui/context.rkt"
                   make-tui-ctx
                   tui-ctx-focused-component-id
-                  tui-ctx-set-focused-component!))
+                  tui-ctx-set-focused-component!
+                  tui-ctx-component-registry-box)
+         (only-in "../tui/keybindings/key-dispatch.rkt" handle-key))
 
 (define-test-suite
  test-component-model
@@ -189,16 +191,30 @@
   (define r3 (component-render comp (initial-ui-state) 40))
   (check-equal? (component-state-ref comp 'scroll) 2)
   (check-equal? (component-state-ref comp 'scroll) 2))
-(define-test-suite focus-tracking-tests
-                   (test-case "tui-ctx focus tracking starts as #f"
-                     (define ctx (make-tui-ctx))
-                     (check-false (tui-ctx-focused-component-id ctx)))
-                   (test-case "tui-ctx set and get focused component"
-                     (define ctx (make-tui-ctx))
-                     (tui-ctx-set-focused-component! ctx 'input-vdom)
-                     (check-equal? (tui-ctx-focused-component-id ctx) 'input-vdom)
-                     (tui-ctx-set-focused-component! ctx #f)
-                     (check-false (tui-ctx-focused-component-id ctx))))
+(define-test-suite
+ focus-tracking-tests
+ (test-case "tui-ctx focus tracking starts as #f"
+   (define ctx (make-tui-ctx))
+   (check-false (tui-ctx-focused-component-id ctx)))
+ (test-case "tui-ctx set and get focused component"
+   (define ctx (make-tui-ctx))
+   (tui-ctx-set-focused-component! ctx 'input-vdom)
+   (check-equal? (tui-ctx-focused-component-id ctx) 'input-vdom)
+   (tui-ctx-set-focused-component! ctx #f)
+   (check-false (tui-ctx-focused-component-id ctx)))
+ (test-case "focused component receives key via handle-key"
+   (define key-log (box '()))
+   (define test-comp
+     (make-q-component (lambda (s w) '())
+                       #:id 'test-focusable
+                       #:handle-input (lambda (key state)
+                                        (set-box! key-log (cons key (unbox key-log)))
+                                        (values state (input-consumed)))))
+   (define ctx (make-tui-ctx))
+   (set-box! (tui-ctx-component-registry-box ctx) (make-hash (list (cons 'test-focusable test-comp))))
+   (tui-ctx-set-focused-component! ctx 'test-focusable)
+   (handle-key ctx #\a)
+   (check-equal? (unbox key-log) '(#\a))))
 
 (run-tests focus-tracking-tests)
 (run-tests test-component-model)

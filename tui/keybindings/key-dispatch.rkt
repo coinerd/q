@@ -18,7 +18,11 @@
          "../selection.rkt"
          "../../agent/event-bus.rkt"
          "../../util/event.rkt"
-         "../keymap.rkt")
+         "../keymap.rkt"
+         (only-in "../component.rkt"
+                  component-handle-input
+                  q-component-handle-input-fn
+                  input-consumed?))
 
 ;; Dispatch a keymap action to the appropriate handler.
 ;; Returns 'handled if handled (maps to 'continue in handle-key),
@@ -99,7 +103,20 @@
   ;; Any key that reaches here may change state — mark for redraw
   (mark-dirty! ctx)
 
-  ;; Check configurable keymap first
+  ;; 1. Check if a component is focused and can handle input
+  (define focused-id (tui-ctx-focused-component-id ctx))
+  (when focused-id
+    (define reg-box (tui-ctx-component-registry-box ctx))
+    (define reg (unbox reg-box))
+    (define comp (and reg (hash-ref reg focused-id #f)))
+    (when (and comp (q-component-handle-input-fn comp))
+      (define-values (new-state result) (component-handle-input comp keycode state))
+      (when (input-consumed? result)
+        (set-box! (tui-ctx-ui-state-box ctx) new-state)
+        (mark-dirty! ctx)
+        (set! state new-state))))
+
+  ;; 2. Check configurable keymap
   (define km (get-active-keymap))
   (define ks (keycode->key-spec-from-msg keycode))
   (define action (and ks (keymap-lookup km ks)))
