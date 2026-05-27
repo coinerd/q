@@ -29,6 +29,31 @@ Key files: `tui/terminal-native.rkt`, `tui/cell-buffer.rkt`, `tui/cell-diff.rkt`
 `tui/cell-diff-render.rkt`, `tui/vdom.rkt`, `tui/vdom-layout.rkt`,
 `tui/vdom-render.rkt`, `tui/vdom-bridge.rkt`, `tui/vdom-components.rkt`
 
+### Render Pipeline (since v0.61.3)
+
+The TUI uses a single render path (legacy path removed in v0.61.3):
+
+```
+ui-state → render-frame-vdom!
+              ├── Header    → cell-buffer-putstring!
+              ├── Transcript → render-transcript → styled-lines → render-styled-line-to-buffer!
+              ├── Status    → render-status-bar → styled-lines → render-styled-line-to-buffer!
+              ├── Input     → render-input-line → styled-lines → render-styled-line-to-buffer!
+              └── Overlay   → overlay content → render-styled-line-to-buffer!
+         ↓
+      cell-buffer (new frame)
+         ↓
+      diff-cell-buffers (prev vs new) → deltas
+         ↓
+      render-smart! → batched ANSI output (terminal)
+```
+
+Key optimizations:
+- **Batch rendering**: Consecutive same-row/same-SGR cells → single cursor move (37% faster)
+- **SGR dedup**: Only emit SGR when attributes change
+- **Cell-diff**: XOR row hashing, smart full vs incremental threshold (50%)
+- **DECAWM**: Auto-wrap disabled during render to prevent last-column wrap glitch
+
 ## Layer Diagram
 
 ```

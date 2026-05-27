@@ -1,7 +1,7 @@
 # ADR-0016: Native TUI Architecture
 
 ## Status
-Accepted
+Accepted — Updated for v0.61.3 (legacy path removed)
 
 ## Context
 The q TUI originally depended on two external Racket packages: `tui-term` (terminal I/O, input handling) and `tui-ubuf` (cell buffer, screen rendering). These dependencies created several problems:
@@ -49,15 +49,15 @@ Replace all external TUI dependencies with a native Racket architecture consisti
 ### Layer 6: Bridge (`tui/vdom-bridge.rkt`)
 - `render-vdom-frame!` — renders vnodes through the existing render loop
 - `styled-line->vnode` / `styled-lines->vnode` — migration helpers
-- `use-vdom-render?` parameter — toggles between vdom and direct rendering
+- `use-vdom-render?` parameter — always `#t` since v0.61.3 (legacy removed)
 
 ## Consequences
 
 ### Positive
 - **Zero external TUI dependencies**: Entire TUI stack is native Racket
-- **Better performance**: Cell-level incremental rendering (was row-level)
-- **Virtual DOM foundation**: Enables future GUI backend (M7 deferred)
-- **Cleaner code**: No `dynamic-require`, no dual code paths
+- **Better performance**: Cell-level incremental rendering with batch optimization (37% faster than per-cell)
+- **Virtual DOM is primary path**: Since v0.61.3, vdom+cell-diff is the only render path
+- **Cleaner code**: No `dynamic-require`, no dual code paths, no frame-diff fallback
 - **Easier testing**: All modules testable without external package mocking
 - **Smaller attack surface**: No dynamic loading of external packages
 

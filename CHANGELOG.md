@@ -1,4 +1,26 @@
 # Changelog
+## v0.61.3 — 2026-05-27
+
+### Native TUI M4 — Remove Legacy Path + Final Cleanup
+
+**W0 — Remove legacy render path** (PR #5682)
+- Removed `use-cell-diff?` parameter — cell-diff always used
+- Removed row-level frame-diff fallback and frame-vec construction
+- `render-frame-vdom!` is now the sole render path
+- `use-vdom-render?` defaults to `#t` (kept for backward compat)
+
+**W1 — TUI smoke tests** (PR #5683)
+- New `test-tui-smoke.rkt` with 7 end-to-end tests
+- Tests full vdom render pipeline without real terminal
+
+**W2 — Component integration tests** (PR #5684)
+- New `test-vdom-component-integration.rkt` with 6 tests
+- Focus cycling, overlay wrapping, input dispatch, render roundtrip
+
+**W3 — Final cleanup** (this wave)
+- Updated ADR-0016 for final architecture
+- Added render pipeline diagram to architecture overview
+
 ## v0.61.2 — 2026-05-27
 
 ### Native TUI M3 — Cell-Diff Batch Optimization + Benchmarking
