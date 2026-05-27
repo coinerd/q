@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.62.1 — 2026-05-27
+
+### Key Dispatch Through Components
+
+- **Focused component tracking**: `tui-ctx` now has `focused-component-id-box` field with `tui-ctx-focused-component-id` and `tui-ctx-set-focused-component!` accessors.
+- **Key dispatch through focused component**: `handle-key` in `key-dispatch.rkt` now checks if a component is focused and has a `handle-input-fn`. If so, it routes the key to the component first, then falls through to existing keymap dispatch if not consumed.
+- **Opt-in by design**: Only components with `wants-focus? #t` AND a `handle-input-fn` participate. Currently no production components set `wants-focus? #t`, so this is infrastructure for future use.
+- **New tests**: 3 new focus tracking tests including end-to-end key dispatch verification.
+
+
 ## v0.62.0 — 2026-05-27
 
 ### Component Lifecycle & State in Production
