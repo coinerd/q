@@ -715,7 +715,40 @@
             (make-test-event "model.stream.thinking" (hasheq 'delta "thinking"))
             (make-test-event "model.stream.completed" (hasheq))))
     (define state (simulate-events s0 events))
-    (check-false (ui-state-streaming-thinking state))))
+    (check-false (ui-state-streaming-thinking state)))
+
+  ;; ============================================================
+  ;; Extracted section functions
+  ;; ============================================================
+
+  (test-case "render-header-line returns inverse styled-line"
+    (define line (render-header-line 80))
+    (check-true (styled-line? line))
+    (define segs (styled-line-segments line))
+    (check-true (not (null? segs)))
+    ;; Should have inverse style
+    (define styles (styled-segment-style (car segs)))
+    (check-not-false (member 'inverse styles))
+    ;; Text should contain "q"
+    (check-not-false (string-contains? (styled-segment-text (car segs)) "q")))
+
+  (test-case "render-header-line width matches cols"
+    (define line (render-header-line 40))
+    (define text (styled-line->text line))
+    (check-equal? (string-length text) 40))
+
+  (test-case "render-overlay-lines returns empty for #f"
+    (check-equal? (render-overlay-lines #f 10) '()))
+
+  (test-case "render-overlay-lines clips to transcript height"
+    (define ov (overlay-state 'test
+                              (list (plain-line "Line 1")
+                                    (plain-line "Line 2")
+                                    (plain-line "Line 3")
+                                    (plain-line "Line 4"))
+                              #f #f #f #f #f #f))
+    (define lines (render-overlay-lines ov 2))
+    (check-equal? (length lines) 2)))
 
 ;; ============================================================
 ;; Run tests

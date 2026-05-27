@@ -36,6 +36,9 @@
 
 ;; Main rendering function
 (provide (contract-out
+          [render-header-line (-> exact-nonnegative-integer? styled-line?)]
+          [render-overlay-lines
+           (-> (or/c #f overlay-state?) exact-nonnegative-integer? (listof styled-line?))]
           [render-frame!
            (-> any/c
                ui-state?
@@ -257,6 +260,23 @@
 ;; Side effect: Modifies ubuf contents.
 ;; Returns: (values cursor-col cursor-row ui-state frame-lines)
 ;;   frame-lines is (listof string) — plain text for each row, for diffing
+;; Render header line as a styled-line.
+;; Returns a single styled-line with inverse style.
+(define (render-header-line cols)
+  (define header-text (format " q ~a" (make-string (max 0 (- cols 3)) #\space)))
+  (styled-line (list (styled-segment header-text '(inverse)))))
+
+;; Render overlay lines from overlay-state, clipped to transcript height.
+;; Returns (listof styled-line?) ready for drawing.
+(define (render-overlay-lines overlay transcript-height)
+  (if (not overlay)
+      '()
+      (let* ([ov-content (overlay-state-content overlay)]
+             [ov-lines (if (> (length ov-content) transcript-height)
+                           (take-right ov-content transcript-height)
+                           ov-content)])
+        ov-lines)))
+
 (define (render-frame! ubuf ui-state input-st layout)
   (define header-region (layout-header layout))
   (define transcript-region (layout-transcript layout))
