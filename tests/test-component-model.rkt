@@ -163,4 +163,26 @@
    (check-equal? (component-state-ref comp1 'key) 'val1)
    (check-equal? (component-state-ref comp2 'key) 'val2)))
 
+;; ═══════════════════════════════════════════════════════════
+;; State bag integration with render pipeline
+;; ═══════════════════════════════════════════════════════════
+(test-case "state bag tracks scroll position across renders"
+  ;; Simulates a component that tracks its own scroll offset
+  (define comp
+    (make-q-component (lambda (st width)
+                        (define scroll (component-state-ref comp 'scroll 0))
+                        (component-state-set! comp 'scroll (+ scroll 1))
+                        (list (vtext (format "scroll:~a" scroll) '())))
+                      #:vdom? #t))
+  ;; First render — scroll is 0, stored as 1
+  (define r1 (component-render comp (initial-ui-state) 40))
+  (check-equal? (component-state-ref comp 'scroll) 1)
+  ;; Invalidate and re-render — scroll is 1, stored as 2
+  (component-invalidate! comp)
+  (define r2 (component-render comp (initial-ui-state) 40))
+  (check-equal? (component-state-ref comp 'scroll) 2)
+  ;; Cache hit on same width — state unchanged (no re-render)
+  (define r3 (component-render comp (initial-ui-state) 40))
+  (check-equal? (component-state-ref comp 'scroll) 2))
+
 (run-tests test-component-model)
