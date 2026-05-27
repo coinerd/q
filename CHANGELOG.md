@@ -1,4 +1,82 @@
 # Changelog
+## v0.61.7 — 2026-05-27
+
+### Native TUI Final — Architecture Polish & Documentation
+
+**W0 — Update ADR-0016** (PR #5716)
+- Updated ADR-0016 for v0.61.6: component state bag, full vdom pipeline
+- Added Layer 7 (component state bag) to architecture description
+- Documented legacy render path retention for parity tests
+
+**W1 — Architecture overview update** (PR #5717)
+- Updated render pipeline diagram to reflect v0.61.5 vdom-mediated path
+- All sections now go through component → vnode → buffer pipeline
+- Updated TUI stack to seven layers
+
+**W2 — Version bump** (this wave)
+- Version bumped to 0.61.7
+
+## v0.61.6 — 2026-05-27
+
+### Native TUI Final — Component State & Renderer Refactor
+
+**W0 — Component state bag** (PR #5712)
+- Added `state-box` field (mutable hash) to `q-component` struct
+- Added `component-state-ref` / `component-state-set!` accessors
+- Exported via contracts in component module
+
+**W1 — State bag integration proof** (PR #5713)
+- 5 new tests: default values, get/set, render persistence, independent state, scroll tracking
+- Proves state bag works end-to-end with render pipeline
+
+**W2 — Renderer documentation** (PR #5714)
+- Documented `render-frame!` in renderer.rkt as legacy test-only path
+- Production uses `render-frame-vdom!` exclusively
+
+**W3 — Version bump** (PR #5715)
+- Version bumped to 0.61.6
+
+## v0.61.5 — 2026-05-27
+
+### Native TUI Final — Full VDOM Production Wiring
+
+**W0 — Section render infrastructure** (PR #5708)
+- Added `render-vdom-section-to-buffer!` to vdom-render.rkt
+- Added `render-frame-components` to vdom-components.rkt
+- 3 new tests for positioning, clipping, padding
+
+**W1 — Wire header/status/input through vdom** (PR #5709)
+- Header, status, input sections fully vdom-mediated
+- `make-input-vdom-component/istate` factory captures input-state via closure
+- All sections go through component → vnode → buffer pipeline
+
+**W2 — Wire transcript/overlay/widgets through vdom** (PR #5710)
+- Transcript retains direct `render-transcript` call for ui-state cache
+- Resulting styled-lines converted to vnodes via `styled-lines->vnodes`
+- Overlay and widgets also vdom-mediated
+- Zero direct `render-styled-line-to-buffer!` calls in production path
+
+**W3 — Parity verification + version bump** (PR #5711)
+- Verified parity between legacy and vdom paths
+- Fixed transcript component contract for `#:height` parameter
+- Version bumped to 0.61.5
+
+## v0.61.4 — 2026-05-27
+
+### Native TUI Final — Dead Code Removal & Naming Cleanup
+
+**W0 — Remove stale references** (PR #5705)
+- Removed stale tui-term/tui-ubuf references from docs and CI
+
+**W1 — Rename legacy identifiers** (PR #5706)
+- Renamed `decode-mouse-tui-term` → `decode-mouse-message`
+- Renamed `stub-byte-ready?` → `default-byte-ready?`
+
+**W2 — Remove legacy render path** (PR #5707)
+- Removed dead `render-ubuf-to-terminal!`
+- Inlined ubuf aliases (`make-ubuf`, `ubuf-clear!`, `ubuf-putstring!`) to direct cell-buffer calls
+- Version bumped to 0.61.4
+
 ## v0.61.3 — 2026-05-27
 
 ### Native TUI M4 — Remove Legacy Path + Final Cleanup
