@@ -1,4 +1,137 @@
 # Changelog
+## v0.60.5 — 2026-05-27
+
+### Native TUI Cleanup and Documentation
+
+Remove dead code, clean legacy references, add ADR-0016, update architecture docs.
+
+**W0 — Remove Dead Code**
+- Remove `tmousemsg-tui-term?` (always #f) from terminal-native.rkt
+- Remove `tui-term-available?` constant (always #f)
+- Clean legacy tui-term/tui-ubuf comments across 5 source files
+- Fix mouse bridge test expectations for native-only mode
+
+**W1 — Write ADR-0016**
+- Document six-layer native TUI architecture
+- ADR-0016 covers Terminal I/O, Cell Buffer, Cell Diff, Virtual DOM, Components, Bridge
+
+**W2 — Update Architecture Docs**
+- Add Native TUI Stack section to architecture overview
+- Document all key TUI files with cross-reference to ADR-0016
+
+**W3 — Final Gate**
+- Version bump to 0.60.5
+- lint-all: 21/23 passed (arch warning non-blocking, release-readiness on branch)
+
+## v0.60.4 — 2026-05-27
+
+### Component System Extension
+
+Extend `q-component` to support vdom rendering. Create typed vdom components for all TUI zones.
+
+**W0 — Extend q-component**
+- Add `vdom?` field to `q-component` struct (default #f)
+- When `#:vdom? #t`, render-fn returns `(listof vnode?)` instead of styled-lines
+- Backward compatible: existing components work unchanged
+
+**W1 — Create Typed Vdom Components**
+- `make-transcript-vdom-component` — transcript zone
+- `make-status-bar-vdom-component` — status bar with model/mode info
+- `make-input-box-vdom-component` — input zone placeholder
+- `make-header-vdom-component` — top header bar
+- `make-overlay-vdom-component` — popup/dialog overlay wrapper
+- `make-vdom-frame-component` — composes all zones
+
+**W2 — Integration Tests**
+- Dual-path validation: vdom and styled-line paths produce valid output
+- Component caching, focus management, compose verified with vdom
+
+**W3 — Version Bump**
+- Version bump to 0.60.4
+
+## v0.60.3 — 2026-05-26
+
+### Virtual DOM Abstraction Layer
+
+Pure data vdom layer with layout engine and cell-buffer rendering.
+
+**W0 — vdom.rkt**
+- 5 vnode types: vtext, vhbox, vvbox, vfill, voverlay
+- Tree operations: vnode-text-length, vnode-height, vnode-map-text
+
+**W1 — vdom-layout.rkt**
+- Layout engine: vnode → styled-line list
+- Width-constrained with truncation
+
+**W2 — vdom-render.rkt**
+- Cell-buffer rendering: styled-lines → cell-buffer writes
+- Full pipeline: vnode → layout → buffer
+
+**W3 — vdom-bridge.rkt**
+- Bridge to render loop: render-vdom-frame!
+- Migration helpers: styled-line->vnode, styled-lines->vnode
+- use-vdom-render? parameter for path switching
+
+**W4 — Version Bump**
+- Version bump to 0.60.3
+
+## v0.60.2 — 2026-05-26
+
+### Cell-Level Incremental Rendering
+
+Native cell-level diffing and incremental ANSI output.
+
+**W0 — cell-diff.rkt**
+- XOR-based row hashing for dirty-row detection
+- Delta struct with changed-rows and full-redraw threshold
+
+**W1 — cell-diff-render.rkt**
+- Minimal ANSI output from cell deltas
+- Smart rendering: auto-selects full vs incremental
+
+**W2 — Render Loop Integration**
+- use-cell-diff? parameter toggles cell-level vs row-level diffing
+- prev-ubuf-box field for snapshot comparison
+
+**W3 — Version Bump and Cleanup**
+- Version bump to 0.60.2
+
+## v0.60.1 — 2026-05-26
+
+### Native Cell Buffer
+
+Replace external tui-ubuf with native Racket cell buffer.
+
+**W0 — cell-buffer.rkt**
+- Flat vector of 7-element cell vectors: #(char fg bg bold underline italic blink)
+- O(1) indexed access, mutable resize
+
+**W1 — Render Loop Rewrite**
+- Native render-ubuf-to-terminal! iterates cells, emits ANSI directly
+- Aliases: make-ubuf, ubuf-clear!, ubuf-putstring!
+
+**W2 — Doctor Simplification and Version Bump**
+- Simplified check-tui-packages to single check-result
+- Version bump to 0.60.1
+
+## v0.60.0 — 2026-05-26
+
+### Foundation: Promote Native Terminal I/O
+
+Remove tui-term dynamic loading, promote native fallbacks.
+
+**W0 — terminal-native.rkt**
+- Full API surface with pure native implementations
+- ANSI escapes, stty commands, vector-based mouse messages
+
+**W1 — Bridge Removal**
+- Deleted terminal-bridge.rkt entirely
+- All dynamic-require logic removed
+
+**W2 — Cleanup and Version Bump**
+- Removed dead tmousemsg-tui-term? branch from render loop
+- Version bump to 0.60.0
+
 ## v0.59.10 — 2026-05-27
 
 ### Security/Workflow Enforcement Closure
