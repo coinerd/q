@@ -30,7 +30,8 @@
          last-prompt-box ; (boxof (or/c string? #f)) — last user prompt for /retry
          extension-registry-box ; (or/c (boxof (or/c extension-registry? #f)) #f)
          session-queue-box ; (boxof (or/c queue? #f)) — agent queue for followup during streaming (G3.1)
-         session-factory-runner) ; (or/c (string -> void) #f) — creates fresh session for /go
+         session-factory-runner ; (or/c (string -> void) #f) — creates fresh session for /go
+         component-registry-box) ; (boxof (or/c (hash/c symbol? q-component?) #f)) — persistent components
   #:transparent)
 
 (define (make-tui-ctx #:event-bus [bus #f]
@@ -56,7 +57,8 @@
            (box #f) ; last-prompt-box - #f until first submit
            (box ext-reg) ; extension-registry-box
            (box sess-queue) ; session-queue-box
-           factory))
+           factory
+           (box #f))) ; component-registry-box - lazy init on first render
 
 ;; Mark that the frame needs redraw.
 (define (mark-dirty! ctx)
@@ -81,6 +83,7 @@
          tui-ctx-extension-registry-box
          tui-ctx-session-queue-box
          tui-ctx-session-factory-runner
+         tui-ctx-component-registry-box
          (contract-out [make-tui-ctx
                         (->* ()
                              (#:event-bus (or/c event-bus? #f)
