@@ -117,14 +117,11 @@ Also remove any PATH entries or aliases you added to your shell config.
 
 ## Optional: Full TUI Support
 
-For the enhanced TUI experience, install `tui-term` and `tui-ubuf`:
+The TUI uses native Racket implementations for all terminal I/O, cell buffering,
+and rendering. No external packages are required.
 
-```bash
-raco pkg install tui-term tui-ubuf
-```
-
-> **Note:** These packages have known compilation issues on Racket 8.10 (upstream bugs).
-> The TUI works without them using built-in fallbacks. This is not required for normal use.
+> **Note:** Previous versions required `tui-term` and `tui-ubuf` packages.
+> As of v0.60.0, these have been replaced by native implementations.
 
 ## Security Note
 
