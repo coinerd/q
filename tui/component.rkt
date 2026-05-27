@@ -28,6 +28,7 @@
          q-component-handle-input-fn
          q-component-wants-focus?
          q-component-vdom?
+         q-component-state-box
          (contract-out
           [make-q-component
            (->* (procedure?)
@@ -52,7 +53,9 @@
           [input-action-data (-> any/c any/c)]
           [focusable-components (-> (listof q-component?) (listof q-component?))]
           [cycle-focus
-           (->* ((listof q-component?) (or/c symbol? #f)) (exact-integer?) (or/c symbol? #f))]))
+           (->* ((listof q-component?) (or/c symbol? #f)) (exact-integer?) (or/c symbol? #f))]
+          [component-state-ref (->* (q-component? any/c) (any/c) any/c)]
+          [component-state-set! (-> q-component? any/c any/c void?)]))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Struct
@@ -65,7 +68,8 @@
          id ; symbol
          handle-input-fn ; (or/c #f (data ui-state → (values ui-state input-result)))
          wants-focus? ; boolean — whether this component can receive focus
-         vdom?) ; boolean — #t when render-fn returns vnodes
+         vdom? ; boolean — #t when render-fn returns vnodes
+         state-box) ; (boxof hash?) — per-component local state
   #:transparent)
 
 ;; ═══════════════════════════════════════════════════════════════════
@@ -78,7 +82,7 @@
                           #:handle-input [handle-input-fn #f]
                           #:wants-focus? [wants-focus? #f]
                           #:vdom? [vdom? #f])
-  (q-component render-fn invalidate-fn (box #f) id handle-input-fn wants-focus? vdom?))
+  (q-component render-fn invalidate-fn (box #f) id handle-input-fn wants-focus? vdom? (box (hash))))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Operations
@@ -112,6 +116,18 @@
 (define (component-cached-width comp)
   (define cache (unbox (q-component-cache-box comp)))
   (and cache (car cache)))
+
+;; ═══════════════════════════════════════════════════════════════════
+;; Component-local state bag
+;; ═══════════════════════════════════════════════════════════════════
+
+;; Retrieve a value from the component's local state.
+(define (component-state-ref comp key [default #f])
+  (hash-ref (unbox (q-component-state-box comp)) key default))
+
+;; Store a value in the component's local state.
+(define (component-state-set! comp key value)
+  (set-box! (q-component-state-box comp) (hash-set (unbox (q-component-state-box comp)) key value)))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Input result constructors
