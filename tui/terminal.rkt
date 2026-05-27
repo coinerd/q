@@ -2,10 +2,8 @@
 
 ;; tui/terminal.rkt — Thin terminal I/O facade
 ;;
-;; This module is the terminal abstraction layer for the TUI. It dynamically
-;; loads the `tui-term` package when available and falls back to pure-stub
-;; implementations in headless environments (CI, containers, Emacs batch)
-;; where terminal control is unavailable.
+;; This module is the terminal abstraction layer for the TUI.
+;; It uses native ANSI escape sequences and stty for all terminal control.
 ;;
 ;; Architecture: This facade re-exports the full public API from
 ;;   - terminal-native.rkt  (raw terminal I/O, screen-size queries)
@@ -106,7 +104,7 @@
          tmousemsg-cb
          tmousemsg-cx
          tmousemsg-cy
-         ;; Mouse events — tui-term struct adapters (#1120)
+         ;; Mouse events — native vector accessors
          tmousemsg-tui-term?
          tmousemsg-kind
          tmousemsg-pos-x
@@ -130,7 +128,7 @@
          tcmdmsg?
          tcmdmsg-cmd
 
-         ;; UTF-8 support (compatibility stubs - tui-term handles UTF-8 internally)
+         ;; UTF-8 support (native implementations from terminal-input)
          utf8-high-byte?
          utf8-lead-byte-count
          utf8-continuation-byte?
@@ -167,7 +165,7 @@
 
 ;; Close terminal and restore state.
 ;; Disables mouse tracking, shows cursor, restores normal screen, closes tty.
-;; BUG-56 fix: disable-mouse-tracking is now in tui-term-close for
+;; BUG-56 fix: disable-mouse-tracking is now in close for
 ;; defense-in-depth — ensures mouse tracking is always disabled regardless
 ;; of exit path (normal exit, error handler, or unexpected crash).
 (define (tui-term-close term)
@@ -248,7 +246,6 @@
 ;; ============================================================
 
 ;; These use direct ANSI escape sequences for compatibility.
-;; When tui-term is fully available, these can delegate to term-* functions.
 
 (define (tui-cursor-hide)
   (display "\x1b[?25l")
@@ -319,12 +316,11 @@
 ;; Input (message-based)
 ;; ============================================================
 
-;; Read one key event from tui-term. Returns keyinfo or #f.
-;; tui-term uses read-msg which returns tkeymsg, tsizemsg, etc.
+;; Read one key event. Returns keyinfo or #f.
 (define (tui-read-key #:timeout [timeout 0.20])
   (read-msg #:timeout timeout))
 
-;; Keycode mapping from tui-term symbols to our symbols
+;; Keycode mapping from key symbols to our symbols
 (define (map-tui-key tui-key)
   (case tui-key
     [(up) 'up]
