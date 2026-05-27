@@ -1,4 +1,29 @@
 # Changelog
+## v0.61.0 — 2026-05-27
+
+### Native TUI M1 — VDOM Render Path + Parity Tests
+
+Wire vdom-bridge into render-frame! for A/B rendering. When use-vdom-render?
+is #t, render-frame! uses the vdom pipeline: same section renderers write to
+cell-buffer via render-styled-line-to-buffer! instead of parameterized ubuf ops.
+Both paths produce identical cell-by-cell output, verified by 4 parity tests.
+
+**W0 — Cell-diff Integration Tests** (PR #5668)
+- Add 8 cell-diff integration tests in tests/test-cell-diff-integration.rkt
+
+**W1 — Wire vdom-bridge into render-frame!** (PR #5669)
+- Add render-frame-vdom! using vdom pipeline (vdom-render.rkt)
+- Import use-vdom-render? parameter; render-frame! dispatches on it
+- Both paths call same section renderers, return same cursor position
+
+**W2 — VDOM Parity Tests** (PR #5670)
+- Add 4 parity tests comparing legacy vs vdom cell-buffer output
+- Tests: empty frame, transcript entries, status bar with labels, input content
+
+**W3 — Gate + Version Bump**
+- All 157 TUI tests pass
+- Version 0.60.6 → 0.61.0
+
 ## v0.60.6 — 2026-05-27
 
 ### Native TUI Bugfix — Snapshot Crash + cmd-ctx Arity + Auto-wrap Glitch
