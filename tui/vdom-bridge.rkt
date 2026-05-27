@@ -16,8 +16,9 @@
          "cell-buffer.rkt"
          "render/message-layout.rkt")
 
-;; Parameter to switch between vdom and direct rendering
-(define use-vdom-render? (make-parameter #f))
+;; Parameter to switch between vdom and direct rendering.
+;; Always #t now — legacy path removed in v0.61.3.
+(define use-vdom-render? (make-parameter #t))
 
 ;; ============================================================
 ;; Frame rendering via vdom

@@ -28,11 +28,9 @@
          "../tui/sgr.rkt"
          (prefix-in renderer: "../tui/renderer.rkt")
          "../tui/layout.rkt"
-         "../tui/frame-diff.rkt"
          "../tui/cell-buffer.rkt"
          "../tui/cell-diff.rkt"
          "../tui/cell-diff-render.rkt"
-         "../tui/vdom-bridge.rkt"
          "../tui/vdom-render.rkt"
          (only-in "../tui/render.rkt"
                   render-transcript
@@ -62,7 +60,6 @@
 (provide fix-sgr-bg-black
          decode-mouse-x10
          decode-mouse-tui-term
-         use-cell-diff?
          current-busy-watchdog-ms
          (contract-out [check-busy-watchdog (-> any/c number? number? (or/c any/c #f))]
                        [render-ubuf-to-terminal! (-> tui-ctx? void?)]
@@ -95,9 +92,6 @@
 ;; Coalesces rapid state changes (e.g., streaming) into single frames.
 ;; 16ms ≈ 60fps, prevents flicker during fast streaming output.
 (define MIN-RENDER-INTERVAL-MS 16)
-
-;; Render mode: #t = cell-level diffing, #f = row-level frame diffing
-(define use-cell-diff? (make-parameter #t))
 
 ;; Track last render timestamp for debouncing.
 (define last-render-ms (box 0.0))
@@ -290,19 +284,10 @@
       #:break (>= i transcript-height)
       (render-styled-line-to-buffer! line ubuf cols (+ transcript-start-row i))))
 
-  ;; 8. Build frame-lines for row-level diffing fallback
-  (define frame-vec (make-vector rows ""))
-  ;; Build simplified frame-lines (plain text) for row-diff compatibility
-  (for ([r (in-range rows)])
-    (define line-strs
-      (for/list ([c (in-range cols)])
-        (string (cell-char (cell-buffer-ref ubuf c r)))))
-    (vector-set! frame-vec r (string-join line-strs "")))
-
-  ;; 9. Return cursor position
+  ;; 8. Return cursor position
   (define-values (_visible-text _scroll-offset cursor-display-col)
     (input-visible-window input-st cols))
-  (values cursor-display-col input-y ui-state* (vector->list frame-vec)))
+  (values cursor-display-col input-y ui-state* '()))
 
 (define (render-frame! ctx)
   (define state (unbox (tui-ctx-ui-state-box ctx)))
@@ -318,46 +303,20 @@
                     #:widget-bar-h (length widget-lines)
                     #:has-widgets? (positive? (length widget-lines))))
 
-  ;; Render to ubuf — choose path based on use-vdom-render?
+  ;; Render to ubuf — always use vdom path
   (define-values (cursor-col cursor-row state* frame-lines)
-    (if (use-vdom-render?)
-        (render-frame-vdom! ubuf state inp layout)
-        (renderer:render-frame! ubuf state inp layout)))
+    (render-frame-vdom! ubuf state inp layout))
 
   ;; Write back state with updated render cache
   (set-box! (tui-ctx-ui-state-box ctx) state*)
 
-  ;; Diff-based terminal output
+  ;; Cell-level incremental diff (always)
   (tui-cursor-hide)
-  (if (use-cell-diff?)
-      ;; Cell-level incremental diff
-      (let ()
-        (define prev-ubuf (unbox (tui-ctx-prev-ubuf-box ctx)))
-        (define out (tui-output-port))
-        (render-smart! prev-ubuf ubuf out #:sync? #t)
-        ;; Store snapshot for next diff
-        (set-box! (tui-ctx-prev-ubuf-box ctx) (cell-buffer-snapshot ubuf)))
-      ;; Row-level frame diff (fallback)
-      (let ()
-        (define prev-frame (unbox (tui-ctx-previous-frame-box ctx)))
-        (define diffs (diff-frames prev-frame frame-lines))
-        (cond
-          [(null? diffs) (void)]
-          [(and (= (length diffs) 1) (eq? (diff-cmd-type (car diffs)) 'full))
-           (render-ubuf-to-terminal! ctx)]
-          [else
-           (for ([cmd (in-list diffs)])
-             (case (diff-cmd-type cmd)
-               [(write)
-                (tui-cursor 1 (+ (diff-cmd-row cmd) 1))
-                (display "\x1b[2K" (tui-output-port))
-                (display (fix-sgr-bg-black (diff-cmd-content cmd)) (tui-output-port))]
-               [(clear-from)
-                (tui-cursor 1 (+ (diff-cmd-row cmd) 1))
-                (display "\x1b[J" (tui-output-port))]
-               [else (void)]))
-           (tui-flush)])
-        (set-box! (tui-ctx-previous-frame-box ctx) frame-lines)))
+  (define prev-ubuf (unbox (tui-ctx-prev-ubuf-box ctx)))
+  (define out (tui-output-port))
+  (render-smart! prev-ubuf ubuf out #:sync? #t)
+  ;; Store snapshot for next diff
+  (set-box! (tui-ctx-prev-ubuf-box ctx) (cell-buffer-snapshot ubuf))
 
   ;; Position cursor at input location (renderer returns 0-indexed, ANSI is 1-indexed)
   (tui-cursor (+ cursor-col 1) (+ cursor-row 1))
