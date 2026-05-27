@@ -83,15 +83,13 @@
 ;; ============================================================
 
 (define (make-header-vdom-component)
-  (make-q-component
-   (lambda (st width)
-     (define version-text " q ")
-     (define right-text (format " ~a " (or (ui-state-model-name st) "")))
-     (define fill-w (max 0 (- width (string-length version-text) (string-length right-text))))
-     (list (vhbox
-            (list (vtext version-text '(bold cyan)) (vfill* fill-w) (vtext right-text '(dim))))))
-   #:id 'header-vdom
-   #:vdom? #t))
+  (make-q-component (lambda (st width)
+                      ;; Production: matches renderer.rkt header row — " q " padded to full width
+                      ;; with inverse video (fg=0 bg=7)
+                      (define header-text (format " q ~a" (make-string (max 0 (- width 3)) #\space)))
+                      (list (vhbox (list (vtext header-text '(inverse))))))
+                    #:id 'header-vdom
+                    #:vdom? #t))
 
 ;; ============================================================
 ;; Overlay component — renders a popup/dialog overlay
@@ -99,6 +97,9 @@
 
 (define (make-overlay-vdom-component content-comp #:anchor anchor-comp #:col [col 0] #:row [row 0])
   (make-q-component (lambda (st width)
+                      ;; Production: renders overlay from ui-state if active.
+                      ;; content-comp renders the overlay content,
+                      ;; anchor-comp renders the background (typically transcript).
                       (define content-vnodes ((q-component-render-fn content-comp) st width))
                       (define anchor-vnodes ((q-component-render-fn anchor-comp) st width))
                       (define content-node
