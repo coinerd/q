@@ -1,7 +1,7 @@
 # ADR-0016: Native TUI Architecture
 
 ## Status
-Accepted — Updated for v0.61.3 (legacy path removed)
+Accepted — Updated for v0.61.6 (component state bag, full vdom pipeline)
 
 ## Context
 The q TUI originally depended on two external Racket packages: `tui-term` (terminal I/O, input handling) and `tui-ubuf` (cell buffer, screen rendering). These dependencies created several problems:
@@ -51,21 +51,28 @@ Replace all external TUI dependencies with a native Racket architecture consisti
 - `styled-line->vnode` / `styled-lines->vnode` — migration helpers
 - `use-vdom-render?` parameter — always `#t` since v0.61.3 (legacy removed)
 
+### Layer 7: Component State Bag (`tui/component.rkt`)
+- `state-box` field on `q-component` struct: `(boxof hash?)` for per-component local state
+- Accessors: `component-state-ref` / `component-state-set!` with key-value semantics
+- Enables components to track scroll position, selection state, render counters, etc.
+- Each component instance has independent state — no cross-contamination
+- Backward compatible: existing components get an empty state hash by default
+
 ## Consequences
 
 ### Positive
 - **Zero external TUI dependencies**: Entire TUI stack is native Racket
 - **Better performance**: Cell-level incremental rendering with batch optimization (37% faster than per-cell)
-- **Virtual DOM is primary path**: Since v0.61.3, vdom+cell-diff is the only render path
+- **Virtual DOM is primary path**: Since v0.61.5, production `render-frame-vdom!` routes all sections (header, status, input, transcript, overlay, widgets) through the component → vnode → buffer pipeline. Since v0.61.3, vdom+cell-diff is the only render path.
 - **Cleaner code**: No `dynamic-require`, no dual code paths, no frame-diff fallback
-- **Easier testing**: All modules testable without external package mocking
+- **Easier testing**: All modules testable without external package mocking\n- **Component state**: Per-component state bag enables self-contained stateful components (scroll, selection, counters) without coupling to global ui-state
 - **Smaller attack surface**: No dynamic loading of external packages
 
 ### Negative
 - **Maintenance burden**: We own the terminal I/O layer (ANSI escape handling, mouse protocols)
-- **Terminal compatibility**: Must handle terminal differences ourselves (was handled by tui-term)
+- **Terminal compatibility**: Must handle terminal differences ourselves (was handled by tui-term)\n- **Legacy render path retained**: `renderer.rkt` `render-frame!` (frame-vec based) kept for parity/integration tests — production uses `render-frame-vdom!` exclusively
 - **No GUI backend yet**: Virtual DOM is ready but GUI rendering is deferred
 
 ### Neutral
 - File count increased: 8 new modules, ~1000 lines of new code
-- Aliases retained: `make-ubuf` → `make-cell-buffer` for backward compat during transition
+- Aliases removed: `make-ubuf`/`ubuf-clear!`/`ubuf-putstring!` inlined to direct `cell-buffer` calls in v0.61.4
