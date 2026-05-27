@@ -251,12 +251,8 @@
          #f)]
     ;; Resize message
     [(tsizemsg? msg) (list 'resize (tsizemsg-cols msg) (tsizemsg-rows msg))]
-    ;; Mouse message — dual-path dispatch (#1120)
-    ;; tui-term returns actual structs, fallback path uses X10 vectors
-    [(tmousemsg? msg)
-     (if (tmousemsg-tui-term? msg)
-         (decode-mouse-tui-term msg)
-         (decode-mouse-x10 (tmousemsg-cb msg) (tmousemsg-cx msg) (tmousemsg-cy msg)))]
+    ;; Mouse message — native vector dispatch
+    [(tmousemsg? msg) (decode-mouse-tui-term msg)]
     ;; Command message (redraw, etc.)
     [(tcmdmsg? msg)
      (case (tcmdmsg-cmd msg)
