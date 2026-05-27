@@ -25,13 +25,32 @@
 ;; Transcript component — renders conversation messages
 ;; ============================================================
 
-(define (make-transcript-vdom-component)
+(define (make-transcript-vdom-component #:height [transcript-height 1000])
   (make-q-component (lambda (st width)
-                      ;; Production: use render-transcript to get styled-lines, convert to vnodes.
-                      ;; transcript-height is a large value; the caller clips to visible area.
-                      (define-values (styled-lines _st) (render-transcript st 1000 width))
-                      (define vnodes (styled-lines->vnodes styled-lines))
-                      vnodes)
+                      ;; Production: render transcript, clip to height, apply selection.
+                      (define-values (styled-lines _st)
+                        (render-transcript st transcript-height width))
+                      (define visible-lines
+                        (if (> (length styled-lines) transcript-height)
+                            (take-right styled-lines transcript-height)
+                            styled-lines))
+                      ;; Apply selection highlight
+                      (define sel (ui-state-selection st))
+                      (define sel-anchor (selection-state-anchor sel))
+                      (define sel-end (selection-state-end sel))
+                      ;; Note: selection coordinates need pad-count adjustment,
+                      ;; but since we clip to height, pad-count = 0 from component perspective.
+                      (define trans-lines
+                        (if (and sel-anchor sel-end)
+                            (apply-selection-highlight visible-lines sel-anchor sel-end 0 0)
+                            visible-lines))
+                      ;; Pad to fill transcript-height
+                      (define pad-count (- transcript-height (length trans-lines)))
+                      (define pad-lines
+                        (for/list ([_ (in-range pad-count)])
+                          (styled-line->vnode (plain-line ""))))
+                      (define content-vnodes (styled-lines->vnodes trans-lines))
+                      (append pad-lines content-vnodes))
                     #:id 'transcript-vdom
                     #:vdom? #t))
 
