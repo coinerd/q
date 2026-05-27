@@ -22,7 +22,7 @@
          event-ch ; async-channel — serializes runtime events into main loop (unbounded buffer)
          session-dir ; (or/c path-string? #f) — session directory for index loading
          needs-redraw-box ; (boxof boolean) — #t when state changed and frame needs redraw
-         term-box ; (boxof any) — terminal instance for tui-term
+         term-box ; (boxof any) — terminal instance
          ubuf-box ; (boxof any) — ubuf buffer for output
          model-registry-box ; (boxof (or/c model-registry? #f)) — model registry for /model
          previous-frame-box ; (boxof (or/c (listof string) #f)) — last rendered frame for diffing
