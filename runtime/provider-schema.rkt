@@ -22,15 +22,44 @@
            (->* (provider-registry?) ((or/c path-string? path?)) exact-nonnegative-integer?)]
           [list-builtin-provider-names (-> (listof string?))]
           [provider-is-placeholder? (-> provider-info? boolean?)]
-          [builtin-provider-config (-> provider-registry? string? (or/c hash? #f))]))
+          [builtin-provider-config (-> provider-registry? string? (or/c hash? #f))])
+         validate-provider-entry)
 
 ;; Runtime path to the schema file
 (define-runtime-path providers-schema-file "providers.rktd")
 
+;; Validate a single provider schema entry.
+;; Returns #t if valid, or a string error message.
+;; Required: car is a symbol, (base-url . string?) and (default-model . string?).
+(define (validate-provider-entry entry)
+  (cond
+    [(not (pair? entry)) "entry must be a pair"]
+    [(not (symbol? (car entry))) (format "provider name must be a symbol, got: ~a" (car entry))]
+    [else
+     (define def (cdr entry))
+     (define base-url (pfield def 'base-url #f))
+     (define default-model (pfield def 'default-model #f))
+     (define models (pfield def 'models '()))
+     (cond
+       [(not (string? base-url)) (format "provider ~a: base-url must be a string" (car entry))]
+       [(not (string? default-model))
+        (format "provider ~a: default-model must be a string" (car entry))]
+       [(not (list? models)) (format "provider ~a: models must be a list" (car entry))]
+       [else #t])]))
+
 ;; Load the raw provider schema as an alist.
+;; Validates entries — malformed entries are skipped with a warning.
 (define (load-providers-schema [path providers-schema-file])
   (with-handlers ([exn:fail? (lambda (e) '())])
-    (call-with-input-file path read)))
+    (define raw (call-with-input-file path read))
+    (for/list ([entry (in-list (if (list? raw)
+                                   raw
+                                   '()))]
+               #:when (let ([v (validate-provider-entry entry)])
+                        (when (string? v)
+                          (log-warning "provider-schema: skipping malformed entry: ~a" v))
+                        (eq? v #t)))
+      entry)))
 
 ;; Extract a field from a provider definition alist
 (define (pfield def field [default #f])

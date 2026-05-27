@@ -118,7 +118,55 @@
     (test-case "builtin-provider-config returns #f for unknown provider"
       (define reg (make-provider-registry))
       (load-builtin-providers! reg)
-      (check-false (builtin-provider-config reg "nonexistent")))))
+      (check-false (builtin-provider-config reg "nonexistent")))
+
+    ;; ============================================================
+    ;; Schema validation (#5499)
+    ;; ============================================================
+
+    (test-case "validate-provider-entry accepts valid entry (#5499)"
+      (define entry '(test-provider (base-url . "https://api.test.com") (default-model . "test-1")))
+      (check-eq? (validate-provider-entry entry) #t))
+
+    (test-case "validate-provider-entry rejects non-pair (#5499)"
+      (check-true (string? (validate-provider-entry "not-a-pair"))))
+
+    (test-case "validate-provider-entry rejects non-symbol name (#5499)"
+      (define entry '("not-a-symbol" (base-url . "https://test.com") (default-model . "m1")))
+      (check-true (string? (validate-provider-entry entry))))
+
+    (test-case "validate-provider-entry rejects missing base-url (#5499)"
+      (define entry '(bad (default-model . "m1")))
+      (check-true (string? (validate-provider-entry entry))))
+
+    (test-case "validate-provider-entry rejects non-string base-url (#5499)"
+      (define entry '(bad (base-url . 123) (default-model . "m1")))
+      (check-true (string? (validate-provider-entry entry))))
+
+    (test-case "validate-provider-entry rejects missing default-model (#5499)"
+      (define entry '(bad (base-url . "https://test.com")))
+      (check-true (string? (validate-provider-entry entry))))
+
+    (test-case "validate-provider-entry rejects non-list models (#5499)"
+      (define entry
+        '(bad (base-url . "https://test.com") (default-model . "m1") (models . "not-list")))
+      (check-true (string? (validate-provider-entry entry))))
+
+    (test-case "load-providers-schema filters malformed entries (#5499)"
+      (define tmp (make-temporary-file "qtest-schema-~a.rktd"))
+      (call-with-output-file
+       tmp
+       (lambda (out)
+         (write '((good (base-url . "https://good.com") (default-model . "g1") (models . ()))
+                  ("bad-name" (base-url . "https://bad.com") (default-model . "b1"))
+                  (no-url (default-model . "x"))
+                  (also-good (base-url . "https://also.com") (default-model . "a1") (models . ())))
+                out))
+       #:exists 'replace)
+      (define schema (load-providers-schema tmp))
+      (check-equal? (length schema) 2)
+      (check-equal? (map car schema) '(good also-good))
+      (delete-file tmp))))
 
 (module+ main
   (run-tests provider-registry-schema-tests))
