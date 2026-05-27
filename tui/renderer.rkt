@@ -41,16 +41,6 @@
           [render-overlay-lines
            (-> (or/c #f overlay-state?) exact-nonnegative-integer? (listof styled-line?))]
           ;; Component-based rendering
-          [make-render-components (-> render-components?)]
-          [render-components-transcript
-           (-> render-components?
-               ui-state?
-               exact-nonnegative-integer?
-               exact-nonnegative-integer?
-               (values (listof styled-line?) ui-state?))]
-          [render-components-status
-           (-> render-components? ui-state? exact-nonnegative-integer? (listof styled-line?))]
-          [render-components-invalidate! (-> render-components? void?)]
           ;; Style mapping (for testing)
           [style->ubuf-kws (-> (listof symbol?) (values (listof keyword?) list?))]
           ;; Ubuf operations (settable for testing)

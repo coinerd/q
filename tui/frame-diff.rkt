@@ -18,7 +18,7 @@
          )
   #:transparent)
 
-;; Convert a ubuf-style rendered frame into a list of strings (one per row)
+;; Convert a cell-buffer rendered frame into a list of strings (one per row)
 ;; This is a helper for testing. frame is a list of strings.
 (define (frame->string-lines frame)
   frame)
