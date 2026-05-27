@@ -121,7 +121,9 @@
                       #:extensions [ext-paths '()]
                       #:extension-registry [ext-reg #f]
                       #:skills-dir [skills-dir #f]
-                      #:register-default-tools? [register-defaults? #t])
+                      #:register-default-tools? [register-defaults? #t]
+                      #:timeout-ms [timeout-ms #f]
+                      #:cleanup? [cleanup? #f])
   (define-values (project-dir session-dir)
     (if (null? files)
         (values #f (make-temp-session-dir))
@@ -130,48 +132,54 @@
   (define bus (make-event-bus))
   (define recorder (make-event-recorder bus))
 
-  ;; Build extension registry: use provided one, or create and load from paths
-  (define effective-ext-reg
-    (cond
-      [ext-reg ext-reg]
-      [(null? ext-paths) #f]
-      [else
-       (define er (make-extension-registry))
-       (for ([p (in-list ext-paths)])
-         (load-extension! er p #:event-bus bus))
-       er]))
+  (define (do-run)
+    (define effective-ext-reg
+      (cond
+        [ext-reg ext-reg]
+        [(null? ext-paths) #f]
+        [else
+         (define er (make-extension-registry))
+         (for ([p (in-list ext-paths)])
+           (load-extension! er p #:event-bus bus))
+         er]))
 
-  ;; Load skills from directory and append to system instructions
-  (define skill-instrs
-    (if (and skills-dir (directory-exists? skills-dir))
-        (let* ([skills-sub (build-path skills-dir "skills")]
-               [dir (if (directory-exists? skills-sub) skills-sub skills-dir)])
-          (filter values
-                  (for/list ([entry (in-list (directory-list dir))]
-                             #:when (directory-exists? (build-path dir entry)))
-                    (define skill-file (build-path dir entry "SKILL.md"))
-                    (try-read-file skill-file))))
-        '()))
-  (define effective-system-instrs (append system-instrs skill-instrs))
+    (define skill-instrs
+      (if (and skills-dir (directory-exists? skills-dir))
+          (let* ([skills-sub (build-path skills-dir "skills")]
+                 [dir (if (directory-exists? skills-sub) skills-sub skills-dir)])
+            (filter values
+                    (for/list ([entry (in-list (directory-list dir))]
+                               #:when (directory-exists? (build-path dir entry)))
+                      (define skill-file (build-path dir entry "SKILL.md"))
+                      (try-read-file skill-file))))
+          '()))
+    (define effective-system-instrs (append system-instrs skill-instrs))
 
-  (define rt
-    (sdk:make-runtime #:provider provider
-                      #:session-dir session-dir
-                      #:tool-registry reg
-                      #:event-bus bus
-                      #:max-iterations max-iter
-                      #:system-instructions effective-system-instrs
-                      #:extension-registry effective-ext-reg
-                      #:register-default-tools? register-defaults?))
-  (define rt2 (sdk:open-session rt))
-  (define sid (hash-ref (sdk:session-info rt2) 'session-id))
-  (define-values (rt3 result)
-    (parameterize ([current-directory (or project-dir (current-directory))])
-      (sdk:run-prompt! rt2 prompt)))
+    (define rt
+      (sdk:make-runtime #:provider provider
+                        #:session-dir session-dir
+                        #:tool-registry reg
+                        #:event-bus bus
+                        #:max-iterations max-iter
+                        #:system-instructions effective-system-instrs
+                        #:extension-registry effective-ext-reg
+                        #:register-default-tools? register-defaults?))
+    (define rt2 (sdk:open-session rt))
+    (define sid (hash-ref (sdk:session-info rt2) 'session-id))
+    (define-values (rt3 result)
+      (parameterize ([current-directory (or project-dir (current-directory))])
+        (sdk:run-prompt! rt2 prompt)))
 
-  (define log-path (build-path session-dir sid "session.jsonl"))
+    (define log-path (build-path session-dir sid "session.jsonl"))
+    (workflow-result result recorder log-path sid project-dir session-dir rt3 '()))
 
-  (workflow-result result recorder log-path sid project-dir session-dir rt3 '()))
+  (define wrapped
+    (if timeout-ms
+        (lambda () (with-workflow-timeout do-run #:timeout-ms timeout-ms))
+        do-run))
+  (cond
+    [cleanup? (with-workflow-cleanup project-dir session-dir wrapped)]
+    [else (wrapped)]))
 
 ;; ============================================================
 ;; run-workflow-multi-turn

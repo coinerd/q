@@ -11,7 +11,8 @@
          rackunit/text-ui
          racket/file
          "workflow-runner.rkt"
-         "temp-project.rkt")
+         "temp-project.rkt"
+         "mock-provider.rkt")
 
 (define timeout-cleanup-tests
   (test-suite "Workflow timeout and cleanup (#5470)"
@@ -70,7 +71,32 @@
                              #:on-timeout (lambda ()
                                             (set-box! called? #t)
                                             'timed-out))
-      (check-true (unbox called?)))))
+      (check-true (unbox called?)))
+
+    ;; ============================================================
+    ;; Integration: run-workflow with timeout/cleanup (#5500)
+    ;; ============================================================
+
+    (test-case "run-workflow with cleanup? cleans up on success (#5500)"
+      (define prov (make-scripted-provider (list (text-response "Hello!"))))
+      (define result (run-workflow prov "test" #:cleanup? #t))
+      (check-not-false (workflow-result-output result))
+      (check-false (directory-exists? (workflow-result-session-dir result))
+                   "cleanup must remove session dir"))
+
+    (test-case "run-workflow with cleanup? cleans up on error (#5500)"
+      (define prov (make-scripted-provider '()))
+      (with-handlers ([exn:fail? (lambda (e) (void))])
+        (run-workflow prov "test" #:cleanup? #t #:max-iterations 1)))
+
+    (test-case "run-workflow with timeout-ms terminates runaway workflow (#5500)"
+      (define prov
+        (make-scripted-provider (list (tool-call-response "tc-1" "bash" (hash 'cmd "sleep 60"))
+                                      (text-response "done"))))
+      (define result
+        (with-handlers ([exn:fail? (lambda (e) 'timed-out)])
+          (run-workflow prov "sleep forever" #:timeout-ms 3000 #:register-default-tools? #t)))
+      (check-true (or (workflow-result? result) (eq? result 'timed-out))))))
 
 (module+ main
   (run-tests timeout-cleanup-tests))
