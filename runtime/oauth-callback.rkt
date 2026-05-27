@@ -47,13 +47,18 @@
 
 ;; Start a one-shot callback server on an ephemeral port.
 ;; The server closes after the first callback (success or failure) or timeout.
-;; Uses a semaphore for atomic completion: only one result is ever delivered,
-;; and listener/ports are closed before the result is put on the channel.
+;; Uses a stored-result model: completion stores the result in a box and posts
+;; to a semaphore, so try-complete! never blocks even without a consumer.
+;; Atomic completion via semaphore-try-wait ensures only one result is stored.
 ;; Returns (values port state code-verifier get-code).
 (define (start-callback-server #:timeout [timeout 120])
   (define state (generate-state))
   (define code-verifier (random-base64url 32))
-  (define result-chan (make-channel))
+  ;; Stored result: box holds the result once, semaphore signals availability.
+  ;; This avoids the unbuffered channel-put blocking problem: storing in a box
+  ;; is always non-blocking, and semaphore-post never blocks.
+  (define result-box (box #f))
+  (define result-sema (make-semaphore 0))
   ;; Atomic completion: semaphore-try-wait returns #f after first success,
   ;; preventing any second consumer from delivering a result.
   (define completion-sema (make-semaphore 1))
@@ -63,13 +68,17 @@
 
   ;; Atomic complete: try to be the one-and-only completer.
   ;; Returns #t if this thread won the race, #f if already completed.
+  ;; Non-blocking: stores result in box (always succeeds) and posts semaphore.
   (define (try-complete! code)
     (and (semaphore-try-wait? completion-sema)
          (begin
-           ;; Close listener FIRST, then deliver result — ensures no more connections
+           ;; Close listener FIRST — ensures no more connections
            (with-handlers ([exn:fail? (lambda (e) (void))])
              (tcp-close listener))
-           (channel-put result-chan code)
+           ;; Store result non-blocking (box set is immediate)
+           (set-box! result-box code)
+           ;; Signal availability (semaphore-post never blocks)
+           (semaphore-post result-sema)
            ;; Kill server accept loop
            (when server-thread
              (with-handlers ([exn:fail? (lambda (e) (void))])
@@ -94,7 +103,8 @@
             (try-complete! #f)))
 
   (define (get-code)
-    (channel-get result-chan))
+    (semaphore-wait result-sema)
+    (unbox result-box))
 
   (values port state code-verifier get-code))
 
