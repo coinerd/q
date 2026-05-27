@@ -17,6 +17,7 @@
          "state.rkt"
          "input.rkt"
          "char-width.rkt"
+         "cell-buffer.rkt"
          "component.rkt"
          (only-in "theme.rkt" current-tui-theme theme-ref theme-color->sgr))
 ;;
@@ -39,15 +40,6 @@
           [render-header-line (-> exact-nonnegative-integer? styled-line?)]
           [render-overlay-lines
            (-> (or/c #f overlay-state?) exact-nonnegative-integer? (listof styled-line?))]
-          [render-frame!
-           (-> any/c
-               ui-state?
-               input-state?
-               hash?
-               (values exact-nonnegative-integer?
-                       exact-nonnegative-integer?
-                       ui-state?
-                       (listof string?)))]
           ;; Component-based rendering
           [make-render-components (-> render-components?)]
           [render-components-transcript
@@ -62,16 +54,6 @@
           ;; Style mapping (for testing)
           [style->ubuf-kws (-> (listof symbol?) (values (listof keyword?) list?))]
           ;; Ubuf operations (settable for testing)
-          [current-ubuf-clear (parameter/c (-> any/c void?))]
-          [current-ubuf-putstring
-           (parameter/c (->* (any/c exact-nonnegative-integer? exact-nonnegative-integer? string?)
-                             (#:fg exact-nonnegative-integer?
-                                   #:bg exact-nonnegative-integer?
-                                   #:bold boolean?
-                                   #:underline boolean?
-                                   #:italic boolean?
-                                   #:blink boolean?)
-                             void?))]
           ;; Width safety net
           [current-assert-width (parameter/c boolean?)]
           [assert-line-width! (-> string? exact-nonnegative-integer? exact-nonnegative-integer?)]
@@ -83,23 +65,7 @@
 ;; Ubuf operations (parameterized for testability)
 ;; ============================================================
 
-;; Parameter for ubuf-clear! function (operates on cell-buffer)
-(define current-ubuf-clear (make-parameter (lambda (ubuf) (void))))
-
-;; Parameter for ubuf-putstring! function
-;; Signature matches cell-buffer: (buf col row str #:fg #:bg #:bold #:underline ...)
-(define current-ubuf-putstring
-  (make-parameter (lambda (ubuf
-                           x
-                           y
-                           str
-                           #:fg [fg 7]
-                           #:bg [bg 0]
-                           #:bold [bold #f]
-                           #:underline [underline #f]
-                           #:italic [italic #f]
-                           #:blink [blink #f])
-                    (void))))
+;; DI parameters removed — draw-styled-line! takes cell-buffer directly.
 
 ;; ============================================================
 ;; Width safety net
@@ -216,8 +182,9 @@
 
 ;; Draw a styled-line to the ubuf at the specified row, starting at column 1.
 ;; The line is padded to width with spaces.
-(define (draw-styled-line! ubuf line row width)
-  (define ubuf-putstring! (current-ubuf-putstring))
+(define (draw-styled-line! buf line row width)
+  ;; buf is a cell-buffer? — uses cell-buffer-putstring! directly
+  (define ubuf-putstring! cell-buffer-putstring!)
   (define col 0)
   (define remaining-width width)
   ;; Draw each segment
@@ -234,12 +201,12 @@
     ;; Resolve styles to ubuf keywords
     (define-values (kws vals) (style->ubuf-kws styles))
     ;; Draw segment with styles
-    (keyword-apply ubuf-putstring! kws vals (list ubuf col row visible-text))
+    (keyword-apply ubuf-putstring! kws vals (list buf col row visible-text))
     (set! col (+ col (string-visible-width visible-text)))
     (set! remaining-width (- remaining-width (string-visible-width visible-text))))
   ;; Pad rest with spaces
   (when (> remaining-width 0)
-    (ubuf-putstring! ubuf col row (make-string remaining-width #\space))))
+    (ubuf-putstring! buf col row (make-string remaining-width #\space))))
 ;; Width overflow protection: draw-styled-line! truncates per-segment
 ;; and pads to exactly 'width'. Upstream wrap-styled-line handles word wrap.
 ;; The assert-line-width! function is available for external callers to
@@ -276,120 +243,6 @@
                            (take-right ov-content transcript-height)
                            ov-content)])
         ov-lines)))
-
-;; Legacy frame render using frame-vec (ANSI string buffer).
-;; Used by parity tests and render integration tests.
-;; Production code uses render-frame-vdom! in tui-render-loop.rkt.
-(define (render-frame! ubuf ui-state input-st layout)
-  (define header-region (layout-header layout))
-  (define transcript-region (layout-transcript layout))
-  (define input-region (layout-input layout))
-  (define cols (layout-region-width header-region))
-  (define rows (+ (layout-region-y input-region) (layout-region-height input-region)))
-  (define header-row (layout-region-y header-region))
-  (define transcript-start-row (layout-region-y transcript-region))
-  (define transcript-height (layout-region-height transcript-region))
-  (define status-row (layout-region-y input-region))
-  (define input-row (min (sub1 rows) (add1 status-row)))
-
-  ;; Get the ubuf operations
-  (define ubuf-clear! (current-ubuf-clear))
-  (define ubuf-putstring! (current-ubuf-putstring))
-
-  ;; Layout rows are 0-based, matching ubuf's 0-based indexing.
-  (define trans-y transcript-start-row)
-  (define status-y status-row)
-  (define input-y input-row)
-
-  ;; 1. Clear the buffer
-  (ubuf-clear! ubuf)
-
-  ;; 2. Draw header row (only if header-row is not #f)
-  (when header-row
-    (define header-text (format " q ~a" (make-string (max 0 (- cols 3)) #\space)))
-    (ubuf-putstring! ubuf 0 header-row header-text #:fg 0 #:bg 7))
-
-  ;; Build frame-lines for diffing
-  (define frame-vec (make-vector rows ""))
-  ;; Header: store ANSI-encoded (inverse video) for correct incremental diff
-  (when header-row
-    (define header-text (format " q ~a" (make-string (max 0 (- cols 3)) #\space)))
-    (vector-set! frame-vec header-row (string-append "\x1b[0m\x1b[30;47m" header-text "\x1b[0m")))
-
-  ;; 3. Draw transcript entries (with render cache)
-  (define-values (trans-lines-raw ui-state*) (render-transcript ui-state transcript-height cols))
-  ;; Determine visible lines and padding BEFORE selection (BUG-57)
-  (define visible-lines-raw
-    (if (> (length trans-lines-raw) transcript-height)
-        (take-right trans-lines-raw transcript-height)
-        trans-lines-raw))
-  (define pad-count (- transcript-height (length visible-lines-raw)))
-  ;; Apply selection highlight with pad-count for correct coordinate mapping
-  (define sel (ui-state-selection ui-state))
-  (define sel-anchor (selection-state-anchor sel))
-  (define sel-end (selection-state-end sel))
-  (define trans-lines
-    (if (and sel-anchor sel-end)
-        (apply-selection-highlight visible-lines-raw sel-anchor sel-end trans-y pad-count)
-        visible-lines-raw))
-  (for ([i (in-range pad-count)])
-    (define blank (make-string cols #\space))
-    (ubuf-putstring! ubuf 0 (+ trans-y i) blank)
-    (vector-set! frame-vec (+ trans-y i) blank))
-  (for ([line (in-list trans-lines)]
-        [i (in-naturals)])
-    (define line-ansi (styled-line->ansi line))
-    (assert-line-width! (styled-line->text line) cols)
-    (draw-styled-line! ubuf line (+ trans-y pad-count i) cols)
-    (vector-set! frame-vec (+ trans-y pad-count i) line-ansi))
-
-  ;; 4. Draw widget container above input (#713)
-  (define widget-lines (get-widget-lines-above ui-state))
-  (define widget-count (length widget-lines))
-  (when (> widget-count 0)
-    (for ([line (in-list widget-lines)]
-          [i (in-naturals)])
-      (define widget-y (+ trans-y transcript-height i))
-      (when (< widget-y status-y)
-        (draw-styled-line! ubuf line widget-y cols)
-        (vector-set! frame-vec widget-y (styled-line->ansi line)))))
-
-  ;; 5. Draw status bar (inverse = fg=0, bg=7)
-  (define status-line (render-status-bar ui-state cols))
-  (assert-line-width! (styled-line->text status-line) cols)
-  (draw-styled-line! ubuf status-line status-y cols)
-  (vector-set! frame-vec status-y (styled-line->ansi status-line))
-
-  ;; 5. Draw input line
-  (define input-line (render-input-line input-st cols))
-  (assert-line-width! (styled-line->text input-line) cols)
-  (draw-styled-line! ubuf input-line input-y cols)
-  (vector-set! frame-vec input-y (styled-line->ansi input-line))
-
-  ;; 6. Draw overlay if active (#643)
-  ;; Overlay renders on top of the transcript zone.
-  ;; Background is drawn with inverse style to distinguish from transcript.
-  (define overlay (ui-state-active-overlay ui-state))
-  (when overlay
-    (define ov-content (overlay-state-content overlay))
-    (define ov-lines
-      (if (> (length ov-content) transcript-height)
-          (take-right ov-content transcript-height)
-          ov-content))
-    ;; Clear overlay background
-    (for ([i (in-range transcript-height)])
-      (ubuf-putstring! ubuf 0 (+ trans-y i) (make-string cols #\space) #:bg 8))
-    ;; Draw overlay lines
-    (for ([line (in-list ov-lines)]
-          [i (in-naturals)])
-      #:break (>= i transcript-height)
-      (draw-styled-line! ubuf line (+ trans-y i) cols)
-      (vector-set! frame-vec (+ trans-y i) (styled-line->ansi line))))
-
-  ;; 7. Return cursor position (0-indexed for ANSI escape)
-  (define-values (_visible-text _scroll-offset cursor-display-col)
-    (input-visible-window input-st cols))
-  (values cursor-display-col input-y ui-state* (vector->list frame-vec)))
 
 ;; ============================================================
 ;; Component-based rendering (#641)

@@ -25,7 +25,6 @@
          "../tui/state.rkt"
          "../tui/input.rkt"
          "../tui/sgr.rkt"
-         (prefix-in renderer: "../tui/renderer.rkt")
          "../tui/layout.rkt"
          "../tui/cell-buffer.rkt"
          "../tui/cell-diff.rkt"
@@ -110,8 +109,6 @@
   (define ubuf (make-cell-buffer cols rows))
   (set-box! (tui-ctx-ubuf-box ctx) ubuf)
   ;; Configure renderer to use cell-buffer operations
-  (renderer:current-ubuf-clear cell-buffer-clear!)
-  (renderer:current-ubuf-putstring cell-buffer-putstring!)
   ;; Enable mouse tracking for scroll wheel support
   (enable-mouse-tracking)
   ;; Detect synchronized output support
