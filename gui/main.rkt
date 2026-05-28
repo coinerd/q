@@ -444,7 +444,7 @@
      #:stretch '(#t #t)
      (hpanel #:stretch '(#t #f) #:style '(border) (text-view status-obs))
      (canvas-view messages-obs on-draw #:style '(border vscroll) #:stretch '(#t #t))
-     (input-view input-obs on-input #:style '(single) #:stretch '(#t #f) #:min-size '(#f 30)))))
+     (input-view input-obs on-input #:style '(multiple) #:stretch '(#t #f) #:min-size '(#f 60)))))
 
   ;; Cleanup after window closes
   (void))
