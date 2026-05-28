@@ -11,6 +11,7 @@
 
 (require racket/class
          racket/string
+         racket/list
          "../util/event.rkt"
          "../gui/components/rich-transcript-view.rkt"
          "../ui-core/theme-protocol.rkt")
@@ -31,9 +32,7 @@
   ;; since all GUI state updates are fast.
   gui-state-lock)
 
-;; Helper: drop-right for lists
-(define (drop-right lst n)
-  (reverse (list-tail (reverse lst) n)))
+;; drop-right — re-exported from racket/list
 
 ;; --------------------------------------------------
 ;; GUI event subscriber
