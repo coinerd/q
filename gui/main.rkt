@@ -61,7 +61,8 @@
   ;; notify-callback-box: (boxof (or/c (-> void?) #f)) — set by launch-gui-window
   (define (notify!)
     (define cb (and notify-callback-box (unbox notify-callback-box)))
-    (when cb (cb)))
+    (when cb
+      (cb)))
   (lambda (evt)
     (define ev (event-ev evt))
     (define payload (event-payload evt))
@@ -76,7 +77,7 @@
           (define msgs (hash-ref old 'messages '()))
           (set-box! state-box
                     (hash-set old 'messages (append msgs (list (hash 'role "user" 'text text)))))
-         (notify!))])
+          (notify!)))]
 
       ;; Stream delta → accumulate text
       [(equal? ev "model.stream.delta")
@@ -104,8 +105,8 @@
                 (hash-set
                  old
                  'messages
-                 (append msgs
-                         (list (hash 'role "assistant" 'text (unbox current-response-text))))))]))))]
+                 (append msgs (list (hash 'role "assistant" 'text (unbox current-response-text))))))])
+            (notify!))))]
 
       ;; Thinking delta → show in transcript (dimmed)
       [(equal? ev "model.stream.thinking")
@@ -115,13 +116,12 @@
                               (lambda ()
                                 (define old (unbox state-box))
                                 (define msgs (hash-ref old 'messages '()))
-                                (define last-msg (and (pair? msgs) (hash-ref last-msg 'role #f)))
                                 ;; Only add thinking message if we haven't started response yet
                                 (when (not (equal? (and (pair? msgs)
                                                         (hash-ref (car (reverse msgs)) 'role #f))
                                                    "assistant"))
-                                  (set-box! state-box (hash-set old 'status 'processing))
-                                 (notify!))))))])
+                                  (set-box! state-box (hash-set old 'status 'processing)))
+                                (notify!))))]
 
       ;; Stream completed → finalize message
       [(equal? ev "model.stream.completed")
@@ -160,7 +160,8 @@
           (set-box! state-box
                     (hash-set old
                               'messages
-                              (append msgs (list (hash 'role "tool" 'text (format "[~a]" name))))))))]
+                              (append msgs (list (hash 'role "tool" 'text (format "[~a]" name))))))
+          (notify!)))]
 
       ;; Error events
       [(and (string? ev) (regexp-match? #rx"(?i:error)" ev))
@@ -171,8 +172,6 @@
                               (notify!)))]
 
       [else (void)])))
-
-;; Helper: semaphore for box access (thread safety)
 (define (box-cell-semaphore b)
   ;; Reuse a per-box semaphore — we store it on the box's props
   ;; Simple approach: just use a global lock since updates are fast
@@ -231,21 +230,20 @@
   ;; Direct observable update via queue-callback (replaces poll thread)
   ;; Called from event subscriber threads, schedules GUI thread update
   (define (notify-gui!)
-    (queue-callback
-     (lambda ()
-       (define state (unbox state-box))
-       (when (hash? state)
-         (define msgs (hash-ref state 'messages '()))
-         (unless (equal? msgs (peek-obs messages-obs))
-           (set-obs! messages-obs msgs))
-         (define st (hash-ref state 'status 'idle))
-         (define status-str
-           (cond
-             [(eq? st 'processing) "Processing..."]
-             [(eq? st 'error) "Error"]
-             [else "Ready"]))
-         (unless (equal? status-str (peek-obs status-obs))
-           (set-obs! status-obs status-str))))))
+    (queue-callback (lambda ()
+                      (define state (unbox state-box))
+                      (when (hash? state)
+                        (define msgs (hash-ref state 'messages '()))
+                        (unless (equal? msgs (peek-obs messages-obs))
+                          (set-obs! messages-obs msgs))
+                        (define st (hash-ref state 'status 'idle))
+                        (define status-str
+                          (cond
+                            [(eq? st 'processing) "Processing..."]
+                            [(eq? st 'error) "Error"]
+                            [else "Ready"]))
+                        (unless (equal? status-str (peek-obs status-obs))
+                          (set-obs! status-obs status-str))))))
 
   ;; Store notify callback in box so subscriber can use it
   (set-box! notify-callback-box notify-gui!)
@@ -408,7 +406,13 @@
 
   ;; Create a text% object for the rich transcript
   (define transcript-text
-    (make-rich-transcript-gui-view text% editor-canvas% color% font% style-delta% theme queue-callback))
+    (make-rich-transcript-gui-view text%
+                                   editor-canvas%
+                                   color%
+                                   font%
+                                   style-delta%
+                                   theme
+                                   queue-callback))
 
   ;; Track last rendered messages for diff-based updates
   (define last-rendered-msgs (box '()))
@@ -423,7 +427,10 @@
       (for ([m (in-list msgs)]
             [i (in-naturals)])
         (define role (and (hash? m) (hash-ref m 'role "system")))
-        (define txt (if (hash? m) (hash-ref m 'text (~a m)) (~a m)))
+        (define txt
+          (if (hash? m)
+              (hash-ref m 'text (~a m))
+              (~a m)))
         (define y (* (+ i 1) 16))
         (when (< (+ y 16) ch)
           (send dc set-text-foreground
