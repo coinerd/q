@@ -20,6 +20,7 @@
          "../util/protocol-types.rkt"
          "../util/jsonl.rkt"
          (only-in "../util/message-helpers.rkt" ensure-parent-dirs!)
+         (only-in "../util/ids.rkt" generate-id)
          (only-in "../util/errors.rkt" raise-session-error)
          ;; Extracted modules (v0.22.9 W2)
          "session-store-integrity.rkt"
@@ -170,7 +171,7 @@
     [(and (file-exists? log-path) (> (file-size log-path) 0)) (void)]
     [else
      (define header-msg
-       (make-message (format "session-version-header-~a" (current-inexact-milliseconds))
+       (make-message (string-append "svh-" (generate-id))
                      #f
                      'system
                      'session-info
@@ -219,7 +220,7 @@
   (when (< from-version to-version)
     (define entries (load-session-log log-path))
     (define header-msg
-      (make-message (format "session-version-header-~a" (current-inexact-milliseconds))
+      (make-message (string-append "svh-" (generate-id))
                     #f
                     'system
                     'session-info
@@ -262,7 +263,7 @@
   (ensure-parent-dirs! dest-path)
   (define header-msg
     (make-message
-     (format "session-version-header-~a" (current-inexact-milliseconds))
+     (string-append "svh-" (generate-id))
      #f
      'system
      'session-info
@@ -279,7 +280,7 @@
 
 (define (write-session-name! log-path name)
   (define name-msg
-    (make-message (format "session-name-~a" (current-inexact-milliseconds))
+    (make-message (string-append "sn-" (generate-id))
                   #f
                   'system
                   'session-info
@@ -305,11 +306,11 @@
                 source-path))
      (when (null? raw)
        (raise-session-error 'import-session! "No valid entries found in source" #f source-path))
-     (define new-session-id (format "imported-~a" (current-inexact-milliseconds)))
+     (define new-session-id (string-append "imported-" (generate-id)))
      (define dest-path (build-path dest-session-dir (format "~a.jsonl" new-session-id)))
      (ensure-parent-dirs! dest-path)
      (define header-msg
-       (make-message (format "session-version-header-~a" (current-inexact-milliseconds))
+       (make-message (string-append "svh-" (generate-id))
                      #f
                      'system
                      'session-info

@@ -21,6 +21,7 @@
          racket/match
          "../util/protocol-types.rkt"
          "../util/message-helpers.rkt"
+         (only-in "../util/ids.rkt" generate-id)
          "compactor.rkt")
 
 ;; #693: Cut-point rules
@@ -180,7 +181,7 @@
         kept))
   ;; Create a fresh user message with the original prompt
   (define retry-msg
-    (make-message (format "retry-~a" (current-inexact-milliseconds))
+    (make-message (string-append "retry-" (generate-id))
                   #f
                   'user
                   'text

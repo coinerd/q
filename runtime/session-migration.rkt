@@ -22,6 +22,7 @@
          json
          "../util/jsonl.rkt"
          "../util/protocol-types.rkt"
+         (only-in "../util/ids.rkt" generate-id)
          (only-in "../util/errors.rkt" with-logged-catch raise-session-error))
 
 (provide (contract-out [current-session-version exact-nonnegative-integer?]
@@ -95,7 +96,7 @@
 (define (migrate-v1->v2! path)
   (define entries (load-session-log path))
   (define header-msg
-    (make-message (format "session-version-header-~a" (current-inexact-milliseconds))
+    (make-message (string-append "svh-" (generate-id))
                   #f
                   'system
                   'session-info
