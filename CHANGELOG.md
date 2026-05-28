@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.68.6 — 2026-05-25
+
+### GUI Hardening
+
+Bracket-safety, module decomposition, diff-based text% updates, and style-delta wiring.
+
+**Changes:**
+- **W0**: Extract `sync-observables!`, `update-text%-content!`, `manage-streaming-cursor!` from deeply nested lambdas; fix double `model.stream.completed` event
+- **W1**: Extract `gui/state-sync.rkt` (211 LOC) — `make-gui-event-subscriber`, `make-notify-gui-callback`, `drop-right` (20 tests)
+- **W2**: Deduplicate extension dispatch in `gui/slash-commands.rkt` — extract `try-extension-dispatch` (11 tests)
+- **W3**: Extract `gui/components/scroll-state.rkt` (7 tests) and `gui/components/input-helpers.rkt` (9 tests); wire style-deltas in `insert-message-into-text!`; add `apply-diff-to-text!` for incremental append vs full rebuild (5 diff-text tests)
+
+
 ## v0.68.5 — 2026-05-25
 
 ### GUI Critical Fix + text% Render Tree
