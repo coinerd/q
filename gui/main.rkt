@@ -143,7 +143,7 @@
                               (notify!)))]
 
       ;; Turn completed → set idle
-      [(or (equal? ev "turn.completed") (equal? ev "model.stream.completed"))
+      [(equal? ev "turn.completed")
        (set-box! current-response-text "")
        (call-with-semaphore (box-cell-semaphore state-box)
                             (lambda ()
@@ -231,39 +231,53 @@
 
   ;; Direct observable update via queue-callback (replaces poll thread)
   ;; Called from event subscriber threads, schedules GUI thread update
+  ;; Update text% editor content from current messages
+  (define (update-text%-content! state)
+    (define msgs (hash-ref state 'messages '()))
+    (define st (hash-ref state 'status 'idle))
+    (when transcript-text
+      (send transcript-text lock #f)
+      (send transcript-text delete 0 (send transcript-text last-position))
+      (for ([msg (in-list msgs)])
+        (insert-message-into-text! transcript-text msg theme))
+      ;; Append streaming cursor when processing
+      (when (eq? st 'processing)
+        (send transcript-text insert (streaming-cursor-string cursor-state)))
+      (send transcript-text lock #t)))
+
+  ;; Manage streaming cursor blink based on processing status
+  (define (manage-streaming-cursor! state)
+    (define st (hash-ref state 'status 'idle))
+    (cond
+      [(eq? st 'processing)
+       (unless (streaming-cursor-active? cursor-state)
+         (streaming-cursor-start! cursor-state notify-gui!))]
+      [else
+       (when (streaming-cursor-active? cursor-state)
+         (streaming-cursor-stop! cursor-state))]))
+
+  ;; Sync observables from state-box → GUI widgets
+  (define (sync-observables! state)
+    (define msgs (hash-ref state 'messages '()))
+    (unless (equal? msgs (peek-obs messages-obs))
+      (set-obs! messages-obs msgs))
+    (define st (hash-ref state 'status 'idle))
+    (define status-str
+      (cond
+        [(eq? st 'processing) "Processing..."]
+        [(eq? st 'error) "Error"]
+        [else "Ready"]))
+    (unless (equal? status-str (peek-obs status-obs))
+      (set-obs! status-obs status-str)))
+
+  ;; Flattened notify-gui! — max nesting = 4 levels (was 8)
   (define (notify-gui!)
     (queue-callback (lambda ()
-                      (define state (unbox state-box))
-                      (when (hash? state)
-                        (define msgs (hash-ref state 'messages '()))
-                        (unless (equal? msgs (peek-obs messages-obs))
-                          (set-obs! messages-obs msgs))
-                        (define st (hash-ref state 'status 'idle))
-                        (define status-str
-                          (cond
-                            [(eq? st 'processing) "Processing..."]
-                            [(eq? st 'error) "Error"]
-                            [else "Ready"]))
-                        (unless (equal? status-str (peek-obs status-obs))
-                          (set-obs! status-obs status-str))
-                        ;; Update text% transcript (editor-canvas% display requires display server)
-                        (when transcript-text
-                          (send transcript-text lock #f)
-                          (send transcript-text delete 0 (send transcript-text last-position))
-                          (for ([msg (in-list msgs)])
-                            (insert-message-into-text! transcript-text msg theme))
-                          ;; Append streaming cursor when processing
-                          (when (eq? st 'processing)
-                            (send transcript-text insert (streaming-cursor-string cursor-state)))
-                          (send transcript-text lock #t))
-                        ;; Manage streaming cursor based on status
-                        (cond
-                          [(eq? st 'processing)
-                           (unless (streaming-cursor-active? cursor-state)
-                             (streaming-cursor-start! cursor-state notify-gui!))]
-                          [else
-                           (when (streaming-cursor-active? cursor-state)
-                             (streaming-cursor-stop! cursor-state))])))))
+      (define state (unbox state-box))
+      (when (hash? state)
+        (sync-observables! state)
+        (update-text%-content! state)
+        (manage-streaming-cursor! state)))))
 
   ;; Store notify callback in box so subscriber can use it
   (set-box! notify-callback-box notify-gui!)
