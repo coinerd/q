@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.68.2 — 2026-05-28
+
+### Code Blocks + Multiline Input
+
+Add code block detection, parsing, and styling for transcript rendering.
+Switch input to multiline with Enter=submit, Shift+Enter=newline.
+
+**Changes:**
+- `contains-code-blocks?` / `parse-code-blocks` — markdown fenced code block parser
+- `render-message-with-code-blocks` — code-block-aware message rendering
+- `code-block-style` / `code-block-header-style` — styling helpers
+- `render-message-descriptor` now uses code-block parsing for content segments
+- `input-key-should-submit?` / `prepare-input-for-submit` / `input-line-count`
+- `input-looks-like-code?` — auto-detect code input
+- Multiline input view (`#:style '(multiple)`)
+- 51 tests total (21 new: 8 code-block + 4 style + 9 input)
+
 ## v0.68.1 — 2026-05-28
 
 ### Streaming Performance
