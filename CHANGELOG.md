@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.68.0 — 2026-05-28
+
+### Rich Transcript Core
+
+Replace canvas% + draw-text with text% + editor-canvas% custom gui-easy view.
+Enables text selection, auto-wrap, and rich formatting.
+
+**Changes:**
+- Add `gui/components/rich-transcript-view.rkt` — pure helpers for message rendering
+- `role->label`, `role->color`, `hex->color-object` — headless-testable color/label mapping
+- `render-message-descriptor` / `messages->render-plan` — message→styled-segments pipeline
+- `compute-transcript-diff` / `apply-diff-to-plan` — efficient diff-based update logic
+- `update-last-message` — streaming delta accumulation helper
+- `make-rich-transcript-gui-view` — text% object constructor for GUI runtime
+- Integrate render plan into `gui/main.rkt` — replaces raw on-draw with structured rendering
+- 23 new tests for pure helper functions
+
 ## v0.67.3 — 2026-05-28
 
 ### GUI Slash Commands + Event Type Fix
