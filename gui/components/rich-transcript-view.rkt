@@ -13,7 +13,9 @@
          racket/list
          "../../ui-core/theme-protocol.rkt"
          "markdown-parser.rkt"
-         "keybindings.rkt")
+         "keybindings.rkt"
+         "scroll-state.rkt"
+         "input-helpers.rkt")
 
 (provide role->label
          role->color
@@ -27,19 +29,13 @@
           [apply-diff-to-plan (-> (listof hash?) (listof hash?) ui-theme? (listof hash?))]
           [update-last-message (-> list? string? list?)]
           [make-rich-transcript-gui-view (-> any/c any/c any/c any/c any/c any/c any/c any/c)]
-          [make-scroll-state (->* () (boolean?) hash?)]
-          [scroll-state-auto-scroll? (-> hash? boolean?)]
-          [scroll-state-user-scrolled-up? (-> hash? boolean?)]
-          [scroll-state-on-scroll (-> hash? (between/c 0.0 1.0) hash?)]
-          [scroll-state-on-submit (-> hash? hash?)]
-          [input-key-should-submit? (-> any/c boolean? boolean? boolean?)]
-          [prepare-input-for-submit (-> string? string?)]
-          [input-line-count (-> string? exact-nonnegative-integer?)]
-          [input-looks-like-code? (-> string? boolean?)]
           [insert-message-into-text! (-> any/c hash? ui-theme? void?)]
-          [clear-and-rebuild-text! (-> any/c list? ui-theme? void?)])
+          [clear-and-rebuild-text! (-> any/c list? ui-theme? void?)]
+          [apply-diff-to-text! (-> any/c list? list? ui-theme? void?)])
          (all-from-out "markdown-parser.rkt")
-         (all-from-out "keybindings.rkt"))
+         (all-from-out "keybindings.rkt")
+         (all-from-out "scroll-state.rkt")
+         (all-from-out "input-helpers.rkt"))
 
 ;; ──────────────────────────────
 ;; Pure helpers (headless-testable)
@@ -69,19 +65,10 @@
   (hash 'r r 'g g 'b b 'hex (or hex-str "#000000")))
 
 (define (make-role-label-delta label color-hex)
-  (hash 'type 'role-label
-        'label label
-        'color color-hex
-        'bold #t
-        'family 'modern
-        'size 12))
+  (hash 'type 'role-label 'label label 'color color-hex 'bold #t 'family 'modern 'size 12))
 
 (define (make-content-delta color-hex)
-  (hash 'type 'content
-        'color color-hex
-        'bold #f
-        'family 'modern
-        'size 12))
+  (hash 'type 'content 'color color-hex 'bold #f 'family 'modern 'size 12))
 
 ;; ──────────────────────────────
 ;; Render plan: message → styled segments
@@ -93,9 +80,13 @@
   (define label (role->label role))
   (define role-color (role->color role theme))
   (define content-color (theme-ref theme 'foreground))
-  (define role-seg (hash 'type 'role-label
-                         'text (string-append label ": ")
-                         'style (make-role-label-delta label role-color)))
+  (define role-seg
+    (hash 'type
+          'role-label
+          'text
+          (string-append label ": ")
+          'style
+          (make-role-label-delta label role-color)))
   ;; Use code-block-aware parsing when code blocks detected
   (define content-segs
     (if (contains-code-blocks? text)
@@ -104,23 +95,33 @@
           (for/list ([seg (in-list parsed)])
             (cond
               [(equal? (hash-ref seg 'type #f) 'code-block)
-               (hash 'type 'code-block
-                     'text (hash-ref seg 'text "")
-                     'lang (hash-ref seg 'lang "")
-                     'style (code-block-style theme))]
+               (hash 'type
+                     'code-block
+                     'text
+                     (hash-ref seg 'text "")
+                     'lang
+                     (hash-ref seg 'lang "")
+                     'style
+                     (code-block-style theme))]
               [else
-               (hash 'type 'content
-                     'text (hash-ref seg 'text "")
-                     'style (make-content-delta content-color))])))
-        (list (hash 'type 'content
-                    'text (string-append text "\n\n")
-                    'style (make-content-delta content-color)))))
-  (hash 'role role
-        'text text
-        'segments (cons role-seg content-segs)))
+               (hash 'type
+                     'content
+                     'text
+                     (hash-ref seg 'text "")
+                     'style
+                     (make-content-delta content-color))])))
+        (list (hash 'type
+                    'content
+                    'text
+                    (string-append text "\n\n")
+                    'style
+                    (make-content-delta content-color)))))
+  (hash 'role role 'text text 'segments (cons role-seg content-segs)))
 
 (define (messages->render-plan msgs theme)
-  (for/list ([m (in-list (if (list? msgs) msgs '()))])
+  (for/list ([m (in-list (if (list? msgs)
+                             msgs
+                             '()))])
     (render-message-descriptor m theme)))
 
 ;; ──────────────────────────────
@@ -144,18 +145,15 @@
        [(and (> old-len 0)
              (not (equal? (hash-ref (list-ref old-msgs (- old-len 1)) 'text #f)
                           (hash-ref (list-ref new-msgs (- new-len 1)) 'text #f))))
-        (list (hash 'op 'update-last
-                    'msg (list-ref new-msgs (- new-len 1))))]
+        (list (hash 'op 'update-last 'msg (list-ref new-msgs (- new-len 1))))]
        [else '()])]
     [(> new-len old-len)
      (for/list ([i (in-range old-len new-len)])
        (hash 'op 'append 'msg (list-ref new-msgs i)))]
-    [(< new-len old-len)
-     (list (hash 'op 'reset 'msgs new-msgs))]))
+    [(< new-len old-len) (list (hash 'op 'reset 'msgs new-msgs))]))
 
 (define (apply-diff-to-plan current-plan diff-ops theme)
-  (for/fold ([plan current-plan])
-            ([op (in-list diff-ops)])
+  (for/fold ([plan current-plan]) ([op (in-list diff-ops)])
     (case (hash-ref op 'op #f)
       [(append)
        (define msg (hash-ref op 'msg))
@@ -172,67 +170,10 @@
       [else plan])))
 
 ;; ──────────────────────────────
-;; Auto-scroll state management (pure, headless-testable)
-;; ──────────────────────────────
-
-;; Scroll state: tracks whether auto-scroll is enabled
-;; and the last known scroll position ratio (0.0 = top, 1.0 = bottom)
-(define (make-scroll-state [auto? #t])
-  (hash 'auto-scroll auto?
-        'scroll-ratio 1.0
-        'user-scrolled-up #f))
-
-(define (scroll-state-auto-scroll? ss)
-  (hash-ref ss 'auto-scroll #t))
-
-(define (scroll-state-user-scrolled-up? ss)
-  (hash-ref ss 'user-scrolled-up #f))
-
-;; On scroll event: update scroll state based on position
-;; ratio: 0.0 = top, 1.0 = bottom
-(define (scroll-state-on-scroll ss ratio)
-  (cond
-    [(>= ratio 0.95)
-     ;; Near bottom → re-enable auto-scroll
-     (hash-set (hash-set ss 'auto-scroll #t) 'user-scrolled-up #f)]
-    [else
-     ;; Scrolled up → disable auto-scroll
-     (hash-set (hash-set ss 'auto-scroll #f) 'user-scrolled-up #t)]))
-
-;; On user submit → reset auto-scroll to #t
-(define (scroll-state-on-submit ss)
-  (hash-set (hash-set ss 'auto-scroll #t) 'user-scrolled-up #f))
-
-;; ──────────────────────────────
-;; Multiline input helpers (pure, headless-testable)
-;; ──────────────────────────────
-
-;; Should this key event trigger submit?
-;; Enter without Shift/Control → submit
-;; Shift+Enter or Control+Enter → insert newline
-(define (input-key-should-submit? key-code shift? control?)
-  (and (equal? key-code 'return)
-       (not shift?)
-       (not control?)))
-
-;; Process input text: trim trailing whitespace for submission
-(define (prepare-input-for-submit text)
-  (string-trim text #:left? #f))
-
-;; Split input into lines for validation
-(define (input-line-count text)
-  (length (string-split text "\n")))
-
-;; Check if input appears to be a code block (for auto-detection)
-(define (input-looks-like-code? text)
-  (or (contains-code-blocks? text)
-      (ormap (lambda (pat) (string-contains? text pat))
-             (list "(define " "(let " "(lambda " "(if " "(cond " "(for " "(when " "(set! "))))
-;; ──────────────────────────────
 ;; text% manipulation helpers (runtime only)
 ;; ──────────────────────────────
 
-;; Insert a single message into a text% object.
+;; Insert a single message into a text% object with styled role label.
 ;; text-obj: a text% instance (must be unlocked externally)
 ;; msg: hash with 'role and 'text keys
 ;; theme: ui-theme
@@ -240,9 +181,24 @@
   (define role (hash-ref msg 'role "system"))
   (define text (hash-ref msg 'text ""))
   (define label (role->label role))
-  (send text-obj insert (format "~a: ~a
-
-" label text)))
+  (cond
+    [(or (getenv "DISPLAY") (getenv "WAYLAND_DISPLAY"))
+     ;; GUI available: apply rich formatting via style-delta%
+     (define style-delta% (dynamic-require 'racket/gui 'style-delta%))
+     (define role-color (role->color role theme))
+     (define content-color (theme-ref theme 'foreground))
+     ;; Apply bold role label with role color
+     (define role-delta (make-object style-delta% 'change-bold))
+     (send role-delta set-delta-foreground role-color)
+     (send text-obj change-style role-delta)
+     (send text-obj insert (format "~a: " label))
+     ;; Apply normal content style with foreground color
+     (define content-delta (make-object style-delta% 'change-normal))
+     (send content-delta set-delta-foreground content-color)
+     (send text-obj change-style content-delta)
+     (send text-obj insert (string-append text "\n\n"))]
+    ;; Headless fallback: plain text insertion
+    [else (send text-obj insert (format "~a: ~a\n\n" label text))]))
 
 ;; Clear a text% object and rebuild from a list of messages.
 ;; text-obj: a text% instance
@@ -255,6 +211,22 @@
     (insert-message-into-text! text-obj msg theme))
   (send text-obj lock #t))
 
+;; Apply diff between old and new messages to a text% object.
+;; For append ops, inserts only new messages.
+;; For update-last/reset, falls back to full rebuild.
+(define (apply-diff-to-text! text-obj old-msgs new-msgs theme)
+  (define diff (compute-transcript-diff old-msgs new-msgs))
+  (cond
+    ;; No structural change
+    [(null? diff) (void)]
+    [(and (= (length diff) 1) (eq? (hash-ref (car diff) 'op #f) 'append))
+     ;; Single append → just insert the new message
+     (send text-obj lock #f)
+     (insert-message-into-text! text-obj (hash-ref (car diff) 'msg) theme)
+     (send text-obj lock #t)]
+    ;; Multiple appends, update-last, or reset → full rebuild
+    [else (clear-and-rebuild-text! text-obj new-msgs theme)]))
+
 ;; ──────────────────────────────
 ;; GUI view constructor (runtime only)
 ;; ──────────────────────────────
@@ -264,17 +236,23 @@
 ;; Returns: (values text-object view-ctor)
 ;; text-object: the text% instance for external append/update calls
 ;; view-ctor: (-> parent-panel void) — adds the editor-canvas% to parent
-(define (make-rich-transcript-gui-view text%-cls editor-canvas%-cls
-                                       color%-cls font%-cls style-delta%-cls
-                                       theme queue-callback)
-  (define bg-c (make-object color%-cls
-                          (string->number (substring (or (theme-ref theme 'background) "#1e1e2e") 1 3) 16)
-                          (string->number (substring (or (theme-ref theme 'background) "#1e1e2e") 3 5) 16)
-                          (string->number (substring (or (theme-ref theme 'background) "#1e1e2e") 5 7) 16)))
-  (define fg-c (make-object color%-cls
-                          (string->number (substring (or (theme-ref theme 'foreground) "#cdd6f4") 1 3) 16)
-                          (string->number (substring (or (theme-ref theme 'foreground) "#cdd6f4") 3 5) 16)
-                          (string->number (substring (or (theme-ref theme 'foreground) "#cdd6f4") 5 7) 16)))
+(define (make-rich-transcript-gui-view text%-cls
+                                       editor-canvas%-cls
+                                       color%-cls
+                                       font%-cls
+                                       style-delta%-cls
+                                       theme
+                                       queue-callback)
+  (define bg-c
+    (make-object color%-cls
+                 (string->number (substring (or (theme-ref theme 'background) "#1e1e2e") 1 3) 16)
+                 (string->number (substring (or (theme-ref theme 'background) "#1e1e2e") 3 5) 16)
+                 (string->number (substring (or (theme-ref theme 'background) "#1e1e2e") 5 7) 16)))
+  (define fg-c
+    (make-object color%-cls
+                 (string->number (substring (or (theme-ref theme 'foreground) "#cdd6f4") 1 3) 16)
+                 (string->number (substring (or (theme-ref theme 'foreground) "#cdd6f4") 3 5) 16)
+                 (string->number (substring (or (theme-ref theme 'foreground) "#cdd6f4") 5 7) 16)))
   (define mono-font (make-object font%-cls 12 'modern 'normal 'normal #f))
 
   (define text-obj (make-object text%-cls))
@@ -283,7 +261,8 @@
   (send text-obj lock #t)
   (send text-obj change-style
         (make-object style-delta%-cls 'change-normal)
-        0 (send text-obj last-position))
+        0
+        (send text-obj last-position))
 
   ;; Returns the text% object for external message insertion
   text-obj)

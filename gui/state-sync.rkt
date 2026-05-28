@@ -83,11 +83,12 @@
                (set-box! state-box
                          (hash-set old 'messages (append all-but-last (list updated-last))))]
               [else
-               (set-box! state-box
-                         (hash-set old
-                                   'messages
-                                   (append msgs (list (hash 'role "assistant"
-                                                            'text (unbox current-response-text))))))])
+               (set-box!
+                state-box
+                (hash-set
+                 old
+                 'messages
+                 (append msgs (list (hash 'role "assistant" 'text (unbox current-response-text))))))])
             (notify!))))]
 
       ;; Thinking delta → show in transcript (dimmed)
@@ -161,10 +162,14 @@
 ;; launch-gui-window are now explicit arguments.
 ;; --------------------------------------------------
 (define (make-notify-gui-callback state-box
-                                  messages-obs status-obs
-                                  transcript-text cursor-state
+                                  messages-obs
+                                  status-obs
+                                  transcript-text
+                                  cursor-state
                                   theme
-                                  peek-obs set-obs! queue-callback)
+                                  peek-obs
+                                  set-obs!
+                                  queue-callback)
   (define (sync-observables! state)
     (define msgs (hash-ref state 'messages '()))
     (unless (equal? msgs (peek-obs messages-obs))
@@ -178,17 +183,19 @@
     (unless (equal? status-str (peek-obs status-obs))
       (set-obs! status-obs status-str)))
 
+  (define previous-msgs-box (box '()))
+
   (define (update-text%-content! state)
-    (define msgs (hash-ref state 'messages '()))
+    (define new-msgs (hash-ref state 'messages '()))
+    (define old-msgs (unbox previous-msgs-box))
     (define st (hash-ref state 'status 'idle))
     (when transcript-text
-      (send transcript-text lock #f)
-      (send transcript-text delete 0 (send transcript-text last-position))
-      (for ([msg (in-list msgs)])
-        (insert-message-into-text! transcript-text msg theme))
+      (apply-diff-to-text! transcript-text old-msgs new-msgs theme)
       (when (eq? st 'processing)
-        (send transcript-text insert (streaming-cursor-string cursor-state)))
-      (send transcript-text lock #t)))
+        (send transcript-text lock #f)
+        (send transcript-text insert (streaming-cursor-string cursor-state))
+        (send transcript-text lock #t))
+      (set-box! previous-msgs-box new-msgs)))
 
   (define (manage-streaming-cursor! state)
     (define st (hash-ref state 'status 'idle))
@@ -202,10 +209,10 @@
 
   (define (notify-gui!)
     (queue-callback (lambda ()
-      (define state (unbox state-box))
-      (when (hash? state)
-        (sync-observables! state)
-        (update-text%-content! state)
-        (manage-streaming-cursor! state)))))
+                      (define state (unbox state-box))
+                      (when (hash? state)
+                        (sync-observables! state)
+                        (update-text%-content! state)
+                        (manage-streaming-cursor! state)))))
 
   notify-gui!)
