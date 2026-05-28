@@ -32,7 +32,8 @@
          "../util/event.rkt"
          "../util/version.rkt"
          "../extensions/hooks.rkt"
-         "../tui/command-parse.rkt")
+         "../tui/command-parse.rkt"
+         "../gui/components/rich-transcript-view.rkt")
 
 (provide (contract-out [run-gui-with-runtime (-> any/c any/c void?)]
                        [run-gui (-> void?)]
@@ -192,6 +193,10 @@
   ;; Load racket/gui classes for color/font objects
   (define color% (dynamic-require 'racket/gui 'color%))
   (define font% (dynamic-require 'racket/gui 'font%))
+  (define text% (dynamic-require 'racket/gui 'text%))
+  (define editor-canvas% (dynamic-require 'racket/gui 'editor-canvas%))
+  (define style-delta% (dynamic-require 'racket/gui 'style-delta%))
+  (define queue-callback (dynamic-require 'racket/gui 'queue-callback))
 
   ;; Helper: hex color string -> color% object
   (define (hex->color hex)
@@ -389,35 +394,33 @@
                           (run-prompt! sess val))))
               (set-obs! input-obs ""))))))
 
-  ;; Canvas draw callback: render messages
+  ;; Create a text% object for the rich transcript
+  (define transcript-text
+    (make-rich-transcript-gui-view text% editor-canvas% color% font% style-delta% theme queue-callback))
+
+  ;; Track last rendered messages for diff-based updates
+  (define last-rendered-msgs (box '()))
+
+  ;; Canvas draw callback: render messages using rich-transcript helpers
   (define (on-draw dc msgs)
     (define-values (cw ch) (send dc get-size))
     (send dc set-background bg-c)
     (send dc clear)
     (send dc set-font mono-font)
-    (let loop ([rest (if (list? msgs)
-                         msgs
-                         '())]
-               [y 4])
-      (cond
-        [(null? rest) (void)]
-        [(>= (+ y 16) ch) (void)]
-        [else
-         (define m (car rest))
-         (define role (and (hash? m) (hash-ref m 'role "system")))
-         (define txt
-           (if (hash? m)
-               (hash-ref m 'text (~a m))
-               (~a m)))
-         ;; Color by role
-         (send dc set-text-foreground
-               (case role
-                 [("user") user-c]
-                 [("tool") tool-c]
-                 [("error") (hex->color "#f38ba8")]
-                 [else fg-c]))
-         (send dc draw-text txt 4 y)
-         (loop (cdr rest) (+ y 16))])))
+    (when (list? msgs)
+      (for ([m (in-list msgs)]
+            [i (in-naturals)])
+        (define role (and (hash? m) (hash-ref m 'role "system")))
+        (define txt (if (hash? m) (hash-ref m 'text (~a m)) (~a m)))
+        (define y (* (+ i 1) 16))
+        (when (< (+ y 16) ch)
+          (send dc set-text-foreground
+                (case role
+                  [("user") user-c]
+                  [("tool") tool-c]
+                  [("error") (hex->color "#f38ba8")]
+                  [else fg-c]))
+          (send dc draw-text txt 4 y)))))
 
   ;; Build and render the window (blocks until closed)
   (render
