@@ -200,3 +200,71 @@
     (check-false (scroll-state-auto-scroll? below-boundary))))
 
 (run-tests test-scroll-state)
+
+
+;; ── Code block detection tests ──
+
+(define-test-suite test-code-block-detection
+
+  (test-case "contains-code-blocks? detects triple backticks"
+    (check-true (contains-code-blocks? "some ```code``` here"))
+    (check-true (contains-code-blocks? "```racket\n(define x 1)```"))
+    (check-false (contains-code-blocks? "no code blocks here"))
+    (check-false (contains-code-blocks? ""))
+    (check-false (contains-code-blocks? 42)))
+
+  (test-case "parse-code-blocks plain text returns single text segment"
+    (define result (parse-code-blocks "hello world"))
+    (check-equal? (length result) 1)
+    (check-equal? (hash-ref (car result) 'type) 'text)
+    (check-equal? (hash-ref (car result) 'text) "hello world"))
+
+  (test-case "parse-code-blocks with inline code"
+    (define result (parse-code-blocks "before ```code``` after"))
+    (check >= (length result) 2)
+    ;; Should have text + code-block segments
+    (define types (map (lambda (s) (hash-ref s 'type)) result))
+    (check-not-false (member 'text types))
+    (check-not-false (member 'code-block types)))
+
+  (test-case "parse-code-blocks with fenced code block and language"
+    (define result (parse-code-blocks "```racket\n(define x 1)\n```"))
+    (check >= (length result) 1)
+    (define code-seg (findf (lambda (s) (equal? (hash-ref s 'type #f) 'code-block)) result))
+    (check-not-false code-seg)
+    (when code-seg
+      (check-equal? (hash-ref code-seg 'lang) "racket")
+      (check-not-false (string-contains? (hash-ref code-seg 'text "") "define"))))
+
+  (test-case "parse-code-blocks with fenced code block no language"
+    (define result (parse-code-blocks "```\nsome code\n```"))
+    (check >= (length result) 1)
+    (define code-seg (findf (lambda (s) (equal? (hash-ref s 'type #f) 'code-block)) result))
+    (check-not-false code-seg))
+
+  (test-case "parse-code-blocks mixed text and code"
+    (define result (parse-code-blocks "Here is code:\n```python\nprint(1)\n```\nDone."))
+    (define types (map (lambda (s) (hash-ref s 'type)) result))
+    (check >= (length result) 2)
+    (check-not-false (member 'text types))
+    (check-not-false (member 'code-block types)))
+
+  (test-case "parse-code-blocks handles non-string input"
+    (define result (parse-code-blocks 42))
+    (check-equal? (length result) 1)
+    (check-equal? (hash-ref (car result) 'type) 'text)
+    (check-equal? (hash-ref (car result) 'text) "42"))
+
+  (test-case "render-message-with-code-blocks produces segments"
+    (define msg (hash 'role "assistant" 'text "Try this:\n```racket\n(+ 1 2)\n```"))
+    (define result (render-message-with-code-blocks msg (default-theme)))
+    (check-not-false (hash-ref result 'segments #f))
+    (define segs (hash-ref result 'segments))
+    (check >= (length segs) 2)
+    ;; First segment should be role label
+    (check-not-false (string-contains? (hash-ref (car segs) 'text "") "Assistant"))
+    ;; Should have a code-block segment
+    (define code-segs (filter (lambda (s) (equal? (hash-ref s 'type #f) 'code-block)) segs))
+    (check >= (length code-segs) 1)))
+
+(run-tests test-code-block-detection)
