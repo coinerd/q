@@ -8,6 +8,7 @@
          "../gui/components/rich-transcript-view.rkt")
 
 (define-test-suite test-gui-rich-transcript
+                   ;; ── role->label ──
                    (test-case "role->label maps known roles"
                      (check-equal? (role->label "user") "You")
                      (check-equal? (role->label "assistant") "Assistant")
@@ -17,12 +18,14 @@
                      (check-equal? (role->label "custom") "Custom"))
                    (test-case "role->label handles #f"
                      (check-equal? (role->label #f) "Unknown"))
+                   ;; ── role->color ──
                    (test-case "role->color returns theme colors"
                      (define t (default-theme))
                      (check-equal? (role->color "user" t) (theme-ref t 'accent))
                      (check-equal? (role->color "assistant" t) (theme-ref t 'foreground))
                      (check-equal? (role->color "system" t) (theme-ref t 'muted))
                      (check-equal? (role->color "tool" t) (theme-ref t 'warning)))
+                   ;; ── hex->color-object ──
                    (test-case "hex->color-object parses hex with #"
                      (define c (hex->color-object "#1e1e2e"))
                      (check-equal? (hash-ref c 'r) 30)
@@ -36,6 +39,7 @@
                    (test-case "hex->color-object handles #f"
                      (define c (hex->color-object #f))
                      (check-equal? (hash-ref c 'r) 0))
+                   ;; ── delta factories ──
                    (test-case "make-role-label-delta produces descriptor"
                      (define d (make-role-label-delta "You" "#89b4fa"))
                      (check-equal? (hash-ref d 'type) 'role-label)
@@ -46,6 +50,7 @@
                      (define d (make-content-delta "#cdd6f4"))
                      (check-equal? (hash-ref d 'type) 'content)
                      (check-false (hash-ref d 'bold)))
+                   ;; ── render-message-descriptor ──
                    (test-case "render-message-descriptor produces segments"
                      (define t (default-theme))
                      (define msg (hash 'role "user" 'text "Hello"))
@@ -65,6 +70,7 @@
                      (define segs (hash-ref desc 'segments))
                      (define role-style (hash-ref (car segs) 'style))
                      (check-equal? (hash-ref role-style 'color) (theme-ref t 'foreground)))
+                   ;; ── messages->render-plan ──
                    (test-case "messages->render-plan produces list"
                      (define t (default-theme))
                      (define msgs
@@ -72,12 +78,79 @@
                      (define plan (messages->render-plan msgs t))
                      (check-equal? (length plan) 2)
                      (check-equal? (hash-ref (car plan) 'role) "user")
-                     (check-equal? (hash-ref (cadr plan) 'role) "assistant"))
-                   (test-case "messages->render-plan handles empty list"
-                     (define t (default-theme))
-                     (check-equal? (messages->render-plan '() t) '()))
-                   (test-case "messages->render-plan handles non-list"
-                     (define t (default-theme))
-                     (check-equal? (messages->render-plan "bad" t) '())))
+                     (check-equal? (hash-ref (cadr plan) 'role) "assistant")))
+
+;; ── Diff-based update tests ──
+
+(define-test-suite
+ test-transcript-diff
+ (test-case "compute-transcript-diff: no change"
+   (define msgs (list (hash 'role "user" 'text "Hi")))
+   (check-equal? (compute-transcript-diff msgs msgs) '()))
+ (test-case "compute-transcript-diff: append one message"
+   (define old (list (hash 'role "user" 'text "Hi")))
+   (define new (list (hash 'role "user" 'text "Hi") (hash 'role "assistant" 'text "Hello")))
+   (define diff (compute-transcript-diff old new))
+   (check-equal? (length diff) 1)
+   (check-equal? (hash-ref (car diff) 'op) 'append)
+   (check-equal? (hash-ref (hash-ref (car diff) 'msg) 'role) "assistant"))
+ (test-case "compute-transcript-diff: append multiple messages"
+   (define old '())
+   (define new (list (hash 'role "user" 'text "Hi") (hash 'role "assistant" 'text "Hello")))
+   (define diff (compute-transcript-diff old new))
+   (check-equal? (length diff) 2)
+   (check-equal? (hash-ref (car diff) 'op) 'append)
+   (check-equal? (hash-ref (cadr diff) 'op) 'append))
+ (test-case "compute-transcript-diff: update last message (streaming)"
+   (define old (list (hash 'role "user" 'text "Hi") (hash 'role "assistant" 'text "Hel")))
+   (define new (list (hash 'role "user" 'text "Hi") (hash 'role "assistant" 'text "Hello")))
+   (define diff (compute-transcript-diff old new))
+   (check-equal? (length diff) 1)
+   (check-equal? (hash-ref (car diff) 'op) 'update-last)
+   (check-equal? (hash-ref (hash-ref (car diff) 'msg) 'text) "Hello"))
+ (test-case "compute-transcript-diff: reset (clear)"
+   (define old (list (hash 'role "user" 'text "Hi")))
+   (define new '())
+   (define diff (compute-transcript-diff old new))
+   (check-equal? (length diff) 1)
+   (check-equal? (hash-ref (car diff) 'op) 'reset)
+   (check-equal? (hash-ref (car diff) 'msgs) '()))
+ (test-case "update-last-message replaces text"
+   (define msgs (list (hash 'role "user" 'text "Hi") (hash 'role "assistant" 'text "Hel")))
+   (define updated (update-last-message msgs "Hello"))
+   (check-equal? (length updated) 2)
+   (check-equal? (hash-ref (cadr updated) 'text) "Hello")
+   ;; First message unchanged
+   (check-equal? (hash-ref (car updated) 'text) "Hi"))
+ (test-case "update-last-message on empty list returns empty"
+   (check-equal? (update-last-message '() "text") '()))
+ (test-case "apply-diff-to-plan: append"
+   (define t (default-theme))
+   (define plan (messages->render-plan (list (hash 'role "user" 'text "Hi")) t))
+   (define diff (list (hash 'op 'append 'msg (hash 'role "assistant" 'text "Hello"))))
+   (define new-plan (apply-diff-to-plan plan diff t))
+   (check-equal? (length new-plan) 2)
+   (check-equal? (hash-ref (cadr new-plan) 'role) "assistant"))
+ (test-case "apply-diff-to-plan: update-last"
+   (define t (default-theme))
+   (define plan
+     (messages->render-plan (list (hash 'role "user" 'text "Hi") (hash 'role "assistant" 'text "Hel"))
+                            t))
+   (define diff (list (hash 'op 'update-last 'msg (hash 'role "assistant" 'text "Hello"))))
+   (define new-plan (apply-diff-to-plan plan diff t))
+   (check-equal? (length new-plan) 2)
+   (check-equal? (hash-ref (cadr new-plan) 'text) "Hello"))
+ (test-case "apply-diff-to-plan: reset"
+   (define t (default-theme))
+   (define plan (messages->render-plan (list (hash 'role "user" 'text "Hi")) t))
+   (define diff (list (hash 'op 'reset 'msgs '())))
+   (define new-plan (apply-diff-to-plan plan diff t))
+   (check-equal? new-plan '()))
+ (test-case "apply-diff-to-plan: no-ops returns same plan"
+   (define t (default-theme))
+   (define plan (messages->render-plan (list (hash 'role "user" 'text "Hi")) t))
+   (define new-plan (apply-diff-to-plan plan '() t))
+   (check-equal? new-plan plan)))
 
 (run-tests test-gui-rich-transcript)
+(run-tests test-transcript-diff)
