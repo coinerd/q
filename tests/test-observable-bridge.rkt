@@ -104,6 +104,20 @@
    (check-equal? (bridge-update-count bridge2) 1)
    (bridge-dispose! bridge1)
    (bridge-dispose! bridge2))
+ (test-case "bridge with filter that checks event-ev (matches wire-bridge! pattern)"
+   ;; This test verifies the fix for audit finding F1: the wire-bridge! filter
+   ;; must handle event structs (not hashes) by using event-ev.
+   (define state-box (box 'no-update))
+   (define bridge
+     (make-gui-state-bridge state-box
+                            'no-update
+                            #:filter (lambda (evt) (and (symbol? (event-ev evt)) #t))))
+   (define bus (make-event-bus))
+   (bridge-subscribe! bridge bus)
+   ;; Event struct should pass the filter (this would fail with the old hash? check)
+   (publish! bus (test-event 'user.input (hash 'text "hello")))
+   (check-equal? (bridge-update-count bridge) 1)
+   (bridge-dispose! bridge))
  (test-case "dispose is idempotent"
    (define state-box (box #f))
    (define bridge (make-gui-state-bridge state-box #f))
