@@ -1,13 +1,6 @@
 #lang racket/base
 
 ;; q/gui/state-sync.rkt — GUI state synchronization
-;;
-;; Extracted from gui/main.rkt to reduce nesting and improve testability.
-;; Contains:
-;;   - make-gui-event-subscriber  (event-bus → state-box accumulator)
-;;   - make-notify-gui-callback   (factory for notify-gui! closure)
-;;   - gui-state-lock             (global semaphore for state updates)
-;;   - drop-right                 (list helper)
 
 (require racket/class
          racket/string
@@ -22,29 +15,16 @@
          make-notify-gui-callback
          box-cell-semaphore)
 
-;; --------------------------------------------------
-;; Global lock for state-box mutations (fast ops, single lock OK)
-;; --------------------------------------------------
 (define gui-state-lock (make-semaphore 1))
 
 (define (box-cell-semaphore b)
-  ;; Per-box semaphore would be cleaner, but a global lock is fine
-  ;; since all GUI state updates are fast.
   gui-state-lock)
 
-;; Helper: drop-right for lists
 (define (drop-right lst n)
   (reverse (list-tail (reverse lst) n)))
 
-;; --------------------------------------------------
-;; GUI event subscriber
-;;
-;; Listens to event-bus events and accumulates messages
-;; into the state hash that the GUI polls.
-;; --------------------------------------------------
 (define (make-gui-event-subscriber state-box [notify-callback-box #f])
   (define current-response-text (box ""))
-  ;; notify-callback-box: (boxof (or/c (-> void?) #f)) — set by launch-gui-window
   (define (notify!)
     (define cb (and notify-callback-box (unbox notify-callback-box)))
     (when cb
@@ -53,7 +33,6 @@
     (define ev (event-ev evt))
     (define payload (event-payload evt))
     (cond
-      ;; User sent a message → add to transcript
       [(equal? ev "user.input")
        (define text (hash-ref payload 'text ""))
        (call-with-semaphore
@@ -65,7 +44,6 @@
                     (hash-set old 'messages (append msgs (list (hash 'role "user" 'text text)))))
           (notify!)))]
 
-      ;; Stream delta → accumulate text
       [(equal? ev "model.stream.delta")
        (define delta (hash-ref payload 'delta ""))
        (when (> (string-length delta) 0)
@@ -90,7 +68,6 @@
                                                             'text (unbox current-response-text))))))])
             (notify!))))]
 
-      ;; Thinking delta → show in transcript (dimmed)
       [(equal? ev "model.stream.thinking")
        (define delta (hash-ref payload 'delta ""))
        (when (> (string-length delta) 0)
@@ -104,7 +81,6 @@
                                   (set-box! state-box (hash-set old 'status 'processing)))
                                 (notify!))))]
 
-      ;; Stream completed → finalize message
       [(equal? ev "model.stream.completed")
        (set-box! current-response-text "")
        (call-with-semaphore gui-state-lock
@@ -113,7 +89,6 @@
                               (set-box! state-box (hash-set old 'status 'idle))
                               (notify!)))]
 
-      ;; Turn started → set processing
       [(equal? ev "turn.started")
        (call-with-semaphore gui-state-lock
                             (lambda ()
@@ -121,7 +96,6 @@
                               (set-box! state-box (hash-set old 'status 'processing))
                               (notify!)))]
 
-      ;; Turn completed → set idle
       [(equal? ev "turn.completed")
        (set-box! current-response-text "")
        (call-with-semaphore gui-state-lock
@@ -130,7 +104,6 @@
                               (set-box! state-box (hash-set old 'status 'idle))
                               (notify!)))]
 
-      ;; Tool call started → show in transcript
       [(equal? ev "tool.call.started")
        (define name (hash-ref payload 'name "unknown"))
        (call-with-semaphore
@@ -144,7 +117,6 @@
                               (append msgs (list (hash 'role "tool" 'text (format "[~a]" name))))))
           (notify!)))]
 
-      ;; Error events
       [(and (string? ev) (regexp-match? #rx"(?i:error)" ev))
        (call-with-semaphore gui-state-lock
                             (lambda ()
@@ -154,17 +126,13 @@
 
       [else (void)])))
 
-;; --------------------------------------------------
-;; Factory: create the notify-gui! callback closure
-;;
-;; All parameters that were previously closed over in
-;; launch-gui-window are now explicit arguments.
-;; --------------------------------------------------
 (define (make-notify-gui-callback state-box
                                   messages-obs status-obs
                                   transcript-text cursor-state
                                   theme
                                   peek-obs set-obs! queue-callback)
+  (define previous-msgs-box (box '()))
+
   (define (sync-observables! state)
     (define msgs (hash-ref state 'messages '()))
     (unless (equal? msgs (peek-obs messages-obs))
@@ -179,16 +147,16 @@
       (set-obs! status-obs status-str)))
 
   (define (update-text%-content! state)
-    (define msgs (hash-ref state 'messages '()))
+    (define new-msgs (hash-ref state 'messages '()))
+    (define old-msgs (unbox previous-msgs-box))
     (define st (hash-ref state 'status 'idle))
     (when transcript-text
-      (send transcript-text lock #f)
-      (send transcript-text delete 0 (send transcript-text last-position))
-      (for ([msg (in-list msgs)])
-        (insert-message-into-text! transcript-text msg theme))
+      (apply-diff-to-text! transcript-text old-msgs new-msgs theme)
       (when (eq? st 'processing)
-        (send transcript-text insert (streaming-cursor-string cursor-state)))
-      (send transcript-text lock #t)))
+        (send transcript-text lock #f)
+        (send transcript-text insert (streaming-cursor-string cursor-state))
+        (send transcript-text lock #t))
+      (set-box! previous-msgs-box new-msgs)))
 
   (define (manage-streaming-cursor! state)
     (define st (hash-ref state 'status 'idle))
