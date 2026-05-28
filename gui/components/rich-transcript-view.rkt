@@ -35,7 +35,9 @@
           [input-key-should-submit? (-> any/c boolean? boolean? boolean?)]
           [prepare-input-for-submit (-> string? string?)]
           [input-line-count (-> string? exact-nonnegative-integer?)]
-          [input-looks-like-code? (-> string? boolean?)])
+          [input-looks-like-code? (-> string? boolean?)]
+          [insert-message-into-text! (-> any/c hash? ui-theme? void?)]
+          [clear-and-rebuild-text! (-> any/c list? ui-theme? void?)])
          (all-from-out "markdown-parser.rkt")
          (all-from-out "keybindings.rkt"))
 
@@ -226,6 +228,33 @@
   (or (contains-code-blocks? text)
       (ormap (lambda (pat) (string-contains? text pat))
              (list "(define " "(let " "(lambda " "(if " "(cond " "(for " "(when " "(set! "))))
+;; ──────────────────────────────
+;; text% manipulation helpers (runtime only)
+;; ──────────────────────────────
+
+;; Insert a single message into a text% object.
+;; text-obj: a text% instance (must be unlocked externally)
+;; msg: hash with 'role and 'text keys
+;; theme: ui-theme
+(define (insert-message-into-text! text-obj msg theme)
+  (define role (hash-ref msg 'role "system"))
+  (define text (hash-ref msg 'text ""))
+  (define label (role->label role))
+  (send text-obj insert (format "~a: ~a
+
+" label text)))
+
+;; Clear a text% object and rebuild from a list of messages.
+;; text-obj: a text% instance
+;; msgs: list of message hashes
+;; theme: ui-theme
+(define (clear-and-rebuild-text! text-obj msgs theme)
+  (send text-obj lock #f)
+  (send text-obj delete 0 (send text-obj last-position))
+  (for ([msg (in-list msgs)])
+    (insert-message-into-text! text-obj msg theme))
+  (send text-obj lock #t))
+
 ;; ──────────────────────────────
 ;; GUI view constructor (runtime only)
 ;; ──────────────────────────────
