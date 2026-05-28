@@ -165,19 +165,22 @@
 
 (define CURRENT-SESSION-VERSION 2)
 
+;; Helper: create a version-header message with optional extra metadata
+(define (make-version-header-message #:version [ver CURRENT-SESSION-VERSION] #:extra [extra (hasheq)])
+  (make-message (string-append "svh-" (generate-id))
+                #f
+                'system
+                'session-info
+                '()
+                (current-seconds)
+                (hash-set extra 'version ver)))
+
 (define (write-session-version-header! log-path)
   (ensure-parent-dirs! log-path)
   (cond
     [(and (file-exists? log-path) (> (file-size log-path) 0)) (void)]
     [else
-     (define header-msg
-       (make-message (string-append "svh-" (generate-id))
-                     #f
-                     'system
-                     'session-info
-                     '()
-                     (current-seconds)
-                     (hasheq 'version CURRENT-SESSION-VERSION)))
+     (define header-msg (make-version-header-message))
      (call-with-output-file log-path
                             (lambda (out)
                               (write-json (message->jsexpr header-msg) out)
@@ -219,14 +222,7 @@
 (define (migrate-session-log! log-path from-version to-version)
   (when (< from-version to-version)
     (define entries (load-session-log log-path))
-    (define header-msg
-      (make-message (string-append "svh-" (generate-id))
-                    #f
-                    'system
-                    'session-info
-                    '()
-                    (current-seconds)
-                    (hasheq 'version to-version)))
+    (define header-msg (make-version-header-message #:version to-version))
     (define all-entries (cons header-msg entries))
     (define bak-path (format "~a.v~a.bak" log-path from-version))
     (when (file-exists? bak-path)
@@ -261,15 +257,7 @@
            new-acc)]))
   (define path-entries (walk-up source-entry-id '()))
   (ensure-parent-dirs! dest-path)
-  (define header-msg
-    (make-message
-     (string-append "svh-" (generate-id))
-     #f
-     'system
-     'session-info
-     '()
-     (current-seconds)
-     (hasheq 'version CURRENT-SESSION-VERSION 'parentSession (path->string source-path))))
+  (define header-msg (make-version-header-message #:extra (hasheq 'parentSession (path->string source-path))))
   (define all-entries (cons header-msg path-entries))
   (jsonl-append-entries! dest-path (map message->jsexpr all-entries))
   (length path-entries))
@@ -309,19 +297,7 @@
      (define new-session-id (string-append "imported-" (generate-id)))
      (define dest-path (build-path dest-session-dir (format "~a.jsonl" new-session-id)))
      (ensure-parent-dirs! dest-path)
-     (define header-msg
-       (make-message (string-append "svh-" (generate-id))
-                     #f
-                     'system
-                     'session-info
-                     '()
-                     (current-seconds)
-                     (hasheq 'version
-                             CURRENT-SESSION-VERSION
-                             'imported-from
-                             (path->string source-path)
-                             'imported-at
-                             (current-seconds))))
+     (define header-msg (make-version-header-message #:extra (hasheq 'imported-from (path->string source-path) 'imported-at (current-seconds))))
      (define messages (map jsexpr->message raw))
      (define all-entries (cons header-msg messages))
      (jsonl-append-entries! dest-path (map message->jsexpr all-entries))
