@@ -33,6 +33,10 @@
           [contains-code-blocks? (-> any/c boolean?)]
           [parse-code-blocks (-> any/c (listof hash?))]
           [render-message-with-code-blocks (-> hash? ui-theme? hash?)]
+          [key-event->action (-> char? boolean? (or/c symbol? #f))]
+          [lookup-keybinding (-> char? boolean? (or/c symbol? #f))]
+          [list-keybindings (-> (listof pair?))]
+          [default-keybindings hash?]
           [code-block-style (-> ui-theme? hash?)]
           [code-block-header-style (-> (or/c string? #f) hash?)]
           [input-key-should-submit? (-> any/c boolean? boolean? boolean?)]
@@ -308,6 +312,32 @@
   (or (contains-code-blocks? text)
       (ormap (lambda (pat) (string-contains? text pat))
              (list "(define " "(let " "(lambda " "(if " "(cond " "(for " "(when " "(set! "))))
+;; ──────────────────────────────
+;; Keyboard shortcut registry (pure, headless-testable)
+;; ──────────────────────────────
+
+;; Default keyboard shortcuts for the GUI transcript
+(define default-keybindings
+  (hash #\l 'clear
+        #\k 'compact
+        #\c 'interrupt
+        #\s 'save
+        #\q 'quit))
+
+;; Look up a keybinding by key character + ctrl modifier
+(define (lookup-keybinding key-char ctrl?)
+  (if ctrl?
+      (hash-ref default-keybindings key-char #f)
+      #f))
+
+;; Get action symbol for a key event
+(define (key-event->action key-char ctrl?)
+  (lookup-keybinding key-char ctrl?))
+
+;; List all registered shortcuts as (char . action) pairs
+(define (list-keybindings)
+  (hash->list default-keybindings))
+
 ;; ──────────────────────────────
 ;; Code block styling helpers (headless-testable)
 ;; ──────────────────────────────
