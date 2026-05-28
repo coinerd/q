@@ -268,3 +268,35 @@
     (check >= (length code-segs) 1)))
 
 (run-tests test-code-block-detection)
+
+
+;; ── Code block style helper tests ──
+
+(define-test-suite test-code-block-style
+
+  (test-case "code-block-style returns hash with expected keys"
+    (define s (code-block-style (default-theme)))
+    (check-not-false (hash-ref s 'background #f))
+    (check-not-false (hash-ref s 'foreground #f))
+    (check-not-false (hash-ref s 'font #f))
+    (check-equal? (hash-ref s 'font) "monospace"))
+
+  (test-case "code-block-header-style with language"
+    (define h (code-block-header-style "racket"))
+    (check-equal? (hash-ref h 'text) "racket")
+    (check-not-false (hash-ref h 'style #f)))
+
+  (test-case "code-block-header-style with #f lang"
+    (define h (code-block-header-style #f))
+    (check-equal? (hash-ref h 'text) ""))
+
+  (test-case "render-message-descriptor uses code-block parsing"
+    ;; Message with code blocks should produce multiple content segments
+    (define msg (hash 'role "assistant" 'text "```racket\n(+ 1 2)\n```\nDone."))
+    (define desc (render-message-descriptor msg (default-theme)))
+    (define segs (hash-ref desc 'segments))
+    (check >= (length segs) 3)  ;; role-label + code-block + "Done."
+    (define code-segs (filter (lambda (s) (equal? (hash-ref s 'type #f) 'code-block)) segs))
+    (check >= (length code-segs) 1)))
+
+(run-tests test-code-block-style)

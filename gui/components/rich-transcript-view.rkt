@@ -32,7 +32,9 @@
           [scroll-state-on-submit (-> hash? hash?)]
           [contains-code-blocks? (-> any/c boolean?)]
           [parse-code-blocks (-> any/c (listof hash?))]
-          [render-message-with-code-blocks (-> hash? ui-theme? hash?)]))
+          [render-message-with-code-blocks (-> hash? ui-theme? hash?)]
+          [code-block-style (-> ui-theme? hash?)]
+          [code-block-header-style (-> (or/c string? #f) hash?)]))
 
 ;; ──────────────────────────────
 ;; Pure helpers (headless-testable)
@@ -86,15 +88,31 @@
   (define label (role->label role))
   (define role-color (role->color role theme))
   (define content-color (theme-ref theme 'foreground))
-  (hash 'role role
-        'text text
-        'segments
-        (list (hash 'type 'role-label
-                    'text (string-append label ": ")
-                    'style (make-role-label-delta label role-color))
-              (hash 'type 'content
+  (define role-seg (hash 'type 'role-label
+                         'text (string-append label ": ")
+                         'style (make-role-label-delta label role-color)))
+  ;; Use code-block-aware parsing when code blocks detected
+  (define content-segs
+    (if (contains-code-blocks? text)
+        (let ()
+          (define parsed (parse-code-blocks text))
+          (for/list ([seg (in-list parsed)])
+            (cond
+              [(equal? (hash-ref seg 'type #f) 'code-block)
+               (hash 'type 'code-block
+                     'text (hash-ref seg 'text "")
+                     'lang (hash-ref seg 'lang "")
+                     'style (code-block-style theme))]
+              [else
+               (hash 'type 'content
+                     'text (hash-ref seg 'text "")
+                     'style (make-content-delta content-color))])))
+        (list (hash 'type 'content
                     'text (string-append text "\n\n")
                     'style (make-content-delta content-color)))))
+  (hash 'role role
+        'text text
+        'segments (cons role-seg content-segs)))
 
 (define (messages->render-plan msgs theme)
   (for/list ([m (in-list (if (list? msgs) msgs '()))])
@@ -260,6 +278,20 @@
 ;; On user submit → reset auto-scroll to #t
 (define (scroll-state-on-submit ss)
   (hash-set (hash-set ss 'auto-scroll #t) 'user-scrolled-up #f))
+
+;; ──────────────────────────────
+;; Code block styling helpers (headless-testable)
+;; ──────────────────────────────
+
+(define (code-block-style theme)
+  (hash 'background (or (theme-ref theme 'background) "#1e1e2e")
+        'foreground "#cdd6f4"
+        'font "monospace"
+        'border-left "#89b4fa"))
+
+(define (code-block-header-style lang)
+  (hash 'text (or lang "")
+        'style (hash 'foreground "#6c7086" 'font "monospace" 'size 'small)))
 
 ;; ──────────────────────────────
 ;; GUI view constructor (runtime only)
