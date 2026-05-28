@@ -421,6 +421,7 @@
 
   ;; Build and render the window (blocks until closed)
   (render
+   #:wait? #t
    (window
     #:title (format "q v~a - ~a" q-version (or model-name "q"))
     #:size '(860 640)
