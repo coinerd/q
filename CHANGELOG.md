@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.68.5 — 2026-05-25
+
+### GUI Critical Fix + text% Render Tree
+
+Wire text% editor into window render tree and extract slash-command handler.
+
+**Changes:**
+- **W0**: Verify gui/main.rkt compiles cleanly (audit F1 false-positive); remove dead comment
+- **W1**: Replace static "Messages: N" label with `editor-canvas-view` wrapping `transcript-text`
+- **W2**: Extract `gui/slash-commands.rkt` — `make-slash-command-handler`, `add-system-msg!` (5 tests); reduce `gui/main.rkt` from 498 → 388 LOC
+
 ## v0.68.4 — 2026-05-25
 
 ### GUI Audit Remediation
