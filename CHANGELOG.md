@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.68.1 — 2026-05-28
+
+### Streaming Performance
+
+Replace 100ms poll-thread with direct queue-callback observable updates.
+Add auto-scroll intelligence with scroll-state management.
+
+**Changes:**
+- Replace poll-thread with `notify-gui!` via `queue-callback` for instant GUI updates
+- Add `notify-callback-box` pattern for safe callback threading between event/GUI threads
+- `make-scroll-state` / `scroll-state-on-scroll` / `scroll-state-on-submit` — pure scroll state management
+- Auto-scroll enables at 95% scroll position, disables on manual scroll-up, resets on submit
+- Remove `kill-thread poll-thread` cleanup
+- 30 tests total (7 new scroll-state tests)
+
 ## v0.68.0 — 2026-05-28
 
 ### Rich Transcript Core
