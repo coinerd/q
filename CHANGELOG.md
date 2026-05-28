@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.67.3 — 2026-05-28
+
+### GUI Slash Commands + Event Type Fix
+
+- **Bug fix**: GUI prompts disappeared without producing transcript — `make-event 'user.input` passed a symbol but the event subscriber compared against strings (`"user.input"`). Symbol ≠ string, so the subscriber never matched and messages were never added to state. Fixed by using string `"user.input"` in `make-event`.
+- **Feature**: Added slash command support in GUI mode (`/help`, `/quit`, `/clear`, `/status`, `/model`, `/compact`, `/interrupt`).
+- **Feature**: Unknown slash commands (like `/plan`, `/go`) now attempt extension dispatch via `dispatch-hooks` before showing "Unknown command" error.
+- **Added**: `handle-slash-command` function with built-in command handlers and `add-system-msg!` helper for system messages in the transcript.
+
 ## v0.67.2 — 2026-05-28
 
 ### Audit Follow-ups + GUI Crash Fix
