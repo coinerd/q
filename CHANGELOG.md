@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.68.4 — 2026-05-25
+
+### GUI Audit Remediation
+
+Extract missing modules from monolithic rich-transcript-view.rkt and remove dead canvas code.
+
+**Changes:**
+- **W0**: Fix `set-max-undo` → `set-max-undo-history` crash (critical regression)
+- **W1**: Extract `gui/components/markdown-parser.rkt` — `contains-code-blocks?`, `parse-code-blocks`, `render-message-with-code-blocks`, `code-block-style`, `code-block-header-style` (14 tests)
+- **W2**: Extract `gui/components/keybindings.rkt` — `default-keybindings`, `lookup-keybinding`, `key-event->action`, `list-keybindings` (11 tests)
+- **W3**: Wire text% into window — remove dead `canvas-view` + `on-draw` path, add `insert-message-into-text!` / `clear-and-rebuild-text!` helpers
+- **W4**: Add `gui/components/streaming-cursor.rkt` — timer-based `|` / space blink during LLM streaming (7 tests)
+- 82 tests total across all GUI modules
+
+
 ## v0.68.3 — 2026-05-28
 
 ### Keyboard Shortcuts + Polish
