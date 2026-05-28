@@ -12,7 +12,8 @@
          "../ui-core/dispatch.rkt"
          "../ui-core/theme-protocol.rkt"
          "../ui-core/layout-protocol.rkt"
-         "../util/event.rkt")
+         "../util/event.rkt"
+         "../util/version.rkt")
 
 (provide (contract-out [run-gui-with-runtime (-> any/c any/c void?)]
                        [run-gui (-> void?)]
@@ -48,7 +49,7 @@
   (unless (gui-available?)
     (eprintf "No display server available. Cannot start GUI.\n")
     (exit 1))
-  (eprintf "q GUI v0.63.0 — no standalone mode yet, use --gui with a prompt\n")
+  (eprintf "q GUI v~a — no standalone mode yet, use --gui with a prompt\n" q-version)
   (exit 0))
 
 ;; ──────────────────────────────
@@ -62,7 +63,7 @@
   (define bridge (wire-bridge! rt-config))
   (define theme (default-theme))
   (define layout (default-gui-layout))
-  ;; The actual window rendering will be added in v0.64.0 (gui/app.rkt)
+  ;; The actual window rendering will be added in a future milestone (gui/app.rkt)
   ;; For now, log and exit cleanly
-  (eprintf "q GUI v0.63.0 — bridge wired, rendering placeholder\n")
+  (eprintf "q GUI v~a — bridge wired, rendering placeholder\n" q-version)
   (bridge-dispose! bridge))
