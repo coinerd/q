@@ -24,7 +24,8 @@ Each ADR describes a decision that was made, the context that led to it, and its
 | [0014](0014-typed-racket-migration-strategy.md) | Typed Racket migration strategy | Active |
 | [0015](0015-tr-boundary-callback-pattern.md) | TR boundary callback pattern for opaque values | Accepted |
 | [0016](0016-native-tui-architecture.md) | Native TUI architecture | Accepted |
-| [0017](0017-gui-architecture.md) | GUI architecture | Proposed |
+| [0017](0017-gui-architecture.md) | GUI architecture | Accepted |
+| [0018](0018-gui-extension-integration.md) | GUI extension integration | Accepted |
 
 ## Conventions
 
