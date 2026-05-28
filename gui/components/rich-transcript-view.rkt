@@ -12,7 +12,8 @@
          racket/class
          racket/list
          "../../ui-core/theme-protocol.rkt"
-         "markdown-parser.rkt")
+         "markdown-parser.rkt"
+         "keybindings.rkt")
 
 (provide role->label
          role->color
@@ -31,15 +32,12 @@
           [scroll-state-user-scrolled-up? (-> hash? boolean?)]
           [scroll-state-on-scroll (-> hash? (between/c 0.0 1.0) hash?)]
           [scroll-state-on-submit (-> hash? hash?)]
-          [key-event->action (-> char? boolean? (or/c symbol? #f))]
-          [lookup-keybinding (-> char? boolean? (or/c symbol? #f))]
-          [list-keybindings (-> (listof pair?))]
-          [default-keybindings hash?]
           [input-key-should-submit? (-> any/c boolean? boolean? boolean?)]
           [prepare-input-for-submit (-> string? string?)]
           [input-line-count (-> string? exact-nonnegative-integer?)]
           [input-looks-like-code? (-> string? boolean?)])
-         (all-from-out "markdown-parser.rkt"))
+         (all-from-out "markdown-parser.rkt")
+         (all-from-out "keybindings.rkt"))
 
 ;; ──────────────────────────────
 ;; Pure helpers (headless-testable)
@@ -228,32 +226,6 @@
   (or (contains-code-blocks? text)
       (ormap (lambda (pat) (string-contains? text pat))
              (list "(define " "(let " "(lambda " "(if " "(cond " "(for " "(when " "(set! "))))
-;; ──────────────────────────────
-;; Keyboard shortcut registry (pure, headless-testable)
-;; ──────────────────────────────
-
-;; Default keyboard shortcuts for the GUI transcript
-(define default-keybindings
-  (hash #\l 'clear
-        #\k 'compact
-        #\c 'interrupt
-        #\s 'save
-        #\q 'quit))
-
-;; Look up a keybinding by key character + ctrl modifier
-(define (lookup-keybinding key-char ctrl?)
-  (if ctrl?
-      (hash-ref default-keybindings key-char #f)
-      #f))
-
-;; Get action symbol for a key event
-(define (key-event->action key-char ctrl?)
-  (lookup-keybinding key-char ctrl?))
-
-;; List all registered shortcuts as (char . action) pairs
-(define (list-keybindings)
-  (hash->list default-keybindings))
-
 ;; ──────────────────────────────
 ;; GUI view constructor (runtime only)
 ;; ──────────────────────────────
