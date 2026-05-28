@@ -187,12 +187,19 @@
   (define max-iterations (iteration-snapshot-max-iterations snapshot))
   (define max-iterations-hard (iteration-snapshot-max-iterations-hard snapshot))
   (define action (step-result-action step-res))
+  ;; Local emit helper — avoids repeating bus/session-id everywhere
+  (define (emit name payload)
+    (emit-session-event! (loop-infra-bus infra)
+                         (loop-infra-session-id infra)
+                         name
+                         payload))
+
   (match action
     ['stop
      (define stop-result (handle-stop-action result new-msgs infra counters ws config))
      (directive-stop stop-result)]
     ['stop-hard-limit
-     ;; W3-T3: effect extraction for fire-and-forget side effects
+     ;; effect extraction for fire-and-forget side effects
      (run-step-effects!
       (list (step-effect:append-entries new-msgs)
             (step-effect:emit-event "runtime.error"
@@ -211,59 +218,51 @@
                       (hash-set (loop-result-metadata result) 'maxIterationsReached #t)))]
     ['stop-soft-limit
      (sink-append-entries! infra new-msgs)
-     (emit-session-event! (loop-infra-bus infra)
-                          (loop-infra-session-id infra)
-                          "iteration.soft-warning"
-                          (hasheq 'iteration
-                                  (add1 (loop-counters-iteration counters))
-                                  'soft-limit
-                                  max-iterations
-                                  'hard-limit
-                                  max-iterations-hard
-                                  'remaining
-                                  (- max-iterations-hard (add1 (loop-counters-iteration counters)))))
+     (emit "iteration.soft-warning"
+           (hasheq 'iteration
+                   (add1 (loop-counters-iteration counters))
+                   'soft-limit
+                   max-iterations
+                   'hard-limit
+                   max-iterations-hard
+                   'remaining
+                   (- max-iterations-hard (add1 (loop-counters-iteration counters)))))
      (define updated-ctx (execute-pending-tool-calls new-msgs infra config ws))
      (define budget-config (hasheq 'max-context-tokens (config-max-context-tokens config)))
-     (define emit-fn
-       (lambda (name payload)
-         (emit-session-event! (loop-infra-bus infra) (loop-infra-session-id infra) name payload)))
      (define ctx-after-budget
        (if sess
            (maybe-compact-mid-turn sess
                                    updated-ctx
                                    (loop-infra-session-id infra)
                                    budget-config
-                                   #:emit-event emit-fn
+                                   #:emit-event emit
                                    #:compact-proc (lambda (ctx) (compact-context-mid-turn sess ctx)))
            (begin
              (estimate-mid-turn-tokens updated-ctx
                                        (loop-infra-session-id infra)
                                        budget-config
-                                       #:emit-event emit-fn)
+                                       #:emit-event emit)
              updated-ctx)))
      (directive-recurse ctx-after-budget (make-next-counters counters) ws)]
     ['continue
-     ;; W3-T3: fire-and-forget effect for entry persistence
+     ;; fire-and-forget effect for entry persistence
      (run-step-effects! (list (step-effect:append-entries new-msgs)) infra)
      (define updated-ctx (execute-pending-tool-calls new-msgs infra config ws))
      (define new-counters (step-result-new-counters step-res))
      (define loop-warning
        (detect-exploration-loop (filter string? (loop-counters-recent-tool-names new-counters))))
      (when loop-warning
-       (emit-session-event! (loop-infra-bus infra)
-                            (loop-infra-session-id infra)
-                            "iteration.exploration-loop"
-                            (hasheq 'pattern
-                                    loop-warning
-                                    'recent-tools
-                                    (loop-counters-recent-tool-names new-counters)
-                                    'iteration
-                                    (loop-counters-iteration counters))))
+       (emit "iteration.exploration-loop"
+             (hasheq 'pattern
+                     loop-warning
+                     'recent-tools
+                     (loop-counters-recent-tool-names new-counters)
+                     'iteration
+                     (loop-counters-iteration counters))))
+     ;; Reuse make-next-counters for consistent counter increment
      (directive-recurse updated-ctx
                         (struct-copy loop-counters
-                                     new-counters
-                                     [iteration (add1 (loop-counters-iteration counters))]
-                                     [consecutive-tool-count
-                                      (add1 (loop-counters-consecutive-tool-count counters))]
-                                     [stall-retry-count 0])
+                                     (make-next-counters counters)
+                                     [recent-tool-names
+                                      (loop-counters-recent-tool-names new-counters)])
                         ws)]))
