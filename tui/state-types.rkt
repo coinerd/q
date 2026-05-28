@@ -11,7 +11,8 @@
          racket/string
          racket/list
          json
-         "../util/cost-tracker.rkt")
+         "../util/cost-tracker.rkt"
+         "../util/string-helpers.rkt")
 
 ;; Structs that need struct-copy support in consumers must use struct-out.
 ;; We add contracts on functions only.
@@ -434,10 +435,7 @@
 ;; String helpers
 ;; ============================================================
 
-(define (truncate-string s max-len)
-  (if (<= (string-length s) max-len)
-      s
-      (string-append (substring s 0 (- max-len 1)) "…")))
+;; truncate-string — now canonical in util/string-helpers.rkt
 
 (define (extract-arg-summary args-str)
   (define (summarize-hash h)

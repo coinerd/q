@@ -19,6 +19,7 @@
          "../util/ansi.rkt"
          "../util/markdown.rkt"
          "../util/error-classify.rkt"
+         "../util/string-helpers.rkt"
          (only-in "../util/content-helpers.rkt" tool-result-content->string)
          json
          racket/string
@@ -136,10 +137,7 @@
 
   (values writer flush!))
 
-(define (truncate-string s max-len)
-  (if (> (string-length s) max-len)
-      (string-append (substring s 0 max-len) "...")
-      s))
+;; truncate-string — now canonical in util/string-helpers.rkt
 
 ;; ============================================================
 ;; format-event-for-terminal

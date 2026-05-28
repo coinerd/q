@@ -11,6 +11,7 @@
          racket/string
          racket/list
          "../util/protocol-types.rkt"
+         "../util/string-helpers.rkt"
          "../llm/token-budget.rkt"
          (only-in "../runtime/compaction-prompts.rkt" format-messages-for-summary)
          (only-in "../runtime/compactor-llm-bridge.rkt" llm-summarize)
@@ -287,7 +288,4 @@
       (text-part-text part)))
   (string-join texts " "))
 
-(define (truncate-string s max-len)
-  (if (<= (string-length s) max-len)
-      s
-      (string-append (substring s 0 (- max-len 3)) "...")))
+;; truncate-string — now canonical in util/string-helpers.rkt
