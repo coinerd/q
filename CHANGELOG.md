@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.67.0 — 2026-05-25
+
+### Stabilization, Polish, Documentation
+
+Fifth and final milestone of the GUI series — stabilization, documentation, and polish:
+- **W0**: Comprehensive smoke tests covering all 18 GUI/ui-core modules (16 tests)
+- **W1**: `gui/views/error-boundary.rkt` — error boundary with fallback rendering (6 tests)
+- **W2**: ADR-0018 GUI Extension Integration Architecture documentation
+- **W3**: Version bump 0.66.0 → 0.67.0 + final tag
+
+22 new tests. ADR-0018 documents the full GUI extension integration architecture.
+
+### GUI Milestone Series Summary (v0.63.0–v0.67.0)
+
+- **v0.63.0**: Infrastructure + Observable Bridge (6 waves, 36 tests)
+- **v0.64.0**: Core Views — Status, Input, Transcript (5 waves, 44 tests)
+- **v0.65.0**: Extension Integration + Dialogs (5 waves, 30 tests)
+- **v0.66.0**: Advanced Features — Sidebar, Toolbar, Themes (5 waves, 27 tests)
+- **v0.67.0**: Stabilization, Polish, Documentation (4 waves, 22 tests)
+
+**Total**: 25 waves, ~159 new tests, 18 new GUI/ui-core modules, 5 ADRs.
+
 ## v0.66.0 — 2026-05-25
 
 ### Advanced Features (Sidebar, Toolbar, Themes)
