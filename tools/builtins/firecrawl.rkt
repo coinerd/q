@@ -11,7 +11,8 @@
          net/url
          (only-in "../tool.rkt" make-success-result make-error-result)
          (only-in "../../util/errors.rkt" raise-tool-error)
-         (only-in "../../util/truncation.rkt" truncate-to-n-chars MAX-OUTPUT-CHARS))
+         "../../util/string-helpers.rkt"
+         (only-in "../../util/truncation.rkt" MAX-OUTPUT-CHARS))
 
 (provide (contract-out [tool-firecrawl (->* (hash?) (any/c) any/c)]
                        [firecrawl-api-key (-> (or/c string? #f))]
@@ -284,8 +285,7 @@
 ;; ============================================================
 
 ;; Backward-compatible alias using shared truncation
-(define (truncate-string s max-len)
-  (truncate-to-n-chars s max-len))
+;; truncate-string — now canonical in util/string-helpers.rkt
 
 (define (valid-action? s)
   (and (member s '("search" "scrape" "crawl" "map")) #t))

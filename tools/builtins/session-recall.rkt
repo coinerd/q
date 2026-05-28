@@ -24,7 +24,8 @@
                   message-role
                   message-content
                   text-part?
-                  text-part-text))
+                  text-part-text)
+         "../../util/string-helpers.rkt")
 
 (provide (contract-out [tool-session-recall (->* (hash?) (any/c) any/c)]))
 
@@ -163,7 +164,4 @@
       (text-part-text part)))
   (string-join texts " "))
 
-(define (truncate-string s max-len)
-  (if (<= (string-length s) max-len)
-      s
-      (string-append (substring s 0 (- max-len 3)) "...")))
+;; truncate-string — now canonical in util/string-helpers.rkt
