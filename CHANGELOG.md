@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.63.0 — 2026-05-25
+
+### Infrastructure + Observable Bridge
+
+First milestone of the GUI milestone series (v0.63.0–v0.67.0):
+- **W0**: `--gui` CLI flag, `gui/main.rkt` entry point, `interfaces/gui.rkt` facade
+- **W1**: `ui-core/observable-bridge.rkt` — thread-safe event-bus → GUI state bridge (10 tests)
+- **W2**: `ui-core/dispatch.rkt` — backend-agnostic UI action dispatch (8 tests)
+- **W3**: `ui-core/theme-protocol.rkt` + `ui-core/layout-protocol.rkt` — shared theme/layout (6 tests)
+- **W4**: 8 GUI hook action schemas + ADR-0017 GUI architecture (4 tests)
+- **W5**: Bridge integration in gui/main.rkt, version bump 0.62.3 → 0.63.0 (3 smoke tests)
+
+31 new tests total. Zero changes to existing TUI modules.
+
 ## v0.62.3 — 2026-05-28
 
 ### Audit Findings Remediation
