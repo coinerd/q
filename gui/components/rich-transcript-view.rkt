@@ -213,7 +213,8 @@
 
 ;; Apply diff between old and new messages to a text% object.
 ;; For append ops, inserts only new messages.
-;; For update-last/reset, falls back to full rebuild.
+;; For update-last, replaces the last message's text in-place.
+;; For reset, falls back to full rebuild.
 (define (apply-diff-to-text! text-obj old-msgs new-msgs theme)
   (define diff (compute-transcript-diff old-msgs new-msgs))
   (cond
@@ -224,7 +225,36 @@
      (send text-obj lock #f)
      (insert-message-into-text! text-obj (hash-ref (car diff) 'msg) theme)
      (send text-obj lock #t)]
-    ;; Multiple appends, update-last, or reset → full rebuild
+    [(and (= (length diff) 1) (eq? (hash-ref (car diff) 'op #f) 'update-last))
+     ;; Update last → try to replace last message in-place
+     ;; If label not found (text% empty or corrupted), fall back to full rebuild
+     (send text-obj lock #f)
+     (define total (send text-obj last-position))
+     (define last-msg (hash-ref (car diff) 'msg))
+     (define last-role (hash-ref last-msg 'role "system"))
+     (define last-label (role->label last-role))
+     (define search-str (string-append last-label ": "))
+     (define start-pos
+       (let loop ([pos (max 0 (- total (string-length search-str)))])
+         (cond
+           [(< pos 0) -1]
+           [(and (>= (+ pos (string-length search-str)) total)
+                 (equal? (send text-obj get-text 0 (min (string-length search-str) total))
+                         search-str))
+            0]
+           [(and (< (+ pos (string-length search-str)) total)
+                 (equal? (send text-obj get-text pos (+ pos (string-length search-str))) search-str))
+            pos]
+           [(<= pos 0) -1]
+           [else (loop (- pos 1))])))
+     (cond
+       [(>= start-pos 0)
+        (send text-obj delete start-pos total)
+        (insert-message-into-text! text-obj last-msg theme)]
+       ;; Label not found — full rebuild
+       [else (clear-and-rebuild-text! text-obj new-msgs theme)])
+     (send text-obj lock #t)]
+    ;; Multiple appends or reset → full rebuild
     [else (clear-and-rebuild-text! text-obj new-msgs theme)]))
 
 ;; ──────────────────────────────
@@ -258,11 +288,11 @@
   (define text-obj (make-object text%-cls))
   (send text-obj auto-wrap #t)
   (send text-obj set-max-undo-history 0)
+  ;; Set default foreground color on the text%'s style
+  (define fg-delta (make-object style-delta%-cls))
+  (send fg-delta set-delta-foreground fg-c)
+  (send text-obj change-style fg-delta 0 0)
   (send text-obj lock #t)
-  (send text-obj change-style
-        (make-object style-delta%-cls 'change-normal)
-        0
-        (send text-obj last-position))
 
   ;; Returns the text% object for external message insertion
   text-obj)

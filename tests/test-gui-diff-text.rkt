@@ -14,11 +14,12 @@
     (define content "")
     (define locked #f)
     (define/public (insert str) (set! content (string-append content str)))
-    (define/public (delete start end) (set! content ""))
+    (define/public (delete start end) (set! content (substring content 0 start)))
     (define/public (last-position) (string-length content))
     (define/public (lock v) (set! locked v))
     (define/public (change-style delta [start 0] [end 0]) (void))
     (define/public (get-content) content)
+    (define/public (get-text start end) (substring content start (min end (string-length content))))
     (define/public (is-locked?) locked)))
 
 (define-test-suite

@@ -10,8 +10,8 @@
   (with-input-from-file path
     (lambda () (port->string (current-input-port)))))
 
-(define main-src (file-source "gui/main.rkt"))
-(define sync-src (file-source "gui/state-sync.rkt"))
+(define main-src (file-source "../gui/main.rkt"))
+(define sync-src (file-source "../gui/state-sync.rkt"))
 
 (define test-double-event-fix
   (test-suite

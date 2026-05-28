@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.68.7 — 2026-05-28
+
+### GUI Critical Hotfix
+
+Fix two critical functional regressions: Enter key not submitting, and white background on dark theme.
+
+**Changes:**
+- **F1 Fix**: Remove `#:style '(multiple)` from `input-view` — multiline style disables `text-field-enter` events, preventing Enter from submitting. Switched to single-line input where Enter → submit works correctly.
+- **F2 Fix**: Add `editor-canvas-bg-mixin` that calls `set-canvas-background` via gui-easy's `#:mixin` parameter, applying dark theme background (`#1e1e2e`) to the transcript area.
+- **W3 Fix**: Fix `test-gui-state-sync-w0.rkt` cwd-relative path bug (`"gui/main.rkt"` → `"../gui/main.rkt"`).
+- All 278 GUI tests pass (0 failures).
+
 ## v0.68.6 — 2026-05-25
 
 ### GUI Hardening

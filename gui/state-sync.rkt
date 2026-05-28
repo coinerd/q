@@ -13,7 +13,6 @@
          racket/string
          "../util/event.rkt"
          "../gui/components/rich-transcript-view.rkt"
-         "../gui/components/streaming-cursor.rkt"
          "../ui-core/theme-protocol.rkt")
 
 (provide make-gui-event-subscriber
@@ -165,7 +164,6 @@
                                   messages-obs
                                   status-obs
                                   transcript-text
-                                  cursor-state
                                   theme
                                   peek-obs
                                   set-obs!
@@ -188,31 +186,15 @@
   (define (update-text%-content! state)
     (define new-msgs (hash-ref state 'messages '()))
     (define old-msgs (unbox previous-msgs-box))
-    (define st (hash-ref state 'status 'idle))
     (when transcript-text
       (apply-diff-to-text! transcript-text old-msgs new-msgs theme)
-      (when (eq? st 'processing)
-        (send transcript-text lock #f)
-        (send transcript-text insert (streaming-cursor-string cursor-state))
-        (send transcript-text lock #t))
       (set-box! previous-msgs-box new-msgs)))
-
-  (define (manage-streaming-cursor! state)
-    (define st (hash-ref state 'status 'idle))
-    (cond
-      [(eq? st 'processing)
-       (unless (streaming-cursor-active? cursor-state)
-         (streaming-cursor-start! cursor-state notify-gui!))]
-      [else
-       (when (streaming-cursor-active? cursor-state)
-         (streaming-cursor-stop! cursor-state))]))
 
   (define (notify-gui!)
     (queue-callback (lambda ()
                       (define state (unbox state-box))
                       (when (hash? state)
                         (sync-observables! state)
-                        (update-text%-content! state)
-                        (manage-streaming-cursor! state)))))
+                        (update-text%-content! state)))))
 
   notify-gui!)

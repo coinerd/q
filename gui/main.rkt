@@ -21,7 +21,6 @@
          "../extensions/hooks.rkt"
          "../tui/command-parse.rkt"
          "../gui/components/rich-transcript-view.rkt"
-         "../gui/components/streaming-cursor.rkt"
          "../gui/slash-commands.rkt"
          "../gui/state-sync.rkt")
 
@@ -94,16 +93,18 @@
                                    theme
                                    queue-callback))
 
-  ;; Streaming cursor state (blinks during LLM response)
-  (define cursor-state (make-streaming-cursor-state))
+  ;; Streaming cursor removed — status bar shows Processing... instead
 
   ;; Build notify-gui! callback via state-sync factory
   (define notify-gui!
     (make-notify-gui-callback state-box
-                              messages-obs status-obs
-                              transcript-text cursor-state
+                              messages-obs
+                              status-obs
+                              transcript-text
                               theme
-                              peek-obs set-obs! queue-callback))
+                              peek-obs
+                              set-obs!
+                              queue-callback))
 
   ;; Store notify callback in box so subscriber can use it
   (set-box! notify-callback-box notify-gui!)
@@ -111,56 +112,66 @@
   ;; Slash command handler (extracted to slash-commands.rkt)
   (define handle-slash-command (make-slash-command-handler sess state-box gui-state-lock))
 
-  ;; Input callback: submit on Enter -> slash command or run-prompt!
+  ;; Input callback: submit on Enter (single-line mode fires 'return on Enter)
   (define (on-input action val)
-    (when (eq? action 'return)
-      (when (and val (> (string-length val) 0))
-        (define trimmed (string-trim val))
-        (if (and (> (string-length trimmed) 0) (char=? (string-ref trimmed 0) #\/))
-            ;; Slash command
-            (begin
-              (handle-slash-command val)
-              (set-obs! input-obs ""))
-            ;; Regular message -> LLM
-            (begin
-              (publish!
-               event-bus
-               (make-event "user.input" (current-inexact-milliseconds) #f #f (hash 'text val)))
-              (thread (lambda ()
-                        (with-handlers
-                            ([exn:fail?
-                              (lambda (e)
-                                (call-with-semaphore
-                                 gui-state-lock
-                                 (lambda ()
-                                   (define old (unbox state-box))
-                                   (define msgs (hash-ref old 'messages '()))
-                                   (set-box!
-                                    state-box
-                                    (hash-set
-                                     (hash-set
-                                      old
-                                      'messages
-                                      (append msgs (list (hash 'role "error" 'text (exn-message e)))))
-                                     'status
-                                     'error)))))])
-                          (run-prompt! sess val))))
-              (set-obs! input-obs ""))))))
+    (cond
+      [(eq? action 'return)
+       ;; Enter pressed -> submit message
+       (when (and val (> (string-length val) 0))
+         (define trimmed (string-trim val))
+         (if (and (> (string-length trimmed) 0) (char=? (string-ref trimmed 0) #\/))
+             ;; Slash command
+             (begin
+               (handle-slash-command val)
+               (set-obs! input-obs ""))
+             ;; Regular message -> LLM
+             (begin
+               (publish!
+                event-bus
+                (make-event "user.input" (current-inexact-milliseconds) #f #f (hash 'text val)))
+               (thread
+                (lambda ()
+                  (with-handlers ([exn:fail?
+                                   (lambda (e)
+                                     (call-with-semaphore
+                                      gui-state-lock
+                                      (lambda ()
+                                        (define old (unbox state-box))
+                                        (define msgs (hash-ref old 'messages '()))
+                                        (set-box!
+                                         state-box
+                                         (hash-set
+                                          (hash-set
+                                           old
+                                           'messages
+                                           (append msgs
+                                                   (list (hash 'role "error" 'text (exn-message e)))))
+                                          'status
+                                          'error)))))])
+                    (run-prompt! sess val))))
+               (set-obs! input-obs ""))))]
+      [else (void)]))
 
   ;; Observable wrapping the text% editor for editor-canvas view
   (define transcript-obs (make-obs transcript-text))
 
+  ;; Mixin to set dark background on editor-canvas% — just call method after init
+  (define ((editor-canvas-bg-mixin bg-color) base%)
+    (class base%
+      (super-new)
+      (send this set-canvas-background bg-color)))
+
   ;; Build and render the window (blocks until closed)
-  (render
-   #:wait? #t
-   (window
-    #:title (format "q v~a - ~a" q-version (or model-name "q"))
-    #:size '(860 640)
-    (vpanel
-     #:stretch '(#t #t)
-     (hpanel #:stretch '(#t #f) #:style '(border) (text-view status-obs))
-     (editor-canvas-view transcript-obs #:min-size '(#f 200) #:stretch '(#t #t))
-     (input-view input-obs on-input #:style '(multiple) #:stretch '(#t #f) #:min-size '(#f 60)))))
+  (render #:wait? #t
+          (window #:title (format "q v~a - ~a" q-version (or model-name "q"))
+                  #:size '(860 640)
+                  (vpanel #:stretch '(#t #t)
+                          (hpanel #:stretch '(#t #f) #:style '(border) (text-view status-obs))
+                          (editor-canvas-view transcript-obs
+                                              #:min-size '(#f 200)
+                                              #:stretch '(#t #t)
+                                              #:mixin (editor-canvas-bg-mixin bg-c))
+                          (input-view input-obs on-input #:stretch '(#t #f)))))
 
   ;; Cleanup after window closes
   (void))
