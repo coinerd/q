@@ -23,7 +23,12 @@
           [compute-transcript-diff (-> list? list? (listof hash?))]
           [apply-diff-to-plan (-> (listof hash?) (listof hash?) ui-theme? (listof hash?))]
           [update-last-message (-> list? string? list?)]
-          [make-rich-transcript-gui-view (-> any/c any/c any/c any/c any/c any/c any/c any/c)]))
+          [make-rich-transcript-gui-view (-> any/c any/c any/c any/c any/c any/c any/c any/c)]
+          [make-scroll-state (->* () (boolean?) hash?)]
+          [scroll-state-auto-scroll? (-> hash? boolean?)]
+          [scroll-state-user-scrolled-up? (-> hash? boolean?)]
+          [scroll-state-on-scroll (-> hash? (between/c 0.0 1.0) hash?)]
+          [scroll-state-on-submit (-> hash? hash?)]))
 
 ;; ──────────────────────────────
 ;; Pure helpers (headless-testable)
@@ -138,6 +143,38 @@
        (define msgs (hash-ref op 'msgs '()))
        (messages->render-plan msgs theme)]
       [else plan])))
+
+;; ──────────────────────────────
+;; Auto-scroll state management (pure, headless-testable)
+;; ──────────────────────────────
+
+;; Scroll state: tracks whether auto-scroll is enabled
+;; and the last known scroll position ratio (0.0 = top, 1.0 = bottom)
+(define (make-scroll-state [auto? #t])
+  (hash 'auto-scroll auto?
+        'scroll-ratio 1.0
+        'user-scrolled-up #f))
+
+(define (scroll-state-auto-scroll? ss)
+  (hash-ref ss 'auto-scroll #t))
+
+(define (scroll-state-user-scrolled-up? ss)
+  (hash-ref ss 'user-scrolled-up #f))
+
+;; On scroll event: update scroll state based on position
+;; ratio: 0.0 = top, 1.0 = bottom
+(define (scroll-state-on-scroll ss ratio)
+  (cond
+    [(>= ratio 0.95)
+     ;; Near bottom → re-enable auto-scroll
+     (hash-set (hash-set ss 'auto-scroll #t) 'user-scrolled-up #f)]
+    [else
+     ;; Scrolled up → disable auto-scroll
+     (hash-set (hash-set ss 'auto-scroll #f) 'user-scrolled-up #t)]))
+
+;; On user submit → reset auto-scroll to #t
+(define (scroll-state-on-submit ss)
+  (hash-set (hash-set ss 'auto-scroll #t) 'user-scrolled-up #f))
 
 ;; ──────────────────────────────
 ;; GUI view constructor (runtime only)
