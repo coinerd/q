@@ -336,3 +336,41 @@
     (check-false (input-looks-like-code? "Hello, how are you?"))))
 
 (run-tests test-multiline-input)
+
+
+;; ── Keyboard shortcut tests ──
+
+(define-test-suite test-keyboard-shortcuts
+
+  (test-case "key-event->action Ctrl+L returns clear"
+    (check-equal? (key-event->action #\l #t) 'clear))
+
+  (test-case "key-event->action Ctrl+K returns compact"
+    (check-equal? (key-event->action #\k #t) 'compact))
+
+  (test-case "key-event->action Ctrl+C returns interrupt"
+    (check-equal? (key-event->action #\c #t) 'interrupt))
+
+  (test-case "key-event->action Ctrl+S returns save"
+    (check-equal? (key-event->action #\s #t) 'save))
+
+  (test-case "key-event->action Ctrl+Q returns quit"
+    (check-equal? (key-event->action #\q #t) 'quit))
+
+  (test-case "key-event->action without ctrl returns #f"
+    (check-false (key-event->action #\l #f)))
+
+  (test-case "key-event->action unknown key returns #f"
+    (check-false (key-event->action #\z #t)))
+
+  (test-case "lookup-keybinding returns hash or #f"
+    (check-not-false (lookup-keybinding #\l #t))
+    (check-false (lookup-keybinding #\l #f)))
+
+  (test-case "list-keybindings returns pairs"
+    (define kbs (list-keybindings))
+    (check >= (length kbs) 5)
+    (for ([kb (in-list kbs)])
+      (check-pred pair? kb))))
+
+(run-tests test-keyboard-shortcuts)
