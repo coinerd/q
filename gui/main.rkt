@@ -197,7 +197,6 @@
   (define hpanel (dynamic-require 'racket/gui/easy/view 'hpanel))
   (define text-view (dynamic-require 'racket/gui/easy/view 'text))
   (define input-view (dynamic-require 'racket/gui/easy/view 'input))
-  (define canvas-view (dynamic-require 'racket/gui/easy/view 'canvas))
 
   ;; Load racket/gui classes for color/font objects
   (define color% (dynamic-require 'racket/gui 'color%))
@@ -243,7 +242,14 @@
                             [(eq? st 'error) "Error"]
                             [else "Ready"]))
                         (unless (equal? status-str (peek-obs status-obs))
-                          (set-obs! status-obs status-str))))))
+                          (set-obs! status-obs status-str))
+                        ;; Update text% transcript (editor-canvas% display requires display server)
+                        (when transcript-text
+                          (send transcript-text lock #f)
+                          (send transcript-text delete 0 (send transcript-text last-position))
+                          (for ([msg (in-list msgs)])
+                            (insert-message-into-text! transcript-text msg theme))
+                          (send transcript-text lock #t))))))
 
   ;; Store notify callback in box so subscriber can use it
   (set-box! notify-callback-box notify-gui!)
@@ -415,31 +421,7 @@
                                    queue-callback))
 
   ;; Track last rendered messages for diff-based updates
-  (define last-rendered-msgs (box '()))
 
-  ;; Canvas draw callback: render messages using rich-transcript helpers
-  (define (on-draw dc msgs)
-    (define-values (cw ch) (send dc get-size))
-    (send dc set-background bg-c)
-    (send dc clear)
-    (send dc set-font mono-font)
-    (when (list? msgs)
-      (for ([m (in-list msgs)]
-            [i (in-naturals)])
-        (define role (and (hash? m) (hash-ref m 'role "system")))
-        (define txt
-          (if (hash? m)
-              (hash-ref m 'text (~a m))
-              (~a m)))
-        (define y (* (+ i 1) 16))
-        (when (< (+ y 16) ch)
-          (send dc set-text-foreground
-                (case role
-                  [("user") user-c]
-                  [("tool") tool-c]
-                  [("error") (hex->color "#f38ba8")]
-                  [else fg-c]))
-          (send dc draw-text txt 4 y)))))
 
   ;; Build and render the window (blocks until closed)
   (render
@@ -450,7 +432,7 @@
     (vpanel
      #:stretch '(#t #t)
      (hpanel #:stretch '(#t #f) #:style '(border) (text-view status-obs))
-     (canvas-view messages-obs on-draw #:style '(border vscroll) #:stretch '(#t #t))
+     (text-view (format "Messages: ~a" (length (obs-peek messages-obs))))
      (input-view input-obs on-input #:style '(multiple) #:stretch '(#t #f) #:min-size '(#f 60)))))
 
   ;; Cleanup after window closes
