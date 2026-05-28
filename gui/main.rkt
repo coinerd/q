@@ -56,8 +56,12 @@
 ;; Listens to event-bus events and accumulates messages
 ;; into the state hash that the GUI polls.
 ;; --------------------------------------------------
-(define (make-gui-event-subscriber state-box)
+(define (make-gui-event-subscriber state-box [notify-callback-box #f])
   (define current-response-text (box ""))
+  ;; notify-callback-box: (boxof (or/c (-> void?) #f)) — set by launch-gui-window
+  (define (notify!)
+    (define cb (and notify-callback-box (unbox notify-callback-box)))
+    (when cb (cb)))
   (lambda (evt)
     (define ev (event-ev evt))
     (define payload (event-payload evt))
@@ -71,7 +75,8 @@
           (define old (unbox state-box))
           (define msgs (hash-ref old 'messages '()))
           (set-box! state-box
-                    (hash-set old 'messages (append msgs (list (hash 'role "user" 'text text)))))))]
+                    (hash-set old 'messages (append msgs (list (hash 'role "user" 'text text)))))
+         (notify!))])
 
       ;; Stream delta → accumulate text
       [(equal? ev "model.stream.delta")
@@ -115,7 +120,8 @@
                                 (when (not (equal? (and (pair? msgs)
                                                         (hash-ref (car (reverse msgs)) 'role #f))
                                                    "assistant"))
-                                  (set-box! state-box (hash-set old 'status 'processing))))))]
+                                  (set-box! state-box (hash-set old 'status 'processing))
+                                 (notify!))))))])
 
       ;; Stream completed → finalize message
       [(equal? ev "model.stream.completed")
@@ -123,14 +129,16 @@
        (call-with-semaphore (box-cell-semaphore state-box)
                             (lambda ()
                               (define old (unbox state-box))
-                              (set-box! state-box (hash-set old 'status 'idle))))]
+                              (set-box! state-box (hash-set old 'status 'idle))
+                              (notify!)))]
 
       ;; Turn started → set processing
       [(equal? ev "turn.started")
        (call-with-semaphore (box-cell-semaphore state-box)
                             (lambda ()
                               (define old (unbox state-box))
-                              (set-box! state-box (hash-set old 'status 'processing))))]
+                              (set-box! state-box (hash-set old 'status 'processing))
+                              (notify!)))]
 
       ;; Turn completed → set idle
       [(or (equal? ev "turn.completed") (equal? ev "model.stream.completed"))
@@ -138,7 +146,8 @@
        (call-with-semaphore (box-cell-semaphore state-box)
                             (lambda ()
                               (define old (unbox state-box))
-                              (set-box! state-box (hash-set old 'status 'idle))))]
+                              (set-box! state-box (hash-set old 'status 'idle))
+                              (notify!)))]
 
       ;; Tool call started → show in transcript
       [(equal? ev "tool.call.started")
@@ -158,7 +167,8 @@
        (call-with-semaphore (box-cell-semaphore state-box)
                             (lambda ()
                               (define old (unbox state-box))
-                              (set-box! state-box (hash-set old 'status 'error))))]
+                              (set-box! state-box (hash-set old 'status 'error))
+                              (notify!)))]
 
       [else (void)])))
 
@@ -177,7 +187,7 @@
 ;; --------------------------------------------------
 ;; Internal: launch gui-easy window (blocks until closed)
 ;; --------------------------------------------------
-(define (launch-gui-window state-box sess event-bus theme model-name)
+(define (launch-gui-window state-box sess event-bus theme model-name notify-callback-box)
   ;; Dynamically load gui-easy to keep it optional at compile time.
   (define make-obs (dynamic-require 'racket/gui/easy/observable 'obs))
   (define peek-obs (dynamic-require 'racket/gui/easy/observable 'obs-peek))
@@ -218,25 +228,27 @@
   (define status-obs (make-obs "Ready"))
   (define input-obs (make-obs ""))
 
-  ;; Background thread: poll state-box -> update observables
-  (define poll-thread
-    (thread (lambda ()
-              (let loop ()
-                (sleep 0.1)
-                (define state (unbox state-box))
-                (when (hash? state)
-                  (define msgs (hash-ref state 'messages '()))
-                  (unless (equal? msgs (peek-obs messages-obs))
-                    (set-obs! messages-obs msgs))
-                  (define st (hash-ref state 'status 'idle))
-                  (define status-str
-                    (cond
-                      [(eq? st 'processing) "Processing..."]
-                      [(eq? st 'error) "Error"]
-                      [else "Ready"]))
-                  (unless (equal? status-str (peek-obs status-obs))
-                    (set-obs! status-obs status-str)))
-                (loop)))))
+  ;; Direct observable update via queue-callback (replaces poll thread)
+  ;; Called from event subscriber threads, schedules GUI thread update
+  (define (notify-gui!)
+    (queue-callback
+     (lambda ()
+       (define state (unbox state-box))
+       (when (hash? state)
+         (define msgs (hash-ref state 'messages '()))
+         (unless (equal? msgs (peek-obs messages-obs))
+           (set-obs! messages-obs msgs))
+         (define st (hash-ref state 'status 'idle))
+         (define status-str
+           (cond
+             [(eq? st 'processing) "Processing..."]
+             [(eq? st 'error) "Error"]
+             [else "Ready"]))
+         (unless (equal? status-str (peek-obs status-obs))
+           (set-obs! status-obs status-str))))))
+
+  ;; Store notify callback in box so subscriber can use it
+  (set-box! notify-callback-box notify-gui!)
 
   ;; Helper: add a system message
   (define (add-system-msg! text)
@@ -435,7 +447,7 @@
      (input-view input-obs on-input #:style '(single) #:stretch '(#t #f) #:min-size '(#f 30)))))
 
   ;; Cleanup after window closes
-  (kill-thread poll-thread))
+  (void))
 
 ;; --------------------------------------------------
 ;; run-gui -- standalone GUI (no runtime)
@@ -466,9 +478,12 @@
   ;; GUI state: accumulated messages + status
   (define state-box (box (hash 'messages '() 'status 'idle 'model model-name)))
 
-  ;; Subscribe our event handler to the bus
+  ;; Notify callback box — set by launch-gui-window after GUI thread starts
+  (define notify-callback-box (box #f))
+
+  ;; Subscribe our event handler to the bus (with notify-callback-box)
   (when bus
-    (subscribe! bus (make-gui-event-subscriber state-box)))
+    (subscribe! bus (make-gui-event-subscriber state-box notify-callback-box)))
 
   ;; If there's an initial prompt from CLI, run it after GUI starts
   (define initial-prompt
@@ -476,7 +491,7 @@
       (dict-ref rt-config 'prompt #f)))
 
   ;; Launch the GUI window (blocks until closed)
-  (launch-gui-window state-box sess bus theme model-name)
+  (launch-gui-window state-box sess bus theme model-name notify-callback-box)
 
   ;; Cleanup
   (close-session! sess))
