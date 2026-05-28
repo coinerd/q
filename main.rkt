@@ -13,6 +13,7 @@
          "interfaces/cli.rkt"
          "interfaces/doctor.rkt"
          "interfaces/tui.rkt"
+         "interfaces/gui.rkt"
          "interfaces/sessions.rkt"
          "util/message.rkt"
          (only-in "llm/provider.rkt" provider? provider-name)
@@ -115,7 +116,10 @@
      (run-rpc cfg rt-config)]
     [(tui)
      (define rt-config (build-runtime-from-cli cfg))
-     (run-tui-with-runtime rt-config cfg)]))
+     (run-tui-with-runtime rt-config cfg)]
+    [(gui)
+     (define rt-config (build-runtime-from-cli cfg))
+     (run-gui-with-runtime rt-config cfg)]))
 
 (module+ main
   (main))

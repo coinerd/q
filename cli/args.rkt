@@ -54,7 +54,7 @@
          session-id ; string or #f
          prompt ; string or #f
          model ; string or #f
-         mode ; symbol: 'interactive | 'single | 'json | 'rpc | 'tui | 'print
+         mode ; symbol: 'interactive | 'single | 'json | 'rpc | 'tui | 'print | 'gui
          project-dir ; path-string or #f
          config-path ; path-string or #f
          verbose? ; boolean
@@ -150,6 +150,7 @@
         ['json 'json]
         ['rpc 'rpc]
         ['tui 'tui]
+        ['gui 'gui]
         ['print 'print]
         [_
          (match final-command
@@ -285,6 +286,14 @@
                   "RPC mode (stdin/stdout JSONL protocol)"
                   #f
                   (lambda (val acc) (acc-set acc 'mode 'rpc)))
+        ;; --gui
+        (flag-def "gui"
+                  #f
+                  "gui"
+                  'mode
+                  "GUI mode (native graphical interface)"
+                  #f
+                  (lambda (val acc) (acc-set acc 'mode 'gui)))
         ;; --keybindings <path>
         (flag-def "keybindings"
                   #f
