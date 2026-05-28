@@ -435,9 +435,6 @@
   ;; Streaming cursor state (blinks during LLM response)
   (define cursor-state (make-streaming-cursor-state))
 
-  ;; Track last rendered messages for diff-based updates
-
-
   ;; Build and render the window (blocks until closed)
   (render
    #:wait? #t
