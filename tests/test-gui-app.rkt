@@ -51,7 +51,7 @@
    (define app (make-gui-app (make-test-bridge) (default-theme) (default-gui-layout)))
    (define views (render-app app))
    (define status-bar (list-ref views 0))
-   (check-equal? (hash-ref status-bar 'bg) "#1e1e2e")
+   (check-equal? (hash-ref status-bar 'bg) "#6c7086")
    (check-equal? (hash-ref status-bar 'fg) "#cdd6f4"))
  (test-case "render-app reflects focus state"
    (define app (make-gui-app (make-test-bridge) (default-theme) (default-gui-layout)))

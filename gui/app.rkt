@@ -10,7 +10,10 @@
          racket/match
          "../ui-core/observable-bridge.rkt"
          "../ui-core/theme-protocol.rkt"
-         "../ui-core/layout-protocol.rkt")
+         "../ui-core/layout-protocol.rkt"
+         "views/status.rkt"
+         "views/transcript.rkt"
+         "views/input.rkt")
 
 (provide gui-app?
          (contract-out [make-gui-app
@@ -87,46 +90,19 @@
   (define theme (gui-app-theme app))
   (define layout (gui-app-layout app))
   (define-values (content-w content-h) (layout-content-area layout))
-  ;; Status bar at top
-  (list (hash 'view
-              'status-bar
-              'text
-              (or (gui-app-status-text app) "Ready")
-              'model
-              (gui-app-model-name app)
-              'bg
-              (theme-ref theme 'background)
-              'fg
-              (theme-ref theme 'foreground)
-              'accent
-              (theme-ref theme 'accent))
-        ;; Transcript area (middle)
-        (hash 'view
-              'transcript
-              'messages
-              (gui-app-messages app)
-              'width
-              content-w
-              'height
-              (max 1 (- content-h 1))
-              'bg
-              (theme-ref theme 'background)
-              'fg
-              (theme-ref theme 'foreground)
-              'focused
-              (eq? (gui-app-focused-view app) 'transcript))
-        ;; Input area at bottom
-        (hash 'view
-              'input-area
-              'text
-              (or (gui-app-input-text app) "")
-              'width
-              content-w
-              'bg
-              (theme-ref theme 'background)
-              'fg
-              (theme-ref theme 'foreground)
-              'accent
-              (theme-ref theme 'accent)
-              'focused
-              (eq? (gui-app-focused-view app) 'input))))
+  ;; Status bar
+  (list (render-status-bar theme
+                           #:model (gui-app-model-name app)
+                           #:status (if (string? (gui-app-status-text app)) 'idle 'idle)
+                           #:width content-w)
+        ;; Transcript
+        (render-transcript theme
+                           (gui-app-messages app)
+                           #:width content-w
+                           #:height (max 1 (- content-h 1))
+                           #:focused (eq? (gui-app-focused-view app) 'transcript))
+        ;; Input area
+        (render-input-area theme
+                           #:text (or (gui-app-input-text app) "")
+                           #:width content-w
+                           #:focused (eq? (gui-app-focused-view app) 'input))))

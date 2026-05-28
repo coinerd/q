@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.64.0 — 2026-05-25
+
+### Core Views (Transcript, Input, Status)
+
+Second milestone of the GUI series — core view components:
+- **W0**: `gui/app.rkt` — top-level application layout with functional update (9 tests)
+- **W1**: `gui/views/status.rkt` — status bar with model/status/turn/tokens (8 tests)
+- **W2**: `gui/views/input.rkt` — input area with text manipulation (15 tests)
+- **W3**: `gui/views/transcript.rkt` + `gui/views/message-entry.rkt` — scroll + role styling (12 tests)
+- **W4**: Wire all views into app.rkt, version bump 0.63.0 → 0.64.0
+
+44 new tests total. All views produce backend-agnostic view descriptors.
+
 ## v0.63.0 — 2026-05-25
 
 ### Infrastructure + Observable Bridge
