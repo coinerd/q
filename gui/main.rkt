@@ -263,7 +263,7 @@
                              (streaming-cursor-start! cursor-state notify-gui!))]
                           [else
                            (when (streaming-cursor-active? cursor-state)
-                             (streaming-cursor-stop! cursor-state))]))))))
+                             (streaming-cursor-stop! cursor-state))])))))
 
   ;; Store notify callback in box so subscriber can use it
   (set-box! notify-callback-box notify-gui!)
@@ -271,7 +271,7 @@
   ;; Slash command handler (extracted to slash-commands.rkt)
   (define handle-slash-command (make-slash-command-handler sess state-box gui-state-lock))
 
-    ;; Input callback: submit on Enter → slash command or run-prompt!
+  ;; Input callback: submit on Enter → slash command or run-prompt!
   (define (on-input action val)
     (when (eq? action 'return)
       (when (and val (> (string-length val) 0))
