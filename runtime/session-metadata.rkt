@@ -10,6 +10,7 @@
 (require racket/contract
          racket/list
          racket/port
+         (only-in "../util/ids.rkt" generate-id)
          (only-in "../util/protocol-types.rkt"
                   message?
                   message-content
@@ -82,7 +83,7 @@
   (unless (label-type? label-type)
     (raise-argument-error 'set-entry-label! "label-type?" label-type))
   (define label-msg
-    (make-message (format "label-~a-~a" label-type (current-inexact-milliseconds))
+    (make-message (string-append "label-" (symbol->string label-type) "-" (generate-id))
                   target-entry-id
                   'system
                   'entry-label

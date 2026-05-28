@@ -24,6 +24,7 @@
                   jsexpr->message
                   message)
          (only-in "../../util/message-helpers.rkt" ensure-parent-dirs!)
+         (only-in "../../util/ids.rkt" generate-id)
          (only-in "../../util/jsonl.rkt" jsonl-read-all-valid)
          (only-in "../session-store.rkt" load-session-log)
          "schema.rkt"
@@ -238,7 +239,7 @@
     [(not entry) #f]
     [else
      (define summary-msg
-       (make-message (format "branch-summary-~a" (current-inexact-milliseconds))
+       (make-message (string-append "bs-" (generate-id))
                      entry-id
                      'system
                      'branch-summary
