@@ -6,9 +6,6 @@
 ;; Defines effect descriptors returned by pure phase functions.
 ;; Effects describe WHAT should happen; the executor decides HOW.
 ;; This separation enables dry-run testing of agent loop phases.
-;;
-;; Also defines streaming-plan — pure computation result for the
-;; streaming phase (v0.47.2).
 
 (require racket/contract
          (only-in "../util/fsm.rkt" fsm-state? fsm-event?))
@@ -17,15 +14,6 @@
          (contract-out (struct effect:update-fsm ([from-state fsm-state?] [event fsm-event?])))
          (contract-out (struct effect:dispatch-hook ([hook-point symbol?] [payload any/c])))
          (contract-out (struct effect:none ()))
-         (contract-out (struct streaming-plan
-                               ([session-id string?] [turn-id any/c]
-                                                     [raw-messages (listof hash?)]
-                                                     [req any/c]
-                                                     [provider any/c]
-                                                     [tools list?]
-                                                     [hook-dispatcher (or/c procedure? #f)]
-                                                     [cancellation-token any/c]
-                                                     [expected-effects (listof effect?)])))
          effect?)
 
 ;; ---------------------------------------------------------------------------
@@ -43,24 +31,6 @@
 
 ;; No-op effect (identity)
 (struct effect:none () #:transparent)
-
-;; ---------------------------------------------------------------------------
-;; Streaming plan (pure computation result) — v0.47.2
-;; ---------------------------------------------------------------------------
-
-;; Pure result from compute-streaming-plan: describes what the streaming
-;; phase needs to do, without actually doing it.
-(struct streaming-plan
-        (session-id turn-id
-                    raw-messages ; (listof hash?) — validated message sequence
-                    req ; model-request?
-                    provider ; provider?
-                    tools ; (listof any/c)
-                    hook-dispatcher ; (or/c procedure? #f)
-                    cancellation-token ; any/c
-                    expected-effects ; (listof effect?) — effects to emit before streaming
-                    )
-  #:transparent)
 
 ;; ---------------------------------------------------------------------------
 ;; Predicates

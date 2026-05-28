@@ -58,10 +58,7 @@
           [phase-stream
            (-> any/c any/c any/c any/c any/c any/c any/c any/c (values any/c (listof effect?)))])
          (contract-out [run-streaming-phase
-                        (-> any/c any/c any/c any/c any/c any/c any/c any/c any/c any/c any/c)])
-         (contract-out
-          [compute-streaming-plan
-           (-> any/c any/c any/c any/c any/c any/c any/c any/c any/c any/c streaming-plan?)]))
+                        (-> any/c any/c any/c any/c any/c any/c any/c any/c any/c any/c any/c)]))
 
 ;; ---------------------------------------------------------------------------
 ;; Phase 1: Emit turn-started event
@@ -159,47 +156,6 @@
   (define stream-data
     (stream-from-provider provider req bus session-id turn-id st hook-dispatcher cancellation-token))
   (values stream-data '()))
-
-;; ---------------------------------------------------------------------------
-;; ---------------------------------------------------------------------------
-;; Phase 6b: Pure streaming plan computation
-;; ---------------------------------------------------------------------------
-
-;; compute-streaming-plan : ... -> streaming-plan
-;; Pure: computes what the streaming phase needs to do without doing it.
-;; Validates messages, builds the request, and records expected effects.
-(define (compute-streaming-plan provider
-                                req
-                                bus
-                                session-id
-                                turn-id
-                                st
-                                raw-messages
-                                tools
-                                hook-dispatcher
-                                cancellation-token)
-  (define pre-effects
-    (list (effect:emit-event 'provider-request
-                             (hasheq 'session-id
-                                     session-id
-                                     'turn-id
-                                     turn-id
-                                     'model
-                                     (hash-ref (model-request-settings req)
-                                               'model
-                                               (lambda () (format "~a" (provider-name provider))))
-                                     'provider
-                                     (format "~a" (provider-name provider))))
-          (effect:update-fsm turn-state-pre-hook turn-event-hook-pass)))
-  (streaming-plan session-id
-                  turn-id
-                  raw-messages
-                  req
-                  provider
-                  tools
-                  hook-dispatcher
-                  cancellation-token
-                  pre-effects))
 
 ;; ---------------------------------------------------------------------------
 
