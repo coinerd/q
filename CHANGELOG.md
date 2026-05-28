@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.65.0 — 2026-05-25
+
+### Extension Integration + Dialogs
+
+Third milestone of the GUI series — extension integration and dialog views:
+- **W0**: `gui/extension-slots/widget-zone.rkt` — widget zones with register/unregister (7 tests)
+- **W1**: `gui/extension-slots/custom-renderer.rkt` — custom renderer registry (8 tests)
+- **W2**: `gui/views/overlay.rkt` — alert/confirm/prompt dialogs (6 tests)
+- **W3**: `gui/extension-slots/extension-bridge.rkt` — zone/lifecycle management (7 tests)
+- **W4**: Integration tests + version bump 0.64.0 → 0.65.0 (2 integration tests)
+
+30 new tests total. Extensions can now register widgets and custom renderers.
+
 ## v0.64.0 — 2026-05-25
 
 ### Core Views (Transcript, Input, Status)
