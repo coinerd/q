@@ -11,7 +11,8 @@
          racket/string
          racket/class
          racket/list
-         "../../ui-core/theme-protocol.rkt")
+         "../../ui-core/theme-protocol.rkt"
+         "markdown-parser.rkt")
 
 (provide role->label
          role->color
@@ -30,19 +31,15 @@
           [scroll-state-user-scrolled-up? (-> hash? boolean?)]
           [scroll-state-on-scroll (-> hash? (between/c 0.0 1.0) hash?)]
           [scroll-state-on-submit (-> hash? hash?)]
-          [contains-code-blocks? (-> any/c boolean?)]
-          [parse-code-blocks (-> any/c (listof hash?))]
-          [render-message-with-code-blocks (-> hash? ui-theme? hash?)]
           [key-event->action (-> char? boolean? (or/c symbol? #f))]
           [lookup-keybinding (-> char? boolean? (or/c symbol? #f))]
           [list-keybindings (-> (listof pair?))]
           [default-keybindings hash?]
-          [code-block-style (-> ui-theme? hash?)]
-          [code-block-header-style (-> (or/c string? #f) hash?)]
           [input-key-should-submit? (-> any/c boolean? boolean? boolean?)]
           [prepare-input-for-submit (-> string? string?)]
           [input-line-count (-> string? exact-nonnegative-integer?)]
-          [input-looks-like-code? (-> string? boolean?)]))
+          [input-looks-like-code? (-> string? boolean?)])
+         (all-from-out "markdown-parser.rkt"))
 
 ;; ──────────────────────────────
 ;; Pure helpers (headless-testable)
@@ -125,87 +122,6 @@
 (define (messages->render-plan msgs theme)
   (for/list ([m (in-list (if (list? msgs) msgs '()))])
     (render-message-descriptor m theme)))
-
-;; ──────────────────────────────
-;; Code block detection and parsing (pure, headless-testable)
-;; ──────────────────────────────
-
-;; A code-block segment: (hash 'type 'code-block 'text "..." 'lang "racket" ...)
-;; A text segment: (hash 'type 'text 'text "...")
-
-;; Check if a string looks like it contains markdown code blocks
-(define (contains-code-blocks? text)
-  (and (string? text)
-       (regexp-match? #rx"```" text)))
-
-;; Parse text into segments: alternating text and code-block segments
-;; Returns: (listof hash?) where each hash has 'type ('text or 'code-block) and 'text
-(define (parse-code-blocks text)
-  (cond
-    [(not (string? text)) (list (hash 'type 'text 'text (~a text)))]
-    [(not (contains-code-blocks? text))
-     (list (hash 'type 'text 'text text))]
-    [else
-     ;; Split on ``` delimiters
-     (define parts (regexp-split #rx"```" text))
-     (define result '())
-     (define in-code? #f)
-     (define current-lang "")
-     (for ([part (in-list parts)]
-           [idx (in-naturals)])
-       (cond
-         [(string=? part "") (void)]  ;; skip empty between consecutive ```
-         [in-code?
-          ;; This part is code
-          ;; First line might be the language
-          (define lines (string-split part "\n" #:trim? #f))
-          (define first-line (if (pair? lines) (car lines) ""))
-          (define lang (if (regexp-match? #rx"^[a-zA-Z0-9+_-]+$" first-line)
-                           first-line
-                           ""))
-          (define code-text
-            (if (string=? lang "")
-                part
-                (string-join (cdr lines) "\n" #:after-last "")))
-          (set! result
-                (append result
-                        (list (hash 'type 'code-block
-                                    'text (string-trim code-text #:left? #f #:right? #t)
-                                    'lang lang))))]
-         [else
-          ;; This part is regular text
-          (when (> (string-length part) 0)
-            (set! result
-                  (append result
-                          (list (hash 'type 'text 'text part)))))])
-       (set! in-code? (not in-code?)))
-     (if (null? result)
-         (list (hash 'type 'text 'text text))
-         result)]))
-
-;; Render a message with code block awareness
-;; Extends render-message-descriptor to split code blocks into segments
-(define (render-message-with-code-blocks msg theme)
-  (define text (hash-ref msg 'text ""))
-  (define role (hash-ref msg 'role "system"))
-  (define segments (parse-code-blocks text))
-  (define label (role->label role))
-  (define color (role->color role theme))
-  (define role-seg (hash 'type 'text 'text (format "[~a] " label) 'style (hash 'color color 'weight 'bold)))
-  (define content-segs
-    (for/list ([seg (in-list segments)])
-      (cond
-        [(equal? (hash-ref seg 'type #f) 'code-block)
-         (hash 'type 'code-block
-               'text (hash-ref seg 'text "")
-               'lang (hash-ref seg 'lang "")
-               'style (hash 'background "#2a2a3e" 'font "monospace"))]
-        [else
-         (hash 'type 'text
-               'text (hash-ref seg 'text "")
-               'style (hash 'color (or color (theme-ref theme 'foreground))))])))
-  (hash 'role role
-        'segments (cons role-seg content-segs)))
 
 ;; ──────────────────────────────
 ;; Diff-based update logic
@@ -337,20 +253,6 @@
 ;; List all registered shortcuts as (char . action) pairs
 (define (list-keybindings)
   (hash->list default-keybindings))
-
-;; ──────────────────────────────
-;; Code block styling helpers (headless-testable)
-;; ──────────────────────────────
-
-(define (code-block-style theme)
-  (hash 'background (or (theme-ref theme 'background) "#1e1e2e")
-        'foreground "#cdd6f4"
-        'font "monospace"
-        'border-left "#89b4fa"))
-
-(define (code-block-header-style lang)
-  (hash 'text (or lang "")
-        'style (hash 'foreground "#6c7086" 'font "monospace" 'size 'small)))
 
 ;; ──────────────────────────────
 ;; GUI view constructor (runtime only)
