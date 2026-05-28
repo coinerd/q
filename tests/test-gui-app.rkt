@@ -63,6 +63,25 @@
  (test-case "app-update unknown key returns same app"
    (define app (make-gui-app (make-test-bridge) (default-theme) (default-gui-layout)))
    (define app2 (app-update app 'nonexistent 'value))
-   (check-eq? app app2)))
+   (check-eq? app app2))
+ ;; ── Status mapping tests (F2 fix verification) ──
+ (test-case "render-app status reflects processing state"
+   (define app (make-gui-app (make-test-bridge) (default-theme) (default-gui-layout)))
+   (define app-processing (app-update app 'status-text "Processing..."))
+   (define views (render-app app-processing))
+   (define status-bar (list-ref views 0))
+   (check-equal? (hash-ref status-bar 'status) 'processing))
+ (test-case "render-app status reflects error state"
+   (define app (make-gui-app (make-test-bridge) (default-theme) (default-gui-layout)))
+   (define app-error (app-update app 'status-text "Error: timeout"))
+   (define views (render-app app-error))
+   (define status-bar (list-ref views 0))
+   (check-equal? (hash-ref status-bar 'status) 'error))
+ (test-case "render-app status defaults to idle for non-matching text"
+   (define app (make-gui-app (make-test-bridge) (default-theme) (default-gui-layout)))
+   (define app-ready (app-update app 'status-text "Ready"))
+   (define views (render-app app-ready))
+   (define status-bar (list-ref views 0))
+   (check-equal? (hash-ref status-bar 'status) 'idle)))
 
 (run-tests test-gui-app)

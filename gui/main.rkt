@@ -11,7 +11,8 @@
          "../ui-core/observable-bridge.rkt"
          "../ui-core/dispatch.rkt"
          "../ui-core/theme-protocol.rkt"
-         "../ui-core/layout-protocol.rkt")
+         "../ui-core/layout-protocol.rkt"
+         "../util/event.rkt")
 
 (provide (contract-out [run-gui-with-runtime (-> any/c any/c void?)]
                        [run-gui (-> void?)]
@@ -33,10 +34,7 @@
     (make-gui-state-bridge state-box
                            (unbox state-box)
                            #:filter (lambda (evt)
-                                      (define t
-                                        (if (hash? evt)
-                                            (hash-ref evt 'type #f)
-                                            #f))
+                                      (define t (event-ev evt))
                                       (and t (symbol? t)))
                            #:transform (lambda (evt) evt)))
   (when bus

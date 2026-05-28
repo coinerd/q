@@ -8,8 +8,11 @@
 (require rackunit
          rackunit/text-ui
          racket/port
+         racket/runtime-path
          "../cli/args.rkt"
          "../gui/main.rkt")
+
+(define-runtime-path info-path "../info.rkt")
 
 (define-test-suite test-gui-init
                    (test-case "gui/main.rkt provides run-gui-with-runtime"
@@ -24,7 +27,7 @@
                          (parse-cli-args)))
                      (check-equal? (cli-config-mode cfg) 'gui))
                    (test-case "info.rkt declares gui-easy-lib dependency"
-                     (define info-text (file->string "info.rkt"))
+                     (define info-text (file->string info-path))
                      (check-not-false (regexp-match #rx"gui-easy-lib" info-text))))
 
 (run-tests test-gui-init)

@@ -91,10 +91,17 @@
   (define layout (gui-app-layout app))
   (define-values (content-w content-h) (layout-content-area layout))
   ;; Status bar
-  (list (render-status-bar theme
-                           #:model (gui-app-model-name app)
-                           #:status (if (string? (gui-app-status-text app)) 'idle 'idle)
-                           #:width content-w)
+  (list (render-status-bar
+         theme
+         #:model (gui-app-model-name app)
+         #:status
+         (let ([st (gui-app-status-text app)])
+           (cond
+             [(not st) 'idle]
+             [(and (string? st) (regexp-match? #rx"(?i:process|think|stream)" st)) 'processing]
+             [(and (string? st) (regexp-match? #rx"(?i:error)" st)) 'error]
+             [else 'idle]))
+         #:width content-w)
         ;; Transcript
         (render-transcript theme
                            (gui-app-messages app)
