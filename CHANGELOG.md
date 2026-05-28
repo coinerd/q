@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.67.1 — 2026-05-28
+
+### GUI Audit Hotfix
+
+Post-implementation audit remediation for the v0.63.0–v0.67.0 GUI milestone series:
+- **F1**: Fixed broken event filter in `wire-bridge!` — was checking `(hash? evt)` on `event` structs, silently dropping all events from the agent. Now uses `(event-ev evt)`.
+- **F2**: Fixed `render-app` status always returning `'idle` — both branches of the conditional were identical. Now maps status text to `'processing`, `'error`, or `'idle` based on content.
+- **F10**: Fixed `test-gui-init.rkt` broken relative path — now uses `runtime-path` for `info.rkt` lookup.
+- **+4 new tests**: 1 for event filter (F1), 3 for status mapping (F2).
+- **13 docs synced**: Stale v0.62.3 version references updated to v0.67.0.
+
 ## v0.67.0 — 2026-05-25
 
 ### Stabilization, Polish, Documentation

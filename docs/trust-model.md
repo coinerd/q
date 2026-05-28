@@ -1,4 +1,4 @@
-<!-- verified-against: 0.67.0 -->
+<!-- verified-against: 0.67.1 -->
 # Trust Model
 
 ## Trust Levels
