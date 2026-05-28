@@ -34,7 +34,8 @@
          "../extensions/hooks.rkt"
          "../tui/command-parse.rkt"
          "../gui/components/rich-transcript-view.rkt"
-         "../gui/components/streaming-cursor.rkt")
+         "../gui/components/streaming-cursor.rkt"
+         "../gui/slash-commands.rkt")
 
 (provide (contract-out [run-gui-with-runtime (-> any/c any/c void?)]
                        [run-gui (-> void?)]
@@ -267,125 +268,10 @@
   ;; Store notify callback in box so subscriber can use it
   (set-box! notify-callback-box notify-gui!)
 
-  ;; Helper: add a system message
-  (define (add-system-msg! text)
-    (call-with-semaphore
-     gui-state-lock
-     (lambda ()
-       (define old (unbox state-box))
-       (define msgs (hash-ref old 'messages '()))
-       (set-box! state-box
-                 (hash-set old 'messages (append msgs (list (hash 'role "system" 'text text))))))))
+  ;; Slash command handler (extracted to slash-commands.rkt)
+  (define handle-slash-command (make-slash-command-handler sess state-box gui-state-lock))
 
-  ;; Handle slash commands. Returns #t if handled.
-  (define (handle-slash-command input-text)
-    (define parsed (parse-command-name input-text))
-    (cond
-      [(not parsed) #f]
-      [(eq? parsed 'unknown)
-       ;; Unknown command — try extension dispatch, else show error
-       (define ext-reg (agent-session-extension-registry sess))
-       (define cmd-name
-         (let* ([trimmed (string-trim input-text)]
-                [parts (string-split trimmed)])
-           (and (pair? parts) (car parts))))
-       (define ext-result
-         (and ext-reg
-              cmd-name
-              (dispatch-hooks 'execute-command (hasheq 'command cmd-name 'input input-text) ext-reg)))
-       (cond
-         [(and (hook-result? ext-result) (eq? (hook-result-action ext-result) 'amend))
-          (define payload (hook-result-payload ext-result))
-          (when (hash-ref payload 'text #f)
-            (add-system-msg! (hash-ref payload 'text)))
-          (when (hash-ref payload 'submit #f)
-            (thread (lambda () (run-prompt! sess (hash-ref payload 'submit)))))
-          #t]
-         [(and (hook-result? ext-result) (eq? (hook-result-action ext-result) 'block))
-          (add-system-msg! (format "Command ~a blocked. Try /help." cmd-name))
-          #t]
-         [else
-          (add-system-msg! (format "Unknown command: ~a. Type /help for available commands."
-                                   input-text))
-          #t])]
-      [else
-       (define cmd
-         (if (parsed-command? parsed)
-             (parsed-command-canonical-name parsed)
-             parsed))
-       (define args
-         (if (parsed-command? parsed)
-             (parsed-command-args parsed)
-             '()))
-       (case cmd
-         [(quit)
-          (close-session! sess)
-          (exit 0)]
-         [(clear)
-          (call-with-semaphore gui-state-lock
-                               (lambda ()
-                                 (set-box! state-box (hash-set (unbox state-box) 'messages '()))))
-          #t]
-         [(help)
-          (add-system-msg! (string-append "Available commands:\n"
-                                          "  /help, /h, /?    Show this help\n"
-                                          "  /quit, /q, /exit Quit\n"
-                                          "  /clear, /cls     Clear transcript\n"
-                                          "  /status, /st     Show session status\n"
-                                          "  /model, /m       Show or change model\n"
-                                          "  /compact         Run context compaction\n"
-                                          "  /plan            GSD plan command\n"
-                                          "  /go              GSD execute command\n"
-                                          "  /activate, /a    Activate extensions\n"))
-          #t]
-         [(status)
-          (add-system-msg! (format "Session: ~a\nModel: ~a\nStatus: ~a\nMessages: ~a"
-                                   (session-id sess)
-                                   (agent-session-model-name sess)
-                                   (if (session-active? sess) "active" "closed")
-                                   (length (hash-ref (unbox state-box) 'messages '()))))
-          #t]
-         [(model)
-          (add-system-msg! (if (null? args)
-                               (format "Current model: ~a" (agent-session-model-name sess))
-                               (format "Model switching not yet supported in GUI. Current: ~a"
-                                       (agent-session-model-name sess))))
-          #t]
-         [(compact)
-          (add-system-msg! "Context compaction triggered (runs on next turn).")
-          #t]
-         [(interrupt)
-          (add-system-msg! "Interrupt not yet supported in GUI mode.")
-          #t]
-         [else
-          ;; Try extension dispatch (/plan, /go, /activate, etc.)
-          (define ext-reg (agent-session-extension-registry sess))
-          (define cmd-name
-            (let* ([trimmed (string-trim input-text)]
-                   [parts (string-split trimmed)])
-              (and (pair? parts) (car parts))))
-          (define ext-result
-            (and
-             ext-reg
-             cmd-name
-             (dispatch-hooks 'execute-command (hasheq 'command cmd-name 'input input-text) ext-reg)))
-          (cond
-            [(and (hook-result? ext-result) (eq? (hook-result-action ext-result) 'amend))
-             (define payload (hook-result-payload ext-result))
-             (when (hash-ref payload 'text #f)
-               (add-system-msg! (hash-ref payload 'text)))
-             (when (hash-ref payload 'submit #f)
-               (thread (lambda () (run-prompt! sess (hash-ref payload 'submit)))))
-             #t]
-            [(and (hook-result? ext-result) (eq? (hook-result-action ext-result) 'block))
-             (add-system-msg! (format "Command ~a blocked. Try /help." cmd-name))
-             #t]
-            [else
-             (add-system-msg! (format "Unknown command: ~a. Type /help for available commands."
-                                      input-text))
-             #t])])]))
-
-  ;; Input callback: submit on Enter → slash command or run-prompt!
+    ;; Input callback: submit on Enter → slash command or run-prompt!
   (define (on-input action val)
     (when (eq? action 'return)
       (when (and val (> (string-length val) 0))
