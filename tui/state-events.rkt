@@ -30,6 +30,8 @@
 ;; Event reducer registry (W-07)
 ;; ============================================================
 
+;; Event reducer registry — mutable hash for registration-time population
+;; (Immutable box pattern causes stale bytecode issues with raco make)
 (define event-reducers (make-hash))
 
 (define (register-event-reducer! type-string handler)
@@ -76,11 +78,14 @@
     (and (memq (transcript-entry-kind entry) '(tool-end tool-fail))
          (equal? (hash-ref (transcript-entry-meta entry) 'name "") name))))
 
-;; Safe take — returns up to n elements from lst (racket/list take is unsafe)
+;; Safe take — returns up to n elements from lst (iterative, no stack overflow)
 (define (take-safe lst n)
-  (if (or (<= n 0) (null? lst))
-      '()
-      (cons (car lst) (take-safe (cdr lst) (- n 1)))))
+  (let loop ([lst lst]
+             [n n]
+             [acc '()])
+    (if (or (<= n 0) (null? lst))
+        (reverse acc)
+        (loop (cdr lst) (- n 1) (cons (car lst) acc)))))
 
 ;; ============================================================
 ;; Named event handlers (extracted from case dispatch)
