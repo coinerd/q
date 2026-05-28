@@ -198,6 +198,7 @@
   (define hpanel (dynamic-require 'racket/gui/easy/view 'hpanel))
   (define text-view (dynamic-require 'racket/gui/easy/view 'text))
   (define input-view (dynamic-require 'racket/gui/easy/view 'input))
+  (define editor-canvas-view (dynamic-require 'racket/gui/easy/view 'editor-canvas))
 
   ;; Load racket/gui classes for color/font objects
   (define color% (dynamic-require 'racket/gui 'color%))
@@ -432,6 +433,9 @@
                                    theme
                                    queue-callback))
 
+  ;; Observable wrapping the text% editor for editor-canvas view
+  (define transcript-obs (make-obs transcript-text))
+
   ;; Streaming cursor state (blinks during LLM response)
   (define cursor-state (make-streaming-cursor-state))
 
@@ -444,7 +448,7 @@
     (vpanel
      #:stretch '(#t #t)
      (hpanel #:stretch '(#t #f) #:style '(border) (text-view status-obs))
-     (text-view (format "Messages: ~a" (length (obs-peek messages-obs))))
+     (editor-canvas-view transcript-obs #:min-size '(#f 200) #:stretch '(#t #t))
      (input-view input-obs on-input #:style '(multiple) #:stretch '(#t #f) #:min-size '(#f 60)))))
 
   ;; Cleanup after window closes
