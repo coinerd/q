@@ -149,6 +149,23 @@
           'session-tree
           '(pass)
           'session-rebind
+          '(pass)
+          ;; GUI hooks (v0.63.0)
+          'gui.window.opened
+          '(pass)
+          'gui.window.closed
+          '(pass)
+          'gui.theme.changed
+          '(pass amend)
+          'gui.layout.changed
+          '(pass amend)
+          'gui.focus.changed
+          '(pass)
+          'gui.input.submit
+          '(pass amend block)
+          'gui.command.execute
+          '(pass amend block)
+          'gui.scroll.request
           '(pass)))
 
 (: default-actions (Listof Symbol))
