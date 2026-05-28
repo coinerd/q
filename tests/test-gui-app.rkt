@@ -82,6 +82,26 @@
    (define app-ready (app-update app 'status-text "Ready"))
    (define views (render-app app-ready))
    (define status-bar (list-ref views 0))
-   (check-equal? (hash-ref status-bar 'status) 'idle)))
+   (check-equal? (hash-ref status-bar 'status) 'idle))
+ ;; T5: #f status-text should map to 'idle
+ (test-case "render-app status is idle when status-text is #f"
+   (define app (make-gui-app (make-test-bridge) (default-theme) (default-gui-layout)))
+   (define app-no-status (app-update app 'status-text #f))
+   (define views (render-app app-no-status))
+   (define status-bar (list-ref views 0))
+   (check-equal? (hash-ref status-bar 'status) 'idle))
+ ;; T6: "Streaming" and "Thinking" should map to 'processing
+ (test-case "render-app status reflects streaming state"
+   (define app (make-gui-app (make-test-bridge) (default-theme) (default-gui-layout)))
+   (define app-streaming (app-update app 'status-text "Streaming response..."))
+   (define views (render-app app-streaming))
+   (define status-bar (list-ref views 0))
+   (check-equal? (hash-ref status-bar 'status) 'processing))
+ (test-case "render-app status reflects thinking state"
+   (define app (make-gui-app (make-test-bridge) (default-theme) (default-gui-layout)))
+   (define app-thinking (app-update app 'status-text "Thinking..."))
+   (define views (render-app app-thinking))
+   (define status-bar (list-ref views 0))
+   (check-equal? (hash-ref status-bar 'status) 'processing)))
 
 (run-tests test-gui-app)

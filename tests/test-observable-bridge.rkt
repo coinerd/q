@@ -118,6 +118,24 @@
    (publish! bus (test-event 'user.input (hash 'text "hello")))
    (check-equal? (bridge-update-count bridge) 1)
    (bridge-dispose! bridge))
+ (test-case "bridge with filter rejects non-symbol event-ev (F1 defense-in-depth)"
+   ;; T4: Verify the event-ev filter pattern REJECTS events with non-symbol ev values
+   ;; (e.g., if event-ev returns a string or #f, it should be filtered out)
+   (define state-box (box 'no-update))
+   (define bridge
+     (make-gui-state-bridge state-box
+                            'no-update
+                            #:filter (lambda (evt) (and (symbol? (event-ev evt)) #t))))
+   (define bus (make-event-bus))
+   (bridge-subscribe! bridge bus)
+   ;; Create event with string ev (should be rejected by symbol? check)
+   (define string-ev-evt (make-event "not-a-symbol" (current-inexact-milliseconds) #f #f '()))
+   (publish! bus string-ev-evt)
+   (check-equal? (bridge-update-count bridge) 0)
+   ;; Create event with symbol ev (should be accepted)
+   (publish! bus (test-event 'user.input '()))
+   (check-equal? (bridge-update-count bridge) 1)
+   (bridge-dispose! bridge))
  (test-case "dispose is idempotent"
    (define state-box (box #f))
    (define bridge (make-gui-state-bridge state-box #f))
