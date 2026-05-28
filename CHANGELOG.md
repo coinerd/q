@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.67.2 — 2026-05-28
+
+### Audit Follow-ups + GUI Crash Fix
+
+Post-v0.67.1 audit follow-up addressing 4 non-blocking findings:
+- **Bug fix**: `--gui` crashed with "cannot open module file" — `interfaces/gui.rkt` used a bare relative string in `dynamic-require` which resolved incorrectly at runtime. Fixed with `define-runtime-path`.
+- **P1**: Updated stale `STATE.md` and `SUMMARY.md` (were at v0.59.x, now reflect v0.67.x series).
+- **P2**: Closed audit artifact `AUDIT-v0.63.x-v0.67.x-GUI-POST-IMPLEMENTATION.md` with remediation confirmation (F1/F2/F10 resolved, verdict upgraded to APPROVED).
+- **P3**: Added 4 edge-case tests: T4 (non-symbol event-ev rejection), T5 (#f status → idle), T6 (streaming/thinking → processing).
+- **P4**: Replaced hardcoded `"v0.63.0"` strings in `gui/main.rkt` with `q-version` constant.
+
 ## v0.67.1 — 2026-05-28
 
 ### GUI Audit Hotfix
