@@ -8,9 +8,10 @@
 (define version "0.62.3")
 (define pkg-desc "A local-first, extensible coding agent runtime")
 
-(define deps '("base"))
+(define deps '("base" "gui-easy-lib"))
 
-;; The TUI uses native ANSI escape sequences (no external packages required).
+;; The TUI uses native ANSI escape sequences.
+;; GUI mode requires gui-easy-lib (optional — graceful fallback if absent).
 
 (define build-deps '("rackunit-lib" "quickcheck" "fmt"))
 
