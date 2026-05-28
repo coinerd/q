@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.66.0 — 2026-05-25
+
+### Advanced Features (Sidebar, Toolbar, Themes)
+
+Fourth milestone of the GUI series — advanced GUI views and theme management:
+- **W0**: `gui/views/sidebar.rkt` — collapsible sidebar with sections/items (7 tests)
+- **W1**: `gui/views/toolbar.rkt` — toolbar with buttons/separators (6 tests)
+- **W2**: `gui/theme-manager.rkt` — theme switching with light/dark presets + customization (8 tests)
+- **W3**: `gui/views/code-block.rkt` — code blocks with language detection (6 tests)
+- **W4**: Version bump 0.65.0 → 0.66.0
+
+27 new tests total. Full sidebar, toolbar, theme management, and code rendering.
+
 ## v0.65.0 — 2026-05-25
 
 ### Extension Integration + Dialogs
