@@ -33,7 +33,8 @@
          "../util/version.rkt"
          "../extensions/hooks.rkt"
          "../tui/command-parse.rkt"
-         "../gui/components/rich-transcript-view.rkt")
+         "../gui/components/rich-transcript-view.rkt"
+         "../gui/components/streaming-cursor.rkt")
 
 (provide (contract-out [run-gui-with-runtime (-> any/c any/c void?)]
                        [run-gui (-> void?)]
@@ -249,7 +250,18 @@
                           (send transcript-text delete 0 (send transcript-text last-position))
                           (for ([msg (in-list msgs)])
                             (insert-message-into-text! transcript-text msg theme))
-                          (send transcript-text lock #t))))))
+                          ;; Append streaming cursor when processing
+                          (when (eq? st 'processing)
+                            (send transcript-text insert (streaming-cursor-string cursor-state)))
+                          (send transcript-text lock #t))
+                        ;; Manage streaming cursor based on status
+                        (cond
+                          [(eq? st 'processing)
+                           (unless (streaming-cursor-active? cursor-state)
+                             (streaming-cursor-start! cursor-state notify-gui!))]
+                          [else
+                           (when (streaming-cursor-active? cursor-state)
+                             (streaming-cursor-stop! cursor-state))]))))))
 
   ;; Store notify callback in box so subscriber can use it
   (set-box! notify-callback-box notify-gui!)
@@ -419,6 +431,9 @@
                                    style-delta%
                                    theme
                                    queue-callback))
+
+  ;; Streaming cursor state (blinks during LLM response)
+  (define cursor-state (make-streaming-cursor-state))
 
   ;; Track last rendered messages for diff-based updates
 
