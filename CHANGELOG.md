@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.68.3 — 2026-05-28
+
+### Keyboard Shortcuts + Polish
+
+Add keyboard shortcut registry and wire into GUI window.
+Final polish of the v0.68.x GUI UX improvement series.
+
+**Changes:**
+- `default-keybindings` — hash map of Ctrl+key → action (clear/compact/interrupt/save/quit)
+- `key-event->action` / `lookup-keybinding` / `list-keybindings` — shortcut lookup
+- `handle-key-action` dispatch wired into gui/main.rkt
+- 60 tests total (9 new keyboard shortcut tests)
+
 ## v0.68.2 — 2026-05-28
 
 ### Code Blocks + Multiline Input
