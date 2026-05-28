@@ -376,7 +376,7 @@
 
   (define text-obj (make-object text%-cls))
   (send text-obj auto-wrap #t)
-  (send text-obj set-max-undo 0)
+  (send text-obj set-max-undo-history 0)
   (send text-obj lock #t)
   (send text-obj change-style
         (make-object style-delta%-cls 'change-normal)
