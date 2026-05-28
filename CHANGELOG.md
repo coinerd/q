@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.69.0 — 2026-05-25
+
+### Abstraction Quality: Dead Code, Dedup, Immutability
+
+Focused cleanup of duplicate implementations, dead code, and unsafe patterns across the codebase.
+
+**Changes:**
+- **W0**: Remove dead `scheduler-strategy` invocation types and `streaming-plan` struct (-199 LOC).
+- **W1**: Extract canonical `truncate-string` to `util/string-helpers.rkt`, replacing 5 duplicate implementations.
+- **W2**: Replace local `drop-right` with `racket/list` native; fix `take-safe` stack overflow (recursive→iterative).
+- **W3**: Extract `emit` helper in `step-interpreter`; reuse `make-next-counters` in `continue` branch.
+
 ## v0.68.7 — 2026-05-28
 
 ### GUI Critical Hotfix
