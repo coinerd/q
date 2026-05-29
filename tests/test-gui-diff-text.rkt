@@ -13,7 +13,11 @@
     (super-new)
     (define content "")
     (define locked #f)
-    (define/public (insert str) (set! content (string-append content str)))
+    ;; insert: positional insert when pos given, append otherwise
+    (define/public (insert str [pos #f])
+      (if pos
+          (set! content (string-append (substring content 0 pos) str (substring content pos)))
+          (set! content (string-append content str))))
     (define/public (delete start end) (set! content (substring content 0 start)))
     (define/public (last-position) (string-length content))
     (define/public (lock v) (set! locked v))
@@ -28,19 +32,19 @@
    (define text-obj (make-object mock-text%))
    (define old-msgs '())
    (define new-msgs (list (hash 'role "user" 'text "Hello")))
-   (apply-diff-to-text! text-obj old-msgs new-msgs (default-theme))
+   (apply-diff-to-text! text-obj old-msgs new-msgs (default-theme) #f)
    (define content (send text-obj get-content))
    (check-true (string-contains? content "You: Hello")))
  (test-case "apply-diff-to-text! no diff does nothing"
    (define text-obj (make-object mock-text%))
    (define msgs (list (hash 'role "user" 'text "Hello")))
-   (apply-diff-to-text! text-obj msgs msgs (default-theme))
+   (apply-diff-to-text! text-obj msgs msgs (default-theme) #f)
    (check-equal? (send text-obj get-content) ""))
  (test-case "apply-diff-to-text! reset clears and rebuilds"
    (define text-obj (make-object mock-text%))
    (define old-msgs (list (hash 'role "user" 'text "Old")))
    (define new-msgs '())
-   (apply-diff-to-text! text-obj old-msgs new-msgs (default-theme))
+   (apply-diff-to-text! text-obj old-msgs new-msgs (default-theme) #f)
    ;; Reset causes full rebuild → content should be empty (no messages)
    (check-equal? (send text-obj get-content) ""))
  (test-case "apply-diff-to-text! multiple appends fall back to rebuild"
@@ -50,7 +54,7 @@
      (list (hash 'role "user" 'text "A")
            (hash 'role "assistant" 'text "B")
            (hash 'role "system" 'text "C")))
-   (apply-diff-to-text! text-obj old-msgs new-msgs (default-theme))
+   (apply-diff-to-text! text-obj old-msgs new-msgs (default-theme) #f)
    (define content (send text-obj get-content))
    (check-true (string-contains? content "You: A"))
    (check-true (string-contains? content "Assistant: B"))
@@ -59,8 +63,34 @@
    (define text-obj (make-object mock-text%))
    (define old-msgs (list (hash 'role "user" 'text "Hi") (hash 'role "assistant" 'text "Hel")))
    (define new-msgs (list (hash 'role "user" 'text "Hi") (hash 'role "assistant" 'text "Hello")))
-   (apply-diff-to-text! text-obj old-msgs new-msgs (default-theme))
+   (apply-diff-to-text! text-obj old-msgs new-msgs (default-theme) #f)
    (define content (send text-obj get-content))
    (check-true (string-contains? content "Hello"))))
 
-(run-tests test-diff-text)
+(define-test-suite
+ test-incremental-append
+ (test-case "incremental suffix append with last-len-box"
+   (define text-obj (make-object mock-text%))
+   (define old-msgs (list (hash 'role "user" 'text "Hi") (hash 'role "assistant" 'text "Hel")))
+   (define new-msgs (list (hash 'role "user" 'text "Hi") (hash 'role "assistant" 'text "Hello")))
+   ;; First call: populate text-obj with old messages (no incremental yet)
+   (apply-diff-to-text! text-obj '() old-msgs (default-theme) #f)
+   (define content-before (send text-obj get-content))
+   ;; Second call: update-last with incremental suffix append
+   (define last-len-box (box (string-length "Hel")))
+   (apply-diff-to-text! text-obj old-msgs new-msgs (default-theme) last-len-box)
+   (define content-after (send text-obj get-content))
+   (check-true (string-contains? content-after "Hello"))
+   (check-true (> (string-length content-after) (string-length content-before))))
+ (test-case "incremental updates last-len-box value"
+   (define text-obj (make-object mock-text%))
+   (define old-msgs (list (hash 'role "assistant" 'text "ABC")))
+   (define new-msgs (list (hash 'role "assistant" 'text "ABCDEF")))
+   (apply-diff-to-text! text-obj '() old-msgs (default-theme) #f)
+   (define last-len-box (box 3))
+   (apply-diff-to-text! text-obj old-msgs new-msgs (default-theme) last-len-box)
+   (check-equal? (unbox last-len-box) 6)))
+
+(run-tests (test-suite "gui-diff-text"
+             test-diff-text
+             test-incremental-append))
