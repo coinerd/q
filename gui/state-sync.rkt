@@ -175,12 +175,13 @@
       (set-obs! status-obs status-str)))
 
   (define previous-msgs-box (box '()))
+  (define last-length-box (box 0))
 
   (define (update-text%-content! state)
     (define new-msgs (map gui-message->hash (gui-state-messages state)))
     (define old-msgs (unbox previous-msgs-box))
     (when transcript-text
-      (apply-diff-to-text! transcript-text old-msgs new-msgs theme)
+      (apply-diff-to-text! transcript-text old-msgs new-msgs theme last-length-box)
       (set-box! previous-msgs-box new-msgs)))
 
   (define (notify-gui!)
