@@ -1,5 +1,41 @@
 # Changelog
 
+## v0.70.11 — 2026-05-30
+
+### Post-Audit Hotfix — Critical/Warning Finding Remediation
+
+- **W0**: Credential backend security fixes
+  - New `current-shell-command-runner` parameter for macOS/Windows/capability backends
+  - Shell-escape applied to all macOS backend interpolated values (USER, provider, key)
+  - Windows backend returns `#f` on load instead of sentinel string
+  - Security warning for Windows cmdkey API key exposure
+  - File permission race fix: set 0600 before writing content
+  - macOS USER env var fallback chain (USER → LOGNAME → who-am-i → "unknown")
+  - Fixed mock tests using wrong runner signature
+- **W1**: Async sink + trace-logger + token cache fixes
+  - `async-session-sink%` flush now propagates to inner sink
+  - `trace-logger` closes file handle when async? is true, events routed through sink
+  - `token-estimate-cache` uses string identity as key (fixes equal-hash-code collision risk)
+  - Removed unused `racket/math` import
+- **W2**: Contracts + lint + code quality
+  - Added contracts to shell-risk main API functions
+  - Fixed tautological string checks in `lint-credential-policy.rkt`
+  - `shell-risk-summary` `critical?` now returns boolean
+  - `drop-old` policy now logs warning instead of silently falling back to `drop-new`
+
+## v0.70.10 — 2026-05-29
+
+### Series Stabilization + Post-Series Audit
+
+- **W0**: Gate truth lint fixes
+  - Fixed `runtime/auth-store.rkt` line-too-long (174→150 chars)
+  - Fixed CHANGELOG dash format (–→—) for v0.70.4–v0.70.9
+  - Synced README metrics via `metrics.rkt --sync-all`
+  - Synced README status block via `sync-readme-status.rkt --sync`
+- **W1**: Updated `docs/reports/v0.70.0-audit-baseline.md` with series completion summary
+- **W2**: Created `docs/reports/v0.70.10-post-series-audit.md` — full post-series audit report
+- **Version bump**: 0.70.10, tag `v0.70.10`
+
 ## v0.70.9 — 2026-05-29
 
 ### Typed Racket Gradual Migration — Boundary Pilot
