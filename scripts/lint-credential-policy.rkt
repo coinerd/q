@@ -23,11 +23,12 @@
 (define cred-doc "docs/getting-started/credentials.md")
 (if (file-exists? cred-doc)
     (let ([content (file->string cred-doc)])
-      (unless (or (string-contains? content "credential policy") (string-contains? content "Credential Policy"))
+      (unless (or (string-contains? content "credential policy")
+                  (string-contains? content "Credential Policy"))
         (warn "credentials.md missing 'credential policy' section"))
-      (unless (or (string-contains? content "keychain-preferred") (string-contains? content ""))
+      (unless (string-contains? content "keychain-preferred")
         (warn "credentials.md missing keychain-preferred policy mention"))
-      (unless (or (string-contains? content "env-only") (string-contains? content ""))
+      (unless (string-contains? content "env-only")
         (warn "credentials.md missing env-only policy mention")))
     (warn (format "~a not found" cred-doc)))
 
@@ -61,5 +62,6 @@
    (displayln (format "  FAIL: ~a credential policy warning(s)" n) (current-error-port))
    (exit 1)]
   [else
-   (displayln (format "  WARN: ~a credential policy warning(s) (non-blocking)" n) (current-error-port))
+   (displayln (format "  WARN: ~a credential policy warning(s) (non-blocking)" n)
+              (current-error-port))
    (exit 0)])

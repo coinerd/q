@@ -160,9 +160,11 @@
              (thread-send worker item)
              (void))]
         [(drop-old)
-         (if (semaphore-try-wait? space-sema)
-             (thread-send worker item)
-             (void))]
+         ;; drop-old not fully implemented — falls back to drop-new with warning
+         (unless (semaphore-try-wait? space-sema)
+           (log-warning "async-session-sink: drop-old not fully implemented, dropping new entry"))
+         (when (semaphore-try-wait? space-sema)
+           (thread-send worker item))]
         [else
          (semaphore-wait space-sema)
          (thread-send worker item)]))
