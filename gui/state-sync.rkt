@@ -14,7 +14,8 @@
          racket/list
          "../util/event.rkt"
          "../gui/components/rich-transcript-view.rkt"
-         "../ui-core/theme-protocol.rkt")
+         "../ui-core/theme-protocol.rkt"
+         "../gui/gui-types.rkt")
 
 (provide make-gui-event-subscriber
          gui-state-lock
@@ -38,7 +39,7 @@
 ;; GUI event subscriber
 ;;
 ;; Listens to event-bus events and accumulates messages
-;; into the state hash that the GUI polls.
+;; into the gui-state struct that the GUI polls.
 ;; --------------------------------------------------
 (define (make-gui-event-subscriber state-box [notify-callback-box #f])
   (define current-response-text (box ""))
@@ -54,14 +55,12 @@
       ;; User sent a message → add to transcript
       [(equal? ev "user.input")
        (define text (hash-ref payload 'text ""))
-       (call-with-semaphore
-        gui-state-lock
-        (lambda ()
-          (define old (unbox state-box))
-          (define msgs (hash-ref old 'messages '()))
-          (set-box! state-box
-                    (hash-set old 'messages (append msgs (list (hash 'role "user" 'text text)))))
-          (notify!)))]
+       (call-with-semaphore gui-state-lock
+                            (lambda ()
+                              (define old (unbox state-box))
+                              (set-box! state-box
+                                        (gui-state-add-message old (make-gui-message "user" text)))
+                              (notify!)))]
 
       ;; Stream delta → accumulate text
       [(equal? ev "model.stream.delta")
@@ -72,21 +71,20 @@
           gui-state-lock
           (lambda ()
             (define old (unbox state-box))
-            (define msgs (hash-ref old 'messages '()))
-            (define last-msg (and (pair? msgs) (car (reverse msgs))))
+            (define msgs (gui-state-messages old))
+            (define last-msg (and (pair? msgs) (last msgs)))
             (cond
-              [(and last-msg (equal? (hash-ref last-msg 'role #f) "assistant"))
-               (define updated-last (hash-set last-msg 'text (unbox current-response-text)))
+              [(and last-msg (equal? (gui-message-role last-msg) "assistant"))
+               (define updated-last (gui-message "assistant" (unbox current-response-text)))
                (define all-but-last (drop-right msgs 1))
-               (set-box! state-box
-                         (hash-set old 'messages (append all-but-last (list updated-last))))]
-              [else
                (set-box!
                 state-box
-                (hash-set
-                 old
-                 'messages
-                 (append msgs (list (hash 'role "assistant" 'text (unbox current-response-text))))))])
+                (struct-copy gui-state old [messages (append all-but-last (list updated-last))]))]
+              [else
+               (set-box! state-box
+                         (gui-state-add-message old
+                                                (make-gui-message "assistant"
+                                                                  (unbox current-response-text))))])
             (notify!))))]
 
       ;; Thinking delta → show in transcript (dimmed)
@@ -96,11 +94,10 @@
          (call-with-semaphore gui-state-lock
                               (lambda ()
                                 (define old (unbox state-box))
-                                (define msgs (hash-ref old 'messages '()))
-                                (when (not (equal? (and (pair? msgs)
-                                                        (hash-ref (car (reverse msgs)) 'role #f))
+                                (define msgs (gui-state-messages old))
+                                (when (not (equal? (and (pair? msgs) (gui-message-role (last msgs)))
                                                    "assistant"))
-                                  (set-box! state-box (hash-set old 'status 'processing)))
+                                  (set-box! state-box (gui-state-set-status old 'processing)))
                                 (notify!))))]
 
       ;; Stream completed → finalize message
@@ -109,7 +106,7 @@
        (call-with-semaphore gui-state-lock
                             (lambda ()
                               (define old (unbox state-box))
-                              (set-box! state-box (hash-set old 'status 'idle))
+                              (set-box! state-box (gui-state-set-status old 'idle))
                               (notify!)))]
 
       ;; Turn started → set processing
@@ -117,7 +114,7 @@
        (call-with-semaphore gui-state-lock
                             (lambda ()
                               (define old (unbox state-box))
-                              (set-box! state-box (hash-set old 'status 'processing))
+                              (set-box! state-box (gui-state-set-status old 'processing))
                               (notify!)))]
 
       ;; Turn completed → set idle
@@ -126,7 +123,7 @@
        (call-with-semaphore gui-state-lock
                             (lambda ()
                               (define old (unbox state-box))
-                              (set-box! state-box (hash-set old 'status 'idle))
+                              (set-box! state-box (gui-state-set-status old 'idle))
                               (notify!)))]
 
       ;; Tool call started → show in transcript
@@ -136,11 +133,8 @@
         gui-state-lock
         (lambda ()
           (define old (unbox state-box))
-          (define msgs (hash-ref old 'messages '()))
           (set-box! state-box
-                    (hash-set old
-                              'messages
-                              (append msgs (list (hash 'role "tool" 'text (format "[~a]" name))))))
+                    (gui-state-add-message old (make-gui-message "tool" (format "[~a]" name))))
           (notify!)))]
 
       ;; Error events
@@ -148,7 +142,7 @@
        (call-with-semaphore gui-state-lock
                             (lambda ()
                               (define old (unbox state-box))
-                              (set-box! state-box (hash-set old 'status 'error))
+                              (set-box! state-box (gui-state-set-status old 'error))
                               (notify!)))]
 
       [else (void)])))
@@ -168,10 +162,10 @@
                                   set-obs!
                                   queue-callback)
   (define (sync-observables! state)
-    (define msgs (hash-ref state 'messages '()))
+    (define msgs (map gui-message->hash (gui-state-messages state)))
     (unless (equal? msgs (peek-obs messages-obs))
       (set-obs! messages-obs msgs))
-    (define st (hash-ref state 'status 'idle))
+    (define st (gui-state-status state))
     (define status-str
       (cond
         [(eq? st 'processing) "Processing..."]
@@ -183,7 +177,7 @@
   (define previous-msgs-box (box '()))
 
   (define (update-text%-content! state)
-    (define new-msgs (hash-ref state 'messages '()))
+    (define new-msgs (map gui-message->hash (gui-state-messages state)))
     (define old-msgs (unbox previous-msgs-box))
     (when transcript-text
       (apply-diff-to-text! transcript-text old-msgs new-msgs theme)
@@ -192,7 +186,7 @@
   (define (notify-gui!)
     (queue-callback (lambda ()
                       (define state (unbox state-box))
-                      (when (hash? state)
+                      (when (gui-state? state)
                         (sync-observables! state)
                         (update-text%-content! state)))))
 
