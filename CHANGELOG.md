@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.69.2 — 2026-05-25
+
+### Abstraction Quality: Declarative Patterns
+
+Convert imperative cond chains to declarative match; replace apply+map with for/sum and filter+negate with filter-not.
+
+**Changes:**
+- **W0**: Convert cond dispatches to match in `gsd/command-handlers.rkt` (gsd-mode, set-gsd-mode!) and `tui/state-events.rkt` (handle-auto-retry-lifecycle).
+- **W1**: Convert `apply + map` to `for/sum` in `tui/vdom.rkt`. Convert `filter + (lambda (x) (not ...))` to `filter-not` in `selection.rkt`, `keymap.rkt`, `message-layout.rkt`.
+
 ## v0.69.1 — 2026-05-25
 
 ### Abstraction Quality: Missing Domain Functions
