@@ -12,13 +12,16 @@
                   goal-state-status
                   goal-state-turns-used
                   goal-state-last-evaluation
+                  goal-state-checks
                   make-goal-state
                   make-evaluation-result
                   evaluation-result?
                   evaluation-result-reason
                   evaluation-result-achieved?)
+         (except-in "../runtime/goal-state.rkt" NO-PROGRESS-THRESHOLD)
          "../runtime/goal-evaluator.rkt"
-         "../runtime/goal-runner.rkt")
+         "../runtime/goal-runner.rkt"
+         "../runtime/goal-evidence.rkt")
 
 ;; ============================================================
 ;; Mock evaluator provider — returns JSON evaluation responses
@@ -167,3 +170,47 @@
   (check-equal? (goal-state-status result-st) 'active "not achieved → active"))
 
 (displayln "All goal-runner tests passed.")
+
+;; ============================================================
+;; No-progress detection: 3 same-reason failures → failed
+;; ============================================================
+
+(let ()
+  (define eval-prov
+    (make-eval-provider (list (eval-failed-response "stuck")
+                              (eval-failed-response "stuck")
+                              (eval-failed-response "stuck"))))
+  (define turn-responses (list (hash 'messages '()) (hash 'messages '()) (hash 'messages '())))
+  (define result
+    (goal-run-simulated! "impossible goal" eval-prov "mock-eval" turn-responses #:max-turns 10))
+  (check-equal? (goal-state-status result) 'failed "no-progress → failed")
+  (check-true (<= (goal-state-turns-used result) 3) "stops by turn 3"))
+
+;; ============================================================
+;; No-progress NOT triggered: different reasons
+;; ============================================================
+
+(let ()
+  (define eval-prov
+    (make-eval-provider (list (eval-failed-response "first issue")
+                              (eval-failed-response "different issue")
+                              (eval-failed-response "another issue")
+                              (eval-achieved-response))))
+  (define turn-responses
+    (list (hash 'messages '()) (hash 'messages '()) (hash 'messages '()) (hash 'messages '())))
+  (define result (goal-run-simulated! "goal" eval-prov "mock-eval" turn-responses #:max-turns 6))
+  (check-equal? (goal-state-status result) 'achieved "different reasons → continues"))
+
+;; ============================================================
+;; collect-evaluations gathers from goal-state
+;; ============================================================
+
+(let ()
+  (define eval1 (make-evaluation-result #:achieved? #f #:reason "nope"))
+  (define eval2 (make-evaluation-result #:achieved? #f #:reason "still no"))
+  (define gs (make-goal-state #:goal-text "test" #:max-turns 5))
+  ;; No evaluations yet
+  (check-equal? (collect-evaluations gs) '())
+  ;; With last-evaluation
+  (define gs2 (struct-copy goal-state gs [last-evaluation eval1]))
+  (check-equal? (length (collect-evaluations gs2)) 1))
