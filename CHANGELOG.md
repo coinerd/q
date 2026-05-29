@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.71.1 — 2026-05-30
+
+### Transcript Evaluator + Core Loop
+
+Second milestone of the `/goal` feature — first working autonomous goal loop.
+
+- **goal-evaluator.rkt**: Transcript evaluation via cheap LLM. Sends goal + transcript, parses JSON response `{ok, reason}`. Graceful fallback for non-JSON responses.
+- **goal-runner.rkt**: Main goal loop orchestration. Bounded by `max-turns` (default 8). No-progress detection after 3 consecutive same-reason failures. Events emitted at each phase. `goal-run-simulated!` for testing with predefined responses.
+- **TUI /goal command**: Added `/goal` and `/g` to command table. Supports `/goal clear`, `/goal status`, `/goal "<description>"`.
+- **Tests**: 27 tests — evaluator parsing (5), mock provider evaluation (7), runner continuation (2), simulated runs (4), events (1), single step (2), command parsing (5).
+
 ## v0.71.0 — 2026-05-30
 
 ### Goal State & Event Foundation
