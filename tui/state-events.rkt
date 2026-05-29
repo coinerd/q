@@ -32,13 +32,16 @@
 
 ;; Event reducer registry — mutable hash for registration-time population
 ;; (Immutable box pattern causes stale bytecode issues with raco make)
+;; Thread-safe: registration guarded by semaphore.
 (define event-reducers (make-hash))
+(define event-reducers-lock (make-semaphore 1))
 
 (define (register-event-reducer! type-string handler)
-  (hash-set! event-reducers type-string handler))
+  (call-with-semaphore event-reducers-lock
+                       (lambda () (hash-set! event-reducers type-string handler))))
 
 (define (event-reducer-registered? type-string)
-  (hash-has-key? event-reducers type-string))
+  (call-with-semaphore event-reducers-lock (lambda () (hash-has-key? event-reducers type-string))))
 
 ;; Local helper (avoids circular dependency with state-ui)
 (define (ui-model-label state)
@@ -487,7 +490,8 @@
 
 (define (apply-event-to-state state evt)
   (define ev (event-ev evt))
-  (define handler (hash-ref event-reducers ev #f))
+  (define handler
+    (call-with-semaphore event-reducers-lock (lambda () (hash-ref event-reducers ev #f))))
   (if handler
       (handler state evt)
       state))
