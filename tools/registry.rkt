@@ -12,7 +12,8 @@
                   tool-description
                   tool-schema
                   tool-prompt-snippet
-                  tool-prompt-guidelines))
+                  tool-prompt-guidelines
+                  tool-timeout-seconds))
 
 (provide (contract-out [make-tool-registry (-> tool-registry?)]
                        [tool-registry-tools (-> tool-registry? (listof tool?))]
@@ -89,7 +90,11 @@
     (if (tool-prompt-guidelines t)
         (hash-set fn-with-snippet 'promptGuidelines (tool-prompt-guidelines t))
         fn-with-snippet))
-  (hasheq 'type "function" 'function fn-with-guidelines))
+  (define fn-with-timeout
+    (if (tool-timeout-seconds t)
+        (hash-set fn-with-guidelines 'timeoutSeconds (tool-timeout-seconds t))
+        fn-with-guidelines))
+  (hasheq 'type "function" 'function fn-with-timeout))
 
 ;; ── Active tool management ──
 

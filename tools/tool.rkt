@@ -47,13 +47,15 @@
          tool-execute
          tool-render-call
          tool-render-result
+         tool-timeout-seconds
          (contract-out [make-tool
                         (->* (string? string? hash? procedure?)
                              (#:prompt-snippet (or/c string? #f)
                                                #:render-call (or/c procedure? #f)
                                                #:render-result (or/c procedure? #f)
                                                #:prompt-guidelines (or/c string? #f)
-                                               #:dangerous? boolean?)
+                                               #:dangerous? boolean?
+                                               #:timeout-seconds (or/c exact-nonnegative-integer? #f))
                              tool?)]
                        [validate-tool-args (-> tool? hash? boolean?)])
          merge-tool-lists
@@ -138,7 +140,8 @@
                    #:render-call [render-call #f]
                    #:render-result [render-result #f]
                    #:prompt-guidelines [prompt-guidelines #f]
-                   #:dangerous? [dangerous? #f])
+                   #:dangerous? [dangerous? #f]
+                   #:timeout-seconds [timeout-seconds #f])
   (unless (string? name)
     (raise-argument-error 'make-tool "string?" name))
   (unless (string? description)
@@ -160,7 +163,8 @@
         prompt-guidelines
         render-call
         render-result
-        dangerous?))
+        dangerous?
+        timeout-seconds))
 
 ;; ============================================================
 ;; Progress emission
