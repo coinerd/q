@@ -39,7 +39,18 @@ Identify 2–3 leaf modules with stable structs and low macro complexity for Typ
 - `util/event-payloads.rkt` — payload structs in typed/racket
 - `runtime/iteration/loop-state.rkt` — state struct in typed/racket
 
-## Next Steps
-1. Convert `util/event-access.rkt` to `#lang typed/racket`.
-2. Run `test-event-access.rkt` to verify boundary contracts still enforce.
-3. If green, decide W2 target or stop.
+## W1 Results
+
+- **Converted**: `util/event-access.rkt` → `#lang typed/racket`
+- **Compile**: ✅ `raco make` passes
+- **Tests**: ✅ `test-event-access.rkt` passes (6/6)
+- **Downstream consumers**: ✅ `agent/event-types.rkt` compiles; `tests/test-stream-error-wrapping.rkt` passes (16/16)
+- **Contract churn**: None — removed manual `contract-out`; TR boundary auto-generates contracts for untyped consumers.
+- **Compile-time impact**: Negligible.
+
+## W2 Decision: STOP
+
+Per the v0.70.9 plan risk decision, the second target (`util/event-types.rkt`) is a 13-line constants module with negligible typing value. The next viable candidate (`util/tool-types.rkt`) is re-exported by facade `util/protocol-types.rkt`, which violates the "no facade typing" rule.
+
+**Conclusion**: Pilot succeeded with one clean conversion. No blockers. Series stops here for v0.70.9 to maintain conservative risk posture. Future milestones may revisit additional leaf targets.
+
