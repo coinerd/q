@@ -8,6 +8,9 @@
 ;; safe-mode-aware block-destructive default.
 
 (require rackunit
+         (only-in "../runtime/settings.rkt"
+                  make-minimal-settings
+                  shell-risk-classifier)
          (only-in "../tools/builtins/bash.rkt"
                   tool-bash
                   destructive-command?
@@ -254,3 +257,17 @@
   (define diag (shell-risk-classifier-diagnostic "git push origin main --force"))
   ;; Either #f (agree) or a string (disagree) is acceptable
   (check-true (or (boolean? diag) (string? diag))))
+
+;; ── v0.70.3: Shell risk classifier setting ────────────────────────
+
+(test-case "shell-risk-classifier: defaults to 'regex"
+  (define settings (make-minimal-settings))
+  (check-equal? (shell-risk-classifier settings) 'regex))
+
+(test-case "shell-risk-classifier: reads from overrides"
+  (define settings (make-minimal-settings #:overrides (hash 'security (hash 'shell-risk-classifier 'both))))
+  (check-equal? (shell-risk-classifier settings) 'both))
+
+(test-case "shell-risk-classifier: structured mode"
+  (define settings (make-minimal-settings #:overrides (hash 'security (hash 'shell-risk-classifier 'structured))))
+  (check-equal? (shell-risk-classifier settings) 'structured))
