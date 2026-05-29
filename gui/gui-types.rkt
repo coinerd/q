@@ -1,0 +1,76 @@
+#lang racket/base
+
+;; gui/gui-types.rkt — Struct types for GUI state
+;;
+;; Replaces raw hash constructions in gui/state-sync.rkt with
+;; typed structs to prevent key-typo bugs (§8, §12).
+
+(require racket/contract
+         racket/list)
+
+(provide (struct-out gui-message)
+         (struct-out gui-state)
+         (contract-out
+          [make-gui-message (->* (string? string?) () gui-message?)]
+          [make-gui-state (->* () () #:rest list? gui-state?)]
+          [gui-state-add-message (-> gui-state? gui-message? gui-state?)]
+          [gui-state-update-last-message (-> gui-state? (-> gui-message? gui-message?) gui-state?)]
+          [gui-state-set-status (-> gui-state? symbol? gui-state?)]
+          [gui-state->hash (-> gui-state? hash?)]
+          [hash->gui-state (-> hash? gui-state?)]
+          [gui-message->hash (-> gui-message? hash?)]
+          [hash->gui-message (-> hash? gui-message?)]))
+
+;; A single chat message in the GUI transcript.
+(struct gui-message (role text) #:transparent)
+
+;; The full GUI state: messages, status, model name.
+(struct gui-state (messages status model) #:transparent)
+
+;; --- Constructors with defaults ---
+
+(define (make-gui-message role text)
+  (gui-message role text))
+
+(define (make-gui-state . args)
+  (gui-state '() 'idle #f))
+
+;; --- Immutable update helpers ---
+
+(define (gui-state-add-message gs msg)
+  (struct-copy gui-state gs
+               [messages (append (gui-state-messages gs) (list msg))]))
+
+(define (gui-state-update-last-message gs updater)
+  (define msgs (gui-state-messages gs))
+  (if (null? msgs)
+      gs
+      (let* ([all-but-last (drop-right msgs 1)]
+             [last-msg (last msgs)]
+             [updated (updater last-msg)])
+        (struct-copy gui-state gs
+                     [messages (append all-but-last (list updated))]))))
+
+(define (gui-state-set-status gs status)
+  (struct-copy gui-state gs [status status]))
+
+;; --- Hash conversion (backward compatibility) ---
+
+(define (gui-message->hash msg)
+  (hash 'role (gui-message-role msg)
+        'text (gui-message-text msg)))
+
+(define (hash->gui-message h)
+  (gui-message (hash-ref h 'role "")
+               (hash-ref h 'text "")))
+
+(define (gui-state->hash gs)
+  (hash 'messages (map gui-message->hash (gui-state-messages gs))
+        'status (gui-state-status gs)
+        'model (gui-state-model gs)))
+
+(define (hash->gui-state h)
+  (gui-state (map hash->gui-message (hash-ref h 'messages '()))
+             (hash-ref h 'status 'idle)
+             (hash-ref h 'model #f)))
+
