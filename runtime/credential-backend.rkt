@@ -11,6 +11,7 @@
 
 (require "../util/json-helpers.rkt"
          "../util/error-helpers.rkt"
+         racket/string
          racket/function)
 (require "../util/errors.rkt")
 (require racket/contract
@@ -37,6 +38,7 @@
          ;; Credential policy (v0.70.1)
          credential-policy?
          valid-credential-policies
+         credential-backend-capabilities
          (contract-out
           [make-file-credential-backend (->* () ((or/c path-string? #f)) credential-backend?)]
           [make-env-credential-backend (-> credential-backend?)]
@@ -54,7 +56,8 @@
            (->* (credential-backend?)
                 (#:policy (or/c 'auto 'keychain-preferred 'keychain-required 'env-only)
                           #:warn-port (or/c output-port? #f))
-                credential-backend?)]))
+                credential-backend?)]
+          [make-macos-keychain-credential-backend (-> credential-backend?)]))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Backend struct
@@ -457,3 +460,78 @@
       (λ (be) (backend-list-providers inner))
       ;; available?
       (λ (be) (backend-available? inner)))]))
+
+;; ═══════════════════════════════════════════════════════════════════
+;; Platform capability matrix (v0.70.2)
+;; ═══════════════════════════════════════════════════════════════════
+
+;; Returns a hash describing which backends are available on the
+;; current platform, based on actual command availability checks.
+(define (credential-backend-capabilities)
+  (define runner (current-external-command-runner))
+  (define (cmd-available? cmd)
+    (with-handlers ([exn:fail? (λ (_) #f)])
+      (define out (open-output-string))
+      (runner (format "which ~a 2>/dev/null" cmd) out)
+      (positive? (string-length (get-output-string out)))))
+  (hash 'env (backend-available? (make-env-credential-backend))
+        'file #t
+        'memory #t
+        'keychain-linux (cmd-available? "secret-tool")
+        'keychain-macos (cmd-available? "security")
+        'keychain-windows (cmd-available? "cmdkey")
+        'platform (symbol->string (system-type 'os))))
+
+;; ═══════════════════════════════════════════════════════════════════
+;; macOS security backend (v0.70.2)
+;; ═══════════════════════════════════════════════════════════════════
+
+;; Uses the macOS `security` command-line tool to store/load/delete
+;; credentials in the macOS Keychain. Fully mockable via
+;; current-external-command-runner.
+
+(define (run-security-command args)
+  (define runner (current-external-command-runner))
+  (define out (open-output-string))
+  (define err (open-output-string))
+  (define cmd (format "security ~a 2>&1" args))
+  (define result (runner cmd out))
+  (values (get-output-string out) result))
+
+(define (make-macos-keychain-credential-backend)
+  (credential-backend
+   "macos-keychain"
+   ;; store!
+   (λ (be provider-name api-key)
+     (define-values (out ok?) (run-security-command
+                               (format "add-generic-password -a '~a' -s 'q-credential-~a' -w '~a' -U"
+                                       (getenv "USER") provider-name api-key)))
+     (unless ok?
+       (raise-credential-error
+        (format "macOS keychain store failed for '~a'" provider-name)
+        "macos-keychain" provider-name)))
+   ;; load
+   (λ (be provider-name env-var)
+     (define-values (out ok?) (run-security-command
+                               (format "find-generic-password -a '~a' -s 'q-credential-~a' -w"
+                                       (getenv "USER") provider-name)))
+     (if ok?
+         (hash 'api-key (string-trim out) 'provider provider-name 'source "macos-keychain")
+         #f))
+   ;; delete!
+   (λ (be provider-name)
+     (define-values (out ok?) (run-security-command
+                               (format "delete-generic-password -a '~a' -s 'q-credential-~a'"
+                                       (getenv "USER") provider-name)))
+     (void))
+   ;; list
+   (λ (be)
+     ;; Keychain doesn't support enumeration easily; return empty
+     '())
+   ;; available?
+   (λ (be)
+     (with-handlers ([exn:fail? (λ (_) #f)])
+       (define runner (current-external-command-runner))
+       (define out (open-output-string))
+       (runner "which security 2>/dev/null" out)
+       (positive? (string-length (get-output-string out)))))))
