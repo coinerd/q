@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.71.4 — 2026-05-30
+
+### TUI Integration & Status Display
+
+Fifth milestone of the `/goal` feature — visibility in the TUI.
+
+- **ui-state extension**: New `active-goal` field with `goal-display-info` struct (goal-text, turns-used, max-turns, status).
+- **Event reducers**: 6 goal event reducers registered in `state-events.rkt` — `goal.started`, `goal.turn.started`, `goal.evaluated`, `goal.check.completed`, `goal.achieved`, `goal.failed`.
+- **Status bar badge**: Goal progress shown in status bar when active: `◎ goal 3/8 · active`. Terminal states: `✓ achieved`, `✗ failed`.
+- **Command handler**: `/goal status` shows active goal info. `/goal clear` clears `active-goal` from ui-state.
+- **Tests**: 11 TUI tests covering event reducers, display info, badge rendering.
+
 ## v0.71.3 — 2026-05-30
 
 ### Deterministic Checks
