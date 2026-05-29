@@ -7,10 +7,12 @@
 ;; Allows swapping file/port/null sinks without changing trace-logger.
 
 (require racket/class
-         racket/contract)
+         racket/contract
+         json)
 
 (provide (contract-out [trace-sink<%> any/c]
                        [file-trace-sink% any/c]
+                       [json-file-trace-sink% any/c]
                        [port-trace-sink% any/c]
                        [null-trace-sink% any/c]
                        [async-trace-sink% any/c]))
@@ -33,6 +35,28 @@
       (unless out
         (set! out (open-output-file path #:exists exists-mode)))
       (write entry out)
+      (newline out))
+
+    (define/public (trace-flush!)
+      (when out
+        (flush-output out)))
+
+    (define/public (trace-close!)
+      (when out
+        (close-output-port out)
+        (set! out #f)))))
+
+;; JSON file trace sink (v0.70.4) — writes jsexpr via write-json
+(define json-file-trace-sink%
+  (class* object% (trace-sink<%>)
+    (init-field path [exists-mode 'append])
+    (super-new)
+    (define out #f)
+
+    (define/public (trace-write! entry)
+      (unless out
+        (set! out (open-output-file path #:exists exists-mode)))
+      (write-json entry out)
       (newline out))
 
     (define/public (trace-flush!)

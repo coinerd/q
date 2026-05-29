@@ -210,3 +210,35 @@
   (define output (get-output-string out))
   (check-true (string-contains? output "test.port") "trace event should appear in string port output")
   (delete-directory/files dir))
+
+;; ============================================================
+;; v0.70.4: Async trace logger integration
+;; ============================================================
+
+(test-case "async trace logger writes events via async sink"
+  (define dir (make-temp-dir))
+  (define bus (make-event-bus))
+  (define logger (make-trace-logger bus dir #:enabled? #t #:async? #t))
+  (start-trace-logger! logger)
+  (publish! bus (make-event "async.evt" (current-seconds) "s1" #f (hasheq 'key "async-val")))
+  (flush-trace-logger! logger)
+  (stop-trace-logger! logger)
+  (define entries (read-trace-jsonl dir))
+  (check >= (length entries) 1)
+  (check-equal? (hash-ref (car entries) 'phase #f) "async.evt")
+  (delete-directory/files dir))
+
+(test-case "async trace logger preserves sequence order"
+  (define dir (make-temp-dir))
+  (define bus (make-event-bus))
+  (define logger (make-trace-logger bus dir #:enabled? #t #:async? #t))
+  (start-trace-logger! logger)
+  (for ([i (in-range 10)])
+    (publish! bus (make-event (format "seq.~a" i) (current-seconds) "s1" #f (hasheq 'n i))))
+  (flush-trace-logger! logger)
+  (stop-trace-logger! logger)
+  (define entries (read-trace-jsonl dir))
+  (check-equal? (length entries) 10)
+  (define seqs (map (lambda (e) (hash-ref e 'seq #f)) entries))
+  (check-equal? seqs '(1 2 3 4 5 6 7 8 9 10))
+  (delete-directory/files dir))
