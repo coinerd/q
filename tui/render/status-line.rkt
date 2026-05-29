@@ -78,9 +78,27 @@
           (format " [~a]" joined))
         ""))
 
+  ;; Goal badge
+  (define goal-info (ui-state-active-goal state))
+  (define goal-badge
+    (if goal-info
+        (let* ([t (goal-display-info-turns-used goal-info)]
+               [m (goal-display-info-max-turns goal-info)]
+               [s (goal-display-info-status goal-info)]
+               [status-text (case s
+                              [(active) "active"]
+                              [(achieved) "\u2713"]
+                              [(failed) "\u2717"]
+                              [(cancelled) "\u2717"]
+                              [else "?"])]
+               [text (format "\u25ce goal ~a/~a \u00b7 ~a" t m status-text)])
+          (format " ~a" text))
+        ""))
+
   ;; Inverse segment (prefix + session + model + state)
   (define busy-marker (if busy " *" "  "))
-  (define inv-text (string-append " q" busy-marker " " session-label state-indicator queue-text))
+  (define inv-text
+    (string-append " q" busy-marker " " session-label state-indicator queue-text goal-badge))
 
   ;; Normal-style segments (context + cost + scroll)
   ;; Show context pressure percentage when available, else token count
