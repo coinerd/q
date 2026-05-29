@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.70.8 -- 2026-05-29
+
+### Large Test File Decomposition
+
+- **W0**: Decomposed `test-cli.rkt` (1202 → 464 lines, 61% reduction)
+  - Extracted `test-cli-format.rkt` — format-event-for-terminal (22 tests)
+  - Extracted `test-cli-interactive.rkt` — run-cli-interactive prompts, slash commands, error handling (32 tests)
+  - Extracted `test-cli-markdown.rkt` — markdown rendering + stream writer (15 tests)
+- **W1**: Decomposed `test-gemini.rkt` (1148 → 632 lines, 45% reduction)
+  - Extracted `test-gemini-stream.rkt` — stream parsing, single-event parsing, tool-call indices
+  - Extracted `test-gemini-provider.rkt` — provider construction, HTTP status, API key validation, security
+- **W2**: Verified test runner auto-discovers new subdirectories; version bump
+
 ## v0.70.7 -- 2026-05-29
 
 ### Per-Tool Timeout Override
