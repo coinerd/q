@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.70.7 -- 2026-05-29
+
+### Per-Tool Timeout Override
+
+- **W0**: `timeout-seconds` field added to `tool` struct (10th positional field)
+- **W0**: `make-tool` accepts `#:timeout-seconds` keyword; `tool-timeout-seconds` accessor
+- **W0**: `tool->jsexpr` serializes `timeoutSeconds` when set
+- **W1**: Scheduler `execute-single` injects per-tool timeout into args as `'timeout`
+- **W1**: Bash tool respects injected timeout via existing `resolve-exec-limits`
+- **W1**: User-provided timeout is not overwritten by tool default
+
 ## v0.70.6 -- 2026-05-29
 
 ### Token Estimation Memoization
