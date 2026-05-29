@@ -10,7 +10,8 @@
          "../llm/model.rkt"
          "../llm/provider.rkt"
          "../runtime/goal-evaluator.rkt"
-         "../runtime/goal-state.rkt")
+         "../runtime/goal-state.rkt"
+         (only-in "../runtime/goal-state.rkt" check-result))
 
 ;; ============================================================
 ;; Helper: create mock provider that returns predefined responses
@@ -130,3 +131,49 @@
   (check-true (evaluation-result-achieved? er2) "Second evaluation succeeds"))
 
 (displayln "All goal-evaluator tests passed.")
+
+;; ============================================================
+;; evaluate-transcript with check-results
+;; ============================================================
+
+;; ============================================================
+;; evaluate-transcript with check-results
+;; ============================================================
+
+(let ()
+  (define (text-response text)
+    (make-model-response (list (hasheq 'type "text" 'text text))
+                         (hasheq 'total_tokens 20)
+                         "mock"
+                         'stop))
+  (define (make-check-mock responses)
+    (define idx (box 0))
+    (make-provider (lambda () "test-eval")
+                   (lambda () (hash 'streaming #f 'token-counting #t))
+                   (lambda (req)
+                     (define resp
+                       (if (< (unbox idx) (length responses))
+                           (list-ref responses (unbox idx))
+                           (last responses)))
+                     (set-box! idx (add1 (unbox idx)))
+                     resp)
+                   (lambda (req)
+                     (define resp
+                       (if (< (unbox idx) (length responses))
+                           (list-ref responses (unbox idx))
+                           (last responses)))
+                     (set-box! idx (add1 (unbox idx)))
+                     resp)))
+  (define cr-pass (check-result "test-1" 0 "all good" "" #f 10))
+  (define cr-fail (check-result "test-2" 1 "" "error" #f 5))
+  ;; Provider returns "achieved"
+  (define mock-ok
+    (make-check-mock (list (text-response "{\"ok\": true, \"reason\": \"checks pass\"}"))))
+  (define er-pass (evaluate-transcript "goal" '() mock-ok "mock-eval" #:check-results (list cr-pass)))
+  (check-true (evaluation-result-achieved? er-pass) "achieved with passing check")
+  ;; Provider returns "not yet" for failed check context
+  (define mock-fail
+    (make-check-mock (list (text-response "{\"ok\": false, \"reason\": \"check failed\"}"))))
+  (define er-fail
+    (evaluate-transcript "goal" '() mock-fail "mock-eval" #:check-results (list cr-fail)))
+  (check-false (evaluation-result-achieved? er-fail) "failed check → not achieved"))

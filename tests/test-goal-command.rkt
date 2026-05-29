@@ -44,3 +44,5 @@
   (check-equal? (parsed-command-canonical-name result) 'goal))
 
 (displayln "All goal-command tests passed.")
+
+(displayln "All goal-command tests passed.")

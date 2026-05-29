@@ -13,7 +13,8 @@
          json
          "../llm/model.rkt"
          "../llm/provider.rkt"
-         "goal-state.rkt")
+         "goal-state.rkt"
+         "goal-checks.rkt")
 
 ;; ============================================================
 ;; Provides
@@ -41,9 +42,12 @@ Do NOT include any text outside the JSON object.")
                                       transcript
                                       provider
                                       evaluator-model
-                                      #:max-tokens [max-tokens 256])
-  (->* (string? list? provider? string?) (#:max-tokens exact-nonnegative-integer?) evaluation-result?)
-  (define messages (build-evaluator-messages goal-text transcript))
+                                      #:max-tokens [max-tokens 256]
+                                      #:check-results [check-results '()])
+  (->* (string? list? provider? string?)
+       (#:max-tokens exact-nonnegative-integer? #:check-results (listof check-result?))
+       evaluation-result?)
+  (define messages (build-evaluator-messages goal-text transcript check-results))
   (define req (make-model-request messages #f (hasheq 'model evaluator-model 'max_tokens max-tokens)))
   (with-handlers ([exn:fail? (lambda (e)
                                (make-evaluation-result #:achieved? #f
@@ -58,10 +62,24 @@ Do NOT include any text outside the JSON object.")
     (parse-evaluator-response text-content evaluator-model token-cost)))
 
 ;; Build the message list for the evaluator LLM call
-(define (build-evaluator-messages goal-text transcript)
+(define (build-evaluator-messages goal-text transcript [check-results '()])
   (define sys-msg (hasheq 'role "system" 'content EVALUATOR-SYSTEM-PROMPT))
+  (define check-text
+    (if (null? check-results)
+        ""
+        (format "\n\nDeterministic check results:\n~a"
+                (string-join (for/list ([cr (in-list check-results)])
+                               (format "- ~a: ~a (exit ~a)~a"
+                                       (check-result-label cr)
+                                       (if (= (check-result-exit-code cr) 0) "PASS" "FAIL")
+                                       (check-result-exit-code cr)
+                                       (if (check-result-timed-out? cr) " [TIMED OUT]" "")))
+                             "\n"))))
   (define goal-msg
-    (hasheq 'role "user" 'content (~a "Goal: " goal-text "\n\nEvaluate the transcript below:")))
+    (hasheq 'role
+            "user"
+            'content
+            (~a "Goal: " goal-text check-text "\n\nEvaluate the transcript below:")))
   (define transcript-text (format-transcript transcript))
   (define transcript-msg (hasheq 'role "assistant" 'content transcript-text))
   (list sys-msg goal-msg transcript-msg))
