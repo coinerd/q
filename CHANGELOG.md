@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.70.6 -- 2026-05-29
+
+### Token Estimation Memoization
+
+- **W0**: `util/token-estimate-cache.rkt` — content-addressed memoization for text token estimation
+- **W0**: `cached-estimate-text-tokens` with hit/miss stats and `clear-token-estimate-cache!`
+- **W0**: `make-token-estimate-cache` for isolated per-session caches
+- **W1**: Replaced ad-hoc cache in `runtime/context-policy.rkt` with `token-estimate-cache.rkt`
+- **W1**: Added `token-estimate-cache-hit-stats` for observability
+- **W2**: Benchmark shows ~43% speedup for repeated token estimation (100 texts, 10 runs)
+
 ## v0.70.5 -- 2026-05-29
 
 ### Opt-In Async Session/Event Sink Pilot
