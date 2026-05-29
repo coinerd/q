@@ -23,14 +23,19 @@
 
 (define-typed-event agent-start-event "agent.started" (model) #:schema-version 1)
 
-(define-typed-event agent-end-event "agent.completed" (reason duration-ms) #:defaults (duration-ms 0) #:schema-version 1)
+(define-typed-event agent-end-event
+                    "agent.completed"
+                    (reason duration-ms)
+                    #:defaults (duration-ms 0)
+                    #:schema-version 1)
 
 ;; Context events
 
 (define-typed-event context-event
                     "context.built"
                     (token-count window-size)
-                    #:defaults (token-count 0 window-size 0) #:schema-version 1)
+                    #:defaults (token-count 0 window-size 0)
+                    #:schema-version 1)
 
 ;; v0.44.3 (R2): Context assembly lifecycle events — replaces raw hasheq payloads
 (define-typed-event
@@ -42,7 +47,10 @@
 
 (define-typed-event context-blocked-event "context.assembly.blocked" (reason) #:schema-version 1)
 
-(define-typed-event working-set-injected-event "working-set.injected" (entries tokens) #:schema-version 1)
+(define-typed-event working-set-injected-event
+                    "working-set.injected"
+                    (entries tokens)
+                    #:schema-version 1)
 
 ;; v0.45.5 (OBS-01/02/03): Detailed assembly metrics for observability
 (define-typed-event context-assembly-detail-event
@@ -75,5 +83,35 @@
                                              ws-tokens
                                              0
                                              cache-hit-p
-                                             #f) #:schema-version 1)
+                                             #f)
+                    #:schema-version 1)
 
+;; v0.71.0: Goal autonomous loop events
+;; Emitted by goal-runner.rkt during /goal execution
+
+(define-typed-event goal-start-event "goal.started" (goal-text max-turns checks) #:schema-version 1)
+
+(define-typed-event goal-turn-start-event
+                    "goal.turn.started"
+                    (turn-number goal-text)
+                    #:schema-version 1)
+
+(define-typed-event goal-evaluated-event
+                    "goal.evaluated"
+                    (achieved? reason turn-number token-cost)
+                    #:defaults (token-cost 0)
+                    #:schema-version 1)
+
+(define-typed-event goal-check-event
+                    "goal.check.completed"
+                    (label exit-code timed-out? stdout stderr)
+                    #:defaults (timed-out? #f stdout "" stderr "")
+                    #:schema-version 1)
+
+(define-typed-event goal-achieved-event
+                    "goal.achieved"
+                    (goal-text turns-used total-token-cost)
+                    #:defaults (total-token-cost 0)
+                    #:schema-version 1)
+
+(define-typed-event goal-failed-event "goal.failed" (goal-text reason turns-used) #:schema-version 1)

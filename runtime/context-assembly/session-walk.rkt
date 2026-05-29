@@ -107,4 +107,5 @@
     [(or 'tool-result 'bash-execution) (summarize-tool-result entry)]
     ['system-instruction entry]
     ['custom-message entry]
+    [(or 'goal-state) #f]
     [_ entry]))
