@@ -111,7 +111,7 @@
   (set-box! notify-callback-box notify-gui!)
 
   ;; Slash command handler (extracted to slash-commands.rkt)
-  (define handle-slash-command (make-slash-command-handler sess state-box gui-state-lock))
+  (define handle-slash-command (make-slash-command-handler sess state-box gui-state-lock notify-gui!))
 
   ;; Input callback: submit on Enter (single-line mode fires 'return on Enter)
   (define (on-input action val)

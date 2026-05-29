@@ -22,12 +22,12 @@
 ;; --------------------------------------------------
 ;; Helper: add a system message to the transcript
 ;; --------------------------------------------------
-(define (add-system-msg! text state-box gui-state-lock)
-  (call-with-semaphore gui-state-lock
-                       (lambda ()
-                         (set-box! state-box
-                                   (gui-state-add-message (unbox state-box)
-                                                          (make-gui-message "system" text))))))
+(define (add-system-msg! text state-box gui-state-lock [notify! void])
+  (call-with-semaphore
+   gui-state-lock
+   (lambda ()
+     (set-box! state-box (gui-state-add-message (unbox state-box) (make-gui-message "system" text)))
+     (notify!))))
 
 ;; --------------------------------------------------
 ;; Extension dispatch
@@ -78,7 +78,7 @@
 ;;
 ;; Returns (-> string? boolean?) — #t if handled, #f otherwise
 ;; --------------------------------------------------
-(define (make-slash-command-handler sess state-box gui-state-lock)
+(define (make-slash-command-handler sess state-box gui-state-lock [notify! void])
   (lambda (input-text)
     (define parsed (parse-command-name input-text))
     (cond
@@ -89,7 +89,8 @@
              (add-system-msg! (format "Unknown command: ~a. Type /help for available commands."
                                       input-text)
                               state-box
-                              gui-state-lock)
+                              gui-state-lock
+                              notify!)
              #t))]
       [else
        (define cmd
@@ -105,9 +106,11 @@
           (close-session! sess)
           (exit 0)]
          [(clear)
-          (call-with-semaphore
-           gui-state-lock
-           (lambda () (set-box! state-box (struct-copy gui-state (unbox state-box) [messages '()]))))
+          (call-with-semaphore gui-state-lock
+                               (lambda ()
+                                 (set-box! state-box
+                                           (struct-copy gui-state (unbox state-box) [messages '()]))
+                                 (notify!)))
           #t]
          [(help)
           (add-system-msg! (string-append "Available commands:\n"
@@ -121,7 +124,8 @@
                                           "  /go              GSD execute command\n"
                                           "  /activate, /a    Activate extensions\n")
                            state-box
-                           gui-state-lock)
+                           gui-state-lock
+                           notify!)
           #t]
          [(status)
           (add-system-msg! (format "Session: ~a\nModel: ~a\nStatus: ~a\nMessages: ~a"
@@ -130,7 +134,8 @@
                                    (if (session-active? sess) "active" "closed")
                                    (length (gui-state-messages (unbox state-box))))
                            state-box
-                           gui-state-lock)
+                           gui-state-lock
+                           notify!)
           #t]
          [(model)
           (add-system-msg! (if (null? args)
@@ -138,15 +143,20 @@
                                (format "Model switching not yet supported in GUI. Current: ~a"
                                        (agent-session-model-name sess)))
                            state-box
-                           gui-state-lock)
+                           gui-state-lock
+                           notify!)
           #t]
          [(compact)
           (add-system-msg! "Context compaction triggered (runs on next turn)."
                            state-box
-                           gui-state-lock)
+                           gui-state-lock
+                           notify!)
           #t]
          [(interrupt)
-          (add-system-msg! "Interrupt not yet supported in GUI mode." state-box gui-state-lock)
+          (add-system-msg! "Interrupt not yet supported in GUI mode."
+                           state-box
+                           gui-state-lock
+                           notify!)
           #t]
          [else
           (or (try-extension-dispatch sess state-box gui-state-lock input-text)
@@ -154,5 +164,6 @@
                 (add-system-msg! (format "Unknown command: ~a. Type /help for available commands."
                                          input-text)
                                  state-box
-                                 gui-state-lock)
+                                 gui-state-lock
+                                 notify!)
                 #t))])])))
