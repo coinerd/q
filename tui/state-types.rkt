@@ -149,7 +149,14 @@
           [truncate-string (-> string? exact-nonnegative-integer? string?)]
           [extract-arg-summary (-> (or/c string? hash?) string?)])
          ui-state-context-pressure-level
-         ui-state-context-pressure-percent)
+         ui-state-context-pressure-percent
+         ui-state-active-goal
+         goal-display-info
+         goal-display-info?
+         goal-display-info-goal-text
+         goal-display-info-turns-used
+         goal-display-info-max-turns
+         goal-display-info-status)
 
 ;; Forward declarations for types referenced in contracts but defined elsewhere
 ;; (These are provided by other modules and re-exported through state.rkt)
@@ -234,7 +241,17 @@
          context-tokens ; (or/c #f integer?) — estimated token count from context events (v0.19.12 W1)
          cost-tracker
          context-pressure-level
-         context-pressure-percent) ; (or/c #f cost-tracker?) — mutable cost accumulator (G8.4)
+         context-pressure-percent ; (or/c #f cost-tracker?) — mutable cost accumulator (G8.4)
+         ;; --- Goal group ---
+         active-goal) ; (or/c goal-display-info? #f) — active autonomous goal display info
+  #:transparent)
+
+;; Goal display info for TUI status bar
+(struct goal-display-info
+        (goal-text ; string (truncated to 40 chars)
+         turns-used ; exact-nonnegative-integer?
+         max-turns ; exact-nonnegative-integer?
+         status) ; symbol: 'active 'achieved 'failed 'cancelled
   #:transparent)
 
 ;; Overlay state for modal/popup UI elements (command palette, etc.)
@@ -367,6 +384,7 @@
             #f ; editor-component
             #f ; context-tokens
             (make-cost-tracker)
+            #f
             #f
             #f))
 
