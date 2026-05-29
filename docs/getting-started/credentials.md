@@ -1,3 +1,4 @@
+<!-- verified-against: 0.70.0 -->
 # Credential Management
 
 This document describes how q manages API keys and provider credentials,
@@ -165,6 +166,48 @@ Options: `"keychain"`, `"file"`, `"env"`, `"auto"` (default — chained).
     }
   }
 }
+```
+
+## Credential Policy (v0.70.1)
+
+q supports credential policies that control fallback behavior when the
+preferred backend (keychain) is unavailable:
+
+| Policy | File store | File load | Keychain store | Keychain load |
+|--------|-----------|-----------|----------------|---------------|
+|  (default) | Allowed | Allowed | Allowed | Allowed |
+|  | Allowed + warning | Allowed + warning | Allowed | Allowed |
+|  | **Blocked** | Allowed | Allowed | Allowed |
+|  | **Blocked** | **Blocked** | **Blocked** | **Blocked** |
+
+Configure in :
+
+```json
+{
+  "credentials": {
+    "policy": "keychain-preferred"
+  }
+}
+```
+
+The  policy is fully backward-compatible — no warnings, no enforcement.
+
+The  policy is recommended for most users: it warns when
+credentials fall back to plaintext file storage but still allows it.
+
+The  policy is for security-sensitive environments where
+plaintext credential storage is not acceptable.
+
+The  policy is for CI/CD and containerized environments where
+credentials must come from environment variables only.
+
+### Programmatic Usage
+
+```racket
+(define inner (make-chained-credential-backend (list keychain file)))
+(define backend (make-policy-aware-backend inner #:policy 'keychain-preferred))
+(backend-store! backend "openai" "sk-...")
+;; If keychain unavailable: WARNING to stderr, then stores to file
 ```
 
 ## CLI Commands
