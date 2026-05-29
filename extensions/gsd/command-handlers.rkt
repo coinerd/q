@@ -95,6 +95,15 @@
     [(eq? v 'executing) (gsm-transition-to! 'executing)]
     [else (gsm-transition! v)]))
 
+;; Helper: emit a mode-changed event with standard boilerplate
+(define (emit-mode-change! mode #:reason [reason #f] #:error [err #f])
+  (events:ctx-emit-gsd-event!
+   (current-gsd-ctx)
+   'gsd.mode.changed
+   (if reason
+       (make-gsd-mode-changed-event #:session-id "" #:turn-id 0 #:mode mode #:reason reason #:error (or err ""))
+       (make-gsd-mode-changed-event #:session-id "" #:turn-id 0 #:mode mode))))
+
 ;; R6: Iterate gsd-command-specs for registration (single source of truth)
 (define (register-gsd-commands ctx)
   (for ([spec (in-list gsd-command-specs)])
@@ -144,10 +153,7 @@
     [(status) (handle-gsd-status)]
     [(replan)
      (define cmd-result (cmd-replan))
-     (events:ctx-emit-gsd-event!
-      (current-gsd-ctx)
-      'gsd.mode.changed
-      (make-gsd-mode-changed-event #:session-id "" #:turn-id 0 #:mode 'exploring))
+     (emit-mode-change! 'exploring)
      (hook-amend (hasheq 'text (or (gsd-command-result-message cmd-result) "")))]
     [(skip)
      (define args-text (gsd-cmd-skip-skip-arg parsed))
@@ -162,10 +168,7 @@
      (hook-amend (hasheq 'text (or (gsd-command-result-message skip-result) "")))]
     [(reset)
      (define cmd-result (cmd-reset))
-     (events:ctx-emit-gsd-event!
-      (current-gsd-ctx)
-      'gsd.mode.changed
-      (make-gsd-mode-changed-event #:session-id "" #:turn-id 0 #:mode 'idle))
+     (emit-mode-change! 'idle)
      (hook-amend (hasheq 'text (or (gsd-command-result-message cmd-result) "")))]
     [(wave-done)
      (define wd-args (gsd-cmd-wave-done-wave-arg parsed))
@@ -265,10 +268,7 @@
      "go"
      (lambda ()
        (set-gsd-mode! 'executing)
-       (events:ctx-emit-gsd-event!
-        (current-gsd-ctx)
-        'gsd.mode.changed
-        (make-gsd-mode-changed-event #:session-id "" #:turn-id 0 #:mode 'executing))
+       (emit-mode-change! 'executing)
        (set-edit-limit! 1200)
        (define wis
          (for/list ([w (gsd-plan-waves plan)])
@@ -280,13 +280,7 @@
        (gsm-set-wave-executor! exec)
        (list exec wis))
      (lambda (e snap)
-       (events:ctx-emit-gsd-event! (current-gsd-ctx)
-                                   'gsd.mode.changed
-                                   (make-gsd-mode-changed-event #:session-id ""
-                                                                #:turn-id 0
-                                                                #:mode (gsm-current)
-                                                                #:reason "transaction-rollback"
-                                                                #:error (exn-message e))))))
+       (emit-mode-change! (gsm-current) #:reason "transaction-rollback" #:error (exn-message e)))))
   (cond
     [(gsd-failed? result) (list 'error (gsd-command-result-message result))]
     [else
@@ -374,10 +368,7 @@
   (when saved-dir
     (set-pinned-dir! saved-dir))
   (set-gsd-mode! 'planning)
-  (events:ctx-emit-gsd-event!
-   (current-gsd-ctx)
-   'gsd.mode.changed
-   (make-gsd-mode-changed-event #:session-id "" #:turn-id 0 #:mode 'planning))
+  (emit-mode-change! 'planning)
   (set-edit-limit! 500)
   ;; Auto-create STATE.md if missing (#2164)
   (ensure-state-md! base-dir)
