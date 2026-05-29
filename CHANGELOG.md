@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.70.2 — 2026-05-29
+
+### Cross-Platform Credential Backends + Windows Install
+
+- **W0**: Platform capability matrix (`credential-backend-capabilities`)
+- **W0**: macOS `security` keychain backend with mock tests
+- **W1**: Windows Credential Manager backend via `cmdkey` with mock tests
+- **W2**: PowerShell install script (`scripts/install.ps1`)
+- **W2**: Updated compatibility matrix with credential backend platform support
+- **W2**: Updated install docs with Windows instructions and security notes
+
 ## v0.70.1 — 2026-05-29
 
 ### Credential Policy & Plaintext Fallback Warnings
