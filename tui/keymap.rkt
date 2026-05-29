@@ -12,6 +12,7 @@
          racket/file
          racket/match
          racket/function
+         racket/list
          json
          "../util/config-paths.rkt")
 
@@ -155,10 +156,10 @@
   ;; Remove existing binding for this key-spec
   (set-keymap-entries!
    km
-   (cons (cons ks action) (filter (lambda (e) (not (key-spec=? (car e) ks))) (keymap-entries km)))))
+   (cons (cons ks action) (filter-not (lambda (e) (key-spec=? (car e) ks)) (keymap-entries km)))))
 
 (define (keymap-remove! km ks)
-  (set-keymap-entries! km (filter (lambda (e) (not (key-spec=? (car e) ks))) (keymap-entries km))))
+  (set-keymap-entries! km (filter-not (lambda (e) (key-spec=? (car e) ks)) (keymap-entries km))))
 
 (define (keymap-lookup km ks)
   (define entry

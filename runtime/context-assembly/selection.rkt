@@ -59,7 +59,7 @@
     (for/hash ([m (in-list kept)])
       (values (message-id m) #t)))
   (define excluded
-    (filter (lambda (m) (not (hash-has-key? kept-ids (message-id m)))) removable))
+    (filter-not (lambda (m) (hash-has-key? kept-ids (message-id m))) removable))
   (values kept excluded))
 
 (define (make-context-assembly-call-options #:cache [cache #f]
