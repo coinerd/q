@@ -20,6 +20,7 @@
          "../util/markdown.rkt"
          "../util/error-classify.rkt"
          "../util/string-helpers.rkt"
+         (only-in "../util/tool-display.rkt" extract-arg-summary format-tool-call-display)
          (only-in "../util/content-helpers.rkt" tool-result-content->string)
          json
          racket/string
@@ -159,41 +160,13 @@
     [("assistant.message.completed") ""]
     [("tool.call.started")
      (define name (hash-ref payload 'name "?"))
-     (define args-raw (hash-ref payload 'arguments #f))
-     (define args
-       (cond
-         [(hash? args-raw) args-raw]
-         [(string? args-raw) (with-safe-fallback #f (string->jsexpr args-raw))]
-         [else #f]))
-     (define detail
-       (cond
-         [(and args (hash? args))
-          (define cmd
-            (or (hash-ref args 'command #f) (hash-ref args 'path #f) (hash-ref args 'pattern #f) #f))
-          (if cmd
-              (truncate-string (format "~a" cmd) 100)
-              #f)]
-         [else #f]))
+     (define detail (extract-arg-summary (hash-ref payload 'arguments #f)))
      (if detail
          (styled (format "[tool: ~a: ~a]" name detail) '(bold yellow))
          (styled (format "[tool: ~a]" name) '(bold yellow)))]
     [("tool.execution.started")
      (define name (hash-ref payload 'toolName "?"))
-     (define args-raw (hash-ref payload 'arguments #f))
-     (define args
-       (cond
-         [(hash? args-raw) args-raw]
-         [(string? args-raw) (with-safe-fallback #f (string->jsexpr args-raw))]
-         [else #f]))
-     (define detail
-       (cond
-         [(and args (hash? args))
-          (define cmd
-            (or (hash-ref args 'command #f) (hash-ref args 'path #f) (hash-ref args 'pattern #f) #f))
-          (if cmd
-              (truncate-string (format "~a" cmd) 100)
-              #f)]
-         [else #f]))
+     (define detail (extract-arg-summary (hash-ref payload 'arguments #f)))
      (if detail
          (styled (format "[tool: ~a: ~a]" name detail) '(bold yellow))
          (styled (format "[tool: ~a]" name) '(bold yellow)))]

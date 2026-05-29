@@ -53,6 +53,15 @@
                estimate-text-proc)
   #:transparent)
 
+;; Helper: partition messages into kept and excluded by ID
+(define (partition-kept-excluded kept removable)
+  (define kept-ids
+    (for/hash ([m (in-list kept)])
+      (values (message-id m) #t)))
+  (define excluded
+    (filter (lambda (m) (not (hash-has-key? kept-ids (message-id m)))) removable))
+  (values kept excluded))
+
 (define (make-context-assembly-call-options #:cache [cache #f]
                                             #:provider [provider #f]
                                             #:model-name [model-name #f]
@@ -124,12 +133,8 @@
       (values pinned removable)
       (let ()
         (define kept (fit-messages-with-importance-rescue removable remaining-budget estimate-fn))
-        (define kept-ids
-          (for/hash ([m (in-list kept)])
-            (values (message-id m) #t)))
-        (define excluded
-          (filter (lambda (m) (not (hash-has-key? kept-ids (message-id m)))) removable))
-        (values (append pinned kept) excluded))))
+        (define-values (kept-msgs excluded) (partition-kept-excluded kept removable))
+        (values (append pinned kept-msgs) excluded))))
 
 (define (build-assembled-context idx
                                  config
@@ -239,11 +244,8 @@
         (let ()
           (define kept
             (fit-messages-with-importance-rescue removable remaining-budget memoized-estimate))
-          (define kept-ids
-            (for/hash ([m (in-list kept)])
-              (values (message-id m) #t)))
-          (define exc (filter (lambda (m) (not (hash-has-key? kept-ids (message-id m)))) removable))
-          (values kept exc))))
+          (define-values (kept-msgs exc) (partition-kept-excluded kept removable))
+          (values kept-msgs exc))))
   (define recent-count (length recent))
   (define excluded-count (length excluded))
   (emit-trace 'phase3-fitted
