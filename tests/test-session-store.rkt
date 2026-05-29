@@ -734,5 +734,72 @@
   (check-exn exn:fail? (lambda () (import-session! source-path dir)))
   (delete-directory/files dir #:must-exist? #f))
 
+
+
+;; ============================================================
+;; v0.70.5 W0: Session sink ordering characterization tests
+;; ============================================================
+
+(test-case "file-session-sink: preserves append order"
+  (define dir (make-temp-dir))
+  (define path (session-path dir))
+  (define sink (new file-session-sink% [log-path path]))
+  (for ([i (in-range 5)])
+    (send sink sink-append! (make-test-message (format "id~a" i) (if (= i 0) #f (format "id~a" (- i 1))) 'user 'message)))
+  (define entries (send sink sink-load))
+  (check-equal? (length entries) 5)
+  (check-equal? (map message-id entries) '("id0" "id1" "id2" "id3" "id4"))
+  (delete-directory/files dir #:must-exist? #f))
+
+(test-case "file-session-sink: append-entries preserves order atomically"
+  (define dir (make-temp-dir))
+  (define path (session-path dir))
+  (define sink (new file-session-sink% [log-path path]))
+  (define msgs
+    (list (make-test-message "a" #f 'user 'message)
+          (make-test-message "b" "a" 'assistant 'message)
+          (make-test-message "c" "b" 'tool 'tool-result)))
+  (send sink sink-append-entries! msgs)
+  (define entries (send sink sink-load))
+  (check-equal? (map message-id entries) '("a" "b" "c"))
+  (delete-directory/files dir #:must-exist? #f))
+
+(test-case "file-session-sink: hash-chain links sequentially"
+  (define dir (make-temp-dir))
+  (define path (session-path dir))
+  (define sink (new file-session-sink% [log-path path]))
+  (send sink sink-append! (make-test-message "id1" #f 'user 'message))
+  (send sink sink-append! (make-test-message "id2" "id1" 'assistant 'message))
+  (define entries (send sink sink-load))
+  (check-equal? (length entries) 2)
+  (define h1 (hash-ref (message-meta (first entries)) 'hash #f))
+  (define h2 (hash-ref (message-meta (second entries)) 'hash #f))
+  (define prev2 (hash-ref (message-meta (second entries)) 'prev_hash #f))
+  ;; Second entry's prev_hash should equal first entry's hash
+  (check-equal? prev2 h1)
+  ;; Hashes should differ
+  (check-not-equal? h1 h2)
+  (delete-directory/files dir #:must-exist? #f))
+
+(test-case "file-session-sink: no pending marker after successful append"
+  (define dir (make-temp-dir))
+  (define path (session-path dir))
+  (define sink (new file-session-sink% [log-path path]))
+  (send sink sink-append! (make-test-message "id1" #f 'user 'message))
+  (check-false (has-pending-marker? path))
+  (send sink sink-append-entries!
+        (list (make-test-message "id2" "id1" 'assistant 'message)
+              (make-test-message "id3" "id2" 'tool 'tool-result)))
+  (check-false (has-pending-marker? path))
+  (delete-directory/files dir #:must-exist? #f))
+
+(test-case "in-memory-session-sink: preserves append order"
+  (define mgr (make-in-memory-session-manager))
+  (define sink (new in-memory-session-sink% [manager mgr] [session-id "test"]))
+  (send sink sink-append! (make-test-message "id1" #f 'user 'message))
+  (send sink sink-append! (make-test-message "id2" "id1" 'assistant 'message))
+  (define entries (send sink sink-load))
+  (check-equal? (map message-id entries) '("id1" "id2")))
+
 ;; Run
 (run-tests test-session-store)
