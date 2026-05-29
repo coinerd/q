@@ -15,20 +15,22 @@
          racket/set
          "../util/protocol-types.rkt"
          (only-in "../util/message.rkt" message-meta-safe)
-         "../llm/token-budget.rkt")
+         "../llm/token-budget.rkt"
+         "../util/token-estimate-cache.rkt")
 
 ;; Token estimation
-(provide (contract-out [estimate-message-tokens (-> message? exact-nonnegative-integer?)]
-                       [estimate-message-tokens-cached (-> message? exact-nonnegative-integer?)]
-                       [invalidate-token-estimate-cache! (-> void?)]
-                       [ensure-first-user-pinned
-                        (-> (listof message?) (listof message?) (listof message?))]
-                       [fit-messages-pair-preserving
-                        (->* [(listof message?) exact-nonnegative-integer?]
-                             [(or/c #f procedure?)]
-                             (listof message?))]
-                       [system-message? (-> message? boolean?)]
-                       [user-message? (-> message? boolean?)])
+(provide (contract-out
+          [estimate-message-tokens (-> message? exact-nonnegative-integer?)]
+          [estimate-message-tokens-cached (-> message? exact-nonnegative-integer?)]
+          [invalidate-token-estimate-cache! (-> void?)]
+          [token-estimate-cache-hit-stats (-> (hash/c symbol? exact-nonnegative-integer?))]
+          [ensure-first-user-pinned (-> (listof message?) (listof message?) (listof message?))]
+          [fit-messages-pair-preserving
+           (->* [(listof message?) exact-nonnegative-integer?]
+                [(or/c #f procedure?)]
+                (listof message?))]
+          [system-message? (-> message? boolean?)]
+          [user-message? (-> message? boolean?)])
          ;; Internal helpers (not contracted — used by context-assembly only)
          build-pair-index
          ;; Re-export from token-budget
@@ -56,23 +58,25 @@
   (estimate-text-tokens (string-join text-parts " ")))
 
 ;; ---------------------------------------------------------------------------
-;; Memoized token estimation — v0.47.6
+;; Memoized token estimation — v0.47.6 → v0.70.6 using token-estimate-cache.rkt
 ;; ---------------------------------------------------------------------------
 
-;; Hash-based cache keyed on message content fingerprint.
-;; Thread-safe via atomic hash operations.
-(define token-estimate-cache (make-hash))
-
 ;; Cached version of estimate-message-tokens.
-;; Uses (message-id msg) and content hash as cache key.
+;; Delegates to util/token-estimate-cache.rkt for content-addressed memoization.
 (define (estimate-message-tokens-cached msg)
-  (define key (cons (message-id msg) (equal-hash-code (message-content msg))))
-  (hash-ref! token-estimate-cache key (lambda () (estimate-message-tokens msg))))
+  (cached-estimate-text-tokens estimate-message-tokens
+                               (string-join (for/list ([part (in-list (message-content msg))]
+                                                       #:when (text-part? part))
+                                              (text-part-text part))
+                                            " ")))
 
 ;; Invalidate the token estimation cache.
-;; Call when message content changes (e.g., compaction, editing).
 (define (invalidate-token-estimate-cache!)
-  (hash-clear! token-estimate-cache))
+  (clear-token-estimate-cache!))
+
+;; Token cache statistics for observability.
+(define (token-estimate-cache-hit-stats)
+  (token-estimate-cache-stats))
 
 ;; ============================================================
 ;; Predicates
