@@ -100,6 +100,16 @@
   (ctx-read ctx gsd-session-ctx-correlation-id-box))
 (define (gsd-ctx-set-correlation-id! ctx v)
   (ctx-write! ctx gsd-session-ctx-correlation-id-box v))
+(define (gsd-ctx-busy ctx)
+  (ctx-read ctx gsd-session-ctx-busy-box))
+(define (gsd-ctx-set-busy! ctx v)
+  (ctx-write! ctx gsd-session-ctx-busy-box v))
+(define (gsd-ctx-transaction ctx)
+  (ctx-read ctx gsd-session-ctx-transaction-box))
+(define (gsd-ctx-set-transaction! ctx v)
+  (ctx-write! ctx gsd-session-ctx-transaction-box v))
+(define (gsd-ctx-transaction-update! ctx update-fn)
+  (ctx-update! ctx gsd-session-ctx-transaction-box update-fn))
 
 ;; Thread-safe transaction with explicit ctx
 (define (with-gsd-transaction ctx thunk)
@@ -249,6 +259,11 @@
                        [gsd-ctx-set-history! (-> gsd-session-ctx? list? void?)]
                        [gsd-ctx-correlation-id (-> gsd-session-ctx? (or/c string? #f))]
                        [gsd-ctx-set-correlation-id! (-> gsd-session-ctx? (or/c string? #f) void?)]
+                       [gsd-ctx-busy (-> gsd-session-ctx? any)]
+                       [gsd-ctx-set-busy! (-> gsd-session-ctx? any/c void?)]
+                       [gsd-ctx-transaction (-> gsd-session-ctx? hash?)]
+                       [gsd-ctx-set-transaction! (-> gsd-session-ctx? hash? void?)]
+                       [gsd-ctx-transaction-update! (-> gsd-session-ctx? procedure? void?)]
                        [with-gsd-transaction (-> gsd-session-ctx? procedure? any)]
                        [gsd-ctx-state-snapshot (-> gsd-session-ctx? gsd-runtime-state?)]
                        [gsd-ctx-state-update! (-> gsd-session-ctx? procedure? any)]
