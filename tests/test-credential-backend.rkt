@@ -16,6 +16,7 @@
                   make-memory-credential-backend
                   make-keychain-credential-backend
                   make-chained-credential-backend
+                  current-external-command-runner
                   credential-backend?
                   backend-name
                   backend-store!
@@ -241,3 +242,85 @@
   (define be (make-keychain-credential-backend))
   (when (not (backend-available? be))
     (check-equal? (backend-list-providers be) '())))
+
+;; ---------------------------------------------------------------------------
+;; Tests: mockable command runner seam
+;; ---------------------------------------------------------------------------
+
+(test-case "command-runner-seam: mock overrides keychain availability"
+  ;; Mock that always reports success for --version
+  (define mock-runner (λ (exe-path args #:stdin [stdin-str #f]) (values 0 "secret-tool 0.1")))
+  (parameterize ([current-external-command-runner mock-runner])
+    (define be (make-keychain-credential-backend))
+    (check-true (backend-available? be))))
+
+(test-case "command-runner-seam: mock returns #f on unavailable"
+  ;; Mock that always fails
+  (define mock-runner (λ (exe-path args #:stdin [stdin-str #f]) (values 1 "")))
+  (parameterize ([current-external-command-runner mock-runner])
+    (define be (make-keychain-credential-backend))
+    (check-false (backend-available? be))))
+
+(test-case "command-runner-seam: mock store and load roundtrip"
+  ;; Mock that tracks stored secrets
+  (define stored-secrets (make-hash))
+  (define mock-runner
+    (λ (exe-path args #:stdin [stdin-str #f])
+      (cond
+        ;; --version check
+        [(and (pair? args) (equal? (car args) "--version")) (values 0 "secret-tool 0.1")]
+        ;; store
+        [(and (pair? args) (equal? (car args) "store"))
+         (define provider
+           (let loop ([a (cdr args)])
+             (cond
+               [(null? a) "unknown"]
+               [(equal? (car a) "--provider") (and (pair? (cdr a)) (cadr a))]
+               [else (loop (cdr a))])))
+         (when stdin-str
+           (hash-set! stored-secrets provider (string-trim stdin-str)))
+         (values 0 "")]
+        ;; lookup
+        [(and (pair? args) (equal? (car args) "lookup"))
+         (define provider
+           (let loop ([a (cdr args)])
+             (cond
+               [(null? a) "unknown"]
+               [(equal? (car a) "--provider") (and (pair? (cdr a)) (cadr a))]
+               [else (loop (cdr a))])))
+         (define val (hash-ref stored-secrets provider #f))
+         (if val
+             (values 0 val)
+             (values 1 ""))]
+        ;; clear
+        [(and (pair? args) (equal? (car args) "clear")) (values 0 "")]
+        [else (values 0 "")])))
+  (parameterize ([current-external-command-runner mock-runner])
+    (define be (make-keychain-credential-backend))
+    (check-true (backend-available? be))
+    ;; Store
+    (backend-store! be "openai" "sk-mock-key-123")
+    ;; Load
+    (define cred (backend-load be "openai"))
+    (check-not-false cred)
+    (check-equal? (hash-ref cred 'api-key) "sk-mock-key-123")
+    (check-equal? (hash-ref cred 'source) "keychain")))
+
+(test-case "command-runner-seam: mock delete succeeds"
+  (define mock-runner (λ (exe-path args #:stdin [stdin-str #f]) (values 0 "")))
+  (parameterize ([current-external-command-runner mock-runner])
+    (define be (make-keychain-credential-backend))
+    ;; delete! should not raise even with mock
+    (backend-delete! be "openai")))
+
+(test-case "command-runner-seam: mock store failure raises"
+  (define mock-runner
+    (λ (exe-path args #:stdin [stdin-str #f])
+      (cond
+        [(and (pair? args) (equal? (car args) "--version")) (values 0 "secret-tool 0.1")]
+        [(and (pair? args) (equal? (car args) "store")) (values 1 "error: store failed")]
+        [else (values 0 "")])))
+  (parameterize ([current-external-command-runner mock-runner])
+    (define be (make-keychain-credential-backend))
+    (check-true (backend-available? be))
+    (check-exn exn:fail? (λ () (backend-store! be "openai" "sk-test")))))

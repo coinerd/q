@@ -10,7 +10,8 @@
 ;; OS keychain (secret-tool / macOS security), and chained (fallback chain).
 
 (require "../util/json-helpers.rkt"
-         "../util/error-helpers.rkt")
+         "../util/error-helpers.rkt"
+         racket/function)
 (require "../util/errors.rkt")
 (require racket/contract
          json
@@ -21,8 +22,11 @@
          racket/list
          racket/port)
 
-;; Backend struct
-(provide credential-backend
+;; Command runner seam for keychain backends (mockable for tests)
+(provide current-external-command-runner
+
+         ;; Backend struct
+         credential-backend
          credential-backend?
          credential-backend-name
          credential-backend-store-fn
@@ -229,6 +233,26 @@
 ;; OS Keychain backend — uses secret-tool (Linux) or security (macOS)
 ;; ═══════════════════════════════════════════════════════════════════
 
+;; ═══════════════════════════════════════════════════════════════════
+;; Command runner seam — injectable for testing
+;; ═══════════════════════════════════════════════════════════════════
+
+;; Default: runs command via subprocess. Returns (values exit-code stdout-string).
+;; Override for testing: (parameterize ([current-external-command-runner mock-fn]) ...)
+(define current-external-command-runner
+  (make-parameter (λ (executable-path args #:stdin [stdin-str #f])
+                    (with-safe-fallback (values 1 "")
+                                        (define-values (sp out-port in-port err-port)
+                                          (subprocess #f #f #f executable-path args))
+                                        (when stdin-str
+                                          (display stdin-str in-port)
+                                          (close-output-port in-port))
+                                        (define out (open-output-string))
+                                        (copy-port out-port out)
+                                        (close-input-port out-port)
+                                        (close-input-port err-port)
+                                        (values (subprocess-status sp) (get-output-string out))))))
+
 ;; Key attribute for secret-tool: q-agent/provider/<name>
 (define (keychain-attrs provider-name)
   (list (cons "application" "q-agent") (cons "provider" provider-name)))
@@ -236,20 +260,10 @@
 (define (keychain-label provider-name)
   (format "q-agent: ~a" provider-name))
 
-;; Run secret-tool with argument vector (no shell interpolation).
+;; Run secret-tool via the injectable command runner.
 ;; Returns (values exit-code stdout-string).
 (define (run-secret-tool args #:stdin [stdin-str #f])
-  (with-safe-fallback (values 1 "")
-                      (define-values (sp out-port in-port err-port)
-                        (subprocess #f #f #f (find-executable-path "secret-tool") args))
-                      (when stdin-str
-                        (display stdin-str in-port)
-                        (close-output-port in-port))
-                      (define out (open-output-string))
-                      (copy-port out-port out)
-                      (close-input-port out-port)
-                      (close-input-port err-port)
-                      (values (subprocess-status sp) (get-output-string out))))
+  ((current-external-command-runner) (find-executable-path "secret-tool") args #:stdin stdin-str))
 
 (define (secret-tool-available?)
   (with-safe-fallback #f (define-values (status _) (run-secret-tool '("--version"))) (= status 0)))
