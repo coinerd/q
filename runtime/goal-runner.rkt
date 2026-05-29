@@ -16,6 +16,7 @@
          "goal-state.rkt"
          "goal-evaluator.rkt"
          "goal-evidence.rkt"
+         "goal-checks.rkt"
          "../llm/provider.rkt")
 
 ;; ============================================================
@@ -26,7 +27,8 @@
          goal-run-simulated!
          goal-loop-step
          build-continuation-prompt
-         collect-evaluations)
+         collect-evaluations
+         execute-checks-for-goal)
 
 (define NO-PROGRESS-THRESHOLD 3)
 
@@ -37,6 +39,14 @@
   (if last-eval
       (append from-checks (list last-eval))
       from-checks))
+
+;; Execute all deterministic checks from goal-state and return results.
+;; If no checks defined, returns empty list.
+(define (execute-checks-for-goal goal-st)
+  (define checks (goal-state-checks goal-st))
+  (if (and (pair? checks) (goal-check? (car checks)))
+      (execute-all-checks checks #:timeout 30)
+      '()))
 
 ;; ============================================================
 ;; Main entry point
@@ -136,10 +146,14 @@
   ;; Run the prompt through the agent
   (define-values (updated-sess loop-result) (run-prompt-fn! prompt))
 
+  ;; Execute deterministic checks if any
+  (define check-results (execute-checks-for-goal goal-st))
+
   ;; Evaluate the result
   ;; Extract transcript from loop-result for evaluation
   (define transcript (extract-transcript-from-result loop-result))
-  (define eval-result (evaluate-transcript goal-text transcript provider evaluator-model))
+  (define eval-result
+    (evaluate-transcript goal-text transcript provider evaluator-model #:check-results check-results))
 
   ;; Emit goal.evaluated
   (on-event 'goal-evaluated (hasheq 'evaluation eval-result 'turn turns))

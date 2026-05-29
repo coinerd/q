@@ -26,6 +26,8 @@
          "../agent/event-bus.rkt"
          "../extensions/hooks.rkt"
          "../extensions/api.rkt"
+         "../runtime/goal-checks.rkt"
+         (only-in "../runtime/goal-state.rkt" goal-check-label goal-check-command)
          ;; Sub-module imports
          (only-in "commands/context.rkt"
                   cmd-ctx
@@ -316,19 +318,45 @@
        (make-system-entry "[goal] No active goal. Use /goal \"<description>\" to set one."))
      (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
      'continue]
-    ;; /goal "<description>" — set a goal
+    ;; /goal "<description>" [--check 'cmd'] — set a goal with optional checks
     [else
-     ;; Strip surrounding quotes if present
+     ;; Check for --check arguments
+     (define-values (goal-text checks)
+       (if (string-contains? arg-text "--check")
+           (parse-goal-checks arg-text)
+           (values arg-text '())))
+     ;; Strip surrounding quotes from goal text if present
      (define clean-text
-       (let ([t arg-text])
+       (let ([t goal-text])
          (if (and (> (string-length t) 1)
-                  (char=? (string-ref t 0) #\")
-                  (char=? (string-ref t (sub1 (string-length t))) #\"))
+                  (or (char=? (string-ref t 0) #\") (char=? (string-ref t 0) #\'))
+                  (or (char=? (string-ref t (sub1 (string-length t))) #\")
+                      (char=? (string-ref t (sub1 (string-length t))) #\')))
              (substring t 1 (sub1 (string-length t)))
              t)))
-     (define entry
-       (make-system-entry
-        (format "[goal] Goal set: ~a\nThe autonomous goal loop will be available in a future update."
-                clean-text)))
-     (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
-     'continue]))
+     ;; Validate check safety
+     (define safety-reasons (validate-check-safety checks))
+     (cond
+       [(pair? safety-reasons)
+        (define entry
+          (make-system-entry (format "[goal] REJECTED — unsafe check commands:\n~a"
+                                     (string-join safety-reasons "\n"))))
+        (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+        'continue]
+       [else
+        (define check-info
+          (if (null? checks)
+              ""
+              (format "\nChecks: ~a"
+                      (string-join
+                       (map (lambda (c) (format "~a: ~a" (goal-check-label c) (goal-check-command c)))
+                            checks)
+                       ", "))))
+        (define entry
+          (make-system-entry
+           (format
+            "[goal] Goal set: ~a~a\nThe autonomous goal loop will be available in a future update."
+            clean-text
+            check-info)))
+        (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+        'continue])]))
