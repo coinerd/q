@@ -78,22 +78,21 @@
 
 ;; Legacy mode wrappers (DEBT-01: migrated from gsd-planning-state.rkt)
 (define (gsd-mode)
-  (let ([s (gsm-current)])
-    (cond
-      [(eq? s 'idle) #f]
-      [(eq? s 'exploring) 'planning]
-      [else s])))
+  (match (gsm-current)
+    ['idle #f]
+    ['exploring 'planning]
+    [s s]))
 
 (define (gsd-mode? v)
   (eq? (gsd-mode) v))
 
 (define (set-gsd-mode! v)
-  (cond
-    [(not v) (gsm-reset!)]
-    [(eq? v 'planning) (gsm-transition-to! 'exploring)]
-    [(eq? v 'plan-written) (gsm-transition-to! 'plan-written)]
-    [(eq? v 'executing) (gsm-transition-to! 'executing)]
-    [else (gsm-transition! v)]))
+  (match v
+    [#f (gsm-reset!)]
+    ['planning (gsm-transition-to! 'exploring)]
+    ['plan-written (gsm-transition-to! 'plan-written)]
+    ['executing (gsm-transition-to! 'executing)]
+    [_ (gsm-transition! v)]))
 
 ;; Helper: emit a mode-changed event with standard boilerplate
 (define (emit-mode-change! mode #:reason [reason #f] #:error [err #f])
