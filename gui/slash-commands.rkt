@@ -52,6 +52,15 @@
        (add-system-msg! (hash-ref payload 'text) state-box gui-state-lock))
      (when (hash-ref payload 'submit #f)
        (thread (lambda () (run-prompt! sess (hash-ref payload 'submit)))))
+     ;; B1: Handle 'new-session from GSD /go (matches TUI execute-extension-command)
+     (when (hash-ref payload 'new-session #f)
+       (thread (lambda ()
+                 (with-handlers ([exn:fail? (lambda (e)
+                                              (add-system-msg! (format "[ERROR] /go failed: ~a"
+                                                                       (exn-message e))
+                                                               state-box
+                                                               gui-state-lock))])
+                   (run-prompt! sess (hash-ref payload 'new-session))))))
      #t]
     [(and (hook-result? ext-result) (eq? (hook-result-action ext-result) 'block))
      (add-system-msg! (format "Command ~a blocked. Try /help." cmd-name) state-box gui-state-lock)
