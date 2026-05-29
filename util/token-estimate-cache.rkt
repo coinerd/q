@@ -6,8 +6,7 @@
 ;; Reduces redundant computation when the same message content is
 ;; estimated repeatedly (e.g. during context assembly iteration).
 
-(require racket/contract
-         racket/math)
+(require racket/contract)
 
 (provide (contract-out
           [cached-estimate-text-tokens
@@ -31,10 +30,10 @@
 (define cache-misses (box 0))
 
 ;; Compute a content hash for cache keying.
-;; Uses equal-hash-code for speed; collisions are acceptable for
-;; an estimation heuristic.
+;; Uses the string itself as key with equal?-based hash table.
+;; This avoids equal-hash-code collision risk.
 (define (content-hash text)
-  (equal-hash-code text))
+  text)
 
 ;; cached-estimate-text-tokens : (string? -> exact-nonnegative-integer?) string? -> exact-nonnegative-integer?
 ;;

@@ -125,29 +125,30 @@
     (define flush-ch (make-channel))
 
     (define worker
-      (thread
-       (lambda ()
-         (let loop ()
-           (define msg (thread-receive))
-           (cond
-             [(eq? msg 'flush)
-              (channel-put flush-ch 'ok)
-              (loop)]
-             [(eq? msg 'stop)
-              (void)]
-             [(pair? msg)
-              ;; msg is a pair: (cons 'entries list) or (cons 'single message)
-              (case (car msg)
-                [(entries)
-                 (send inner-sink sink-append-entries! (cdr msg))
-                 (semaphore-post space-sema)]
-                [(single)
-                 (send inner-sink sink-append! (cdr msg))
-                 (semaphore-post space-sema)])
-              (loop)]
-             [else
-              (semaphore-post space-sema)
-              (loop)])))))
+      (thread (lambda ()
+                (let loop ()
+                  (define msg (thread-receive))
+                  (cond
+                    [(eq? msg 'flush)
+                     ;; Flush inner sink if it supports flush (e.g. nested async)
+                     (when (object-method-arity-includes? inner-sink 'sink-flush! 0)
+                       (send inner-sink sink-flush!))
+                     (channel-put flush-ch 'ok)
+                     (loop)]
+                    [(eq? msg 'stop) (void)]
+                    [(pair? msg)
+                     ;; msg is a pair: (cons 'entries list) or (cons 'single message)
+                     (case (car msg)
+                       [(entries)
+                        (send inner-sink sink-append-entries! (cdr msg))
+                        (semaphore-post space-sema)]
+                       [(single)
+                        (send inner-sink sink-append! (cdr msg))
+                        (semaphore-post space-sema)])
+                     (loop)]
+                    [else
+                     (semaphore-post space-sema)
+                     (loop)])))))
 
     (define (try-send! item)
       (case policy
@@ -174,11 +175,9 @@
       (unless (unbox closed-box)
         (try-send! (cons 'entries msgs))))
 
-    (define/public (sink-load)
-      (send inner-sink sink-load))
+    (define/public (sink-load) (send inner-sink sink-load))
 
-    (define/public (sink-fork! entry-id dest-id)
-      (send inner-sink sink-fork! entry-id dest-id))
+    (define/public (sink-fork! entry-id dest-id) (send inner-sink sink-fork! entry-id dest-id))
 
     ;; Non-interface methods for flush/close contract
     (define/public (sink-get-worker) worker)
@@ -337,7 +336,8 @@
            new-acc)]))
   (define path-entries (walk-up source-entry-id '()))
   (ensure-parent-dirs! dest-path)
-  (define header-msg (make-version-header-message #:extra (hasheq 'parentSession (path->string source-path))))
+  (define header-msg
+    (make-version-header-message #:extra (hasheq 'parentSession (path->string source-path))))
   (define all-entries (cons header-msg path-entries))
   (jsonl-append-entries! dest-path (map message->jsexpr all-entries))
   (length path-entries))
@@ -377,7 +377,9 @@
      (define new-session-id (string-append "imported-" (generate-id)))
      (define dest-path (build-path dest-session-dir (format "~a.jsonl" new-session-id)))
      (ensure-parent-dirs! dest-path)
-     (define header-msg (make-version-header-message #:extra (hasheq 'imported-from (path->string source-path) 'imported-at (current-seconds))))
+     (define header-msg
+       (make-version-header-message
+        #:extra (hasheq 'imported-from (path->string source-path) 'imported-at (current-seconds))))
      (define messages (map jsexpr->message raw))
      (define all-entries (cons header-msg messages))
      (jsonl-append-entries! dest-path (map message->jsexpr all-entries))
