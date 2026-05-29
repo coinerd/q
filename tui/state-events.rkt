@@ -408,8 +408,8 @@
 (define (handle-auto-retry-lifecycle state evt)
   (define ev (event-ev evt))
   (define payload (event-payload evt))
-  (cond
-    [(equal? ev "auto-retry.start")
+  (match ev
+    ["auto-retry.start"
      (define attempt (hash-ref payload 'attempt "?"))
      (define max-attempts (hash-ref payload 'maxRetries "?"))
      (define error-type (hash-ref payload 'errorType #f))
@@ -425,7 +425,7 @@
            (format "[retry: ~a, ~a/~a...]" type-label attempt max-attempts)
            (format "[retry: attempt ~a/~a]" attempt max-attempts)))
      (clear-streaming (append-entry state (make-entry 'system msg (event-time evt) (hash))))]
-    [(equal? ev "auto-retry.context-reduced")
+    ["auto-retry.context-reduced"
      (define original (hash-ref payload 'original-messages 0))
      (define reduced (hash-ref payload 'reduced-messages 0))
      (append-entry state
@@ -433,7 +433,7 @@
                                (format "[retry: reduced context ~a -> ~a messages]" original reduced)
                                (event-time evt)
                                (hash)))]
-    [else state]))
+    [_ state]))
 
 (define (handle-model-stream-thinking state evt)
   (define payload (event-payload evt))
