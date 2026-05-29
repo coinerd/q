@@ -185,8 +185,16 @@
     [(or (getenv "DISPLAY") (getenv "WAYLAND_DISPLAY"))
      ;; GUI available: apply rich formatting via style-delta%
      (define style-delta% (dynamic-require 'racket/gui 'style-delta%))
-     (define role-color (role->color role theme))
-     (define content-color (theme-ref theme 'foreground))
+     (define color% (dynamic-require 'racket/gui 'color%))
+     ;; Convert hex strings to color% objects for set-delta-foreground
+     (define (hex->color-obj hex)
+       (define cleaned (string-trim hex "#" #:left? #t))
+       (make-object color%
+                    (string->number (substring cleaned 0 2) 16)
+                    (string->number (substring cleaned 2 4) 16)
+                    (string->number (substring cleaned 4 6) 16)))
+     (define role-color (hex->color-obj (role->color role theme)))
+     (define content-color (hex->color-obj (theme-ref theme 'foreground)))
      ;; Apply bold role label with role color
      (define role-delta (make-object style-delta% 'change-bold))
      (send role-delta set-delta-foreground role-color)
