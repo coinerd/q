@@ -28,7 +28,8 @@
                   backend-available?
                   make-policy-aware-backend
                   credential-backend-capabilities
-                  make-macos-keychain-credential-backend))
+                  make-macos-keychain-credential-backend
+                  make-windows-credential-backend))
 
 ;; ---------------------------------------------------------------------------
 ;; Helpers
@@ -476,3 +477,86 @@
                        #f]))])
     (define be (make-macos-keychain-credential-backend))
     (check-false (backend-load be "nonexistent-provider"))))
+
+;; ---------------------------------------------------------------------------
+;; Tests: Windows Credential Manager backend (v0.70.2)
+;; ---------------------------------------------------------------------------
+
+(test-case "windows-credential: backend name"
+  (define be (make-windows-credential-backend))
+  (check-equal? (backend-name be) "windows-credential-manager"))
+
+(test-case "windows-credential: available? returns boolean"
+  (define be (make-windows-credential-backend))
+  (check-true (boolean? (backend-available? be))))
+
+(test-case "windows-credential: mock store success"
+  (parameterize ([current-external-command-runner
+                  (λ (cmd out)
+                    (cond
+                      [(string-contains? cmd "cmdkey")
+                       (display "CMDKEY: Credential added successfully." out)
+                       #t]
+                      [(string-contains? cmd "where cmdkey")
+                       (display "C:\\Windows\\System32\\cmdkey.exe" out)
+                       #t]
+                      [else
+                       (display "" out)
+                       #f]))])
+    (define be (make-windows-credential-backend))
+    (check-true (backend-available? be))
+    (backend-store! be "openai" "sk-win-key")
+    (check-true #t)))
+
+(test-case "windows-credential: mock load returns credential hash"
+  (parameterize ([current-external-command-runner
+                  (λ (cmd out)
+                    (cond
+                      [(string-contains? cmd "/list:q-credential-openai")
+                       (display "Target: q-credential-openai\nType: Generic\nUser: q-api-key" out)
+                       #t]
+                      [(string-contains? cmd "where cmdkey")
+                       (display "C:\\Windows\\System32\\cmdkey.exe" out)
+                       #t]
+                      [else
+                       (display "" out)
+                       #f]))])
+    (define be (make-windows-credential-backend))
+    (define cred (backend-load be "openai"))
+    (check-not-false cred)
+    (check-equal? (hash-ref cred 'provider) "openai")
+    (check-equal? (hash-ref cred 'source) "windows-credential-manager")))
+
+(test-case "windows-credential: mock list returns providers"
+  (parameterize ([current-external-command-runner
+                  (λ (cmd out)
+                    (cond
+                      [(string-contains? cmd "/list")
+                       (display "Target: q-credential-openai\nTarget: q-credential-anthropic\n" out)
+                       #t]
+                      [(string-contains? cmd "where cmdkey")
+                       (display "C:\\Windows\\System32\\cmdkey.exe" out)
+                       #t]
+                      [else
+                       (display "" out)
+                       #f]))])
+    (define be (make-windows-credential-backend))
+    (define providers (backend-list-providers be))
+    (check-true (list? providers))
+    (check-not-false (or (member "openai" providers) (member "q-credential-openai" providers)))))
+
+(test-case "windows-credential: mock load returns #f when not found"
+  (parameterize ([current-external-command-runner
+                  (λ (cmd out)
+                    (cond
+                      [(string-contains? cmd "/list:q-credential-missing")
+                       (display "ERROR: Element not found." out)
+                       #f]
+                      [(string-contains? cmd "where cmdkey")
+                       (display "C:\\Windows\\System32\\cmdkey.exe" out)
+                       #t]
+                      [else
+                       (display "" out)
+                       #f]))])
+    (define be (make-windows-credential-backend))
+    (check-false (backend-load be "missing"))))
