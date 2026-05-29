@@ -34,6 +34,9 @@
          credential-backend-delete-fn
          credential-backend-list-fn
          credential-backend-available?-fn
+         ;; Credential policy (v0.70.1)
+         credential-policy?
+         valid-credential-policies
          (contract-out
           [make-file-credential-backend (->* () ((or/c path-string? #f)) credential-backend?)]
           [make-env-credential-backend (-> credential-backend?)]
@@ -46,7 +49,12 @@
            (->* (credential-backend? string?) (#:env-var (or/c string? #f)) (or/c hash? #f))]
           [backend-delete! (-> credential-backend? string? void?)]
           [backend-list-providers (-> credential-backend? (listof string?))]
-          [backend-available? (-> credential-backend? boolean?)]))
+          [backend-available? (-> credential-backend? boolean?)]
+          [make-policy-aware-backend
+           (->* (credential-backend?)
+                (#:policy (or/c 'auto 'keychain-preferred 'keychain-required 'env-only)
+                          #:warn-port (or/c output-port? #f))
+                credential-backend?)]))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Backend struct
@@ -372,3 +380,80 @@
 
 (define (shell-escape s)
   (string-replace s "'" "'\\''"))
+
+;; ═══════════════════════════════════════════════════════════════════
+;; Credential policy (v0.70.1)
+;; ═══════════════════════════════════════════════════════════════════
+
+;; Valid policy modes
+(define valid-credential-policies '(auto keychain-preferred keychain-required env-only))
+
+(define (credential-policy? v)
+  (and (symbol? v) (member v valid-credential-policies) #t))
+
+;; Policy-aware backend wrapper.
+;; Wraps an inner backend (typically chained) with policy enforcement.
+;;
+;; 'auto               — pass-through, no enforcement
+;; 'keychain-preferred — warn when falling back to file/env for store
+;; 'keychain-required  — raise on file store, warn on file load
+;; 'env-only           — raise on file store, file load returns #f
+(define (make-policy-aware-backend inner
+                                   #:policy [policy 'auto]
+                                   #:warn-port [warn-port (current-error-port)])
+  (case policy
+    [(auto) inner]
+    [else
+     (define (emit-warning msg)
+       (when warn-port
+         (fprintf warn-port "WARNING [credential-policy ~a]: ~a\n" policy msg)))
+     (define (file-fallback-violation action)
+       (raise-credential-error
+        (format "~a forbidden by credential policy '~a' — file fallback not allowed" action policy)
+        "policy"
+        (format "~a-forbidden" action)))
+     (credential-backend
+      (format "policy-aware(~a, ~a)" policy (backend-name inner))
+      ;; store!
+      (λ (be provider-name api-key)
+        (define inner-name (backend-name inner))
+        (cond
+          [(eq? policy 'keychain-required)
+           (when (member inner-name '("file" "chained"))
+             (file-fallback-violation "store"))
+           (backend-store! inner provider-name api-key)]
+          [(eq? policy 'env-only)
+           (when (member inner-name '("file" "chained" "keychain"))
+             (file-fallback-violation "store"))
+           (backend-store! inner provider-name api-key)]
+          [(eq? policy 'keychain-preferred)
+           (when (member inner-name '("file"))
+             (emit-warning
+              (format "storing credential for '~a' in file backend — consider using keychain or env" provider-name)))
+           (backend-store! inner provider-name api-key)]
+          [else (backend-store! inner provider-name api-key)]))
+      ;; load
+      (λ (be provider-name env-var)
+        (define inner-name (backend-name inner))
+        (cond
+          [(eq? policy 'env-only)
+           (if (member inner-name '("file" "keychain" "chained"))
+               (begin
+                 (emit-warning
+                  (format "loading credential for '~a' from '~a' blocked by env-only policy" provider-name inner-name))
+                 #f)
+               (backend-load inner provider-name #:env-var (or env-var #f)))]
+          [else
+           (define result (backend-load inner provider-name #:env-var (or env-var #f)))
+           (when (and result
+                      (eq? policy 'keychain-preferred)
+                      (member inner-name '("file")))
+             (emit-warning
+              (format "loaded credential for '~a' from file backend — consider using keychain" provider-name)))
+           result]))
+      ;; delete!
+      (λ (be provider-name) (backend-delete! inner provider-name))
+      ;; list
+      (λ (be) (backend-list-providers inner))
+      ;; available?
+      (λ (be) (backend-available? inner)))]))
