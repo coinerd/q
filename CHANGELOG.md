@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.69.3 — 2026-05-25
+
+### Abstraction Quality: Representation Discipline
+
+Replace hash-as-struct anti-patterns with proper structs in GUI state and UI events.
+
+**Changes:**
+- **W0**: Define `gui-message` and `gui-state` structs in `gui/gui-types.rkt` with immutable update helpers.
+- **W1**: Migrate `gui/state-sync.rkt` from raw hashes to `gui-message`/`gui-state` structs (-11 LOC net).
+- **W2**: Define `ui-event` struct in `ui-core/event-types.rkt`. Migrate `ui-core/dispatch.rkt` to struct-based events with backward-compatible hash conversion.
+
 ## v0.69.2 — 2026-05-25
 
 ### Abstraction Quality: Declarative Patterns
