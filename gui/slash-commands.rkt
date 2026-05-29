@@ -122,7 +122,8 @@
                                           "  /compact         Run context compaction\n"
                                           "  /plan            GSD plan command\n"
                                           "  /go              GSD execute command\n"
-                                          "  /activate, /a    Activate extensions\n")
+                                          "  /activate, /a    Activate extensions\n"
+                                          "  /goal            Set/show/clear autonomous goal\n")
                            state-box
                            gui-state-lock
                            notify!)
@@ -152,6 +153,43 @@
                            gui-state-lock
                            notify!)
           #t]
+         [(goal)
+          (define goal-arg (string-trim (string-join args " ")))
+          (cond
+            [(string=? goal-arg "clear")
+             (call-with-semaphore gui-state-lock
+                                  (lambda ()
+                                    (set-box! state-box
+                                              (gui-state-set-active-goal (unbox state-box) #f))
+                                    (notify!)))
+             (add-system-msg! "[goal] Active goal cancelled." state-box gui-state-lock notify!)
+             #t]
+            [(or (string=? goal-arg "") (string=? goal-arg "status"))
+             (define gs (unbox state-box))
+             (define goal-info (gui-state-active-goal gs))
+             (if goal-info
+                 (add-system-msg! (format "[goal] Active: ~a\nStatus: ~a | Turns: ~a/~a"
+                                          (hash-ref goal-info 'goal-text "?")
+                                          (hash-ref goal-info 'status 'active)
+                                          (hash-ref goal-info 'turns-used 0)
+                                          (hash-ref goal-info 'max-turns 8))
+                                  state-box
+                                  gui-state-lock
+                                  notify!)
+                 (add-system-msg! "[goal] No active goal. Use /goal \"<description>\" to set one."
+                                  state-box
+                                  gui-state-lock
+                                  notify!))
+             #t]
+            [else
+             (add-system-msg!
+              (format
+               "[goal] Goal set: ~a\nThe autonomous goal loop will be available in a future update."
+               goal-arg)
+              state-box
+              gui-state-lock
+              notify!)
+             #t])]
          [(interrupt)
           (add-system-msg! "Interrupt not yet supported in GUI mode."
                            state-box
