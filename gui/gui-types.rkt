@@ -12,7 +12,7 @@
          (struct-out gui-state)
          (contract-out
           [make-gui-message (->* (string? string?) () gui-message?)]
-          [make-gui-state (->* () () #:rest list? gui-state?)]
+          [make-gui-state (->* () (#:model (or/c string? #f) #:messages list? #:status symbol?) gui-state?)]
           [gui-state-add-message (-> gui-state? gui-message? gui-state?)]
           [gui-state-update-last-message (-> gui-state? (-> gui-message? gui-message?) gui-state?)]
           [gui-state-set-status (-> gui-state? symbol? gui-state?)]
@@ -32,8 +32,8 @@
 (define (make-gui-message role text)
   (gui-message role text))
 
-(define (make-gui-state . args)
-  (gui-state '() 'idle #f))
+(define (make-gui-state #:model [model #f] #:messages [messages '()] #:status [status 'idle])
+  (gui-state messages status model))
 
 ;; --- Immutable update helpers ---
 

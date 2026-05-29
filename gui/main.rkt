@@ -22,7 +22,8 @@
          "../tui/command-parse.rkt"
          "../gui/components/rich-transcript-view.rkt"
          "../gui/slash-commands.rkt"
-         "../gui/state-sync.rkt")
+         "../gui/state-sync.rkt"
+         "../gui/gui-types.rkt")
 
 (provide (contract-out [run-gui-with-runtime (-> any/c any/c void?)]
                        [run-gui (-> void?)]
@@ -137,16 +138,10 @@
                                       gui-state-lock
                                       (lambda ()
                                         (define old (unbox state-box))
-                                        (define msgs (hash-ref old 'messages '()))
                                         (set-box!
                                          state-box
-                                         (hash-set
-                                          (hash-set
-                                           old
-                                           'messages
-                                           (append msgs
-                                                   (list (hash 'role "error" 'text (exn-message e)))))
-                                          'status
+                                         (gui-state-set-status
+                                          (gui-state-add-message old (make-gui-message "error" (exn-message e)))
                                           'error)))))])
                     (run-prompt! sess val))))
                (set-obs! input-obs ""))))]
@@ -203,7 +198,7 @@
   (define model-name (dict-ref rt-config 'model-name #f))
 
   ;; GUI state: accumulated messages + status
-  (define state-box (box (hash 'messages '() 'status 'idle 'model model-name)))
+  (define state-box (box (make-gui-state #:model model-name)))
 
   ;; Notify callback box — set by launch-gui-window after GUI thread starts
   (define notify-callback-box (box #f))
