@@ -29,7 +29,15 @@
       (add-system-msg! "sys" state-box lock)
       (define msgs (gui-state-messages (unbox state-box)))
       (check-equal? (length msgs) 2)
-      (check-equal? (gui-message-role (cadr msgs)) "system"))))
+      (check-equal? (gui-message-role (cadr msgs)) "system"))
+
+    (test-case "add-system-msg! calls notify callback"
+      (define state-box (box (make-gui-state)))
+      (define lock (make-semaphore 1))
+      (define notify-called? (box #f))
+      (add-system-msg! "hello" state-box lock (lambda () (set-box! notify-called? #t)))
+      (check-true (unbox notify-called?))
+      (check-equal? (length (gui-state-messages (unbox state-box))) 1))))
 
 (define test-make-slash-command-handler
   (test-suite "make-slash-command-handler"
@@ -45,7 +53,17 @@
       (define state-box (box (make-gui-state)))
       (define lock (make-semaphore 1))
       (define handler (make-slash-command-handler #f state-box lock))
-      (check-false (handler "")))))
+      (check-false (handler "")))
+
+    (test-case "handler /help calls notify"
+      (define state-box (box (make-gui-state)))
+      (define lock (make-semaphore 1))
+      (define notify-called? (box #f))
+      (define handler
+        (make-slash-command-handler #f state-box lock (lambda () (set-box! notify-called? #t))))
+      (handler "/help")
+      (check-true (unbox notify-called?))
+      (check-equal? (length (gui-state-messages (unbox state-box))) 1))))
 
 (define test-known-commands
   (test-suite "known commands"

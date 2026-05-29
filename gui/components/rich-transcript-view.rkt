@@ -200,14 +200,14 @@
      (define role-delta (make-object style-delta% 'change-bold))
      (send role-delta set-delta-foreground role-color)
      (send text-obj change-style role-delta)
-     (send text-obj insert (format "~a: " label))
+     (send text-obj insert (format "~a: " label) (send text-obj last-position))
      ;; Apply normal content style with foreground color
      (define content-delta (make-object style-delta% 'change-normal))
      (send content-delta set-delta-foreground content-color)
      (send text-obj change-style content-delta)
-     (send text-obj insert (string-append text "\n\n"))]
+     (send text-obj insert (string-append text "\n\n") (send text-obj last-position))]
     ;; Headless fallback: plain text insertion
-    [else (send text-obj insert (format "~a: ~a\n\n" label text))]))
+    [else (send text-obj insert (format "~a: ~a\n\n" label text) (send text-obj last-position))]))
 
 ;; Clear a text% object and rebuild from a list of messages.
 ;; text-obj: a text% instance

@@ -13,8 +13,11 @@
     (super-new)
     (define content "")
     (define locked #f)
+    (define insert-with-position? #f)
     ;; insert: positional insert when pos given, append otherwise
     (define/public (insert str [pos #f])
+      (when pos
+        (set! insert-with-position? #t))
       (if pos
           (set! content (string-append (substring content 0 pos) str (substring content pos)))
           (set! content (string-append content str))))
@@ -24,7 +27,8 @@
     (define/public (change-style delta [start 0] [end 0]) (void))
     (define/public (get-content) content)
     (define/public (get-text start end) (substring content start (min end (string-length content))))
-    (define/public (is-locked?) locked)))
+    (define/public (is-locked?) locked)
+    (define/public (was-insert-positional?) insert-with-position?)))
 
 (define-test-suite
  test-diff-text
@@ -91,6 +95,14 @@
    (apply-diff-to-text! text-obj old-msgs new-msgs (default-theme) last-len-box)
    (check-equal? (unbox last-len-box) 6)))
 
+(define test-positional-insert
+  (test-suite "positional insert (selection-safe)"
+    (test-case "insert-message-into-text! uses explicit position"
+      (define text-obj (make-object mock-text%))
+      (insert-message-into-text! text-obj (hash 'role "user" 'text "hello") (default-theme))
+      (check-true (send text-obj was-insert-positional?)))))
+
 (run-tests (test-suite "gui-diff-text"
              test-diff-text
-             test-incremental-append))
+             test-incremental-append
+             test-positional-insert))
