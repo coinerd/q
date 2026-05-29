@@ -130,20 +130,20 @@
                (publish!
                 event-bus
                 (make-event "user.input" (current-inexact-milliseconds) #f #f (hash 'text val)))
-               (thread
-                (lambda ()
-                  (with-handlers ([exn:fail?
-                                   (lambda (e)
-                                     (call-with-semaphore
-                                      gui-state-lock
-                                      (lambda ()
-                                        (define old (unbox state-box))
-                                        (set-box!
-                                         state-box
-                                         (gui-state-set-status
-                                          (gui-state-add-message old (make-gui-message "error" (exn-message e)))
-                                          'error)))))])
-                    (run-prompt! sess val))))
+               (thread (lambda ()
+                         (with-handlers ([exn:fail?
+                                          (lambda (e)
+                                            (call-with-semaphore
+                                             gui-state-lock
+                                             (lambda ()
+                                               (define old (unbox state-box))
+                                               (set-box! state-box
+                                                         (gui-state-set-status
+                                                          (gui-state-add-message
+                                                           old
+                                                           (make-gui-message "error" (exn-message e)))
+                                                          'error)))))])
+                           (run-prompt! sess val))))
                (set-obs! input-obs ""))))]
       [else (void)]))
 
@@ -156,6 +156,28 @@
       (super-new)
       (send this set-canvas-background bg-color)))
 
+  ;; Mixin: enable clipboard shortcuts (Ctrl+C, Ctrl+A) on the editor-canvas%
+  (define ((editor-canvas-clipboard-mixin) base%)
+    (class base%
+      (super-new)
+      (define/override (on-char event)
+        (cond
+          [(and (send event get-control-down) (eq? (send event get-key-code) #\c))
+           (define ed (send this get-editor))
+           (when ed
+             (send ed copy))]
+          [(and (send event get-control-down) (eq? (send event get-key-code) #\a))
+           (define ed (send this get-editor))
+           (when ed
+             (send ed set-position 0 (send ed last-position)))]
+          [else (super on-char event)]))))
+
+  ;; Compose multiple mixins into one (right-to-left application)
+  (define (compose-mixins . mixins)
+    (lambda (base%)
+      (for/fold ([b base%]) ([m (in-list (reverse mixins))])
+        (m b))))
+
   ;; Build and render the window (blocks until closed)
   (render #:wait? #t
           (window #:title (format "q v~a - ~a" q-version (or model-name "q"))
@@ -165,7 +187,8 @@
                           (editor-canvas-view transcript-obs
                                               #:min-size '(#f 200)
                                               #:stretch '(#t #t)
-                                              #:mixin (editor-canvas-bg-mixin bg-c))
+                                              #:mixin (compose-mixins (editor-canvas-clipboard-mixin)
+                                                                      (editor-canvas-bg-mixin bg-c)))
                           (input-view input-obs on-input #:stretch '(#t #f)))))
 
   ;; Cleanup after window closes
