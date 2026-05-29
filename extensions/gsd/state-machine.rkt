@@ -18,7 +18,7 @@
          racket/set
          "runtime-state-types.rkt"
          (only-in "policy.rkt" blocked-tools-for gsd-decide-action policy-allowed?)
-         (only-in "events.rkt" emit-gsd-event! ctx-emit-gsd-event! current-gsd-correlation-id)
+         (only-in "events.rkt" emit-gsd-event! ctx-emit-gsd-event! current-gsd-correlation-id emit-to-bus!)
          (only-in "event-structs.rkt"
                   make-gsd-transition-attempted-event
                   make-gsd-transition-succeeded-event
@@ -30,10 +30,7 @@
                   gsd-state-snapshot
                   gsd-history-snapshot
                   gsd-state-update!
-                  with-gsd-lock
                   gsd-default-ctx
-                  gsd-session-ctx-state-box
-                  gsd-session-ctx-history-box
                   gsd-session-ctx?
                   gsd-ctx-state
                   gsd-ctx-set-state!
@@ -42,7 +39,7 @@
                   gsd-ctx-history
                   gsd-ctx-set-history!
                   gsd-ctx-history-update!
-                  gsd-session-ctx-sem))
+                  gsd-ctx-transaction!))
 
 ;; States
 ;; Struct exports (plain)
@@ -209,39 +206,36 @@
       current-state)]))
 
 (define (gsm-transition! target #:event [event #f])
-  ;; R-01: Direct box access inside with-gsd-lock to avoid nested semaphore deadlock.
-  ;; gsd-state-snapshot/gsd-state-update! call with-gsd-lock internally,
-  ;; causing deadlock on the same non-reentrant semaphore.
-  (with-gsd-lock
-   (lambda ()
-     (define state (unbox (gsd-session-ctx-state-box gsd-default-ctx)))
+  (gsd-ctx-transaction!
+   gsd-default-ctx
+   (lambda (state history event-bus set-state! set-history!)
      (define current (gsd-runtime-state-mode state))
-     (ctx-emit-gsd-event!
-      (current-gsd-ctx)
+     (emit-to-bus!
+      event-bus
       'gsd.transition.attempted
       (make-gsd-transition-attempted-event #:session-id "" #:turn-id 0 #:from current #:to target))
      (define-values (result new-state) (compute-next-gsm-state state target #:event event))
      (cond
        [(ok? result)
         (define new-mode (gsd-runtime-state-mode new-state))
-        (set-box! (gsd-session-ctx-state-box gsd-default-ctx) new-state)
-        (set-gsd-history! (cons (list current new-mode (current-seconds)) (current-gsd-history)))
-        (ctx-emit-gsd-event! (current-gsd-ctx)
-                             'gsd.transition.succeeded
-                             (make-gsd-transition-succeeded-event #:session-id ""
-                                                                  #:turn-id 0
-                                                                  #:from current
-                                                                  #:to new-mode))
+        (set-state! new-state)
+        (set-history! (cons (list current new-mode (current-seconds)) history))
+        (emit-to-bus! event-bus
+                      'gsd.transition.succeeded
+                      (make-gsd-transition-succeeded-event #:session-id ""
+                                                           #:turn-id 0
+                                                           #:from current
+                                                           #:to new-mode))
         result]
        [else
-        (ctx-emit-gsd-event! (current-gsd-ctx)
-                             'gsd.transition.failed
-                             (make-gsd-transition-failed-event
-                              #:session-id ""
-                              #:turn-id 0
-                              #:from current
-                              #:to target
-                              #:reason (format "invalid: ~a -> ~a" current target)))
+        (emit-to-bus! event-bus
+                      'gsd.transition.failed
+                      (make-gsd-transition-failed-event
+                       #:session-id ""
+                       #:turn-id 0
+                       #:from current
+                       #:to target
+                       #:reason (format "invalid: ~a -> ~a" current target)))
         result]))))
 
 ;; FF-01: Auto-routing transition — finds shortest path via BFS and follows it.
@@ -258,21 +252,21 @@
          (gsm-transition! target))]))
 
 (define (gsm-reset!)
-  ;; R-01: Direct box access inside with-gsd-lock to avoid nested semaphore deadlock.
-  (with-gsd-lock (lambda ()
-                   (define state (unbox (gsd-session-ctx-state-box gsd-default-ctx)))
-                   (define old (gsd-runtime-state-mode state))
-                   (set-box! (gsd-session-ctx-state-box gsd-default-ctx)
-                             (struct-copy gsd-runtime-state state [mode 'idle] [wave-executor #f]))
-                   (set-gsd-history! (cons (list old 'idle (current-seconds)) (current-gsd-history)))
-                   (ok-result old 'idle))))
+  (gsd-ctx-transaction!
+   gsd-default-ctx
+   (lambda (state history event-bus set-state! set-history!)
+     (define old (gsd-runtime-state-mode state))
+     (set-state! (struct-copy gsd-runtime-state state [mode 'idle] [wave-executor #f]))
+     (set-history! (cons (list old 'idle (current-seconds)) history))
+     (ok-result old 'idle))))
 
 (define (reset-gsm!)
-  ;; R-01: Use set-gsd-state!/set-gsd-history! directly inside with-gsd-lock.
-  (with-gsd-lock (lambda ()
-                   (set-box! (gsd-session-ctx-state-box gsd-default-ctx) (make-initial-gsd-state))
-                   (set-gsd-history! '())
-                   (void))))
+  (gsd-ctx-transaction!
+   gsd-default-ctx
+   (lambda (state history event-bus set-state! set-history!)
+     (set-state! (make-initial-gsd-state))
+     (set-history! '())
+     (void))))
 
 (define (gsm-valid-next-states)
   (define current (gsm-current))
@@ -432,51 +426,45 @@
   (valid-targets (gsm-ctx-current ctx)))
 
 (define (gsm-ctx-transition! ctx target #:event [event #f])
-  (call-with-semaphore
-   (gsd-session-ctx-sem ctx)
-   (lambda ()
-     (define state (unbox (gsd-session-ctx-state-box ctx)))
+  (gsd-ctx-transaction!
+   ctx
+   (lambda (state history event-bus set-state! set-history!)
      (define current (gsd-runtime-state-mode state))
-     (ctx-emit-gsd-event!
-      ctx
+     (emit-to-bus!
+      event-bus
       'gsd.transition.attempted
       (make-gsd-transition-attempted-event #:session-id "" #:turn-id 0 #:from current #:to target))
      (define-values (result new-state) (compute-next-gsm-state state target #:event event))
      (cond
        [(ok? result)
         (define new-mode (gsd-runtime-state-mode new-state))
-        (set-box! (gsd-session-ctx-state-box ctx) new-state)
-        (set-box! (gsd-session-ctx-history-box ctx)
-                  (cons (list current new-mode (current-seconds))
-                        (unbox (gsd-session-ctx-history-box ctx))))
-        (ctx-emit-gsd-event! ctx
-                             'gsd.transition.succeeded
-                             (make-gsd-transition-succeeded-event #:session-id ""
-                                                                  #:turn-id 0
-                                                                  #:from current
-                                                                  #:to new-mode))
+        (set-state! new-state)
+        (set-history! (cons (list current new-mode (current-seconds)) history))
+        (emit-to-bus! event-bus
+                      'gsd.transition.succeeded
+                      (make-gsd-transition-succeeded-event #:session-id ""
+                                                           #:turn-id 0
+                                                           #:from current
+                                                           #:to new-mode))
         result]
        [else
-        (ctx-emit-gsd-event! ctx
-                             'gsd.transition.failed
-                             (make-gsd-transition-failed-event
-                              #:session-id ""
-                              #:turn-id 0
-                              #:from current
-                              #:to target
-                              #:reason (format "invalid: ~a -> ~a" current target)))
+        (emit-to-bus! event-bus
+                      'gsd.transition.failed
+                      (make-gsd-transition-failed-event
+                       #:session-id ""
+                       #:turn-id 0
+                       #:from current
+                       #:to target
+                       #:reason (format "invalid: ~a -> ~a" current target)))
         result]))))
 
 (define (gsm-ctx-reset! ctx)
-  (call-with-semaphore
-   (gsd-session-ctx-sem ctx)
-   (lambda ()
-     (define state (unbox (gsd-session-ctx-state-box ctx)))
+  (gsd-ctx-transaction!
+   ctx
+   (lambda (state history event-bus set-state! set-history!)
      (define old (gsd-runtime-state-mode state))
-     (set-box! (gsd-session-ctx-state-box ctx)
-               (struct-copy gsd-runtime-state state [mode 'idle] [wave-executor #f]))
-     (set-box! (gsd-session-ctx-history-box ctx)
-               (cons (list old 'idle (current-seconds)) (unbox (gsd-session-ctx-history-box ctx))))
+     (set-state! (struct-copy gsd-runtime-state state [mode 'idle] [wave-executor #f]))
+     (set-history! (cons (list old 'idle (current-seconds)) history))
      (ok-result old 'idle))))
 
 ;; Auto-routing multi-step transition (ctx-aware)
