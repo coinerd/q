@@ -254,7 +254,7 @@
           'goal-text
           (goal-state-goal-text gs)
           'status
-          (goal-state-status gs)
+          (symbol->string (goal-state-status gs))
           'turns-used
           (goal-state-turns-used gs)
           'max-turns
@@ -262,7 +262,7 @@
           'evaluator-model
           (goal-state-evaluator-model gs)
           'evaluator-mode
-          (goal-state-evaluator-mode gs)
+          (symbol->string (goal-state-evaluator-mode gs))
           'checks
           (map goal-check->hash (goal-state-checks gs))
           'last-evaluation
@@ -278,11 +278,17 @@
   (-> hash? goal-state?)
   (goal-state (hash-ref h 'id "")
               (hash-ref h 'goal-text "")
-              (hash-ref h 'status 'active)
+              (let ([s (hash-ref h 'status "active")])
+                (if (symbol? s)
+                    s
+                    (string->symbol s)))
               (hash-ref h 'turns-used 0)
               (hash-ref h 'max-turns DEFAULT-GOAL-MAX-TURNS)
               (hash-ref h 'evaluator-model "auto")
-              (hash-ref h 'evaluator-mode DEFAULT-EVALUATOR-MODE)
+              (let ([m (hash-ref h 'evaluator-mode "transcript")])
+                (if (symbol? m)
+                    m
+                    (string->symbol m)))
               (map hash->goal-check (hash-ref h 'checks '()))
               (let ([le (hash-ref h 'last-evaluation #f)]) (and le (hash->evaluation-result le)))
               (hash-ref h 'started-at 0)

@@ -17,6 +17,7 @@
          racket/port
          racket/class
          json
+         "../runtime/goal-state.rkt"
          "../util/protocol-types.rkt"
          "../util/jsonl.rkt"
          (only-in "../util/message-helpers.rkt" ensure-parent-dirs!)
@@ -73,6 +74,9 @@
          ;; Custom entry helpers (#1147)
          append-custom-entry!
          load-custom-entries
+         ;; Goal state persistence (v0.71.0)
+         append-goal-state!
+         load-latest-goal-state
          ;; R-09/R-10: Session sink interface (v0.39.0)
          session-sink<%>
          file-session-sink%
@@ -448,6 +452,36 @@
                  (equal? (custom-entry-extension e) extension-name)
                  (or (not key) (equal? (custom-entry-key e) key))))
           entries))
+
+;; ============================================================
+;; Goal state persistence (v0.71.0)
+;; ============================================================
+
+(define (append-goal-state! path gs)
+  ;; Store goal-state as a JSON string in a system message
+  ;; so it survives message->jsexpr serialization
+  (define gs-json-str (jsexpr->string (goal-state->hash gs)))
+  (append-entry! path
+                 (make-message (goal-state-id gs)
+                               #f
+                               'system
+                               'goal-state
+                               (list (make-text-part gs-json-str))
+                               (goal-state-updated-at gs)
+                               #f)))
+
+(define (load-latest-goal-state path)
+  (define entries (load-session-log path))
+  (define goal-entries
+    (filter (lambda (e) (and (message? e) (eq? (message-kind e) 'goal-state))) entries))
+  (if (null? goal-entries)
+      #f
+      (let* ([last-entry (car (reverse goal-entries))]
+             [content (message-content last-entry)]
+             [json-str (if (string? content)
+                           content
+                           (text-part-text (car content)))])
+        (hash->goal-state (string->jsexpr json-str)))))
 
 ;; ── Session-info helper ──
 
