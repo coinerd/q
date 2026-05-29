@@ -6,7 +6,8 @@
 ;; util/safe-mode-state.rkt. This module imports from there and adds
 ;; mutation actions, locking, and introspection.
 
-(require racket/string
+(require racket/contract
+         racket/string
          (only-in "../util/safe-mode-state.rkt"
                   current-safe-mode
                   current-safe-mode-config
@@ -30,11 +31,29 @@
 ;; Re-export everything from safe-mode-state
 ;; ============================================================
 
-(provide current-safe-mode
-         current-safe-mode-config
-         project-root
-
-         ;; Per-session config struct
+(provide (contract-out
+          [current-safe-mode (parameter/c boolean?)]
+          [current-safe-mode-config (parameter/c (or/c safe-mode-config? #f))]
+          [project-root (parameter/c path?)]
+          [make-safe-mode-config
+           (->* ()
+                (#:active boolean?
+                 #:allowed-tools (listof string?)
+                 #:allowed-paths (listof path?)
+                 #:locked boolean?
+                 #:project-root (or/c path? #f))
+                safe-mode-config?)]
+          [safe-mode? (-> boolean?)]
+          [allowed-tool? (-> string? boolean?)]
+          [allowed-path? (-> (or/c path? string?) boolean?)]
+          [safe-mode-project-root (-> path?)]
+          [trust-level (-> (or/c 'full 'restricted))]
+          [safe-mode-active! (-> void?)]
+          [safe-mode-deactivate! (-> void?)]
+          [lock-safe-mode! (-> void?)]
+          [safe-mode-locked? (parameter/c boolean?)]
+          [safe-mode-config-info (-> hash?)])
+         ;; Struct type + accessors (plain provide for struct)
          safe-mode-config
          safe-mode-config?
          safe-mode-config-active
@@ -42,28 +61,7 @@
          safe-mode-config-allowed-paths
          safe-mode-config-locked
          safe-mode-config-project-root-path
-         make-safe-mode-config
-
-         ;; Predicates
-         safe-mode?
-         allowed-tool?
-         allowed-path?
-
-         ;; Introspection
-         safe-mode-project-root
-         trust-level
-
-         ;; Constants
-         blocked-tools
-
-         ;; Actions (defined below)
-         safe-mode-active!
-         safe-mode-deactivate!
-         lock-safe-mode!
-         safe-mode-locked?
-
-         ;; Introspection (defined below)
-         safe-mode-config-info)
+         blocked-tools)
 
 ;; ============================================================
 ;; Lock state

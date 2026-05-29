@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.69.4 — 2026-05-25
+
+### Abstraction Quality: Boundary Tightening
+
+Tighten module boundaries by adding named accessors and contracts.
+
+**Changes:**
+- **W0**: Add `gsd-ctx-busy`, `gsd-ctx-set-busy!`, `gsd-ctx-transaction`, `gsd-ctx-set-transaction!`, `gsd-ctx-transaction-update!` named accessors. Update tests to use `gsd-ctx-*` accessors instead of raw box patterns.
+- **W1**: Add `contract-out` to all 14 exports in `runtime/safe-mode.rkt`. Parameters, predicates, actions, and introspection now have type-checked boundaries.
+
 ## v0.69.3 — 2026-05-25
 
 ### Abstraction Quality: Representation Discipline
