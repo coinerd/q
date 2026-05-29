@@ -286,7 +286,7 @@
         (apply
          append
          (for/list ([group (in-list line-groups)])
-           (define non-empty (filter (lambda (s) (not (string=? (styled-segment-text s) ""))) group))
+           (define non-empty (filter-not (lambda (s) (string=? (styled-segment-text s) "")) group))
            (cond
              [(null? non-empty) (list (styled-line (list (styled-segment "" (quote ())))))]
              [else

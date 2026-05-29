@@ -90,7 +90,7 @@
 (define (vnode-text-length v)
   (cond
     [(vtext? v) (string-length (vtext-text v))]
-    [(vhbox? v) (apply + (map vnode-text-length (vhbox-children v)))]
+    [(vhbox? v) (for/sum ([c (in-list (vhbox-children v))]) (vnode-text-length c))]
     [(vvbox? v)
      (define children (vvbox-children v))
      (if (null? children)
@@ -108,7 +108,7 @@
      (if (null? (vhbox-children v))
          0
          (apply max (map vnode-height (vhbox-children v))))]
-    [(vvbox? v) (apply + (map vnode-height (vvbox-children v)))]
+    [(vvbox? v) (for/sum ([c (in-list (vvbox-children v))]) (vnode-height c))]
     [(vfill? v) 1]
     [(voverlay? v) (max (vnode-height (voverlay-content v)) (vnode-height (voverlay-anchor v)))]
     [else 0]))
