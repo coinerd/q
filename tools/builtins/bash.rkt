@@ -39,7 +39,12 @@
                   sandbox-max-processes)
          (only-in "../../util/path-helpers.rkt" expand-home-path)
          (only-in "../../util/truncation.rkt" truncate-output)
-         (only-in "../../util/safe-mode-predicates.rkt" safe-mode?))
+         (only-in "../../util/safe-mode-predicates.rkt" safe-mode?)
+         (only-in "../shell-risk.rkt"
+                  tokenize-shell-command
+                  classify-shell-risks
+                  shell-risk-finding-type
+                  shell-risk-finding-severity))
 
 ;; Struct-based config (v0.44.2+, sole config path since v0.46.3)
 (provide bash-execution-config
@@ -63,7 +68,8 @@
                        [destructive-command? (-> string? boolean?)]
                        [execution-policy-allows? (-> string? boolean?)]
                        [high-risk-command? (-> string? boolean?)]
-                       [tool-bash (->* (hash?) (exec-context?) any/c)]))
+                       [tool-bash (->* (hash?) (exec-context?) any/c)])
+         shell-risk-classifier-diagnostic)
 
 ;; Default timeout in seconds (used when no settings available)
 (define DEFAULT-TIMEOUT-SECONDS 120)
@@ -200,6 +206,39 @@
   (for/or ([pattern (in-list high-risk-patterns)])
     (regexp-match? pattern lower)))
 
+;; ── Structured risk classifier shadow mode (v0.70.3) ──
+;; Compares regex-based detection with structured classifier.
+;; Returns diagnostic string when they disagree, #f when they agree.
+(define (shell-risk-classifier-diagnostic command)
+  (define regex-destructive? (destructive-command? command))
+  (define regex-high-risk? (high-risk-command? command))
+  (define findings (classify-shell-risks (tokenize-shell-command command)))
+  (define struct-destructive?
+    (for/or ([f (in-list findings)])
+      (member (shell-risk-finding-type f) '(destructive high-risk windows-destructive network-pipe command-substitution eval exec))))
+  (define struct-critical?
+    (for/or ([f (in-list findings)])
+      (eq? (shell-risk-finding-severity f) 'critical)))
+  (cond
+    ;; Regex says destructive but classifier sees nothing
+    [(and regex-destructive? (not struct-destructive?))
+     (format
+      "[CLASSIFIER-DIAG] Regex flagged '~a' as destructive but structured classifier found no risks.
+"
+      command)]
+    ;; Classifier sees destructive but regex does not
+    [(and (not regex-destructive?) struct-destructive?)
+     (format "[CLASSIFIER-DIAG] Structured classifier found risks in '~a' but regex did not match.
+"
+             command)]
+    ;; Regex says high-risk but classifier sees no critical
+    [(and regex-high-risk? (not struct-critical?))
+     (format
+      "[CLASSIFIER-DIAG] Regex flagged '~a' as high-risk but classifier found no critical severity.
+"
+      command)]
+    [else #f]))
+
 ;; v0.44.2 (R5): Struct-based config for per-request bash settings
 (struct bash-execution-config (policy block-destructive? warn-on-destructive? warning-port)
   #:transparent)
@@ -277,6 +316,10 @@
         ;; Optional warning
         (when (and warn-on-destructive? (destructive-command? command))
           (fprintf warning-port "WARNING: Destructive command detected: ~a~n" command))
+        ;; v0.70.3: Structured classifier shadow mode — log disagreements
+        (define classifier-diag (shell-risk-classifier-diagnostic command))
+        (when classifier-diag
+          (fprintf warning-port "~a" classifier-diag))
         (define timeout-arg (hash-ref args 'timeout #f))
         (define raw-work-dir (hash-ref args 'working-directory #f))
         (define work-dir (and raw-work-dir (expand-home-path raw-work-dir)))
