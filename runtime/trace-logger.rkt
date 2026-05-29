@@ -17,7 +17,9 @@
 
 (provide (contract-out [make-trace-logger
                         (->* (event-bus? path-string?)
-                             (#:enabled? boolean? #:sink (or/c (is-a?/c trace-sink<%>) #f))
+                             (#:enabled? boolean?
+                              #:sink (or/c (is-a?/c trace-sink<%>) #f)
+                              #:async? boolean?)
                              trace-logger?)]
                        [trace-logger? (-> any/c boolean?)]
                        [start-trace-logger!
@@ -35,15 +37,16 @@
              [seq #:mutable]
              [sub-id #:mutable]
              [out-port #:mutable]
-             [sink #:mutable])
+             [sink #:mutable]
+             [async? #:mutable])
   #:transparent)
 
 ;; ============================================================
 ;; Constructor
 ;; ============================================================
 
-(define (make-trace-logger bus session-dir #:enabled? [enabled? #t] #:sink [sink #f])
-  (trace-logger bus session-dir enabled? 0 #f #f sink))
+(define (make-trace-logger bus session-dir #:enabled? [enabled? #t] #:sink [sink #f] #:async? [async? #f])
+  (trace-logger bus session-dir enabled? 0 #f #f sink async?))
 
 ;; ============================================================
 ;; Start / Stop
@@ -66,6 +69,11 @@
             ;; Open output port in append mode
             (open-output-file trace-path #:exists 'append))))
     (set-trace-logger-out-port! logger out)
+    ;; v0.70.4: wrap sink in async-trace-sink% when async? is enabled
+    (when (and (trace-logger-async? logger) (not (trace-logger-sink logger)))
+      (define trace-path (build-path (trace-logger-session-dir logger) "trace.jsonl"))
+      (define file-sink (new json-file-trace-sink% [path trace-path]))
+      (set-trace-logger-sink! logger (new async-trace-sink% [inner-sink file-sink])))
     ;; Subscribe to all events
     (define sub-id (subscribe! bus (lambda (evt) (handle-event! logger evt))))
     (set-trace-logger-sub-id! logger sub-id)))
