@@ -26,7 +26,9 @@
                   backend-delete!
                   backend-list-providers
                   backend-available?
-                  make-policy-aware-backend))
+                  make-policy-aware-backend
+                  credential-backend-capabilities
+                  make-macos-keychain-credential-backend))
 
 ;; ---------------------------------------------------------------------------
 ;; Helpers
@@ -398,3 +400,79 @@
   (define mem (make-memory-credential-backend))
   (define be (make-policy-aware-backend mem #:policy 'keychain-preferred))
   (check-true (string-contains? (backend-name be) "policy-aware")))
+
+;; ---------------------------------------------------------------------------
+;; Tests: platform capability matrix + macOS keychain (v0.70.2)
+;; ---------------------------------------------------------------------------
+
+(test-case "capability-matrix: returns expected keys"
+  (define caps (credential-backend-capabilities))
+  (check-not-false (hash-ref caps 'env #f))
+  (check-not-false (hash-ref caps 'file #f))
+  (check-not-false (hash-ref caps 'memory #f))
+  (check-not-false (hash-ref caps 'platform #f))
+  (check-true (boolean? (hash-ref caps 'env)))
+  (check-true (boolean? (hash-ref caps 'keychain-linux)))
+  (check-true (boolean? (hash-ref caps 'keychain-macos)))
+  (check-true (boolean? (hash-ref caps 'keychain-windows))))
+
+(test-case "capability-matrix: file and memory always available"
+  (define caps (credential-backend-capabilities))
+  (check-true (hash-ref caps 'file))
+  (check-true (hash-ref caps 'memory)))
+
+(test-case "macos-keychain: backend name"
+  (define be (make-macos-keychain-credential-backend))
+  (check-equal? (backend-name be) "macos-keychain"))
+
+(test-case "macos-keychain: available? returns boolean"
+  (define be (make-macos-keychain-credential-backend))
+  ;; In CI (Linux headless), security won't be available
+  (check-true (boolean? (backend-available? be))))
+
+(test-case "macos-keychain: mock store+load roundtrip"
+  ;; Mock the command runner
+  (define stored (box #f))
+  (parameterize ([current-external-command-runner
+                  (λ (cmd out)
+                    (cond
+                      [(string-contains? cmd "add-generic-password")
+                       (set-box! stored #t)
+                       (display "ok" out)
+                       #t]
+                      [(string-contains? cmd "find-generic-password")
+                       (display "sk-mock-key-123" out)
+                       #t]
+                      [(string-contains? cmd "delete-generic-password")
+                       (display "ok" out)
+                       #t]
+                      [(string-contains? cmd "which security")
+                       (display "/usr/bin/security" out)
+                       #t]
+                      [else
+                       (display "" out)
+                       #f]))])
+    (define be (make-macos-keychain-credential-backend))
+    (check-true (backend-available? be))
+    (backend-store! be "openai" "sk-mock-key-123")
+    (check-true (unbox stored))
+    (define cred (backend-load be "openai"))
+    (check-not-false cred)
+    (check-equal? (hash-ref cred 'api-key) "sk-mock-key-123")
+    (backend-delete! be "openai")))
+
+(test-case "macos-keychain: mock load returns #f on failure"
+  (parameterize ([current-external-command-runner
+                  (λ (cmd out)
+                    (cond
+                      [(string-contains? cmd "find-generic-password")
+                       (display "security: item not found" out)
+                       #f]
+                      [(string-contains? cmd "which security")
+                       (display "/usr/bin/security" out)
+                       #t]
+                      [else
+                       (display "" out)
+                       #f]))])
+    (define be (make-macos-keychain-credential-backend))
+    (check-false (backend-load be "nonexistent-provider"))))
