@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.71.0 — 2026-05-30
+
+### Goal State & Event Foundation
+
+First milestone of the `/goal` autonomous goal-driven loop feature.
+
+- **goal-state.rkt**: Core data model with `goal-state` (11 fields), `goal-check`, `evaluation-result`, and `check-result` structs. Full serialization (hash round-trip) with JSON-safe symbol→string conversion. Contracts on all public constructors.
+- **Typed events**: 6 goal events added to `session-events.rkt` — `goal.started`, `goal.turn.started`, `goal.evaluated`, `goal.check.completed`, `goal.achieved`, `goal.failed`.
+- **JSONL persistence**: `append-goal-state!` and `load-latest-goal-state` in `session-store.rkt` for session-scoped goal state storage.
+- **Context filtering**: `goal-state` kind excluded from context assembly in `session-walk.rkt`.
+- **Tests**: 36 tests covering construction, contracts, serialization round-trip, backward compatibility, event construction, persistence, and context filtering.
+
 ## v0.70.13 — 2026-05-30
 
 ### Audit Hotfix Round 3 + GUI Bug Fixes
