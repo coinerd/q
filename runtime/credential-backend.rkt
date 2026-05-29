@@ -25,6 +25,7 @@
 
 ;; Command runner seam for keychain backends (mockable for tests)
 (provide current-external-command-runner
+         current-shell-command-runner
 
          ;; Backend struct
          credential-backend
@@ -186,6 +187,7 @@
   (with-handlers ([exn:fail? (λ (e)
                                (with-safe-fallback (void) (delete-file tmp))
                                (raise e))])
+    (file-or-directory-permissions tmp #o600)
     (write-json-file tmp data)
     (rename-file-or-directory tmp path #t)
     (file-or-directory-permissions path #o600)))
@@ -264,6 +266,21 @@
                                         (close-input-port out-port)
                                         (close-input-port err-port)
                                         (values (subprocess-status sp) (get-output-string out))))))
+
+;; Shell command runner for platform backends (macOS security, Windows cmdkey).
+;; Signature: (string? output-port? -> any/c)
+;; Mockable for testing: (parameterize ([current-shell-command-runner mock-fn]) ...)
+(define current-shell-command-runner
+  (make-parameter (λ (cmd-string output-port)
+                    (with-safe-fallback
+                     #f
+                     (define-values (sp out-port in-port err-port)
+                       (subprocess #f #f #f (find-executable-path "/bin/sh") "-c" cmd-string))
+                     (copy-port out-port output-port)
+                     (close-input-port out-port)
+                     (close-input-port err-port)
+                     (close-input-port in-port)
+                     (= (subprocess-status sp) 0)))))
 
 ;; Key attribute for secret-tool: q-agent/provider/<name>
 (define (keychain-attrs provider-name)
@@ -433,7 +450,8 @@
           [(eq? policy 'keychain-preferred)
            (when (member inner-name '("file"))
              (emit-warning
-              (format "storing credential for '~a' in file backend — consider using keychain or env" provider-name)))
+              (format "storing credential for '~a' in file backend — consider using keychain or env"
+                      provider-name)))
            (backend-store! inner provider-name api-key)]
           [else (backend-store! inner provider-name api-key)]))
       ;; load
@@ -444,16 +462,17 @@
            (if (member inner-name '("file" "keychain" "chained"))
                (begin
                  (emit-warning
-                  (format "loading credential for '~a' from '~a' blocked by env-only policy" provider-name inner-name))
+                  (format "loading credential for '~a' from '~a' blocked by env-only policy"
+                          provider-name
+                          inner-name))
                  #f)
                (backend-load inner provider-name #:env-var (or env-var #f)))]
           [else
            (define result (backend-load inner provider-name #:env-var (or env-var #f)))
-           (when (and result
-                      (eq? policy 'keychain-preferred)
-                      (member inner-name '("file")))
+           (when (and result (eq? policy 'keychain-preferred) (member inner-name '("file")))
              (emit-warning
-              (format "loaded credential for '~a' from file backend — consider using keychain" provider-name)))
+              (format "loaded credential for '~a' from file backend — consider using keychain"
+                      provider-name)))
            result]))
       ;; delete!
       (λ (be provider-name) (backend-delete! inner provider-name))
@@ -469,19 +488,26 @@
 ;; Returns a hash describing which backends are available on the
 ;; current platform, based on actual command availability checks.
 (define (credential-backend-capabilities)
-  (define runner (current-external-command-runner))
+  (define runner (current-shell-command-runner))
   (define (cmd-available? cmd)
     (with-handlers ([exn:fail? (λ (_) #f)])
       (define out (open-output-string))
       (runner (format "which ~a 2>/dev/null" cmd) out)
       (positive? (string-length (get-output-string out)))))
-  (hash 'env (backend-available? (make-env-credential-backend))
-        'file #t
-        'memory #t
-        'keychain-linux (cmd-available? "secret-tool")
-        'keychain-macos (cmd-available? "security")
-        'keychain-windows (cmd-available? "cmdkey")
-        'platform (symbol->string (system-type 'os))))
+  (hash 'env
+        (backend-available? (make-env-credential-backend))
+        'file
+        #t
+        'memory
+        #t
+        'keychain-linux
+        (cmd-available? "secret-tool")
+        'keychain-macos
+        (cmd-available? "security")
+        'keychain-windows
+        (cmd-available? "cmdkey")
+        'platform
+        (symbol->string (system-type 'os))))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; macOS security backend (v0.70.2)
@@ -492,9 +518,8 @@
 ;; current-external-command-runner.
 
 (define (run-security-command args)
-  (define runner (current-external-command-runner))
+  (define runner (current-shell-command-runner))
   (define out (open-output-string))
-  (define err (open-output-string))
   (define cmd (format "security ~a 2>&1" args))
   (define result (runner cmd out))
   (values (get-output-string out) result))
@@ -504,26 +529,48 @@
    "macos-keychain"
    ;; store!
    (λ (be provider-name api-key)
-     (define-values (out ok?) (run-security-command
-                               (format "add-generic-password -a '~a' -s 'q-credential-~a' -w '~a' -U"
-                                       (getenv "USER") provider-name api-key)))
+     (define user
+       (or (getenv "USER")
+           (getenv "LOGNAME")
+           (with-handlers ([exn:fail? (λ (_) #f)])
+             (path->string (find-system-path 'who-am-i)))
+           "unknown"))
+     (define-values (out ok?)
+       (run-security-command (format "add-generic-password -a '~a' -s 'q-credential-~a' -w '~a' -U"
+                                     (shell-escape user)
+                                     (shell-escape provider-name)
+                                     (shell-escape api-key))))
      (unless ok?
-       (raise-credential-error
-        (format "macOS keychain store failed for '~a'" provider-name)
-        "macos-keychain" provider-name)))
+       (raise-credential-error (format "macOS keychain store failed for '~a'" provider-name)
+                               "macos-keychain"
+                               provider-name)))
    ;; load
    (λ (be provider-name env-var)
-     (define-values (out ok?) (run-security-command
-                               (format "find-generic-password -a '~a' -s 'q-credential-~a' -w"
-                                       (getenv "USER") provider-name)))
+     (define user
+       (or (getenv "USER")
+           (getenv "LOGNAME")
+           (with-handlers ([exn:fail? (λ (_) #f)])
+             (path->string (find-system-path 'who-am-i)))
+           "unknown"))
+     (define-values (out ok?)
+       (run-security-command (format "find-generic-password -a '~a' -s 'q-credential-~a' -w"
+                                     (shell-escape user)
+                                     (shell-escape provider-name))))
      (if ok?
          (hash 'api-key (string-trim out) 'provider provider-name 'source "macos-keychain")
          #f))
    ;; delete!
    (λ (be provider-name)
-     (define-values (out ok?) (run-security-command
-                               (format "delete-generic-password -a '~a' -s 'q-credential-~a'"
-                                       (getenv "USER") provider-name)))
+     (define user
+       (or (getenv "USER")
+           (getenv "LOGNAME")
+           (with-handlers ([exn:fail? (λ (_) #f)])
+             (path->string (find-system-path 'who-am-i)))
+           "unknown"))
+     (define-values (out ok?)
+       (run-security-command (format "delete-generic-password -a '~a' -s 'q-credential-~a'"
+                                     (shell-escape user)
+                                     (shell-escape provider-name))))
      (void))
    ;; list
    (λ (be)
@@ -532,7 +579,7 @@
    ;; available?
    (λ (be)
      (with-handlers ([exn:fail? (λ (_) #f)])
-       (define runner (current-external-command-runner))
+       (define runner (current-shell-command-runner))
        (define out (open-output-string))
        (runner "which security 2>/dev/null" out)
        (positive? (string-length (get-output-string out)))))))
@@ -545,36 +592,38 @@
 ;; Fully mockable via current-external-command-runner.
 
 (define (run-cmdkey-command args)
-  (define runner (current-external-command-runner))
+  (define runner (current-shell-command-runner))
   (define out (open-output-string))
   (define cmd (format "cmdkey ~a 2>&1" args))
   (define result (runner cmd out))
   (values (get-output-string out) result))
 
 (define (make-windows-credential-backend)
+  (log-warning
+   "Windows Credential Manager stores API key via cmdkey CLI arguments. ~~ Use env-only policy on shared machines for enhanced security.")
   (credential-backend
    "windows-credential-manager"
    ;; store! — uses cmdkey /generic:target /user:user /pass:key
    (λ (be provider-name api-key)
-     (define-values (out ok?) (run-cmdkey-command
-                               (format "/generic:q-credential-~a /user:q-api-key /pass:~a"
-                                       provider-name api-key)))
+     (define-values (out ok?)
+       (run-cmdkey-command
+        (format "/generic:q-credential-~a /user:q-api-key /pass:~a" provider-name api-key)))
      (unless ok?
-       (raise-credential-error
-        (format "Windows credential store failed for '~a'" provider-name)
-        "windows-credential-manager" provider-name)))
+       (raise-credential-error (format "Windows credential store failed for '~a'" provider-name)
+                               "windows-credential-manager"
+                               provider-name)))
    ;; load — uses cmdkey /list to find, then /generic to retrieve
    ;; Note: cmdkey cannot retrieve passwords directly; this is a limitation.
    ;; On Windows, PowerShell's CredentialManager module would be needed for
    ;; actual password retrieval. For now, load checks presence only and
    ;; returns a marker hash. Full retrieval requires PowerShell integration.
    (λ (be provider-name env-var)
-     (define-values (out ok?) (run-cmdkey-command
-                               (format "/list:q-credential-~a" provider-name)))
+     (define-values (out ok?) (run-cmdkey-command (format "/list:q-credential-~a" provider-name)))
      (if (and ok? (string-contains? out (format "q-credential-~a" provider-name)))
-         (hash 'api-key "[stored-in-windows-credential-manager]"
-               'provider provider-name
-               'source "windows-credential-manager")
+         (begin
+           (log-warning
+            "Windows Credential Manager cannot retrieve stored passwords. ~~ Credential marked as present but key unavailable.")
+           #f)
          #f))
    ;; delete!
    (λ (be provider-name)
@@ -588,12 +637,14 @@
            (for/list ([line (in-list lines)]
                       #:when (string-contains? line "q-credential-"))
              (define m (regexp-match #rx"q-credential-([a-zA-Z0-9_-]+)" line))
-             (if m (cadr m) line)))
+             (if m
+                 (cadr m)
+                 line)))
          '()))
    ;; available? — check if cmdkey exists
    (λ (be)
      (with-handlers ([exn:fail? (λ (_) #f)])
-       (define runner (current-external-command-runner))
+       (define runner (current-shell-command-runner))
        (define out (open-output-string))
        (runner "which cmdkey 2>/dev/null || where cmdkey 2>nul" out)
        (positive? (string-length (get-output-string out)))))))
