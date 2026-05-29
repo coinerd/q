@@ -15,17 +15,15 @@
          "../util/protocol-types.rkt"
          "trace-sink.rkt")
 
-(provide (contract-out [make-trace-logger
-                        (->* (event-bus? path-string?)
-                             (#:enabled? boolean?
-                              #:sink (or/c (is-a?/c trace-sink<%>) #f)
-                              #:async? boolean?)
-                             trace-logger?)]
-                       [trace-logger? (-> any/c boolean?)]
-                       [start-trace-logger!
-                        (->* (trace-logger?) (#:port (or/c output-port? #f)) void?)]
-                       [stop-trace-logger! (-> trace-logger? void?)]
-                       [flush-trace-logger! (-> trace-logger? void?)]))
+(provide (contract-out
+          [make-trace-logger
+           (->* (event-bus? path-string?)
+                (#:enabled? boolean? #:sink (or/c (is-a?/c trace-sink<%>) #f) #:async? boolean?)
+                trace-logger?)]
+          [trace-logger? (-> any/c boolean?)]
+          [start-trace-logger! (->* (trace-logger?) (#:port (or/c output-port? #f)) void?)]
+          [stop-trace-logger! (-> trace-logger? void?)]
+          [flush-trace-logger! (-> trace-logger? void?)]))
 
 ;; ============================================================
 ;; Trace logger struct
@@ -45,7 +43,11 @@
 ;; Constructor
 ;; ============================================================
 
-(define (make-trace-logger bus session-dir #:enabled? [enabled? #t] #:sink [sink #f] #:async? [async? #f])
+(define (make-trace-logger bus
+                           session-dir
+                           #:enabled? [enabled? #t]
+                           #:sink [sink #f]
+                           #:async? [async? #f])
   (trace-logger bus session-dir enabled? 0 #f #f sink async?))
 
 ;; ============================================================
@@ -71,6 +73,9 @@
     (set-trace-logger-out-port! logger out)
     ;; v0.70.4: wrap sink in async-trace-sink% when async? is enabled
     (when (and (trace-logger-async? logger) (not (trace-logger-sink logger)))
+      ;; Close the port we just opened — async sink manages its own file handle
+      (close-output-port out)
+      (set-trace-logger-out-port! logger #f)
       (define trace-path (build-path (trace-logger-session-dir logger) "trace.jsonl"))
       (define file-sink (new json-file-trace-sink% [path trace-path]))
       (set-trace-logger-sink! logger (new async-trace-sink% [inner-sink file-sink])))
@@ -105,7 +110,8 @@
 
 (define (handle-event! logger evt)
   (define out (trace-logger-out-port logger))
-  (when out
+  (define sink (trace-logger-sink logger))
+  (when (or out (and sink (object? sink)))
     (define seq (add1 (trace-logger-seq logger)))
     (set-trace-logger-seq! logger seq)
     (define entry
@@ -123,7 +129,6 @@
               (sanitize-for-json (event-payload evt))))
     ;; v0.15.1: Wrap write-json in error handler to prevent
     ;; partial writes from corrupting the JSONL file.
-    (define sink (trace-logger-sink logger))
     (cond
       [(and sink (object? sink))
        (with-handlers ([exn:fail? (lambda (e)
