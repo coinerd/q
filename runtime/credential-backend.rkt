@@ -17,7 +17,6 @@
 (require racket/contract
          json
          racket/file
-         racket/string
          racket/path
          racket/match
          racket/list
@@ -606,8 +605,9 @@
    ;; store! — uses cmdkey /generic:target /user:user /pass:key
    (λ (be provider-name api-key)
      (define-values (out ok?)
-       (run-cmdkey-command
-        (format "/generic:q-credential-~a /user:q-api-key /pass:~a" provider-name api-key)))
+       (run-cmdkey-command (format "/generic:q-credential-~a /user:q-api-key /pass:'~a'"
+                                   (shell-escape provider-name)
+                                   (shell-escape api-key))))
      (unless ok?
        (raise-credential-error (format "Windows credential store failed for '~a'" provider-name)
                                "windows-credential-manager"

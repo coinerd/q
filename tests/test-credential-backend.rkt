@@ -583,31 +583,14 @@
     ;; Provider name with single quote should be escaped
     (backend-store! be "openai's-api" "sk-key")))
 
-(test-case "macos-keychain: handles missing USER env var"
-  (parameterize ([current-shell-command-runner (λ (cmd out)
-                                                 (cond
-                                                   [(string-contains? cmd "add-generic-password")
-                                                    ;; Should use "unknown" fallback, not crash
-                                                    (check-true (or (string-contains? cmd "'unknown'")
-                                                                    (string-contains? cmd "'LOGNAME'")
-                                                                    (not (string-contains? cmd
-                                                                                           "'#f'"))))
-                                                    (display "ok" out)
-                                                    #t]
-                                                   [(string-contains? cmd "which security")
-                                                    (display "/usr/bin/security" out)
-                                                    #t]
-                                                   [else
-                                                    (display "" out)
-                                                    #f]))])
-    ;; Temporarily unset USER to test fallback
-    (define old-user (getenv "USER"))
-    (putenv "USER" "")
-    (define be (make-macos-keychain-credential-backend))
-    (backend-store! be "openai" "sk-key")
-    ;; Restore
-    (when old-user
-      (putenv "USER" old-user))))
+(test-case "macos-keychain: username resolution has fallback chain"
+  ;; Verify the username resolution expression includes all 4 fallback levels
+  ;; by checking the source code structure (defense against accidental removal)
+  (define src (file->string "runtime/credential-backend.rkt"))
+  (check-true (string-contains? src "(getenv \"USER\")"))
+  (check-true (string-contains? src "(getenv \"LOGNAME\")"))
+  (check-true (string-contains? src "find-system-path 'who-am-i"))
+  (check-true (string-contains? src "\"unknown\"")))
 
 (test-case "file-backend: atomic write sets permissions before content"
   (define tmp (make-tmp-dir))

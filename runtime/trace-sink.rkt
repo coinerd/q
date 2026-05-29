@@ -93,7 +93,6 @@
 
     (define/public (trace-close!) (void))))
 
-
 ;; -- Async trace sink (v0.70.4) ------------------------------------------------
 ;; Wraps an inner sink with a worker thread + bounded mailbox.
 ;; Backpressure policies:
@@ -114,23 +113,22 @@
     (define closed-box (box #f))
 
     (define worker
-      (thread
-       (lambda ()
-         (let loop ()
-           (define msg (thread-receive))
-           (cond
-             [(eq? msg 'flush)
-              (send inner-sink trace-flush!)
-              (channel-put flush-ch 'done)
-              (semaphore-post space-sema)
-              (loop)]
-             [(eq? msg 'stop)
-              (send inner-sink trace-flush!)
-              (send inner-sink trace-close!)]
-             [else
-              (send inner-sink trace-write! msg)
-              (semaphore-post space-sema)
-              (loop)])))))
+      (thread (lambda ()
+                (let loop ()
+                  (define msg (thread-receive))
+                  (cond
+                    [(eq? msg 'flush)
+                     (send inner-sink trace-flush!)
+                     (channel-put flush-ch 'done)
+                     (semaphore-post space-sema)
+                     (loop)]
+                    [(eq? msg 'stop)
+                     (send inner-sink trace-flush!)
+                     (send inner-sink trace-close!)]
+                    [else
+                     (send inner-sink trace-write! msg)
+                     (semaphore-post space-sema)
+                     (loop)])))))
 
     (define (try-send! item)
       (case policy
@@ -142,11 +140,11 @@
              (thread-send worker item)
              (void))]
         [(drop-old)
-         ;; TODO: implement true drop-oldest by using a shared queue
-         ;; instead of thread mailbox. For now, fallback to drop-new.
-         (if (semaphore-try-wait? space-sema)
-             (thread-send worker item)
-             (void))]
+         ;; drop-old not fully implemented — falls back to drop-new with warning
+         (unless (semaphore-try-wait? space-sema)
+           (log-warning "async-trace-sink: drop-old not fully implemented, dropping new entry"))
+         (when (semaphore-try-wait? space-sema)
+           (thread-send worker item))]
         [else
          (semaphore-wait space-sema)
          (thread-send worker item)]))
