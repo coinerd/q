@@ -3,8 +3,14 @@
 (require rackunit
          rackunit/text-ui
          racket/string
+         racket/class
          "../gui/gui-types.rkt"
-         "../gui/slash-commands.rkt")
+         "../gui/slash-commands.rkt"
+         "../runtime/session-types.rkt"
+         "../extensions/api.rkt"
+         "../extensions/hooks.rkt"
+         "../util/hook-types.rkt"
+         "../agent/queue.rkt")
 
 (define test-add-system-msg
   (test-suite "add-system-msg!"
@@ -92,8 +98,83 @@
       (define handler (make-slash-command-handler #f state-box lock))
       (check-true (handler "/nope")))))
 
+(define test-new-session-dispatch
+  (test-suite "new-session dispatch"
+    (test-case "try-extension-dispatch handles new-session hook result"
+      (define ext-reg (make-extension-registry))
+      (define test-ext
+        (extension "test-new-session"
+                   "1.0"
+                   "1"
+                   (hasheq 'execute-command
+                           (lambda (payload) (hook-amend (hasheq 'new-session "test prompt"))))))
+      (register-extension! ext-reg test-ext)
+      (define mock-sess
+        (agent-session "test-session"
+                       (string->path "/tmp/test")
+                       #f
+                       #f
+                       #f
+                       ext-reg
+                       "test-model"
+                       '()
+                       #f
+                       (make-queue)
+                       (hash)
+                       #t
+                       0
+                       #f
+                       #f
+                       #f
+                       '()
+                       '()
+                       #f
+                       #f
+                       #f))
+      (define state-box (box (make-gui-state)))
+      (define lock (make-semaphore 1))
+      (check-true (try-extension-dispatch mock-sess state-box lock "/test-new-session"))
+      (define msgs (gui-state-messages (unbox state-box)))
+      (check-equal? (length msgs) 0))
+
+    (test-case "try-extension-dispatch handles submit hook result"
+      (define ext-reg (make-extension-registry))
+      (define test-ext
+        (extension "test-submit"
+                   "1.0"
+                   "1"
+                   (hasheq 'execute-command
+                           (lambda (payload) (hook-amend (hasheq 'submit "test submit text"))))))
+      (register-extension! ext-reg test-ext)
+      (define mock-sess
+        (agent-session "test-session"
+                       (string->path "/tmp/test")
+                       #f
+                       #f
+                       #f
+                       ext-reg
+                       "test-model"
+                       '()
+                       #f
+                       (make-queue)
+                       (hash)
+                       #t
+                       0
+                       #f
+                       #f
+                       #f
+                       '()
+                       '()
+                       #f
+                       #f
+                       #f))
+      (define state-box (box (make-gui-state)))
+      (define lock (make-semaphore 1))
+      (check-true (try-extension-dispatch mock-sess state-box lock "/test-submit")))))
+
 (run-tests (test-suite "gui-slash-commands"
              test-add-system-msg
              test-make-slash-command-handler
              test-known-commands
-             test-extension-dispatch))
+             test-extension-dispatch
+             test-new-session-dispatch))
