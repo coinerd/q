@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.69.5 — 2026-05-25
+
+### Audit Hotfix
+
+- **F2 CRITICAL**: Remove raw box accessor exports from `session-state.rkt`. Migrate 16 call sites in `state-machine.rkt` and `events.rkt` to `gsd-ctx-transaction!` / `emit-to-bus!`. Add `emit-to-bus!` with global fallback.
+- **W1**: Remove local `take-safe` from `tui/state-events.rkt` — use `take` + `min` instead.
+- **W3**: Remove duplicate `truncate-str` from `tui/builtins.rkt` — use canonical `truncate-string` from `util/string-helpers.rkt`.
+- **W4**: Add `contract-out` to 5 struct accessors and `make-safe-mode-config` in `util/safe-mode-state.rkt`. Remove double-contract from `runtime/safe-mode.rkt` re-export.
+
 ## v0.69.4 — 2026-05-25
 
 ### Abstraction Quality: Boundary Tightening

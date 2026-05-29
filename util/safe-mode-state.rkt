@@ -9,7 +9,8 @@
 ;; Both runtime/safe-mode.rkt and util/safe-mode-predicates.rkt import
 ;; from here.
 
-(require racket/string)
+(require racket/string
+         racket/contract)
 
 ;; ============================================================
 ;; Parameters
@@ -148,15 +149,24 @@
  current-safe-mode-config
  project-root
 
- ;; Struct
+ ;; Struct type + predicate
  safe-mode-config
  safe-mode-config?
- safe-mode-config-active
- safe-mode-config-allowed-tools
- safe-mode-config-allowed-paths
- safe-mode-config-locked
- safe-mode-config-project-root-path
- make-safe-mode-config
+
+ ;; Struct accessors (contracted)
+ (contract-out
+  [make-safe-mode-config (->* ()
+                               (#:active boolean?
+                                #:allowed-tools (or/c #f (listof string?))
+                                #:allowed-paths (or/c #f (listof (or/c path? string?)))
+                                #:locked boolean?
+                                #:project-root (or/c path? string?))
+                               safe-mode-config?)]
+  [safe-mode-config-active (-> safe-mode-config? boolean?)]
+  [safe-mode-config-allowed-tools (-> safe-mode-config? any/c)]
+  [safe-mode-config-allowed-paths (-> safe-mode-config? any/c)]
+  [safe-mode-config-locked (-> safe-mode-config? boolean?)]
+  [safe-mode-config-project-root-path (-> safe-mode-config? (or/c path? #f))])
 
  ;; Constants
  blocked-tools

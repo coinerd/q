@@ -509,6 +509,9 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 
 
+
+**v0.69.5** — Audit Hotfix
+
 **v0.69.4** — Abstraction Quality: Boundary Tightening
 
 **v0.69.3** — Abstraction Quality: Declarative Patterns
