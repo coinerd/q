@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.71.6 — 2026-05-30
+
+### Agent Evaluator + Series Audit
+
+Seventh and final milestone of the `/goal` feature — agent-based evaluation and series closure.
+
+- **Agent evaluator**: New `runtime/goal-agent-evaluator.rkt` with `evaluate-with-agent` — deeper investigation with enhanced system prompt, 2000 token budget, JSON extraction from prose responses.
+- **Evaluator mode dispatch**: `goal-runner.rkt` dispatches to `evaluate-with-agent` when `evaluator-mode` is `'agent`. New `--evaluator agent` flag in `/goal` command.
+- **Regression verified**: All 9 goal test files pass (state, evaluator, runner, evidence, checks, command, TUI, agent-evaluator, GUI).
+
+#### v0.71.x Series Summary
+
+| Milestone | Theme | New Files | Tests |
+|-----------|-------|-----------|-------|
+| v0.71.0 | Goal State & Event Foundation | goal-state.rkt + 6 events | 18+ |
+| v0.71.1 | Transcript Evaluator + Core Loop | goal-evaluator.rkt, goal-runner.rkt | 22 |
+| v0.71.2 | Evidence Discipline + No-Progress | goal-evidence.rkt | 14 |
+| v0.71.3 | Deterministic Checks | goal-checks.rkt | 14 |
+| v0.71.4 | TUI Integration & Status Display | state-types/event extensions | 11 |
+| v0.71.5 | GUI Integration + Docs | gui-types, slash-commands | 5 |
+| v0.71.6 | Agent Evaluator + Audit | goal-agent-evaluator.rkt | 7 |
+
 ## v0.71.5 — 2026-05-30
 
 ### GUI Integration + Release Polish
