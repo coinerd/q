@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.70.4 -- 2026-05-29
+
+### Async Trace/Event Logging
+
+- **W0**: `async-trace-sink%` class with worker thread and bounded mailbox
+- **W0**: Backpressure policies: `block` (default), `drop-new`, `drop-old` (fallback)
+- **W0**: `trace-flush!` blocks until worker ack; `trace-close!` terminates worker gracefully
+- **W1**: `#:async?` flag in `make-trace-logger` (default `#f` for backward compatibility)
+- **W1**: `json-file-trace-sink%` for JSON-formatted trace output
+- **W2**: Stress benchmark script `scripts/bench-trace-logger.rkt`
+
 ## v0.70.3 — 2026-05-29
 
 ### Structured Shell Risk Classification
