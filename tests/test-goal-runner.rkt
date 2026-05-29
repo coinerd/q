@@ -214,3 +214,24 @@
   ;; With last-evaluation
   (define gs2 (struct-copy goal-state gs [last-evaluation eval1]))
   (check-equal? (length (collect-evaluations gs2)) 1))
+
+;; ============================================================
+
+;; ============================================================
+;; Agent evaluator mode dispatch (W1)
+;; ============================================================
+
+(let ()
+  ;; Build an evaluator provider that returns achieved JSON
+  (define eval-prov (make-eval-provider (list (eval-achieved-response))))
+  (define turn-responses
+    (list (hash 'messages (list (hasheq 'role "assistant" 'content "Bug fixed.")))))
+  (define result
+    (goal-run-simulated! "fix the bug"
+                         eval-prov
+                         "mock-eval"
+                         turn-responses
+                         #:max-turns 1
+                         #:evaluator-mode 'agent))
+  (check-true (goal-state? result))
+  (check-equal? (goal-state-status result) 'achieved))
