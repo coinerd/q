@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.70.0 — 2026-05-29
+
+### Audit Baselines & Risk Harnesses
+
+- **W0**: Baseline inventory report — version, lint, stale docs, large tests, TODO/FIXME, trace/credential baselines
+- **W1**: Mockable command runner seam (`current-external-command-runner` parameter) for keychain credential backends
+- **W1**: 5 new mock-based tests for keychain store/load/delete/availability via command runner seam
+- **W2**: 5 characterization tests for trace sink protocol — ordering, flush completeness, close semantics, idempotent flush, sequential writes
+
 ## v0.69.7 — 2026-05-29
 
 ### Audit Followups
