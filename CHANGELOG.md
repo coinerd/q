@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.71.2 — 2026-05-30
+
+### Evidence Discipline + No-Progress Detection
+
+Third milestone of the `/goal` feature — reliable evaluation with evidence requirements.
+
+- **goal-evidence.rkt**: Evidence system prompt injection forces worker agent to produce verifiable evidence (commands, exit codes, file diffs). `evidence-prompt-for-goal` builds continuation prompts with evaluation feedback.
+- **No-progress detection**: `detect-no-progress` and `consecutive-same-reason?` detect stall conditions from 3 consecutive same-reason evaluation failures.
+- **Runner integration**: Goal runner now uses evidence prompts for continuations and accumulates evaluation history in goal-state checks field. No-progress detection replaces simple counter.
+- **Tests**: 17 new tests — evidence prompts (5), no-progress detection (6), runner integration (3), collect-evaluations (1).
+
 ## v0.71.1 — 2026-05-30
 
 ### Transcript Evaluator + Core Loop
