@@ -12,7 +12,8 @@
          "../agent/event-bus.rkt"
          "../runtime/agent-session.rkt"
          "../extensions/hooks.rkt"
-         "../tui/command-parse.rkt")
+         "../tui/command-parse.rkt"
+         "gui-types.rkt")
 
 (provide make-slash-command-handler
          add-system-msg!
@@ -22,13 +23,11 @@
 ;; Helper: add a system message to the transcript
 ;; --------------------------------------------------
 (define (add-system-msg! text state-box gui-state-lock)
-  (call-with-semaphore
-   gui-state-lock
-   (lambda ()
-     (define old (unbox state-box))
-     (define msgs (hash-ref old 'messages '()))
-     (set-box! state-box
-               (hash-set old 'messages (append msgs (list (hash 'role "system" 'text text))))))))
+  (call-with-semaphore gui-state-lock
+                       (lambda ()
+                         (set-box! state-box
+                                   (gui-state-add-message (unbox state-box)
+                                                          (make-gui-message "system" text))))))
 
 ;; --------------------------------------------------
 ;; Extension dispatch
@@ -91,9 +90,9 @@
           (close-session! sess)
           (exit 0)]
          [(clear)
-          (call-with-semaphore gui-state-lock
-                               (lambda ()
-                                 (set-box! state-box (hash-set (unbox state-box) 'messages '()))))
+          (call-with-semaphore
+           gui-state-lock
+           (lambda () (set-box! state-box (struct-copy gui-state (unbox state-box) [messages '()]))))
           #t]
          [(help)
           (add-system-msg! (string-append "Available commands:\n"
@@ -114,7 +113,7 @@
                                    (session-id sess)
                                    (agent-session-model-name sess)
                                    (if (session-active? sess) "active" "closed")
-                                   (length (hash-ref (unbox state-box) 'messages '())))
+                                   (length (gui-state-messages (unbox state-box))))
                            state-box
                            gui-state-lock)
           #t]

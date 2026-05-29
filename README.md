@@ -262,7 +262,7 @@ q/
 ├── runtime/        Agent session, compaction, resource loading, auth
 ├── sandbox/        Subprocess management, execution limits
 ├── skills/         Skill loading, context files, prompt templates
-├── tests/          Full test suite (699 files)
+├── tests/          Full test suite (702 files)
 ├── tools/          Tool registry, scheduler, 14 built-in tools
 ├── tui/            Terminal UI: rendering, input, state, clipboard
 ├── util/           JSONL, ANSI, markdown, IDs, cancellation, paths
@@ -273,10 +273,10 @@ q/
 
 | Metric | Value |
 |--------|-------|
-| Test files | 699 |
-| Source modules | 506 |
-| Source lines | 76765 |
-| Test lines | 116127 |
+| Test files | 702 |
+| Source modules | 507 |
+| Source lines | 77016 |
+| Test lines | 116132 |
 | Test assertions | 18396 |
 | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |
 
@@ -509,7 +509,7 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 
 
-**v0.69.4** — Abstraction Quality: Representation Discipline
+**v0.69.4** — Abstraction Quality: Boundary Tightening
 
 **v0.69.3** — Abstraction Quality: Declarative Patterns
 

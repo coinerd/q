@@ -10,7 +10,11 @@
 
 (require rackunit
          racket/set
-         (only-in "../extensions/gsd/runtime-state-types.rkt" gsd-runtime-state gsd-runtime-state? gsd-runtime-state-mode gsd-runtime-state-current-wave)
+         (only-in "../extensions/gsd/runtime-state-types.rkt"
+                  gsd-runtime-state
+                  gsd-runtime-state?
+                  gsd-runtime-state-mode
+                  gsd-runtime-state-current-wave)
          (only-in "../extensions/gsd/session-state.rkt"
                   make-gsd-context
                   gsd-session-ctx?
@@ -58,7 +62,9 @@
 
 (test-case "state supports arbitrary values via state-update!"
   (define ctx (make-gsd-context))
-  (gsd-ctx-state-update! ctx (lambda (s) (struct-copy gsd-runtime-state s [mode 'executing] [current-wave 2])))
+  (gsd-ctx-state-update! ctx
+                         (lambda (s)
+                           (struct-copy gsd-runtime-state s [mode 'executing] [current-wave 2])))
   (check-equal? (gsd-runtime-state-mode (gsd-ctx-state ctx)) 'executing)
   (check-equal? (gsd-runtime-state-current-wave (gsd-ctx-state ctx)) 2))
 
@@ -136,7 +142,9 @@
   (define iterations 100)
   ;; Spawn threads that race to update state
   (for ([i (in-range iterations)])
-    (thread (lambda () (gsd-ctx-state-update! ctx (lambda (s) (struct-copy gsd-runtime-state s [current-wave i]))))))
+    (thread
+     (lambda ()
+       (gsd-ctx-state-update! ctx (lambda (s) (struct-copy gsd-runtime-state s [current-wave i]))))))
   ;; Give threads time to finish
   (sleep 0.1)
   ;; State should be a valid gsd-runtime-state with integer current-wave
