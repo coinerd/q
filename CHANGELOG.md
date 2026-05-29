@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.70.1 — 2026-05-29
+
+### Credential Policy & Plaintext Fallback Warnings
+
+- **W0**: Credential policy model with 4 modes (auto, keychain-preferred, keychain-required, env-only)
+- **W0**: Policy-aware backend wrapper with store/load enforcement
+- **W0**: 10 new policy tests
+- **W1**: User-facing log-warning when storing credentials to file
+- **W1**: Credential policy documentation with table and programmatic usage
+- **W2**: Credential policy consistency lint script (warning-only, strict mode)
+
 ## v0.70.0 — 2026-05-29
 
 ### Audit Baselines & Risk Harnesses
