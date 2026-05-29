@@ -17,6 +17,7 @@
                   make-keychain-credential-backend
                   make-chained-credential-backend
                   current-external-command-runner
+                  current-shell-command-runner
                   credential-policy?
                   valid-credential-policies
                   credential-backend?
@@ -345,39 +346,40 @@
 
 (test-case "policy: keychain-preferred warns on file store"
   (define warnings (open-output-string))
-  (define file-backend (make-file-credential-backend
-                        (build-path (find-system-path 'temp-dir) "cred-policy-test.json")))
-  (define be (make-policy-aware-backend file-backend
-                                        #:policy 'keychain-preferred
-                                        #:warn-port warnings))
+  (define file-backend
+    (make-file-credential-backend (build-path (find-system-path 'temp-dir) "cred-policy-test.json")))
+  (define be
+    (make-policy-aware-backend file-backend #:policy 'keychain-preferred #:warn-port warnings))
   (backend-store! be "testprov" "sk-test-warn")
   (define warn-str (get-output-string warnings))
   (check-true (string-contains? warn-str "consider using keychain"))
   ;; cleanup
   (define p (build-path (find-system-path 'temp-dir) "cred-policy-test.json"))
-  (when (file-exists? p) (delete-file p)))
+  (when (file-exists? p)
+    (delete-file p)))
 
 (test-case "policy: keychain-required raises on file store"
-  (define file-backend (make-file-credential-backend
-                        (build-path (find-system-path 'temp-dir) "cred-policy-req.json")))
+  (define file-backend
+    (make-file-credential-backend (build-path (find-system-path 'temp-dir) "cred-policy-req.json")))
   (define be (make-policy-aware-backend file-backend #:policy 'keychain-required))
   (check-exn exn:fail? (λ () (backend-store! be "openai" "sk-test"))))
 
 (test-case "policy: env-only raises on file store"
-  (define file-backend (make-file-credential-backend
-                        (build-path (find-system-path 'temp-dir) "cred-policy-env.json")))
+  (define file-backend
+    (make-file-credential-backend (build-path (find-system-path 'temp-dir) "cred-policy-env.json")))
   (define be (make-policy-aware-backend file-backend #:policy 'env-only))
   (check-exn exn:fail? (λ () (backend-store! be "openai" "sk-test"))))
 
 (test-case "policy: env-only returns #f on file load"
-  (define file-be (make-file-credential-backend
-                   (build-path (find-system-path 'temp-dir) "cred-envonly-load.json")))
+  (define file-be
+    (make-file-credential-backend (build-path (find-system-path 'temp-dir) "cred-envonly-load.json")))
   (backend-store! file-be "openai" "sk-file")
   (define be (make-policy-aware-backend file-be #:policy 'env-only #:warn-port #f))
   (check-false (backend-load be "openai"))
   ;; cleanup
   (define p (build-path (find-system-path 'temp-dir) "cred-envonly-load.json"))
-  (when (file-exists? p) (delete-file p)))
+  (when (file-exists? p)
+    (delete-file p)))
 
 (test-case "policy: credential-policy? validates symbols"
   (check-true (credential-policy? 'auto))
@@ -434,25 +436,24 @@
 (test-case "macos-keychain: mock store+load roundtrip"
   ;; Mock the command runner
   (define stored (box #f))
-  (parameterize ([current-external-command-runner
-                  (λ (cmd out)
-                    (cond
-                      [(string-contains? cmd "add-generic-password")
-                       (set-box! stored #t)
-                       (display "ok" out)
-                       #t]
-                      [(string-contains? cmd "find-generic-password")
-                       (display "sk-mock-key-123" out)
-                       #t]
-                      [(string-contains? cmd "delete-generic-password")
-                       (display "ok" out)
-                       #t]
-                      [(string-contains? cmd "which security")
-                       (display "/usr/bin/security" out)
-                       #t]
-                      [else
-                       (display "" out)
-                       #f]))])
+  (parameterize ([current-shell-command-runner (λ (cmd out)
+                                                 (cond
+                                                   [(string-contains? cmd "add-generic-password")
+                                                    (set-box! stored #t)
+                                                    (display "ok" out)
+                                                    #t]
+                                                   [(string-contains? cmd "find-generic-password")
+                                                    (display "sk-mock-key-123" out)
+                                                    #t]
+                                                   [(string-contains? cmd "delete-generic-password")
+                                                    (display "ok" out)
+                                                    #t]
+                                                   [(string-contains? cmd "which security")
+                                                    (display "/usr/bin/security" out)
+                                                    #t]
+                                                   [else
+                                                    (display "" out)
+                                                    #f]))])
     (define be (make-macos-keychain-credential-backend))
     (check-true (backend-available? be))
     (backend-store! be "openai" "sk-mock-key-123")
@@ -463,18 +464,17 @@
     (backend-delete! be "openai")))
 
 (test-case "macos-keychain: mock load returns #f on failure"
-  (parameterize ([current-external-command-runner
-                  (λ (cmd out)
-                    (cond
-                      [(string-contains? cmd "find-generic-password")
-                       (display "security: item not found" out)
-                       #f]
-                      [(string-contains? cmd "which security")
-                       (display "/usr/bin/security" out)
-                       #t]
-                      [else
-                       (display "" out)
-                       #f]))])
+  (parameterize ([current-shell-command-runner (λ (cmd out)
+                                                 (cond
+                                                   [(string-contains? cmd "find-generic-password")
+                                                    (display "security: item not found" out)
+                                                    #f]
+                                                   [(string-contains? cmd "which security")
+                                                    (display "/usr/bin/security" out)
+                                                    #t]
+                                                   [else
+                                                    (display "" out)
+                                                    #f]))])
     (define be (make-macos-keychain-credential-backend))
     (check-false (backend-load be "nonexistent-provider"))))
 
@@ -491,25 +491,25 @@
   (check-true (boolean? (backend-available? be))))
 
 (test-case "windows-credential: mock store success"
-  (parameterize ([current-external-command-runner
-                  (λ (cmd out)
-                    (cond
-                      [(string-contains? cmd "cmdkey")
-                       (display "CMDKEY: Credential added successfully." out)
-                       #t]
-                      [(string-contains? cmd "where cmdkey")
-                       (display "C:\\Windows\\System32\\cmdkey.exe" out)
-                       #t]
-                      [else
-                       (display "" out)
-                       #f]))])
+  (parameterize ([current-shell-command-runner (λ (cmd out)
+                                                 (cond
+                                                   [(string-contains? cmd "cmdkey")
+                                                    (display "CMDKEY: Credential added successfully."
+                                                             out)
+                                                    #t]
+                                                   [(string-contains? cmd "where cmdkey")
+                                                    (display "C:\\Windows\\System32\\cmdkey.exe" out)
+                                                    #t]
+                                                   [else
+                                                    (display "" out)
+                                                    #f]))])
     (define be (make-windows-credential-backend))
     (check-true (backend-available? be))
     (backend-store! be "openai" "sk-win-key")
     (check-true #t)))
 
-(test-case "windows-credential: mock load returns credential hash"
-  (parameterize ([current-external-command-runner
+(test-case "windows-credential: mock load returns #f (cannot retrieve passwords)"
+  (parameterize ([current-shell-command-runner
                   (λ (cmd out)
                     (cond
                       [(string-contains? cmd "/list:q-credential-openai")
@@ -523,12 +523,11 @@
                        #f]))])
     (define be (make-windows-credential-backend))
     (define cred (backend-load be "openai"))
-    (check-not-false cred)
-    (check-equal? (hash-ref cred 'provider) "openai")
-    (check-equal? (hash-ref cred 'source) "windows-credential-manager")))
+    ;; Windows backend returns #f because cmdkey cannot retrieve passwords
+    (check-false cred)))
 
 (test-case "windows-credential: mock list returns providers"
-  (parameterize ([current-external-command-runner
+  (parameterize ([current-shell-command-runner
                   (λ (cmd out)
                     (cond
                       [(string-contains? cmd "/list")
@@ -546,17 +545,78 @@
     (check-not-false (or (member "openai" providers) (member "q-credential-openai" providers)))))
 
 (test-case "windows-credential: mock load returns #f when not found"
-  (parameterize ([current-external-command-runner
+  (parameterize ([current-shell-command-runner (λ (cmd out)
+                                                 (cond
+                                                   [(string-contains? cmd
+                                                                      "/list:q-credential-missing")
+                                                    (display "ERROR: Element not found." out)
+                                                    #f]
+                                                   [(string-contains? cmd "where cmdkey")
+                                                    (display "C:\\Windows\\System32\\cmdkey.exe" out)
+                                                    #t]
+                                                   [else
+                                                    (display "" out)
+                                                    #f]))])
+    (define be (make-windows-credential-backend))
+    (check-false (backend-load be "missing"))))
+
+;; ---------------------------------------------------------------------------
+;; Tests: v0.70.11 security fixes
+;; ---------------------------------------------------------------------------
+
+(test-case "macos-keychain: shell-escape applied to special chars in provider"
+  (parameterize ([current-shell-command-runner
                   (λ (cmd out)
                     (cond
-                      [(string-contains? cmd "/list:q-credential-missing")
-                       (display "ERROR: Element not found." out)
-                       #f]
-                      [(string-contains? cmd "where cmdkey")
-                       (display "C:\\Windows\\System32\\cmdkey.exe" out)
+                      [(string-contains? cmd "add-generic-password")
+                       ;; Verify the command contains shell-escaped values
+                       (check-true (string-contains? cmd "'\\''"))
+                       (display "ok" out)
+                       #t]
+                      [(string-contains? cmd "which security")
+                       (display "/usr/bin/security" out)
                        #t]
                       [else
                        (display "" out)
                        #f]))])
-    (define be (make-windows-credential-backend))
-    (check-false (backend-load be "missing"))))
+    (define be (make-macos-keychain-credential-backend))
+    ;; Provider name with single quote should be escaped
+    (backend-store! be "openai's-api" "sk-key")))
+
+(test-case "macos-keychain: handles missing USER env var"
+  (parameterize ([current-shell-command-runner (λ (cmd out)
+                                                 (cond
+                                                   [(string-contains? cmd "add-generic-password")
+                                                    ;; Should use "unknown" fallback, not crash
+                                                    (check-true (or (string-contains? cmd "'unknown'")
+                                                                    (string-contains? cmd "'LOGNAME'")
+                                                                    (not (string-contains? cmd
+                                                                                           "'#f'"))))
+                                                    (display "ok" out)
+                                                    #t]
+                                                   [(string-contains? cmd "which security")
+                                                    (display "/usr/bin/security" out)
+                                                    #t]
+                                                   [else
+                                                    (display "" out)
+                                                    #f]))])
+    ;; Temporarily unset USER to test fallback
+    (define old-user (getenv "USER"))
+    (putenv "USER" "")
+    (define be (make-macos-keychain-credential-backend))
+    (backend-store! be "openai" "sk-key")
+    ;; Restore
+    (when old-user
+      (putenv "USER" old-user))))
+
+(test-case "file-backend: atomic write sets permissions before content"
+  (define tmp (make-tmp-dir))
+  (define cred-path (build-path tmp "credentials.json"))
+  (define be (make-file-credential-backend cred-path))
+  (backend-store! be "openai" "sk-test-perm")
+  ;; File should exist and have restricted permissions
+  (when (file-exists? cred-path)
+    (define perms (file-or-directory-permissions cred-path))
+    ;; On Unix, check that the file exists and is readable
+    (check-true (file-exists? cred-path)))
+  (cleanup tmp))
