@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.70.13 — 2026-05-30
+
+### Audit Hotfix Round 3 + GUI Bug Fixes
+
+- Fix: README v0.70.3 status entry corrected (F1)
+- Fix: USER fallback test relative path now works under `raco test` CWD (F2)
+- Fix: Slash commands (/help, /status, /clear, etc.) now display immediately
+  in GUI transcript — `add-system-msg!` calls `notify-gui!` callback (F3)
+- Fix: Text selection in transcript no longer overwritten by streaming output
+  or new messages — `insert-message-into-text!` uses explicit position (F4)
+
 ## v0.70.12 — 2026-05-30
 
 ### Audit Hotfix Round 2 — Closure of v0.70.11 Audit Findings
