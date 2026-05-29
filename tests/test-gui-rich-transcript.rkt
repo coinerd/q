@@ -25,19 +25,19 @@
                      (check-equal? (role->color "assistant" t) (theme-ref t 'foreground))
                      (check-equal? (role->color "system" t) (theme-ref t 'muted))
                      (check-equal? (role->color "tool" t) (theme-ref t 'warning)))
-                   ;; ── hex->color-object ──
-                   (test-case "hex->color-object parses hex with #"
-                     (define c (hex->color-object "#1e1e2e"))
+                   ;; ── hex->color-components ──
+                   (test-case "hex->color-components parses hex with #"
+                     (define c (hex->color-components "#1e1e2e"))
                      (check-equal? (hash-ref c 'r) 30)
                      (check-equal? (hash-ref c 'g) 30)
                      (check-equal? (hash-ref c 'b) 46))
-                   (test-case "hex->color-object handles no hash prefix"
-                     (define c (hex->color-object "ff0000"))
+                   (test-case "hex->color-components handles no hash prefix"
+                     (define c (hex->color-components "ff0000"))
                      (check-equal? (hash-ref c 'r) 255)
                      (check-equal? (hash-ref c 'g) 0)
                      (check-equal? (hash-ref c 'b) 0))
-                   (test-case "hex->color-object handles #f"
-                     (define c (hex->color-object #f))
+                   (test-case "hex->color-components handles #f"
+                     (define c (hex->color-components #f))
                      (check-equal? (hash-ref c 'r) 0))
                    ;; ── delta factories ──
                    (test-case "make-role-label-delta produces descriptor"
