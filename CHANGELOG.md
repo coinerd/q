@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.71.5 — 2026-05-30
+
+### GUI Integration + Release Polish
+
+Sixth milestone of the `/goal` feature — GUI parity and documentation.
+
+- **GUI active-goal**: Added `active-goal` field to `gui-state` struct with `gui-state-set-active-goal` helper.
+- **GUI /goal handler**: `/goal clear/status/set` in `gui/slash-commands.rkt`. Added to help text.
+- **Documentation**: New `docs/getting-started/goal.md` covering usage, checks, monitoring, limitations, and security.
+- **Tests**: 5 GUI tests for struct, setter, hash round-trip.
+
 ## v0.71.4 — 2026-05-30
 
 ### TUI Integration & Status Display

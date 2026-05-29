@@ -2,7 +2,7 @@
 
 ## Version
 
-v0.71.4
+v0.71.5
 
 ## Native TUI Stack
 
