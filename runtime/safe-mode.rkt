@@ -35,14 +35,6 @@
           [current-safe-mode (parameter/c boolean?)]
           [current-safe-mode-config (parameter/c (or/c safe-mode-config? #f))]
           [project-root (parameter/c path?)]
-          [make-safe-mode-config
-           (->* ()
-                (#:active boolean?
-                 #:allowed-tools (listof string?)
-                 #:allowed-paths (listof path?)
-                 #:locked boolean?
-                 #:project-root (or/c path? #f))
-                safe-mode-config?)]
           [safe-mode? (-> boolean?)]
           [allowed-tool? (-> string? boolean?)]
           [allowed-path? (-> (or/c path? string?) boolean?)]
@@ -53,7 +45,7 @@
           [lock-safe-mode! (-> void?)]
           [safe-mode-locked? (parameter/c boolean?)]
           [safe-mode-config-info (-> hash?)])
-         ;; Struct type + accessors (plain provide for struct)
+         ;; Struct type + contracted accessors (re-exported from safe-mode-state.rkt)
          safe-mode-config
          safe-mode-config?
          safe-mode-config-active
@@ -61,6 +53,7 @@
          safe-mode-config-allowed-paths
          safe-mode-config-locked
          safe-mode-config-project-root-path
+         make-safe-mode-config
          blocked-tools)
 
 ;; ============================================================
