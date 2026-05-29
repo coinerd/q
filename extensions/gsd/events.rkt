@@ -12,7 +12,6 @@
          (only-in "../../agent/event-emitter.rkt" event-struct->hasheq)
          (only-in "session-state.rkt"
                   gsd-session-ctx?
-                  gsd-session-ctx-event-bus-box
                   gsd-default-ctx
                   gsd-ctx-event-bus))
 
@@ -26,7 +25,8 @@
          make-event-collector
          collector-events
          ctx-emit-gsd-event!
-         resolve-gsd-event-bus)
+         resolve-gsd-event-bus
+         emit-to-bus!)
 
 ;; ============================================================
 ;; Event taxonomy
@@ -99,7 +99,7 @@
 
 ;; Resolve event bus: prefer ctx-specific bus, fallback to global.
 (define (resolve-gsd-event-bus ctx)
-  (define ctx-bus (and ctx (unbox (gsd-session-ctx-event-bus-box ctx))))
+  (define ctx-bus (and ctx (gsd-ctx-event-bus ctx)))
   (or (and ctx-bus (procedure? ctx-bus) ctx-bus) (unbox gsd-event-bus-box)))
 
 ;; Emit to a specific session context's event bus.
@@ -129,6 +129,38 @@
                 'data
                 data)))
   (bus event-name wrapped))
+
+;; Emit to a pre-resolved bus (avoids semaphore re-acquisition inside transactions).
+(define (emit-to-bus! bus event-name data)
+  (unless (memq event-name gsd-event-names)
+    (raise-extension-error (format "Unknown event: ~a" event-name) 'gsd 'emit-event))
+  (define wrapped
+    (if (typed-event? data)
+        (hasheq 'event
+                event-name
+                'correlation-id
+                (current-gsd-correlation-id)
+                'timestamp
+                (current-inexact-milliseconds)
+                'data
+                (event-struct->hasheq data)
+                '__typed
+                #t)
+        (hasheq 'event
+                event-name
+                'correlation-id
+                (current-gsd-correlation-id)
+                'timestamp
+                (current-inexact-milliseconds)
+                'data
+                data)))
+  (when (and bus (procedure? bus))
+    (bus event-name wrapped))
+  ;; Fall back to global bus if ctx bus was #f or not a procedure
+  (unless (and bus (procedure? bus))
+    (define global-bus (unbox gsd-event-bus-box))
+    (when (procedure? global-bus)
+      (global-bus event-name wrapped))))
 
 ;; ============================================================
 ;; Event collector (for testing)

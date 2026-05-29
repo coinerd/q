@@ -64,6 +64,20 @@
                        (lambda ()
                          (set-box! (box-accessor ctx) (update-fn (unbox (box-accessor ctx)))))))
 
+;; Atomic state+history transaction. Runs thunk under semaphore with
+;; read-only state, history, event-bus and write callbacks for state and history.
+;; Avoids exposing raw box accessors to consumers.
+(define (gsd-ctx-transaction! ctx thunk)
+  (call-with-semaphore
+   (gsd-session-ctx-sem ctx)
+   (lambda ()
+     (define state (unbox (gsd-session-ctx-state-box ctx)))
+     (define history (unbox (gsd-session-ctx-history-box ctx)))
+     (define event-bus (unbox (gsd-session-ctx-event-bus-box ctx)))
+     (define (set-state! v) (set-box! (gsd-session-ctx-state-box ctx) v))
+     (define (set-history! v) (set-box! (gsd-session-ctx-history-box ctx) v))
+     (thunk state history event-bus set-state! set-history!))))
+
 ;; ============================================================
 ;; Per-session accessors (explicit ctx argument) — C-01 v0.35.1
 ;; ============================================================
@@ -224,16 +238,6 @@
 
 ;; Struct exports (plain)
 (provide gsd-session-ctx?
-         gsd-session-ctx-state-box
-         gsd-session-ctx-plan-box
-         gsd-session-ctx-pinned-dir-box
-         gsd-session-ctx-edit-limit-box
-         gsd-session-ctx-event-bus-box
-         gsd-session-ctx-history-box
-         gsd-session-ctx-busy-box
-         gsd-session-ctx-correlation-id-box
-         gsd-session-ctx-transaction-box
-         gsd-session-ctx-sem
          ;; Global default context (plain)
          gsd-default-ctx
          current-gsd-ctx
@@ -264,6 +268,7 @@
                        [gsd-ctx-transaction (-> gsd-session-ctx? hash?)]
                        [gsd-ctx-set-transaction! (-> gsd-session-ctx? hash? void?)]
                        [gsd-ctx-transaction-update! (-> gsd-session-ctx? procedure? void?)]
+                       [gsd-ctx-transaction! (-> gsd-session-ctx? procedure? any)]
                        [with-gsd-transaction (-> gsd-session-ctx? procedure? any)]
                        [gsd-ctx-state-snapshot (-> gsd-session-ctx? gsd-runtime-state?)]
                        [gsd-ctx-state-update! (-> gsd-session-ctx? procedure? any)]
