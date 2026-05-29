@@ -293,6 +293,42 @@
        ['activate (handle-activate-command cctx)]
        ['deactivate (handle-deactivate-command cctx)]
        ['reload (handle-reload-command cctx)]
+       ['goal (handle-goal-command cctx state args)]
        ['quit (handle-quit-command cctx)]
        ['unknown (process-extension-command cctx state)]
        [else 'continue])]))
+
+;; ============================================================
+;; Goal command handler
+;; ============================================================
+
+(define (handle-goal-command cctx state args)
+  (define arg-text (string-trim (string-join args " ")))
+  (cond
+    ;; /goal clear — cancel active goal
+    [(string=? arg-text "clear")
+     (define entry (make-system-entry "[goal] Active goal cancelled."))
+     (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+     'continue]
+    ;; /goal status or /goal (no args) — show status
+    [(or (string=? arg-text "") (string=? arg-text "status"))
+     (define entry
+       (make-system-entry "[goal] No active goal. Use /goal \"<description>\" to set one."))
+     (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+     'continue]
+    ;; /goal "<description>" — set a goal
+    [else
+     ;; Strip surrounding quotes if present
+     (define clean-text
+       (let ([t arg-text])
+         (if (and (> (string-length t) 1)
+                  (char=? (string-ref t 0) #\")
+                  (char=? (string-ref t (sub1 (string-length t))) #\"))
+             (substring t 1 (sub1 (string-length t)))
+             t)))
+     (define entry
+       (make-system-entry
+        (format "[goal] Goal set: ~a\nThe autonomous goal loop will be available in a future update."
+                clean-text)))
+     (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+     'continue]))
