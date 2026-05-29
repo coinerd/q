@@ -20,7 +20,7 @@
 ;; Cache implementation
 ;; ============================================================
 
-;; Mutable hash: content-hash -> estimated-token-count
+;; Mutable hash: text -> estimated-token-count
 (define token-cache (make-hash))
 
 ;; Total number of cache hits since last clear
@@ -29,18 +29,12 @@
 ;; Total number of cache misses since last clear
 (define cache-misses (box 0))
 
-;; Compute a content hash for cache keying.
-;; Uses the string itself as key with equal?-based hash table.
-;; This avoids equal-hash-code collision risk.
-(define (content-hash text)
-  text)
-
 ;; cached-estimate-text-tokens : (string? -> exact-nonnegative-integer?) string? -> exact-nonnegative-integer?
 ;;
 ;; Looks up the token estimate for `text` in the cache. If absent,
 ;; calls `estimator` to compute the value, stores it, and returns it.
 (define (cached-estimate-text-tokens estimator text)
-  (define key (content-hash text))
+  (define key text)
   (cond
     [(hash-has-key? token-cache key)
      (set-box! cache-hits (add1 (unbox cache-hits)))
@@ -75,7 +69,7 @@
   (define local-hits (box 0))
   (define local-misses (box 0))
   (lambda (text)
-    (define key (content-hash text))
+    (define key text)
     (cond
       [(hash-has-key? local-cache key)
        (set-box! local-hits (add1 (unbox local-hits)))
