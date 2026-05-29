@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.69.7 — 2026-05-29
+
+### Audit Followups
+
+- **W0**: Add error handling to GUI submit path (`with-handlers` wrapping `run-prompt!`)
+- **W0**: New-session dispatch tests for `try-extension-dispatch` with mock extensions
+- **W1**: Incremental suffix append tests for `apply-diff-to-text!` with `last-len-box`
+- **W2**: Rename `hex->color-object` → `hex->color-components` for clarity
+
 ## v0.69.6 — 2026-05-29
 
 ### GUI Bugfix + Audit Closure
