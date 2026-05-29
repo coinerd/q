@@ -19,7 +19,7 @@
 
 (provide role->label
          role->color
-         hex->color-object
+         hex->color-components
          (contract-out
           [make-role-label-delta (-> string? (or/c string? #f) hash?)]
           [make-content-delta (-> (or/c string? #f) hash?)]
@@ -58,7 +58,7 @@
     [(tool) (theme-ref theme 'warning)]
     [else (theme-ref theme 'muted)]))
 
-(define (hex->color-object hex-str)
+(define (hex->color-components hex-str)
   (define cleaned (string-trim (or hex-str "#000000") "#" #:left? #t))
   (define r (string->number (substring cleaned 0 2) 16))
   (define g (string->number (substring cleaned 2 4) 16))
