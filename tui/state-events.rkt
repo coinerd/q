@@ -65,7 +65,7 @@
 ;; Dedup guard: prevent duplicate tool-start entries
 (define (recent-tool-start? st name)
   (define transcript (ui-state-transcript st))
-  (define recent (take-safe transcript dedup-window-size))
+  (define recent (take transcript (min dedup-window-size (length transcript))))
   (for/or ([entry (in-list recent)])
     (and (eq? (transcript-entry-kind entry) 'tool-start)
          (equal? (hash-ref (transcript-entry-meta entry) 'name "") name))))
@@ -73,19 +73,10 @@
 ;; Dedup guard: prevent duplicate tool-end entries
 (define (recent-tool-end? st name)
   (define transcript (ui-state-transcript st))
-  (define recent (take-safe transcript dedup-window-size))
+  (define recent (take transcript (min dedup-window-size (length transcript))))
   (for/or ([entry (in-list recent)])
     (and (memq (transcript-entry-kind entry) '(tool-end tool-fail))
          (equal? (hash-ref (transcript-entry-meta entry) 'name "") name))))
-
-;; Safe take — returns up to n elements from lst (iterative, no stack overflow)
-(define (take-safe lst n)
-  (let loop ([lst lst]
-             [n n]
-             [acc '()])
-    (if (or (<= n 0) (null? lst))
-        (reverse acc)
-        (loop (cdr lst) (- n 1) (cons (car lst) acc)))))
 
 ;; ============================================================
 ;; Named event handlers (extracted from case dispatch)

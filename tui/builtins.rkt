@@ -9,7 +9,8 @@
          racket/string
          "component.rkt"
          "state.rkt"
-         (only-in "../util/shared.rkt" take-at-most))
+         (only-in "../util/shared.rkt" take-at-most)
+         (only-in "../util/string-helpers.rkt" truncate-string))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Provides
@@ -33,8 +34,7 @@
          settings-entry-type
 
          ;; Helpers
-         filter-options
-         truncate-str)
+         filter-options)
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Helpers
@@ -45,11 +45,6 @@
       options
       (filter (lambda (o) (string-contains? (string-downcase o) (string-downcase filter-text)))
               options)))
-
-(define (truncate-str s max-len)
-  (if (> (string-length s) max-len)
-      (string-append (substring s 0 (max 0 (- max-len 3))) "...")
-      s))
 
 (define (drop-at-most lst n)
   (drop lst (min n (length lst))))
@@ -131,7 +126,7 @@
      (define inner-width (max 10 (- width 4)))
      (define top (format "╭─~a─╮" (make-string (max 0 (- inner-width 2)) #\─)))
      (define bottom (format "╰─~a─╯" (make-string (max 0 (- inner-width 2)) #\─)))
-     (define text (format "│ ~a ~a │" spinner (truncate-str status-text (max 1 (- inner-width 4)))))
+     (define text (format "│ ~a ~a │" spinner (truncate-string status-text (max 1 (- inner-width 4)))))
      (list (list (cons 'text top)) (list (cons 'text text)) (list (cons 'text bottom))))
    #:id id
    #:handle-input (lambda (data ui-state)
