@@ -76,7 +76,10 @@
                        [steering-same-file-dedup? (-> q-settings? boolean?)]
                        [credential-policy
                         (-> q-settings?
-                            (or/c 'auto 'keychain-preferred 'keychain-required 'env-only))])
+                            (or/c 'auto 'keychain-preferred 'keychain-required 'env-only))]
+                       [shell-risk-classifier
+                        (-> q-settings?
+                            (or/c 'regex 'structured 'both))])
 
          ;; Sandbox settings (re-exported, not locally defined)
          sandbox-enabled?
@@ -417,3 +420,17 @@
 
 (define (credential-policy settings)
   (setting-ref* settings '(credentials policy) 'auto))
+
+;; ============================================================
+;; Shell risk classifier mode (v0.70.3)
+;; ============================================================
+
+;; Controls which shell risk detection method to use.
+;; Modes:
+;;   'regex     — use regex-based patterns only (default, backward-compatible)
+;;   'structured — use structured classifier only
+;;   'both       — use both; classifier wins on disagreement
+;;
+;; Config key: security.shell-risk-classifier
+(define (shell-risk-classifier settings)
+  (setting-ref* settings '(security shell-risk-classifier) 'regex))

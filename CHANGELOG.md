@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.70.3 — 2026-05-29
+
+### Structured Shell Risk Classification
+
+- **W0**: Conservative shell tokenizer + structured risk classifier (`tools/shell-risk.rkt`)
+- **W0**: Risk types: destructive, network-pipe, command-substitution, eval, exec, windows-destructive
+- **W1**: Shadow-mode integration in `bash.rkt` — logs diagnostic when regex/classifier disagree
+- **W2**: Feature flag `shell-risk-classifier` setting (`regex`, `structured`, `both`)
+- **W2**: Default `regex` for backward compatibility
+
 ## v0.70.2 — 2026-05-29
 
 ### Cross-Platform Credential Backends + Windows Install
