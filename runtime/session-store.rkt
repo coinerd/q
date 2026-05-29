@@ -76,7 +76,9 @@
          ;; R-09/R-10: Session sink interface (v0.39.0)
          session-sink<%>
          file-session-sink%
-         in-memory-session-sink%)
+         in-memory-session-sink%
+         ;; v0.70.5: Async session sink (opt-in)
+         async-session-sink%)
 
 ;; ── R-09/R-10: Session sink interface (v0.39.0) ──
 ;;
@@ -112,6 +114,84 @@
     (define/public (sink-load) (in-memory-load manager session-id))
     (define/public (sink-fork! entry-id dest-id)
       (in-memory-fork! manager session-id dest-id entry-id))))
+
+;; v0.70.5: Async session sink wrapper — opt-in only, preserves order via single worker thread
+(define async-session-sink%
+  (class* object% (session-sink<%>)
+    (init-field inner-sink [capacity 100] [policy 'block])
+    (super-new)
+    (define closed-box (box #f))
+    (define space-sema (make-semaphore capacity))
+    (define flush-ch (make-channel))
+
+    (define worker
+      (thread
+       (lambda ()
+         (let loop ()
+           (define msg (thread-receive))
+           (cond
+             [(eq? msg 'flush)
+              (channel-put flush-ch 'ok)
+              (loop)]
+             [(eq? msg 'stop)
+              (void)]
+             [(pair? msg)
+              ;; msg is a pair: (cons 'entries list) or (cons 'single message)
+              (case (car msg)
+                [(entries)
+                 (send inner-sink sink-append-entries! (cdr msg))
+                 (semaphore-post space-sema)]
+                [(single)
+                 (send inner-sink sink-append! (cdr msg))
+                 (semaphore-post space-sema)])
+              (loop)]
+             [else
+              (semaphore-post space-sema)
+              (loop)])))))
+
+    (define (try-send! item)
+      (case policy
+        [(block)
+         (semaphore-wait space-sema)
+         (thread-send worker item)]
+        [(drop-new)
+         (if (semaphore-try-wait? space-sema)
+             (thread-send worker item)
+             (void))]
+        [(drop-old)
+         (if (semaphore-try-wait? space-sema)
+             (thread-send worker item)
+             (void))]
+        [else
+         (semaphore-wait space-sema)
+         (thread-send worker item)]))
+
+    (define/public (sink-append! msg)
+      (unless (unbox closed-box)
+        (try-send! (cons 'single msg))))
+
+    (define/public (sink-append-entries! msgs)
+      (unless (unbox closed-box)
+        (try-send! (cons 'entries msgs))))
+
+    (define/public (sink-load)
+      (send inner-sink sink-load))
+
+    (define/public (sink-fork! entry-id dest-id)
+      (send inner-sink sink-fork! entry-id dest-id))
+
+    ;; Non-interface methods for flush/close contract
+    (define/public (sink-get-worker) worker)
+    (define/public (sink-flush!)
+      (unless (unbox closed-box)
+        (try-send! 'flush)
+        (channel-get flush-ch)))
+
+    (define/public (sink-close!)
+      (unless (unbox closed-box)
+        (set-box! closed-box #t)
+        (try-send! 'stop)
+        (thread-wait worker)))))
 
 ;; ── Append operations ──
 
