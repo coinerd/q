@@ -309,13 +309,21 @@
   (cond
     ;; /goal clear — cancel active goal
     [(string=? arg-text "clear")
+     (define cleared-state (struct-copy ui-state state [active-goal #f]))
      (define entry (make-system-entry "[goal] Active goal cancelled."))
-     (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+     (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry cleared-state entry))
      'continue]
     ;; /goal status or /goal (no args) — show status
     [(or (string=? arg-text "") (string=? arg-text "status"))
+     (define goal-info (ui-state-active-goal state))
      (define entry
-       (make-system-entry "[goal] No active goal. Use /goal \"<description>\" to set one."))
+       (if goal-info
+           (make-system-entry (format "[goal] Active: ~a\nStatus: ~a | Turns: ~a/~a"
+                                      (goal-display-info-goal-text goal-info)
+                                      (goal-display-info-status goal-info)
+                                      (goal-display-info-turns-used goal-info)
+                                      (goal-display-info-max-turns goal-info)))
+           (make-system-entry "[goal] No active goal. Use /goal \"<description>\" to set one.")))
      (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
      'continue]
     ;; /goal "<description>" [--check 'cmd'] — set a goal with optional checks
