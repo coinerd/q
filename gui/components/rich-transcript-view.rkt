@@ -31,7 +31,8 @@
           [make-rich-transcript-gui-view (-> any/c any/c any/c any/c any/c any/c any/c any/c)]
           [insert-message-into-text! (-> any/c hash? ui-theme? void?)]
           [clear-and-rebuild-text! (-> any/c list? ui-theme? void?)]
-          [apply-diff-to-text! (-> any/c list? list? ui-theme? void?)])
+          [apply-diff-to-text!
+           (-> any/c list? list? ui-theme? (or/c (box/c exact-nonnegative-integer?) #f) void?)])
          (all-from-out "markdown-parser.rkt")
          (all-from-out "keybindings.rkt")
          (all-from-out "scroll-state.rkt")
@@ -221,9 +222,12 @@
 
 ;; Apply diff between old and new messages to a text% object.
 ;; For append ops, inserts only new messages.
-;; For update-last, replaces the last message's text in-place.
+;; For update-last, uses incremental suffix append when text only grew
+;;   (preserves user selection during streaming).
 ;; For reset, falls back to full rebuild.
-(define (apply-diff-to-text! text-obj old-msgs new-msgs theme)
+;; last-len-box: (boxof exact-nonnegative-integer?) — tracks previous text length
+;;   for incremental append. Pass #f to disable incremental mode.
+(define (apply-diff-to-text! text-obj old-msgs new-msgs theme [last-len-box #f])
   (define diff (compute-transcript-diff old-msgs new-msgs))
   (cond
     ;; No structural change
@@ -234,36 +238,56 @@
      (insert-message-into-text! text-obj (hash-ref (car diff) 'msg) theme)
      (send text-obj lock #t)]
     [(and (= (length diff) 1) (eq? (hash-ref (car diff) 'op #f) 'update-last))
-     ;; Update last → try to replace last message in-place
-     ;; If label not found (text% empty or corrupted), fall back to full rebuild
+     ;; Update last → try incremental suffix append first
      (send text-obj lock #f)
      (define total (send text-obj last-position))
      (define last-msg (hash-ref (car diff) 'msg))
-     (define last-role (hash-ref last-msg 'role "system"))
-     (define last-label (role->label last-role))
-     (define search-str (string-append last-label ": "))
-     (define start-pos
-       (let loop ([pos (max 0 (- total (string-length search-str)))])
-         (cond
-           [(< pos 0) -1]
-           [(and (>= (+ pos (string-length search-str)) total)
-                 (equal? (send text-obj get-text 0 (min (string-length search-str) total))
-                         search-str))
-            0]
-           [(and (< (+ pos (string-length search-str)) total)
-                 (equal? (send text-obj get-text pos (+ pos (string-length search-str))) search-str))
-            pos]
-           [(<= pos 0) -1]
-           [else (loop (- pos 1))])))
+     (define new-text (hash-ref last-msg 'text ""))
+     (define old-text (and (pair? old-msgs) (hash-ref (last old-msgs) 'text "")))
      (cond
-       [(>= start-pos 0)
-        (send text-obj delete start-pos total)
-        (insert-message-into-text! text-obj last-msg theme)]
-       ;; Label not found — full rebuild
-       [else (clear-and-rebuild-text! text-obj new-msgs theme)])
+       ;; Incremental path: text only grew (streaming append)
+       [(and last-len-box
+             old-text
+             (> (string-length new-text) (string-length old-text))
+             (equal? (substring new-text 0 (string-length old-text)) old-text))
+        (define suffix (substring new-text (string-length old-text)))
+        ;; Insert only the new suffix at end of text% (before trailing newlines)
+        (send text-obj insert suffix (- total 2))
+        (when last-len-box
+          (set-box! last-len-box (string-length new-text)))]
+       ;; Slow path: full delete + reinsert of last message
+       [else
+        (define last-role (hash-ref last-msg 'role "system"))
+        (define last-label (role->label last-role))
+        (define search-str (string-append last-label ": "))
+        (define start-pos
+          (let loop ([pos (max 0 (- total (string-length search-str)))])
+            (cond
+              [(< pos 0) -1]
+              [(and (>= (+ pos (string-length search-str)) total)
+                    (equal? (send text-obj get-text 0 (min (string-length search-str) total))
+                            search-str))
+               0]
+              [(and (< (+ pos (string-length search-str)) total)
+                    (equal? (send text-obj get-text pos (+ pos (string-length search-str)))
+                            search-str))
+               pos]
+              [(<= pos 0) -1]
+              [else (loop (- pos 1))])))
+        (cond
+          [(>= start-pos 0)
+           (send text-obj delete start-pos total)
+           (insert-message-into-text! text-obj last-msg theme)]
+          ;; Label not found — full rebuild
+          [else (clear-and-rebuild-text! text-obj new-msgs theme)])
+        (when last-len-box
+          (set-box! last-len-box (string-length new-text)))])
      (send text-obj lock #t)]
     ;; Multiple appends or reset → full rebuild
-    [else (clear-and-rebuild-text! text-obj new-msgs theme)]))
+    [else
+     (clear-and-rebuild-text! text-obj new-msgs theme)
+     (when last-len-box
+       (set-box! last-len-box 0))]))
 
 ;; ──────────────────────────────
 ;; GUI view constructor (runtime only)
