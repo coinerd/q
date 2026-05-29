@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.69.6 — 2026-05-29
+
+### GUI Bugfix + Audit Closure
+
+- **B2 CRITICAL**: Fix text appearing black on dark background — convert hex color strings to `color%` objects in `insert-message-into-text!`.
+- **B1 CRITICAL**: Fix `/go` command not executing — add `'new-session` key handling to `try-extension-dispatch`.
+- **B4 MAJOR**: Add clipboard support — Ctrl+C copies selection, Ctrl+A selects all via editor-canvas mixin.
+- **B3 MAJOR**: Fix selection overwritten during streaming — incremental suffix append instead of full delete+reinsert.
+- **W2**: Add thread-safe semaphore guard to `event-reducers` registry in `tui/state-events.rkt`.
+
 ## v0.69.5 — 2026-05-25
 
 ### Audit Hotfix
