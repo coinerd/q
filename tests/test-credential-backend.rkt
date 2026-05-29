@@ -17,13 +17,16 @@
                   make-keychain-credential-backend
                   make-chained-credential-backend
                   current-external-command-runner
+                  credential-policy?
+                  valid-credential-policies
                   credential-backend?
                   backend-name
                   backend-store!
                   backend-load
                   backend-delete!
                   backend-list-providers
-                  backend-available?))
+                  backend-available?
+                  make-policy-aware-backend))
 
 ;; ---------------------------------------------------------------------------
 ;; Helpers
@@ -324,3 +327,74 @@
     (define be (make-keychain-credential-backend))
     (check-true (backend-available? be))
     (check-exn exn:fail? (λ () (backend-store! be "openai" "sk-test")))))
+
+;; ---------------------------------------------------------------------------
+;; Tests: credential policy model (v0.70.1)
+;; ---------------------------------------------------------------------------
+
+(test-case "policy: auto passes through to inner"
+  (define mem (make-memory-credential-backend))
+  (define be (make-policy-aware-backend mem #:policy 'auto))
+  (backend-store! be "openai" "sk-test")
+  (define cred (backend-load be "openai"))
+  (check-not-false cred)
+  (check-equal? (hash-ref cred 'api-key) "sk-test"))
+
+(test-case "policy: keychain-preferred warns on file store"
+  (define warnings (open-output-string))
+  (define file-backend (make-file-credential-backend
+                        (build-path (find-system-path 'temp-dir) "cred-policy-test.json")))
+  (define be (make-policy-aware-backend file-backend
+                                        #:policy 'keychain-preferred
+                                        #:warn-port warnings))
+  (backend-store! be "testprov" "sk-test-warn")
+  (define warn-str (get-output-string warnings))
+  (check-true (string-contains? warn-str "consider using keychain"))
+  ;; cleanup
+  (define p (build-path (find-system-path 'temp-dir) "cred-policy-test.json"))
+  (when (file-exists? p) (delete-file p)))
+
+(test-case "policy: keychain-required raises on file store"
+  (define file-backend (make-file-credential-backend
+                        (build-path (find-system-path 'temp-dir) "cred-policy-req.json")))
+  (define be (make-policy-aware-backend file-backend #:policy 'keychain-required))
+  (check-exn exn:fail? (λ () (backend-store! be "openai" "sk-test"))))
+
+(test-case "policy: env-only raises on file store"
+  (define file-backend (make-file-credential-backend
+                        (build-path (find-system-path 'temp-dir) "cred-policy-env.json")))
+  (define be (make-policy-aware-backend file-backend #:policy 'env-only))
+  (check-exn exn:fail? (λ () (backend-store! be "openai" "sk-test"))))
+
+(test-case "policy: env-only returns #f on file load"
+  (define file-be (make-file-credential-backend
+                   (build-path (find-system-path 'temp-dir) "cred-envonly-load.json")))
+  (backend-store! file-be "openai" "sk-file")
+  (define be (make-policy-aware-backend file-be #:policy 'env-only #:warn-port #f))
+  (check-false (backend-load be "openai"))
+  ;; cleanup
+  (define p (build-path (find-system-path 'temp-dir) "cred-envonly-load.json"))
+  (when (file-exists? p) (delete-file p)))
+
+(test-case "policy: credential-policy? validates symbols"
+  (check-true (credential-policy? 'auto))
+  (check-true (credential-policy? 'keychain-required))
+  (check-false (credential-policy? 'invalid))
+  (check-false (credential-policy? "auto")))
+
+(test-case "policy: valid-credential-policies has all modes"
+  (check-equal? valid-credential-policies '(auto keychain-preferred keychain-required env-only)))
+
+(test-case "policy: keychain-required allows memory backend"
+  (define mem (make-memory-credential-backend))
+  (define be (make-policy-aware-backend mem #:policy 'keychain-required))
+  ;; memory backend is not file — should succeed
+  (backend-store! be "openai" "sk-mem-ok")
+  (define cred (backend-load be "openai"))
+  (check-not-false cred)
+  (check-equal? (hash-ref cred 'api-key) "sk-mem-ok"))
+
+(test-case "policy: backend-name reflects policy wrapper"
+  (define mem (make-memory-credential-backend))
+  (define be (make-policy-aware-backend mem #:policy 'keychain-preferred))
+  (check-true (string-contains? (backend-name be) "policy-aware")))

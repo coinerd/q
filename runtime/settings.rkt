@@ -73,7 +73,10 @@
                        [steering-gentle-threshold (-> q-settings? number?)]
                        [steering-strong-threshold (-> q-settings? number?)]
                        [steering-hard-cap (-> q-settings? number?)]
-                       [steering-same-file-dedup? (-> q-settings? boolean?)])
+                       [steering-same-file-dedup? (-> q-settings? boolean?)]
+                       [credential-policy
+                        (-> q-settings?
+                            (or/c 'auto 'keychain-preferred 'keychain-required 'env-only))])
 
          ;; Sandbox settings (re-exported, not locally defined)
          sandbox-enabled?
@@ -396,3 +399,21 @@
 ;; Whether same-file dedup is enabled. Default: #t.
 (define (steering-same-file-dedup? settings)
   (setting-ref* settings '(steering same_file_dedup) #t))
+
+;; ============================================================
+;; Credential policy (v0.70.1)
+;; ============================================================
+
+;; Credential policy controls how credential backends behave when
+;; keychain is unavailable and file/env fallback would be used.
+;;
+;; Modes:
+;;   'auto               — current chain, no policy enforcement (default, backward-compatible)
+;;   'keychain-preferred — file fallback allowed with warning
+;;   'keychain-required  — file fallback forbidden for store/load
+;;   'env-only           — no local credential file writes
+;;
+;; Config key: credentials.policy
+
+(define (credential-policy settings)
+  (setting-ref* settings '(credentials policy) 'auto))
