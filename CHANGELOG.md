@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.71.3 — 2026-05-30
+
+### Deterministic Checks
+
+Fourth milestone of the `/goal` feature — user-defined shell commands as verifiable evidence.
+
+- **goal-checks.rkt**: Parse `--check` arguments from `/goal` command. Validate safety via `classify-shell-risks` (blocks critical commands like `rm -rf`). Execute checks via subprocess with timeout + custodian isolation.
+- **Evaluator integration**: `evaluate-transcript` gains `#:check-results` parameter. Check results appended to evaluator prompt as deterministic evidence alongside transcript.
+- **Runner integration**: `execute-checks-for-goal` runs all checks before LLM evaluation. Results feed directly into evaluator.
+- **Command handler**: `/goal "tests pass" --check 'raco test'` parses check arguments, validates safety, shows check summary.
+- **Tests**: 14 new tests — parsing, safety, execution, output capture, check-augmented evaluation.
+
 ## v0.71.2 — 2026-05-30
 
 ### Evidence Discipline + No-Progress Detection
