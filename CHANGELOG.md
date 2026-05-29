@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.70.12 — 2026-05-30
+
+### Audit Hotfix Round 2 — Closure of v0.70.11 Audit Findings
+
+- Remove duplicate `racket/string` import in credential-backend (F1)
+- Add `log-warning` to `drop-old` backpressure handler in trace-sink (F2)
+- Fix 9 wrong v0.70.x status descriptions in README (F3)
+- Apply `shell-escape` to Windows `cmdkey store!` for defense-in-depth (W1)
+- Inline identity function `content-hash` in token-estimate-cache (W2)
+- Improve USER fallback test coverage (W3)
+
 ## v0.70.11 — 2026-05-30
 
 ### Post-Audit Hotfix — Critical/Warning Finding Remediation
