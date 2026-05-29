@@ -9,7 +9,8 @@
 ;; Architecture:
 ;;   User action → dispatch-*! → event bus → state reducer → UI update
 
-(require racket/contract)
+(require racket/contract
+         "event-types.rkt")
 
 (provide (contract-out [dispatch-submit! (-> any/c string? void?)]
                        [dispatch-cancel! (-> any/c void?)]
@@ -21,68 +22,56 @@
                        [dispatch-input-append! (-> any/c string? void?)]
                        [dispatch-input-clear! (-> any/c void?)]))
 
+;; Helper: emit a ui-event via the runtime's event mechanism.
+(define (emit-ui-event! runtime type . payload-args)
+  (define emit-fn (hash-ref runtime 'emit-event #f))
+  (when emit-fn
+    (emit-fn (ui-event->hash (apply make-ui-event type payload-args)))))
+
 ;; ──────────────────────────────
 ;; Submit user input
 ;; ──────────────────────────────
 (define (dispatch-submit! runtime text)
-  ;; In full wiring, this calls the submit handler on the agent session.
-  ;; For now, emit a user-input event via the runtime's event mechanism.
-  (define emit-fn (hash-ref runtime 'emit-event #f))
-  (when emit-fn
-    (emit-fn (hash 'type "user.input" 'text text))))
+  (emit-ui-event! runtime "user.input" 'text text))
 
 ;; ──────────────────────────────
 ;; Cancel current operation
 ;; ──────────────────────────────
 (define (dispatch-cancel! runtime)
-  (define emit-fn (hash-ref runtime 'emit-event #f))
-  (when emit-fn
-    (emit-fn (hash 'type "user.cancel"))))
+  (emit-ui-event! runtime "user.cancel"))
 
 ;; ──────────────────────────────
 ;; Scroll transcript
 ;; ──────────────────────────────
 (define (dispatch-scroll! runtime direction)
-  (define emit-fn (hash-ref runtime 'emit-event #f))
-  (when emit-fn
-    (emit-fn (hash 'type "ui.scroll" 'direction direction))))
+  (emit-ui-event! runtime "ui.scroll" 'direction direction))
 
 ;; ──────────────────────────────
 ;; Execute a slash command
 ;; ──────────────────────────────
 (define (dispatch-command! runtime command-name args)
-  (define emit-fn (hash-ref runtime 'emit-event #f))
-  (when emit-fn
-    (emit-fn (hash 'type "user.command" 'command command-name 'args args))))
+  (emit-ui-event! runtime "user.command" 'command command-name 'args args))
 
 ;; ──────────────────────────────
 ;; Resize event
 ;; ──────────────────────────────
 (define (dispatch-resize! runtime cols rows)
-  (define emit-fn (hash-ref runtime 'emit-event #f))
-  (when emit-fn
-    (emit-fn (hash 'type "ui.resize" 'cols cols 'rows rows))))
+  (emit-ui-event! runtime "ui.resize" 'cols cols 'rows rows))
 
 ;; ──────────────────────────────
 ;; Focus a specific component
 ;; ──────────────────────────────
 (define (dispatch-focus! runtime component-id)
-  (define emit-fn (hash-ref runtime 'emit-event #f))
-  (when emit-fn
-    (emit-fn (hash 'type "ui.focus" 'component component-id))))
+  (emit-ui-event! runtime "ui.focus" 'component component-id))
 
 ;; ──────────────────────────────
 ;; Append text to input
 ;; ──────────────────────────────
 (define (dispatch-input-append! runtime text)
-  (define emit-fn (hash-ref runtime 'emit-event #f))
-  (when emit-fn
-    (emit-fn (hash 'type "ui.input.append" 'text text))))
+  (emit-ui-event! runtime "ui.input.append" 'text text))
 
 ;; ──────────────────────────────
 ;; Clear input field
 ;; ──────────────────────────────
 (define (dispatch-input-clear! runtime)
-  (define emit-fn (hash-ref runtime 'emit-event #f))
-  (when emit-fn
-    (emit-fn (hash 'type "ui.input.clear"))))
+  (emit-ui-event! runtime "ui.input.clear"))
