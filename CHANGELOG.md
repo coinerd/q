@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.69.1 — 2026-05-25
+
+### Abstraction Quality: Missing Domain Functions
+
+Extract duplicated patterns into named domain functions, replacing manual ID construction with canonical `generate-id`.
+
+**Changes:**
+- **W0**: Replace all `(format "prefix-~a" (current-inexact-milliseconds))` with `(string-append "prefix-" (generate-id))` across 5 runtime files. Zero format-id patterns remain outside `util/ids.rkt`.
+- **W1**: Extract `make-version-header-message` helper in `session-store.rkt`. Replaces 4 duplicate `make-message` calls (-24 LOC).
+- **W2**: Extract `emit-mode-change!` helper in GSD `command-handlers.rkt`. Replaces 5 duplicate emit+event patterns.
+- **W3**: Extract `extract-arg-summary` and `format-tool-call-display` to new `util/tool-display.rkt`. Dedup `kept-ids` filter in `selection.rkt` via `partition-kept-excluded`.
+
 ## v0.69.0 — 2026-05-25
 
 ### Abstraction Quality: Dead Code, Dedup, Immutability
