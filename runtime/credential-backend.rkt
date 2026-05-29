@@ -57,7 +57,8 @@
                 (#:policy (or/c 'auto 'keychain-preferred 'keychain-required 'env-only)
                           #:warn-port (or/c output-port? #f))
                 credential-backend?)]
-          [make-macos-keychain-credential-backend (-> credential-backend?)]))
+          [make-macos-keychain-credential-backend (-> credential-backend?)]
+          [make-windows-credential-backend (-> credential-backend?)]))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Backend struct
@@ -534,4 +535,65 @@
        (define runner (current-external-command-runner))
        (define out (open-output-string))
        (runner "which security 2>/dev/null" out)
+       (positive? (string-length (get-output-string out)))))))
+
+;; ═══════════════════════════════════════════════════════════════════
+;; Windows Credential Manager backend (v0.70.2)
+;; ═══════════════════════════════════════════════════════════════════
+
+;; Uses `cmdkey` to interact with Windows Credential Manager.
+;; Fully mockable via current-external-command-runner.
+
+(define (run-cmdkey-command args)
+  (define runner (current-external-command-runner))
+  (define out (open-output-string))
+  (define cmd (format "cmdkey ~a 2>&1" args))
+  (define result (runner cmd out))
+  (values (get-output-string out) result))
+
+(define (make-windows-credential-backend)
+  (credential-backend
+   "windows-credential-manager"
+   ;; store! — uses cmdkey /generic:target /user:user /pass:key
+   (λ (be provider-name api-key)
+     (define-values (out ok?) (run-cmdkey-command
+                               (format "/generic:q-credential-~a /user:q-api-key /pass:~a"
+                                       provider-name api-key)))
+     (unless ok?
+       (raise-credential-error
+        (format "Windows credential store failed for '~a'" provider-name)
+        "windows-credential-manager" provider-name)))
+   ;; load — uses cmdkey /list to find, then /generic to retrieve
+   ;; Note: cmdkey cannot retrieve passwords directly; this is a limitation.
+   ;; On Windows, PowerShell's CredentialManager module would be needed for
+   ;; actual password retrieval. For now, load checks presence only and
+   ;; returns a marker hash. Full retrieval requires PowerShell integration.
+   (λ (be provider-name env-var)
+     (define-values (out ok?) (run-cmdkey-command
+                               (format "/list:q-credential-~a" provider-name)))
+     (if (and ok? (string-contains? out (format "q-credential-~a" provider-name)))
+         (hash 'api-key "[stored-in-windows-credential-manager]"
+               'provider provider-name
+               'source "windows-credential-manager")
+         #f))
+   ;; delete!
+   (λ (be provider-name)
+     (run-cmdkey-command (format "/delete:q-credential-~a" provider-name))
+     (void))
+   ;; list — parse cmdkey /list output
+   (λ (be)
+     (define-values (out ok?) (run-cmdkey-command "/list"))
+     (if ok?
+         (let ([lines (string-split out "\n")])
+           (for/list ([line (in-list lines)]
+                      #:when (string-contains? line "q-credential-"))
+             (define m (regexp-match #rx"q-credential-([a-zA-Z0-9_-]+)" line))
+             (if m (cadr m) line)))
+         '()))
+   ;; available? — check if cmdkey exists
+   (λ (be)
+     (with-handlers ([exn:fail? (λ (_) #f)])
+       (define runner (current-external-command-runner))
+       (define out (open-output-string))
+       (runner "which cmdkey 2>/dev/null || where cmdkey 2>nul" out)
        (positive? (string-length (get-output-string out)))))))
