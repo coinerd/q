@@ -342,6 +342,11 @@
                       (char=? (string-ref t (sub1 (string-length t))) #\')))
              (substring t 1 (sub1 (string-length t)))
              t)))
+     ;; Check for --evaluator flag
+     (define evaluator-mode
+       (if (string-contains? arg-text "--evaluator")
+           (let ([parts (string-split arg-text)]) (if (member "agent" parts) 'agent 'transcript))
+           'transcript))
      ;; Validate check safety
      (define safety-reasons (validate-check-safety checks))
      (cond
@@ -360,11 +365,13 @@
                        (map (lambda (c) (format "~a: ~a" (goal-check-label c) (goal-check-command c)))
                             checks)
                        ", "))))
+        (define eval-info (if (eq? evaluator-mode 'agent) " [agent evaluator]" ""))
         (define entry
           (make-system-entry
            (format
-            "[goal] Goal set: ~a~a\nThe autonomous goal loop will be available in a future update."
+            "[goal] Goal set: ~a~a~a\nThe autonomous goal loop will be available in a future update."
             clean-text
-            check-info)))
+            check-info
+            eval-info)))
         (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
         'continue])]))

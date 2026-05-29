@@ -15,6 +15,7 @@
          racket/list
          "goal-state.rkt"
          "goal-evaluator.rkt"
+         "goal-agent-evaluator.rkt"
          "goal-evidence.rkt"
          "goal-checks.rkt"
          "../llm/provider.rkt")
@@ -57,14 +58,21 @@
                             evaluator-model
                             run-prompt-fn!
                             #:max-turns [max-turns 8]
+                            #:evaluator-mode [evaluator-mode 'transcript]
                             #:on-event [on-event void]
                             #:on-status [on-status void])
   (->* (string? provider? string? procedure?)
-       (#:max-turns exact-nonnegative-integer? #:on-event procedure? #:on-status procedure?)
+       (#:max-turns exact-nonnegative-integer?
+                    #:evaluator-mode symbol?
+                    #:on-event procedure?
+                    #:on-status procedure?)
        goal-state?)
   ;; Initialize goal state
   (define goal-st
-    (make-goal-state #:goal-text goal-text #:max-turns max-turns #:evaluator-model evaluator-model))
+    (make-goal-state #:goal-text goal-text
+                     #:max-turns max-turns
+                     #:evaluator-model evaluator-model
+                     #:evaluator-mode evaluator-mode))
 
   ;; Emit goal.started
   (on-event 'goal-started goal-st)
@@ -153,7 +161,17 @@
   ;; Extract transcript from loop-result for evaluation
   (define transcript (extract-transcript-from-result loop-result))
   (define eval-result
-    (evaluate-transcript goal-text transcript provider evaluator-model #:check-results check-results))
+    (if (eq? (goal-state-evaluator-mode goal-st) 'agent)
+        (evaluate-with-agent goal-text
+                             transcript
+                             provider
+                             evaluator-model
+                             #:check-results check-results)
+        (evaluate-transcript goal-text
+                             transcript
+                             provider
+                             evaluator-model
+                             #:check-results check-results)))
 
   ;; Emit goal.evaluated
   (on-event 'goal-evaluated (hasheq 'evaluation eval-result 'turn turns))
@@ -203,8 +221,11 @@
                                       provider
                                       evaluator-model
                                       turn-responses
-                                      #:max-turns [max-turns 8])
-  (->* (string? provider? string? list?) (#:max-turns exact-nonnegative-integer?) goal-state?)
+                                      #:max-turns [max-turns 8]
+                                      #:evaluator-mode [evaluator-mode 'transcript])
+  (->* (string? provider? string? list?)
+       (#:max-turns exact-nonnegative-integer? #:evaluator-mode symbol?)
+       goal-state?)
   ;; Simulated run-prompt! that returns predefined responses
   (define turn-idx (box 0))
   (define (sim-run-prompt! prompt)
@@ -215,4 +236,9 @@
     (set-box! turn-idx (add1 (unbox turn-idx)))
     (values #f resp))
 
-  (goal-run! goal-text provider evaluator-model sim-run-prompt! #:max-turns max-turns))
+  (goal-run! goal-text
+             provider
+             evaluator-model
+             sim-run-prompt!
+             #:max-turns max-turns
+             #:evaluator-mode evaluator-mode))
