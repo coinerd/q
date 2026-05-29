@@ -104,7 +104,11 @@
         (cons 'activate 'none)
         ;; Reload
         "/reload"
-        (cons 'reload 'none)))
+        (cons 'reload 'none)
+        "/goal"
+        (cons 'goal 'optional)
+        "/g"
+        (cons 'goal 'optional)))
 
 ;; Parse a slash command string into a dispatch symbol + args list.
 ;; Returns: symbol | (list symbol args...) | #f
