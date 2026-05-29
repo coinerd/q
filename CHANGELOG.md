@@ -1,6 +1,20 @@
 # Changelog
 
-## v0.70.8 -- 2026-05-29
+## v0.70.9 — 2026-05-29
+
+### Typed Racket Gradual Migration — Boundary Pilot
+
+- **W0**: Audited 5 candidate modules; selected `util/event-access.rkt` as first target
+- **W1**: Converted `util/event-access.rkt` to `#lang typed/racket`
+  - Removed manual `racket/contract` boilerplate; TR boundary auto-generates contracts
+  - All downstream consumers compile and pass (`agent/event-types.rkt`, `test-stream-error-wrapping.rkt`)
+  - Zero contract churn, negligible compile-time impact
+- **W2**: Decision — STOP after one successful conversion
+  - Second candidate (`util/event-types.rkt`) too small for value
+  - Next viable candidate (`util/tool-types.rkt`) re-exported by facade — excluded per risk decision
+  - Pilot documented in `docs/reports/TYPED-RACKET-TARGETS-v0.70.9.md`
+
+## v0.70.8 — 2026-05-29
 
 ### Large Test File Decomposition
 
@@ -13,7 +27,7 @@
   - Extracted `test-gemini-provider.rkt` — provider construction, HTTP status, API key validation, security
 - **W2**: Verified test runner auto-discovers new subdirectories; version bump
 
-## v0.70.7 -- 2026-05-29
+## v0.70.7 — 2026-05-29
 
 ### Per-Tool Timeout Override
 
@@ -24,7 +38,7 @@
 - **W1**: Bash tool respects injected timeout via existing `resolve-exec-limits`
 - **W1**: User-provided timeout is not overwritten by tool default
 
-## v0.70.6 -- 2026-05-29
+## v0.70.6 — 2026-05-29
 
 ### Token Estimation Memoization
 
@@ -35,7 +49,7 @@
 - **W1**: Added `token-estimate-cache-hit-stats` for observability
 - **W2**: Benchmark shows ~43% speedup for repeated token estimation (100 texts, 10 runs)
 
-## v0.70.5 -- 2026-05-29
+## v0.70.5 — 2026-05-29
 
 ### Opt-In Async Session/Event Sink Pilot
 
@@ -47,7 +61,7 @@
 - **W1**: `sink-flush!` blocks until queued writes complete; `sink-close!` stops worker
 - **W1**: Integrity proof: `verify-hash-chain` passes after async appends
 
-## v0.70.4 -- 2026-05-29
+## v0.70.4 — 2026-05-29
 
 ### Async Trace/Event Logging
 

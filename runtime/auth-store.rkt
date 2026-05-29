@@ -198,7 +198,10 @@
                            #:config-path [config-path #f])
   ;; Warn when storing credentials to file (v0.70.1)
   (when config-path
-    (log-warning "store-credential: storing credential for '~a' to file ~a — consider using keychain or environment variables for better security" provider-name config-path))
+    (log-warning
+     "store-credential: storing credential for '~a' to file ~a — consider using keychain or environment variables for better security"
+     provider-name
+     config-path))
   ;; Update the provider-config with the new api-key
   (define updated (hash-set provider-config 'api-key api-key))
   (when config-path
