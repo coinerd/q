@@ -15,6 +15,7 @@
          racket/list
          "goal-state.rkt"
          "goal-evaluator.rkt"
+         "goal-evidence.rkt"
          "../llm/provider.rkt")
 
 ;; ============================================================
@@ -25,9 +26,17 @@
          goal-run-simulated!
          goal-loop-step
          build-continuation-prompt
-         NO-PROGRESS-THRESHOLD)
+         collect-evaluations)
 
 (define NO-PROGRESS-THRESHOLD 3)
+
+;; Collect all evaluations from goal-state checks + last-evaluation
+(define (collect-evaluations goal-st)
+  (define from-checks (filter evaluation-result? (goal-state-checks goal-st)))
+  (define last-eval (goal-state-last-evaluation goal-st))
+  (if last-eval
+      (append from-checks (list last-eval))
+      from-checks))
 
 ;; ============================================================
 ;; Main entry point
@@ -52,19 +61,15 @@
   (on-status (format "Goal set: ~a (max ~a turns)" goal-text max-turns))
 
   ;; Run the loop
-  (run-goal-loop goal-st provider evaluator-model run-prompt-fn! on-event on-status 0))
+  (run-goal-loop goal-st provider evaluator-model run-prompt-fn! on-event on-status))
 
 ;; ============================================================
 ;; Internal loop
 ;; ============================================================
 
-(define (run-goal-loop goal-st
-                       provider
-                       evaluator-model
-                       run-prompt-fn!
-                       on-event
-                       on-status
-                       no-progress-count)
+(define (run-goal-loop goal-st provider evaluator-model run-prompt-fn! on-event on-status)
+  ;; Collect accumulated evaluations for no-progress check
+  (define all-evals (collect-evaluations goal-st))
   (cond
     ;; Terminal conditions
     [(>= (goal-state-turns-used goal-st) (goal-state-max-turns goal-st))
@@ -77,14 +82,14 @@
      (on-status (format "Goal failed: max turns (~a) reached" (goal-state-max-turns goal-st)))
      final-st]
 
-    [(>= no-progress-count NO-PROGRESS-THRESHOLD)
+    [(detect-no-progress all-evals)
      (define final-st
        (struct-copy goal-state
                     goal-st
                     [status 'failed]
                     [updated-at (inexact->exact (round (current-inexact-milliseconds)))]))
      (on-event 'goal-failed final-st)
-     (on-status "Goal failed: no progress after 3 consecutive evaluations")
+     (on-status "Goal failed: no progress — 3 consecutive same-reason evaluations")
      final-st]
 
     [else
@@ -99,24 +104,8 @@
         (on-status (format "Goal failed: ~a" (goal-state-last-evaluation-reason updated-st)))
         updated-st]
        [else
-        ;; Active — check for no-progress
-        (define new-no-progress
-          (if (no-progress-evaluation? (goal-state-last-evaluation updated-st))
-              (add1 no-progress-count)
-              0))
-        (run-goal-loop updated-st
-                       provider
-                       evaluator-model
-                       run-prompt-fn!
-                       on-event
-                       on-status
-                       new-no-progress)])]))
-
-;; Check if evaluation shows no progress (same reason as before)
-(define (no-progress-evaluation? eval-result)
-  (and eval-result
-       (not (evaluation-result-achieved? eval-result))
-       (string-contains? (evaluation-result-reason eval-result) "no progress")))
+        ;; Active — recurse with updated state (evaluations now tracked in state)
+        (run-goal-loop updated-st provider evaluator-model run-prompt-fn! on-event on-status)])]))
 
 ;; Extract reason from last evaluation safely
 (define (goal-state-last-evaluation-reason gs)
@@ -138,11 +127,11 @@
   (on-event 'goal-turn-started (hasheq 'turn turns 'goal goal-st))
   (on-status (format "Goal turn ~a/~a: working..." turns (goal-state-max-turns goal-st)))
 
-  ;; Build the prompt for this turn
+  ;; Build the prompt — use evidence prompt from goal-evidence
   (define prompt
     (if (= turns 1)
         goal-text
-        (build-continuation-prompt goal-text (goal-state-last-evaluation goal-st))))
+        (evidence-prompt-for-goal goal-text (goal-state-last-evaluation goal-st))))
 
   ;; Run the prompt through the agent
   (define-values (updated-sess loop-result) (run-prompt-fn! prompt))
@@ -163,6 +152,7 @@
                goal-st
                [turns-used turns]
                [status new-status]
+               [checks (append (goal-state-checks goal-st) (list eval-result))]
                [last-evaluation eval-result]
                [updated-at now]))
 
