@@ -1,6 +1,6 @@
 # Compatibility Matrix
 
-<!-- verified-against: 0.24.9 -->
+<!-- verified-against: 0.70.1 -->
 This document tracks compatibility between q versions, Racket versions, and
 extension API versions.
 
@@ -42,6 +42,19 @@ extension API versions.
 | Anthropic (Claude) | 0.24.9 | Stable |
 | Gemini | 0.24.9 | Stable |
 | Local (llama.cpp server) | 0.24.9 | Stable |
+## Credential Backend Platform Support
+
+| Backend | Linux | macOS | Windows | Status |
+|---------|-------|-------|---------|--------|
+| Environment variables | ✓ | ✓ | ✓ | Stable |
+| File (JSON, 0600) | ✓ | ✓ | ✓ | Stable |
+| Memory (testing) | ✓ | ✓ | ✓ | Stable |
+| Linux `secret-tool` | ✓ | ✗ | ✗ | Stable |
+| macOS `security` | ✗ | ✓ | ✗ | Stable |
+| Windows `cmdkey` | ✗ | ✗ | ✓ | Stable (v0.70.2+) |
+
+All backends are fully mockable via `current-external-command-runner`.
+
 ## TUI Dependencies
 
 All TUI functionality is implemented natively in Racket — no external packages required.

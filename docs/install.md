@@ -11,8 +11,23 @@ Everything you need to get q running on your machine.
 
 ## Quick Install (one command)
 
+### macOS / Linux
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/coinerd/q/main/scripts/install.sh | bash
+```
+
+### Windows (PowerShell)
+
+```powershell
+Invoke-Expression (Invoke-WebRequest -Uri https://raw.githubusercontent.com/coinerd/q/main/scripts/install.ps1).Content
+```
+
+Or download and run locally:
+
+```powershell
+Invoke-WebRequest -Uri https://raw.githubusercontent.com/coinerd/q/main/scripts/install.ps1 -OutFile install.ps1
+.\install.ps1
 ```
 
 This script:
@@ -126,6 +141,14 @@ and rendering. No external packages are required.
 ## Security Note
 
 API keys stored in `~/.q/credentials.json` are saved in **plaintext** with owner-only permissions (`0600`). For production or CI environments, **use environment variables** instead of the credentials file:
+
+On Windows, store credentials in environment variables:
+
+```powershell
+[Environment]::SetEnvironmentVariable('Q_OPENAI_API_KEY', 'sk-...', 'User')
+```
+
+Or use the Windows Credential Manager (see `q credentials` CLI).
 
 ```bash
 export OPENAI_API_KEY=sk-...
