@@ -43,7 +43,7 @@
                   tool-call-id
                   tool-call-name
                   tool-call-arguments)
-         (only-in "tool-struct.rkt" tool-execute tool-dangerous?)
+         (only-in "tool-struct.rkt" tool-execute tool-dangerous? tool-timeout-seconds)
          (only-in "scheduler-strategy.rkt"
                   scheduler-strategy?
                   scheduler-strategy-preflight-filter
@@ -308,7 +308,12 @@
         (make-error-result (format "tool '~a' blocked — approval denied" tc-name))]
        [else
         ;; R-03/R-22: Use tool-dangerous? metadata instead of hardcoded list
-        (define args (tool-call-arguments tc-to-execute))
+        (define raw-args (tool-call-arguments tc-to-execute))
+        ;; v0.70.7: Inject per-tool timeout into args if the tool defines one
+        (define args
+          (if (and (tool-timeout-seconds t) (not (hash-has-key? raw-args 'timeout)))
+              (hash-set raw-args 'timeout (tool-timeout-seconds t))
+              raw-args))
         (define exec-result
           (with-handlers ([exn:fail? (lambda (e)
                                        (make-error-result
