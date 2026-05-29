@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.70.5 -- 2026-05-29
+
+### Opt-In Async Session/Event Sink Pilot
+
+- **W0**: Session sink ordering characterization tests (file + in-memory sinks)
+- **W0**: Hash-chain sequential linking verification
+- **W0**: Pending marker cleanup after successful append
+- **W1**: `async-session-sink%` class with worker thread and bounded capacity
+- **W1**: Opt-in only — default remains sync; no production wiring change
+- **W1**: `sink-flush!` blocks until queued writes complete; `sink-close!` stops worker
+- **W1**: Integrity proof: `verify-hash-chain` passes after async appends
+
 ## v0.70.4 -- 2026-05-29
 
 ### Async Trace/Event Logging
