@@ -8,6 +8,7 @@
          rackunit/text-ui
          racket/file
          racket/list
+         json
          "../util/protocol-types.rkt"
          "../runtime/session-store.rkt"
          "../runtime/session-index.rkt"
@@ -690,7 +691,7 @@
    (fork-session! source-path "c1" dest-path)
    (define original (load-session-log source-path))
    (check-equal? (length original) 2)
-   (delete-directory/files dir #:must-exist? #f)))
+   (delete-directory/files dir #:must-exist? #f))
 
 ;; ============================================================
 ;; Session import tests (#1113)
@@ -772,9 +773,13 @@
   (send sink sink-append! (make-test-message "id2" "id1" 'assistant 'message))
   (define entries (send sink sink-load))
   (check-equal? (length entries) 2)
-  (define h1 (hash-ref (message-meta (first entries)) 'hash #f))
-  (define h2 (hash-ref (message-meta (second entries)) 'hash #f))
-  (define prev2 (hash-ref (message-meta (second entries)) 'prev_hash #f))
+  ;; Read raw JSONL to verify hash chain (hash/prev_hash not restored by jsexpr->message)
+  (define raw-lines (filter non-empty-string? (file->lines path)))
+  (define raw1 (string->jsexpr (first raw-lines)))
+  (define raw2 (string->jsexpr (second raw-lines)))
+  (define h1 (hash-ref raw1 'hash #f))
+  (define h2 (hash-ref raw2 'hash #f))
+  (define prev2 (hash-ref raw2 'prev_hash #f))
   ;; Second entry's prev_hash should equal first entry's hash
   (check-equal? prev2 h1)
   ;; Hashes should differ
@@ -801,5 +806,82 @@
   (define entries (send sink sink-load))
   (check-equal? (map message-id entries) '("id1" "id2")))
 
+
+
+;; ============================================================
+;; v0.70.5 W1: async-session-sink% tests (opt-in, default off)
+;; ============================================================
+
+(test-case "async-session-sink: preserves append order"
+  (define dir (make-temp-dir))
+  (define path (session-path dir))
+  (define inner (new file-session-sink% [log-path path]))
+  (define sink (new async-session-sink% [inner-sink inner] [capacity 10]))
+  (for ([i (in-range 5)])
+    (send sink sink-append! (make-test-message (format "id~a" i) (if (= i 0) #f (format "id~a" (- i 1))) 'user 'message)))
+  (send sink sink-flush!)
+  (send sink sink-close!)
+  (define entries (send sink sink-load))
+  (check-equal? (length entries) 5)
+  (check-equal? (map message-id entries) '("id0" "id1" "id2" "id3" "id4"))
+  (delete-directory/files dir #:must-exist? #f))
+
+(test-case "async-session-sink: append-entries preserves batch order"
+  (define dir (make-temp-dir))
+  (define path (session-path dir))
+  (define inner (new file-session-sink% [log-path path]))
+  (define sink (new async-session-sink% [inner-sink inner] [capacity 10]))
+  (define msgs
+    (list (make-test-message "a" #f 'user 'message)
+          (make-test-message "b" "a" 'assistant 'message)
+          (make-test-message "c" "b" 'tool 'tool-result)))
+  (send sink sink-append-entries! msgs)
+  (send sink sink-flush!)
+  (send sink sink-close!)
+  (define entries (send sink sink-load))
+  (check-equal? (map message-id entries) '("a" "b" "c"))
+  (delete-directory/files dir #:must-exist? #f))
+
+(test-case "async-session-sink: hash-chain integrity after async appends"
+  (define dir (make-temp-dir))
+  (define path (session-path dir))
+  (define inner (new file-session-sink% [log-path path]))
+  (define sink (new async-session-sink% [inner-sink inner] [capacity 10]))
+  (send sink sink-append! (make-test-message "id1" #f 'user 'message))
+  (send sink sink-append! (make-test-message "id2" "id1" 'assistant 'message))
+  (send sink sink-flush!)
+  (send sink sink-close!)
+  (define report (verify-session-integrity path))
+  (check-equal? (hash-ref report 'valid-entries) 2)
+  (check-equal? (hash-ref report 'invalid-entries) '())
+  (check-true (hash-ref report 'entry-order-valid?))
+  (delete-directory/files dir #:must-exist? #f))
+
+(test-case "async-session-sink: close prevents further writes"
+  (define mgr (make-in-memory-session-manager))
+  (define inner (new in-memory-session-sink% [manager mgr] [session-id "test"]))
+  (define sink (new async-session-sink% [inner-sink inner] [capacity 10]))
+  (send sink sink-append! (make-test-message "id1" #f 'user 'message))
+  (send sink sink-close!)
+  ;; After close, write is a no-op
+  (send sink sink-append! (make-test-message "id2" "id1" 'assistant 'message))
+  (define entries (send sink sink-load))
+  (check-equal? (length entries) 1)
+  (check-equal? (message-id (first entries)) "id1"))
+
+(test-case "async-session-sink: flush blocks until all queued writes complete"
+  (define dir (make-temp-dir))
+  (define path (session-path dir))
+  (define inner (new file-session-sink% [log-path path]))
+  (define sink (new async-session-sink% [inner-sink inner] [capacity 100]))
+  (for ([i (in-range 50)])
+    (send sink sink-append! (make-test-message (format "id~a" i) (if (= i 0) #f (format "id~a" (- i 1))) 'user 'message)))
+  (send sink sink-flush!)
+  (send sink sink-close!)
+  (define entries (send sink sink-load))
+  (check-equal? (length entries) 50)
+  (delete-directory/files dir #:must-exist? #f))
+
+   )
 ;; Run
 (run-tests test-session-store)
