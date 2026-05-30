@@ -1,11 +1,20 @@
 #lang racket/base
 
 ;; util/extension-types.rkt — Pure type definitions for extension context (M-06)
+;; A-3: Also provides extension-registry? predicate for Typed Racket boundary. — Pure type definitions for extension context (M-06)
 ;;
 ;; Contains only the struct definition with NO runtime/ or llm/ imports.
 ;; Runtime-dependent convenience methods stay in extensions/context.rkt.
 
-(provide extension-ctx
+(require racket/contract)
+
+;; A-3: Standalone extension-registry? predicate.
+;; Typed Racket #:opaque creates its own predicate; this is for untyped consumers.
+;; Matches the struct definition in extensions/api.rkt.
+(define extension-registry? procedure?)
+
+(provide (contract-out [extension-registry? (-> any/c boolean?)])
+         extension-ctx
          extension-ctx?
          extension-ctx-session-id
          extension-ctx-session-dir
