@@ -590,3 +590,95 @@
       (check-not-false (assoc 'risk-notes hotspot-section) "must have risk-notes"))))
 
 (run-tests v0740-suite)
+
+;; ════════════════════════════════════════════════════════════
+
+;; ════════════════════════════════════════════════════════════
+;; v0.74.1 additions: Cycle-detection CI gate
+;; ════════════════════════════════════════════════════════════
+
+;; Simple cycle detection: collect all local requires from .rkt files
+;; and build a directed graph, then DFS for back-edges.
+
+(define (local-requires-of filepath)
+  (define content (file->string filepath))
+  (define rx-pattern (byte-regexp #"\"([a-zA-Z0-9_./-]+\\.rkt)\""))
+  (define bs (string->bytes/utf-8 content))
+  (for/list ([m (regexp-match* rx-pattern bs)])
+    (bytes->string/utf-8 m)))
+
+(define (resolve-dep from-path rel)
+  (simplify-path (build-path (path-only from-path) rel)))
+
+(define (build-require-graph root-dir)
+  (define all-files (rkt-files-in root-dir))
+  (define graph (make-hash))
+  (for ([f (in-list all-files)])
+    (define rels (local-requires-of f))
+    (define resolved
+      (filter-map (lambda (r)
+                    (define p (resolve-dep f r))
+                    (and (file-exists? p) p))
+                  rels))
+    (hash-set! graph (simplify-path f) resolved))
+  graph)
+
+(define (find-cycles graph)
+  (define visited (make-hash))
+  (define cycles '())
+  (define (dfs path stack)
+    (define state (hash-ref visited path #f))
+    (cond
+      [(eq? state 'visiting)
+       (define cycle-start (member path (reverse stack)))
+       (when cycle-start
+         (set! cycles (cons cycle-start cycles)))]
+      [(eq? state 'done) (void)]
+      [else
+       (hash-set! visited path 'visiting)
+       (for ([dep (in-list (hash-ref graph path '()))])
+         (when (hash-has-key? graph dep)
+           (dfs dep (cons path stack))))
+       (hash-set! visited path 'done)]))
+  (for ([node (in-hash-keys graph)])
+    (dfs node '()))
+  cycles)
+
+(define v0741-suite
+  (test-suite "v0.74.1-cycle-detection"
+
+    (test-case "No circular dependencies in runtime layer"
+      (define graph (build-require-graph "runtime"))
+      (define cycles (find-cycles graph))
+      (when (not (null? cycles))
+        (for ([c (in-list cycles)])
+          (displayln (format "CYCLE: ~a" c))))
+      (check-equal? cycles '() "runtime layer must have no circular requires"))
+
+    (test-case "No circular dependencies in agent layer"
+      (define graph (build-require-graph "agent"))
+      (define cycles (find-cycles graph))
+      (when (not (null? cycles))
+        (for ([c (in-list cycles)])
+          (displayln (format "CYCLE: ~a" c))))
+      (check-equal? cycles '() "agent layer must have no circular requires"))
+
+    (test-case "No circular dependencies in tools layer"
+      (define graph (build-require-graph "tools"))
+      (define cycles (find-cycles graph))
+      (when (not (null? cycles))
+        (for ([c (in-list cycles)])
+          (displayln (format "CYCLE: ~a" c))))
+      (check-equal? cycles '() "tools layer must have no circular requires"))
+
+    (test-case "session-store-tree no longer lazy-requires session-store"
+      (define tree-content (file->string (build-path q-dir "runtime" "session-store-tree.rkt")))
+      ;; Strip comment lines before checking
+      (define code-lines
+        (filter (lambda (l) (not (string-prefix? (string-trim l) ";;")))
+                (string-split tree-content "\n")))
+      (define code-only (string-join code-lines "\n"))
+      (check-false (regexp-match? #rx"lazy-require" code-only)
+                   "session-store-tree.rkt must not use lazy-require"))))
+
+(run-tests v0741-suite)
