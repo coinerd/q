@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.71.8 — 
+
+### v0.71.7 Audit Closure
+
+Post-implementation audit closure for the v0.71.7 hotfix. Test gaps + event payload alignment + doc fixes.
+
+| Finding | Severity | Fix |
+|---------|----------|-----|
+| WARN-1: No test for goal-check-completed event | WARN | Added test via goal-loop-step |
+| WARN-2: No test for concurrent goal guard rejection | WARN | Added guard condition verification test |
+| INFO-1: string-truncate missing docstring | INFO | Added docstring clarifying output length |
+| INFO-2: No payload key assertions in event tests | INFO | Added goal-achieved/goal-started payload checks |
+| INFO-3: No test for goal-failed on shutdown-cancel | INFO | Enhanced shutdown test with event tracking |
+| INFO-4: Cancelled state not verified in failed event | INFO | Assert goal-state-status in failed payload |
+| INFO-5: Event payloads use raw structs | INFO | Aligned 4 event types to hasheq payloads |
+| DOC-1: VALIDATION header stale | DOC | Fixed header reference |
+
+**Files changed:** `goal-state.rkt`, `goal-runner.rkt` + 2 test files
+**Tests added:** 4 new/enhanced tests
+
 ## v0.71.7 — 
 
 ### Goal Audit Hotfix
