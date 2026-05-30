@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.74.0 -- 2026-05-30
+
+### Fitness Functions & Quick Wins (M1 W0)
+
+- **Fix** `test-registry-snapshot.rkt` — add missing `timeout-seconds` field
+- **New** C1 regression test for `extension-registry?` predicate
+- **New** `log-stream-setup-timing` unit test (contract accepts `real?`)
+- **Tighten** `step-interpreter.rkt` contracts — replace `any/c` with struct predicates
+- **Clean** README — remove 214 excess blank lines
+- **New** 11 tool security edge-case tests using shell-risk classifier
+
 ## v0.73.8 -- 2026-05-30
 
 ### Audit Closure (A-7)

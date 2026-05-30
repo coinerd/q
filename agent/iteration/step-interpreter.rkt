@@ -15,7 +15,10 @@
          racket/list
          (only-in "loop-state.rkt"
                   loop-infra
+                  loop-infra?
                   iteration-snapshot
+                  iteration-snapshot?
+                  loop-counters?
                   iteration-snapshot-counters
                   iteration-snapshot-ws
                   iteration-snapshot-config
@@ -56,6 +59,7 @@
                   injection-count-payload/c)
          (only-in "../../util/loop-result.rkt"
                   make-loop-result
+                  loop-result?
                   loop-result-metadata
                   loop-result-termination-reason
                   loop-result-messages)
@@ -74,15 +78,15 @@
                   estimate-mid-turn-tokens
                   maybe-compact-mid-turn
                   detect-exploration-loop)
-         (only-in "../../runtime/iteration/decision.rkt" step-result step-result-action step-result-new-counters)
+         (only-in "../../runtime/iteration/decision.rkt" step-result step-result? step-result-action step-result-new-counters)
          (only-in "../../runtime/iteration/internal.rkt" assert-payload)
          (only-in "../../runtime/iteration/directive.rkt" directive-recurse directive-stop))
 
 (provide (contract-out
-          [interpret-step (-> any/c any/c any/c any/c any/c any/c)]
-          [handle-stop-action (-> any/c any/c any/c any/c any/c any/c any/c)]
-          [execute-pending-tool-calls (-> any/c any/c any/c any/c any/c)]
-          [sink-append-entries! (->* (any/c any/c) (any/c) void?)]))
+          [interpret-step (-> step-result? loop-result? (listof any/c) loop-infra? iteration-snapshot? any/c)]
+          [handle-stop-action (-> loop-result? (listof any/c) loop-infra? loop-counters? any/c any/c loop-result?)]
+          [execute-pending-tool-calls (-> (listof any/c) loop-infra? any/c any/c (listof any/c))]
+          [sink-append-entries! (->* (loop-infra? (listof any/c)) ((or/c any/c #f)) void?)]))
 
 ;; ============================================================
 ;; R-09/R-10: Sink-aware append helper
