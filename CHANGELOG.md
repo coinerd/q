@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.73.1 -- 2026-05-30
+
+### Architecture Fixes + Code Quality (A-2/A-3/Q-1/Q-2/Q-3)
+
+| Finding | Change | Files |
+|---------|--------|-------|
+| A-2 | Extract `tool?` to `util/tool-types.rkt` | util/tool-types.rkt, loop-dispatch.rkt, loop-phases.rkt |
+| A-3 | Move `extension-registry?` to `util/extension-types.rkt` | util/extension-types.rkt, loop-state.rkt |
+| Q-1 | Adopt `now-epoch-ms`/`now-epoch-secs` across 4 files | util/time.rkt, goal-*.rkt, sdk-core.rkt |
+| Q-2 | Extract `with-stream-timing` into `llm/timing.rkt` | llm/timing.rkt, 4 provider files |
+| Q-3 | Migrate 2 files to `#lang racket/base` | sdk-public.rkt, tui/state.rkt |
+
+Zero logic changes. Pure mechanical refactoring.
+
 ## v0.73.0 — 2026-05-30
 
 ### Core Loop Tests: Pure Functions (T-1a)
