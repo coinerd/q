@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.72.3 — 
+
+### Phase 3a: Purity Enforcement
+
+Pure/impure separation in agent loop.
+
+| Finding | Severity | Fix |
+|---------|----------|-----|
+| C3: run-streaming-phase is impure in pure module | CRITICAL | Extracted to `agent/loop-dispatch.rkt` |
+| W5: tool-coordinator lacks purity labels | WARNING | Added EFFECTFUL/PURE labels to phase comments |
+
+**Files changed:** `loop-dispatch.rkt` (new), `loop-phases.rkt`, `loop.rkt`, `tool-coordinator.rkt`
+
 ## v0.72.2 — 
 
 ### Phase 2b: Boundary Contract Precision
