@@ -88,6 +88,7 @@
 
          ;; Main command dispatcher
          process-slash-command
+         apply-slash-command
          process-extension-command
          execute-extension-command
          cmd-ctx-session-factory-runner)
@@ -236,6 +237,15 @@
 ;; ============================================================
 ;; Main command dispatcher
 ;; ============================================================
+
+;; Pure-ish state transition for slash commands.
+;; Returns (values new-state result) where result is 'continue | 'quit.
+;; W6 (v0.72.7): Return-based wrapper — callers can adopt this instead of
+;; relying on set-box! side effects. Currently delegates to process-slash-command.
+(define (apply-slash-command state cctx cmd)
+  (define result (process-slash-command cctx cmd))
+  (define new-state (unbox (cmd-ctx-state-box cctx)))
+  (values new-state result))
 
 ;; Process a slash command. Returns 'continue | 'quit
 ;; cmd can be: symbol | (list symbol args...)
