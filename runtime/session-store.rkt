@@ -27,7 +27,15 @@
          (only-in "../util/errors.rkt" raise-session-error)
          ;; Extracted modules (v0.22.9 W2)
          "session-store-integrity.rkt"
-         "session-store-tree.rkt"
+         (only-in "session-store-tree.rkt"
+                  current-load-session-log
+                  current-append-entry!
+                  append-tree-entry!
+                  load-tree
+                  get-tree-branch
+                  get-children
+                  resolve-active-branch
+                  tree-info)
          ;; Extracted sub-modules (v0.72.5 W0)
          "session-store/versioning.rkt"
          "session-store/in-memory.rkt")
@@ -246,6 +254,10 @@
              (or session-id path)))
   (map jsexpr->message raw))
 
+;; Wire tree parameters to break lazy-require cycle (v0.74.1 W0)
+(current-load-session-log load-session-log)
+(current-append-entry! append-entry!)
+
 (define (replay-session path)
   (load-session-log path))
 
@@ -351,7 +363,6 @@
                            content
                            (text-part-text (car content)))])
         (hash->goal-state (string->jsexpr json-str)))))
-
 
 ;; ---------------------------------------------------------------------------
 ;; F11: Consumer/Admin submodule split

@@ -7,24 +7,29 @@
 ;; Tree operations work on top of the JSONL session log.
 ;; Tree structure is derived from parentId fields.
 ;;
-;; Uses lazy-require for session-store load/append to avoid circular deps.
+;; v0.74.1 W0: Removed lazy-require cycle with session-store.rkt.
+;; Uses runtime parameters for load/append injection.
 
 (require racket/contract
-         racket/lazy-require
+         racket/function
          "../util/protocol-types.rkt")
 
-(provide (contract-out [append-tree-entry!
-                        (->* (path-string? message?)
-                             (#:before-hook (or/c #f procedure?) #:after-hook (or/c #f procedure?))
-                             void?)]
-                       [load-tree (-> path-string? hash?)]
-                       [get-tree-branch (-> hash? string? list?)]
-                       [get-children (-> hash? string? list?)]
-                       [resolve-active-branch (-> hash? list?)]
-                       [tree-info (-> hash? hash?)]))
+;; Runtime parameters — set by session-store.rkt on load
+(define current-load-session-log (make-parameter #f))
+(define current-append-entry! (make-parameter #f))
 
-;; Lazy-require to break circular dependency with session-store.rkt
-(lazy-require ["session-store.rkt" (load-session-log append-entry!)])
+(provide (contract-out
+          [append-tree-entry!
+           (->* (path-string? message?)
+                (#:before-hook (or/c #f procedure?) #:after-hook (or/c #f procedure?))
+                void?)]
+          [load-tree (-> path-string? hash?)]
+          [get-tree-branch (-> hash? string? list?)]
+          [get-children (-> hash? string? list?)]
+          [resolve-active-branch (-> hash? list?)]
+          [tree-info (-> hash? hash?)]
+          [current-load-session-log (parameter/c (or/c #f (-> path-string? (listof message?))))]
+          [current-append-entry! (parameter/c (or/c #f (-> path-string? message? void?)))]))
 
 ;; ── Tree store operations ──
 
@@ -37,7 +42,9 @@
                          (message-id entry)
                          'parent-id
                          (message-parent-id entry))))
-  (append-entry! path entry)
+  (define append-fn (current-append-entry!))
+  (when append-fn
+    (append-fn path entry))
   (when after-hook
     (after-hook 'session-tree
                 (hasheq 'entry-type
@@ -48,7 +55,11 @@
                         (message-parent-id entry)))))
 
 (define (load-tree path)
-  (define entries (load-session-log path))
+  (define load-fn (current-load-session-log))
+  (define entries
+    (if load-fn
+        (load-fn path)
+        '()))
   (define children-map (make-hash))
   (for ([e (in-list entries)])
     (hash-set! children-map (message-id e) '()))
