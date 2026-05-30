@@ -35,6 +35,6 @@
   (check-false (step-directive? #f))
   (check-false (step-directive? (hash 'status 'ready))))
 
-(test-case "directive structs are transparent"
+(test-case "directive-recurse accessor works"
   (define d (directive-recurse '(a b) '(c d) 'ws))
   (check-equal? (directive-recurse-new-ctx d) '(a b)))

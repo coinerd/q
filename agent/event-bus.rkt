@@ -134,7 +134,7 @@
 ;; Internal subscription record
 ;; ============================================================
 
-(struct subscription (id handler filter) #:transparent)
+(struct subscription (id handler filter))
 
 ;; ============================================================
 ;; Event bus struct
