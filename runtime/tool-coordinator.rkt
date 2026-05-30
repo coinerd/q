@@ -158,7 +158,7 @@
 
 ;; Handle tool-calls-pending: extract calls, run through scheduler, emit events,
 ;; and return updated context for the next loop iteration.
-;; Phase 1: Preparation (lookup + permission check)
+;; Phase 1: Preparation + Hook dispatch (EFFECTFUL — calls extension hooks)
 (define (prepare-tool-execution-phase new-msgs ext-reg)
   (define tool-calls (extract-tool-calls-from-messages new-msgs))
   (define assistant-msg-id
@@ -170,7 +170,7 @@
   (define actions (compute-tool-call-actions tool-calls amended hook-res))
   (values tool-calls assistant-msg-id actions))
 
-;; Phase 2: Execution (scheduler + event emission)
+;; Phase 2: Execution + Event emission (EFFECTFUL — scheduler + events)
 (define (execute-tool-batch-phase tool-calls-to-run
                                   reg
                                   ext-reg
