@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.73.3 -- 2026-05-30
+
+### Core Loop Tests: State Machines + Dispatch (T-1b)
+
+| Finding | Change | Tests |
+|---------|--------|-------|
+| T-1b | Loop FSM state machine tests | test-loop-fsm.rkt (19 cases) |
+| T-1b | Loop dispatch surface tests | test-loop-dispatch.rkt (5 cases) |
+| T-1b | Tool registry unit tests | test-tool-registry-unit.rkt (14 cases) |
+
+**38 new test cases** across 3 test files. Zero logic changes.
+
 ## v0.73.2 -- 2026-05-30
 
 ### Tool Builtins + Security Tests (T-2/T-7/S-1/S-2)
