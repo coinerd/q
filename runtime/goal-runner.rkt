@@ -14,6 +14,20 @@
          racket/string
          racket/list
          "goal-state.rkt"
+         (only-in "goal-state.rkt"
+                  NO-PROGRESS-THRESHOLD
+                  goal-state-evaluations
+                  goal-state-checks
+                  goal-state-last-evaluation
+                  goal-state-status
+                  goal-state-goal-text
+                  goal-state-turns-used
+                  goal-state-max-turns
+                  goal-state-evaluator-mode
+                  goal-state?
+                  goal-state-id
+                  goal-state-updated-at
+                  make-goal-state)
          "goal-evaluator.rkt"
          "goal-agent-evaluator.rkt"
          "goal-evidence.rkt"
@@ -31,15 +45,13 @@
          collect-evaluations
          execute-checks-for-goal)
 
-(define NO-PROGRESS-THRESHOLD 3)
-
-;; Collect all evaluations from goal-state checks + last-evaluation
+;; Collect all evaluations from goal-state evaluations field + last-evaluation
 (define (collect-evaluations goal-st)
-  (define from-checks (filter evaluation-result? (goal-state-checks goal-st)))
+  (define from-field (goal-state-evaluations goal-st))
   (define last-eval (goal-state-last-evaluation goal-st))
   (if last-eval
-      (append from-checks (list last-eval))
-      from-checks))
+      (append from-field (list last-eval))
+      from-field))
 
 ;; Execute all deterministic checks from goal-state and return results.
 ;; If no checks defined, returns empty list.
@@ -60,12 +72,14 @@
                             #:max-turns [max-turns 8]
                             #:evaluator-mode [evaluator-mode 'transcript]
                             #:on-event [on-event void]
-                            #:on-status [on-status void])
+                            #:on-status [on-status void]
+                            #:shutdown-check [shutdown-check (lambda () #f)])
   (->* (string? provider? string? procedure?)
        (#:max-turns exact-nonnegative-integer?
                     #:evaluator-mode symbol?
                     #:on-event procedure?
-                    #:on-status procedure?)
+                    #:on-status procedure?
+                    #:shutdown-check procedure?)
        goal-state?)
   ;; Initialize goal state
   (define goal-st
@@ -79,17 +93,32 @@
   (on-status (format "Goal set: ~a (max ~a turns)" goal-text max-turns))
 
   ;; Run the loop
-  (run-goal-loop goal-st provider evaluator-model run-prompt-fn! on-event on-status))
+  (run-goal-loop goal-st provider evaluator-model run-prompt-fn! on-event on-status shutdown-check))
 
 ;; ============================================================
 ;; Internal loop
 ;; ============================================================
 
-(define (run-goal-loop goal-st provider evaluator-model run-prompt-fn! on-event on-status)
-  ;; Collect accumulated evaluations for no-progress check
-  (define all-evals (collect-evaluations goal-st))
+(define (run-goal-loop goal-st
+                       provider
+                       evaluator-model
+                       run-prompt-fn!
+                       on-event
+                       on-status
+                       shutdown-check)
+  ;; Shutdown check — first priority
   (cond
-    ;; Terminal conditions
+    [(shutdown-check)
+     (define final-st
+       (struct-copy goal-state
+                    goal-st
+                    [status 'cancelled]
+                    [updated-at (inexact->exact (round (current-inexact-milliseconds)))]))
+     (on-event 'goal-failed final-st)
+     (on-status "Goal cancelled by user")
+     final-st]
+
+    ;; Max turns reached
     [(>= (goal-state-turns-used goal-st) (goal-state-max-turns goal-st))
      (define final-st
        (struct-copy goal-state
@@ -100,7 +129,7 @@
      (on-status (format "Goal failed: max turns (~a) reached" (goal-state-max-turns goal-st)))
      final-st]
 
-    [(detect-no-progress all-evals)
+    [(detect-no-progress (collect-evaluations goal-st))
      (define final-st
        (struct-copy goal-state
                     goal-st
@@ -116,14 +145,27 @@
        (goal-loop-step goal-st provider evaluator-model run-prompt-fn! on-event on-status))
      (cond
        [(eq? (goal-state-status updated-st) 'achieved)
+        (on-event 'goal-achieved
+                  (hasheq 'goal-text
+                          (goal-state-goal-text updated-st)
+                          'turns-used
+                          (goal-state-turns-used updated-st)
+                          'total-token-cost
+                          (goal-state-total-token-cost updated-st)))
         (on-status (format "Goal achieved in ~a turns!" (goal-state-turns-used updated-st)))
         updated-st]
        [(eq? (goal-state-status updated-st) 'failed)
         (on-status (format "Goal failed: ~a" (goal-state-last-evaluation-reason updated-st)))
         updated-st]
        [else
-        ;; Active — recurse with updated state (evaluations now tracked in state)
-        (run-goal-loop updated-st provider evaluator-model run-prompt-fn! on-event on-status)])]))
+        ;; Active — recurse with updated state
+        (run-goal-loop updated-st
+                       provider
+                       evaluator-model
+                       run-prompt-fn!
+                       on-event
+                       on-status
+                       shutdown-check)])]))
 
 ;; Extract reason from last evaluation safely
 (define (goal-state-last-evaluation-reason gs)
@@ -131,6 +173,10 @@
   (if le
       (evaluation-result-reason le)
       "unknown"))
+
+;; Sum token costs from all evaluations
+(define (goal-state-total-token-cost gs)
+  (for/sum ([er (in-list (goal-state-evaluations gs))]) (evaluation-result-token-cost er)))
 
 ;; ============================================================
 ;; Single step
@@ -156,6 +202,20 @@
 
   ;; Execute deterministic checks if any
   (define check-results (execute-checks-for-goal goal-st))
+
+  ;; Emit goal-check-completed for each check result
+  (for ([cr (in-list check-results)])
+    (on-event 'goal-check-completed
+              (hasheq 'label
+                      (check-result-label cr)
+                      'exit-code
+                      (check-result-exit-code cr)
+                      'timed-out?
+                      (check-result-timed-out? cr)
+                      'stdout
+                      (check-result-stdout cr)
+                      'stderr
+                      (check-result-stderr cr))))
 
   ;; Evaluate the result
   ;; Extract transcript from loop-result for evaluation
@@ -184,7 +244,7 @@
                goal-st
                [turns-used turns]
                [status new-status]
-               [checks (append (goal-state-checks goal-st) (list eval-result))]
+               [evaluations (append (goal-state-evaluations goal-st) (list eval-result))]
                [last-evaluation eval-result]
                [updated-at now]))
 
@@ -222,9 +282,10 @@
                                       evaluator-model
                                       turn-responses
                                       #:max-turns [max-turns 8]
-                                      #:evaluator-mode [evaluator-mode 'transcript])
+                                      #:evaluator-mode [evaluator-mode 'transcript]
+                                      #:shutdown-check [shutdown-check (lambda () #f)])
   (->* (string? provider? string? list?)
-       (#:max-turns exact-nonnegative-integer? #:evaluator-mode symbol?)
+       (#:max-turns exact-nonnegative-integer? #:evaluator-mode symbol? #:shutdown-check procedure?)
        goal-state?)
   ;; Simulated run-prompt! that returns predefined responses
   (define turn-idx (box 0))
@@ -241,4 +302,5 @@
              evaluator-model
              sim-run-prompt!
              #:max-turns max-turns
-             #:evaluator-mode evaluator-mode))
+             #:evaluator-mode evaluator-mode
+             #:shutdown-check shutdown-check))
