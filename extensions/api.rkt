@@ -20,6 +20,9 @@
                   extension-api-version
                   extension-hooks)
          ;; ARCH-04 (v0.22.0): event bus re-exports for extensions
+         ;; NOTE (W12 v0.72.5): Event bus is a foundational utility (util-layer). Despite living
+;; in agent/, it has no upward dependencies and is safe to import from extensions/.
+;; Moving it to util/ would break 20+ import paths for minimal architectural benefit.
          (only-in "../agent/event-bus.rkt" publish! subscribe! unsubscribe! make-event-bus event-bus?)
          ;; Backward-compat: re-export injection-event-topic
          (rename-in "../util/event-types.rkt" [injection-event-topic api-injection-event-topic]))
