@@ -6,7 +6,8 @@
 ;; custodian-based cleanup. Every subprocess runs under its own custodian
 ;; so that timeout or kill cleans up all associated resources.
 
-(require racket/port
+(require racket/contract
+         racket/port
          racket/string
          "limits.rkt"
          ;; SEC-16 (v0.22.0): consolidated shell-quote
@@ -14,22 +15,35 @@
 
 (define-logger subprocess)
 
-(provide subprocess-result
-         subprocess-result?
-         subprocess-result-exit-code
-         subprocess-result-stdout
-         subprocess-result-stderr
-         subprocess-result-timed-out?
-         subprocess-result-elapsed-ms
-         subprocess-result-truncated?
-         run-subprocess
-         kill-subprocess!
-         default-timeout-seconds
-         default-max-output-bytes
-         sanitize-env
-         secret-env-var?
-         current-secret-scrub-denylist
-         current-secret-scrub-allowlist)
+(provide
+ ;; Struct accessors (no contract needed for transparent struct)
+ subprocess-result
+ subprocess-result?
+ subprocess-result-exit-code
+ subprocess-result-stdout
+ subprocess-result-stderr
+ subprocess-result-timed-out?
+ subprocess-result-elapsed-ms
+ subprocess-result-truncated?
+ ;; Parameters (no contract needed)
+ default-timeout-seconds
+ default-max-output-bytes
+ current-secret-scrub-denylist
+ current-secret-scrub-allowlist
+ ;; Contracted functions
+ (contract-out
+  [run-subprocess
+   (->* (string?)
+        (#:args (listof string?)
+         #:limits exec-limits?
+         #:timeout (or/c number? #f)
+         #:directory (or/c path-string? #f)
+         #:environment any/c
+         #:encoding symbol?)
+        subprocess-result?)]
+  [kill-subprocess! (-> any/c void?)]
+  [sanitize-env (->* () (any/c) any/c)]
+  [secret-env-var? (-> string? boolean?)]))
 
 ;; --------------------------------------------------
 ;; Result struct
