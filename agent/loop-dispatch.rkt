@@ -24,7 +24,7 @@
          (only-in "turn-reducer.rkt" decide-after-msg-hook decide-after-stream)
          (only-in "turn-model.rkt" make-stream-completion turn-decision-tag)
          (only-in "event-emitter.rkt" emit-typed-event!)
-         (only-in "../tools/tool.rkt" tool?)
+         (only-in "../util/tool-types.rkt" tool?)
          (only-in "event-bus.rkt" event-bus?)
          (only-in "loop-stream.rkt" handle-cancellation build-stream-result)
          (only-in "loop-phases.rkt" phase-msg-hook phase-stream)

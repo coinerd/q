@@ -37,7 +37,7 @@
                   make-turn-stream-complete
                   hook-stage-payload)
          (only-in "../llm/token-budget.rkt" estimate-context-tokens)
-         (only-in "../tools/tool.rkt" tool?)
+         (only-in "../util/tool-types.rkt" tool?)
          (only-in "event-bus.rkt" event-bus?)
          (only-in "loop-stream.rkt" stream-from-provider handle-cancellation build-stream-result)
          "../util/loop-result.rkt")
