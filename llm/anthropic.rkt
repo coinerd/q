@@ -355,8 +355,7 @@
        (define current-tool-id (box #f))
        (define current-tool-name (box #f))
        (define current-tool-index (box 0))
-       (log-info (format "[telemetry] anthropic-stream setup completed in ~a ms"
-                         (real->decimal-string (- (current-inexact-milliseconds) _stream-t0) 1)))
+       (log-stream-setup-timing "anthropic" _stream-t0)
        (generator ()
                   (let loop ([first-read? #t])
                     (define timeout-secs
