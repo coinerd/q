@@ -13,6 +13,7 @@
          racket/match
          "turn-model.rkt"
          (only-in "loop-messages.rkt" classify-hook-result)
+         (only-in "../util/hook-types.rkt" hook-result?)
          (only-in "loop-fsm.rkt"
                   turn-state-emit-start
                   turn-state-build-context
@@ -81,7 +82,7 @@
 (provide classify-hook-result
          (contract-out [decide-after-start (-> any/c turn-decision?)]
                        [decide-after-context (-> any/c turn-decision?)]
-                       [decide-after-pre-hook (-> any/c turn-decision?)]
-                       [decide-after-msg-hook (-> any/c turn-decision?)]
+                       [decide-after-pre-hook (-> (or/c hook-result? #f) turn-decision?)]
+                       [decide-after-msg-hook (-> (or/c hook-result? #f) turn-decision?)]
                        [decide-after-stream (-> stream-completion? turn-decision?)]
                        [decide-turn-step (-> turn-command? turn-decision?)]))

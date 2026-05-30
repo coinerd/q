@@ -30,7 +30,7 @@
       (check-true (decision-blocked? d)))
 
     (test-case "pre-hook pass -> check-msg-hook decision"
-      (define d (decide-after-pre-hook 'pass))
+      (define d (decide-after-pre-hook #f))
       (check-true (decision-check-msg-hook? d)))
 
     (test-case "msg-hook block -> blocked decision"
@@ -39,7 +39,7 @@
       (check-true (decision-blocked? d)))
 
     (test-case "msg-hook pass -> begin-stream decision"
-      (define d (decide-after-msg-hook 'pass))
+      (define d (decide-after-msg-hook #f))
       (check-true (decision-begin-stream? d)))
 
     (test-case "stream cancelled -> cancelled decision"
