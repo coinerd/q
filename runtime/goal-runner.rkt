@@ -13,21 +13,20 @@
          racket/format
          racket/string
          racket/list
-         "goal-state.rkt"
+         (except-in "goal-state.rkt" NO-PROGRESS-THRESHOLD)
          (only-in "goal-state.rkt"
                   NO-PROGRESS-THRESHOLD
-                  goal-state-evaluations
-                  goal-state-checks
-                  goal-state-last-evaluation
-                  goal-state-status
-                  goal-state-goal-text
-                  goal-state-turns-used
-                  goal-state-max-turns
-                  goal-state-evaluator-mode
-                  goal-state?
-                  goal-state-id
-                  goal-state-updated-at
-                  make-goal-state)
+                  evaluation-result?
+                  evaluation-result-achieved?
+                  evaluation-result-reason
+                  evaluation-result-token-cost
+                  check-result?
+                  check-result-label
+                  check-result-exit-code
+                  check-result-timed-out?
+                  check-result-stdout
+                  check-result-stderr
+                  goal-check?)
          "goal-evaluator.rkt"
          "goal-agent-evaluator.rkt"
          "goal-evidence.rkt"
