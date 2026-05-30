@@ -5,18 +5,29 @@
 ;; Uses Racket's built-in racket/sandbox module to evaluate Racket code
 ;; safely with timeout and resource limits.
 
-(require racket/sandbox
+(require racket/contract
+         racket/sandbox
          (only-in "../util/errors.rkt" with-logged-catch))
 
-(provide eval-result
-         eval-result?
-         eval-result-value
-         eval-result-output
-         eval-result-error
-         eval-result-elapsed-ms
-         eval-in-sandbox
-         current-sandbox-memory-limit
-         current-sandbox-path-limit)
+(provide
+ ;; Struct (transparent, no contract needed)
+ eval-result
+ eval-result?
+ eval-result-value
+ eval-result-output
+ eval-result-error
+ eval-result-elapsed-ms
+ ;; Parameters
+ current-sandbox-memory-limit
+ current-sandbox-path-limit
+ ;; Contracted
+ (contract-out
+  [eval-in-sandbox
+   (->* (string?)
+        (#:timeout number?
+         #:language symbol?
+         #:allow-for-load (listof string?))
+        eval-result?)]))
 
 ;; --------------------------------------------------
 ;; Configurable limits (SEC-09)
