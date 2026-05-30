@@ -41,7 +41,7 @@
          #:environment any/c
          #:encoding symbol?)
         subprocess-result?)]
-  [kill-subprocess! (-> any/c void?)]
+  [kill-subprocess! (-> (or/c custodian? #f) void?)]
   [sanitize-env (->* () (any/c) any/c)]
   [secret-env-var? (-> string? boolean?)]))
 

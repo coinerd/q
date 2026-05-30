@@ -12,6 +12,7 @@
 ;;   Integrity: verify-session-integrity, repair-session-log!
 
 (require racket/contract
+         racket/hash
          racket/match
          racket/file
          racket/string

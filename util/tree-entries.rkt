@@ -19,9 +19,9 @@
           [tree-navigation-entry-target-entry-id (-> message? (or/c string? #f))]
           [tree-navigation-entry-from-entry-id (-> message? (or/c string? #f))]
           [make-branch-summary-entry
-           (-> string? (or/c string? #f) string? any/c exact-nonnegative-integer? message?)]
+           (-> string? (or/c string? #f) string? (or/c string? #f) exact-nonnegative-integer? message?)]
           [branch-summary-entry-summary (-> message? (or/c string? #f))]
-          [branch-summary-entry-entry-range (-> message? any/c)]
+          [branch-summary-entry-entry-range (-> message? (or/c string? #f))]
           [branch-summary-entry-token-count (-> message? (or/c exact-nonnegative-integer? #f))]
           [tree-entry? (-> any/c boolean?)]))
 

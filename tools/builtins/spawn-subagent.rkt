@@ -46,7 +46,7 @@
          (only-in "../builtins/ls.rkt" tool-ls)
          (only-in "../builtins/skill-router.rkt" tool-skill-route))
 
-(provide (contract-out [resolve-role-prompt (-> any/c string?)]
+(provide (contract-out [resolve-role-prompt (-> (or/c string? #f) string?)]
                        [parse-subagent-config (-> any/c subagent-config?)])
          ;; Tool entries (direct — used by scheduler)
          tool-spawn-subagent

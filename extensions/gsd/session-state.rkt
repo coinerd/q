@@ -68,15 +68,16 @@
 ;; read-only state, history, event-bus and write callbacks for state and history.
 ;; Avoids exposing raw box accessors to consumers.
 (define (gsd-ctx-transaction! ctx thunk)
-  (call-with-semaphore
-   (gsd-session-ctx-sem ctx)
-   (lambda ()
-     (define state (unbox (gsd-session-ctx-state-box ctx)))
-     (define history (unbox (gsd-session-ctx-history-box ctx)))
-     (define event-bus (unbox (gsd-session-ctx-event-bus-box ctx)))
-     (define (set-state! v) (set-box! (gsd-session-ctx-state-box ctx) v))
-     (define (set-history! v) (set-box! (gsd-session-ctx-history-box ctx) v))
-     (thunk state history event-bus set-state! set-history!))))
+  (call-with-semaphore (gsd-session-ctx-sem ctx)
+                       (lambda ()
+                         (define state (unbox (gsd-session-ctx-state-box ctx)))
+                         (define history (unbox (gsd-session-ctx-history-box ctx)))
+                         (define event-bus (unbox (gsd-session-ctx-event-bus-box ctx)))
+                         (define (set-state! v)
+                           (set-box! (gsd-session-ctx-state-box ctx) v))
+                         (define (set-history! v)
+                           (set-box! (gsd-session-ctx-history-box ctx) v))
+                         (thunk state history event-bus set-state! set-history!))))
 
 ;; ============================================================
 ;; Per-session accessors (explicit ctx argument) — C-01 v0.35.1

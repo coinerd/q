@@ -6,10 +6,11 @@
 ;; All tool schemas, descriptions, and handlers are defined there.
 
 (require racket/contract
-         "registry-table.rkt")
+         "registry-table.rkt"
+         "registry.rkt")                            ; for tool-registry?
 
 (provide (contract-out [register-default-tools!
-                        (->* (any/c) (#:only (or/c (listof string?) #f)) void?)]))
+                        (->* (tool-registry?) (#:only (or/c (listof string?) #f)) void?)]))
 
 ;; Register the built-in tools into the given tool registry.
 ;; #:only — optional list of tool name strings to register; #f means all.

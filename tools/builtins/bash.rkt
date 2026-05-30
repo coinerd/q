@@ -28,7 +28,8 @@
                   make-error-result
                   exec-context?
                   exec-context-working-directory
-                  exec-context-runtime-settings)
+                  exec-context-runtime-settings
+                  tool-result?)
          "../../sandbox/subprocess.rkt"
          "../../sandbox/limits.rkt"
          (only-in "../../util/sandbox-config.rkt"
@@ -68,7 +69,7 @@
                        [destructive-command? (-> string? boolean?)]
                        [execution-policy-allows? (-> string? boolean?)]
                        [high-risk-command? (-> string? boolean?)]
-                       [tool-bash (->* (hash?) (exec-context?) any/c)])
+                       [tool-bash (->* (hash?) (exec-context?) tool-result?)])
          shell-risk-classifier-diagnostic)
 
 ;; Default timeout in seconds (used when no settings available)
@@ -215,7 +216,9 @@
   (define findings (classify-shell-risks (tokenize-shell-command command)))
   (define struct-destructive?
     (for/or ([f (in-list findings)])
-      (member (shell-risk-finding-type f) '(destructive high-risk windows-destructive network-pipe command-substitution eval exec))))
+      (member
+       (shell-risk-finding-type f)
+       '(destructive high-risk windows-destructive network-pipe command-substitution eval exec))))
   (define struct-critical?
     (for/or ([f (in-list findings)])
       (eq? (shell-risk-finding-severity f) 'critical)))

@@ -10,8 +10,10 @@
          (only-in "../../util/fsm.rkt"
                   define-fsm-machine
                   fsm-state
+                  fsm-state?
                   fsm-state-name
                   fsm-event
+                  fsm-event?
                   fsm-event-name
                   fsm?
                   fsm-transitions
@@ -111,7 +113,7 @@
          event-cancel
 
          TRANSITIONS
-         (contract-out [state->symbol (-> any/c symbol?)]
-                       [iteration-event->symbol (-> any/c symbol?)]
-                       [next-iteration-state (-> any/c any/c any)]
-                       [valid-transition? (-> any/c any/c boolean?)]))
+         (contract-out [state->symbol (-> fsm-state? symbol?)]
+                       [iteration-event->symbol (-> fsm-event? symbol?)]
+                       [next-iteration-state (-> fsm-state? fsm-event? any)]
+                       [valid-transition? (-> fsm-state? fsm-event? boolean?)]))

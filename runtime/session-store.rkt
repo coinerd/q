@@ -13,13 +13,14 @@
 ;;; Re-exports all symbols from extracted modules for backward compatibility.
 
 (require racket/contract
+         racket/hash
          racket/match
          racket/file
          racket/string
          racket/port
          racket/class
          json
-         "../runtime/goal-state.rkt"
+         "goal-state.rkt"
          "../util/protocol-types.rkt"
          "../util/jsonl.rkt"
          (only-in "../util/message-helpers.rkt" ensure-parent-dirs!)

@@ -9,7 +9,8 @@
 ;; directive-stop    : terminal, return loop-result
 ;; directive-yield   : events produced, continue (for future use)
 
-(require racket/contract)
+(require racket/contract
+         (only-in "../working-set.rkt" working-set?))
 
 ;; Struct constructors needed as match patterns — must NOT be in contract-out
 (provide directive-recurse
@@ -17,15 +18,15 @@
          directive-yield
          (contract-out [directive-recurse? (-> any/c boolean?)]
                        [directive-recurse-new-ctx (-> directive-recurse? any/c)]
-                       [directive-recurse-new-counters (-> directive-recurse? any/c)]
-                       [directive-recurse-ws (-> directive-recurse? (or/c any/c #f))]
+                       [directive-recurse-new-counters (-> directive-recurse? list?)]
+                       [directive-recurse-ws (-> directive-recurse? (or/c working-set? #f))]
                        [directive-stop? (-> any/c boolean?)]
                        [directive-stop-result (-> directive-stop? any/c)]
                        [directive-yield? (-> any/c boolean?)]
                        [directive-yield-events (-> directive-yield? list?)]
                        [directive-yield-new-ctx (-> directive-yield? list?)]
                        [directive-yield-new-counters (-> directive-yield? hash?)]
-                       [directive-yield-ws (-> directive-yield? (or/c any/c #f))]
+                       [directive-yield-ws (-> directive-yield? (or/c working-set? #f))]
                        [step-directive? (-> any/c boolean?)]))
 
 (struct directive-recurse (new-ctx new-counters ws))
