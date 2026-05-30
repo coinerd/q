@@ -80,7 +80,8 @@
                   phase-build-request
                   phase-pre-hook
                   phase-msg-hook
-                  phase-stream
+                  phase-stream)
+         (only-in "loop-dispatch.rkt"
                   run-streaming-phase))
 
 (provide (contract-out [run-agent-turn
