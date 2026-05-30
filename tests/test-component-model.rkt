@@ -141,11 +141,11 @@
    (define comp (make-q-component (lambda (s w) '())))
    (check-equal? (component-state-ref comp 'foo) #f)
    (check-equal? (component-state-ref comp 'foo 42) 42))
- (test-case "component-state-set! stores and retrieves values"
+ (test-case "component-state-update stores and retrieves values"
    (define comp (make-q-component (lambda (s w) '())))
-   (component-state-set! comp 'counter 0)
+   (component-state-update comp 'counter 0)
    (check-equal? (component-state-ref comp 'counter) 0)
-   (component-state-set! comp 'counter 5)
+   (component-state-update comp 'counter 5)
    (check-equal? (component-state-ref comp 'counter) 5))
  (test-case "component state persists across renders"
    (define render-count 0)
@@ -153,7 +153,7 @@
      (make-q-component (lambda (s w)
                          (set! render-count (add1 render-count))
                          (define prev (component-state-ref comp 'renders 0))
-                         (component-state-set! comp 'renders (add1 prev))
+                         (component-state-update comp 'renders (add1 prev))
                          (list (vtext (format "render #~a" (add1 prev)) '())))
                        #:vdom? #t))
    (component-render comp (initial-ui-state) 80)
@@ -164,8 +164,8 @@
  (test-case "each component has independent state"
    (define comp1 (make-q-component (lambda (s w) '())))
    (define comp2 (make-q-component (lambda (s w) '())))
-   (component-state-set! comp1 'key 'val1)
-   (component-state-set! comp2 'key 'val2)
+   (component-state-update comp1 'key 'val1)
+   (component-state-update comp2 'key 'val2)
    (check-equal? (component-state-ref comp1 'key) 'val1)
    (check-equal? (component-state-ref comp2 'key) 'val2)))
 
@@ -177,7 +177,7 @@
   (define comp
     (make-q-component (lambda (st width)
                         (define scroll (component-state-ref comp 'scroll 0))
-                        (component-state-set! comp 'scroll (+ scroll 1))
+                        (component-state-update comp 'scroll (+ scroll 1))
                         (list (vtext (format "scroll:~a" scroll) '())))
                       #:vdom? #t))
   ;; First render — scroll is 0, stored as 1
