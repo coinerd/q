@@ -22,9 +22,7 @@
                   make-message-blocked-event
                   make-turn-end-event)
          (only-in "turn-reducer.rkt" decide-after-msg-hook decide-after-stream)
-         (only-in "turn-model.rkt"
-                  make-stream-completion
-                  turn-decision-tag)
+         (only-in "turn-model.rkt" make-stream-completion turn-decision-tag)
          (only-in "event-emitter.rkt" emit-typed-event!)
          (only-in "../tools/tool.rkt" tool?)
          (only-in "event-bus.rkt" event-bus?)
@@ -41,9 +39,9 @@
                             string?
                             loop-state?
                             (listof any/c)
-                            (listof tool?)
-                            procedure?
-                            any/c
+                            (or/c (listof any/c) #f)
+                            (or/c procedure? #f)
+                            (or/c any/c #f)
                             any/c)]))
 
 ;; Phase 7: Full post-pre-hook streaming dispatch

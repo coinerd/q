@@ -47,10 +47,11 @@
          (contract-out
           [phase-build-context
            (-> event-bus? string? string? loop-state? any/c (values any/c (listof effect?)))])
-         (contract-out [phase-build-request
-                        (-> (listof any/c) (listof tool?) any/c (values any/c (listof effect?)))])
+         (contract-out
+          [phase-build-request
+           (-> (listof any/c) (or/c (listof any/c) #f) any/c (values any/c (listof effect?)))])
          (contract-out [phase-pre-hook
-                        (-> procedure?
+                        (-> (or/c procedure? #f)
                             provider?
                             (listof any/c)
                             any/c
@@ -58,7 +59,7 @@
                             string?
                             (values any/c (listof effect?)))])
          (contract-out [phase-msg-hook
-                        (-> procedure?
+                        (-> (or/c procedure? #f)
                             provider?
                             any/c
                             (listof any/c)
@@ -73,8 +74,8 @@
                             string?
                             string?
                             loop-state?
-                            (listof any/c)
-                            (listof tool?)
+                            (or/c procedure? #f)
+                            (or/c any/c #f)
                             (values any/c (listof effect?)))]))
 
 ;; ---------------------------------------------------------------------------
