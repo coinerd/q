@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.72.8 — 
+
+### Audit Closure
+
+Close 5 remaining findings from v0.72.xx post-implementation audit.
+
+| Finding | Fix |
+|---------|-----|
+| AU-2: 6 internal structs #:transparent | Removed #:transparent from directive-recurse, directive-stop, directive-yield, tool-call-actions, subscription, in-memory-session-manager |
+| AU-3: turn-reducer any/c contracts | Tightened decide-after-pre-hook and decide-after-msg-hook to (or/c hook-result? #f) |
+| AU-4: guarded-set-index! any/c | Tightened to (or/c session-index? #f) |
+| AU-5: q-component? placeholder | Documented cycle constraint; placeholder retained with explanation |
+| Fix: test-component-model.rkt | Updated component-state-set! → component-state-update (missed in v0.72.7) |
+
+**Files changed:** directive.rkt, tool-coordinator.rkt, event-bus.rkt, in-memory.rkt, turn-reducer.rkt, session-mutation.rkt, state-types.rkt, test-step-directive.rkt, test-turn-reducer.rkt, test-component-model.rkt
+
 ## v0.72.7 — 
 
 ### Phase 5: Long-Term Patterns + Sweep
