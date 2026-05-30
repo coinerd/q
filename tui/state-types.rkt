@@ -160,8 +160,10 @@
 
 ;; Forward declarations for types referenced in contracts but defined elsewhere
 ;; (These are provided by other modules and re-exported through state.rkt)
-(define styled-line? any/c) ;; placeholder — actual definition is in render/message-layout.rkt
-(define q-component? any/c) ;; placeholder — actual definition is in component.rkt
+;; Forward-declared predicates — actual structs defined in render/message-layout.rkt
+;; and component.rkt. These are (-> any/c boolean?) predicates compatible with contracts.
+(define styled-line? (lambda (v) (and (list? v) (andmap pair? v))))
+(define q-component? procedure?)
 
 ;; A single line in the transcript display
 (struct transcript-entry
