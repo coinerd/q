@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.71.7 — 
+
+### Goal Audit Hotfix
+
+Post-implementation audit hotfix for the `/goal` autonomous loop feature.
+
+| Finding | Severity | Fix |
+|---------|----------|-----|
+| F1: Type confusion — evaluation-result mixed into checks field | FAIL | Added `evaluations` field to goal-state |
+| F2: goal.achieved / goal.check.completed events never emitted | FAIL | Runner now emits both events |
+| W1: No shutdown-requested check in runner loop | WARN | Added `#:shutdown-check` parameter |
+| W2: No concurrent goal guard — silent overwrite | WARN | TUI rejects `/goal` when active-goal set |
+| W3: Shell injection via $(...) only rejected at critical | WARN | Raised to high severity |
+| I1: string-truncate duplicated across modules | INFO | Consolidated into goal-state.rkt |
+| I2: NO-PROGRESS-THRESHOLD duplicated in runner | INFO | Removed duplicate, uses goal-state export |
+
+**Files changed:** `goal-state.rkt`, `goal-runner.rkt`, `goal-checks.rkt`, `shell-risk.rkt`, `tui/commands.rkt` + 3 test files
+**Tests added:** 9 new tests across 3 files
+**Breaking changes:** None — new field defaults to empty list
+
+
 ## v0.71.6 — 2026-05-30
 
 ### Agent Evaluator + Series Audit
