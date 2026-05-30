@@ -22,7 +22,8 @@
                   make-text-part
                   message->jsexpr
                   jsexpr->message
-                  message)
+                  message
+                  message?)
          (only-in "../../util/message-helpers.rkt" ensure-parent-dirs!)
          (only-in "../../util/ids.rkt" generate-id)
          (only-in "../../util/jsonl.rkt" jsonl-read-all-valid)
@@ -40,10 +41,10 @@
           [navigate-to-leaf! (-> session-index? (or/c string? #f) (or/c navigate-result? #f))]
           [navigate-next-leaf! (-> session-index? (or/c navigate-result? #f))]
           [navigate-prev-leaf! (-> session-index? (or/c navigate-result? #f))]
-          [branch! (-> session-index? (or/c string? #f) (or/c any/c #f))]
-          [branch-with-summary! (-> session-index? (or/c string? #f) string? (or/c any/c #f))]
+          [branch! (-> session-index? (or/c string? #f) (or/c message? #f))]
+          [branch-with-summary! (-> session-index? (or/c string? #f) string? (or/c message? #f))]
           [reset-leaf! (-> session-index? void?)]
-          [append-to-leaf! (-> session-index? any/c any/c)]
+          [append-to-leaf! (-> session-index? message? message?)]
           [add-bookmark! (-> session-index? (or/c string? #f) string? (or/c string? #f))]
           [remove-bookmark! (-> session-index? (or/c string? #f) boolean?)]
           [list-bookmarks (-> session-index? (listof bookmark?))]

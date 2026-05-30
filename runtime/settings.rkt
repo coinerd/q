@@ -47,7 +47,7 @@
                        [load-project-settings (->* () (path-string?) hash?)]
                        [make-minimal-settings
                         (->* ()
-                             (#:provider any/c #:model (or/c string? #f) #:overrides (or/c hash? #f))
+                             (#:provider (or/c string? #f) #:model (or/c string? #f) #:overrides (or/c hash? #f))
                              q-settings?)]
                        [merge-settings (-> hash? hash? hash?)]
                        [deep-merge-hash (-> hash? hash? hash?)]

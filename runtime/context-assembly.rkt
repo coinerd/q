@@ -159,7 +159,7 @@
                                 #:hook-dispatcher (or/c procedure? #f)
                                 #:max-tokens exact-nonnegative-integer?
                                 #:working-set-messages (or/c (listof message?) #f))
-                (values tiered-context? any/c))]
+                (values tiered-context? hash?))]
           [compute-dynamic-tier-b-count (-> exact-nonnegative-integer? exact-nonnegative-integer?)]
           [summarize-tool-result (-> message? message?)]
           ;; Struct: context-assembly-payload

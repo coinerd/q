@@ -42,7 +42,7 @@
           [wave-doc-path (-> path-string? exact-nonnegative-integer? string? path?)]
           [write-wave-doc! (-> path-string? exact-nonnegative-integer? string? string? string? path?)]
           [read-wave-doc (-> path-string? exact-nonnegative-integer? string? (or/c hash? #f))]
-          [parse-wave-doc-from-string (->* (any/c any/c any/c) (any/c) hash?)]
+          [parse-wave-doc-from-string (->* (string? any/c string?) ((or/c path? #f)) hash?)]
           [slugify (-> string? string?)]
           [parse-plan-index (-> string? (listof wave-index-entry?))]
           [update-wave-in-index! (-> path-string? exact-nonnegative-integer? string? boolean?)]

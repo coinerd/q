@@ -33,7 +33,7 @@
                        [handle-planning-write (->* (hash?) (any/c) any/c)]
                        [resolve-project-root (-> path-string? path?)]
                        [planning-artifact-path (-> path-string? string? (or/c path? #f))]
-                       [get-base-dir (->* (hash?) (any/c) path?)]
+                       [get-base-dir (->* (hash?) ((or/c exec-context? #f)) path?)]
                        [read-planning-artifact (-> path-string? string? (or/c hash? string? #f))]
                        [write-planning-artifact!
                         (-> path-string? string? (or/c hash? string?) (or/c path? #f))]))

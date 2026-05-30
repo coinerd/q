@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.74.3 -- 2026-05-30
+
+### Widened Contract Reconciliation — Investigation Batch (M4)
+- Deep caller analysis of 17 investigate-category contracts
+- Tightened 14 contracts after confirming actual types:
+  - `session-index.rkt` / `mutations.rkt`: branch!, branch-with-summary!,
+    append-to-leaf!, lookup-entry, resolve-active-leaf, active-leaf,
+    estimate-entry-tokens — all now use `message?` or `(or/c message? #f)`
+  - `session-manager.rkt`: sm-fork! kept at `any/c` (returns polymorphic fork result)
+  - `settings.rkt`: make-minimal-settings #:provider → `(or/c string? #f)`
+  - `context-assembly.rkt`: build-tiered-context-with-hooks 2nd value → `hash?`
+  - `llm/stream.rkt`: normalize-openai-chunk(s) → `(or/c stream-chunk? hash?)`
+  - `llm/http-helpers.rkt`: translate-stop-reason 2nd arg → `(or/c string? symbol? #f)`
+  - `gsd/tool-handlers.rkt`: get-base-dir optional → `(or/c exec-context? #f)`
+  - `gsd/wave-docs.rkt`: parse-wave-doc-from-string → specific arg types
+
+
 ## v0.74.2 -- 2026-05-30
 
 ### Widened Contract Reconciliation (M3)
