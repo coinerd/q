@@ -35,7 +35,9 @@
          ;; Constants
          DEFAULT-GOAL-MAX-TURNS
          DEFAULT-EVALUATOR-MODE
-         NO-PROGRESS-THRESHOLD)
+         NO-PROGRESS-THRESHOLD
+         ;; Helpers
+         string-truncate)
 
 ;; --------------------------------------------------
 ;; Constants
@@ -95,6 +97,7 @@
          evaluator-model ; string (default "auto")
          evaluator-mode ; (or/c 'transcript 'agent)
          checks ; (listof goal-check?)
+         evaluations ; (listof evaluation-result?)
          last-evaluation ; (or/c evaluation-result? #f)
          started-at ; exact-nonnegative-integer? (epoch ms)
          updated-at ; exact-nonnegative-integer? (epoch ms)
@@ -144,6 +147,7 @@
                                   #:evaluator-model [evaluator-model "auto"]
                                   #:evaluator-mode [evaluator-mode DEFAULT-EVALUATOR-MODE]
                                   #:checks [checks '()]
+                                  #:evaluations [evaluations '()]
                                   #:id [id #f]
                                   #:turns-used [turns-used 0]
                                   #:last-evaluation [last-evaluation #f]
@@ -156,6 +160,7 @@
                  #:evaluator-model string?
                  #:evaluator-mode evaluator-mode?
                  #:checks (listof goal-check?)
+                 #:evaluations (listof evaluation-result?)
                  #:id (or/c string? #f)
                  #:turns-used exact-nonnegative-integer?
                  #:last-evaluation (or/c evaluation-result? #f)
@@ -171,6 +176,7 @@
               evaluator-model
               evaluator-mode
               checks
+              evaluations
               last-evaluation
               (or started-at (inexact->exact (round (current-inexact-milliseconds))))
               (or updated-at (inexact->exact (round (current-inexact-milliseconds))))
@@ -265,6 +271,8 @@
           (symbol->string (goal-state-evaluator-mode gs))
           'checks
           (map goal-check->hash (goal-state-checks gs))
+          'evaluations
+          (map evaluation-result->hash (goal-state-evaluations gs))
           'last-evaluation
           (let ([le (goal-state-last-evaluation gs)]) (and le (evaluation-result->hash le)))
           'started-at
@@ -290,6 +298,7 @@
                     m
                     (string->symbol m)))
               (map hash->goal-check (hash-ref h 'checks '()))
+              (map hash->evaluation-result (hash-ref h 'evaluations '()))
               (let ([le (hash-ref h 'last-evaluation #f)]) (and le (hash->evaluation-result le)))
               (hash-ref h 'started-at 0)
               (hash-ref h 'updated-at 0)

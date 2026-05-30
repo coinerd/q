@@ -328,50 +328,61 @@
      'continue]
     ;; /goal "<description>" [--check 'cmd'] — set a goal with optional checks
     [else
-     ;; Check for --check arguments
-     (define-values (goal-text checks)
-       (if (string-contains? arg-text "--check")
-           (parse-goal-checks arg-text)
-           (values arg-text '())))
-     ;; Strip surrounding quotes from goal text if present
-     (define clean-text
-       (let ([t goal-text])
-         (if (and (> (string-length t) 1)
-                  (or (char=? (string-ref t 0) #\") (char=? (string-ref t 0) #\'))
-                  (or (char=? (string-ref t (sub1 (string-length t))) #\")
-                      (char=? (string-ref t (sub1 (string-length t))) #\')))
-             (substring t 1 (sub1 (string-length t)))
-             t)))
-     ;; Check for --evaluator flag
-     (define evaluator-mode
-       (if (string-contains? arg-text "--evaluator")
-           (let ([parts (string-split arg-text)]) (if (member "agent" parts) 'agent 'transcript))
-           'transcript))
-     ;; Validate check safety
-     (define safety-reasons (validate-check-safety checks))
+     ;; Concurrent goal guard — reject if goal already active
      (cond
-       [(pair? safety-reasons)
+       [(ui-state-active-goal state)
         (define entry
-          (make-system-entry (format "[goal] REJECTED — unsafe check commands:\n~a"
-                                     (string-join safety-reasons "\n"))))
+          (make-system-entry "[goal] REJECTED — a goal is already active. Use /goal clear first."))
         (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
         'continue]
        [else
-        (define check-info
-          (if (null? checks)
-              ""
-              (format "\nChecks: ~a"
-                      (string-join
-                       (map (lambda (c) (format "~a: ~a" (goal-check-label c) (goal-check-command c)))
-                            checks)
-                       ", "))))
-        (define eval-info (if (eq? evaluator-mode 'agent) " [agent evaluator]" ""))
-        (define entry
-          (make-system-entry
-           (format
-            "[goal] Goal set: ~a~a~a\nThe autonomous goal loop will be available in a future update."
-            clean-text
-            check-info
-            eval-info)))
-        (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
-        'continue])]))
+        ;; Check for --check arguments
+        (define-values (goal-text checks)
+          (if (string-contains? arg-text "--check")
+              (parse-goal-checks arg-text)
+              (values arg-text '())))
+        ;; Strip surrounding quotes from goal text if present
+        (define clean-text
+          (let ([t goal-text])
+            (if (and (> (string-length t) 1)
+                     (or (char=? (string-ref t 0) #\") (char=? (string-ref t 0) #\'))
+                     (or (char=? (string-ref t (sub1 (string-length t))) #\")
+                         (char=? (string-ref t (sub1 (string-length t))) #\')))
+                (substring t 1 (sub1 (string-length t)))
+                t)))
+        ;; Check for --evaluator flag
+        (define evaluator-mode
+          (if (string-contains? arg-text "--evaluator")
+              (let ([parts (string-split arg-text)]) (if (member "agent" parts) 'agent 'transcript))
+              'transcript))
+        ;; Validate check safety
+        (define safety-reasons (validate-check-safety checks))
+        (cond
+          [(pair? safety-reasons)
+           (define entry
+             (make-system-entry (format "[goal] REJECTED — unsafe check commands:\n~a"
+                                        (string-join safety-reasons "\n"))))
+           (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+           'continue]
+          [else
+           (define check-info
+             (if (null? checks)
+                 ""
+                 (format "\nChecks: ~a"
+                         (string-join
+                          (map (lambda (c)
+                                 (format "~a: ~a" (goal-check-label c) (goal-check-command c)))
+                               checks)
+                          ", "))))
+           (define eval-info (if (eq? evaluator-mode 'agent) " [agent evaluator]" ""))
+           (define goal-info (goal-display-info clean-text 0 8 'active))
+           (define new-state (struct-copy ui-state state [active-goal goal-info]))
+           (define entry
+             (make-system-entry
+              (format
+               "[goal] Goal set: ~a~a~a\nThe autonomous goal loop will be available in a future update."
+               clean-text
+               check-info
+               eval-info)))
+           (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry new-state entry))
+           'continue])])]))

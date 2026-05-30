@@ -314,3 +314,34 @@
               "regular message still included in context"))
 
 (displayln "All W1 tests passed.")
+
+;; ============================================================
+;; W0: evaluations field tests (v0.71.7)
+;; ============================================================
+
+;; Default evaluations is empty
+(let ()
+  (define gs (make-goal-state #:goal-text "test"))
+  (check-equal? (goal-state-evaluations gs) '() "evaluations defaults to empty"))
+
+;; Explicit evaluations
+(let ()
+  (define er1 (make-evaluation-result #:achieved? #f #:reason "not yet"))
+  (define er2 (make-evaluation-result #:achieved? #t #:reason "done"))
+  (define gs (make-goal-state #:goal-text "test" #:evaluations (list er1 er2)))
+  (check-equal? (length (goal-state-evaluations gs)) 2 "evaluations field populated"))
+
+;; Round-trip with evaluations
+(let ()
+  (define er (make-evaluation-result #:achieved? #t #:reason "ok" #:token-cost 42))
+  (define gs (make-goal-state #:goal-text "round-trip" #:evaluations (list er)))
+  (define h (goal-state->hash gs))
+  (define gs2 (hash->goal-state h))
+  (check-equal? (length (goal-state-evaluations gs2)) 1)
+  (check-equal? (evaluation-result-token-cost (car (goal-state-evaluations gs2))) 42))
+
+;; Backward compat: missing evaluations key defaults to empty
+(let ()
+  (define h (hasheq 'goal-text "old"))
+  (define gs (hash->goal-state h))
+  (check-equal? (goal-state-evaluations gs) '() "missing evaluations key → empty"))

@@ -235,3 +235,46 @@
                          #:evaluator-mode 'agent))
   (check-true (goal-state? result))
   (check-equal? (goal-state-status result) 'achieved))
+
+;; ============================================================
+;; W0: Event emission + shutdown tests (v0.71.7)
+;; ============================================================
+
+;; goal.achieved event emitted on success
+(let ()
+  (define eval-prov (make-eval-provider (list (eval-achieved-response))))
+  (define turn-responses (list (hash 'messages (list (hasheq 'role "assistant" 'content "Done.")))))
+  (define events '())
+  (define (track-event type data)
+    (set! events (append events (list type))))
+  (define result
+    (goal-run-simulated! "pass tests"
+                         eval-prov
+                         "mock"
+                         turn-responses
+                         #:max-turns 2
+                         #:on-event track-event))
+  (check-equal? (goal-state-status result) 'achieved)
+  (check-not-false (member 'goal-achieved events) "goal-achieved event emitted"))
+
+;; shutdown-check cancels the loop
+(let ()
+  (define eval-prov (make-eval-provider (list (eval-achieved-response))))
+  (define turn-responses (list (hash 'messages (list (hasheq 'role "assistant" 'content "Done.")))))
+  (define result
+    (goal-run-simulated! "should cancel"
+                         eval-prov
+                         "mock"
+                         turn-responses
+                         #:max-turns 2
+                         #:shutdown-check (lambda () #t)))
+  (check-equal? (goal-state-status result) 'cancelled))
+
+;; evaluations field populated after loop-step
+(let ()
+  (define eval-prov (make-eval-provider (list (eval-achieved-response))))
+  (define turn-responses (list (hash 'messages (list (hasheq 'role "assistant" 'content "Done.")))))
+  (define result (goal-run-simulated! "test evals" eval-prov "mock" turn-responses #:max-turns 2))
+  (check-true (>= (length (goal-state-evaluations result)) 1) "evaluations field has entries")
+  (check-true (evaluation-result? (car (goal-state-evaluations result)))
+              "entry is evaluation-result"))
