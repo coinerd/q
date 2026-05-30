@@ -13,6 +13,11 @@
 ;;   - tool-types.rkt         -- tool-call, tool-result structs
 ;;
 ;; This file re-exports everything for backward compatibility.
+;;
+;; TRANSITIONAL (I2 v0.72.5): Remaining direct consumers:
+;;   - runtime/iteration/retry-policy.rkt
+;;   - tui/render.rkt
+;; Consider migrating these to import from specific sub-modules.
 
 (require "content-parts.rkt"
          "message.rkt"

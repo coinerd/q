@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.72.5 — 
+
+### Phase 4a: Module Decomposition I
+
+Session-store split + errors split + protocol-types documentation.
+
+| Finding | Severity | Fix |
+|---------|----------|-----|
+| W3: session-store monolith | WARNING | Split into versioning.rkt + in-memory.rkt sub-modules |
+| W14: warn-deprecated! in errors.rkt | WARNING | Extracted to util/deprecation.rkt, re-exported |
+| I2: protocol-types transitional | INFO | Documented remaining consumers for future migration |
+
+**Files changed:** session-store/versioning.rkt (new), session-store/in-memory.rkt (new), session-store.rkt (facade), deprecation.rkt (new), errors.rkt, protocol-types.rkt
+
 ## v0.72.4 — 
 
 ### Phase 3b: Opaque Representations

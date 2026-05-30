@@ -8,16 +8,8 @@
 ;;   - tool-error: tool execution failures (tool-name)
 ;;   - session-error: session lifecycle errors (session-id)
 
-(require racket/contract)
-
-;; Deprecation warning
-(define (warn-deprecated! symbol-name removal-version [extra-notes #f])
-  (log-warning (format "DEPRECATED: ~a (will be removed in ~a).~a"
-                       symbol-name
-                       removal-version
-                       (if extra-notes
-                           (format " ~a" extra-notes)
-                           ""))))
+(require racket/contract
+         (only-in "deprecation.rkt" warn-deprecated!))
 
 ;; Error structs and constructors
 (provide warn-deprecated!
