@@ -17,6 +17,7 @@
          "../agent/event-structs/iteration-events.rkt"
          "session-types.rkt")
 (require "session-mutation.rkt")
+(require (only-in "../util/time.rkt" now-epoch-ms))
 
 (provide (contract-out [maybe-compact-context
                         (-> agent-session? (listof any/c) integer? (listof any/c))])
@@ -50,7 +51,7 @@
     [else
      ;; #770: Stale usage guard — skip if compaction just completed
      (define last-compact (agent-session-last-compaction-time sess))
-     (define now-ms (current-inexact-milliseconds))
+     (define now-ms (now-epoch-ms))
      (cond
        [(and last-compact (< (- now-ms last-compact) 2000))
         context-with-system] ; too soon after last compaction
@@ -60,7 +61,7 @@
         (emit-typed-event! bus
                            (make-compaction-event #:session-id sid
                                                   #:turn-id #f
-                                                  #:timestamp (current-inexact-milliseconds)
+                                                  #:timestamp (now-epoch-ms)
                                                   #:reason "budget-exceeded"
                                                   #:tokens-before token-count
                                                   #:tokens-after token-count))
@@ -74,12 +75,11 @@
                                                         sid))
                       (lambda ()
                         (guarded-set-compacting! sess #f)
-                        (set-agent-session-last-compaction-time! sess (current-inexact-milliseconds))
+                        (guarded-set-last-compaction-time! sess (now-epoch-ms))
                         (emit-typed-event! bus
                                            (make-compaction-event #:session-id sid
                                                                   #:turn-id #f
-                                                                  #:timestamp
-                                                                  (current-inexact-milliseconds)
+                                                                  #:timestamp (now-epoch-ms)
                                                                   #:reason "compaction-complete"
                                                                   #:tokens-before token-count
                                                                   #:tokens-after token-count))))])]))

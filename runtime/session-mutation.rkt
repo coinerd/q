@@ -7,6 +7,7 @@
 
 (require racket/contract
          "session-types.rkt"
+         (submod "session-types.rkt" internal)
          (only-in "../util/errors.rkt" raise-session-error))
 
 (provide (contract-out [guarded-set-prompt-running! (-> agent-session? boolean? void?)]
