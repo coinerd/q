@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.73.8 -- 2026-05-30
+
+### Audit Closure (A-7)
+
+- **CRITICAL:** Fix `extension-registry?` contract violation — replaced fake `procedure?` predicate with real re-export from `extensions/api.rkt` (C1)
+- **W1:** Activate dead loggers — remove dead `define-logger` from `loop-fsm.rkt`, add 4 `log-q-main-loop-info` calls at FSM transition sites in `main-loop.rkt`
+- **W2:** Complete shared timing adoption — fix `timing.rkt` contract to accept `real?`, replace inline timing logs in `anthropic.rkt` and `gemini.rkt`
+- **W3:** Add `contract-out` to `step-interpreter.rkt` for `interpret-step`, `handle-stop-action`, `execute-pending-tool-calls`, `sink-append-entries!`
+
 ## v0.73.7 -- 2026-05-30
 
 ### Extension Tests + Contract Completion (T-6/A-6b)

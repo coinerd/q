@@ -9,7 +9,8 @@
 ;;   handle-stop-action     — handle 'stop action from decide-next-action
 ;;   execute-pending-tool-calls — execute pending tool calls, update working set
 
-(require racket/match
+(require racket/contract
+         racket/match
          racket/class
          racket/list
          (only-in "loop-state.rkt"
@@ -77,11 +78,11 @@
          (only-in "../../runtime/iteration/internal.rkt" assert-payload)
          (only-in "../../runtime/iteration/directive.rkt" directive-recurse directive-stop))
 
-(provide interpret-step
-         handle-stop-action
-         execute-pending-tool-calls
-         ;; R-09/R-10: Optional sink for dependency injection
-         sink-append-entries!)
+(provide (contract-out
+          [interpret-step (-> any/c any/c any/c any/c any/c any/c)]
+          [handle-stop-action (-> any/c any/c any/c any/c any/c any/c any/c)]
+          [execute-pending-tool-calls (-> any/c any/c any/c any/c any/c)]
+          [sink-append-entries! (->* (any/c any/c) (any/c) void?)]))
 
 ;; ============================================================
 ;; R-09/R-10: Sink-aware append helper
