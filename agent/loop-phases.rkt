@@ -45,20 +45,51 @@
          "../util/loop-result.rkt")
 
 (provide (contract-out [phase-emit-start
-                        (-> any/c any/c any/c any/c (values any/c (listof effect?)))])
-         (contract-out [phase-build-context
-                        (-> any/c any/c any/c any/c any/c (values any/c (listof effect?)))])
-         (contract-out [phase-build-request (-> any/c any/c any/c (values any/c (listof effect?)))])
+                        (-> string? string? loop-state? any/c (values any/c (listof effect?)))])
+         (contract-out
+          [phase-build-context
+           (-> event-bus? string? string? loop-state? any/c (values any/c (listof effect?)))])
+         (contract-out [phase-build-request
+                        (-> (listof any/c) (listof tool?) any/c (values any/c (listof effect?)))])
          (contract-out [phase-pre-hook
-                        (-> any/c any/c any/c any/c any/c any/c (values any/c (listof effect?)))])
-         (contract-out
-          [phase-msg-hook
-           (-> any/c any/c any/c any/c any/c any/c any/c (values any/c (listof effect?)))])
-         (contract-out
-          [phase-stream
-           (-> any/c any/c any/c any/c any/c any/c any/c any/c (values any/c (listof effect?)))])
+                        (-> procedure?
+                            provider?
+                            (listof any/c)
+                            any/c
+                            string?
+                            string?
+                            (values any/c (listof effect?)))])
+         (contract-out [phase-msg-hook
+                        (-> procedure?
+                            provider?
+                            any/c
+                            (listof any/c)
+                            string?
+                            string?
+                            loop-state?
+                            (values any/c (listof effect?)))])
+         (contract-out [phase-stream
+                        (-> provider?
+                            any/c
+                            event-bus?
+                            string?
+                            string?
+                            loop-state?
+                            (listof any/c)
+                            (listof tool?)
+                            (values any/c (listof effect?)))])
          (contract-out [run-streaming-phase
-                        (-> any/c any/c any/c any/c any/c any/c any/c any/c any/c any/c any/c)]))
+                        (-> provider?
+                            any/c
+                            event-bus?
+                            string?
+                            string?
+                            loop-state?
+                            (listof any/c)
+                            (listof tool?)
+                            procedure?
+                            any/c
+                            any/c)]))
 
 ;; ---------------------------------------------------------------------------
 ;; Phase 1: Emit turn-started event
