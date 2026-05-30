@@ -170,6 +170,7 @@
         (let ([infra (loop-infra context ext-reg reg bus session-id log-path token)])
           ;; R-06/R-07: Track FSM state: idle -> provider-turn
           (current-iteration-fsm-state (next-iteration-state state-idle event-start-loop))
+          (log-q-main-loop-info "iteration start")
           (let loop ([ctx context]
                      [counters (make-initial-counters)]
                      [ws ws])
@@ -196,6 +197,7 @@
                   ;; R-06/R-07: FSM: provider-turn + hook-block -> aborted
                   (current-iteration-fsm-state (next-iteration-state state-provider-turn
                                                                      event-hook-block))
+                  (log-q-main-loop-info "turn blocked at iteration ~a" (loop-counters-iteration counters))
                   (emit-session-event! bus
                                        session-id
                                        "turn.blocked"
@@ -227,6 +229,7 @@
                   ;; R-06/R-07: FSM: provider-turn + model-response -> decision
                   (current-iteration-fsm-state (next-iteration-state state-provider-turn
                                                                      event-model-response))
+                  (log-q-main-loop-info "model response received at iteration ~a" (loop-counters-iteration counters))
                   (emit-typed-event! bus
                                      (make-iteration-decision-event
                                       #:session-id session-id
@@ -260,6 +263,7 @@
                      ;; R-06/R-07: FSM: decision + termination -> complete
                      (current-iteration-fsm-state (next-iteration-state state-decision
                                                                         event-termination-reason))
+                     (log-q-main-loop-info "iteration complete: ~a at iteration ~a" termination (loop-counters-iteration counters))
                      final-result]
                     [(directive-recurse new-ctx new-counters ws2)
                      (loop new-ctx new-counters ws2)])])]))))))
