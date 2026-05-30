@@ -9,8 +9,8 @@
 
 (require rackunit
          rackunit/text-ui
-         "../runtime/iteration/main-loop.rkt"
-         "../runtime/iteration/loop-state.rkt"
+         "../agent/iteration/main-loop.rkt"
+         "../agent/iteration/loop-state.rkt"
          (only-in "../agent/event-bus.rkt" make-event-bus)
          (only-in "../llm/provider.rkt" make-provider)
          (only-in "../util/protocol-types.rkt" make-message make-text-part message-role)

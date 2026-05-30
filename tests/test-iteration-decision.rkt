@@ -6,7 +6,7 @@
 (require rackunit
          rackunit/text-ui
          "../runtime/iteration/decision.rkt"
-         "../runtime/iteration/loop-state.rkt"
+         "../agent/iteration/loop-state.rkt"
          "../util/loop-result.rkt")
 
 (define helper-suite

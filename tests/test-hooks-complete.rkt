@@ -13,7 +13,7 @@
          "../agent/state.rkt"
          "../extensions/hooks.rkt"
          "../extensions/api.rkt"
-         (only-in "../runtime/iteration/main-loop.rkt" run-iteration-loop)
+         (only-in "../agent/iteration/main-loop.rkt" run-iteration-loop)
          (only-in "../runtime/runtime-helpers.rkt" maybe-dispatch-hooks)
          "../runtime/agent-session.rkt"
          "../skills/types.rkt"

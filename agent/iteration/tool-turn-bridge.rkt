@@ -21,10 +21,10 @@
                   tool-result-part-is-error?
                   event-ev
                   event-payload)
-         "../../agent/event-bus.rkt"
-         (only-in "../../agent/queue.rkt" dequeue-steering! dequeue-followup! dequeue-all-followups!)
-         "../working-set.rkt"
-         (only-in "../context-policy.rkt" estimate-message-tokens)
+         "../event-bus.rkt"
+         (only-in "../queue.rkt" dequeue-steering! dequeue-followup! dequeue-all-followups!)
+         "../../runtime/working-set.rkt"
+         (only-in "../../runtime/context-policy.rkt" estimate-message-tokens)
          (only-in "../../util/event-types.rkt" injection-event-topic)
          (only-in "../../util/shared.rkt" take-at-most))
 

@@ -7,7 +7,7 @@
 (require rackunit
          rackunit/text-ui
          racket/set
-         "../runtime/iteration/tool-turn-bridge.rkt"
+         "../agent/iteration/tool-turn-bridge.rkt"
          "../runtime/working-set.rkt"
          "../util/protocol-types.rkt")
 

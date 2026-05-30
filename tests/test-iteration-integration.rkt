@@ -9,17 +9,17 @@
          (only-in "../runtime/session-config.rkt" hash->session-config)
          racket/set
          racket/file
-         (only-in "../runtime/iteration/step-interpreter.rkt"
+         (only-in "../agent/iteration/step-interpreter.rkt"
                   handle-stop-action
                   interpret-step
                   execute-pending-tool-calls)
-         (only-in "../runtime/iteration/counters.rkt" compute-next-counters check-cancellation)
+         (only-in "../agent/iteration/counters.rkt" compute-next-counters check-cancellation)
          (only-in "../runtime/iteration/decision.rkt"
                   decide-next-action
                   compute-step-result
                   iteration-ctx
                   step-result)
-         (only-in "../runtime/iteration/loop-state.rkt"
+         (only-in "../agent/iteration/loop-state.rkt"
                   make-initial-counters
                   loop-infra
                   iteration-snapshot
@@ -51,11 +51,11 @@
                   cancellation-token-cancelled?)
          (only-in "../util/event.rkt" event-ev)
          (only-in "../runtime/iteration/decision.rkt" step-result)
-         (only-in "../runtime/iteration/step-interpreter.rkt"
+         (only-in "../agent/iteration/step-interpreter.rkt"
                   handle-stop-action
                   interpret-step
                   execute-pending-tool-calls)
-         (only-in "../runtime/iteration/counters.rkt" compute-next-counters check-cancellation)
+         (only-in "../agent/iteration/counters.rkt" compute-next-counters check-cancellation)
          (only-in "../runtime/iteration/decision.rkt"
                   decide-next-action
                   compute-step-result

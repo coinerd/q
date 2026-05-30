@@ -9,7 +9,7 @@
 ;; without any-wrap/c contract failure.
 
 (require rackunit
-         (only-in "../runtime/iteration/loop-state.rkt"
+         (only-in "../agent/iteration/loop-state.rkt"
                   iteration-snapshot
                   iteration-snapshot?
                   iteration-snapshot-counters

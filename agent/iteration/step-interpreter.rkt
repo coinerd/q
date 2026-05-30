@@ -42,12 +42,12 @@
                   handle-tool-calls-pending
                   extract-tool-calls-from-messages)
          (only-in "../../runtime/runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
-         (only-in "effect-executor.rkt"
+         (only-in "../../runtime/iteration/effect-executor.rkt"
                   step-effect:append-entries
                   step-effect:emit-event
                   run-step-effects!)
          (only-in "../../util/hook-types.rkt" hook-result-action hook-result?)
-         (only-in "../../agent/event-emitter.rkt" emit-typed-event!)
+         (only-in "../event-emitter.rkt" emit-typed-event!)
          (only-in "../../util/event-contracts.rkt"
                   error-detail-payload/c
                   iteration-decision-payload/c
@@ -69,13 +69,13 @@
          (only-in "tool-turn-bridge.rkt" extract-tool-target-path)
          (only-in "../../runtime/context-policy.rkt" estimate-message-tokens)
          (only-in "../../runtime/session-compaction.rkt" compact-context-mid-turn)
-         (only-in "retry-policy.rkt"
+         (only-in "../../runtime/iteration/retry-policy.rkt"
                   estimate-mid-turn-tokens
                   maybe-compact-mid-turn
                   detect-exploration-loop)
-         (only-in "decision.rkt" step-result step-result-action step-result-new-counters)
-         (only-in "internal.rkt" assert-payload)
-         (only-in "directive.rkt" directive-recurse directive-stop))
+         (only-in "../../runtime/iteration/decision.rkt" step-result step-result-action step-result-new-counters)
+         (only-in "../../runtime/iteration/internal.rkt" assert-payload)
+         (only-in "../../runtime/iteration/directive.rkt" directive-recurse directive-stop))
 
 (provide interpret-step
          handle-stop-action

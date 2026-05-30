@@ -9,7 +9,7 @@
          racket/list
          racket/file
          "../runtime/working-set.rkt"
-         (only-in "../runtime/iteration/main-loop.rkt" run-iteration-loop)
+         (only-in "../agent/iteration/main-loop.rkt" run-iteration-loop)
          "../runtime/turn-orchestrator.rkt"
          "../runtime/agent-session.rkt"
          "../runtime/session-types.rkt"

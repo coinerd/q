@@ -10,7 +10,7 @@
          "../agent/queue.rkt"
          "../agent/event-bus.rkt"
          "../util/ids.rkt"
-         (only-in "../runtime/iteration/main-loop.rkt" run-iteration-loop)
+         (only-in "../agent/iteration/main-loop.rkt" run-iteration-loop)
          (only-in "../util/json-helpers.rkt" ensure-hash-args)
          (only-in "../llm/provider.rkt" make-mock-provider)
          (only-in "../llm/model.rkt" make-model-response))

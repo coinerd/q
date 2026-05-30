@@ -8,7 +8,7 @@
 
 (require racket/contract
          racket/match
-         (only-in "loop-state.rkt"
+         (only-in "../../agent/iteration/loop-state.rkt"
                   loop-infra
                   loop-infra-bus
                   loop-infra-session-id

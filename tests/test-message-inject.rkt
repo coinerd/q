@@ -155,7 +155,7 @@
 ;; FEAT-61: Iteration loop integration
 ;; ============================================================
 
-(require (only-in "../runtime/iteration/tool-turn-bridge.rkt"
+(require (only-in "../agent/iteration/tool-turn-bridge.rkt"
                   make-injected-collector!
                   drain-injected-messages!))
 

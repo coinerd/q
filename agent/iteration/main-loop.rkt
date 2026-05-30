@@ -27,10 +27,10 @@
                   loop-result-messages
                   loop-result-metadata)
          (only-in "../../util/ids.rkt" generate-id)
-         (only-in "../../agent/event-emitter.rkt" emit-typed-event!)
-         (only-in "../../agent/event-structs/hook-events.rkt" turn-cancelled-event)
-         (only-in "../../agent/event-structs/iteration-events.rkt" make-iteration-decision-event)
-         (only-in "../../agent/queue.rkt"
+         (only-in "../event-emitter.rkt" emit-typed-event!)
+         (only-in "../event-structs/hook-events.rkt" turn-cancelled-event)
+         (only-in "../event-structs/iteration-events.rkt" make-iteration-decision-event)
+         (only-in "../queue.rkt"
                   queue-status
                   queue?
                   dequeue-followup!
@@ -52,13 +52,13 @@
                   resolve-max-iterations-hard)
          (only-in "../../llm/provider.rkt" provider?)
          (only-in "../../runtime/layer-adapters.rkt" tool-registry? extension-registry?)
-         (only-in "../../agent/event-bus.rkt" event-bus?)
+         (only-in "../event-bus.rkt" event-bus?)
          (only-in "../../util/loop-result.rkt" loop-result?)
          (only-in "counters.rkt" check-cancellation)
-         (only-in "decision.rkt" iteration-ctx compute-step-result)
+         (only-in "../../runtime/iteration/decision.rkt" iteration-ctx compute-step-result)
          (only-in "step-interpreter.rkt" interpret-step)
-         (only-in "directive.rkt" directive-recurse directive-stop directive-yield)
-         (only-in "fsm-types.rkt"
+         (only-in "../../runtime/iteration/directive.rkt" directive-recurse directive-stop directive-yield)
+         (only-in "../../runtime/iteration/fsm-types.rkt"
                   state-idle
                   state-provider-turn
                   state-decision
@@ -73,7 +73,7 @@
                   next-iteration-state
                   state->symbol
                   iteration-state?)
-         (only-in "internal.rkt" assert-payload)
+         (only-in "../../runtime/iteration/internal.rkt" assert-payload)
          (only-in "loop-phases.rkt" prepare-iteration-context dispatch-turn-start-hooks)
          (only-in "loop-config.rkt"
                   loop-config?
