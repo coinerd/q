@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.72.0 — 
+
+### Phase 1: Zero-Cost Fixes
+
+Abstraction quality remediation — zero-risk fixes.
+
+| Finding | Severity | Fix |
+|---------|----------|-----|
+| C2: Raw setter breach — 13 deprecated setters in public API | CRITICAL | Moved to `module+ internal`, only `session-mutation.rkt` can import |
+| W4: `epoch-ms` pattern repeated across codebase | WARNING | Extracted `now-epoch-ms` into `util/time.rkt` |
+| W16: No effect-base supertype | WARNING | Added `effect-base` struct, `effect?` uses supertype predicate |
+| I1: Dead `with-cleanup` macro exported | INFO | Deleted from `errors.rkt` |
+| I3: Duplicate bare+only-in import in `goal-runner.rkt` | INFO | Replaced with `except-in` |
+
+**Files changed:** `session-types.rkt`, `session-mutation.rkt`, `session-compaction.rkt`, `effect-types.rkt`, `errors.rkt`, `goal-runner.rkt`, `util/time.rkt` (new)
+
 ## v0.71.8 — 
 
 ### v0.71.7 Audit Closure
