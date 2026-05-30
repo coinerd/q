@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.72.2 — 
+
+### Phase 2b: Boundary Contract Precision
+
+Boundary tightening for tool-registry, settings, and state-types.
+
+| Finding | Severity | Fix |
+|---------|----------|-----|
+| W10: tool-registry internal fields publicly exported | WARNING | Moved to `module+ internal` |
+| W9: settings globals in public API | WARNING | Removed q-settings-global/project from provide |
+| W8: state-types uses `any/c` for styled-line/q-component | WARNING | Replaced with real predicates |
+| I6: tool-schema naming | INFO | Verified — no rename needed |
+
+**Files changed:** `tool-registry-struct.rkt`, `registry.rkt`, `settings.rkt`, `state-types.rkt`
+
 ## v0.72.1 — 
 
 ### Phase 2a: Core Contract Precision
