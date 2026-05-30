@@ -6,8 +6,10 @@
 ;;; v0.22.9 W2: Decomposed into:
 ;;;   session-store-integrity.rkt — hash chain, verification, repair, write-ahead markers
 ;;;   session-store-tree.rkt      — tree store operations
-;;; This module retains: append, load/replay, versioning, forking, import,
-;;; naming, in-memory session manager, custom entry helpers.
+;;; v0.72.5 W0: Further decomposed into:
+;;;   session-store/versioning.rkt — session versioning constants and functions
+;;;   session-store/in-memory.rkt  — in-memory session manager and custom entry helpers
+;;; This module retains: append, load/replay, forking, import, naming, sinks.
 ;;; Re-exports all symbols from extracted modules for backward compatibility.
 
 (require racket/contract
@@ -25,7 +27,10 @@
          (only-in "../util/errors.rkt" raise-session-error)
          ;; Extracted modules (v0.22.9 W2)
          "session-store-integrity.rkt"
-         "session-store-tree.rkt")
+         "session-store-tree.rkt"
+         ;; Extracted sub-modules (v0.72.5 W0)
+         "session-store/versioning.rkt"
+         "session-store/in-memory.rkt")
 
 ;; F11: Consumer/Admin tier split:
 ;;   Consumer tier (always safe): append-entry!, load-session-log,
@@ -248,80 +253,6 @@
 ;; Session versioning (#499)
 ;; ============================================================
 
-(define CURRENT-SESSION-VERSION 2)
-
-;; Helper: create a version-header message with optional extra metadata
-(define (make-version-header-message #:version [ver CURRENT-SESSION-VERSION] #:extra [extra (hasheq)])
-  (make-message (string-append "svh-" (generate-id))
-                #f
-                'system
-                'session-info
-                '()
-                (current-seconds)
-                (hash-set extra 'version ver)))
-
-(define (write-session-version-header! log-path)
-  (ensure-parent-dirs! log-path)
-  (cond
-    [(and (file-exists? log-path) (> (file-size log-path) 0)) (void)]
-    [else
-     (define header-msg (make-version-header-message))
-     (call-with-output-file log-path
-                            (lambda (out)
-                              (write-json (message->jsexpr header-msg) out)
-                              (newline out))
-                            #:mode 'text
-                            #:exists 'truncate)]))
-
-(define (read-first-log-entry log-path)
-  (with-handlers ([exn:fail? (lambda (e)
-                               (log-warning (format "session-store: ~a" (exn-message e)))
-                               #f)])
-    (call-with-input-file log-path
-                          (lambda (in)
-                            (define line (read-line in))
-                            (if (eof-object? line)
-                                #f
-                                (jsexpr->message (string->jsexpr line))))
-                          #:mode 'text)))
-
-(define (ensure-session-version-header! log-path)
-  (cond
-    [(not (file-exists? log-path))
-     (write-session-version-header! log-path)
-     CURRENT-SESSION-VERSION]
-    [(= (file-size log-path) 0)
-     (write-session-version-header! log-path)
-     CURRENT-SESSION-VERSION]
-    [else
-     (define first-entry (read-first-log-entry log-path))
-     (match first-entry
-       [#f
-        (write-session-version-header! log-path)
-        CURRENT-SESSION-VERSION]
-       [(? session-info-entry?) (hash-ref (message-meta-safe first-entry) 'version 1)]
-       [_
-        (migrate-session-log! log-path 1 CURRENT-SESSION-VERSION)
-        CURRENT-SESSION-VERSION])]))
-
-(define (migrate-session-log! log-path from-version to-version)
-  (when (< from-version to-version)
-    (define entries (load-session-log log-path))
-    (define header-msg (make-version-header-message #:version to-version))
-    (define all-entries (cons header-msg entries))
-    (define bak-path (format "~a.v~a.bak" log-path from-version))
-    (when (file-exists? bak-path)
-      (delete-file bak-path))
-    (rename-file-or-directory log-path bak-path #t)
-    (jsonl-append-entries! log-path (map message->jsexpr all-entries))
-    (fprintf (current-error-port)
-             "Session migrated v~a -> v~a: ~a entries. Backup: ~a\n"
-             from-version
-             to-version
-             (length entries)
-             bak-path)))
-
-;; ============================================================
 ;; Session forking (#500)
 ;; ============================================================
 
@@ -392,68 +323,6 @@
      new-session-id]))
 
 ;; ============================================================
-;; In-memory session manager (GC-18)
-;; ============================================================
-
-(struct in-memory-session-manager (sessions-box) #:transparent)
-
-(define (make-in-memory-session-manager)
-  (in-memory-session-manager (box (hash))))
-
-(define (in-memory-append! mgr session-id msg)
-  (define box (in-memory-session-manager-sessions-box mgr))
-  (define sessions (unbox box))
-  (define existing (hash-ref sessions session-id '()))
-  ;; RA-17: prepend (O(1)) instead of append (O(n)) to avoid quadratic growth
-  (set-box! box (hash-set sessions session-id (cons msg existing))))
-
-(define (in-memory-append-entries! mgr session-id msgs)
-  (for ([msg (in-list msgs)])
-    (in-memory-append! mgr session-id msg)))
-
-(define (in-memory-load mgr session-id)
-  (define sessions (unbox (in-memory-session-manager-sessions-box mgr)))
-  ;; Reverse to restore chronological order (entries are stored newest-first)
-  (reverse (hash-ref sessions session-id '())))
-
-(define (in-memory-list-sessions mgr)
-  (hash-keys (unbox (in-memory-session-manager-sessions-box mgr))))
-
-(define (in-memory-fork! mgr src-id dest-id [entry-id #f])
-  (define entries (in-memory-load mgr src-id))
-  (define to-copy
-    (if entry-id
-        (let loop ([es entries]
-                   [acc '()])
-          (match es
-            ['() (reverse acc)]
-            [(cons (? (lambda (e) (equal? (message-id e) entry-id)) found) _)
-             (reverse (cons found acc))]
-            [(cons e rest) (loop rest (cons e acc))]))
-        entries))
-  (define box (in-memory-session-manager-sessions-box mgr))
-  (define sessions (unbox box))
-  ;; Store in reverse-chronological order to match internal representation
-  (set-box! box (hash-set sessions dest-id (reverse to-copy)))
-  dest-id)
-
-;; ============================================================
-;; Custom entry helpers (#1147)
-;; ============================================================
-
-(define (append-custom-entry! mgr session-id extension-name key data)
-  (define entry (make-custom-entry extension-name key data))
-  (in-memory-append! mgr session-id entry))
-
-(define (load-custom-entries mgr session-id extension-name [key #f])
-  (define entries (in-memory-load mgr session-id))
-  (filter (lambda (e)
-            (and (custom-entry? e)
-                 (equal? (custom-entry-extension e) extension-name)
-                 (or (not key) (equal? (custom-entry-key e) key))))
-          entries))
-
-;; ============================================================
 ;; Goal state persistence (v0.71.0)
 ;; ============================================================
 
@@ -483,10 +352,6 @@
                            (text-part-text (car content)))])
         (hash->goal-state (string->jsexpr json-str)))))
 
-;; ── Session-info helper ──
-
-(define (session-info-entry? msg)
-  (and (message? msg) (eq? (message-kind msg) 'session-info)))
 
 ;; ---------------------------------------------------------------------------
 ;; F11: Consumer/Admin submodule split
