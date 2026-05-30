@@ -1,13 +1,15 @@
 #lang racket/base
 
-;; util/tool-types.rkt — standalone tool-call and tool-result structs
+;; util/tool-types.rkt -- standalone tool-call and tool-result structs + tool? predicate
 ;;
-;; Canonical definitions for tool-call and tool-result data types.
-;; These are shared across the tool execution pipeline.
+;; Canonical definitions for tool data types.
+;; tool? re-exported from tools/tool-struct.rkt (A-2: avoids agent->tools layer violation).
 
-(require racket/contract)
+(require racket/contract
+         (only-in "../tools/tool-struct.rkt" tool?))
 
-(provide (contract-out [tool-call? (-> any/c boolean?)]
+(provide (contract-out [tool? (-> any/c boolean?)]
+                       [tool-call? (-> any/c boolean?)]
                        [tool-call-id (-> tool-call? (or/c string? #f))]
                        [tool-call-name (-> tool-call? (or/c string? #f))]
                        [tool-call-arguments (-> tool-call? any/c)]
