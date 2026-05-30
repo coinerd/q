@@ -1,96 +1,138 @@
-#lang racket/base
-
-;; BOUNDARY: integration
-
-;; test-iteration-decision.rkt — Tests for pure decide-next-action function
-;; v0.29.1 W0: Test scaffolding (function does not exist yet — tests should FAIL)
+#lang racket
+;; BOUNDARY: pure
+;; BOUNDARY: unit
+;; tests/test-iteration-decision.rkt — Pure decision function tests (T-1a)
 
 (require rackunit
-         racket/base
-         (only-in "../util/loop-result.rkt" make-loop-result loop-result-termination-reason)
-         (only-in "../runtime/iteration/decision.rkt" decide-next-action iteration-ctx))
+         rackunit/text-ui
+         "../runtime/iteration/decision.rkt"
+         "../runtime/iteration/loop-state.rkt"
+         "../util/loop-result.rkt")
 
-;; Helper: build an iteration-ctx
-(define (make-ictx #:iteration [iteration 0]
-                   #:max-iter [max-iter 50]
-                   #:max-iter-hard [max-iter-hard 100])
-  (iteration-ctx iteration 0 0 max-iter max-iter-hard))
+(define helper-suite
+  (test-suite "iteration-decision helpers"
 
-;; ── Completed termination → 'stop ──
+    (test-case "known-termination-reasons contains expected symbols"
+      (define reasons (known-termination-reasons))
+      (for ([r '(completed cancelled tool-calls-pending error
+                 force-shutdown shutdown max-iterations-exceeded hook-blocked)])
+        (check-not-false (member r reasons)
+                         (format "expected ~a in known-termination-reasons" r))))
 
-(test-case "decide-next-action: completed → stop"
-  (define ctx (make-ictx))
-  (define result (make-loop-result '() 'completed (hasheq)))
-  (check-equal? (decide-next-action ctx result) 'stop))
+    (test-case "step-action? accepts known actions"
+      (for ([a '(continue stop stop-hard-limit stop-soft-limit)])
+        (check-true (step-action? a)
+                    (format "step-action? should accept ~a" a))))
 
-;; ── Cancelled → 'stop ──
+    (test-case "step-action? rejects unknown actions"
+      (check-false (step-action? 'unknown-action))
+      (check-false (step-action? 42))
+      (check-false (step-action? "continue")))
 
-(test-case "decide-next-action: cancelled → stop"
-  (define ctx (make-ictx))
-  (define result (make-loop-result '() 'cancelled (hasheq)))
-  (check-equal? (decide-next-action ctx result) 'stop))
+    (test-case "iteration-ctx constructor and accessors"
+      (define ctx (iteration-ctx 5 3 2 20 30))
+      (check-equal? (iteration-ctx-iteration ctx) 5)
+      (check-equal? (iteration-ctx-consecutive-tool-count ctx) 3)
+      (check-equal? (iteration-ctx-explore-count ctx) 2)
+      (check-equal? (iteration-ctx-max-iterations ctx) 20)
+      (check-equal? (iteration-ctx-max-iterations-hard ctx) 30))
 
-;; ── Force-shutdown → 'stop ──
+    (test-case "step-result constructor and accessors"
+      (define sr (step-result 'continue #f (void) (hasheq)))
+      (check-equal? (step-result-action sr) 'continue)
+      (check-false (step-result-termination sr))
+      (check-equal? (step-result-metadata sr) (hasheq)))
+  ))
 
-(test-case "decide-next-action: force-shutdown → stop"
-  (define ctx (make-ictx))
-  (define result (make-loop-result '() 'force-shutdown (hasheq)))
-  (check-equal? (decide-next-action ctx result) 'stop))
+(define decide-suite
+  (test-suite "decide-next-action"
 
-;; ── Shutdown → 'stop ──
+    (test-case "completed -> stop"
+      (define ctx (iteration-ctx 0 0 0 10 20))
+      (define result (make-loop-result '() 'completed (hasheq)))
+      (check-equal? (decide-next-action ctx result) 'stop))
 
-(test-case "decide-next-action: shutdown → stop"
-  (define ctx (make-ictx))
-  (define result (make-loop-result '() 'shutdown (hasheq)))
-  (check-equal? (decide-next-action ctx result) 'stop))
+    (test-case "cancelled -> stop"
+      (define ctx (iteration-ctx 0 0 0 10 20))
+      (define result (make-loop-result '() 'cancelled (hasheq)))
+      (check-equal? (decide-next-action ctx result) 'stop))
 
-;; ── Tool calls pending at hard limit → 'stop-hard-limit ──
+    (test-case "force-shutdown -> stop"
+      (define ctx (iteration-ctx 0 0 0 10 20))
+      (define result (make-loop-result '() 'force-shutdown (hasheq)))
+      (check-equal? (decide-next-action ctx result) 'stop))
 
-(test-case "decide-next-action: tool-calls-pending at hard limit → stop-hard-limit"
-  (define ctx (make-ictx #:iteration 99 #:max-iter 50 #:max-iter-hard 100))
-  (define result (make-loop-result '() 'tool-calls-pending (hasheq)))
-  (check-equal? (decide-next-action ctx result) 'stop-hard-limit))
+    (test-case "error -> stop"
+      (define ctx (iteration-ctx 0 0 0 10 20))
+      (define result (make-loop-result '() 'error (hasheq)))
+      (check-equal? (decide-next-action ctx result) 'stop))
 
-;; ── Tool calls pending at soft limit → 'stop-soft-limit ──
+    (test-case "hook-blocked -> stop"
+      (define ctx (iteration-ctx 0 0 0 10 20))
+      (define result (make-loop-result '() 'hook-blocked (hasheq)))
+      (check-equal? (decide-next-action ctx result) 'stop))
 
-(test-case "decide-next-action: tool-calls-pending at soft limit → stop-soft-limit"
-  (define ctx (make-ictx #:iteration 49 #:max-iter 50 #:max-iter-hard 100))
-  (define result (make-loop-result '() 'tool-calls-pending (hasheq)))
-  (check-equal? (decide-next-action ctx result) 'stop-soft-limit))
+    (test-case "max-iterations-exceeded -> stop"
+      (define ctx (iteration-ctx 0 0 0 10 20))
+      (define result (make-loop-result '() 'max-iterations-exceeded (hasheq)))
+      (check-equal? (decide-next-action ctx result) 'stop))
 
-;; ── Tool calls pending under limits → 'continue ──
+    (test-case "tool-calls-pending iteration < soft limit -> continue"
+      (define ctx (iteration-ctx 5 0 0 10 20))
+      (define result (make-loop-result '() 'tool-calls-pending (hasheq)))
+      (check-equal? (decide-next-action ctx result) 'continue))
 
-(test-case "decide-next-action: tool-calls-pending under limits → continue"
-  (define ctx (make-ictx #:iteration 10 #:max-iter 50 #:max-iter-hard 100))
-  (define result (make-loop-result '() 'tool-calls-pending (hasheq)))
-  (check-equal? (decide-next-action ctx result) 'continue))
+    (test-case "tool-calls-pending iteration at soft limit < hard -> stop-soft-limit"
+      (define ctx (iteration-ctx 9 0 0 10 20))
+      (define result (make-loop-result '() 'tool-calls-pending (hasheq)))
+      (check-equal? (decide-next-action ctx result) 'stop-soft-limit))
 
-;; ── Error → 'stop ──
+    (test-case "tool-calls-pending iteration at hard limit -> stop-hard-limit"
+      (define ctx (iteration-ctx 19 0 0 10 20))
+      (define result (make-loop-result '() 'tool-calls-pending (hasheq)))
+      (check-equal? (decide-next-action ctx result) 'stop-hard-limit))
 
-(test-case "decide-next-action: error → stop"
-  (define ctx (make-ictx))
-  (define result (make-loop-result '() 'error (hasheq)))
-  (check-equal? (decide-next-action ctx result) 'stop))
+    (test-case "unknown termination reason -> stop"
+      (define ctx (iteration-ctx 0 0 0 10 20))
+      (define result (make-loop-result '() 'unknown-reason (hasheq)))
+      (check-equal? (decide-next-action ctx result) 'stop))
+  ))
 
-;; ── Unknown termination → 'stop ──
+(define compute-suite
+  (test-suite "compute-step-result"
 
-(test-case "decide-next-action: unknown termination → stop"
-  (define ctx (make-ictx))
-  (define result (make-loop-result '() 'some-unknown-reason (hasheq)))
-  (check-equal? (decide-next-action ctx result) 'stop))
+    (test-case "continue action preserves termination #f"
+      (define ctx (iteration-ctx 0 0 0 10 20))
+      (define result (make-loop-result '() 'tool-calls-pending (hasheq)))
+      (define counters (make-initial-counters))
+      (define sr (compute-step-result ctx result counters))
+      (check-equal? (step-result-action sr) 'continue)
+      (check-equal? (step-result-termination sr) 'tool-calls-pending))
 
-;; ── Boundary: iteration exactly at hard limit ──
+    (test-case "stop-hard-limit metadata has maxIterationsReached"
+      (define ctx (iteration-ctx 19 0 0 10 20))
+      (define result (make-loop-result '() 'tool-calls-pending (hasheq)))
+      (define counters (make-initial-counters))
+      (define sr (compute-step-result ctx result counters))
+      (check-equal? (step-result-action sr) 'stop-hard-limit)
+      (check-true (hash-ref (step-result-metadata sr) 'maxIterationsReached #f)))
 
-(test-case "decide-next-action: iteration at hard limit boundary"
-  (define ctx (make-ictx #:iteration 100 #:max-iter 50 #:max-iter-hard 100))
-  (define result (make-loop-result '() 'tool-calls-pending (hasheq)))
-  ;; (add1 100) = 101 >= 100 → hard limit
-  (check-equal? (decide-next-action ctx result) 'stop-hard-limit))
+    (test-case "completed stop has empty metadata"
+      (define ctx (iteration-ctx 0 0 0 10 20))
+      (define result (make-loop-result '() 'completed (hasheq)))
+      (define counters (make-initial-counters))
+      (define sr (compute-step-result ctx result counters))
+      (check-equal? (step-result-action sr) 'stop)
+      (check-equal? (step-result-metadata sr) (hasheq)))
 
-;; ── Boundary: iteration at soft limit exactly ──
+    (test-case "step-result has new-counters"
+      (define ctx (iteration-ctx 0 0 0 10 20))
+      (define result (make-loop-result '() 'completed (hasheq)))
+      (define counters (make-initial-counters))
+      (define sr (compute-step-result ctx result counters))
+      (check-not-false (step-result-new-counters sr)))
+  ))
 
-(test-case "decide-next-action: iteration at soft limit boundary"
-  (define ctx (make-ictx #:iteration 50 #:max-iter 50 #:max-iter-hard 100))
-  (define result (make-loop-result '() 'tool-calls-pending (hasheq)))
-  ;; (add1 50) = 51 >= 50 but < 100 → soft limit
-  (check-equal? (decide-next-action ctx result) 'stop-soft-limit))
+(run-tests helper-suite 'verbose)
+(run-tests decide-suite 'verbose)
+(run-tests compute-suite 'verbose)
