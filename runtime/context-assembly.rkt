@@ -6,6 +6,13 @@
 ;; Thin facade: re-exports from context-assembly/budgeting, selection, serialization.
 ;; Also re-exports from context-summary.rkt (sibling module).
 ;; All struct definitions live in sub-modules (single source of truth).
+;;
+;; I13 (v0.72.6): Documented as transitional facade. Each symbol originates
+;; from a specific sub-module. New code should import directly from:
+;;   - context-assembly/budgeting.rkt  — token budget calculations
+;;   - context-assembly/selection.rkt  — message selection strategies
+;;   - context-assembly/serialization.rkt — serialization helpers
+;;   - context-summary.rkt            — summary entities
 
 (require racket/contract
          "context-assembly/budgeting.rkt"
