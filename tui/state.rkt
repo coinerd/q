@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; tui/state.rkt — UI state and event→state reduction
 ;;
