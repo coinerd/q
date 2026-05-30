@@ -1,4 +1,4 @@
-<!-- verified-against: 0.72.8 -->
+<!-- verified-against: 0.73.0 -->
 # Credential Management
 
 This document describes how q manages API keys and provider credentials,

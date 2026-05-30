@@ -11,4 +11,4 @@
 
 (provide (contract-out [q-version string?]))
 
-(define q-version "0.72.8")
+(define q-version "0.73.0")

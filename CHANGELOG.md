@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.73.0 — 2026-05-30
+
+### Core Loop Tests: Pure Functions (T-1a)
+
+| Module | Tests | Focus |
+|--------|-------|-------|
+| `test-iteration-decision.rkt` | 19 | decide-next-action, compute-step-result, step-action?, struct accessors |
+| `test-iteration-retry-policy.rkt` | 16 | compute-mid-turn-estimate, detect-exploration-loop, count-occurrences, overflow recovery |
+| `test-iteration-counters-unit.rkt` | 8 | compute-next-counters (explore/implement/tool counts), documented check-cancellation gap |
+
+**43 new test cases** across 3 previously untested modules. Zero source changes.
+
 ## v0.72.8 — 
 
 ### Audit Closure
