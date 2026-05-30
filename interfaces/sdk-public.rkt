@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; interfaces/sdk-public.rkt — Stable public SDK API
 ;; STABILITY: stable
@@ -17,6 +17,8 @@
 ;; All callables are contracted via contract-out. Struct predicates
 ;; and accessors are exported bare (they're already guarded by structs).
 ;; ───────────────────────────────────────────────────────────────
+
+(require racket/contract)
 
 (require (only-in "sdk.rkt"
                   runtime?
