@@ -6,7 +6,7 @@
 ;; Defines FSM states for a single agent turn using define-fsm-machine
 ;; from util/fsm.rkt. Backward-compatible exports maintained.
 
-(define-logger q-loop-fsm)
+;; Logger removed — pure data module. FSM transition logging is in main-loop.rkt.
 
 (require racket/contract
          (only-in "../util/fsm.rkt"
