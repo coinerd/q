@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.73.4 -- 2026-05-30
+
+### Iteration Layer Migration (A-1)
+
+**Moved 7 files** from `runtime/iteration/` to `agent/iteration/`:
+- `counters.rkt`, `loop-config.rkt`, `loop-phases.rkt`, `loop-state.rkt`
+- `main-loop.rkt`, `step-interpreter.rkt`, `tool-turn-bridge.rkt`
+
+**Rationale:** These 7 files have dense coupling to `agent/` (event emission,
+queue operations, event bus types) and implement the agent loop's iteration
+mechanics. Moving them aligns code location with conceptual ownership.
+
+**~80 import paths** updated across source and test files.
+Zero logic changes. All existing tests pass.
+
 ## v0.73.3 -- 2026-05-30
 
 ### Core Loop Tests: State Machines + Dispatch (T-1b)
