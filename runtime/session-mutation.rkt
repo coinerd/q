@@ -9,7 +9,8 @@
          "session-types.rkt"
          (submod "session-types.rkt" internal)
          (only-in "session-config.rkt" session-config?)
-         (only-in "../util/errors.rkt" raise-session-error))
+         (only-in "../util/errors.rkt" raise-session-error)
+         (only-in "session-index/schema.rkt" session-index?))
 
 (provide (contract-out [guarded-set-prompt-running! (-> agent-session? boolean? void?)]
                        [guarded-set-compacting! (-> agent-session? boolean? void?)]
@@ -18,7 +19,7 @@
                        [guarded-set-active! (-> agent-session? boolean? void?)]
                        [guarded-set-model-name! (-> agent-session? (or/c string? #f) void?)]
                        [guarded-set-config! (-> agent-session? (or/c session-config? hash? #f) void?)]
-                       [guarded-set-index! (-> agent-session? any/c void?)]
+                       [guarded-set-index! (-> agent-session? (or/c session-index? #f) void?)]
                        [guarded-set-persisted! (-> agent-session? boolean? void?)]
                        [guarded-set-pending-entries! (-> agent-session? list? void?)]
                        [guarded-set-start-time! (-> agent-session? exact-nonnegative-integer? void?)]
