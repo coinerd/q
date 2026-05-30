@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.73.2 -- 2026-05-30
+
+### Tool Builtins + Security Tests (T-2/T-7/S-1/S-2)
+
+| Finding | Change | Tests |
+|---------|--------|-------|
+| T-7 | FSM unit tests | test-fsm-unit.rkt (8 cases) |
+| T-7 | Shell-quote injection tests | test-shell-quote.rkt (16 cases) |
+| T-2 | Read builtin tests | test-tool-read-builtin.rkt (7 cases) |
+| T-2 | Write + edit builtin tests | test-tool-write-builtin.rkt (5), test-tool-edit-builtin.rkt (7) |
+| S-1 | Sandbox limits tests | test-sandbox-limits-unit.rkt (4 cases) |
+| S-2 | Image-pipeline temp cleanup reviewed | Already safe — no source change needed |
+
+**47 new test cases** across 6 test files. Zero logic changes.
+
 ## v0.73.1 -- 2026-05-30
 
 ### Architecture Fixes + Code Quality (A-2/A-3/Q-1/Q-2/Q-3)
