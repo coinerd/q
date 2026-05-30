@@ -13,11 +13,21 @@
                   goal-state-turns-used
                   goal-state-last-evaluation
                   goal-state-checks
+                  goal-state-evaluations
+                  goal-state-goal-text
                   make-goal-state
+                  make-goal-check
                   make-evaluation-result
                   evaluation-result?
                   evaluation-result-reason
-                  evaluation-result-achieved?)
+                  evaluation-result-achieved?
+                  evaluation-result-token-cost
+                  check-result?
+                  check-result-label
+                  check-result-exit-code
+                  check-result-timed-out?
+                  check-result-stdout
+                  check-result-stderr)
          (except-in "../runtime/goal-state.rkt" NO-PROGRESS-THRESHOLD)
          "../runtime/goal-evaluator.rkt"
          "../runtime/goal-runner.rkt"
@@ -237,38 +247,59 @@
   (check-equal? (goal-state-status result) 'achieved))
 
 ;; ============================================================
-;; W0: Event emission + shutdown tests (v0.71.7)
+;; W0: Event emission + shutdown tests (v0.71.7 → v0.71.8 enhanced)
 ;; ============================================================
 
-;; goal.achieved event emitted on success
+;; goal.achieved event emitted on success + payload key verification (INFO-2)
 (let ()
   (define eval-prov (make-eval-provider (list (eval-achieved-response))))
   (define turn-responses (list (hash 'messages (list (hasheq 'role "assistant" 'content "Done.")))))
   (define events '())
   (define (track-event type data)
-    (set! events (append events (list type))))
+    (set! events (append events (list (cons type data)))))
   (define result
-    (goal-run-simulated! "pass tests"
-                         eval-prov
-                         "mock"
-                         turn-responses
-                         #:max-turns 2
-                         #:on-event track-event))
+    (goal-run! "pass tests"
+               eval-prov
+               "mock"
+               (lambda (prompt)
+                 (values #f (hash 'messages (list (hasheq 'role "assistant" 'content "Done.")))))
+               #:max-turns 2
+               #:on-event track-event))
   (check-equal? (goal-state-status result) 'achieved)
-  (check-not-false (member 'goal-achieved events) "goal-achieved event emitted"))
+  (check-not-false (assoc 'goal-achieved events) "goal-achieved event emitted")
+  ;; INFO-2: Verify payload keys for goal-achieved
+  (define achieved-data (cdr (assoc 'goal-achieved events)))
+  (check-not-false (hash-ref achieved-data 'goal-text #f) "achieved payload has goal-text")
+  (check-not-false (hash-ref achieved-data 'turns-used #f) "achieved payload has turns-used")
+  (check-not-false (hash-ref achieved-data 'total-token-cost #f)
+                   "achieved payload has total-token-cost")
+  ;; INFO-2: Verify payload keys for goal-started
+  (define started-data (cdr (assoc 'goal-started events)))
+  (check-not-false (hash-ref started-data 'goal-text #f) "started payload has goal-text")
+  (check-not-false (hash-ref started-data 'max-turns #f) "started payload has max-turns"))
 
-;; shutdown-check cancels the loop
+;; shutdown-check cancels + emits goal-failed (INFO-3, INFO-4)
 (let ()
   (define eval-prov (make-eval-provider (list (eval-achieved-response))))
-  (define turn-responses (list (hash 'messages (list (hasheq 'role "assistant" 'content "Done.")))))
+  (define events '())
+  (define (track-event type data)
+    (set! events (append events (list (cons type data)))))
   (define result
-    (goal-run-simulated! "should cancel"
-                         eval-prov
-                         "mock"
-                         turn-responses
-                         #:max-turns 2
-                         #:shutdown-check (lambda () #t)))
-  (check-equal? (goal-state-status result) 'cancelled))
+    (goal-run! "should cancel"
+               eval-prov
+               "mock"
+               (lambda (prompt)
+                 (values #f (hash 'messages (list (hasheq 'role "assistant" 'content "Done.")))))
+               #:max-turns 2
+               #:on-event track-event
+               #:shutdown-check (lambda () #t)))
+  (check-equal? (goal-state-status result) 'cancelled)
+  (check-not-false (assoc 'goal-failed events) "goal-failed emitted on cancellation (INFO-3)")
+  ;; INFO-4: Verify cancelled state in event data
+  (define failed-data (cdr (assoc 'goal-failed events)))
+  (check-equal? (goal-state-status failed-data)
+                'cancelled
+                "failed event carries cancelled state (INFO-4)"))
 
 ;; evaluations field populated after loop-step
 (let ()
@@ -278,3 +309,24 @@
   (check-true (>= (length (goal-state-evaluations result)) 1) "evaluations field has entries")
   (check-true (evaluation-result? (car (goal-state-evaluations result)))
               "entry is evaluation-result"))
+
+;; WARN-1: goal-check-completed emitted when checks are defined
+(let ()
+  (define eval-prov (make-eval-provider (list (eval-achieved-response))))
+  (define events '())
+  (define (track-event type data)
+    (set! events (append events (list (cons type data)))))
+  (define initial-st
+    (make-goal-state #:goal-text "pass tests"
+                     #:max-turns 2
+                     #:checks (list (make-goal-check #:label "unit" #:command "echo ok"))))
+  (define result-st
+    (goal-loop-step initial-st
+                    eval-prov
+                    "mock-eval"
+                    (lambda (prompt)
+                      (values #f (hash 'messages (list (hasheq 'role "assistant" 'content "Done.")))))
+                    track-event
+                    void))
+  (check-not-false (assoc 'goal-check-completed events)
+                   "goal-check-completed event emitted when checks exist (WARN-1)"))

@@ -187,6 +187,8 @@
 ;; --------------------------------------------------
 
 (define (string-truncate s max-len)
+  ;; Truncate string to max-len chars, appending "..." if truncated.
+  ;; Note: output length is max-len + 3 when truncation occurs (max-len text + "..." indicator).
   (if (> (string-length s) max-len)
       (string-append (substring s 0 max-len) "...")
       s))
