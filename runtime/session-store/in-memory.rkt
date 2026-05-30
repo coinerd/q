@@ -21,7 +21,7 @@
 ;; In-memory session manager (GC-18)
 ;; ============================================================
 
-(struct in-memory-session-manager (sessions-box) #:transparent)
+(struct in-memory-session-manager (sessions-box))
 
 (define (make-in-memory-session-manager)
   (in-memory-session-manager (box (hash))))

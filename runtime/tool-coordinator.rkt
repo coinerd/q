@@ -111,7 +111,7 @@
 ;; ============================================================
 
 ;; v0.31.5 W1: Pure function for tool-call actions
-(struct tool-call-actions (calls-to-run blocked? final-calls) #:transparent)
+(struct tool-call-actions (calls-to-run blocked? final-calls))
 
 ;; classify-tool-results : (listof tool-call?) (listof tool-result?) -> (listof hasheq?)
 ;; Pure: maps tool calls + results to status classification hashes.

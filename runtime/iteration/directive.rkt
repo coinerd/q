@@ -28,9 +28,9 @@
                        [directive-yield-ws (-> directive-yield? (or/c any/c #f))]
                        [step-directive? (-> any/c boolean?)]))
 
-(struct directive-recurse (new-ctx new-counters ws) #:transparent)
-(struct directive-stop (result) #:transparent)
-(struct directive-yield (events new-ctx new-counters ws) #:transparent)
+(struct directive-recurse (new-ctx new-counters ws))
+(struct directive-stop (result))
+(struct directive-yield (events new-ctx new-counters ws))
 
 (define (step-directive? v)
   (or (directive-recurse? v) (directive-stop? v) (directive-yield? v)))
