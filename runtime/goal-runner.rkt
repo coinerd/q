@@ -89,7 +89,8 @@
                      #:evaluator-mode evaluator-mode))
 
   ;; Emit goal.started
-  (on-event 'goal-started goal-st)
+  (on-event 'goal-started
+            (hasheq 'goal-text goal-text 'max-turns max-turns 'checks (goal-state-checks goal-st)))
   (on-status (format "Goal set: ~a (max ~a turns)" goal-text max-turns))
 
   ;; Run the loop
@@ -114,7 +115,13 @@
                     goal-st
                     [status 'cancelled]
                     [updated-at (inexact->exact (round (current-inexact-milliseconds)))]))
-     (on-event 'goal-failed final-st)
+     (on-event 'goal-failed
+               (hasheq 'goal-text
+                       (goal-state-goal-text final-st)
+                       'reason
+                       "cancelled"
+                       'turns-used
+                       (goal-state-turns-used final-st)))
      (on-status "Goal cancelled by user")
      final-st]
 
@@ -125,7 +132,13 @@
                     goal-st
                     [status 'failed]
                     [updated-at (inexact->exact (round (current-inexact-milliseconds)))]))
-     (on-event 'goal-failed final-st)
+     (on-event 'goal-failed
+               (hasheq 'goal-text
+                       (goal-state-goal-text final-st)
+                       'reason
+                       "max turns reached"
+                       'turns-used
+                       (goal-state-turns-used final-st)))
      (on-status (format "Goal failed: max turns (~a) reached" (goal-state-max-turns goal-st)))
      final-st]
 
@@ -135,7 +148,13 @@
                     goal-st
                     [status 'failed]
                     [updated-at (inexact->exact (round (current-inexact-milliseconds)))]))
-     (on-event 'goal-failed final-st)
+     (on-event 'goal-failed
+               (hasheq 'goal-text
+                       (goal-state-goal-text final-st)
+                       'reason
+                       "no progress"
+                       'turns-used
+                       (goal-state-turns-used final-st)))
      (on-status "Goal failed: no progress — 3 consecutive same-reason evaluations")
      final-st]
 
@@ -188,7 +207,7 @@
   (define goal-text (goal-state-goal-text goal-st))
 
   ;; Emit turn-started
-  (on-event 'goal-turn-started (hasheq 'turn turns 'goal goal-st))
+  (on-event 'goal-turn-started (hasheq 'turn-number turns 'goal-text goal-text))
   (on-status (format "Goal turn ~a/~a: working..." turns (goal-state-max-turns goal-st)))
 
   ;; Build the prompt — use evidence prompt from goal-evidence
@@ -234,7 +253,15 @@
                              #:check-results check-results)))
 
   ;; Emit goal.evaluated
-  (on-event 'goal-evaluated (hasheq 'evaluation eval-result 'turn turns))
+  (on-event 'goal-evaluated
+            (hasheq 'achieved?
+                    (evaluation-result-achieved? eval-result)
+                    'reason
+                    (evaluation-result-reason eval-result)
+                    'turn-number
+                    turns
+                    'token-cost
+                    (evaluation-result-token-cost eval-result)))
 
   ;; Update goal state
   (define now (inexact->exact (round (current-inexact-milliseconds))))
