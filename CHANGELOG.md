@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.72.6 — 
+
+### Phase 4b: Module Decomposition II
+
+Event-structs explicit provides + event-bus documentation.
+
+| Finding | Severity | Fix |
+|---------|----------|-----|
+| W12: event-bus layer violation | WARNING | Documented as foundational utility in extensions/api.rkt |
+| W11: event-structs all-from-out | WARNING | Replaced with 239 explicit identifier provides |
+| I13: context-assembly facade | INFO | Documented sub-module origins for future migration |
+
+**Files changed:** event-structs.rkt, extensions/api.rkt, context-assembly.rkt
+
 ## v0.72.5 — 
 
 ### Phase 4a: Module Decomposition I
