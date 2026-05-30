@@ -5,6 +5,8 @@
 ;; Extracted from runtime/iteration.rkt (v0.34.6 W0a — A-01 decomposition).
 ;;
 ;; Provides:
+
+(define-logger q-main-loop)
 ;;   run-iteration-loop — main iteration loop entry point
 
 (require racket/dict

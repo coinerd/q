@@ -6,6 +6,8 @@
 ;; Defines FSM states for a single agent turn using define-fsm-machine
 ;; from util/fsm.rkt. Backward-compatible exports maintained.
 
+(define-logger q-loop-fsm)
+
 (require racket/contract
          (only-in "../util/fsm.rkt"
                   define-fsm-machine
