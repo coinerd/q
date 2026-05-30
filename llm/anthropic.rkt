@@ -10,6 +10,7 @@
 ;; SSE parsing delegates to llm/stream.rkt.
 
 (require racket/contract
+         "timing.rkt"
          racket/match
          racket/string
          (only-in "model-defaults.rkt" ANTHROPIC-DEFAULT-MODEL ANTHROPIC-DEFAULT-BASE-URL)
