@@ -15,13 +15,13 @@
 
 (struct turn-context
         (session-id iteration messages active-tools model-config budget-ctx extension-registry)
-  #:transparent)
+ )
 
 ;; ============================================================
 ;; Turn command -- discriminated union (4 tags)
 ;; ============================================================
 
-(struct turn-command (tag payload) #:transparent)
+(struct turn-command (tag payload))
 
 (define (make-turn-start payload)
   (turn-command 'start payload))
@@ -48,7 +48,7 @@
 ;; Turn decision -- discriminated union (8 tags)
 ;; ============================================================
 
-(struct turn-decision (tag payload metadata) #:transparent)
+(struct turn-decision (tag payload metadata))
 
 (define (make-decision-emit-start payload)
   (turn-decision 'emit-start payload (hasheq)))
@@ -100,7 +100,7 @@
 ;; ============================================================
 
 (struct stream-completion (cancelled? cancel-reason text tool-calls usage model all-chunks)
-  #:transparent)
+ )
 
 (define (make-stream-completion #:cancelled? [cancelled? #f]
                                 #:cancel-reason [cancel-reason #f]
@@ -115,7 +115,7 @@
 ;; Hook stage payload -- replaces raw hash for decide-turn-step
 ;; ============================================================
 
-(struct hook-stage-payload (stage result) #:transparent)
+(struct hook-stage-payload (stage result))
 
 ;; ============================================================
 ;; Provide

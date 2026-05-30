@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.72.4 — 
+
+### Phase 3b: Opaque Representations
+
+Struct opacity + goal-state split + mutable-set elimination.
+
+| Finding | Severity | Fix |
+|---------|----------|-----|
+| W2: goal-state monolith | WARNING | Split into goal-types.rkt + goal-codec.rkt, facade re-exports |
+| W1: turn-model #:transparent structs | WARNING | Removed #:transparent from 5 structs |
+| I7: append-entries! uses set-box! | INFO | Already pure — no change needed |
+| I8: compactor mutable-set | INFO | Replaced with immutable set + for/fold |
+
+**Files changed:** `goal-types.rkt` (new), `goal-codec.rkt` (new), `goal-state.rkt` (facade), `turn-model.rkt`, `compactor.rkt`
+
 ## v0.72.3 — 
 
 ### Phase 3a: Purity Enforcement

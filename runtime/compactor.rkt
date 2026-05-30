@@ -125,30 +125,28 @@
 ;; Returns a hash: 'readFiles -> list of paths,
 ;;                  'modifiedFiles -> list of paths.
 (define (extract-file-tracker messages)
-  (define reads (mutable-set))
-  (define writes (mutable-set))
-  (for ([m (in-list messages)])
-    (define content (message-content m))
-    (for ([part (in-list content)])
+  (define-values (reads writes)
+    (for*/fold ([reads (set)] [writes (set)])
+               ([m (in-list messages)]
+                [part (in-list (message-content m))])
       (cond
-        [(tool-call-part? part)
+        [(not (tool-call-part? part)) (values reads writes)]
+        [else
          (define tool-name (tool-call-part-name part))
          (define args (tool-call-part-arguments part))
          (define path
            (cond
              [(hash? args) (hash-ref args 'path #f)]
              [(string? args)
-              ;; Try to extract path from JSON string
               (and (string-contains? args "path")
                    (let ([m (regexp-match #rx"\"path\"[[:space:]]*:[[:space:]]*\"([^\"]+)\"" args)])
                      (and m (cadr m))))]
              [else #f]))
-         (when path
-           (cond
-             [(member tool-name '("read" "find" "grep" "ls")) (set-add! reads path)]
-             [(member tool-name '("edit" "write")) (set-add! writes path)]))]
-        ;; Tool results may contain file paths in content
-        [(tool-result-part? part) (void)])))
+         (cond
+           [(not path) (values reads writes)]
+           [(member tool-name '("read" "find" "grep" "ls")) (values (set-add reads path) writes)]
+           [(member tool-name '("edit" "write")) (values reads (set-add writes path))]
+           [else (values reads writes)])])))
   (hasheq 'readFiles (set->list reads) 'modifiedFiles (set->list writes)))
 
 ;; Find the most recent compaction-summary message in the list.
@@ -172,13 +170,12 @@
 
 ;; #768: Merge two file trackers, deduplicating file paths.
 (define (merge-file-trackers . trackers)
-  (define all-reads (mutable-set))
-  (define all-writes (mutable-set))
-  (for ([ft (in-list trackers)])
-    (for ([path (in-list (hash-ref ft 'readFiles '()))])
-      (set-add! all-reads path))
-    (for ([path (in-list (hash-ref ft 'modifiedFiles '()))])
-      (set-add! all-writes path)))
+  (define-values (all-reads all-writes)
+    (for*/fold ([reads (set)] [writes (set)])
+               ([ft (in-list trackers)])
+      (values
+       (for/fold ([r reads]) ([path (in-list (hash-ref ft 'readFiles '()))]) (set-add r path))
+       (for/fold ([w writes]) ([path (in-list (hash-ref ft 'modifiedFiles '()))]) (set-add w path)))))
   (hasheq 'readFiles (set->list all-reads) 'modifiedFiles (set->list all-writes)))
 
 ;; ============================================================
