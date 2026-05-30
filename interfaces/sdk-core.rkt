@@ -59,7 +59,8 @@
                   in-memory-list-sessions
                   in-memory-fork!)
          (only-in "../util/loop-result.rkt" loop-result?)
-         "../util/cancellation.rkt")
+         "../util/cancellation.rkt"
+         (only-in "../util/time.rkt" now-epoch-secs))
 
 (provide (struct-out runtime-config)
          (struct-out runtime)
@@ -283,7 +284,7 @@
   (when sess
     (publish! bus
               (make-event "interrupt.requested"
-                          (exact-truncate (/ (current-inexact-milliseconds) 1000))
+                          (now-epoch-secs)
                           (session:session-id sess)
                           #f
                           (hasheq 'sessionId (session:session-id sess)))))
@@ -314,7 +315,7 @@
      (define sid (session:session-id sess))
      (publish! bus
                (make-event "compaction.started"
-                           (exact-truncate (/ (current-inexact-milliseconds) 1000))
+                           (now-epoch-secs)
                            sid
                            #f
                            (hasheq 'sessionId sid 'persist? persist?)))
@@ -329,7 +330,7 @@
            (compact-history history)))
      (publish! bus
                (make-event "compaction.completed"
-                           (exact-truncate (/ (current-inexact-milliseconds) 1000))
+                           (now-epoch-secs)
                            sid
                            #f
                            (hasheq 'sessionId

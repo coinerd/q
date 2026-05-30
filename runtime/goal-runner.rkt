@@ -31,7 +31,8 @@
          "goal-agent-evaluator.rkt"
          "goal-evidence.rkt"
          "goal-checks.rkt"
-         "../llm/provider.rkt")
+         "../llm/provider.rkt"
+         (only-in "../util/time.rkt" now-epoch-ms))
 
 ;; ============================================================
 ;; Provides
@@ -113,7 +114,7 @@
        (struct-copy goal-state
                     goal-st
                     [status 'cancelled]
-                    [updated-at (inexact->exact (round (current-inexact-milliseconds)))]))
+                    [updated-at (now-epoch-ms)]))
      (on-event 'goal-failed
                (hasheq 'goal-text
                        (goal-state-goal-text final-st)
@@ -130,7 +131,7 @@
        (struct-copy goal-state
                     goal-st
                     [status 'failed]
-                    [updated-at (inexact->exact (round (current-inexact-milliseconds)))]))
+                    [updated-at (now-epoch-ms)]))
      (on-event 'goal-failed
                (hasheq 'goal-text
                        (goal-state-goal-text final-st)
@@ -146,7 +147,7 @@
        (struct-copy goal-state
                     goal-st
                     [status 'failed]
-                    [updated-at (inexact->exact (round (current-inexact-milliseconds)))]))
+                    [updated-at (now-epoch-ms)]))
      (on-event 'goal-failed
                (hasheq 'goal-text
                        (goal-state-goal-text final-st)
@@ -262,7 +263,7 @@
                     (evaluation-result-token-cost eval-result)))
 
   ;; Update goal state
-  (define now (inexact->exact (round (current-inexact-milliseconds))))
+  (define now (now-epoch-ms))
   (define new-status (if (evaluation-result-achieved? eval-result) 'achieved 'active))
 
   (struct-copy goal-state
