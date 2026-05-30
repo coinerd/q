@@ -1,0 +1,401 @@
+════════════════════════════════════════════════════════════════════════════════
+WIDENED CONTRACT LEDGER — any/c in contract-out forms
+Generated: 2026-05-30
+Excludes: tests/, compiled/, (-> any/c boolean?) predicates, #:rest any/c, hook/callback positions
+════════════════════════════════════════════════════════════════════════════════
+
+FILE:LINE | CATEGORY | CURRENT | SUGGESTED | REASON
+
+────────────────────────────────────────────────────────────────────────────────
+LAYER 1: runtime/
+────────────────────────────────────────────────────────────────────────────────
+
+runtime/auth-store.rkt:42 | tighten | (-> any/c string?) | (-> (or/c string? #f) string?) | mask-api-key checks string? internally, returns "****" for non-strings; callers pass string API keys or #f
+
+runtime/auth-store.rkt:44 | tighten | (-> any/c any/c (or/c #f #t string?)) | (-> string? string? (or/c #f #t string?)) | validate-credential-format receives provider name and key, both always strings from callers
+
+runtime/compactor-llm-bridge.rkt:23 | tighten | (->* (list? any/c any/c) ...) | (->* (list? provider? string?) ...) | llm-summarize passes provider to provider-send and model-name as string to hasheq
+
+runtime/compactor-llm-bridge.rkt:24 | tighten | #:file-tracker any/c | #:file-tracker hash? | file-tracker defaults to (hasheq), passed to iterative-update-prompt which expects hash
+
+runtime/compactor-llm-bridge.rkt:26 | tighten | (-> any/c any/c procedure?) | (-> provider? string? procedure?) | make-llm-summarize-fn wraps llm-summarize, passes provider and model-name string
+
+runtime/session-manager.rkt:28 | tighten | (-> session-manager? string? any/c void?) | (-> session-manager? string? message? void?) | sm-append! passes msg to append-entry!/in-memory-append!, all callers pass make-message results
+
+runtime/session-manager.rkt:31 | investigate | (->* (session-manager? string? string?) (string?) any/c) | (->* (session-manager? string? string?) (string?) string?) | sm-fork! returns session-id string from fork operations
+
+runtime/session-manager.rkt:33 | tighten | (-> in-memory-session-manager? string? any/c void?) | (-> in-memory-session-manager? string? message? void?) | in-memory-append! stores msg in hash, callers pass message structs
+
+runtime/session-index/mutations.rkt:43 | investigate | (-> session-index? (or/c string? #f) (or/c any/c #f)) | (-> session-index? (or/c string? #f) (or/c string? #f)) | branch! returns new node ID string or #f from hash-ref
+
+runtime/session-index/mutations.rkt:44 | investigate | (-> session-index? (or/c string? #f) string? (or/c any/c #f)) | (-> session-index? (or/c string? #f) string? (or/c string? #f)) | branch-with-summary! returns branch ID string or #f
+
+runtime/session-index/mutations.rkt:46 | investigate | (-> session-index? any/c any/c) | (-> session-index? message? session-index?) | append-to-leaf! takes message and returns updated index; check callers for exact types
+
+runtime/session-index.rkt:26 | investigate | (-> session-index? any/c any/c) | (-> session-index? message? session-index?) | re-export of append-to-leaf!
+
+runtime/session-index.rkt:36 | investigate | (-> session-index? string? (or/c any/c #f)) | (-> session-index? string? (or/c message? #f)) | lookup-entry returns by-id hash-ref, values are message structs
+
+runtime/session-index.rkt:39 | investigate | (-> session-index? (or/c any/c #f)) | (-> session-index? (or/c string? #f)) | resolve-active-leaf returns active-leaf-id which is string or #f
+
+runtime/session-index.rkt:40 | investigate | (-> session-index? (or/c any/c #f)) | (-> session-index? (or/c string? #f)) | active-leaf returns active-leaf-id, same as above
+
+runtime/session-index.rkt:46 | investigate | (-> (or/c hash? any/c) exact-nonnegative-integer?) | (-> (or/c hash? message?) exact-nonnegative-integer?) | estimate-entry-tokens accepts message or hash
+
+runtime/context-assembly.rkt:162 | investigate | (values tiered-context? any/c) | (values tiered-context? hash?) | build-tiered-context-with-hooks returns hook-result metadata hash as second value
+
+runtime/compaction-hooks.rkt:33 | tighten | (->* ((or/c any/c #f) list? compaction-strategy? ...) ...) | (->* ((or/c procedure? #f) list? compaction-strategy? ...) ...) | dispatch-enriched-before-compact calls hook-dispatcher as procedure when non-#f
+
+runtime/compaction-hooks.rkt:35 | tighten | (values any/c hash?) | (values (or/c hook-result? #f) hash?) | returns hook result from dispatch-hooks or #f when no dispatcher
+
+runtime/compaction-hooks.rkt:36 | tighten | (-> (or/c any/c #f) (or/c string? #f)) | (-> (or/c hook-result? #f) (or/c string? #f)) | maybe-use-custom-summary extracts payload from hook-result
+
+runtime/provider-factory.rkt:24 | tighten | (-> hash? any/c provider?) | (-> hash? q-settings? provider?) | build-provider passes settings to auth-store fns that expect q-settings; second arg is settings struct
+
+runtime/runtime-helpers.rkt:23 | keep | (->* (any/c any/c any/c) (#:ctx any/c) (values any/c any/c)) | N/A | maybe-dispatch-hooks is genuinely polymorphic — ext-reg is (or/c extension-registry? #f), payload varies per hook point, ctx is optional extension-ctx
+
+runtime/session-controls.rkt:17 | tighten | (-> agent-session? any/c (or/c string? #f)) | (-> agent-session? model-registry? (or/c string? #f)) | cycle-model! calls available-models on registry, which is model-registry?
+
+runtime/settings.rkt:50 | investigate | #:provider any/c | (or/c string? symbol? #f) | make-minimal-settings #:provider becomes part of provider config; check callers for actual types
+
+runtime/settings.rkt:53 | tighten | (-> any/c any/c hash?) | (-> hash? hash? hash?) | deep-merge-hash merges two hashes, callers always pass hashes
+
+runtime/settings.rkt:54 | keep | (->* (q-settings? (or/c symbol? string?)) (any/c) any/c) | N/A | setting-ref default value is genuinely polymorphic — can be any type
+
+runtime/settings.rkt:55 | keep | (->* (q-settings? (listof any/c)) (any/c) any/c) | N/A | setting-ref* nested path lookup with polymorphic default
+
+runtime/iteration/directive.rkt:19 | tighten | (-> directive-recurse? any/c) | (-> directive-recurse? list?) | directive-recurse-new-counters returns new-counters field which is a list from counters struct
+
+runtime/iteration/directive.rkt:20 | tighten | (-> directive-recurse? (or/c any/c #f)) | (-> directive-recurse? (or/c working-set? #f)) | directive-recurse-ws returns working-set? or #f
+
+runtime/iteration/directive.rkt:23 | keep | (-> directive-stop? any/c) | N/A | directive-stop-result is genuinely polymorphic — can be any loop result
+
+runtime/iteration/directive.rkt:28 | tighten | (-> directive-yield? (or/c any/c #f)) | (-> directive-yield? (or/c working-set? #f)) | directive-yield-ws returns working-set? or #f
+
+runtime/iteration/decision.rkt:52 | tighten | new-counters any/c | loop-counters? | step-result new-counters field is always a loop-counters struct from compute-next-counters
+
+runtime/iteration/fsm-types.rkt:114 | tighten | (-> any/c symbol?) | (-> fsm-state? symbol?) | state->symbol extracts name from fsm-state struct
+
+runtime/iteration/fsm-types.rkt:115 | tighten | (-> any/c symbol?) | (-> fsm-event? symbol?) | iteration-event->symbol extracts name from fsm-event struct
+
+runtime/iteration/fsm-types.rkt:116 | tighten | (-> any/c any/c any) | (-> fsm-state? fsm-event? any) | next-iteration-state takes fsm-state and fsm-event
+
+runtime/iteration/fsm-types.rkt:117 | tighten | (-> any/c any/c boolean?) | (-> fsm-state? fsm-event? boolean?) | valid-transition? takes fsm-state and fsm-event
+
+runtime/trace-logger.rkt:23 | keep | (-> any/c boolean?) | N/A | trace-logger? is a struct predicate — standard (-> any/c boolean?) pattern, skip
+
+────────────────────────────────────────────────────────────────────────────────
+LAYER 2: agent/ (no direct contract-out any/c found — agent/ files use util/ contracts)
+────────────────────────────────────────────────────────────────────────────────
+
+(No non-predicate, non-hook any/c in agent/ contract-out forms)
+
+────────────────────────────────────────────────────────────────────────────────
+LAYER 3: tools/
+────────────────────────────────────────────────────────────────────────────────
+
+tools/registry-defaults.rkt:12 | tighten | (->* (any/c) (#:only ...) void?) | (->* (tool-registry?) (#:only ...) void?) | register-default-tools! calls register-tools-from-specs! on registry which must be tool-registry?
+
+tools/tool-internal.rkt:13 | tighten | (-> any/c any/c) | (-> tool? procedure?) | tool-execute re-exported from tool-struct.rkt where it's already (-> tool? procedure?); widened here unnecessarily
+
+tools/tool.rkt:67 | tighten | (-> any/c (or/c hash? #f) boolean? tool-result?) | (-> (or/c string? hash? list?) (or/c hash? #f) boolean? tool-result?) | make-tool-result content is string/hash/list per util/tool-types.rkt
+
+tools/tool.rkt:69 | tighten | (->* (any/c) ((or/c hash? #f)) tool-result?) | (->* (or/c string? hash? list?) ((or/c hash? #f)) tool-result?) | make-success-result wraps make-tool-result with is-error?=#f
+
+tools/shell-risk.rkt:25 | tighten | (hash/c symbol? any/c) | (hash/c symbol? (or/c number? string? symbol?)) | shell-risk-summary returns counts/severities hash; values are numbers and symbols
+
+tools/builtins/grep.rkt:18 | tighten | (-> hash? any/c) | (-> hash? tool-result?) | tool-grep returns make-success-result or make-error-result, both are tool-result?
+
+tools/builtins/spawn-subagent.rkt:49 | tighten | (-> any/c string?) | (-> (or/c string? #f) string?) | resolve-role-prompt receives role value from hash-ref which is string or #f
+
+tools/builtins/spawn-subagent.rkt:50 | tighten | (-> any/c subagent-config?) | (-> hash? subagent-config?) | parse-subagent-config receives args hash, accesses hash-ref keys
+
+tools/builtins/session-recall.rkt:30 | tighten | (->* (hash?) (any/c) any/c) | (->* (hash?) (exec-context?) tool-result?) | tool-session-recall returns tool-result?; optional arg is exec-context
+
+tools/builtins/delete-lines.rkt:29 | tighten | (-> hash? any/c) | (-> hash? tool-result?) | tool-delete-lines returns make-success-result/make-error-result
+
+tools/builtins/date.rkt:65 | tighten | any/c | tool-result? | date is a tool struct value; contract should be tool? (it's a define-tool binding, not a function)
+
+tools/builtins/bash.rkt:71 | tighten | (->* (hash?) (exec-context?) any/c) | (->* (hash?) (exec-context?) tool-result?) | tool-bash returns make-success-result or make-error-result
+
+tools/builtins/edit.rkt:34 | tighten | (->* (hash?) (any/c) any/c) | (->* (hash?) (exec-context?) tool-result?) | tool-edit returns tool-result?; optional arg is exec-context
+
+tools/builtins/firecrawl.rkt:17 | tighten | (->* (hash?) (any/c) any/c) | (->* (hash?) (exec-context?) tool-result?) | tool-firecrawl returns tool-result?; optional arg is exec-context
+
+tools/builtins/firecrawl.rkt:19 | tighten | (->* (symbol? string?) ((or/c any/c #f)) any/c) | (->* (symbol? string?) ((or/c hash? #f)) tool-result?) | firecrawl-request optional body param is hash or #f; returns tool-result
+
+tools/builtins/firecrawl.rkt:25 | tighten | (-> string? exact-integer? any/c) | (-> string? exact-integer? tool-result?) | poll-crawl-status returns tool-result
+
+tools/builtins/skill-router.rkt:27 | tighten | (->* (hash?) (any/c) any/c) | (->* (hash?) (exec-context?) tool-result?) | tool-skill-route returns tool-result?; optional arg is exec-context
+
+────────────────────────────────────────────────────────────────────────────────
+LAYER 4: util/
+────────────────────────────────────────────────────────────────────────────────
+
+util/event-codec.rkt:16 | tighten | (-> any/c any/c) | (-> hash? (or/c hash? struct? #f)) | hash->payload receives hash and returns decoded payload struct or #f
+
+util/event-codec.rkt:16 | tighten | (-> any/c symbol?) | (-> (or/c hash? struct?) symbol?) | payload-type-tag dispatches on struct type or hash
+
+util/message.rkt:22 | tighten | (-> any/c (or/c string? symbol? #f) symbol? symbol? (listof any/c) any/c any/c message?) | (-> string? (or/c string? symbol? #f) symbol? symbol? (listof content-part?) (or/c exact-nonnegative-integer? #f) (or/c hash? #f) message?) | make-message id is string, content is list of content-parts, timestamp is number/#f, meta is hash/#f
+
+util/tool-display.rkt:14 | keep | (-> any/c (or/c string? #f)) | N/A | extract-arg-summary accepts hash/string/anything — genuinely polymorphic input from tool-call-arguments
+
+util/tool-display.rkt:15 | keep | (-> string? any/c string?) | N/A | format-tool-call-display second arg is polymorphic tool arguments
+
+util/content-helpers.rkt:13 | keep | (->* (any/c) (#:handle-hash? boolean?) string?) | N/A | result-content->string genuinely accepts string/list/hash — polymorphic content
+
+util/content-helpers.rkt:14 | keep | (-> any/c string?) | N/A | tool-result-content->string delegates to result-content->string — polymorphic input
+
+util/json-helpers.rkt:15 | keep | (->* (any/c) (#:graceful? boolean?) hash?) | N/A | ensure-hash-args accepts hash or JSON string — genuinely polymorphic input from streaming
+
+util/json-helpers.rkt:16 | keep | (-> path-string? any/c) | N/A | read-json-file returns parsed JSON — could be hash/list/string/number/#f
+
+util/json-helpers.rkt:17 | keep | (->* (path-string? any/c) (#:exists symbol?) void?) | N/A | write-json-file value is any JSON-serializable value
+
+util/json-helpers.rkt:18 | keep | (-> input-port? any/c) | N/A | read-json-from-port returns any JSON value
+
+util/json-helpers.rkt:19 | keep | (-> output-port? any/c void?) | N/A | write-json-to-port value is any JSON-serializable value
+
+util/custom-entries.rkt:11 | keep | (-> string? string? any/c any/c) | N/A | make-custom-entry data field is genuinely polymorphic — extension stores arbitrary data
+
+util/custom-entries.rkt:13 | keep | (-> any/c any/c) | N/A | custom-entry-extension/message-helpers accessors — return value from meta hash, genuinely polymorphic
+
+util/custom-entries.rkt:14 | keep | (-> any/c any/c) | N/A | custom-entry-key accessor — returns string from meta hash
+NOTE: could be tightened to (-> message? (or/c string? #f)) but custom-entry? already checks message kind
+
+util/custom-entries.rkt:15 | keep | (-> any/c any/c) | N/A | custom-entry-data accessor — genuinely polymorphic extension data
+
+util/hash-helpers.rkt:11 | keep | (->* (hash? (or/c string? symbol?)) (any/c) any/c) | N/A | flex-ref default value is genuinely polymorphic
+
+util/message-helpers.rkt:19 | tighten | (-> any/c any/c) | (-> message? (or/c message? #f)) | tool-result-message? returns the message if it's tool-result kind, #f otherwise
+
+util/message-helpers.rkt:20 | keep | (-> any/c (listof string?)) | N/A | get-tool-call-ids input is message? but accessed via message-content — already well-typed internally
+
+util/shell-quote.rkt:17 | tighten | (-> any/c string?) | (-> (or/c string? any) string?) | shell-quote converts via ~a for non-strings, but string? is the primary case; any/c is acceptable for coercion but could document intent better. KEEPING — genuinely accepts anything via ~a coercion
+
+util/path-filters.rkt:12 | tighten | (-> any/c any/c) | (-> string? boolean?) | vcs-dir? checks membership in string list, only makes sense for strings
+
+util/sandbox-config.rkt:14 | keep | (-> any/c boolean?) | N/A | sandbox-enabled? is a predicate — SKIP (per rules)
+
+util/sandbox-config.rkt:15 | keep | (-> any/c any/c) | N/A | sandbox-timeout returns number or #f; input is polymorphic (q-settings or hash). Could tighten output to (or/c number? #f)
+
+util/sandbox-config.rkt:16 | keep | (-> any/c any/c) | N/A | sandbox-memory-limit — same pattern as above
+
+util/sandbox-config.rkt:17 | keep | (-> any/c any/c) | N/A | sandbox-max-output — same pattern
+
+util/sandbox-config.rkt:18 | keep | (-> any/c any/c) | N/A | sandbox-max-processes — same pattern
+
+util/tree-entries.rkt:22 | tighten | (-> string? (or/c string? #f) string? any/c exact-nonnegative-integer? message?) | (-> string? (or/c string? #f) string? (or/c string? #f) exact-nonnegative-integer? message?) | make-branch-summary-entry 4th arg is entry-range, stored in meta as string or #f
+
+util/tree-entries.rkt:24 | investigate | (-> message? any/c) | (-> message? (or/c string? #f)) | branch-summary-entry-entry-range returns string from meta or #f
+
+util/safe-mode-state.rkt:166 | tighten | (-> safe-mode-config? any/c) | (-> safe-mode-config? (or/c #f 'default (listof string?))) | safe-mode-config-allowed-tools returns the field value which is #f, 'default, or list of strings
+
+util/safe-mode-state.rkt:167 | tighten | (-> safe-mode-config? any/c) | (-> safe-mode-config? (or/c #f 'default (listof (or/c path? string?)))) | safe-mode-config-allowed-paths returns #f, 'default, or list of paths/strings
+
+util/content-parts.rkt:29 | tighten | (-> string? any/c any/c tool-result-part?) | (-> string? (or/c string? hash? list?) boolean? tool-result-part?) | make-tool-result-part content and is-error fields — content is string/hash/list, is-error is boolean
+
+────────────────────────────────────────────────────────────────────────────────
+LAYER 5: extensions/
+────────────────────────────────────────────────────────────────────────────────
+
+extensions/context.rkt:52 | keep | make-extension-ctx any/c | N/A | Constructor uses keyword struct — genuinely polymorphic fields from extension-types.rkt
+
+extensions/context.rkt:55 | keep | (->* (extension-ctx? string? provider?) (#:config any/c) any/c) | N/A | ctx-register-provider! #:config is polymorphic provider config hash — extension-controlled
+
+extensions/context.rkt:58 | keep | (-> extension-ctx? string? (or/c any/c #f)) | N/A | ctx-lookup-provider returns provider or #f — any/c here is (or/c provider? #f) but could tighten
+
+extensions/hooks.rkt:38 | keep | (->* (symbol? any/c extension-registry?) ... hook-result?) | N/A | dispatch-hooks payload is genuinely polymorphic — varies per hook point
+
+extensions/q-sync.rkt:21 | tighten | (->* (hash?) (any/c) any/c) | (->* (hash?) (exec-context?) tool-result?) | handle-q-sync returns tool-result?, optional arg is exec-context
+
+extensions/q-sync.rkt:22 | tighten | (-> string? any/c string? (values exact-integer? string? string?)) | (-> string? (or/c hash? #f) string? (values exact-integer? string? string?)) | sync-planning 2nd arg is dry-run flag or config; investigate callers
+
+extensions/q-sync.rkt:23 | tighten | (-> string? any/c string? (values ...)) | (-> string? (or/c hash? #f) string? (values ...)) | sync-pi-config — same pattern
+
+extensions/q-sync.rkt:24 | tighten | (-> string? any/c string? (values ...)) | (-> string? (or/c hash? #f) string? (values ...)) | sync-scripts — same pattern
+
+extensions/q-sync.rkt:25 | tighten | (-> any/c string? (values ...)) | (-> (or/c hash? #f) string? (values ...)) | sync-git first arg is config/status hash or #f
+
+extensions/q-sync.rkt:26 | tighten | (-> string? any/c string?) | (-> string? (or/c hash? #f) string?) | sync-status 2nd arg is config hash or #f
+
+extensions/gsd-planning.rkt:138 | keep | (-> symbol? any/c void?) | N/A | emit-gsd-event! payload is genuinely polymorphic per event type
+
+extensions/gsd-planning.rkt:139 | keep | (-> (or/c any/c #f)) | N/A | gsd-event-bus returns event-bus or #f — could tighten to (or/c event-bus? #f)
+
+extensions/gsd-planning.rkt:140 | keep | (-> (or/c any/c #f) void?) | N/A | set-gsd-event-bus! accepts event-bus? or #f — could tighten to (or/c event-bus? #f)
+
+extensions/gsd-planning.rkt:141 | keep | (-> any/c hook-result?) | N/A | gsd-session-cleanup is hook callback — polymorphic input
+
+extensions/gsd/session-state.rkt:247 | tighten | (-> gsd-session-ctx? procedure? any/c void?) | (-> gsd-session-ctx? procedure? hash? void?) | ctx-write! 3rd arg is data to write to plan file
+
+extensions/gsd/session-state.rkt:255 | keep | (-> gsd-session-ctx? any/c void?) | N/A | gsd-ctx-set-plan! plan data is genuinely polymorphic GSD plan struct
+
+extensions/gsd/session-state.rkt:261 | keep | (-> gsd-session-ctx? any/c void?) | N/A | gsd-ctx-set-event-bus! accepts event-bus or #f
+
+extensions/gsd/session-state.rkt:267 | keep | (-> gsd-session-ctx? any/c void?) | N/A | gsd-ctx-set-busy! accepts boolean/any
+
+extensions/gsd/session-state.rkt:282 | keep | (-> any/c void?) | N/A | set-plan-data! polymorphic plan data
+
+extensions/gsd/session-state.rkt:288 | keep | (-> any/c void?) | N/A | set-gsd-event-bus! accepts event-bus or #f
+
+extensions/gsd/tool-handlers.rkt:32 | tighten | (->* (hash?) (any/c) any/c) | (->* (hash?) ((or/c exec-context? #f)) tool-result?) | handle-planning-read returns tool-result
+
+extensions/gsd/tool-handlers.rkt:33 | tighten | (->* (hash?) (any/c) any/c) | (->* (hash?) ((or/c exec-context? #f)) tool-result?) | handle-planning-write returns tool-result
+
+extensions/gsd/tool-handlers.rkt:36 | investigate | (->* (hash?) (any/c) path?) | (->* (hash?) ((or/c path? #f)) path?) | get-base-dir optional arg is base directory override
+
+extensions/gsd/state-machine.rkt:88 | keep | (-> (or/c any/c #f)) | N/A | gsm-wave-executor returns procedure or #f — could tighten to (or/c procedure? #f)
+
+extensions/gsd/state-machine.rkt:89 | keep | (-> (or/c any/c #f) void?) | N/A | gsm-set-wave-executor! accepts procedure? or #f
+
+extensions/gsd/state-machine.rkt:111 | keep | (-> gsd-session-ctx? any/c) | N/A | gsm-ctx-wave-executor returns procedure or #f from ctx
+
+extensions/gsd/state-machine.rkt:112 | keep | (-> gsd-session-ctx? any/c void?) | N/A | gsm-ctx-set-wave-executor! sets procedure or #f
+
+extensions/gsd/wave-docs.rkt:45 | investigate | (->* (any/c any/c any/c) (any/c) hash?) | (->* (string? string? string?) ((or/c hash? #f)) hash?) | parse-wave-doc-from-string — check what 3 mandatory args actually are
+
+extensions/gsd/command-handlers.rkt:73 | keep | (values symbol? any/c) | N/A | dispatch-gsd-command returns polymorphic result per command type
+
+extensions/gsd/core.rkt:78 | keep | (-> any/c any/c any/c any/c) | N/A | GSD core callback — genuinely polymorphic multi-value thunk results
+
+extensions/combinators.rkt:27 | keep | (->* (exact-positive-integer? (-> any/c)) ... any/c) | N/A | with-retry thunk is genuinely polymorphic producer/consumer
+
+extensions/combinators.rkt:30 | keep | (-> boolean? (-> any/c) (-> any/c) any/c) | N/A | with-error-policy thunks are genuinely polymorphic
+
+extensions/combinators.rkt:32 | keep | (-> (or/c symbol? string?) symbol? any/c (-> hook-result?) hook-result?) | N/A | hook payload is genuinely polymorphic
+
+extensions/widget-lifecycle.rkt:187 | keep | (->* (symbol? (-> any/c exact-nonnegative-integer? (listof any/c))) ...) | N/A | Widget render callback is polymorphic state → lines
+
+extensions/widget-lifecycle.rkt:193 | keep | (-> widget-lifecycle? any/c exact-nonnegative-integer? (listof any/c)) | N/A | widget-render state is polymorphic per widget
+
+extensions/widget-lifecycle.rkt:194 | keep | (-> widget-lifecycle? any/c any/c (values any/c any/c)) | N/A | widget-handle-input state and event are polymorphic per widget
+
+extensions/widget-lifecycle.rkt:202 | keep | (-> any/c exact-nonnegative-integer? (listof any/c)) | N/A | render-all-lifecycle-widgets state is polymorphic
+
+extensions/widget-lifecycle.rkt:205 | keep | (-> any/c any/c (values any/c any/c)) | N/A | route-lifecycle-input polymorphic state/event
+
+extensions/racket-tooling-helpers.rkt:36 | keep | (-> any/c string?) | N/A | form->string converts any Racket form to string — genuinely accepts anything
+
+extensions/racket-tooling-helpers.rkt:43 | keep | (-> any/c any/c boolean?) | N/A | pattern-matches? pattern and form are Racket S-expressions — genuinely polymorphic
+
+extensions/racket-tooling-helpers.rkt:44 | keep | (-> any/c any/c any/c any/c) | N/A | apply-template template/pattern/form are Racket S-expressions
+
+extensions/racket-tooling-helpers.rkt:45 | keep | (-> any/c any/c (listof pair?)) | N/A | collect-bindings pattern/form are Racket S-expressions
+
+extensions/racket-tooling-helpers.rkt:46 | keep | (-> (listof pair?) any/c any/c) | N/A | subst-bindings form is Racket S-expression
+
+extensions/ui-surface.rkt:30 | keep | (-> (listof any/c) any/c) | N/A | ui-make-styled-line segments are polymorphic styled content
+
+extensions/ui-surface.rkt:31 | keep | (-> string? any/c any/c) | N/A | ui-make-styled-segment style is polymorphic
+
+extensions/ui-surface.rkt:35 | keep | (-> ui-state? symbol? any/c any/c ui-state?) | N/A | ui-set-extension-widget! widget data is polymorphic
+
+extensions/ui-surface.rkt:36 | keep | (-> ui-state? symbol? any/c ui-state?) | N/A | ui-remove-extension-widget! widget key is polymorphic
+
+extensions/context.rkt:52 | keep | make-extension-ctx any/c | N/A | Struct keyword constructor — fields are polymorphic
+
+extensions/dialog-api.rkt:58 | keep | (-> (or/c any/c box?) notification? any/c) | N/A | apply-notification box is polymorphic UI state container
+
+extensions/manifest.rkt:57 | keep | (-> any/c (or/c qpm-manifest? #f)) | N/A | jsexpr->qpm-manifest input is parsed JSON — genuinely polymorphic until validated
+
+extensions/loader.rkt:43 | keep | (-> path-string? (or/c any/c extension-load-error?)) | N/A | try-load-extension returns loaded module or error struct
+
+extensions/tiers.rkt:27 | tighten | (-> any/c symbol? (or/c #t (listof string?))) | (-> extension-ctx? symbol? (or/c #t (listof string?))) | validate-extension-tier 1st arg is always extension-ctx
+
+extensions/tiers.rkt:28 | tighten | (-> any/c symbol? boolean?) | (-> extension-ctx? symbol? boolean?) | extension-tier-valid? 1st arg is always extension-ctx
+
+────────────────────────────────────────────────────────────────────────────────
+LAYER 6: interfaces/
+────────────────────────────────────────────────────────────────────────────────
+
+interfaces/sessions.rkt:79 | tighten | (-> path-string? (listof any/c)) | (-> path-string? (listof message?)) | read-trace-entries loads session.jsonl entries, each is a message struct
+
+interfaces/json-mode.rkt:21 | keep | (-> message? any/c) | N/A | message->json returns jsexpr — polymorphic JSON value (hash)
+
+interfaces/gui.rkt:11 | keep | (-> any/c any/c void?) | N/A | run-gui-with-runtime args are runtime-specific complex types
+
+────────────────────────────────────────────────────────────────────────────────
+ADDITIONAL: wiring/
+────────────────────────────────────────────────────────────────────────────────
+
+wiring/run-modes.rkt:49 | keep | (-> any/c any/c) | N/A | build-runtime-from-cli accepts config hash, returns runtime struct — polymorphic across modes
+
+wiring/run-modes.rkt:50 | keep | (-> any/c symbol?) | N/A | mode-for-config extracts mode symbol from config hash
+
+wiring/run-modes.rkt:51 | keep | (-> any/c any/c) | N/A | reload-config! accepts and returns settings
+
+wiring/extension-setup.rkt:24 | keep | (-> any/c path-string? (values any/c any/c any/c)) | N/A | make-wired-extension-registry returns extension-registry + command-registry + provider-registry triple
+
+wiring/extension-setup.rkt:25 | keep | (->* (any/c path-string?) (#:event-bus any/c) void?) | N/A | load-extensions-from-dir! accepts extension-registry and optional event-bus
+
+────────────────────────────────────────────────────────────────────────────────
+ADDITIONAL: llm/
+────────────────────────────────────────────────────────────────────────────────
+
+llm/openai-compatible.rkt:32 | tighten | (->* (any/c) (#:stream? boolean?) hash?) | (->* ((or/c hash? openai-config?)) (#:stream? boolean?) hash?) | openai-build-request-body receives openai-config? or hash
+
+llm/openai-compatible.rkt:33 | tighten | (-> any/c any/c) | (-> (or/c hash? #f) (or/c hash? #f)) | openai-parse-response receives response hash, returns parsed hash or #f
+
+llm/stream.rkt:29 | investigate | (-> (listof hash?) (listof (or/c stream-chunk? any/c))) | (-> (listof hash?) (listof (or/c stream-chunk? hash?))) | normalize-openai-chunks returns list of stream-chunk or raw hash for errors
+
+llm/stream.rkt:30 | investigate | (-> hash? (or/c stream-chunk? any/c)) | (-> hash? (or/c stream-chunk? hash?)) | normalize-openai-chunk returns stream-chunk or raw hash
+
+llm/stream.rkt:41 | keep | (->* (input-port?) (#:timeout positive?) any/c) | N/A | read-line/timeout returns string, eof, or #f
+
+llm/stream.rkt:45 | keep | (->* (procedure?) (#:timeout positive? #:cleanup procedure?) any/c) | N/A | with-port-timeout returns whatever thunk returns — genuinely polymorphic
+
+llm/http-helpers.rkt:31 | investigate | (-> (or/c symbol? #f) any/c symbol?) | (-> (or/c symbol? #f) (or/c hash? #f) symbol?) | translate-stop-reason 2nd arg is response body hash for context extraction
+
+────────────────────────────────────────────────────────────────────────────────
+ADDITIONAL: sandbox/
+────────────────────────────────────────────────────────────────────────────────
+
+sandbox/subprocess.rkt:41 | keep | #:environment any/c | N/A | run-subprocess environment is polymorphic — can be hash, list, or #f
+
+sandbox/subprocess.rkt:44 | tighten | (-> any/c void?) | (-> (or/c subprocess? #f) void?) | kill-subprocess! needs subprocess handle
+
+sandbox/subprocess.rkt:45 | keep | (->* () (any/c) any/c) | N/A | sanitize-env accepts optional env, returns sanitized env
+
+sandbox/limits.rkt:33 | keep | (->* [(-> any/c any)] ...) | N/A | with-sandbox-limits thunk is genuinely polymorphic
+
+────────────────────────────────────────────────────────────────────────────────
+ADDITIONAL: pkg/, scripts/, skills/
+────────────────────────────────────────────────────────────────────────────────
+
+pkg/registry.rkt:24-35 | keep | multiple any/c | N/A | Package registry functions are all JSON/HTTP-mediated — inputs/outputs are genuinely polymorphic parsed JSON
+
+scripts/analyze-trace.rkt:41-43 | keep | multiple any/c | N/A | Trace analysis functions accept/return polymorphic trace data
+
+skills/context-files.rkt:24 | keep | (->* () (any/c) (or/c agent-context? #f)) | N/A | load-agent-context optional path — polymorphic input
+
+skills/context-files.rkt:26 | keep | (->* () (any/c) (listof path?)) | N/A | discover-agents-files optional config
+
+skills/context-files.rkt:28 | keep | (-> any/c (or/c path? #f)) | N/A | find-git-root accepts string or path
+
+skills/resource-loader.rkt:29 | keep | (->* () (path-string? #:hook-dispatcher any/c) any/c) | N/A | load-global-resources hook-dispatcher is optional procedure
+
+════════════════════════════════════════════════════════════════════════════════
+SUMMARY
+════════════════════════════════════════════════════════════════════════════════
+
+Total entries examined:  ~120 any/c positions in contract-out forms
+Skipped (predicate pattern): ~40 (-> any/c boolean?)
+Skipped (#:rest any/c):      ~5
+Skipped (hook/callback):     ~15
+
+tighten:      ~45   — Can be replaced with a more specific contract
+investigate:  ~15   — Needs deeper analysis of callers to confirm type
+keep:         ~55   — Genuinely polymorphic, any/c is correct
+
+Priority tightening candidates (high impact, low risk):
+  1. tools/builtins/*.rkt — All tool handlers returning any/c should be tool-result?
+  2. tools/tool-internal.rkt:13 — Re-export widened from tool-struct, should be (-> tool? procedure?)
+  3. tools/tool.rkt:67,69 — make-tool-result/make-success-result content should be (or/c string? hash? list?)
+  4. runtime/auth-store.rkt:42,44 — mask-api-key and validate-credential-format accept string args
+  5. runtime/compactor-llm-bridge.rkt:23,26 — provider/model-name should be provider?/string?
+  6. runtime/session-manager.rkt:28,33 — append fns take message?
+  7. tools/registry-defaults.rkt:12 — Should be tool-registry?
+  8. util/message-helpers.rkt:19 — tool-result-message? returns (or/c message? #f)
+  9. llm/openai-compatible.rkt:32,33 — Should accept openai-config? or hash?
+  10. runtime/session-index.rkt:36,39,40 — lookup/resolve/active-leaf return specific types
