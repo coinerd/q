@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.73.6 -- 2026-05-30
+
+### Observability Infrastructure (T-3/T-4/T-5)
+
+| Change | Detail |
+|--------|--------|
+| T-3 | Added `define-logger` to 6 critical modules |
+| T-4 | Added trace logging to tool register/unregister |
+| T-5 | Reduced flaky `sleep 10` → `sleep 2` in sandbox limits test |
+
+**New loggers:** `q-loop-fsm`, `q-main-loop`, `q-tool-registry`, `q-openai`,
+`q-turn-orch`, `q-session-lifecycle`. All additive — no behavior changes.
+
 ## v0.73.5 -- 2026-05-30
 
 ### Credential Backend Decomposition (A-4)
