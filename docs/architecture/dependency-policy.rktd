@@ -176,6 +176,10 @@
       ("tui/tui-render-loop.rkt"
        (risk . "TUI render loop with streaming state, VDOM diffing, and layout; high visual-coupling")
        (owner . "tui"))
+      ("runtime/session-store-tree.rkt"
+       (cycle-resolved . "v0.74.1")
+       (risk . "Session store tree operations; formerly circular with session-store.rkt via lazy-require; now uses parameter injection")
+       (owner . "runtime"))
       ("extensions/gsd/core.rkt"
        (risk . "GSD planning core with wave execution, state machine dispatch, and high co-change coupling")
        (owner . "extensions"))))))
