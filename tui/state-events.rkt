@@ -18,6 +18,7 @@
 (provide current-gsd-mode-query
          (contract-out [apply-event-to-state (-> ui-state? event? ui-state?)]
                        [register-event-reducer! (-> string? procedure? void?)]
+                       [call-with-test-registry (-> procedure? any)]
                        [event-reducer-registered? (-> string? boolean?)]
                        [classify-error-type (-> any/c hash? symbol?)]
                        [format-error-hint
@@ -36,12 +37,28 @@
 (define event-reducers (make-hash))
 (define event-reducers-lock (make-semaphore 1))
 
+;; W7 (v0.72.7): Parameter-based registry for test isolation.
+;; When set, tests use a fresh hash instead of the global registry.
+;; Write-once registration — re-registering an existing type is a no-op.
+(define current-event-reducers (make-parameter #f))
+
+(define (get-event-reducers)
+  (or (current-event-reducers) event-reducers))
+
+(define (call-with-test-registry thunk)
+  (parameterize ([current-event-reducers (make-hash)])
+    (thunk)))
+
 (define (register-event-reducer! type-string handler)
+  ;; Write-once: re-registering an existing type is a no-op.
   (call-with-semaphore event-reducers-lock
-                       (lambda () (hash-set! event-reducers type-string handler))))
+                       (lambda ()
+                         (unless (hash-has-key? (get-event-reducers) type-string)
+                           (hash-set! (get-event-reducers) type-string handler)))))
 
 (define (event-reducer-registered? type-string)
-  (call-with-semaphore event-reducers-lock (lambda () (hash-has-key? event-reducers type-string))))
+  (call-with-semaphore event-reducers-lock
+                       (lambda () (hash-has-key? (get-event-reducers) type-string))))
 
 ;; Local helper (avoids circular dependency with state-ui)
 (define (ui-model-label state)
@@ -556,7 +573,7 @@
 (define (apply-event-to-state state evt)
   (define ev (event-ev evt))
   (define handler
-    (call-with-semaphore event-reducers-lock (lambda () (hash-ref event-reducers ev #f))))
+    (call-with-semaphore event-reducers-lock (lambda () (hash-ref (get-event-reducers) ev #f))))
   (if handler
       (handler state evt)
       state))
