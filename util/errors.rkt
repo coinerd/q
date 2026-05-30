@@ -81,7 +81,6 @@
           [raise-policy-error (->* (string? string? string?) (hash?) exn:fail?)]
           [raise-credential-error (->* (string? string?) (string? hash?) exn:fail?)])
          ;; Quality macros (Q06/Q07)
-         with-cleanup
          with-logged-catch)
 
 ;; Base error type for all q domain errors.
@@ -182,14 +181,6 @@
 ;; ============================================================
 ;; Quality macros (Q06/Q07)
 ;; ============================================================
-
-;; with-cleanup: Ensure cleanup runs regardless of success/failure.
-;; (with-cleanup cleanup-expr body-expr ...)
-(define-syntax-rule (with-cleanup cleanup body ...)
-  (dynamic-wind (lambda () (void))
-                (lambda ()
-                  body ...)
-                (lambda () cleanup)))
 
 ;; with-logged-catch: Like with-handlers but logs the exception before
 ;; returning the fallback value. Prevents silent failures.
