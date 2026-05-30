@@ -27,7 +27,7 @@
                   text-part-text)
          "../../util/string-helpers.rkt")
 
-(provide (contract-out [tool-session-recall (->* (hash?) (any/c) any/c)]))
+(provide (contract-out [tool-session-recall (->* (hash?) ((or/c exec-context? #f)) tool-result?)]))
 
 ;; Max entries returned per recall call
 (define MAX-RECALL-ENTRIES 5)

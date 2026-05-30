@@ -21,7 +21,7 @@
          net/url)
 
 (provide provider-name ;; re-export for tui-init.rkt (A1 fix)
-         (contract-out [build-provider (-> hash? any/c provider?)]
+         (contract-out [build-provider (-> hash? q-settings? provider?)]
                        [build-mock-provider (-> provider?)]
                        [local-provider? (-> any/c boolean?)]
                        [create-provider-for-name

@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.74.2 -- 2026-05-30
+
+### Widened Contract Reconciliation (M3)
+- **W0**: Audited 120+ `any/c` positions in contract-out forms across all layers
+  - Categorized: ~45 tighten, ~15 investigate, ~55 keep
+- **W1**: Tightened ~30 safe contracts across 6 layers:
+  - `runtime/`: session-manager (message?), compaction-hooks (procedure?),
+    provider-factory (q-settings?), session-controls (model-registry?),
+    settings (hash?), iteration/directive (working-set?, list?),
+    iteration/fsm-types (fsm-state?, fsm-event?)
+  - `tools/`: registry-defaults (tool-registry?), tool-internal (tool?→procedure?),
+    tool.rkt (or/c string? hash? list?), builtins/bash+grep+edit+firecrawl+session-recall (tool-result?)
+  - `util/`: message-helpers (message?→boolean?), tree-entries (or/c string? #f),
+    content-parts (boolean? for is-error)
+  - `llm/`: openai-compatible (model-request?, model-response?)
+  - `extensions/`: tiers (extension?)
+  - `sandbox/`: subprocess (custodian?)
+- Reverted 2 auth-store tightenings that broke intentional polymorphic tests
+
+
 ## v0.74.1 -- 2026-05-30
 
 ### Session Store Cycle Elimination (M2)

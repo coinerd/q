@@ -64,9 +64,9 @@
 
          ;; ── Tool result (re-exported from agent/types.rkt) ──
          tool-result?
-         (contract-out [make-tool-result (-> any/c (or/c hash? #f) boolean? tool-result?)]
+         (contract-out [make-tool-result (-> (or/c string? hash? list?) (or/c hash? #f) boolean? tool-result?)]
                        [make-error-result (-> string? tool-result?)]
-                       [make-success-result (->* (any/c) ((or/c hash? #f)) tool-result?)])
+                       [make-success-result (->* ((or/c string? hash? list?)) ((or/c hash? #f)) tool-result?)])
          tool-result-content
          tool-result-details
          tool-result-is-error?

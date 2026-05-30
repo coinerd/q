@@ -9,12 +9,12 @@
          json
          net/http-client
          net/url
-         (only-in "../tool.rkt" make-success-result make-error-result)
+         (only-in "../tool.rkt" make-success-result make-error-result exec-context? tool-result?)
          (only-in "../../util/errors.rkt" raise-tool-error)
          "../../util/string-helpers.rkt"
          (only-in "../../util/truncation.rkt" MAX-OUTPUT-CHARS))
 
-(provide (contract-out [tool-firecrawl (->* (hash?) (any/c) any/c)]
+(provide (contract-out [tool-firecrawl (->* (hash?) ((or/c exec-context? #f)) tool-result?)]
                        [firecrawl-api-key (-> (or/c string? #f))]
                        [firecrawl-request (->* (symbol? string?) ((or/c any/c #f)) any/c)]
                        [valid-action? (-> any/c boolean?)]

@@ -50,7 +50,7 @@
                              (#:provider any/c #:model (or/c string? #f) #:overrides (or/c hash? #f))
                              q-settings?)]
                        [merge-settings (-> hash? hash? hash?)]
-                       [deep-merge-hash (-> any/c any/c hash?)]
+                       [deep-merge-hash (-> hash? hash? hash?)]
                        [setting-ref (->* (q-settings? (or/c symbol? string?)) (any/c) any/c)]
                        [setting-ref* (->* (q-settings? (listof any/c)) (any/c) any/c)]
                        [provider-config (-> q-settings? (or/c symbol? string?) (or/c hash? #f))]

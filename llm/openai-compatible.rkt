@@ -9,7 +9,6 @@
 ;; HTTP calls use net/http-client from Racket stdlib.
 ;; SSE parsing delegates to llm/stream.rkt.
 
-
 (define-logger q-openai)
 (require racket/contract
          "timing.rkt"
@@ -29,8 +28,8 @@
 
 ;; Provider constructor
 (provide (contract-out [make-openai-compatible-provider (-> (or/c hash? openai-config?) provider?)]
-                       [openai-build-request-body (->* (any/c) (#:stream? boolean?) hash?)]
-                       [openai-parse-response (-> any/c any/c)]))
+                       [openai-build-request-body (->* (model-request?) (#:stream? boolean?) hash?)]
+                       [openai-parse-response (-> (or/c hash? #f) model-response?)]))
 
 ;; ============================================================
 ;; OpenAI Config struct (T2-4)
@@ -143,8 +142,8 @@
                      (define round-trip (tool-call-intent->hash tci))
                      (unless (equal? (hash-ref tc-hash 'name) (hash-ref round-trip 'name))
                        (log-q-openai-warning "tool-call-intent shadow mismatch in openai: ~a vs ~a"
-                                    (hash-ref tc-hash 'name)
-                                    (hash-ref round-trip 'name)))
+                                             (hash-ref tc-hash 'name)
+                                             (hash-ref round-trip 'name)))
                      tc-hash)
                    '()))]))
 

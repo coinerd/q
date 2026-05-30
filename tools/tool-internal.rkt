@@ -10,7 +10,7 @@
 (require racket/contract
          "../tools/tool-struct.rkt")
 
-(provide (contract-out [tool-execute (-> any/c any/c)] [tool-dangerous? (-> any/c boolean?)]))
+(provide (contract-out [tool-execute (-> tool? procedure?)] [tool-dangerous? (-> any/c boolean?)]))
 
 ;; Re-export from tool-struct for internal use
 ;; tool-execute and tool-dangerous? are already bound by the require

@@ -24,8 +24,8 @@
                        [tier-capabilities (-> symbol? (listof symbol?))]
                        [capability-allowed? (-> symbol? symbol? boolean?)]
                        [valid-api-version? (-> any/c boolean?)]
-                       [validate-extension-tier (-> any/c symbol? (or/c #t (listof string?)))]
-                       [extension-tier-valid? (-> any/c symbol? boolean?)]
+                       [validate-extension-tier (-> extension? symbol? (or/c #t (listof string?)))]
+                       [extension-tier-valid? (-> extension? symbol? boolean?)]
                        [hook-point-tier (-> symbol? symbol?)]))
 
 ;; ============================================================

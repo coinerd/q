@@ -17,7 +17,7 @@
          racket/match
          racket/string
          (only-in racket/list last drop)
-         (only-in "../tool.rkt" make-success-result make-error-result)
+         (only-in "../tool.rkt" make-success-result make-error-result exec-context? tool-result?)
          (only-in "../../extensions/gsd/session-state.rkt"
                   [current-edit-limit current-max-old-text-len]
                   [set-edit-limit! set-current-max-old-text-len!])
@@ -31,7 +31,7 @@
 (provide current-max-old-text-len
          set-current-max-old-text-len!
          current-fuzzy-edit-enabled?
-         (contract-out [tool-edit (->* (hash?) (any/c) any/c)]))
+         (contract-out [tool-edit (->* (hash?) ((or/c exec-context? #f)) tool-result?)]))
 
 ;; --------------------------------------------------
 ;; Backup helpers

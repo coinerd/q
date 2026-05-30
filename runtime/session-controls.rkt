@@ -9,12 +9,12 @@
 
 (require racket/contract
          racket/list
-         (only-in "model-registry.rkt" available-models model-entry-name)
+         (only-in "model-registry.rkt" available-models model-entry-name model-registry?)
          "session-types.rkt")
 (require "session-mutation.rkt")
 
 (provide (contract-out [set-model! (-> agent-session? string? void?)]
-                       [cycle-model! (-> agent-session? any/c (or/c string? #f))]
+                       [cycle-model! (-> agent-session? model-registry? (or/c string? #f))]
                        ;; Thinking level control (#1153)
                        [thinking-levels (listof symbol?)]
                        [thinking-level? (-> any/c boolean?)]

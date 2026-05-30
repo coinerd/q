@@ -30,7 +30,7 @@
                              (#:previous-summary (or/c #f string?) #:session-id (or/c #f string?))
                              hash?)]
                        [dispatch-enriched-before-compact
-                        (->* ((or/c any/c #f) list? compaction-strategy?)
+                        (->* ((or/c procedure? #f) list? compaction-strategy?)
                              (#:previous-summary (or/c #f string?) #:session-id (or/c #f string?))
                              (values any/c hash?))]
                        [maybe-use-custom-summary (-> (or/c any/c #f) (or/c string? #f))]

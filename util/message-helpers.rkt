@@ -16,7 +16,7 @@
          "../util/protocol-types.rkt")
 
 (provide (contract-out [has-tool-calls? (-> any/c boolean?)]
-                       [tool-result-message? (-> any/c any/c)]
+                       [tool-result-message? (-> message? boolean?)]
                        [get-tool-call-ids (-> any/c (listof string?))]
                        [ensure-parent-dirs! (-> (or/c path? string?) void?)]))
 
@@ -34,7 +34,7 @@
 ;; Check if a message is a tool-result or bash-execution entry.
 ;; Used by compactor and cutpoint-rules for cutpoint validation.
 (define (tool-result-message? msg)
-  (memq (message-kind msg) '(tool-result bash-execution)))
+  (and (memq (message-kind msg) '(tool-result bash-execution)) #t))
 
 ;; Extract all tool-call IDs from a message's content parts.
 ;; Used by context-manager for pair-aware trimming.
