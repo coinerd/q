@@ -51,6 +51,7 @@
 
      #'(begin
          (define tool-id handler)
+         ;; I5 (v0.72.7): tool-<name> provided for backward compat (used by test files)
          (provide tool-id)
          (define name
            (make-tool tool-name-str

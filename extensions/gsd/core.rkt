@@ -272,6 +272,9 @@
            (log-warning (format "wave-done ~a rolled back: ~a" idx (exn-message e)))))])]))
 
 ;; Helper: update STATE.md with wave completion note
+;; I10 (v0.72.7): Pure/effectful boundary documentation
+;; Pure section: string manipulation (format, string-split, string-contains?)
+;; Effectful section: filesystem I/O (file-exists?, call-with-input-file, write-string-to-file!)
 (define (update-state-with-wave! base-dir wave-idx)
   (define state-path (build-path base-dir ".planning" "STATE.md"))
   (when (file-exists? state-path)

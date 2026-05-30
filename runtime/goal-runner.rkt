@@ -193,8 +193,7 @@
       "unknown"))
 
 ;; Sum token costs from all evaluations
-(define (goal-state-total-token-cost gs)
-  (for/sum ([er (in-list (goal-state-evaluations gs))]) (evaluation-result-token-cost er)))
+
 
 ;; ============================================================
 ;; Single step

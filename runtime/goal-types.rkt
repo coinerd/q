@@ -59,7 +59,9 @@
          DEFAULT-EVALUATOR-MODE
          NO-PROGRESS-THRESHOLD
          ;; Helpers
-         string-truncate)
+         string-truncate
+         ;; I4 (v0.72.7): Moved from goal-runner.rkt
+         goal-state-total-token-cost)
 
 ;; --------------------------------------------------
 ;; Constants
@@ -214,3 +216,8 @@
               (or started-at (inexact->exact (round (current-inexact-milliseconds))))
               (or updated-at (inexact->exact (round (current-inexact-milliseconds))))
               meta))
+
+;; I4 (v0.72.7): Moved from goal-runner.rkt to be alongside goal-state struct
+(define (goal-state-total-token-cost gs)
+  (for/sum ([er (in-list (goal-state-evaluations gs))])
+    (evaluation-result-token-cost er)))

@@ -97,6 +97,8 @@
 
 ;; Hash-based cache keyed on (model-name-string . registry-hash-code).
 ;; Cleared when registry changes (new registry = new hash).
+;; W15 (v0.72.7): Mutable hash — accessed during model resolution (main thread).
+;; Not concurrently written. Thread-safe in practice due to single-writer pattern.
 (define model-resolution-cache (make-hash))
 
 (define (cache-key registry model-name)
