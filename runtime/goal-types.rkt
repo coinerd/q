@@ -7,7 +7,8 @@
 
 (require racket/contract
          racket/format
-         "../util/ids.rkt")
+         "../util/ids.rkt"
+         (only-in "../util/time.rkt" now-epoch-ms))
 
 ;; Structs (no struct-out — use contracted constructors)
 (provide goal-state
@@ -213,8 +214,8 @@
               checks
               evaluations
               last-evaluation
-              (or started-at (inexact->exact (round (current-inexact-milliseconds))))
-              (or updated-at (inexact->exact (round (current-inexact-milliseconds))))
+              (or started-at (now-epoch-ms))
+              (or updated-at (now-epoch-ms))
               meta))
 
 ;; I4 (v0.72.7): Moved from goal-runner.rkt to be alongside goal-state struct

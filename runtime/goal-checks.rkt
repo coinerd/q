@@ -12,7 +12,8 @@
          racket/list
          "goal-state.rkt"
          "../sandbox/subprocess.rkt"
-         "../tools/shell-risk.rkt")
+         "../tools/shell-risk.rkt"
+         (only-in "../util/time.rkt" now-epoch-ms))
 
 ;; ============================================================
 ;; Provides
@@ -130,13 +131,13 @@
        check-result?)
   (define cmd (goal-check-command check))
   (define label (goal-check-label check))
-  (define start-ms (inexact->exact (round (current-inexact-milliseconds))))
+  (define start-ms (now-epoch-ms))
   (define result
     (run-subprocess "/bin/sh"
                     #:args (list "-c" cmd)
                     #:timeout timeout
                     #:directory (or directory (current-directory))))
-  (define elapsed (- (inexact->exact (round (current-inexact-milliseconds))) start-ms))
+  (define elapsed (- (now-epoch-ms) start-ms))
   (check-result label
                 (or (subprocess-result-exit-code result) -1)
                 (string-truncate (or (subprocess-result-stdout result) "") 500)
