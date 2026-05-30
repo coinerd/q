@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.73.5 -- 2026-05-30
+
+### Credential Backend Decomposition (A-4)
+
+Decomposed the 650-line `credential-backend.rkt` god module into 7 focused
+modules under `runtime/credentials/`:
+
+| Module | Content |
+|--------|---------|
+| `protocol.rkt` | Struct + generic ops + command runner parameters |
+| `file-backend.rkt` | JSON file credential storage |
+| `env-backend.rkt` | Environment variable backend (read-only) |
+| `memory-backend.rkt` | In-memory backend (testing) |
+| `keychain-backend.rkt` | Linux `secret-tool` backend |
+| `platform-backends.rkt` | macOS `security` + Windows `cmdkey` + capabilities |
+| `chained-backend.rkt` | Chained fallback + policy-aware wrapper |
+
+`credential-backend.rkt` becomes a re-export facade. Zero API changes.
+
 ## v0.73.4 -- 2026-05-30
 
 ### Iteration Layer Migration (A-1)
