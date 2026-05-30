@@ -6,12 +6,16 @@
 
 (require racket/contract)
 
-(provide (contract-out [tool-registry? (-> any/c boolean?)]
-                       [make-tool-registry-internal (-> any/c any/c any/c tool-registry?)]
-                       [tool-registry-tools-box (-> tool-registry? any/c)]
-                       [tool-registry-active-set-box (-> tool-registry? any/c)]
-                       [tool-registry-sem (-> tool-registry? any/c)])
+;; Public: predicate and struct type (for struct-copy)
+(provide (contract-out [tool-registry? (-> any/c boolean?)])
          tool-registry)
+
+;; Internal: only for tools/registry.rkt
+(module+ internal
+  (provide make-tool-registry-internal
+           tool-registry-tools-box
+           tool-registry-active-set-box
+           tool-registry-sem))
 
 ;; Thread-safe tool registry struct. Fields are internal; use accessor
 ;; functions from tools/registry.rkt for safe access.

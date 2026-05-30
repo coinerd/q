@@ -33,8 +33,6 @@
 ;; Structs
 (provide q-settings
          q-settings?
-         q-settings-global
-         q-settings-project
          q-settings-merged
 
          ;; Loading — contracted
@@ -77,9 +75,7 @@
                        [credential-policy
                         (-> q-settings?
                             (or/c 'auto 'keychain-preferred 'keychain-required 'env-only))]
-                       [shell-risk-classifier
-                        (-> q-settings?
-                            (or/c 'regex 'structured 'both))])
+                       [shell-risk-classifier (-> q-settings? (or/c 'regex 'structured 'both))])
 
          ;; Sandbox settings (re-exported, not locally defined)
          sandbox-enabled?
