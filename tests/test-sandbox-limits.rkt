@@ -136,7 +136,7 @@
 (test-case "with-resource-limits returns timed-out on timeout"
   (define-values (result timed-out?)
     (with-resource-limits (λ (cust)
-                            (sleep 10)
+                            (sleep 2)
                             'done)
                           #:timeout 0.1))
   (check-false result)
