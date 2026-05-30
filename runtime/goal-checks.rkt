@@ -108,11 +108,14 @@
     (define tokens (tokenize-shell-command cmd))
     (define findings (classify-shell-risks tokens))
     (define summary (shell-risk-summary findings))
-    (define critical (hash-ref summary 'critical? #f))
-    (if critical
+    (define max-sev (hash-ref summary 'max-severity 'info))
+    (define severity-order '(info low medium high critical))
+    (define too-risky? (> (index-of severity-order max-sev) (index-of severity-order 'medium)))
+    (if too-risky?
         (append reasons
-                (list (format "Check '~a' has critical severity risks: ~a"
+                (list (format "Check '~a' has ~a severity risks: ~a"
                               (goal-check-label c)
+                              max-sev
                               (string-join (map shell-risk-finding-message findings) "; "))))
         reasons)))
 
@@ -153,10 +156,7 @@
 ;; Helpers
 ;; ============================================================
 
-(define (string-truncate s max-len)
-  (if (> (string-length s) max-len)
-      (string-append (substring s 0 (sub1 max-len)) "…")
-      s))
+;; string-truncate is provided by goal-state.rkt (consolidated in v0.71.7)
 
 ;; Summarize check results: all passed? summary string.
 (define/contract (checks-summary results)

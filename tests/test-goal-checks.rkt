@@ -8,6 +8,7 @@
                   goal-check?
                   goal-check-command
                   goal-check-label
+                  make-goal-check
                   check-result?
                   check-result-exit-code
                   check-result-stdout
@@ -128,3 +129,19 @@
   (check-true (string-contains? summary "FAIL")))
 
 (displayln "All goal-checks tests passed.")
+
+;; ============================================================
+;; W1: Shell safety — command substitution now high severity (v0.71.7)
+;; ============================================================
+
+;; Command substitution $(...) is rejected by validate-check-safety
+(let ()
+  (define checks (list (make-goal-check #:command "echo $(whoami)" #:label "sub")))
+  (define reasons (validate-check-safety checks))
+  (check-true (pair? reasons) "command substitution rejected"))
+
+;; Pipe commands are rejected
+(let ()
+  (define checks (list (make-goal-check #:command "cat /etc/passwd | grep root" #:label "pipe")))
+  (define reasons (validate-check-safety checks))
+  (check-true (pair? reasons) "pipe rejected"))

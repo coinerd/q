@@ -257,7 +257,7 @@
     (define pos (shell-token-start tok))
 
     (when (eq? type 'substitution)
-      (add! 'command-substitution 'medium (format "Command substitution: ~a" val) pos))
+      (add! 'command-substitution 'high (format "Command substitution: ~a" val) pos))
 
     (when (and (eq? type 'separator) (string=? (string-downcase val) "|"))
       ;; Skip whitespace to find next word
