@@ -25,7 +25,7 @@
 
 (require/typed "../../util/tool-registry-struct.rkt" [#:opaque ToolRegistry tool-registry?])
 
-(require/typed "../../extensions/api.rkt" [#:opaque ExtRegistry extension-registry?])
+(require/typed "../../util/extension-types.rkt" [#:opaque ExtRegistry extension-registry?])
 
 (require/typed "../../util/cancellation.rkt" [#:opaque CancellationToken cancellation-token?])
 
