@@ -587,9 +587,9 @@
   ;; Verify the username resolution expression includes all 4 fallback levels
   ;; by checking the source code structure (defense against accidental removal)
   (define src
-    (file->string (if (file-exists? "runtime/credential-backend.rkt")
-                      "runtime/credential-backend.rkt"
-                      "../runtime/credential-backend.rkt")))
+    (file->string (if (file-exists? "runtime/credentials/platform-backends.rkt")
+                      "runtime/credentials/platform-backends.rkt"
+                      "../runtime/credentials/platform-backends.rkt")))
   (check-true (string-contains? src "(getenv \"USER\")"))
   (check-true (string-contains? src "(getenv \"LOGNAME\")"))
   (check-true (string-contains? src "find-system-path 'who-am-i"))
