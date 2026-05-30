@@ -68,10 +68,14 @@
   (with-registry-lock reg
                       (lambda ()
                         (define tbl (tool-registry-tools-box reg))
-                        (hash-set! tbl (tool-name t) t))))
+                        (hash-set! tbl (tool-name t) t)
+                        (log-q-tool-registry-info "registered tool: ~a" (tool-name t)))))
 
 (define (unregister-tool! reg name)
-  (with-registry-lock reg (lambda () (hash-remove! (tool-registry-tools-box reg) name))))
+  (with-registry-lock reg
+                      (lambda ()
+                        (hash-remove! (tool-registry-tools-box reg) name)
+                        (log-q-tool-registry-info "unregistered tool: ~a" name))))
 
 (define (lookup-tool reg name)
   (if (not name)
