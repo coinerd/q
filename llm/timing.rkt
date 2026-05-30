@@ -7,7 +7,7 @@
 (require racket/contract
          racket/format)
 
-(provide (contract-out [log-stream-setup-timing (-> string? exact-nonnegative-integer? void?)]))
+(provide (contract-out [log-stream-setup-timing (-> string? real? void?)]))
 
 ;; Log the elapsed time since stream setup started.
 ;; Usage: (define t0 (current-inexact-milliseconds)) ... (log-stream-setup-timing "provider" t0)

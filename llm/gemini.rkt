@@ -426,8 +426,7 @@
        (parameterize ([gemini-tool-id-counter-param 0])
          ;; Incremental SSE parsing — generator yields chunks one at a time
          (define raw-port response-port)
-         (log-info (format "[telemetry] gemini-stream setup completed in ~a ms"
-                           (real->decimal-string (- (current-inexact-milliseconds) _stream-t0) 1)))
+         (log-stream-setup-timing "gemini" _stream-t0)
          (generator ()
                     (let loop ([first-read? #t])
                       (define timeout-secs
