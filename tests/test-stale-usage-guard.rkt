@@ -12,7 +12,8 @@
          "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
          "../runtime/agent-session.rkt"
-         "../runtime/session-types.rkt")
+         "../runtime/session-types.rkt"
+         (only-in "../runtime/session-mutation.rkt" guarded-set-last-compaction-time!))
 
 (define (make-temp-dir)
   (make-temporary-file "q-stale-test-~a" 'directory))
@@ -37,13 +38,13 @@
 
 (test-case "last-compaction-time updated after compaction"
   (define sess (make-test-session))
-  (set-agent-session-last-compaction-time! sess (current-inexact-milliseconds))
+  (guarded-set-last-compaction-time! sess (inexact->exact (round (current-inexact-milliseconds))))
   (check-not-false (agent-session-last-compaction-time sess)))
 
 (test-case "stale usage guard prevents immediate re-compaction"
   (define sess (make-test-session))
   ;; Simulate recent compaction
-  (set-agent-session-last-compaction-time! sess (current-inexact-milliseconds))
+  (guarded-set-last-compaction-time! sess (inexact->exact (round (current-inexact-milliseconds))))
   ;; Create context that would normally trigger compaction (threshold 0 = always)
   (define context
     (list (make-message "m1"
@@ -60,7 +61,7 @@
 (test-case "fresh usage after cooldown triggers normally"
   (define sess (make-test-session))
   ;; Simulate compaction that happened 3 seconds ago
-  (set-agent-session-last-compaction-time! sess (- (current-inexact-milliseconds) 3000))
+  (guarded-set-last-compaction-time! sess (inexact->exact (round (- (current-inexact-milliseconds) 3000))))
   ;; Create context with enough messages to trigger
   (define context
     (list (make-message "m1"

@@ -14,6 +14,7 @@
                   build-session-context-for-prompt
                   run-prompt-internal)
          "../runtime/session-types.rkt"
+         (only-in "../runtime/session-mutation.rkt" guarded-set-config!)
          (except-in "../runtime/agent-session.rkt" run-prompt!)
          "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
@@ -59,7 +60,7 @@
       (define sess (make-agent-session cfg))
       (define ws (make-working-set))
       ;; Pre-populate working set on session config
-      (set-agent-session-config! sess (dict-set (agent-session-config sess) 'working-set ws))
+      (guarded-set-config! sess (dict-set (agent-session-config sess) 'working-set ws))
       (working-set-update! ws
                            (list (hasheq 'name "read" 'arguments (hasheq 'path "/tmp/a.rkt")))
                            (list (make-message "m1"
@@ -127,7 +128,7 @@
                            (list tool-msg)
                            message-id
                            (lambda (m) 20))
-      (set-agent-session-config! sess (dict-set (agent-session-config sess) 'working-set ws))
+      (guarded-set-config! sess (dict-set (agent-session-config sess) 'working-set ws))
       ;; build-session-context should produce context including ws message
       (define ctx (build-session-context-for-prompt sess "hello" ensure-persisted! buffer-or-append!))
       ;; Context should contain the tool message (it's in the working set)

@@ -16,6 +16,7 @@
          "../agent/event-bus.rkt"
          "../runtime/agent-session.rkt"
          "../runtime/session-types.rkt"
+         (only-in "../runtime/session-mutation.rkt" guarded-set-compacting!)
          "../runtime/session-store.rkt"
          "../runtime/compactor.rkt")
 
@@ -67,7 +68,7 @@
                                 "test"
                                 'system-instructions
                                 '())))
-  (set-agent-session-compacting?! sess #t)
+  (guarded-set-compacting! sess #t)
   (check-true (agent-session-compacting? sess))
   ;; If flag is set, compaction should be skipped
   (define context
@@ -96,6 +97,6 @@
                                 "test"
                                 'system-instructions
                                 '())))
-  (set-agent-session-compacting?! sess #t)
-  (set-agent-session-compacting?! sess #f)
+  (guarded-set-compacting! sess #t)
+  (guarded-set-compacting! sess #f)
   (check-false (agent-session-compacting? sess)))

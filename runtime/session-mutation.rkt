@@ -8,6 +8,7 @@
 (require racket/contract
          "session-types.rkt"
          (submod "session-types.rkt" internal)
+         (only-in "session-config.rkt" session-config?)
          (only-in "../util/errors.rkt" raise-session-error))
 
 (provide (contract-out [guarded-set-prompt-running! (-> agent-session? boolean? void?)]
@@ -16,13 +17,14 @@
                        [guarded-set-force-shutdown! (-> agent-session? boolean? void?)]
                        [guarded-set-active! (-> agent-session? boolean? void?)]
                        [guarded-set-model-name! (-> agent-session? (or/c string? #f) void?)]
-                       [guarded-set-config! (-> agent-session? hash? void?)]
+                       [guarded-set-config! (-> agent-session? (or/c session-config? hash? #f) void?)]
                        [guarded-set-index! (-> agent-session? any/c void?)]
                        [guarded-set-persisted! (-> agent-session? boolean? void?)]
                        [guarded-set-pending-entries! (-> agent-session? list? void?)]
                        [guarded-set-start-time! (-> agent-session? exact-nonnegative-integer? void?)]
                        [guarded-set-thinking-level! (-> agent-session? (or/c symbol? #f) void?)]
-                       [guarded-set-last-compaction-time! (-> agent-session? (or/c exact-nonnegative-integer? #f) void?)]
+                       [guarded-set-last-compaction-time!
+                        (-> agent-session? (or/c exact-nonnegative-integer? #f) void?)]
                        [valid-session-phase? (-> symbol? boolean?)]
                        [session-phase (-> agent-session? symbol?)]))
 

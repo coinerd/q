@@ -10,6 +10,11 @@
 (require rackunit
          racket/runtime-path
          "../runtime/session-types.rkt"
+         (only-in "../runtime/session-mutation.rkt"
+                  guarded-set-compacting!
+                  guarded-set-persisted!
+                  guarded-set-prompt-running!
+                  guarded-set-shutdown-requested!)
          "../runtime/session-config.rkt"
          "../agent/queue.rkt"
          "../agent/event-bus.rkt")
@@ -81,13 +86,13 @@
 
 (test-case "mutable lifecycle flags can be set"
   (define sess (make-test-session))
-  (set-agent-session-compacting?! sess #t)
+  (guarded-set-compacting! sess #t)
   (check-true (agent-session-compacting? sess))
-  (set-agent-session-persisted?! sess #t)
+  (guarded-set-persisted! sess #t)
   (check-true (agent-session-persisted? sess))
-  (set-agent-session-prompt-running?! sess #t)
+  (guarded-set-prompt-running! sess #t)
   (check-true (agent-session-prompt-running? sess))
-  (set-agent-session-shutdown-requested?! sess #t)
+  (guarded-set-shutdown-requested! sess #t)
   (check-true (agent-session-shutdown-requested? sess)))
 
 (test-case "session-log-path constructs correct path"

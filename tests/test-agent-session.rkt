@@ -12,6 +12,7 @@
          racket/file
          "../runtime/agent-session.rkt"
          "../runtime/session-types.rkt"
+         (only-in "../runtime/session-mutation.rkt" guarded-set-prompt-running!)
          "../agent/event-bus.rkt"
          "../tools/tool.rkt")
 
@@ -33,9 +34,9 @@
   (check-not-exn (lambda () (agent-session-prompt-running? sess)))
   (check-false (agent-session-prompt-running? sess)))
 
-(test-case "set-agent-session-prompt-running?! works"
+(test-case "guarded-set-prompt-running! works"
   (define sess (make-test-session))
-  (set-agent-session-prompt-running?! sess #t)
+  (guarded-set-prompt-running! sess #t)
   (check-true (agent-session-prompt-running? sess))
-  (set-agent-session-prompt-running?! sess #f)
+  (guarded-set-prompt-running! sess #f)
   (check-false (agent-session-prompt-running? sess)))
