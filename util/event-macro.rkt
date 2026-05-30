@@ -101,6 +101,9 @@
 ;; Convert Racket field name to JSON key:
 ;;   duration-ms -> durationMs, is-error? -> isError, model -> model
 ;; Preserves underscores: finish_reason -> finish_reason
+;; I12 (v0.72.7): Runtime version. Duplicated by field->json-key-stx (compile-time)
+;; at line ~159. Both implement the same symbol->snake_case conversion.
+;; Cannot unify because Racket macros require separate compile-time bindings.
 (define (field->json-key field-sym)
   (define s (symbol->string field-sym))
   (define stripped

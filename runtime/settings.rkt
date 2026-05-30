@@ -184,6 +184,9 @@
 
 ;; Settings memoization cache (T3-5)
 ;; Key: (list project-dir home-dir), Value: (cons mtime q-settings)
+;; W15 (v0.72.7): Mutable hash — accessed from main thread only during init.
+;; Not thread-safe for concurrent reads/writes. Acceptable because settings
+;; loading happens once at startup before any concurrent access.
 (define settings-cache (make-hash))
 
 ;; Internal: load settings from disk (no caching).

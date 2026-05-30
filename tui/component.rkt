@@ -55,7 +55,7 @@
           [cycle-focus
            (->* ((listof q-component?) (or/c symbol? #f)) (exact-integer?) (or/c symbol? #f))]
           [component-state-ref (->* (q-component? any/c) (any/c) any/c)]
-          [component-state-set! (-> q-component? any/c any/c void?)]))
+          [component-state-update (-> q-component? any/c any/c void?)]))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Struct
@@ -126,7 +126,7 @@
   (hash-ref (unbox (q-component-state-box comp)) key default))
 
 ;; Store a value in the component's local state.
-(define (component-state-set! comp key value)
+(define (component-state-update comp key value)
   (set-box! (q-component-state-box comp) (hash-set (unbox (q-component-state-box comp)) key value)))
 
 ;; ═══════════════════════════════════════════════════════════════════

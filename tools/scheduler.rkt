@@ -104,8 +104,6 @@
          scheduler-batch-stats-blocked
          scheduler-batch-stats-errors
          scheduler-batch-stats->hash
-         plan-tool-batch
-         execute-tool-plan
          run-preflight
          (contract-out [run-tool-batch
                         (->* ((listof tool-call?) tool-registry?)
@@ -113,7 +111,15 @@
                                                 #:exec-context (or/c exec-context? #f)
                                                 #:parallel? (or/c boolean? #f))
                              scheduler-result?)]
-                       [max-parallel-tools (parameter/c exact-positive-integer?)]))
+                       [max-parallel-tools (parameter/c exact-positive-integer?)]
+                       ;; I11 (v0.72.7): Contracts on internal exports
+                       [plan-tool-batch (-> scheduler-problem? scheduler-plan?)]
+                       [execute-tool-plan (-> scheduler-plan?
+                                              exec-context?
+                                              (or/c procedure? #f)
+                                              boolean?
+                                              (or/c procedure? #f)
+                                              scheduler-result?)]))
 
 ;; ============================================================
 ;; Scheduler result struct

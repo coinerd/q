@@ -23,6 +23,7 @@
          racket/list
          racket/set
          "../util/protocol-types.rkt"
+         (only-in "../util/time.rkt" now-epoch-ms)
          "../util/message-helpers.rkt"
          (only-in "../util/telemetry.rkt" with-telemetry)
          "../runtime/session-store.rkt"
@@ -324,7 +325,7 @@
                         'system
                         'compaction-summary
                         (list (make-text-part summary-text))
-                        (current-seconds)
+                        (now-epoch-ms)
                         (hash-set (hash-set (hash-set file-tracker-meta 'type "compaction")
                                             'removedCount
                                             (length adjusted-old))

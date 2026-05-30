@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.72.7 — 
+
+### Phase 5: Long-Term Patterns + Sweep
+
+TUI reducer pattern + event registry lifecycle + mutable hash audit + naming cleanup + misc fixes.
+
+| Finding | Severity | Fix |
+|---------|----------|-----|
+| W6: TUI slash command mutation | WARNING | Added apply-slash-command return-based wrapper |
+| W7: event-reducer test isolation | WARNING | Added current-event-reducers parameter + call-with-test-registry |
+| W15: mutable hash thread safety | WARNING | Documented thread-safety guarantees for 3 registries |
+| W17: component-state-set! naming | WARNING | Renamed to component-state-update |
+| I4: goal-state-total-token-cost location | INFO | Moved from goal-runner.rkt to goal-types.rkt |
+| I5: tool-id provide | INFO | Documented as backward-compat |
+| I9: compactor current-seconds | INFO | Replaced with now-epoch-ms for consistency |
+| I10: gsd/core boundary | INFO | Documented pure/effectful sections |
+| I11: scheduler contracts | INFO | Added contract-out for plan-tool-batch, execute-tool-plan |
+| I12: field->json-key duplication | INFO | Documented compile-time vs runtime split |
+
+**Files changed:** commands.rkt, state-events.rkt, component.rkt, tui-render-loop.rkt, goal-types.rkt, goal-runner.rkt, define-tool.rkt, compactor.rkt, core.rkt, scheduler.rkt, event-macro.rkt, settings.rkt, model-registry.rkt
+
 ## v0.72.6 — 
 
 ### Phase 4b: Module Decomposition II
