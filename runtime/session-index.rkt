@@ -6,6 +6,7 @@
 ;; All struct definitions live in schema.rkt (single source of truth).
 
 (require racket/contract
+         (only-in "../util/protocol-types.rkt" message?)
          "session-index/schema.rkt"
          "session-index/mutations.rkt"
          "session-index/query.rkt")
@@ -20,10 +21,10 @@
                        [navigate-to-leaf! (-> session-index? string? (or/c navigate-result? #f))]
                        [navigate-next-leaf! (-> session-index? (or/c navigate-result? #f))]
                        [navigate-prev-leaf! (-> session-index? (or/c navigate-result? #f))]
-                       [branch! (-> session-index? string? (or/c any/c #f))]
-                       [branch-with-summary! (-> session-index? string? string? (or/c any/c #f))]
+                       [branch! (-> session-index? string? (or/c message? #f))]
+                       [branch-with-summary! (-> session-index? string? string? (or/c message? #f))]
                        [reset-leaf! (-> session-index? void?)]
-                       [append-to-leaf! (-> session-index? any/c any/c)]
+                       [append-to-leaf! (-> session-index? message? message?)]
                        [add-bookmark! (-> session-index? string? string? string?)]
                        [remove-bookmark! (-> session-index? string? boolean?)]
                        [list-bookmarks (-> session-index? list?)]
@@ -33,14 +34,14 @@
                        [save-bookmarks! (-> path-string? session-index? void?)]
                        [load-index-with-bookmarks (-> path-string? path-string? session-index?)]
                        [bookmarks-path (-> path-string? path?)]
-                       [lookup-entry (-> session-index? string? (or/c any/c #f))]
+                       [lookup-entry (-> session-index? string? (or/c message? #f))]
                        [children-of (-> session-index? string? list?)]
                        [leaf-nodes (-> session-index? list?)]
-                       [resolve-active-leaf (-> session-index? (or/c any/c #f))]
-                       [active-leaf (-> session-index? (or/c any/c #f))]
+                       [resolve-active-leaf (-> session-index? (or/c message? #f))]
+                       [active-leaf (-> session-index? (or/c message? #f))]
                        [get-branch (-> session-index? string? (or/c list? #f))]
                        [find-common-ancestor (-> session-index? string? string? (or/c string? #f))]
                        [collect-branch-entries
                         (-> session-index? string? string? exact-nonnegative-integer? list?)]
                        [leaf-depth (-> session-index? string? (or/c exact-nonnegative-integer? #f))]
-                       [estimate-entry-tokens (-> (or/c hash? any/c) exact-nonnegative-integer?)]))
+                       [estimate-entry-tokens (-> (or/c hash? message?) exact-nonnegative-integer?)]))
