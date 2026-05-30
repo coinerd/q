@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.74.1 -- 2026-05-30
+
+### Session Store Cycle Elimination (M2)
+- **W0**: Eliminated `lazy-require` circular dependency between `session-store.rkt`
+  and `session-store-tree.rkt` using runtime parameter injection
+- **W1**: Added cycle-detection CI gate (DFS-based) to `test-arch-fitness.rkt`
+  for runtime, agent, and tools layers
+- **W2**: Version bump to 0.74.1
+
+
 ## v0.74.0 -- 2026-05-30
 
 ### Fitness Functions & Quick Wins (M1 W0)
