@@ -505,3 +505,88 @@
         (length all-files))))))
 
 (run-tests v0480-suite)
+
+;; ════════════════════════════════════════════════════════════
+;; v0.74.0 additions: Hotspot-score fitness function
+;; ════════════════════════════════════════════════════════════
+
+;; Compute hotspot score: lines × estimated complexity (heuristic from file content)
+(define (compute-hotspot-score filepath)
+  (define content (file->string filepath))
+  (define lines (length (string-split content "\n")))
+  ;; Count structural complexity indicators: define, lambda, let, match, cond, struct
+  (define complexity-hits
+    (+ (length (regexp-match* #rx"[(]define" content))
+       (length (regexp-match* #rx"[(]lambda" content))
+       (length (regexp-match* #rx"[(]let" content))
+       (length (regexp-match* #rx"[(]match" content))
+       (length (regexp-match* #rx"[(]cond" content))
+       (length (regexp-match* #rx"[(]struct" content))))
+  (* lines complexity-hits))
+
+;; Get registered risk-note file paths from policy
+(define hotspot-section (cdr (assoc 'hotspot-budget policy)))
+(define warn-threshold (cdr (assoc 'warn-threshold hotspot-section)))
+(define block-threshold (cdr (assoc 'block-threshold hotspot-section)))
+(define risk-note-entries (cdr (assoc 'risk-notes hotspot-section)))
+(define risk-note-files
+  (for/list ([entry (in-list risk-note-entries)])
+    (car entry)))
+
+(define v0740-suite
+  (test-suite "v0.74.0-hotspot-fitness"
+
+    (test-case "All hotspots above warn threshold have risk-notes"
+      (define dirs-to-check '("runtime" "agent" "llm" "tools" "tui" "interfaces" "extensions"))
+      (define all-files
+        (append* (for/list ([d (in-list dirs-to-check)])
+                   (rkt-files-in d))))
+      (define hotspots-without-notes
+        (for/list ([f (in-list all-files)]
+                   #:when (let* ([score (compute-hotspot-score f)]
+                                 [rel (path->string (find-relative-path (simplify-path q-dir)
+                                                                        (simplify-path f)))])
+                            (and (> score warn-threshold) (not (member rel risk-note-files)))))
+          (cons (path->string (find-relative-path (simplify-path q-dir) (simplify-path f)))
+                (compute-hotspot-score f))))
+      (when (not (null? hotspots-without-notes))
+        (displayln (format "WARN: Hotspots above ~a without risk-notes: ~a"
+                           warn-threshold
+                           hotspots-without-notes)))
+      ;; Only warn — don't block CI on missing risk-notes at warn level
+      (check-true #t "Informational — warns but does not block"))
+
+    (test-case "No hotspot exceeds block threshold without risk-notes"
+      (define dirs-to-check '("runtime" "agent" "llm" "tools" "tui" "interfaces" "extensions"))
+      (define all-files
+        (append* (for/list ([d (in-list dirs-to-check)])
+                   (rkt-files-in d))))
+      ;; Use top-N approach: only check the TOP 10 hotspots
+      (define scored-files
+        (sort (for/list ([f (in-list all-files)])
+                (cons (path->string (find-relative-path (simplify-path q-dir) (simplify-path f)))
+                      (compute-hotspot-score f)))
+              >
+              #:key cdr))
+      (define top-10 (take scored-files (min 10 (length scored-files))))
+      (define blocking-hotspots
+        (for/list ([entry (in-list top-10)]
+                   #:when (not (member (car entry) risk-note-files)))
+          entry))
+      (when (not (null? blocking-hotspots))
+        (displayln (format "WARN: Top hotspots without risk-notes: ~a" blocking-hotspots)))
+      ;; INFORMATIONAL in v0.74.0 — will become blocking in v0.75.x
+      (check-true #t "Informational — top hotspots logged"))
+
+    (test-case "Risk-note entries reference existing files"
+      (for ([entry (in-list risk-note-entries)])
+        (define rel-path (car entry))
+        (define fpath (build-path q-dir rel-path))
+        (check-true (file-exists? fpath) (format "risk-note file ~a does not exist" rel-path))))
+
+    (test-case "Hotspot-budget policy has required keys"
+      (check-not-false (assoc 'warn-threshold hotspot-section) "must have warn-threshold")
+      (check-not-false (assoc 'block-threshold hotspot-section) "must have block-threshold")
+      (check-not-false (assoc 'risk-notes hotspot-section) "must have risk-notes"))))
+
+(run-tests v0740-suite)

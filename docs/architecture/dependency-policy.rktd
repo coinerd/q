@@ -172,4 +172,10 @@
       ("sandbox/subprocess.rkt"
        (risk
         . "Shell subprocess execution with resource limits, timeout handling, and output capture; security-sensitive boundary")
-       (owner . "hardening"))))))
+       (owner . "hardening"))
+      ("tui/tui-render-loop.rkt"
+       (risk . "TUI render loop with streaming state, VDOM diffing, and layout; high visual-coupling")
+       (owner . "tui"))
+      ("extensions/gsd/core.rkt"
+       (risk . "GSD planning core with wave execution, state machine dispatch, and high co-change coupling")
+       (owner . "extensions"))))))
