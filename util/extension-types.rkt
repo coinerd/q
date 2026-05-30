@@ -8,10 +8,10 @@
 
 (require racket/contract)
 
-;; A-3: Standalone extension-registry? predicate.
+;; A-3: Re-export the real extension-registry? struct predicate.
 ;; Typed Racket #:opaque creates its own predicate; this is for untyped consumers.
-;; Matches the struct definition in extensions/api.rkt.
-(define extension-registry? procedure?)
+;; Must match the actual struct in extensions/api.rkt to avoid any-wrap/c violations.
+(require (only-in "../extensions/api.rkt" extension-registry?))
 
 (provide (contract-out [extension-registry? (-> any/c boolean?)])
          extension-ctx
