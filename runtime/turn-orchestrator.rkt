@@ -6,6 +6,8 @@
 ;; Extracted from iteration.rkt for single-responsibility separation.
 ;; Handles: context assembly → provider turn → tool execution.
 ;;
+
+(define-logger q-turn-orch)
 ;; This module is one of the boundary modules that imports upward into
 ;; the tools/ and extensions/ layers (agent-session.rkt is another).
 ;; Other runtime modules should not import tools/tool.rkt, tools/scheduler.rkt,

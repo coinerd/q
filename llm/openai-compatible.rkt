@@ -9,6 +9,8 @@
 ;; HTTP calls use net/http-client from Racket stdlib.
 ;; SSE parsing delegates to llm/stream.rkt.
 
+
+(define-logger q-openai)
 (require racket/contract
          "timing.rkt"
          (only-in "model-defaults.rkt" OPENAI-DEFAULT-MODEL)
@@ -140,7 +142,7 @@
                      (define tci (hash->tool-call-intent tc-hash))
                      (define round-trip (tool-call-intent->hash tci))
                      (unless (equal? (hash-ref tc-hash 'name) (hash-ref round-trip 'name))
-                       (log-warning "tool-call-intent shadow mismatch in openai: ~a vs ~a"
+                       (log-q-openai-warning "tool-call-intent shadow mismatch in openai: ~a vs ~a"
                                     (hash-ref tc-hash 'name)
                                     (hash-ref round-trip 'name)))
                      tc-hash)

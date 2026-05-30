@@ -8,6 +8,8 @@
 ;; entry point.
 ;;
 ;; Provides:
+
+(define-logger q-session-lifecycle)
 ;;   run-prompt!             — main entry point for running a user prompt
 ;;   build-session-context-for-prompt — build context from history + system instructions
 ;;   dispatch-iteration      — model-select hook + iteration loop dispatch

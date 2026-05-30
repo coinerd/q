@@ -3,6 +3,8 @@
 ;; Extracted from tools/tool.rkt (v0.30.8 W0)
 ;; STABILITY: stable
 
+
+(define-logger q-tool-registry)
 (require racket/contract
          racket/set
          (only-in racket/base make-semaphore call-with-semaphore)
