@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.73.7 -- 2026-05-30
+
+### Extension Tests + Contract Completion (T-6/A-6b)
+
+| Change | Detail |
+|--------|--------|
+| T-6 | 27 unit tests for GSD command parsing + dispatch |
+| T-6 | 14 unit tests for GSD plan validator |
+| A-6b | Contract-out added to `sandbox/subprocess.rkt` |
+| A-6b | Contract-out added to `sandbox/evaluator.rkt` |
+
+41 new test cases. Sandbox security boundary now has typed contracts.
+
 ## v0.73.6 -- 2026-05-30
 
 ### Observability Infrastructure (T-3/T-4/T-5)
