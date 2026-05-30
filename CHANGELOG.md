@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.72.1 — 
+
+### Phase 2a: Core Contract Precision
+
+Contract tightening for core modules.
+
+| Finding | Severity | Fix |
+|---------|----------|-----|
+| C1: 28 `any/c` in loop-phases contracts | CRITICAL | Replaced with string?, event-bus?, provider?, loop-state?, procedure?, (listof tool?) |
+| W13: turn-reducer lacks contracts | WARNING | Reviewed — contracts already specific where possible |
+| I14: session-mutation uses `any/c` for typed fields | INFO | Tightened config→hash?, start-time→exact-nonnegative-integer?, last-compaction-time→(or/c exact-nonnegative-integer? #f) |
+
+**Files changed:** `loop-phases.rkt`, `session-mutation.rkt`
+
 ## v0.72.0 — 
 
 ### Phase 1: Zero-Cost Fixes
