@@ -16,6 +16,7 @@
 (require "../util/errors.rkt")
 (require "provider-errors.rkt")
 (require racket/contract
+         "timing.rkt"
          (only-in "model-defaults.rkt" OPENAI-DEFAULT-MODEL)
          racket/string
          racket/generator
@@ -117,8 +118,7 @@
   (define headers (list (format "api-key: ~a" api-key) "Content-Type: application/json"))
   (define body-bytes (jsexpr->bytes body))
   (define response-port-box (box #f))
-  (log-info (format "[telemetry] azure-stream setup completed in ~a ms"
-                    (real->decimal-string (- (current-inexact-milliseconds) _stream-t0) 1)))
+  (log-stream-setup-timing "azure" _stream-t0)
   (dynamic-wind
    (lambda () (void))
    (lambda ()

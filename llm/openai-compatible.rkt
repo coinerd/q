@@ -10,6 +10,7 @@
 ;; SSE parsing delegates to llm/stream.rkt.
 
 (require racket/contract
+         "timing.rkt"
          (only-in "model-defaults.rkt" OPENAI-DEFAULT-MODEL)
          racket/match
          racket/string
@@ -301,8 +302,7 @@
     ;; Simple wrapper: yield chunks until done, then close port.
     ;; No dynamic-wind — it fires before/after on every yield which
     ;; causes the port to be closed between yields.
-    (log-info (format "[telemetry] openai-stream setup completed in ~a ms"
-                      (real->decimal-string (- (current-inexact-milliseconds) _stream-t0) 1)))
+    (log-stream-setup-timing "openai" _stream-t0)
     (generator ()
                (let loop ()
                  (define chunk (gen))

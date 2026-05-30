@@ -11,6 +11,7 @@
 ;; SSE parsing delegates to llm/stream.rkt.
 
 (require racket/contract
+         "timing.rkt"
          racket/match
          racket/string
          (only-in "model-defaults.rkt" GEMINI-DEFAULT-MODEL GEMINI-DEFAULT-BASE-URL)
