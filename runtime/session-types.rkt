@@ -58,21 +58,6 @@
          agent-session-shutdown-requested?
          agent-session-force-shutdown?
          agent-session-prompt-running?
-         ;; DEPRECATED (v0.54.2): Use guarded setters from session-mutation.rkt
-         ;; These will be removed in a future version.
-         set-agent-session-model-name!
-         set-agent-session-index!
-         set-agent-session-config!
-         set-agent-session-active?!
-         set-agent-session-start-time!
-         set-agent-session-compacting?!
-         set-agent-session-last-compaction-time!
-         set-agent-session-persisted?!
-         set-agent-session-pending-entries!
-         set-agent-session-thinking-level!
-         set-agent-session-shutdown-requested?!
-         set-agent-session-force-shutdown?!
-         set-agent-session-prompt-running?!
          session-log-path
          session-index-path
          (contract-out [session-log-path-for (-> agent-session? path?)]
@@ -143,3 +128,20 @@
 
 (define (session-extension-registry sess)
   (agent-session-extension-registry sess))
+
+;; Internal sub-module: provides raw setters for session-mutation.rkt only.
+;; These MUST NOT be used outside session-mutation.rkt.
+(module+ internal
+  (provide set-agent-session-model-name!
+           set-agent-session-index!
+           set-agent-session-config!
+           set-agent-session-active?!
+           set-agent-session-start-time!
+           set-agent-session-compacting?!
+           set-agent-session-last-compaction-time!
+           set-agent-session-persisted?!
+           set-agent-session-pending-entries!
+           set-agent-session-thinking-level!
+           set-agent-session-shutdown-requested?!
+           set-agent-session-force-shutdown?!
+           set-agent-session-prompt-running?!))
