@@ -7,7 +7,7 @@
 (require rackunit
          rackunit/text-ui
          "../runtime/iteration/fsm-types.rkt"
-         (only-in "../runtime/iteration/main-loop.rkt" current-iteration-fsm-state))
+         (only-in "../agent/iteration/main-loop.rkt" current-iteration-fsm-state))
 
 (define fsm-suite
   (test-suite "Iteration FSM tests"

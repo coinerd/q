@@ -21,7 +21,7 @@
 ;; ── Opaque types for untyped struct values ────────────────────
 ;; These avoid TR's any-wrap/c failure with opaque structs.
 
-(require/typed "../../agent/event-bus.rkt" [#:opaque EventBus event-bus?])
+(require/typed "../event-bus.rkt" [#:opaque EventBus event-bus?])
 
 (require/typed "../../util/tool-registry-struct.rkt" [#:opaque ToolRegistry tool-registry?])
 

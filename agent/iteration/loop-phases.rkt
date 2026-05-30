@@ -11,7 +11,7 @@
 
 (require racket/contract
          racket/list
-         (only-in "../../agent/event-bus.rkt" event-bus? publish!)
+         (only-in "../event-bus.rkt" event-bus? publish!)
          (only-in "../../util/event-contracts.rkt" injection-count-payload/c)
          (only-in "tool-turn-bridge.rkt" dequeue-all-steering! drain-injected-messages!)
          (only-in "loop-config.rkt"
@@ -20,11 +20,11 @@
                   loop-config-bus
                   loop-config-session-id
                   loop-config?)
-         (only-in "../../agent/queue.rkt" queue? queue-status)
+         (only-in "../queue.rkt" queue? queue-status)
          (only-in "../../runtime/runtime-helpers.rkt" maybe-dispatch-hooks emit-session-event!)
          (only-in "../../util/hook-types.rkt" hook-result-action hook-result?)
          (only-in "../../runtime/layer-adapters.rkt" extension-registry?)
-         (only-in "internal.rkt" assert-payload))
+         (only-in "../../runtime/iteration/internal.rkt" assert-payload))
 
 ;; Re-export for consumers
 (provide (contract-out [prepare-iteration-context

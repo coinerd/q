@@ -9,8 +9,8 @@
 
 (require rackunit
          rackunit/text-ui
-         "../runtime/iteration/counters.rkt"
-         "../runtime/iteration/loop-state.rkt"
+         "../agent/iteration/counters.rkt"
+         "../agent/iteration/loop-state.rkt"
          (only-in "../util/message.rkt" make-message)
          (only-in "../util/content-parts.rkt" make-tool-call-part))
 

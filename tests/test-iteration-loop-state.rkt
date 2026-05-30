@@ -6,7 +6,7 @@
 
 (require rackunit
          rackunit/text-ui
-         "../runtime/iteration/loop-state.rkt"
+         "../agent/iteration/loop-state.rkt"
          "../agent/event-bus.rkt"
          racket/set)
 

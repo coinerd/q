@@ -6,7 +6,7 @@
 
 (require rackunit
          rackunit/text-ui
-         "../runtime/iteration/loop-phases.rkt"
+         "../agent/iteration/loop-phases.rkt"
          "../agent/event-bus.rkt"
          "../agent/queue.rkt")
 

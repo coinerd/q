@@ -48,8 +48,8 @@
          (only-in "../runtime/session-context.rkt" extract-path-settings)
          "../util/ids.rkt"
          (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
-         (only-in "iteration/main-loop.rkt" run-iteration-loop/v2)
-         (only-in "iteration/loop-config.rkt" make-loop-config)
+         (only-in "../agent/iteration/main-loop.rkt" run-iteration-loop/v2)
+         (only-in "../agent/iteration/loop-config.rkt" make-loop-config)
          (only-in "../agent/event-emitter.rkt" emit-typed-event!)
          (only-in "../agent/event-structs/turn-events.rkt" turn-end-event turn-start-event)
          "session-types.rkt"

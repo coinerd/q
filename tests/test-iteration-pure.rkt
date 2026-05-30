@@ -11,7 +11,7 @@
 (require rackunit
          rackunit/text-ui
          "../runtime/iteration/decision.rkt"
-         "../runtime/iteration/loop-state.rkt"
+         "../agent/iteration/loop-state.rkt"
          (only-in "../util/loop-result.rkt"
                   make-loop-result
                   loop-result-termination-reason

@@ -25,8 +25,8 @@
                   tool-call-name)
          (only-in "../../runtime/tool-coordinator.rkt" extract-tool-calls-from-messages)
          (only-in "tool-turn-bridge.rkt" update-seen-paths take-at-most)
-         (only-in "../../agent/event-emitter.rkt" emit-typed-event!)
-         (only-in "../../agent/event-structs/hook-events.rkt" turn-cancelled-event)
+         (only-in "../event-emitter.rkt" emit-typed-event!)
+         (only-in "../event-structs/hook-events.rkt" turn-cancelled-event)
          (only-in "../../util/loop-result.rkt" make-loop-result)
          (only-in "../../util/cancellation.rkt" cancellation-token? cancellation-token-cancelled?))
 

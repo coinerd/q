@@ -14,9 +14,9 @@
 
 (require racket/contract
          racket/match
-         (only-in "counters.rkt" compute-next-counters)
+         (only-in "../../agent/iteration/counters.rkt" compute-next-counters)
          (only-in "../../util/loop-result.rkt" loop-result-termination-reason loop-result-messages)
-         (only-in "loop-state.rkt"
+         (only-in "../../agent/iteration/loop-state.rkt"
                   loop-counters
                   loop-counters-iteration
                   loop-counters-consecutive-tool-count

@@ -10,8 +10,8 @@
 (require rackunit
          rackunit/text-ui
          racket/match
-         "../runtime/iteration/loop-state.rkt"
-         (only-in "../runtime/iteration/counters.rkt" compute-next-counters)
+         "../agent/iteration/loop-state.rkt"
+         (only-in "../agent/iteration/counters.rkt" compute-next-counters)
          (only-in "../util/protocol-types.rkt"
                   make-message
                   make-text-part
