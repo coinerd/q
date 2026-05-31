@@ -5,17 +5,27 @@
 
 (require racket/list
          racket/string
-         (only-in "../../util/protocol-types.rkt" message make-message make-text-part)
-         (only-in "task-conclusion.rkt" task-conclusion? task-conclusion-text)
+         (only-in "../../util/protocol-types.rkt"
+                  message
+                  message-id
+                  message-content
+                  make-message
+                  make-text-part)
+         (only-in "task-conclusion.rkt"
+                  task-conclusion?
+                  task-conclusion-text
+                  task-conclusion-origin-message-ids)
          (only-in "state-relevance.rkt" context-level-for-state)
          (only-in "../../util/ids.rkt" generate-id)
          (only-in "../../util/fsm.rkt" fsm-state? fsm-state-name)
+         (only-in "../../util/content-parts.rkt" text-part-text text-part? text-part)
          "context-floor.rkt")
 
 (provide current-task-state-aware-assembly?
          build-tiered-context/state-aware
          build-state-awareness-preamble
-         check-rollback-triggers)
+         check-rollback-triggers
+         ws-entry->conclusion-or-self)
 
 ;; Feature flag: state-aware context assembly (v0.75.3)
 (define current-task-state-aware-assembly? (make-parameter #f))
@@ -63,11 +73,20 @@
   (define conclusions-level (and state-name (context-level-for-state state-name 'conclusions)))
 
   ;; Adjust working-set based on state relevance
+  ;; v0.76.4: conclusion-first replacement when filtered/excluded
   (define effective-ws
     (cond
-      [(eq? ws-level 'excluded) '()]
-      ;; Keep only the most recent working-set entries
-      [(eq? ws-level 'filtered) (take ws-messages (min 3 (length ws-messages)))]
+      [(eq? ws-level 'excluded)
+       ;; v0.76.4: Instead of dropping all, keep entries that have matching conclusions
+       ;; (as compact replacement). Unmatched entries are still dropped (backward compat).
+       (for/list ([m (in-list ws-messages)]
+                  #:when (for/or ([c (in-list conclusions)]
+                                  #:when (task-conclusion? c))
+                           (member (message-id m) (task-conclusion-origin-message-ids c))))
+         (ws-entry->conclusion-or-self m conclusions))]
+      [(eq? ws-level 'filtered)
+       (define filtered (take ws-messages (min 3 (length ws-messages))))
+       (map (λ (m) (ws-entry->conclusion-or-self m conclusions)) filtered)]
       [else ws-messages]))
 
   ;; Add conclusions as context entries when relevant
@@ -215,3 +234,31 @@
                 warnings)))
 
   (reverse warnings))
+
+;; ════════════════════════════════════════════════════════════════
+;; v0.76.4 M5 W0: Conclusion-first working-set replacement
+;; ════════════════════════════════════════════════════════════════
+
+;; ws-entry->conclusion-or-self :
+;;   message? (listof task-conclusion?) -> message?
+;; If a conclusion references this message's ID via origin-message-ids,
+;; returns a compact replacement message with conclusion text.
+;; Otherwise returns the original message unchanged.
+(define (ws-entry->conclusion-or-self ws-msg conclusions)
+  (define msg-id-val (message-id ws-msg))
+  (define matching-conclusion
+    (for/first ([c (in-list conclusions)]
+                #:when (and (task-conclusion? c)
+                            (member msg-id-val (task-conclusion-origin-message-ids c))))
+      c))
+  (cond
+    [matching-conclusion
+     (make-message (message-id ws-msg)
+                   #f
+                   'system-instruction
+                   'text
+                   (list (make-text-part (format "[Conclusion replaces context] ~a"
+                                                 (task-conclusion-text matching-conclusion))))
+                   (current-seconds)
+                   (hasheq))]
+    [else ws-msg]))
