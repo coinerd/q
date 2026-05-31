@@ -27,6 +27,7 @@
          measure-context-size
          compute-savings
          category-breakdown
+         compute-conclusion-coverage
          measure-context-assembly)
 
 ;; ── Struct ──
@@ -126,3 +127,22 @@
                      (current-seconds)))
 
   (values tc metrics))
+
+;; ── Conclusion coverage ──
+
+;; compute-conclusion-coverage :
+;;   (listof string?) exact-nonnegative-integer? -> real?
+;;
+;; Computes ratio of record_conclusion calls to total tool calls.
+;; tool-names: list of tool names called in the last N turns.
+;; Returns coverage ratio (0.0–1.0+).
+(define (compute-conclusion-coverage tool-names)
+  (define total (length tool-names))
+  (if (zero? total)
+      0.0
+      (let ([conclusion-calls
+             (count
+              (lambda (name)
+                (member name '("record_conclusion" "save-conclusion" "save_conclusion") string=?))
+              tool-names)])
+        (/ conclusion-calls total))))
