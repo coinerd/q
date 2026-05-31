@@ -15,6 +15,10 @@
          (only-in "runtime-helpers.rkt" emit-session-event!)
          "session-types.rkt")
 (require "session-mutation.rkt")
+(require (only-in "context-assembly/state-inference.rkt"
+                  infer-task-state-from-tools
+                  current-state-inference-threshold))
+(require (only-in "../util/fsm.rkt" fsm-state-name))
 
 (provide (contract-out [wire-session-event-handlers! (-> agent-session? procedure? void?)]))
 
@@ -73,6 +77,24 @@
                                                      (length (compaction-result-kept-messages
                                                               compact-result))))))))
                 #:filter (lambda (evt) (equal? (event-ev evt) "compact.requested")))
+    ;; Subscribe to tool.execution.completed — infer task state
+    (subscribe!
+     bus
+     (lambda (evt)
+       (define payload (event-payload evt))
+       (define tool-name (and (hash? payload) (hash-ref payload 'tool-name #f)))
+       (when tool-name
+         (define current-state (agent-session-task-fsm-state sess))
+         (define recent-calls (list tool-name))
+         (define-values (inferred-state confidence) (infer-task-state-from-tools recent-calls))
+         (when (and inferred-state (>= confidence (current-state-inference-threshold)))
+           (guarded-set-task-fsm-state! sess (fsm-state-name inferred-state))
+           (emit-session-event!
+            bus
+            (agent-session-session-id sess)
+            "task.state.inferred"
+            (hasheq 'state (fsm-state-name inferred-state) 'confidence confidence 'tool tool-name)))))
+     #:filter (lambda (evt) (equal? (event-ev evt) "tool.execution.completed")))
     (void)))
 
 ;; ============================================================

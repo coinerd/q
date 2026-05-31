@@ -1,7 +1,7 @@
 #lang racket/base
 
 ;; tests/test-task-state-inference.rkt — tests for state-inference heuristics
-;; v0.75.2 W0: Tool-call pattern → task-state inference
+;; v0.75.2: Tool-call pattern → task-state inference + event wiring
 
 (require rackunit
          rackunit/text-ui
@@ -84,7 +84,6 @@
 
     (test-case "low-confidence reads don't trigger transition"
       (define-values (state conf) (infer-task-state-from-tools '("read")))
-      ;; Only 1 read → confidence 0.5, below threshold
       (check-true (< conf (current-state-inference-threshold))))
 
     ;; ── Tool name categorization ──
@@ -112,6 +111,23 @@
 
     (test-case "infer-from-recent-turns with mixed turns"
       (define-values (state conf) (infer-from-recent-turns '(("read" "read" "read"))))
-      (check-equal? state task-exploration))))
+      (check-equal? state task-exploration))
+
+    ;; ── W1: Event wiring + confidence threshold ──
+
+    (test-case "threshold is adjustable via parameterize"
+      (check-true (procedure? current-state-inference-threshold))
+      (parameterize ([current-state-inference-threshold 0.9])
+        (check-equal? (current-state-inference-threshold) 0.9))
+      (check-equal? (current-state-inference-threshold) 0.7))
+
+    (test-case "mixed tools with edits take priority over reads"
+      (define-values (state conf)
+        (infer-task-state-from-tools '("read" "read" "read" "edit" "write")))
+      (check-equal? state task-implementation))
+
+    (test-case "explicit set_task_state overrides inference"
+      (define-values (inferred-state conf) (infer-task-state-from-tools '("set-task-state")))
+      (check-true (or (eq? inferred-state task-planning) (not inferred-state))))))
 
 (run-tests suite)
