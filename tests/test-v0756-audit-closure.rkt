@@ -111,7 +111,7 @@
 
     (test-case "append-conclusion! + load-conclusions round-trip"
       (define log-path (make-temp-log-path))
-      (define c1 (task-conclusion "c1" "test fact" 'fact 'exploration '() 1000 '()))
+      (define c1 (task-conclusion "c1" "test fact" 'fact 'exploration '() 1000 '() '()))
       (append-conclusion! log-path c1)
       (define loaded (load-conclusions log-path))
       (check-equal? (length loaded) 1)
@@ -121,8 +121,8 @@
 
     (test-case "append-conclusion! accumulates multiple conclusions"
       (define log-path (make-temp-log-path))
-      (define c1 (task-conclusion "c1" "first" 'fact 'exploration '() 1000 '()))
-      (define c2 (task-conclusion "c2" "second" 'decision 'planning '() 2000 '()))
+      (define c1 (task-conclusion "c1" "first" 'fact 'exploration '() 1000 '() '()))
+      (define c2 (task-conclusion "c2" "second" 'decision 'planning '() 2000 '() '()))
       (append-conclusion! log-path c1)
       (append-conclusion! log-path c2)
       (define loaded (load-conclusions log-path))
@@ -156,6 +156,7 @@
                            'exploration
                            '()
                            (* 1000 i)
+                           '()
                            '())))
       (define result (build-state-awareness-preamble 'exploration conclusions))
       (check-not-false result))
@@ -184,7 +185,7 @@
 
     (test-case "guarded-set-task-conclusions! accepts valid list"
       (define s (make-test-session))
-      (define c1 (task-conclusion "c1" "test" 'fact 'exploration '() 1000 '()))
+      (define c1 (task-conclusion "c1" "test" 'fact 'exploration '() 1000 '() '()))
       (guarded-set-task-conclusions! s (list c1))
       (check-equal? (length (agent-session-task-conclusions s)) 1))))
 

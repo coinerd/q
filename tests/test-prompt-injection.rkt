@@ -30,6 +30,7 @@
                    'exploration
                    '()
                    (current-seconds)
+                   '()
                    '()))
 
 (define suite

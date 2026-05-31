@@ -58,8 +58,9 @@
 (define ws-messages (list (ws-msg "ws-entry-1") (ws-msg "ws-entry-2") (ws-msg "ws-entry-3")))
 
 (define conclusions
-  (list (task-conclusion "c1" "Files are organized by layer" 'fact 'idle '() (current-seconds) '())
-        (task-conclusion "c2" "Tests use rackunit" 'fact 'idle '() (current-seconds) '())))
+  (list
+   (task-conclusion "c1" "Files are organized by layer" 'fact 'idle '() (current-seconds) '() '())
+   (task-conclusion "c2" "Tests use rackunit" 'fact 'idle '() (current-seconds) '() '())))
 
 (define (count-ws tier-a)
   (length (filter (lambda (m) (hash-ref (message-meta-safe m) 'working-set #f)) tier-a)))
@@ -220,8 +221,8 @@
 
     (test-case "preamble includes conclusions summary"
       (define conclusions
-        (list (task-conclusion "c1" "Use struct for data" 'fact 'idle '() (current-seconds) '())
-              (task-conclusion "c2" "Tests in tests/" 'fact 'idle '() (current-seconds) '())))
+        (list (task-conclusion "c1" "Use struct for data" 'fact 'idle '() (current-seconds) '() '())
+              (task-conclusion "c2" "Tests in tests/" 'fact 'idle '() (current-seconds) '() '())))
       (define p (build-state-awareness-preamble task-exploration conclusions))
       (define text (text-part-text (car (message-content p))))
       (check-not-false (string-contains? text "Use struct for data")
@@ -236,6 +237,7 @@
                            'idle
                            '()
                            (current-seconds)
+                           '()
                            '())))
       (define p (build-state-awareness-preamble task-planning conclusions))
       (define text (text-part-text (car (message-content p))))

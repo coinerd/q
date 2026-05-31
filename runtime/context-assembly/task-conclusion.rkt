@@ -20,7 +20,7 @@
          origin-message-ids ; (listof string) — provenance: which messages led to this
          timestamp ; integer — epoch seconds
          relevance-tags ; (listof symbol) — tags for state-relevance matching
-         )
+         dependencies)
   #:transparent)
 
 ;; ── Predicates ──
@@ -46,7 +46,9 @@
         'timestamp
         (task-conclusion-timestamp c)
         'relevance-tags
-        (task-conclusion-relevance-tags c)))
+        (task-conclusion-relevance-tags c)
+        'dependencies
+        (task-conclusion-dependencies c)))
 
 (define (hash->conclusion h)
   (task-conclusion (hash-ref h 'id)
@@ -55,7 +57,8 @@
                    (hash-ref h 'fsm-state-origin)
                    (hash-ref h 'origin-message-ids '())
                    (hash-ref h 'timestamp 0)
-                   (hash-ref h 'relevance-tags '())))
+                   (hash-ref h 'relevance-tags '())
+                   (hash-ref h 'dependencies '())))
 
 ;; ── Exports ──
 

@@ -135,7 +135,8 @@
                                        current-state
                                        '()
                                        (current-seconds)
-                                       tag-syms))
+                                       tag-syms
+                                       '())) ; dependencies — v0.76.5
                     ;; Add to session
                     (define current-conclusions (agent-session-task-conclusions sess))
                     (guarded-set-task-conclusions! sess (append current-conclusions (list c)))

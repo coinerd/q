@@ -33,8 +33,8 @@
     (working-set-add! ws p (format "msg-~a" p) 500)))
 
 (define conclusions
-  (list (task-conclusion "c1" "Use struct for data" 'fact 'idle '() (current-seconds) '())
-        (task-conclusion "c2" "Tests in tests/" 'fact 'idle '() (current-seconds) '())))
+  (list (task-conclusion "c1" "Use struct for data" 'fact 'idle '() (current-seconds) '() '())
+        (task-conclusion "c2" "Tests in tests/" 'fact 'idle '() (current-seconds) '() '())))
 
 (define suite
   (test-suite "ws-evolution"

@@ -27,6 +27,7 @@
                    'exploration
                    '()
                    (current-seconds)
+                   '()
                    '()))
 
 (define (preamble-text task-state conclusions)
