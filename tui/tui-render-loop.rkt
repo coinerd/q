@@ -139,6 +139,34 @@
 ;; Frame rendering (cell-buffer-based)
 ;; ============================================================
 
+;; ============================================================
+;; Pure render helpers (extracted for testability, v0.74.5)
+;; ============================================================
+
+;; clip-visible-lines : (listof any/c) natural? -> (listof any/c)
+;; Pure: clips lines to visible height from the bottom.
+(define (clip-visible-lines lines height)
+  (if (> (length lines) height)
+      (take-right lines height)
+      lines))
+
+;; compute-pad-count : (listof any/c) natural? -> natural?
+;; Pure: computes number of padding lines needed.
+(define (compute-pad-count lines height)
+  (max 0 (- height (length lines))))
+
+;; clip-overlay-content : (listof any/c) natural? -> (listof any/c)
+;; Pure: clips overlay content to fit transcript height.
+(define (clip-overlay-content content height)
+  (if (> (length content) height)
+      (take-right content height)
+      content))
+
+(provide (contract-out
+          [clip-visible-lines (-> list? exact-nonnegative-integer? list?)]
+          [compute-pad-count (-> list? exact-nonnegative-integer? exact-nonnegative-integer?)]
+          [clip-overlay-content (-> list? exact-nonnegative-integer? list?)]))
+
 ;; Render the complete frame to the terminal using ubuf.
 ;; Hides cursor during redraw to prevent flicker, shows after.
 ;; Clears needs-redraw flag after drawing.
@@ -187,11 +215,8 @@
     ;; This proves component-state-ref/set! works for scroll-relevant data
     (component-state-update trans-comp 'last-scroll-offset (ui-state-scroll-offset ui-state)))
   (define-values (trans-lines-raw ui-state*) (render-transcript ui-state transcript-height cols))
-  (define visible-lines-raw
-    (if (> (length trans-lines-raw) transcript-height)
-        (take-right trans-lines-raw transcript-height)
-        trans-lines-raw))
-  (define pad-count (- transcript-height (length visible-lines-raw)))
+  (define visible-lines-raw (clip-visible-lines trans-lines-raw transcript-height))
+  (define pad-count (compute-pad-count trans-lines-raw transcript-height))
   (define sel (ui-state-selection ui-state))
   (define sel-anchor (selection-state-anchor sel))
   (define sel-end (selection-state-end sel))
@@ -237,10 +262,7 @@
   (define overlay (ui-state-active-overlay ui-state))
   (when overlay
     (define ov-content (overlay-state-content overlay))
-    (define ov-lines
-      (if (> (length ov-content) transcript-height)
-          (take-right ov-content transcript-height)
-          ov-content))
+    (define ov-lines (clip-overlay-content ov-content transcript-height))
     ;; Convert overlay content to vnodes with background style
     (define ov-vnodes
       (for/list ([line (in-list ov-lines)]
