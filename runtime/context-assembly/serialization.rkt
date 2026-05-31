@@ -99,6 +99,7 @@
 
 (define (gsd-progress-message? m)
   (or (hash-ref (message-meta-safe m) 'gsd-pin #f)
+      (hash-ref (message-meta-safe m) 'gsd-execution-instruction #f)
       (and (memq (message-role m) '(tool assistant))
            (let ([txt (string-join (for/list ([part (message-content m)]
                                               #:when (text-part? part))
@@ -478,4 +479,16 @@
 
   (test-case "regex-no-match-non-gsd-text"
     (define m (make-test-msg 'assistant "I have completed the refactoring"))
-    (check-false (gsd-progress-message? m))))
+    (check-false (gsd-progress-message? m))
+    ;; v0.75.7 W3: gsd-execution-instruction meta flag
+    (test-case "gsd-execution-instruction-flag-pins-message"
+      (define m (make-test-msg 'user "Implement the plan" (hasheq 'gsd-execution-instruction #t)))
+      (check-true (gsd-progress-message? m)))
+
+    (test-case "gsd-execution-instruction-flag-pins-any-role"
+      (define m (make-test-msg 'system "Task context" (hasheq 'gsd-execution-instruction #t)))
+      (check-true (gsd-progress-message? m)))
+
+    (test-case "no-execution-instruction-flag-does-not-pin"
+      (define m (make-test-msg 'user "Just a regular message"))
+      (check-false (gsd-progress-message? m)))))

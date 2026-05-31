@@ -70,7 +70,8 @@
           [handle-gsd-status (-> hook-result?)]
           [handle-artifact-command (-> string? string? (or/c path-string? #f) hash? hook-result?)]
           [dispatch-gsd-command
-           (-> (or/c parsed-gsd-command? #f) string? (or/c path-string? #f) (values symbol? any/c))]))
+           (-> (or/c parsed-gsd-command? #f) string? (or/c path-string? #f) (values symbol? any/c))])
+         extract-task-summary)
 
 ;; ============================================================
 ;; Command registration
@@ -290,6 +291,18 @@
      (match-define (list executor wave-indices) result)
      (list 'ok executor wave-indices)]))
 
+;; Extract a concise task summary from the plan for persistent reminder
+(define (extract-task-summary plan)
+  (define waves (gsd-plan-waves plan))
+  (define wave-titles
+    (for/list ([w waves])
+      (format "W~a: ~a" (gsd-wave-index w) (gsd-wave-title w))))
+  (if (null? wave-titles)
+      ""
+      (format
+       "\n## Task Summary (DO NOT FORGET)\nYou are implementing: ~a\nStay focused on this task.\n"
+       (string-join wave-titles ", "))))
+
 ;; build-go-prompt : path? string? (or/c gsd-plan? #f) any/c string? gsd-plan? -> (values string? string?)
 ;; Assemble augmented prompt text and display text for /go.
 (define (build-go-prompt base-dir plan-content plan-from-index executor wave-arg plan)
@@ -303,9 +316,11 @@
         (string-append plan-content "\n\n" (wave-docs-summary plan-from-index))
         plan-content))
   (define exec-prompt (executing-prompt plan executor))
+  (define task-summary (extract-task-summary plan))
   (define augmented-text
     (string-append planning-implement-prompt
                    exec-prompt
+                   task-summary
                    "\nPlan:\n"
                    plan-text-for-prompt
                    "\n"
