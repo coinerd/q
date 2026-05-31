@@ -577,8 +577,9 @@
       (when (not (null? blocking-hotspots))
         (displayln (format "WARN: Top hotspots without risk-notes: ~a" blocking-hotspots)))
       ;; v0.74.6: BLOCKING — top hotspots above block threshold must have risk-notes
-      (check-equal? blocking-hotspots '()
-                   (format "Top hotspots above ~a without risk-notes" block-threshold)))
+      (check-equal? blocking-hotspots
+                    '()
+                    (format "Top hotspots above ~a without risk-notes" block-threshold)))
 
     (test-case "Risk-note entries reference existing files"
       (for ([entry (in-list risk-note-entries)])
@@ -682,5 +683,51 @@
       (define code-only (string-join code-lines "\n"))
       (check-false (regexp-match? #rx"lazy-require" code-only)
                    "session-store-tree.rkt must not use lazy-require"))))
+
+(define v0747-suite
+  (test-suite "v0.74.7-audit-closure"
+
+    (test-case "Agent layer has known-exceptions in policy"
+      (define agent-exc (policy-ref 'known-exceptions 'agent))
+      (check-true (list? agent-exc) "Agent known-exceptions must be a list"))
+
+    (test-case "Agent layer exceptions do not exceed policy maximum"
+      (define agent-exc (policy-ref 'known-exceptions 'agent))
+      (define max-agent-exc (policy-ref 'layers 'agent 'max-exceptions))
+      (check-true (<= (length agent-exc) max-agent-exc)
+                  (format "Agent exceptions (~a) exceed max (~a)" (length agent-exc) max-agent-exc)))
+
+    (test-case "Session persistence module exists"
+      (define p (build-path q-dir "runtime" "session-persistence.rkt"))
+      (check-true (file-exists? p) "runtime/session-persistence.rkt must exist"))
+
+    (test-case "Session lifecycle line count within budget"
+      (define p (build-path q-dir "runtime" "session-lifecycle.rkt"))
+      (check-true (file-exists? p) "runtime/session-lifecycle.rkt must exist")
+      (when (file-exists? p)
+        (define lines (length (file->lines p)))
+        (check-true (<= lines 450)
+                    (format "session-lifecycle.rkt has ~a lines (budget: 450)" lines))))
+
+    (test-case "Session persistence has contract-out for key functions"
+      (define p (build-path q-dir "runtime" "session-persistence.rkt"))
+      (when (file-exists? p)
+        (define content (file->string p))
+        (check-true (regexp-match? #rx"contract-out" content)
+                    "session-persistence.rkt must use contract-out")
+        (check-true (regexp-match? #rx"write-crash-log!" content)
+                    "session-persistence.rkt must provide write-crash-log!")
+        (check-true (regexp-match? #rx"ensure-persisted!" content)
+                    "session-persistence.rkt must provide ensure-persisted!")
+        (check-true (regexp-match? #rx"buffer-or-append!" content)
+                    "session-persistence.rkt must provide buffer-or-append!")))
+
+    (test-case "Dependency policy has agent/iteration convention"
+      (define p (build-path q-dir "docs" "architecture" "dependency-policy.rktd"))
+      (define content (file->string p))
+      (check-true (regexp-match? #rx"agent/iteration" content)
+                  "dependency-policy.rktd must define agent/iteration deep-module"))))
+
+(run-tests v0747-suite)
 
 (run-tests v0741-suite)
