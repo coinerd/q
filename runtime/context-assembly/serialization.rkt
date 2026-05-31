@@ -4,6 +4,8 @@
 ;; runtime/context-assembly/serialization.rkt — tiered context, entry conversion, agents discovery
 ;;
 ;; Wire format construction, tiered context, and file discovery.
+;; v0.76.0 W2: Core tiered context building extracted to context-floor.rkt.
+;;              State-aware assembly extracted to state-aware-builder.rkt.
 
 (require racket/list
          racket/string
@@ -22,194 +24,24 @@
          (only-in "../context-policy.rkt" estimate-message-tokens)
          (only-in "../context-fit.rkt" truncate-messages-to-budget)
          (only-in "../../llm/provider.rkt" provider?)
-         (only-in "../../util/hook-types.rkt" hook-result-action hook-result-payload)
          "../../skills/context-files.rkt"
-         "budgeting.rkt"
-         (only-in "state-relevance.rkt" context-level-for-state)
-         (only-in "task-conclusion.rkt" task-conclusion? task-conclusion-text)
-         (only-in "../../util/ids.rkt" generate-id)
-         (only-in "../../util/fsm.rkt" fsm-state? fsm-state-name))
+         "session-walk.rkt")
 
-(provide tiered-context
-         tiered-context?
-         tiered-context-tier-a
-         tiered-context-tier-b
-         tiered-context-tier-c
-         build-tiered-context
-         tiered-context->message-list
-         build-tiered-context-with-hooks
-         compute-dynamic-tier-b-count
-         summarize-tool-result ;; re-exported from session-walk.rkt via context-assembly.rkt
-         context-assembly-payload
-         context-assembly-payload?
-         context-assembly-payload-tier-a-messages
-         context-assembly-payload-tier-b-messages
-         context-assembly-payload-tier-c-messages
-         context-assembly-payload-max-tokens
-         context-assembly-payload-metadata
-         payload->tiered-context
-         tiered-context->payload
-         build-session-context/tokens
+;; Re-export from context-floor.rkt
+(require "context-floor.rkt")
+(provide (all-from-out "context-floor.rkt"))
+
+;; Re-export from state-aware-builder.rkt
+(require "state-aware-builder.rkt")
+(provide (all-from-out "state-aware-builder.rkt"))
+
+;; Remaining exports (not moved)
+(provide build-session-context/tokens
          entry->context-message
          load-agents-context
          build-system-preamble
          truncate-messages-to-budget
-         gsd-progress-message?
-         current-task-state-aware-assembly?
-         build-tiered-context/state-aware)
-
-;; Feature flag: state-aware context assembly (v0.75.3)
-(define current-task-state-aware-assembly? (make-parameter #f))
-
-;; Default tier boundaries
-(define DEFAULT-TIER-B-COUNT 20)
-(define DEFAULT-TIER-C-COUNT 4)
-
-;; v0.45.6 (SAL-03): Dynamic Tier C sizing — scales with total message count
-;; At 200 messages: 4. At 400: 8. At 500+: 10-12.
-(define (compute-tier-c-count total-messages)
-  (min 12 (max 4 (quotient total-messages 50))))
-
-(provide (contract-out [compute-tier-c-count
-                        (-> exact-nonnegative-integer? exact-nonnegative-integer?)]))
-
-;; v0.28.21 W4: Dynamic Tier-B sizing
-;; Scales Tier-B with total message count: min(50, max(20, total/10))
-;; More messages → larger Tier-B window for better mid-context retention.
-(define (compute-dynamic-tier-b-count total-messages)
-  (min 50 (max 20 (quotient total-messages 10))))
-
-;; R2-6: Context Assembly Hook Payload
-(struct context-assembly-payload (tier-a-messages tier-b-messages tier-c-messages max-tokens metadata)
-  #:transparent)
-
-(struct tiered-context (tier-a tier-b tier-c) #:transparent)
-
-(define (payload->tiered-context payload)
-  (tiered-context (context-assembly-payload-tier-a-messages payload)
-                  (context-assembly-payload-tier-b-messages payload)
-                  (context-assembly-payload-tier-c-messages payload)))
-
-(define (tiered-context->payload tc max-tokens [metadata (hasheq)])
-  (context-assembly-payload (tiered-context-tier-a tc)
-                            (tiered-context-tier-b tc)
-                            (tiered-context-tier-c tc)
-                            max-tokens
-                            metadata))
-
-(define (gsd-progress-message? m)
-  (or (hash-ref (message-meta-safe m) 'gsd-pin #f)
-      (hash-ref (message-meta-safe m) 'gsd-execution-instruction #f)
-      (and (memq (message-role m) '(tool assistant))
-           (let ([txt (string-join (for/list ([part (message-content m)]
-                                              #:when (text-part? part))
-                                     (text-part-text part)))])
-             (and (non-empty-string? txt)
-                  (regexp-match?
-                   (regexp (string-append "wave [0-9]+ (marked complete|is complete|done)"
-                                          "|PLAN\\.md.*(updated|created|written)"
-                                          "|STATE\\.md.*(updated|created|written)"
-                                          "|HANDOFF\\.json.*(written|updated)"
-                                          "|milestone.*complete"
-                                          "|review.*(APPROVED|REQUEST_CHANGES)"))
-                   txt))))))
-
-(define (build-tiered-context messages
-                              #:tier-b-count [tier-b-count #f]
-                              #:tier-c-count [tier-c-count DEFAULT-TIER-C-COUNT]
-                              #:working-set-messages [ws-messages '()]
-                              #:trace [trace-cb #f])
-  (when trace-cb
-    (trace-cb 'start (hasheq 'total (length messages))))
-  (define-values (compaction-summaries regular-msgs)
-    (partition (lambda (m) (eq? (message-kind m) 'compaction-summary)) messages))
-  (define-values (gsd-pinned regular) (partition gsd-progress-message? regular-msgs))
-  (define-values (sys-protected unpinned-raw)
-    (partition (lambda (m) (eq? (message-kind m) 'system-instruction)) regular))
-  (define first-user-idx
-    (for/first ([m (in-list unpinned-raw)]
-                [i (in-naturals)]
-                #:when (eq? (message-role m) 'user))
-      i))
-  (define-values (pinned-user unpinned)
-    (if first-user-idx
-        (values (list (list-ref unpinned-raw first-user-idx))
-                (append (take unpinned-raw first-user-idx) (drop unpinned-raw (add1 first-user-idx))))
-        (values '() unpinned-raw)))
-  (define total (length unpinned))
-  ;; v0.28.21 W4: Use dynamic Tier-B sizing when not explicitly specified
-  (define effective-tier-b (or tier-b-count (compute-dynamic-tier-b-count total)))
-  ;; v0.45.6 (SAL-03): Use dynamic Tier-C sizing when using default
-  (define effective-tier-c
-    (if (= tier-c-count DEFAULT-TIER-C-COUNT)
-        (compute-tier-c-count total)
-        tier-c-count))
-  (define tier-c-size (min effective-tier-c total))
-  (define tier-c
-    (if (> tier-c-size 0)
-        (take-right unpinned tier-c-size)
-        '()))
-  (define remaining-after-c
-    (if (> tier-c-size 0)
-        (drop-right unpinned tier-c-size)
-        unpinned))
-  (define remaining-count (length remaining-after-c))
-  (define tier-b-size (min effective-tier-b remaining-count))
-  (define tier-b
-    (if (> tier-b-size 0)
-        (take-right remaining-after-c tier-b-size)
-        '()))
-  (define tier-a (append sys-protected pinned-user gsd-pinned compaction-summaries ws-messages))
-  (when trace-cb
-    (trace-cb 'partition
-              (hasheq 'tier-a
-                      (length tier-a)
-                      'tier-b
-                      (length tier-b)
-                      'tier-c
-                      (length tier-c)
-                      'gsd-pinned
-                      (length gsd-pinned))))
-  (tiered-context tier-a tier-b tier-c))
-
-(define (build-tiered-context-with-hooks messages
-                                         #:hook-dispatcher [hook-dispatcher #f]
-                                         #:tier-b-count [tier-b-count #f]
-                                         #:tier-c-count [tier-c-count DEFAULT-TIER-C-COUNT]
-                                         #:max-tokens [max-tokens 8192]
-                                         #:working-set-messages [ws-messages '()])
-  (define base-context
-    (build-tiered-context messages
-                          #:tier-b-count tier-b-count
-                          #:tier-c-count tier-c-count
-                          #:working-set-messages ws-messages))
-  (define effective-tier-b (or tier-b-count (compute-dynamic-tier-b-count (length messages))))
-  (define payload
-    (tiered-context->payload base-context
-                             max-tokens
-                             (hasheq 'tier-b-count
-                                     effective-tier-b
-                                     'tier-c-count
-                                     tier-c-count
-                                     'total-messages
-                                     (length messages))))
-  (if hook-dispatcher
-      (let ([result (hook-dispatcher 'context-assembly payload)])
-        (match (hook-result-action result)
-          ['block
-           (define reason (hook-result-payload result))
-           (raise (exn:fail (format "Context assembly blocked by hook: ~a"
-                                    (if reason reason "no reason given"))
-                            (current-continuation-marks)))]
-          ['amend
-           (define amended-payload (hook-result-payload result))
-           (values (payload->tiered-context amended-payload) result)]
-          ['pass (values base-context result)]
-          [_ (values base-context result)]))
-      (values base-context #f)))
-
-(define (tiered-context->message-list tc)
-  (append (tiered-context-tier-a tc) (tiered-context-tier-b tc) (tiered-context-tier-c tc)))
+         summarize-tool-result)
 
 ;; Token-aware context assembly
 ;; CA-05: Uses build-session-context from session-walk.rkt
@@ -225,9 +57,6 @@
         (define truncated (truncate-messages-to-budget messages max-tokens))
         (define new-total (for/sum ([m (in-list truncated)]) (estimate-message-tokens m)))
         (values truncated new-total)])]))
-
-;; CA-05: Import shared session walk logic from session-walk.rkt
-(require "session-walk.rkt") ;; provides build-session-context, assemble-context, etc.
 
 ;; AGENTS.md context discovery
 (define (load-agents-context working-directory)
@@ -270,157 +99,6 @@
                         inst)))
         (string-join parts "\n\n")])]))
 
-;; ── v0.75.3: State-aware context assembly ──
-
-;; build-tiered-context/state-aware :
-;;   Same signature as build-tiered-context, plus optional task-state and conclusions.
-;;   When a task-state is provided, uses state-relevance-table to decide which
-;;   context categories to include/summarize/filter/exclude.
-(define (build-tiered-context/state-aware messages
-                                          #:tier-b-count [tier-b-count #f]
-                                          #:tier-c-count [tier-c-count DEFAULT-TIER-C-COUNT]
-                                          #:working-set-messages [ws-messages '()]
-                                          #:task-state [task-state #f]
-                                          #:conclusions [conclusions '()]
-                                          #:trace [trace-cb #f])
-  ;; Accept both fsm-state structs and bare symbols
-  (define state-name
-    (cond
-      [(not task-state) #f]
-      [(symbol? task-state) task-state]
-      [(fsm-state? task-state) (fsm-state-name task-state)]
-      [else #f]))
-  (define ws-level (and state-name (context-level-for-state state-name 'working-set)))
-  (define conclusions-level (and state-name (context-level-for-state state-name 'conclusions)))
-
-  ;; Adjust working-set based on state relevance
-  (define effective-ws
-    (cond
-      [(eq? ws-level 'excluded) '()]
-      ;; Keep only the most recent working-set entries
-      [(eq? ws-level 'filtered) (take ws-messages (min 3 (length ws-messages)))]
-      [else ws-messages]))
-
-  ;; Add conclusions as context entries when relevant
-  (define conclusion-entries
-    (cond
-      [(or (not state-name) (eq? conclusions-level 'excluded)) '()]
-      [(eq? conclusions-level 'full)
-       (for/list ([c (in-list conclusions)]
-                  #:when (task-conclusion? c))
-         (make-message (generate-id)
-                       #f
-                       'system-instruction
-                       'text
-                       (list (make-text-part (format "[Conclusion] ~a" (task-conclusion-text c))))
-                       (current-seconds)
-                       (hasheq)))]
-      [(eq? conclusions-level 'summary)
-       (if (<= (length conclusions) 3)
-           (for/list ([c (in-list conclusions)]
-                      #:when (task-conclusion? c))
-             (make-message (generate-id)
-                           #f
-                           'system-instruction
-                           'text
-                           (list (make-text-part (format "[Conclusion] ~a" (task-conclusion-text c))))
-                           (current-seconds)
-                           (hasheq)))
-           ;; Summarize: take first + last
-           (let ([first-c (car conclusions)]
-                 [last-c (car (reverse conclusions))])
-             (for/list ([c (list first-c last-c)]
-                        #:when (task-conclusion? c))
-               (make-message (generate-id)
-                             #f
-                             'system-instruction
-                             'text
-                             (list (make-text-part (format "[Conclusion] ~a"
-                                                           (task-conclusion-text c))))
-                             (current-seconds)
-                             (hasheq)))))]
-      [else '()]))
-
-  ;; Build base context with adjusted working-set
-  (define base-tc
-    (build-tiered-context messages
-                          #:tier-b-count tier-b-count
-                          #:tier-c-count tier-c-count
-                          #:working-set-messages effective-ws
-                          #:trace trace-cb))
-
-  ;; v0.75.6: Prepend state-awareness preamble to tier-a
-  (define preamble (build-state-awareness-preamble task-state conclusions))
-  (define preamble-entries
-    (if preamble
-        (list preamble)
-        '()))
-  ;; Prepend preamble + conclusion entries to tier-a
-  (define new-tier-a (append preamble-entries conclusion-entries (tiered-context-tier-a base-tc)))
-  (if (and (null? preamble-entries) (null? conclusion-entries))
-      base-tc
-      (tiered-context new-tier-a (tiered-context-tier-b base-tc) (tiered-context-tier-c base-tc))))
-
-;; ── v0.75.5: System prompt state injection ──
-
-;; State-specific guidance strings
-(define state-guidance-table
-  (hasheq
-   'idle
-   "Awaiting instructions."
-   'exploration
-   "Focus on reading and understanding the codebase. Use save_conclusion to record key findings."
-   'planning
-   "Break down the task into steps. Use save_conclusion to record the plan."
-   'implementation
-   "Focus on editing files. Use save_conclusion to record key decisions."
-   'verification
-   "Run tests and verify correctness. Use save_conclusion to record test results."
-   'debugging
-   "Focus on error-related files. Use save_conclusion to record debugging insights."))
-
-;; build-state-awareness-preamble : task-state? (listof task-conclusion?) → (or/c #f message?)
-;; Generates a system prompt section describing the current task state.
-;; Returns #f if no meaningful preamble (idle state with no conclusions).
-(define (build-state-awareness-preamble task-state conclusions)
-  ;; Accept both fsm-state structs and bare symbols
-  (define state-name
-    (cond
-      [(not task-state) #f]
-      [(symbol? task-state) task-state]
-      [(fsm-state? task-state) (fsm-state-name task-state)]
-      [else #f]))
-  (cond
-    [(not state-name) #f]
-    [(eq? state-name 'idle) #f]
-    [else
-     (define label
-       (case state-name
-         [(exploration) "EXPLORATION"]
-         [(planning) "PLANNING"]
-         [(implementation) "IMPLEMENTATION"]
-         [(verification) "VERIFICATION"]
-         [(debugging) "DEBUGGING"]
-         [else "UNKNOWN"]))
-     (define guidance (hash-ref state-guidance-table state-name "Focus on the current task."))
-     (define conclusion-section
-       (if (and (pair? conclusions) (task-conclusion? (car conclusions)))
-           (let* ([top (take conclusions (min 10 (length conclusions)))]
-                  [texts (for/list ([c (in-list top)])
-                           (format "  - ~a" (task-conclusion-text c)))])
-             (format "\n\nKey conclusions:\n~a" (string-join texts "\n")))
-           ""))
-     (define preamble-text
-       (format "You are currently in the ~a phase.~a~a" label guidance conclusion-section))
-     (make-message "state-awareness-preamble"
-                   #f
-                   'system-instruction
-                   'text
-                   (list (make-text-part preamble-text))
-                   (current-seconds)
-                   (hasheq))]))
-
-(provide build-state-awareness-preamble)
 ;; ============================================================
 ;; TEST-01: Isolated unit tests for gsd-progress-message?
 ;; ============================================================
@@ -479,16 +157,17 @@
 
   (test-case "regex-no-match-non-gsd-text"
     (define m (make-test-msg 'assistant "I have completed the refactoring"))
-    (check-false (gsd-progress-message? m))
-    ;; v0.75.7 W3: gsd-execution-instruction meta flag
-    (test-case "gsd-execution-instruction-flag-pins-message"
-      (define m (make-test-msg 'user "Implement the plan" (hasheq 'gsd-execution-instruction #t)))
-      (check-true (gsd-progress-message? m)))
+    (check-false (gsd-progress-message? m)))
 
-    (test-case "gsd-execution-instruction-flag-pins-any-role"
-      (define m (make-test-msg 'system "Task context" (hasheq 'gsd-execution-instruction #t)))
-      (check-true (gsd-progress-message? m)))
+  ;; v0.75.7 W3: gsd-execution-instruction meta flag
+  (test-case "gsd-execution-instruction-flag-pins-message"
+    (define m (make-test-msg 'user "Implement the plan" (hasheq 'gsd-execution-instruction #t)))
+    (check-true (gsd-progress-message? m)))
 
-    (test-case "no-execution-instruction-flag-does-not-pin"
-      (define m (make-test-msg 'user "Just a regular message"))
-      (check-false (gsd-progress-message? m)))))
+  (test-case "gsd-execution-instruction-flag-pins-any-role"
+    (define m (make-test-msg 'system "Task context" (hasheq 'gsd-execution-instruction #t)))
+    (check-true (gsd-progress-message? m)))
+
+  (test-case "no-execution-instruction-flag-does-not-pin"
+    (define m (make-test-msg 'user "Just a regular message"))
+    (check-false (gsd-progress-message? m))))
