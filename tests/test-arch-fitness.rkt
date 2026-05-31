@@ -553,7 +553,8 @@
         (displayln (format "WARN: Hotspots above ~a without risk-notes: ~a"
                            warn-threshold
                            hotspots-without-notes)))
-      ;; Only warn — don't block CI on missing risk-notes at warn level
+      ;; v0.74.6: Still informational at warn level — too many files to annotate
+      ;; Will become blocking in v0.75.x after threshold calibration
       (check-true #t "Informational — warns but does not block"))
 
     (test-case "No hotspot exceeds block threshold without risk-notes"
@@ -575,8 +576,9 @@
           entry))
       (when (not (null? blocking-hotspots))
         (displayln (format "WARN: Top hotspots without risk-notes: ~a" blocking-hotspots)))
-      ;; INFORMATIONAL in v0.74.0 — will become blocking in v0.75.x
-      (check-true #t "Informational — top hotspots logged"))
+      ;; v0.74.6: BLOCKING — top hotspots above block threshold must have risk-notes
+      (check-equal? blocking-hotspots '()
+                   (format "Top hotspots above ~a without risk-notes" block-threshold)))
 
     (test-case "Risk-note entries reference existing files"
       (for ([entry (in-list risk-note-entries)])
