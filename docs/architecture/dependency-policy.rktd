@@ -119,6 +119,10 @@
    (budget . 450)
    (convention
     . "Iteration loop decomposition. Pure logic in counters/decision, effectful in step-interpreter, orchestration in main-loop."))
+  (runtime/session-persistence
+   (parent . "runtime/session-lifecycle.rkt")
+   (budget . 150)
+   (convention . "Session persistence and crash recovery. Extracted from session-lifecycle for testability."))
   (runtime/session-index
    (parent . "runtime/session-index.rkt")
    (sub-modules . (schema query mutations))
