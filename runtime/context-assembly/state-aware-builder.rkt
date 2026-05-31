@@ -19,21 +19,26 @@
 ;; Feature flag: state-aware context assembly (v0.75.3)
 (define current-task-state-aware-assembly? (make-parameter #f))
 
-;; State-specific guidance strings
+;; State-specific guidance strings (action-oriented instructions)
 (define state-guidance-table
-  (hasheq
-   'idle
-   "Awaiting instructions."
-   'exploration
-   "Focus on reading and understanding the codebase. Use save_conclusion to record key findings."
-   'planning
-   "Break down the task into steps. Use save_conclusion to record the plan."
-   'implementation
-   "Focus on editing files. Use save_conclusion to record key decisions."
-   'verification
-   "Run tests and verify correctness. Use save_conclusion to record test results."
-   'debugging
-   "Focus on error-related files. Use save_conclusion to record debugging insights."))
+  (hasheq 'idle
+          "Awaiting instructions."
+          'exploration
+          (string-append "Focus on reading and understanding the codebase. "
+                         "Record key findings with record_conclusion before moving on.")
+          'planning
+          (string-append "Break down the task into steps. "
+                         "Save your plan as conclusions with record_conclusion.")
+          'implementation
+          (string-append "Focus on editing files. "
+                         "Record key decisions with record_conclusion. "
+                         "Prefer existing conclusions over re-reading files.")
+          'verification
+          (string-append "Run tests and verify correctness. "
+                         "Record test results as conclusions with record_conclusion.")
+          'debugging
+          (string-append "Focus on error-related files. "
+                         "Save error analysis as conclusions with record_conclusion.")))
 
 ;; build-tiered-context/state-aware :
 ;;   Same signature as build-tiered-context, plus optional task-state and conclusions.
@@ -148,13 +153,16 @@
          [(debugging) "DEBUGGING"]
          [else "UNKNOWN"]))
      (define guidance (hash-ref state-guidance-table state-name "Focus on the current task."))
+     (define conclusion-count (length (filter task-conclusion? conclusions)))
      (define conclusion-section
-       (if (and (pair? conclusions) (task-conclusion? (car conclusions)))
+       (if (> conclusion-count 0)
            (let* ([top (take conclusions (min 10 (length conclusions)))]
                   [texts (for/list ([c (in-list top)])
                            (format "  - ~a" (task-conclusion-text c)))])
-             (format "\n\nKey conclusions:\n~a" (string-join texts "\n")))
-           ""))
+             (format "\n\nKey conclusions (~a in memory):\n~a"
+                     conclusion-count
+                     (string-join texts "\n")))
+           "\n\nNo conclusions in memory yet. Use record_conclusion to save findings."))
      (define preamble-text
        (format "You are currently in the ~a phase.~a~a" label guidance conclusion-section))
      (make-message "state-awareness-preamble"
