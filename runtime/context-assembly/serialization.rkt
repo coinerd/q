@@ -27,7 +27,8 @@
          "budgeting.rkt"
          (only-in "state-relevance.rkt" context-level-for-state)
          (only-in "task-conclusion.rkt" task-conclusion? task-conclusion-text)
-         (only-in "../../util/fsm.rkt" fsm-state-name))
+         (only-in "../../util/fsm.rkt" fsm-state-name)
+         (only-in "../../util/ids.rkt" generate-id))
 
 (provide tiered-context
          tiered-context?
@@ -300,7 +301,7 @@
       [(eq? conclusions-level 'full)
        (for/list ([c (in-list conclusions)]
                   #:when (task-conclusion? c))
-         (make-message (format "conclusion-~a" (current-milliseconds))
+         (make-message (generate-id)
                        #f
                        'system-instruction
                        'text
@@ -311,7 +312,7 @@
        (if (<= (length conclusions) 3)
            (for/list ([c (in-list conclusions)]
                       #:when (task-conclusion? c))
-             (make-message (format "conclusion-~a" (current-milliseconds))
+             (make-message (generate-id)
                            #f
                            'system-instruction
                            'text
@@ -323,7 +324,7 @@
                  [last-c (car (reverse conclusions))])
              (for/list ([c (list first-c last-c)]
                         #:when (task-conclusion? c))
-               (make-message (format "conclusion-~a" (current-milliseconds))
+               (make-message (generate-id)
                              #f
                              'system-instruction
                              'text
@@ -341,12 +342,17 @@
                           #:working-set-messages effective-ws
                           #:trace trace-cb))
 
-  ;; Prepend conclusion entries to tier-a
-  (if (null? conclusion-entries)
+  ;; v0.75.6: Prepend state-awareness preamble to tier-a
+  (define preamble (build-state-awareness-preamble task-state conclusions))
+  (define preamble-entries
+    (if preamble
+        (list preamble)
+        '()))
+  ;; Prepend preamble + conclusion entries to tier-a
+  (define new-tier-a (append preamble-entries conclusion-entries (tiered-context-tier-a base-tc)))
+  (if (and (null? preamble-entries) (null? conclusion-entries))
       base-tc
-      (tiered-context (append conclusion-entries (tiered-context-tier-a base-tc))
-                      (tiered-context-tier-b base-tc)
-                      (tiered-context-tier-c base-tc))))
+      (tiered-context new-tier-a (tiered-context-tier-b base-tc) (tiered-context-tier-c base-tc))))
 
 ;; ── v0.75.5: System prompt state injection ──
 

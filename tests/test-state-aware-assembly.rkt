@@ -142,15 +142,15 @@
 
     ;; ── W1: Comparison tests ──
 
-    (test-case "exploration state behaves identically to standard"
+    (test-case "exploration state includes preamble (1 more than standard)"
       (define sa
         (build-tiered-context/state-aware base-messages
                                           #:working-set-messages ws-messages
                                           #:task-state task-exploration))
       (define std (build-tiered-context base-messages #:working-set-messages ws-messages))
-      ;; Exploration has 'full for everything → should be same
+      ;; Exploration has preamble injected → 1 more than standard
       (check-equal? (length (tiered-context->message-list sa))
-                    (length (tiered-context->message-list std))))
+                    (add1 (length (tiered-context->message-list std)))))
 
     (test-case "implementation filters working-set entries"
       (define many-ws
