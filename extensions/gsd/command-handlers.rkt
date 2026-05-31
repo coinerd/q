@@ -100,7 +100,11 @@
    (current-gsd-ctx)
    'gsd.mode.changed
    (if reason
-       (make-gsd-mode-changed-event #:session-id "" #:turn-id 0 #:mode mode #:reason reason #:error (or err ""))
+       (make-gsd-mode-changed-event #:session-id ""
+                                    #:turn-id 0
+                                    #:mode mode
+                                    #:reason reason
+                                    #:error (or err ""))
        (make-gsd-mode-changed-event #:session-id "" #:turn-id 0 #:mode mode))))
 
 ;; R6: Iterate gsd-command-specs for registration (single source of truth)
@@ -362,6 +366,13 @@
   (define saved-bus (current-gsd-event-bus)) ;; Preserve event bus across reset
   (define saved-dir (current-pinned-dir)) ;; Preserve pinned dir
   (reset-all-gsd-state!) ;; Clean state for fresh plan (F1 fix)
+  ;; Clean old wave files to prevent stale state
+  (define waves-dir (build-path base-dir ".planning" "waves"))
+  (when (directory-exists? waves-dir)
+    (for ([f (in-directory waves-dir)])
+      (when (file-exists? f)
+        (with-handlers ([exn:fail? void])
+          (delete-file f)))))
   (when saved-bus
     (set-gsd-event-bus! saved-bus))
   (when saved-dir
