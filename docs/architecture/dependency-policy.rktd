@@ -186,4 +186,32 @@
        (owner . "runtime"))
       ("extensions/gsd/core.rkt"
        (risk . "GSD planning core with wave execution, state machine dispatch, and high co-change coupling")
-       (owner . "extensions"))))))
+       (owner . "extensions"))
+      ("tui/state-events.rkt"
+       (risk . "TUI state event dispatch; large enum of UI event types with high change frequency")
+       (owner . "tui"))
+      ("tui/terminal-input.rkt"
+       (risk . "Terminal input handling with mouse, key, and paste event parsing")
+       (owner . "tui"))
+      ("interfaces/sessions.rkt"
+       (risk . "Session interface with SDK bindings, large provide surface")
+       (owner . "interfaces"))
+      ("llm/gemini.rkt"
+       (risk . "Gemini provider with streaming, tool calling, and multi-modal support")
+       (owner . "provider"))
+      ("tools/scheduler.rkt"
+       (risk . "Tool scheduler with parallel execution, timeout management, and coordination")
+       (owner . "tools"))
+      ("llm/anthropic.rkt"
+       (risk . "Anthropic Claude provider with streaming, tool use, and extended thinking")
+       (owner . "provider"))
+      ("extensions/image-pipeline.rkt"
+       (risk . "Image pipeline with format detection, resizing, and validation")
+       (owner . "extensions"))
+      ("tui/terminal.rkt"
+       (risk . "Terminal abstraction layer with platform-specific rendering and CSI sequences")
+       (owner . "tui"))
+      ("tui/state-ui.rkt"
+       (risk . "TUI UI state management with overlay, selection, and widget state")
+       (owner . "tui"))
+))))
