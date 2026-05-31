@@ -23,7 +23,12 @@
          (only-in "../gsd/events.rkt"
                   [emit-gsd-event! events:emit-gsd-event!]
                   [set-gsd-event-bus! events:set-gsd-event-bus!])
-         (only-in "event-structs.rkt" make-gsd-mode-changed-event))
+         (only-in "event-structs.rkt" make-gsd-mode-changed-event)
+         (only-in "wave-docs.rkt"
+                  parse-plan-index
+                  wave-index-entry-slug
+                  wave-index-entry-idx
+                  wave-exists?))
 
 ;; Schema data (plain)
 (provide planning-read-schema
@@ -215,6 +220,18 @@
                (make-error-result (format "Failed to write artifact '~a'" name))
                (begin
                  (when (and (eq? (gsd-mode) 'planning) (string=? name "PLAN"))
+                   ;; Validate wave docs exist before transitioning to plan-written
+                   (define plan-content (read-planning-artifact base-dir "PLAN"))
+                   (define entries (and plan-content (parse-plan-index plan-content)))
+                   (cond
+                     [(and entries (not (null? entries)))
+                      ;; Check at least the first wave doc exists
+                      (define first-entry (car entries))
+                      (define first-slug (wave-index-entry-slug first-entry))
+                      (define first-idx (wave-index-entry-idx first-entry))
+                      (unless (wave-exists? base-dir first-idx first-slug)
+                        (log-warning "PLAN.md written but wave docs missing — /go may fail"))]
+                     [else (void)]) ;; No wave entries — inline plan, OK
                    (set-gsd-mode! 'plan-written)
                    (events:emit-gsd-event!
                     'gsd.mode.changed

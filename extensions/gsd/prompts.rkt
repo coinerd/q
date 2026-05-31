@@ -17,7 +17,6 @@
          verifying-prompt
          status-prompt)
 
-
 ;; ============================================================
 ;; Planning implement prompt
 ;; ============================================================
@@ -65,6 +64,9 @@
    "4. NEVER re-read a file you have already read.\n"
    "5. NEVER investigate tangential concerns (package versions, font systems, etc.).\n"
    "6. NEVER run the target script — focus on source code analysis only.\n"
+   "7. CRITICAL ORDERING: You MUST write ALL wave documents (STEP 2) BEFORE writing PLAN.md (STEP 3).\n"
+   "   If PLAN.md is written without corresponding wave files, /go will fail.\n"
+   "8. After writing each wave doc, verify with: planning-read artifact=\"waves/W0-slug.md\"\n"
    "9. Read the files you need, then IMMEDIATELY write wave documents.\n"
    "    Do NOT read more than 8 files total — read less, write more.\n\n"
    "10. CRITICAL: For ANY file in the .planning/ directory, you MUST use\n"
@@ -78,7 +80,9 @@
    "the file is at module.py (NOT package/package/module.py).\n"
    "Use ls or find to locate files if unsure of the exact path.\n"
    "Identify: root cause, exact file paths, line numbers.\n\n"
-   "## STEP 2: Write Wave Documents (the MAIN work)\n"
+   "## STEP 2: Write Wave Documents (the MAIN work — MANDATORY)\n"
+   "MANDATORY: You MUST write wave documents. Without wave files, /go will fail.\n"
+   "Write ALL wave documents first, then write PLAN.md last.\n"
    "For EACH wave, write a SEPARATE file using planning-write:\n"
    "  planning-write artifact=\"waves/W0-short-title.md\" content=\"...\"\n"
    "  planning-write artifact=\"waves/W1-short-title.md\" content=\"...\"\n"
@@ -189,8 +193,6 @@
 ;; ============================================================
 ;; Internal helpers
 ;; ============================================================
-
-
 
 (define (format-wave-list waves)
   (string-join (for/list ([w waves])
