@@ -95,6 +95,13 @@
          ;; Budget would be exceeded — stop here
          [else (set-working-set-entries! ws (reverse acc))])])))
 
+;; Remove entries NOT matching a predicate (keeps selective entries).
+(define (working-set-selective-remove! ws keep-pred?)
+  (define existing (working-set-entries ws))
+  (define filtered (filter keep-pred? existing))
+  (set-working-set-entries! ws filtered)
+  (working-set-enforce-budget! ws))
+
 ;; ────────────────────────────────────────────────────────────
 ;; Tool call processing
 ;; ────────────────────────────────────────────────────────────
@@ -211,4 +218,7 @@
           [ws-entry-path (-> ws-entry? string?)]
           [ws-entry-message-id (-> ws-entry? any/c)]
           [ws-entry-token-estimate (-> ws-entry? exact-nonnegative-integer?)]
-          [ws-entry-timestamp (-> ws-entry? exact-nonnegative-integer?)]))
+          [ws-entry-timestamp (-> ws-entry? exact-nonnegative-integer?)]
+          [working-set-selective-remove! (-> working-set? procedure? void?)]
+          [working-set-add! (-> working-set? string? any/c exact-nonnegative-integer? void?)]
+          [working-set-remove! (-> working-set? string? void?)]))
