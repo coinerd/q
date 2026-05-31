@@ -117,7 +117,8 @@
                   config-max-tokens
                   config-working-set
                   config-settings
-                  config-model-name)
+                  config-model-name
+                  config-task-state-aware?)
          (only-in "../util/protocol-types.rkt" message-kind message-content)
          racket/set)
 
@@ -145,7 +146,7 @@
            (-> tool-registry? (or/c extension-registry? #f) event-bus? string? (listof hash?))]
           [assemble-context/pure
            (->* (list? session-config?)
-                (#:hook-dispatcher (or/c procedure? #f))
+                (#:hook-dispatcher (or/c procedure? #f) #:state-aware? (or/c boolean? #f))
                 (values list? (or/c hook-result? #f) tiered-context?))]))
 
 ;; ============================================================
@@ -158,7 +159,8 @@
                                config-raw
                                #:hook-dispatcher [hook-dispatcher #f]
                                #:task-state [task-state #f]
-                               #:conclusions [conclusions '()])
+                               #:conclusions [conclusions '()]
+                               #:state-aware? [state-aware? #f])
   (define config config-raw)
   (define tier-b-count (config-tier-b-count config))
   (define tier-c-count (config-tier-c-count config))
@@ -172,8 +174,8 @@
   (define ws-messages (force ws-messages-promise))
   (define-values (tc hook-result)
     (cond
-      ;; v0.75.3: State-aware assembly when feature flag is on
-      [(and (current-task-state-aware-assembly?) task-state)
+      ;; v0.76.3: State-aware assembly when enabled (global flag or per-session rollout)
+      [(and (or state-aware? (current-task-state-aware-assembly?)) task-state)
        (define sa-tc
          (build-tiered-context/state-aware ctx-to-use
                                            #:tier-b-count tier-b-count
@@ -216,12 +218,14 @@
   (define task-state (and session (agent-session-task-fsm-state session)))
   (define conclusions (and session (agent-session-task-conclusions session)))
   ;; FD-05: Delegate pure assembly to assemble-context/pure
+  ;; v0.76.3: Pass per-session rollout flag
   (define-values (ctx-assembled assembly-hook-result tc-struct)
     (assemble-context/pure ctx-to-use
                            config-raw
                            #:hook-dispatcher ctx-assembly-hook-dispatcher
                            #:task-state task-state
-                           #:conclusions conclusions))
+                           #:conclusions conclusions
+                           #:state-aware? (config-task-state-aware? config)))
 
   ;; Handle block action from context-assembly hook
   (when (and assembly-hook-result (eq? (hook-result-action assembly-hook-result) 'block))

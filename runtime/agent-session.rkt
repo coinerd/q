@@ -25,6 +25,7 @@
          racket/file
          racket/list
          racket/path
+         racket/dict
          (only-in "../util/errors.rkt" raise-session-error)
          (only-in "../util/protocol-types.rkt" message-id message-kind make-loop-result message?)
          "../agent/queue.rkt"
@@ -68,6 +69,7 @@
          (only-in "session-config.rkt"
                   session-config?
                   hash->session-config
+                  current-task-state-aware-rollout-rate
                   config-provider
                   config-tool-registry
                   config-event-bus
@@ -133,7 +135,8 @@
          agent-session-thinking-level
          ;; Graceful shutdown (#1158)
          agent-session-shutdown-requested?
-         agent-session-force-shutdown?)
+         agent-session-force-shutdown?
+         session-rollout-enabled?)
 
 ;; ============================================================
 ;; ARCH-05: struct definition moved to session-types.rkt
@@ -217,6 +220,12 @@
                  task-conclusions
                  recent-tool-calls))
 
+;; session-rollout-enabled? : string? -> boolean?
+;; Deterministic A/B assignment using session-id hash modulo 100.
+(define (session-rollout-enabled? sid)
+  (define rate (current-task-state-aware-rollout-rate))
+  (and (> rate 0.0) (< (modulo (equal-hash-code sid) 100) (inexact->exact (round (* rate 100))))))
+
 ;; ============================================================
 ;; make-agent-session
 ;; ============================================================
@@ -231,21 +240,25 @@
   (define base-dir (config-session-dir cfg))
   (define dir (build-path base-dir sid))
 
+  ;; M4 W0: Rollout gate — deterministically assign task-state-aware? based on session-id hash
+  (define task-state-aware? (session-rollout-enabled? sid))
+  (define cfg-with-rollout (dict-set cfg 'task-state-aware? task-state-aware?))
+
   (define session-created-at (now-seconds))
 
   (define sess
     (make-session-struct #:id sid
                          #:dir dir
-                         #:provider (config-provider cfg)
-                         #:tool-registry (config-tool-registry cfg)
-                         #:event-bus (config-event-bus cfg)
-                         #:extension-registry (config-extension-registry cfg)
-                         #:model-name (config-model-name cfg)
-                         #:system-instructions (config-system-instructions cfg)
+                         #:provider (config-provider cfg-with-rollout)
+                         #:tool-registry (config-tool-registry cfg-with-rollout)
+                         #:event-bus (config-event-bus cfg-with-rollout)
+                         #:extension-registry (config-extension-registry cfg-with-rollout)
+                         #:model-name (config-model-name cfg-with-rollout)
+                         #:system-instructions (config-system-instructions cfg-with-rollout)
                          #:queue (make-queue)
-                         #:config cfg
+                         #:config cfg-with-rollout
                          #:start-time session-created-at
-                         #:thinking-level (config-thinking-level cfg)))
+                         #:thinking-level (config-thinking-level cfg-with-rollout)))
 
   ;; Emit session.started
   (emit-typed-event! (agent-session-event-bus sess)

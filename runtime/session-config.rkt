@@ -35,7 +35,11 @@
          (only-in "../util/cancellation.rkt" cancellation-token?)
          (only-in "../runtime/session-index/schema.rkt" session-index?))
 
+;; Global rollout rate for state-aware assembly (0.0 = none, 1.0 = all)
+(define current-task-state-aware-rollout-rate (make-parameter 0.0))
+
 (provide session-config?
+         current-task-state-aware-rollout-rate
          ;; Smart accessors with defaults
          (contract-out
           [hash->session-config (-> hash? session-config?)]
@@ -69,7 +73,8 @@
           [config-verbose? (-> session-config? boolean?)]
           [config-max-tokens (-> session-config? exact-positive-integer?)]
           [config-token-budget-threshold (-> session-config? (or/c #f exact-nonnegative-integer?))]
-          [config-session-index (-> session-config? (or/c #f session-index?))]))
+          [config-session-index (-> session-config? (or/c #f session-index?))]
+          [config-task-state-aware? (-> session-config? boolean?)]))
 
 ;; ── session-config struct ────────────────────────────────────────
 
@@ -161,6 +166,8 @@
   (hash-ref (session-config-data c) 'token-budget-threshold #f))
 (define (config-session-index c)
   (hash-ref (session-config-data c) 'session-index #f))
+(define (config-task-state-aware? c)
+  (hash-ref (session-config-data c) 'task-state-aware? #f))
 
 ;; ── Dynamic default resolution ─────────────────────────────────
 
@@ -196,7 +203,8 @@
                verbose?
                max-tokens
                token-budget-threshold
-               session-index))
+               session-index
+               task-state-aware?))
   (define base
     (if (hash? h)
         (make-immutable-hash (hash->list h))
