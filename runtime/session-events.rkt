@@ -13,7 +13,8 @@
          "../runtime/session-index.rkt"
          (only-in "../util/protocol-types.rkt" event-ev event-payload message-id)
          (only-in "runtime-helpers.rkt" emit-session-event!)
-         "session-types.rkt")
+         "session-types.rkt"
+         (only-in "context-assembly/task-conclusion.rkt" task-conclusion task-conclusion-id))
 (require "session-mutation.rkt")
 (require (submod "session-types.rkt" internal))
 (require (only-in "context-assembly/state-inference.rkt"
@@ -108,6 +109,53 @@
             "task.state.inferred"
             (hasheq 'state (fsm-state-name inferred-state) 'confidence confidence 'tool tool-name)))))
      #:filter (lambda (evt) (equal? (event-ev evt) "tool.execution.completed")))
+    ;; Subscribe to tool.record_conclusion.completed — persist conclusion
+    (subscribe! bus
+                (lambda (evt)
+                  (define payload (event-payload evt))
+                  (define text (and (hash? payload) (hash-ref payload 'text #f)))
+                  (when text
+                    (define current-state (or (agent-session-task-fsm-state sess) 'idle))
+                    (define id (and (hash? payload) (hash-ref payload 'conclusion-id #f)))
+                    (define category-raw (and (hash? payload) (hash-ref payload 'category "fact")))
+                    (define tags (and (hash? payload) (hash-ref payload 'tags '())))
+                    (define category-sym
+                      (if (string? category-raw)
+                          (string->symbol category-raw)
+                          category-raw))
+                    (define tag-syms
+                      (for/list ([t (in-list (if (list? tags)
+                                                 tags
+                                                 '()))])
+                        (if (string? t)
+                            (string->symbol t)
+                            t)))
+                    (define c
+                      (task-conclusion (or id (format "c~a" (current-inexact-milliseconds)))
+                                       text
+                                       category-sym
+                                       current-state
+                                       '()
+                                       (current-seconds)
+                                       tag-syms))
+                    ;; Add to session
+                    (define current-conclusions (agent-session-task-conclusions sess))
+                    (guarded-set-task-conclusions! sess (append current-conclusions (list c)))
+                    ;; Persist to log
+                    (define log-path (session-log-path-for sess))
+                    (when (file-exists? log-path)
+                      (append-conclusion! log-path c))
+                    ;; Emit confirmation
+                    (emit-session-event! bus
+                                         (agent-session-session-id sess)
+                                         "task.conclusion.recorded"
+                                         (hasheq 'conclusion-id
+                                                 (task-conclusion-id c)
+                                                 'category
+                                                 category-sym
+                                                 'state
+                                                 current-state))))
+                #:filter (lambda (evt) (equal? (event-ev evt) "tool.record_conclusion.completed")))
     (void)))
 
 ;; ============================================================
