@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.76.2 (2026-05-31)
+
+### Context Assembly Activation — Measurement Infrastructure (M3)
+
+Third milestone: build instrumentation to prove token savings.
+Purely additive — no behavior change.
+
+#### Changes
+- **Token metrics**: `runtime/context-assembly/token-metrics.rkt`
+  - `context-metrics` struct, `measure-context-size`, `compute-savings`
+  - `category-breakdown`: per-tier token counts
+  - `measure-context-assembly`: wrapper returning `(values context metrics)`
+- **Conclusion coverage**: `compute-conclusion-coverage` — ratio of conclusion
+  tool calls to total tool calls
+- **Report script**: `scripts/report-context-efficiency.rkt` — text report
+  with token savings and low-coverage warning
+
+#### Tests Added
+- test-token-metrics.rkt: 24 tests (token counting, savings, coverage,
+  assembly wrapper)
+
+
 ## v0.76.1 (2026-05-31)
 
 ### Context Assembly Activation — System Prompt Integration (M2)
