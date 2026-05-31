@@ -21,6 +21,12 @@
          racket/class
          json
          "goal-state.rkt"
+         (only-in "context-assembly/task-state.rkt" task-states-list)
+         (only-in "context-assembly/task-conclusion.rkt"
+                  task-conclusion
+                  task-conclusion?
+                  conclusion->hash
+                  hash->conclusion)
          "../util/protocol-types.rkt"
          "../util/jsonl.rkt"
          (only-in "../util/message-helpers.rkt" ensure-parent-dirs!)
@@ -91,6 +97,11 @@
          ;; Goal state persistence (v0.71.0)
          append-goal-state!
          load-latest-goal-state
+         ;; Task state persistence (v0.75.6)
+         append-task-state!
+         load-latest-task-state
+         append-conclusion!
+         load-conclusions
          ;; R-09/R-10: Session sink interface (v0.39.0)
          session-sink<%>
          file-session-sink%
@@ -364,6 +375,57 @@
                            content
                            (text-part-text (car content)))])
         (hash->goal-state (string->jsexpr json-str)))))
+
+;; ============================================================
+;; Task state & conclusion persistence (v0.75.6)
+;; ============================================================
+
+(define (append-task-state! path state-sym)
+  (append-entry! path
+                 (make-message (generate-id)
+                               #f
+                               'system
+                               'task-state
+                               (list (make-text-part (symbol->string state-sym)))
+                               (current-seconds)
+                               (hasheq))))
+
+(define (load-latest-task-state path)
+  (define entries (load-session-log path))
+  (define state-entries
+    (filter (lambda (e) (and (message? e) (eq? (message-kind e) 'task-state))) entries))
+  (if (null? state-entries)
+      'idle
+      (let* ([last-entry (car (reverse state-entries))]
+             [content (message-content last-entry)]
+             [text (if (string? content)
+                       content
+                       (text-part-text (car content)))])
+        (string->symbol text))))
+
+(define (append-conclusion! path conclusion)
+  (append-entry! path
+                 (make-message (generate-id)
+                               #f
+                               'system
+                               'task-conclusion
+                               (list (make-text-part (jsexpr->string (conclusion->hash conclusion))))
+                               (current-seconds)
+                               (hasheq))))
+
+(define (load-conclusions path)
+  (define entries (load-session-log path))
+  (define conc-entries
+    (filter (lambda (e) (and (message? e) (eq? (message-kind e) 'task-conclusion))) entries))
+  (for/list ([e (in-list conc-entries)]
+             #:when (message? e))
+    (define content (message-content e))
+    (define text
+      (if (string? content)
+          content
+          (text-part-text (car content))))
+    (with-handlers ([exn:fail? (lambda (_) #f)])
+      (hash->conclusion (string->jsexpr text)))))
 
 ;; ---------------------------------------------------------------------------
 ;; F11: Consumer/Admin submodule split

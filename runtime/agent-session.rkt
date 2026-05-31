@@ -190,7 +190,8 @@
                              #:force-shutdown? [force-shutdown? #f]
                              #:prompt-running? [prompt-running? #f]
                              #:task-fsm-state [task-fsm-state 'idle]
-                             #:task-conclusions [task-conclusions '()])
+                             #:task-conclusions [task-conclusions '()]
+                             #:recent-tool-calls [recent-tool-calls '()])
   (agent-session id
                  dir
                  provider
@@ -213,7 +214,8 @@
                  force-shutdown?
                  prompt-running?
                  task-fsm-state
-                 task-conclusions))
+                 task-conclusions
+                 recent-tool-calls))
 
 ;; ============================================================
 ;; make-agent-session
@@ -323,6 +325,13 @@
                          #:config cfg
                          #:persisted? #t
                          #:thinking-level (config-thinking-level cfg)))
+
+  ;; v0.75.6: Load persisted task state and conclusions
+  (when (file-exists? log-path)
+    (guarded-set-task-fsm-state! sess (load-latest-task-state log-path))
+    (define conclusions (load-conclusions log-path))
+    (unless (null? conclusions)
+      (guarded-set-task-conclusions! sess conclusions)))
 
   (emit-session-event! (agent-session-event-bus sess)
                        session-id

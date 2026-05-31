@@ -45,6 +45,7 @@
                #f ; prompt-running?
                'idle ; task-fsm-state
                '() ; task-conclusions
+               '() ; recent-tool-calls
                )))
 
 (define suite

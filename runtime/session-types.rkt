@@ -60,6 +60,7 @@
          agent-session-prompt-running?
          agent-session-task-fsm-state
          agent-session-task-conclusions
+         agent-session-recent-tool-calls
          session-log-path
          session-index-path
          (contract-out [session-log-path-for (-> agent-session? path?)]
@@ -99,7 +100,8 @@
          [force-shutdown? #:mutable]
          [prompt-running? #:mutable]
          [task-fsm-state #:mutable]
-         [task-conclusions #:mutable]) ; (listof task-conclusion?) — agent task conclusions
+         [task-conclusions #:mutable] ; (listof task-conclusion?) — agent task conclusions
+         [recent-tool-calls #:mutable]) ; (listof symbol?) — recent tool call history for inference
   #:transparent)
 
 ;; ============================================================
@@ -150,4 +152,5 @@
            set-agent-session-force-shutdown?!
            set-agent-session-prompt-running?!
            set-agent-session-task-fsm-state!
-           set-agent-session-task-conclusions!))
+           set-agent-session-task-conclusions!
+           set-agent-session-recent-tool-calls!))
