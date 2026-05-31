@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.76.1 (2026-05-31)
+
+### Context Assembly Activation — System Prompt Integration (M2)
+
+Second milestone: force the agent to use conclusions by injecting
+state-aware instructions into the system prompt.
+
+#### Changes
+- **Prompt injection**: `state-guidance-table` updated with action-oriented
+  instructions using `record_conclusion` (was: `save_conclusion`)
+- **Dynamic preamble**: `build-state-awareness-preamble` now includes
+  conclusion count and encouragement when empty
+- **Benchmark**: `scripts/benchmark/task-state-aware.rkt` verifies
+  instruction presence across all 5 states, token overhead, and
+  conclusion count accuracy
+
+#### Tests Added
+- test-prompt-injection.rkt: 21 tests (presence, labels, instructions,
+  record_conclusion references, conclusion count, no duplicates)
+
+
 ## v0.76.0 (2026-05-31)
 
 ### Context Assembly Activation — Gap Closure (M1)
