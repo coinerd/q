@@ -5,6 +5,8 @@
 
 (require rackunit
          rackunit/text-ui
+         racket/list
+         racket/string
          (only-in "../runtime/context-assembly/task-state.rkt"
                   task-idle
                   task-exploration
@@ -12,9 +14,7 @@
                   task-implementation
                   task-verification
                   task-debugging)
-         (only-in "../runtime/context-assembly/task-conclusion.rkt"
-                  task-conclusion
-                  task-conclusion?)
+         (only-in "../runtime/context-assembly/task-conclusion.rkt" task-conclusion task-conclusion?)
          (only-in "../runtime/context-assembly/serialization.rkt"
                   build-tiered-context
                   build-tiered-context/state-aware
@@ -23,7 +23,12 @@
                   tiered-context-tier-c
                   tiered-context->message-list
                   current-task-state-aware-assembly?)
-         (only-in "../util/protocol-types.rkt" make-message make-text-part message-meta-safe))
+         (only-in "../util/protocol-types.rkt"
+                  make-message
+                  make-text-part
+                  message-meta-safe
+                  message-content)
+         (only-in "../util/content-parts.rkt" text-part? text-part-text))
 
 ;; Helper: create a simple test message
 (define (test-msg role text)
@@ -49,9 +54,8 @@
 (define ws-messages (list (ws-msg "ws-entry-1") (ws-msg "ws-entry-2") (ws-msg "ws-entry-3")))
 
 (define conclusions
-  (list
-   (task-conclusion "c1" "Files are organized by layer" 'fact 'idle '() (current-seconds) '())
-   (task-conclusion "c2" "Tests use rackunit" 'fact 'idle '() (current-seconds) '())))
+  (list (task-conclusion "c1" "Files are organized by layer" 'fact 'idle '() (current-seconds) '())
+        (task-conclusion "c2" "Tests use rackunit" 'fact 'idle '() (current-seconds) '())))
 
 (define (count-ws tier-a)
   (length (filter (lambda (m) (hash-ref (message-meta-safe m) 'working-set #f)) tier-a)))
@@ -132,6 +136,49 @@
       (define tier-a (tiered-context-tier-a tc))
       (check-equal? (count-ws tier-a) 3 "debugging keeps all working-set"))
 
+    ;; ── W1: Comparison tests ──
+
+    (test-case "exploration state behaves identically to standard"
+      (define sa
+        (build-tiered-context/state-aware base-messages
+                                          #:working-set-messages ws-messages
+                                          #:task-state task-exploration))
+      (define std (build-tiered-context base-messages #:working-set-messages ws-messages))
+      ;; Exploration has 'full for everything → should be same
+      (check-equal? (length (tiered-context->message-list sa))
+                    (length (tiered-context->message-list std))))
+
+    (test-case "implementation filters working-set entries"
+      (define many-ws
+        (for/list ([i (in-range 10)])
+          (ws-msg (format "ws-~a" i))))
+      (define sa
+        (build-tiered-context/state-aware base-messages
+                                          #:working-set-messages many-ws
+                                          #:task-state task-implementation
+                                          #:conclusions conclusions))
+      (define sa-ws (count-ws (tiered-context-tier-a sa)))
+      (check-true (<= sa-ws 3) (format "sa-ws=~a should be <= 3" sa-ws)))
+
+    (test-case "feature flag can be enabled"
+      (parameterize ([current-task-state-aware-assembly? #t])
+        (check-true (current-task-state-aware-assembly?))))
+
+    (test-case "conclusions appear as system-instruction messages"
+      (define tc
+        (build-tiered-context/state-aware base-messages
+                                          #:working-set-messages '()
+                                          #:task-state task-debugging
+                                          #:conclusions conclusions))
+      (define tier-a (tiered-context-tier-a tc))
+      (define conclusion-texts
+        (filter-map (lambda (m)
+                      (define content (message-content m))
+                      (and (pair? content)
+                           (let ([t (text-part-text (car content))])
+                             (and (string-contains? t "[Conclusion]") t))))
+                    tier-a))
+      (check-true (>= (length conclusion-texts) 1) "At least one conclusion should appear in tier-a"))
     ;; ── Empty conclusions ──
     (test-case "empty conclusions with planning state"
       (define tc
