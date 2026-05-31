@@ -19,7 +19,6 @@
          (only-in "session-config.rkt" config-working-set)
          "session-mutation.rkt"
          racket/string
-         racket/file
          racket/list
          (only-in racket/dict dict-ref dict-set)
          racket/path
@@ -68,7 +67,8 @@
                   retry-exhausted-total-delay-ms
                   retry-exhausted-error-history)
          (only-in "../llm/token-budget.rkt" estimate-context-tokens)
-         (only-in "context-pressure.rkt" check-context-pressure))
+         (only-in "context-pressure.rkt" check-context-pressure)
+         "session-persistence.rkt")
 
 (provide (contract-out
           [run-prompt!
@@ -436,43 +436,3 @@
          (ensure-persisted! sess))))))
 
 ;; ============================================================
-;; Crash logging (B3-A)
-;; ============================================================
-
-;; Write crash log entry to ~/.q/crash-<timestamp>.jsonl
-(define (write-crash-log! sid error-msg phase)
-  (with-handlers ([exn:fail? void])
-    (define q-dir (build-path (find-system-path 'home-dir) ".q"))
-    (make-directory* q-dir)
-    (define crash-path (build-path q-dir (format "crash-~a.jsonl" (current-seconds))))
-    (call-with-output-file
-     crash-path
-     (lambda (out)
-       (fprintf out
-                "{\"ts\":~a,\"session\":\"~a\",\"error\":\"~a\",\"phase\":\"~a\"}\n"
-                (current-seconds)
-                (or sid "unknown")
-                error-msg
-                phase))
-     #:mode 'text
-     #:exists 'append)))
-
-;; ============================================================
-;; Persistence helpers (re-exported for agent-session.rkt)
-;; ============================================================
-
-(define (ensure-persisted! sess)
-  (unless (agent-session-persisted? sess)
-    (make-directory* (agent-session-session-dir sess))
-    (guarded-set-persisted! sess #t)
-    (define log-path (session-log-path-for sess))
-    (write-session-version-header! log-path)
-    (when (not (null? (agent-session-pending-entries sess)))
-      (for ([entry (in-list (reverse (agent-session-pending-entries sess)))])
-        (append-entry! log-path entry))
-      (guarded-set-pending-entries! sess '()))))
-
-(define (buffer-or-append! sess entry)
-  (if (agent-session-persisted? sess)
-      (append-entry! (session-log-path-for sess) entry)
-      (guarded-set-pending-entries! sess (cons entry (agent-session-pending-entries sess)))))

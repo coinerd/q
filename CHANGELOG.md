@@ -2,11 +2,16 @@
 
 ## v0.74.7 -- 2026-05-31
 
-### Audit Closure (W0)
-- Fixed stale `loop-state.rkt` references (moved from `runtime/` to `agent/` in v0.73.4)
-- Updated `dependency-policy.rktd`: moved exception to `agent` layer, updated sub-modules
-- Updated `test-arch-fitness.rkt`: corrected TR module path
-- Arch-fitness test failures: 2 → 0
+### Audit Closure (W0 + W1)
+- **W0**: Fixed stale `loop-state.rkt` references (moved from `runtime/` to `agent/` in v0.73.4)
+  - Updated `dependency-policy.rktd`: moved exception to `agent` layer, updated sub-modules
+  - Updated `test-arch-fitness.rkt`: corrected TR module path
+  - Arch-fitness test failures: 2 → 0
+- **W1**: Session persistence extraction
+  - Extracted `write-crash-log!`, `ensure-persisted!`, `buffer-or-append!` to `runtime/session-persistence.rkt`
+  - Added 6 crash-logger tests (was zero)
+  - `session-lifecycle.rkt`: 478 → 438 lines (target ≤450)
+  - Backward-compatible re-export from `session-lifecycle.rkt`
 
 
 ## v0.74.6 -- 2026-05-30
