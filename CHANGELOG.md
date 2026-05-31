@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.74.7 -- 2026-05-31
+
+### Audit Closure (W0)
+- Fixed stale `loop-state.rkt` references (moved from `runtime/` to `agent/` in v0.73.4)
+- Updated `dependency-policy.rktd`: moved exception to `agent` layer, updated sub-modules
+- Updated `test-arch-fitness.rkt`: corrected TR module path
+- Arch-fitness test failures: 2 → 0
+
+
 ## v0.74.6 -- 2026-05-30
 
 ### Architecture Controls & Release (M7)
