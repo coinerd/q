@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.74.6 -- 2026-05-30
+
+### Architecture Controls & Release (M7)
+- **W0**: Activated CI gates
+  - Hotspot block-threshold (>20,000 score) now BLOCKING — top files must have risk-notes
+  - Added risk-notes for 9 top hotspot files (tui/state-events, tui/terminal-input, llm/gemini, etc.)
+  - Cycle-detection tests already blocking
+  - Metrics synced to README
+- **W1**: Version bump 0.74.5 → 0.74.6, final release
+
+### v0.74.xx Series Summary
+7 milestones (v0.74.0–v0.74.6), ~1,000 LOC across:
+- Hotspot fitness function with scoring
+- Failure-domain classifier (7 error domains)
+- Session store cycle elimination (parameter injection)
+- Cycle-detection CI gate
+- Widened contract reconciliation (~44 contracts tightened)
+- Session lifecycle FSM extraction
+- GSD boundary clarification + TUI render phase extraction
+- Architecture controls activation
+
+
 ## v0.74.5 -- 2026-05-30
 
 ### GSD Boundary Clarification + TUI Render Extraction (M6)
