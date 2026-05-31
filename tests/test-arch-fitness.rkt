@@ -283,7 +283,7 @@
         "util/event-payloads.rkt"
         "extensions/gsd/plan-types.rkt"
         "extensions/gsd/plan-validator.rkt"
-        "runtime/iteration/loop-state.rkt"
+        "agent/iteration/loop-state.rkt"
         "runtime/iteration/retry-policy.rkt"))
 
 (define v02810-suite

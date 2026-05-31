@@ -15,6 +15,9 @@
    (forbidden-from . (llm tools extensions))
    (rationale
     . "Runtime should not import upward into tools/extensions except via documented exceptions (includes iteration/ submodules and layer-adapters)"))
+  (agent (max-exceptions . 2)
+       (forbidden-from . (llm))
+       (rationale . "Agent layer types; minimal cross-boundary imports"))
   (tui (max-exceptions . 0)
        (forbidden-from . (llm tools))
        (allowed-from . (runtime agent extensions util)))
@@ -34,10 +37,6 @@
        (rationale . "explicit adapter facade routing tool/extension deps behind contained boundary")
        (owner . "runtime")
        (revisit-by . "2026-07-01"))
-      (iteration/loop-state.rkt
-       (rationale . "typed require from extensions/api.rkt for opaque ExtRegistry")
-       (owner . "iteration")
-       (revisit-by . "2026-08-01"))
       (agent-session.rkt (rationale . "list-extensions via adapter (re-exports extension listing)")
                          (owner . "runtime")
                          (revisit-by . "2026-07-01"))
@@ -107,11 +106,16 @@
                    (sub-modules . (binding-resolver default-map mode-map))
                    (budget . 150)
                    (convention . "Keymap resolution and default maps."))
+  (agent/iteration
+   (parent . "agent/iteration.rkt")
+   (sub-modules . (loop-state counters step-interpreter main-loop tool-turn-bridge loop-config loop-phases))
+   (budget . 400)
+   (convention . "Agent iteration loop. Migrated from runtime/ in v0.73.4. TR module in loop-state."))
   (runtime/iteration
    (parent . "runtime/iteration.rkt")
    (sub-modules
     .
-    (loop-state retry-policy tool-turn-bridge counters decision step-interpreter main-loop internal))
+    (fsm-types directive retry-policy tool-turn-bridge counters decision step-interpreter main-loop internal))
    (budget . 450)
    (convention
     . "Iteration loop decomposition. Pure logic in counters/decision, effectful in step-interpreter, orchestration in main-loop."))
