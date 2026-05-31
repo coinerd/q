@@ -82,7 +82,10 @@
                   working-set-resolve-messages
                   working-set-entry-count
                   working-set-token-count)
-         (only-in "context-assembly/serialization.rkt" gsd-progress-message?)
+         (only-in "context-assembly/serialization.rkt"
+                  gsd-progress-message?
+                  build-tiered-context/state-aware
+                  current-task-state-aware-assembly?)
          (only-in "../runtime/tool-coordinator.rkt"
                   handle-tool-calls-pending
                   extract-tool-calls-from-messages)
@@ -147,7 +150,11 @@
 
 ;; Pure: assemble context from messages and config without side effects.
 ;; Returns the assembled message list and hook result (no events emitted here).
-(define (assemble-context/pure ctx-to-use config-raw #:hook-dispatcher [hook-dispatcher #f])
+(define (assemble-context/pure ctx-to-use
+                               config-raw
+                               #:hook-dispatcher [hook-dispatcher #f]
+                               #:task-state [task-state #f]
+                               #:conclusions [conclusions '()])
   (define config config-raw)
   (define tier-b-count (config-tier-b-count config))
   (define tier-c-count (config-tier-c-count config))
@@ -160,12 +167,25 @@
           '())))
   (define ws-messages (force ws-messages-promise))
   (define-values (tc hook-result)
-    (build-tiered-context-with-hooks ctx-to-use
-                                     #:hook-dispatcher hook-dispatcher
-                                     #:tier-b-count tier-b-count
-                                     #:tier-c-count tier-c-count
-                                     #:max-tokens max-tokens
-                                     #:working-set-messages ws-messages))
+    (cond
+      ;; v0.75.3: State-aware assembly when feature flag is on
+      [(and (current-task-state-aware-assembly?) task-state)
+       (define sa-tc
+         (build-tiered-context/state-aware ctx-to-use
+                                           #:tier-b-count tier-b-count
+                                           #:tier-c-count tier-c-count
+                                           #:working-set-messages ws-messages
+                                           #:task-state task-state
+                                           #:conclusions conclusions))
+       (values sa-tc #f)]
+      ;; Standard assembly path
+      [else
+       (build-tiered-context-with-hooks ctx-to-use
+                                        #:hook-dispatcher hook-dispatcher
+                                        #:tier-b-count tier-b-count
+                                        #:tier-c-count tier-c-count
+                                        #:max-tokens max-tokens
+                                        #:working-set-messages ws-messages)]))
   (values (tiered-context->message-list tc) hook-result tc))
 
 ;; Build assembled context using tiered context assembly with hooks.
