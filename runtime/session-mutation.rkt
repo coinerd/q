@@ -11,7 +11,7 @@
          (only-in "session-config.rkt" session-config?)
          (only-in "../util/errors.rkt" raise-session-error)
          (only-in "session-index/schema.rkt" session-index?)
-         (only-in "context-assembly/task-state.rkt" task-states-list))
+         (only-in "context-assembly/task-state.rkt" task-states-list task-valid-direct-transition?))
 
 (provide (contract-out [guarded-set-prompt-running! (-> agent-session? boolean? void?)]
                        [guarded-set-compacting! (-> agent-session? boolean? void?)]
@@ -29,6 +29,7 @@
                         (-> agent-session? (or/c exact-nonnegative-integer? #f) void?)]
                        [guarded-set-task-fsm-state! (-> agent-session? (or/c symbol? #f) void?)]
                        [guarded-set-task-conclusions! (-> agent-session? list? void?)]
+                       [guarded-set-recent-tool-calls! (-> agent-session? list? void?)]
                        [valid-session-phase? (-> symbol? boolean?)]
                        [session-phase (-> agent-session? symbol?)]))
 
@@ -113,10 +114,26 @@
 
 ;; Guard task-fsm-state — validates FSM transition
 ;; v0.75.6: Validate that value is a known FSM state symbol.
+;; v0.76.0 W1: Validate that the transition from current state is valid.
 (define (guarded-set-task-fsm-state! sess value)
+  ;; First, validate that value is a known state
   (when (and value (not (member value (task-states-list))))
     (raise-session-error (format "invalid task FSM state: ~a" value) #f))
+  ;; Second, validate that the transition is allowed
+  (define current (agent-session-task-fsm-state sess))
+  (when (and value
+             current
+             (not (eq? current 'idle))
+             (not (eq? value 'idle))
+             (not (task-valid-direct-transition? current value)))
+    (raise-session-error (format "invalid task FSM transition: ~a → ~a" current value) #f))
   (set-agent-session-task-fsm-state! sess value))
+
+;; Guard recent-tool-calls — keeps last 10, validates list of symbols/strings
+(define (guarded-set-recent-tool-calls! sess value)
+  (unless (and (list? value) (andmap (lambda (v) (or (symbol? v) (string? v))) value))
+    (raise-session-error "recent-tool-calls must be a list of symbols or strings" #f))
+  (set-agent-session-recent-tool-calls! sess value))
 
 ;; Guard task-conclusions — type-safe wrapper
 (define (guarded-set-task-conclusions! sess value)

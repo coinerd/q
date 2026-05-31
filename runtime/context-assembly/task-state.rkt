@@ -137,6 +137,7 @@
          ;; Transition helpers
          task-valid-transition?
          task-next-state
+         task-valid-direct-transition?
          ;; Contracts
          (contract-out [task-states-list (-> (listof symbol?))]
                        [task-events-list (-> (listof symbol?))]))
@@ -148,3 +149,9 @@
 
 (define (task-events-list)
   (fsm-events task-machine))
+
+;; Check if a direct state→state transition is valid (any event).
+;; Used by session-mutation.rkt for transition validation.
+(define (task-valid-direct-transition? from-sym to-sym)
+  (for/or ([event-sym (in-list (fsm-events task-machine))])
+    (eq? (fsm-lookup task-machine from-sym event-sym) to-sym)))

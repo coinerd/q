@@ -3,7 +3,8 @@
 ;; tests/test-task-state-inference.rkt — tests for state-inference heuristics
 ;; v0.75.2: Tool-call pattern → task-state inference + event wiring
 
-(require rackunit
+(require racket/list
+         rackunit
          rackunit/text-ui
          "../runtime/context-assembly/state-inference.rkt"
          (only-in "../runtime/context-assembly/task-state.rkt"
@@ -128,6 +129,27 @@
 
     (test-case "explicit set_task_state overrides inference"
       (define-values (inferred-state conf) (infer-task-state-from-tools '("set-task-state")))
-      (check-true (or (eq? inferred-state task-planning) (not inferred-state))))))
+      (check-true (or (eq? inferred-state task-planning) (not inferred-state))))
+
+    ;; ── W1: Accumulated tool calls + mixed types ──
+
+    (test-case "inference handles symbol tool names"
+      (define-values (state conf) (infer-task-state-from-tools '(read read edit)))
+      (check-equal? state task-implementation))
+
+    (test-case "inference handles mixed string/symbol tool names"
+      (define-values (state conf) (infer-task-state-from-tools '("read" read "edit" write)))
+      (check-equal? state task-implementation))
+
+    (test-case "batch inference caps at 10 calls"
+      (define many-reads (make-list 15 "read"))
+      (define-values (state conf) (infer-from-recent-turns (list many-reads)))
+      (check-equal? state task-exploration)
+      ;; Should not error despite >10 calls
+      (check-true (>= conf 0.5)))
+
+    (test-case "batch inference with multiple turn windows"
+      (define-values (state conf) (infer-from-recent-turns '(("read") ("edit" "write"))))
+      (check-equal? state task-implementation))))
 
 (run-tests suite)

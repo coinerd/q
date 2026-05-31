@@ -16,7 +16,6 @@
          "session-types.rkt"
          (only-in "context-assembly/task-conclusion.rkt" task-conclusion task-conclusion-id))
 (require "session-mutation.rkt")
-(require (submod "session-types.rkt" internal))
 (require (only-in "context-assembly/state-inference.rkt"
                   infer-task-state-from-tools
                   current-state-inference-threshold))
@@ -90,11 +89,10 @@
          (define current-recent (agent-session-recent-tool-calls sess))
          (define updated-recent (append current-recent (list tool-name)))
          ;; Keep last 10 tool calls
-         (set-agent-session-recent-tool-calls! sess
-                                               (if (> (length updated-recent) 10)
-                                                   (list-tail updated-recent
-                                                              (- (length updated-recent) 10))
-                                                   updated-recent))
+         (guarded-set-recent-tool-calls! sess
+                                         (if (> (length updated-recent) 10)
+                                             (list-tail updated-recent (- (length updated-recent) 10))
+                                             updated-recent))
          (define-values (inferred-state confidence)
            (infer-task-state-from-tools (agent-session-recent-tool-calls sess)))
          (when (and inferred-state (>= confidence (current-state-inference-threshold)))
