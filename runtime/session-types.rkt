@@ -58,6 +58,8 @@
          agent-session-shutdown-requested?
          agent-session-force-shutdown?
          agent-session-prompt-running?
+         agent-session-task-fsm-state
+         agent-session-task-conclusions
          session-log-path
          session-index-path
          (contract-out [session-log-path-for (-> agent-session? path?)]
@@ -95,7 +97,9 @@
          [thinking-level #:mutable] ; symbol — one of thinking-levels (#1153)
          [shutdown-requested? #:mutable] ; boolean — graceful shutdown flag (#1158)
          [force-shutdown? #:mutable]
-         [prompt-running? #:mutable]) ; boolean — concurrent prompt execution guard
+         [prompt-running? #:mutable]
+         [task-fsm-state #:mutable]
+         [task-conclusions #:mutable]) ; boolean — concurrent prompt execution guard
   #:transparent)
 
 ;; ============================================================
@@ -144,4 +148,6 @@
            set-agent-session-thinking-level!
            set-agent-session-shutdown-requested?!
            set-agent-session-force-shutdown?!
-           set-agent-session-prompt-running?!))
+           set-agent-session-prompt-running?!
+           set-agent-session-task-fsm-state!
+           set-agent-session-task-conclusions!))

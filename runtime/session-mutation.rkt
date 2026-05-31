@@ -26,6 +26,8 @@
                        [guarded-set-thinking-level! (-> agent-session? (or/c symbol? #f) void?)]
                        [guarded-set-last-compaction-time!
                         (-> agent-session? (or/c exact-nonnegative-integer? #f) void?)]
+                       [guarded-set-task-fsm-state! (-> agent-session? symbol? void?)]
+                       [guarded-set-task-conclusions! (-> agent-session? list? void?)]
                        [valid-session-phase? (-> symbol? boolean?)]
                        [session-phase (-> agent-session? symbol?)]))
 
@@ -107,3 +109,11 @@
 ;; Guard last-compaction-time — type-safe wrapper
 (define (guarded-set-last-compaction-time! sess value)
   (set-agent-session-last-compaction-time! sess value))
+
+;; Guard task-fsm-state — validates FSM transition
+(define (guarded-set-task-fsm-state! sess value)
+  (set-agent-session-task-fsm-state! sess value))
+
+;; Guard task-conclusions — type-safe wrapper
+(define (guarded-set-task-conclusions! sess value)
+  (set-agent-session-task-conclusions! sess value))
