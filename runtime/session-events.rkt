@@ -15,6 +15,7 @@
          (only-in "runtime-helpers.rkt" emit-session-event!)
          "session-types.rkt")
 (require "session-mutation.rkt")
+(require (submod "session-types.rkt" internal))
 (require (only-in "context-assembly/state-inference.rkt"
                   infer-task-state-from-tools
                   current-state-inference-threshold))
@@ -84,11 +85,23 @@
        (define payload (event-payload evt))
        (define tool-name (and (hash? payload) (hash-ref payload 'tool-name #f)))
        (when tool-name
-         (define current-state (agent-session-task-fsm-state sess))
-         (define recent-calls (list tool-name))
-         (define-values (inferred-state confidence) (infer-task-state-from-tools recent-calls))
+         ;; v0.75.6: Accumulate tool calls for better inference
+         (define current-recent (agent-session-recent-tool-calls sess))
+         (define updated-recent (append current-recent (list tool-name)))
+         ;; Keep last 10 tool calls
+         (set-agent-session-recent-tool-calls! sess
+                                               (if (> (length updated-recent) 10)
+                                                   (list-tail updated-recent
+                                                              (- (length updated-recent) 10))
+                                                   updated-recent))
+         (define-values (inferred-state confidence)
+           (infer-task-state-from-tools (agent-session-recent-tool-calls sess)))
          (when (and inferred-state (>= confidence (current-state-inference-threshold)))
            (guarded-set-task-fsm-state! sess (fsm-state-name inferred-state))
+           ;; v0.75.6: Persist task state change
+           (define log-path (session-log-path (agent-session-session-dir sess)))
+           (when (file-exists? log-path)
+             (append-task-state! log-path (fsm-state-name inferred-state)))
            (emit-session-event!
             bus
             (agent-session-session-id sess)
