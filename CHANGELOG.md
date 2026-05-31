@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.75.7 (2026-05-30)
+
+### GUI/GSD Workflow Usability Fixes
+
+#### Bug Fixes
+- **GUI**: Tool messages now show arguments and results in transcript (was: `Tool: [xxx]`, now: `Tool: [bash] command: ls`)
+- **GUI**: Tool execution results now appear in transcript via `tool.execution.completed` handler
+- **GUI**: `gui-message` struct extended with `meta` field for structured tool data
+- **GSD**: `/plan` now cleans old wave files and emphasizes wave-first ordering in prompt
+- **GSD**: `/go` now validates wave doc existence before state transition
+- **GSD**: `/go` resilient to relaxed wave index format (`- W0: Title` without `[Status]` brackets)
+- **GSD**: `/go` now includes persistent task summary to prevent focus loss during execution
+- **Context**: `gsd-progress-message?` extended to pin execution-instruction messages
+
+#### Tests Added
+- 13 tests in test-gui-types.rkt (5 new: meta field)
+- 25 tests in test-gui-state-sync.rkt (5 new: tool args/results, 20 fixed: struct migration)
+- 5 tests in test-gsd-wave-gen-validation.rkt (wave doc validation)
+- 5 tests in test-gsd-relaxed-index.rkt (relaxed parser)
+- 3 tests in test-gsd-task-focus.rkt (task summary)
+- 6 tests in serialization.rkt module+test (execution instruction pinning)
+
+
 ## v0.75.6 (2026-05-30)
 
 ### Audit Closure (v0.75.6)
