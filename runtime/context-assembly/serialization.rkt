@@ -348,6 +348,60 @@
                       (tiered-context-tier-b base-tc)
                       (tiered-context-tier-c base-tc))))
 
+;; ── v0.75.5: System prompt state injection ──
+
+;; State-specific guidance strings
+(define state-guidance-table
+  (hasheq
+   'idle
+   "Awaiting instructions."
+   'exploration
+   "Focus on reading and understanding the codebase. Use save_conclusion to record key findings."
+   'planning
+   "Break down the task into steps. Use save_conclusion to record the plan."
+   'implementation
+   "Focus on editing files. Use save_conclusion to record key decisions."
+   'verification
+   "Run tests and verify correctness. Use save_conclusion to record test results."
+   'debugging
+   "Focus on error-related files. Use save_conclusion to record debugging insights."))
+
+;; build-state-awareness-preamble : task-state? (listof task-conclusion?) → (or/c #f message?)
+;; Generates a system prompt section describing the current task state.
+;; Returns #f if no meaningful preamble (idle state with no conclusions).
+(define (build-state-awareness-preamble task-state conclusions)
+  (define state-name (and task-state (fsm-state-name task-state)))
+  (cond
+    [(not state-name) #f]
+    [(eq? state-name 'idle) #f]
+    [else
+     (define label
+       (case state-name
+         [(exploration) "EXPLORATION"]
+         [(planning) "PLANNING"]
+         [(implementation) "IMPLEMENTATION"]
+         [(verification) "VERIFICATION"]
+         [(debugging) "DEBUGGING"]
+         [else "UNKNOWN"]))
+     (define guidance (hash-ref state-guidance-table state-name "Focus on the current task."))
+     (define conclusion-section
+       (if (and (pair? conclusions) (task-conclusion? (car conclusions)))
+           (let* ([top (take conclusions (min 10 (length conclusions)))]
+                  [texts (for/list ([c (in-list top)])
+                           (format "  - ~a" (task-conclusion-text c)))])
+             (format "\n\nKey conclusions:\n~a" (string-join texts "\n")))
+           ""))
+     (define preamble-text
+       (format "You are currently in the ~a phase.~a~a" label guidance conclusion-section))
+     (make-message "state-awareness-preamble"
+                   #f
+                   'system-instruction
+                   'text
+                   (list (make-text-part preamble-text))
+                   (current-seconds)
+                   (hasheq))]))
+
+(provide build-state-awareness-preamble)
 ;; ============================================================
 ;; TEST-01: Isolated unit tests for gsd-progress-message?
 ;; ============================================================

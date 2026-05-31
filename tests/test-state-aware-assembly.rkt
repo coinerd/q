@@ -15,6 +15,9 @@
                   task-verification
                   task-debugging)
          (only-in "../runtime/context-assembly/task-conclusion.rkt" task-conclusion task-conclusion?)
+         (only-in "../runtime/context-assembly/task-conclusion.rkt" task-conclusion)
+         (only-in "../util/protocol-types.rkt" message-content)
+         (only-in "../util/content-parts.rkt" text-part-text)
          (only-in "../runtime/context-assembly/serialization.rkt"
                   build-tiered-context
                   build-tiered-context/state-aware
@@ -22,7 +25,8 @@
                   tiered-context-tier-b
                   tiered-context-tier-c
                   tiered-context->message-list
-                  current-task-state-aware-assembly?)
+                  current-task-state-aware-assembly?
+                  build-state-awareness-preamble)
          (only-in "../util/protocol-types.rkt"
                   make-message
                   make-text-part
@@ -180,6 +184,8 @@
                     tier-a))
       (check-true (>= (length conclusion-texts) 1) "At least one conclusion should appear in tier-a"))
     ;; ── Empty conclusions ──
+
+    ;; ── Empty conclusions ──
     (test-case "empty conclusions with planning state"
       (define tc
         (build-tiered-context/state-aware base-messages
@@ -187,6 +193,53 @@
                                           #:task-state task-planning
                                           #:conclusions '()))
       (define tier-a (tiered-context-tier-a tc))
-      (check-equal? (count-ws tier-a) 0 "planning excludes ws even without conclusions"))))
+      (check-equal? (count-ws tier-a) 0 "planning excludes ws even without conclusions"))
+
+    ;; ── v0.75.5: System prompt preamble tests ──
+
+    (test-case "preamble returns #f for idle state"
+      (define p (build-state-awareness-preamble task-idle '()))
+      (check-false p))
+
+    (test-case "preamble returns #f for #f state"
+      (define p (build-state-awareness-preamble #f '()))
+      (check-false p))
+
+    (test-case "preamble contains correct state label"
+      (define p (build-state-awareness-preamble task-implementation '()))
+      (check-not-false p)
+      (define text-part (car (message-content p)))
+      (define text (text-part-text text-part))
+      (check-not-false (string-contains? text "IMPLEMENTATION") (format "text=~a" text)))
+
+    (test-case "preamble contains state-specific guidance"
+      (define p (build-state-awareness-preamble task-implementation '()))
+      (define text (text-part-text (car (message-content p))))
+      (check-not-false (string-contains? text "Focus on editing files")
+                       (format "missing guidance in: ~a" text)))
+
+    (test-case "preamble includes conclusions summary"
+      (define conclusions
+        (list (task-conclusion "c1" "Use struct for data" 'fact 'idle '() (current-seconds) '())
+              (task-conclusion "c2" "Tests in tests/" 'fact 'idle '() (current-seconds) '())))
+      (define p (build-state-awareness-preamble task-exploration conclusions))
+      (define text (text-part-text (car (message-content p))))
+      (check-not-false (string-contains? text "Use struct for data")
+                       (format "missing conclusion in: ~a" text)))
+
+    (test-case "preamble limits conclusions to top 10"
+      (define conclusions
+        (for/list ([i (in-range 15)])
+          (task-conclusion (format "c~a" i)
+                           (format "Finding ~a" i)
+                           'fact
+                           'idle
+                           '()
+                           (current-seconds)
+                           '())))
+      (define p (build-state-awareness-preamble task-planning conclusions))
+      (define text (text-part-text (car (message-content p))))
+      (check-not-false (string-contains? text "Finding 9"))
+      (check-false (string-contains? text "Finding 14")))))
 
 (run-tests suite)
