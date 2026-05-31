@@ -24,7 +24,10 @@
          (only-in "../../llm/provider.rkt" provider?)
          (only-in "../../util/hook-types.rkt" hook-result-action hook-result-payload)
          "../../skills/context-files.rkt"
-         "budgeting.rkt")
+         "budgeting.rkt"
+         (only-in "state-relevance.rkt" context-level-for-state)
+         (only-in "task-conclusion.rkt" task-conclusion? task-conclusion-text)
+         (only-in "../../util/fsm.rkt" fsm-state-name))
 
 (provide tiered-context
          tiered-context?
@@ -50,7 +53,12 @@
          load-agents-context
          build-system-preamble
          truncate-messages-to-budget
-         gsd-progress-message?)
+         gsd-progress-message?
+         current-task-state-aware-assembly?
+         build-tiered-context/state-aware)
+
+;; Feature flag: state-aware context assembly (v0.75.3)
+(define current-task-state-aware-assembly? (make-parameter #f))
 
 ;; Default tier boundaries
 (define DEFAULT-TIER-B-COUNT 20)
@@ -259,6 +267,86 @@
                         desc
                         inst)))
         (string-join parts "\n\n")])]))
+
+;; ── v0.75.3: State-aware context assembly ──
+
+;; build-tiered-context/state-aware :
+;;   Same signature as build-tiered-context, plus optional task-state and conclusions.
+;;   When a task-state is provided, uses state-relevance-table to decide which
+;;   context categories to include/summarize/filter/exclude.
+(define (build-tiered-context/state-aware messages
+                                          #:tier-b-count [tier-b-count #f]
+                                          #:tier-c-count [tier-c-count DEFAULT-TIER-C-COUNT]
+                                          #:working-set-messages [ws-messages '()]
+                                          #:task-state [task-state #f]
+                                          #:conclusions [conclusions '()]
+                                          #:trace [trace-cb #f])
+  (define state-name (and task-state (fsm-state-name task-state)))
+  (define ws-level (and state-name (context-level-for-state task-state 'working-set)))
+  (define conclusions-level (and state-name (context-level-for-state task-state 'conclusions)))
+
+  ;; Adjust working-set based on state relevance
+  (define effective-ws
+    (cond
+      [(eq? ws-level 'excluded) '()]
+      ;; Keep only the most recent working-set entries
+      [(eq? ws-level 'filtered) (take ws-messages (min 3 (length ws-messages)))]
+      [else ws-messages]))
+
+  ;; Add conclusions as context entries when relevant
+  (define conclusion-entries
+    (cond
+      [(or (not state-name) (eq? conclusions-level 'excluded)) '()]
+      [(eq? conclusions-level 'full)
+       (for/list ([c (in-list conclusions)]
+                  #:when (task-conclusion? c))
+         (make-message (format "conclusion-~a" (current-milliseconds))
+                       #f
+                       'system-instruction
+                       'text
+                       (list (make-text-part (format "[Conclusion] ~a" (task-conclusion-text c))))
+                       (current-seconds)
+                       (hasheq)))]
+      [(eq? conclusions-level 'summary)
+       (if (<= (length conclusions) 3)
+           (for/list ([c (in-list conclusions)]
+                      #:when (task-conclusion? c))
+             (make-message (format "conclusion-~a" (current-milliseconds))
+                           #f
+                           'system-instruction
+                           'text
+                           (list (make-text-part (format "[Conclusion] ~a" (task-conclusion-text c))))
+                           (current-seconds)
+                           (hasheq)))
+           ;; Summarize: take first + last
+           (let ([first-c (car conclusions)]
+                 [last-c (car (reverse conclusions))])
+             (for/list ([c (list first-c last-c)]
+                        #:when (task-conclusion? c))
+               (make-message (format "conclusion-~a" (current-milliseconds))
+                             #f
+                             'system-instruction
+                             'text
+                             (list (make-text-part (format "[Conclusion] ~a"
+                                                           (task-conclusion-text c))))
+                             (current-seconds)
+                             (hasheq)))))]
+      [else '()]))
+
+  ;; Build base context with adjusted working-set
+  (define base-tc
+    (build-tiered-context messages
+                          #:tier-b-count tier-b-count
+                          #:tier-c-count tier-c-count
+                          #:working-set-messages effective-ws
+                          #:trace trace-cb))
+
+  ;; Prepend conclusion entries to tier-a
+  (if (null? conclusion-entries)
+      base-tc
+      (tiered-context (append conclusion-entries (tiered-context-tier-a base-tc))
+                      (tiered-context-tier-b base-tc)
+                      (tiered-context-tier-c base-tc))))
 
 ;; ============================================================
 ;; TEST-01: Isolated unit tests for gsd-progress-message?
