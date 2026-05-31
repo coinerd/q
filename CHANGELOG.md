@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.75.8 (2026-05-31)
+
+### Post-v0.75.7 Audit Fix
+
+#### Bug Fixes
+- **GUI**: Fixed tool results showing `→ #f` — now shows `→ OK` or `→ FAIL` with correct event payload keys (`toolName`/`resultSummary`)
+- **GUI**: Tool results now inline with tool calls (`Tool: [bash] → OK`) instead of separate messages
+- **GSD**: `/plan` wave cleanup now instant — uses `delete-directory/files` instead of per-file iteration
+- **GSD**: Plan validator no longer blocks docs-only plans with no file references — downgraded to WARNING
+
+#### Tests Updated
+- test-gui-state-sync.rkt: 24 tests (updated tool.execution.completed tests for inline display)
+- test-gsd-plan-validator.rkt: 10 tests (updated docs-only plan expectation)
+- test-gsd-plan-validator-unit.rkt: 14 tests (updated docs-only plan expectations)
+
 ## v0.75.7 (2026-05-30)
 
 ### GUI/GSD Workflow Usability Fixes

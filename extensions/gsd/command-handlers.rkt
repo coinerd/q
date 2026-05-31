@@ -61,7 +61,8 @@
                   set-edit-limit!
                   current-gsd-event-bus
                   set-gsd-event-bus!
-                  current-gsd-ctx))
+                  current-gsd-ctx)
+         racket/file)
 
 (provide (contract-out
           [register-gsd-commands (-> extension-ctx? hook-result?)]
@@ -381,13 +382,12 @@
   (define saved-bus (current-gsd-event-bus)) ;; Preserve event bus across reset
   (define saved-dir (current-pinned-dir)) ;; Preserve pinned dir
   (reset-all-gsd-state!) ;; Clean state for fresh plan (F1 fix)
-  ;; Clean old wave files to prevent stale state
+  ;; Clean old wave files to prevent stale state (fast: delete+recreate dir)
   (define waves-dir (build-path base-dir ".planning" "waves"))
-  (when (directory-exists? waves-dir)
-    (for ([f (in-directory waves-dir)])
-      (when (file-exists? f)
-        (with-handlers ([exn:fail? void])
-          (delete-file f)))))
+  (with-handlers ([exn:fail? void])
+    (when (directory-exists? waves-dir)
+      (delete-directory/files waves-dir)))
+  (make-directory* waves-dir)
   (when saved-bus
     (set-gsd-event-bus! saved-bus))
   (when saved-dir

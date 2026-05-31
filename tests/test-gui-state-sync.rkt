@@ -199,41 +199,35 @@
 
 (define test-tool-execution-completed
   (test-suite "tool.execution.completed"
-    (test-case "adds tool-result message"
+    (test-case "updates last tool message with OK result"
       (define sb (fresh-box))
       (define sub (make-gui-event-subscriber sb))
-      (sub (mk-event "tool.execution.completed" (hash 'name "bash" 'result "3 files found")))
+      ;; First: tool call started
+      (sub (mk-event "tool.call.started" (hash 'name "bash" 'arguments (hash 'command "ls -la"))))
+      ;; Then: tool execution completed with correct camelCase keys
+      (sub (mk-event "tool.execution.completed" (hash 'toolName "bash" 'resultSummary 'completed)))
+      (define msgs (gui-state-messages (unbox sb)))
+      (check-equal? (length msgs) 1 "should update existing tool message, not add new")
+      (check-equal? (gui-message-role (car msgs)) "tool")
+      (check-not-false (regexp-match? #rx"\u2192 OK" (gui-message-text (car msgs)))))
+
+    (test-case "shows FAIL for error result"
+      (define sb (fresh-box))
+      (define sub (make-gui-event-subscriber sb))
+      (sub (mk-event "tool.call.started" (hash 'name "read")))
+      (sub (mk-event "tool.execution.completed" (hash 'toolName "read" 'resultSummary 'error)))
       (define msgs (gui-state-messages (unbox sb)))
       (check-equal? (length msgs) 1)
-      (check-equal? (gui-message-role (car msgs)) "tool-result")
-      (check-not-false (regexp-match? #rx"3 files found" (gui-message-text (car msgs)))))
+      (check-not-false (regexp-match? #rx"\u2192 FAIL" (gui-message-text (car msgs)))))
 
-    (test-case "truncates long results"
+    (test-case "defaults to OK when no resultSummary"
       (define sb (fresh-box))
       (define sub (make-gui-event-subscriber sb))
-      (define long-result (make-string 200 #\x))
-      (sub (mk-event "tool.execution.completed" (hash 'name "read" 'result long-result)))
+      (sub (mk-event "tool.call.started" (hash 'name "bash")))
+      (sub (mk-event "tool.execution.completed" (hash 'toolName "bash")))
       (define msgs (gui-state-messages (unbox sb)))
       (check-equal? (length msgs) 1)
-      (define text (gui-message-text (car msgs)))
-      (check-true (< (string-length text) 130)
-                  (format "text length ~a should be < 130" (string-length text))))
-
-    (test-case "handles hash result"
-      (define sb (fresh-box))
-      (define sub (make-gui-event-subscriber sb))
-      (sub (mk-event "tool.execution.completed"
-                     (hash 'name "read" 'result (hash 'text "file contents here"))))
-      (define msgs (gui-state-messages (unbox sb)))
-      (check-equal? (length msgs) 1)
-      (check-not-false (regexp-match? #rx"file contents" (gui-message-text (car msgs)))))
-
-    (test-case "handles missing result"
-      (define sb (fresh-box))
-      (define sub (make-gui-event-subscriber sb))
-      (sub (mk-event "tool.execution.completed" (hash 'name "bash")))
-      (define msgs (gui-state-messages (unbox sb)))
-      (check-equal? (length msgs) 1))))
+      (check-not-false (regexp-match? #rx"\u2192 OK" (gui-message-text (car msgs)))))))
 
 (run-tests (test-suite "gui-state-sync"
              test-user-input

@@ -53,13 +53,13 @@
   (check-true (validation-valid? result))
   (check-true (ormap (lambda (w) (string-contains? w "title")) (validation-warnings result))))
 
-(test-case "wave without files → warning (relaxed in v0.21.7)"
+(test-case "wave without files → warning, not error (v0.75.8 relaxed)"
   (define plan (gsd-plan (list (gsd-wave 0 "Fix" 'pending "" '() '() "test" '())) "" '() '()))
   (define result (validate-plan-strict plan))
-  ;; Single wave with no files = plan-level error (all waves file-less)
-  (check-false (validation-valid? result))
-  (check-true (ormap (lambda (e) (string-contains? e "no file references in any wave"))
-                     (validation-errors result))))
+  ;; v0.75.8: docs-only plans with no file refs are now valid (warning, not error)
+  (check-true (validation-valid? result))
+  (check-true (ormap (lambda (w) (string-contains? w "no file references"))
+                     (validation-warnings result))))
 
 (test-case "plan with some file-less waves passes (v0.21.7)"
   (define plan

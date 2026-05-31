@@ -162,27 +162,25 @@
                                                              (hasheq 'name name 'arguments args))))
           (notify!)))]
 
-      ;; Tool execution completed → show result
+      ;; Tool execution completed → update last tool message with result
       [(equal? ev "tool.execution.completed")
-       (define name (hash-ref payload 'name "unknown"))
-       (define result-raw (hash-ref payload 'result #f))
-       (define result-text
-         (let ([s (cond
-                    [(string? result-raw) result-raw]
-                    [(hash? result-raw) (hash-ref result-raw 'text "")]
-                    [else (format "~a" result-raw)])])
-           (if (> (string-length s) 120)
-               (string-append (substring s 0 117) "...")
-               s)))
+       (define name (hash-ref payload 'toolName "unknown"))
+       (define result-summary (hash-ref payload 'resultSummary 'completed))
+       (define result-text (if (eq? result-summary 'error) "FAIL" "OK"))
        (call-with-semaphore
         gui-state-lock
         (lambda ()
           (define old (unbox state-box))
+          ;; Update last tool message inline: "Tool: [bash] → OK"
           (set-box! state-box
-                    (gui-state-add-message old
-                                           (make-gui-message "tool-result"
-                                                             (format "\u2192 ~a" result-text)
-                                                             (hasheq 'name name 'result result-raw))))
+                    (gui-state-update-last-message
+                     old
+                     (lambda (msg)
+                       (if (equal? (gui-message-role msg) "tool")
+                           (gui-message "tool"
+                                        (string-append (gui-message-text msg) " \u2192 " result-text)
+                                        (gui-message-meta msg))
+                           msg))))
           (notify!)))]
       ;; Error events
       [(and (string? ev) (regexp-match? #rx"(?i:error)" ev))
