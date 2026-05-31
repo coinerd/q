@@ -47,7 +47,7 @@
     [(user) "You"]
     [(assistant) "Assistant"]
     [(system) "System"]
-    [(tool) "Tool"]
+    [(tool tool-result) "Tool"]
     [else (string-titlecase (or role "Unknown"))]))
 
 (define (role->color role theme)
@@ -55,7 +55,7 @@
     [(user) (theme-ref theme 'accent)]
     [(assistant) (theme-ref theme 'foreground)]
     [(system) (theme-ref theme 'muted)]
-    [(tool) (theme-ref theme 'warning)]
+    [(tool tool-result) (theme-ref theme 'warning)]
     [else (theme-ref theme 'muted)]))
 
 (define (hex->color-components hex-str)
