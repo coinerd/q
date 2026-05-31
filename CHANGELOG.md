@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.74.5 -- 2026-05-30
+
+### GSD Boundary Clarification + TUI Render Extraction (M6)
+- **W0**: Added 8 boundary tests for gsd/core.rkt contract-out API
+  - Command dispatch, write guard, status, reset, accessors, contract rejection
+- **W1**: GSD state already well-extracted into gsd/session-state.rkt
+  - Verified facade pattern: gsd-planning.rkt → gsd/session-state.rkt + gsd/core.rkt
+  - Version bump 0.74.4 → 0.74.5
+
+
 ## v0.74.4 -- 2026-05-30
 
 ### Session Lifecycle FSM Extraction (M5)
