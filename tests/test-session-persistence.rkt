@@ -8,7 +8,11 @@
          racket/file
          racket/port
          racket/string
-         "../runtime/session-persistence.rkt")
+         "../runtime/session-persistence.rkt"
+         "../runtime/session-types.rkt"
+         (only-in "../util/message.rkt" message)
+         "../runtime/session-mutation.rkt"
+         "helpers/session-fixture.rkt")
 
 ;; --- Test isolation helper ---
 
@@ -88,6 +92,82 @@
       (check-not-exn (lambda ()
                        (parameterize ([current-crash-log-dir
                                        "/nonexistent/deeply/nested/path/that/cannot/be/created"])
-                         (write-crash-log! "test" "msg" "phase")))))))
+                         (write-crash-log! "test" "msg" "phase")))))
 
-(run-tests suite)
+    ;; ── Contract-rejection tests (R3) ──
+
+    (test-case "write-crash-log! rejects non-string session-id"
+      (check-exn exn:fail:contract?
+                 (lambda () (write-crash-log! 42 "msg" "phase"))
+                 "integer session-id must be rejected"))
+
+    (test-case "ensure-persisted! rejects non-agent-session"
+      (check-exn exn:fail:contract?
+                 (lambda () (ensure-persisted! "not-a-session"))
+                 "string argument must be rejected"))
+
+    (test-case "buffer-or-append! rejects non-message entry"
+      (define sess (make-test-session #:dir "/tmp/q-test-buf-contract"))
+      (check-exn exn:fail:contract?
+                 (lambda () (buffer-or-append! sess 42))
+                 "integer entry must be rejected"))
+
+    ;; ── Direct function tests (R4) ──
+
+    (test-case "ensure-persisted! creates session directory"
+      (define tmp (make-temporary-file "q-persist-test-~a" 'directory))
+      (dynamic-wind void
+                    (lambda ()
+                      (define sess (make-test-session #:dir tmp))
+                      (ensure-persisted! sess)
+                      (check-true (directory-exists? (agent-session-session-dir sess))
+                                  "session directory must exist after ensure-persisted!"))
+                    (lambda ()
+                      (with-handlers ([exn:fail? void])
+                        (delete-directory/files tmp)))))
+
+    (test-case "ensure-persisted! sets persisted flag"
+      (define tmp (make-temporary-file "q-persist-flag-~a" 'directory))
+      (dynamic-wind void
+                    (lambda ()
+                      (define sess (make-test-session #:dir tmp))
+                      (check-false (agent-session-persisted? sess) "should start un-persisted")
+                      (ensure-persisted! sess)
+                      (check-true (agent-session-persisted? sess) "should be persisted after call"))
+                    (lambda ()
+                      (with-handlers ([exn:fail? void])
+                        (delete-directory/files tmp))))
+
+      (test-case "buffer-or-append! buffers when not persisted"
+        (define tmp (make-temporary-file "q-buffer-test-~a" 'directory))
+        (dynamic-wind void
+                      (lambda ()
+                        (define sess (make-test-session #:dir tmp))
+                        (check-false (agent-session-persisted? sess))
+                        (define fake-entry (message "id1" #f "user" "text" "hello" 0 (hash)))
+                        (buffer-or-append! sess fake-entry)
+                        (check-equal? (length (agent-session-pending-entries sess))
+                                      1
+                                      "entry should be buffered when not persisted"))
+                      (lambda ()
+                        (with-handlers ([exn:fail? void])
+                          (delete-directory/files tmp))))
+
+        (test-case "buffer-or-append! writes immediately when persisted"
+          (define tmp (make-temporary-file "q-buffer-write-test-~a" 'directory))
+          (dynamic-wind void
+                        (lambda ()
+                          (define sess (make-test-session #:dir tmp))
+                          (ensure-persisted! sess)
+                          (check-true (agent-session-persisted? sess))
+                          (define fake-entry (message "id2" #f "user" "text" "world" 0 (hash)))
+                          (buffer-or-append! sess fake-entry)
+                          ;; When persisted, entry goes directly to file, not pending
+                          (check-equal? (agent-session-pending-entries sess)
+                                        '()
+                                        "no pending entries when persisted"))
+                        (lambda ()
+                          (with-handlers ([exn:fail? void])
+                            (delete-directory/files tmp))))))
+
+      (run-tests suite))))

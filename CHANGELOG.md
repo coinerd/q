@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.74.8 (2026-05-31)
+
+### Context-Assembly Contract Bugfix + Test Quality Remediation
+
+- **P0 FIX**: `build-tiered-context-with-hooks` contract declared `(or/c hash? #f)` but returned `(or/c hook-result? #f)` — broke all prompt submission with hooks active
+- **R1**: Removed trivially-true `check-true #t` assertions in `test-session-persistence.rkt`
+- **R2**: Added `current-crash-log-dir` parameter for test isolation — zero `~/.q/` pollution
+- **R3**: Added 3 contract-rejection tests for all exported functions
+- **R4**: Added 4 direct function tests for `ensure-persisted!` and `buffer-or-append!`
+- Test count: 6 → 13 (all meaningful assertions, temp-dir isolated)
+- Version bump 0.74.7 → 0.74.8
+
 ## v0.74.7 -- 2026-05-31
 
 ### Audit Closure (W0 + W1 + W2)
