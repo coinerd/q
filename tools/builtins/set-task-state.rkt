@@ -73,13 +73,15 @@
 (define (set-task-state-handler args [exec-ctx #f])
   (define state-name (hash-ref args 'state #f))
   (define event-name (hash-ref args 'event #f))
-
+  ;; Convert strings to symbols for hasheq lookup (LLM sends strings)
+  (define state-sym (if (string? state-name) (string->symbol state-name) state-name))
+  (define event-sym (if (string? event-name) (string->symbol event-name) event-name))
   (cond
     [(not state-name) (make-error-result "Missing required argument: state")]
     [(not event-name) (make-error-result "Missing required argument: event")]
     [else
-     (define target-state (hash-ref state-lookup state-name #f))
-     (define event (hash-ref event-lookup event-name #f))
+     (define target-state (hash-ref state-lookup state-sym #f))
+     (define event (hash-ref event-lookup event-sym #f))
      (cond
        [(not target-state)
         (make-error-result (format "Unknown state: ~a. Valid: ~a" state-name (task-states-list)))]

@@ -21,6 +21,8 @@
                        [gui-state-add-message (-> gui-state? gui-message? gui-state?)]
                        [gui-state-update-last-message
                         (-> gui-state? (-> gui-message? gui-message?) gui-state?)]
+                       [gui-state-update-tool-message-by-name
+                        (-> gui-state? string? (-> gui-message? gui-message?) gui-state?)]
                        [gui-state-set-status (-> gui-state? symbol? gui-state?)]
                        [gui-state-set-active-goal (-> gui-state? (or/c hash? #f) gui-state?)]
                        [gui-state->hash (-> gui-state? hash?)]
@@ -58,6 +60,23 @@
              [last-msg (last msgs)]
              [updated (updater last-msg)])
         (struct-copy gui-state gs [messages (append all-but-last (list updated))]))))
+
+(define (gui-state-update-tool-message-by-name gs tool-name updater)
+  (define msgs (gui-state-messages gs))
+  (define idx
+    (for/first ([i (in-range (sub1 (length msgs)) -1 -1)]
+                #:when (let ([m (list-ref msgs i)])
+                         (and (equal? (gui-message-role m) "tool")
+                              (equal? (hash-ref (gui-message-meta m) 'name #f) tool-name)
+                              (not (hash-ref (gui-message-meta m) 'completed #f)))))
+      i))
+  (if (not idx)
+      gs
+      (let* ([pre (take msgs idx)]
+             [post (drop msgs (add1 idx))]
+             [target (list-ref msgs idx)]
+             [updated (updater target)])
+        (struct-copy gui-state gs [messages (append pre (list updated) post)]))))
 
 (define (gui-state-set-status gs status)
   (struct-copy gui-state gs [status status]))

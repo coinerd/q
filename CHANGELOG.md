@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.75.9 (2026-05-31)
+
+### Post-v0.75.8 Audit Fix
+
+#### Bug Fixes
+- **GUI**: Fixed tool result misalignment — parallel tool completions now correctly correlate to their own tool call (was: all → OK hit the last message)
+- **Tools**: Fixed `set-task-state` always failing from LLM — `hasheq` symbol keys now accept string args via `string->symbol` conversion
+- **Streaming**: Emit `model.stream.completed` on provider stream exceptions — prevents GUI text concatenation on next turn
+
+#### Tests Added
+- test-gui-state-sync.rkt: 27 tests (+3: parallel tool correlation, mixed OK/FAIL, orphan completion)
+- test-save-conclusion.rkt: 16 tests (+2: string args for set-task-state)
+
 ## v0.75.8 (2026-05-31)
 
 ### Post-v0.75.7 Audit Fix

@@ -229,6 +229,52 @@
       (check-equal? (length msgs) 1)
       (check-not-false (regexp-match? #rx"\u2192 OK" (gui-message-text (car msgs)))))))
 
+(define test-parallel-tool-completions
+  (test-suite "parallel tool completion correlation"
+    (test-case "3 parallel reads: each completion updates correct tool"
+      (define sb (fresh-box))
+      (define sub (make-gui-event-subscriber sb))
+      ;; 3 tool calls in rapid succession
+      (sub (mk-event "tool.call.started" (hash 'name "read" 'arguments (hash 'path "a.txt"))))
+      (sub (mk-event "tool.call.started" (hash 'name "read" 'arguments (hash 'path "b.txt"))))
+      (sub (mk-event "tool.call.started" (hash 'name "read" 'arguments (hash 'path "c.txt"))))
+      ;; 3 completions
+      (sub (mk-event "tool.execution.completed" (hash 'toolName "read" 'resultSummary 'completed)))
+      (sub (mk-event "tool.execution.completed" (hash 'toolName "read" 'resultSummary 'completed)))
+      (sub (mk-event "tool.execution.completed" (hash 'toolName "read" 'resultSummary 'completed)))
+      (define msgs (gui-state-messages (unbox sb)))
+      (check-equal? (length msgs) 3 "three tool messages remain")
+      ;; Each should have exactly one \u2192 OK
+      (for ([m (in-list msgs)])
+        (check-not-false (regexp-match? #rx"\u2192 OK" (gui-message-text m))
+                         "each has exactly one result")
+        (check-false (regexp-match? #rx"\u2192 OK.*\u2192 OK" (gui-message-text m))
+                     "no double results")))
+
+    (test-case "mixed tools: read OK, bash FAIL, read OK"
+      (define sb (fresh-box))
+      (define sub (make-gui-event-subscriber sb))
+      (sub (mk-event "tool.call.started" (hash 'name "read")))
+      (sub (mk-event "tool.call.started" (hash 'name "bash")))
+      (sub (mk-event "tool.call.started" (hash 'name "read")))
+      (sub (mk-event "tool.execution.completed" (hash 'toolName "read" 'resultSummary 'completed)))
+      (sub (mk-event "tool.execution.completed" (hash 'toolName "bash" 'resultSummary 'error)))
+      (sub (mk-event "tool.execution.completed" (hash 'toolName "read" 'resultSummary 'completed)))
+      (define msgs (gui-state-messages (unbox sb)))
+      (check-equal? (length msgs) 3)
+      (check-not-false (regexp-match? #rx"\u2192 OK" (gui-message-text (car msgs))) "first read OK")
+      (check-not-false (regexp-match? #rx"\u2192 FAIL" (gui-message-text (cadr msgs))) "bash FAIL")
+      (check-not-false (regexp-match? #rx"\u2192 OK" (gui-message-text (caddr msgs)))
+                       "second read OK"))
+
+    (test-case "completion with no matching started event"
+      (define sb (fresh-box))
+      (define sub (make-gui-event-subscriber sb))
+      ;; No tool.call.started, just a completion
+      (sub (mk-event "tool.execution.completed" (hash 'toolName "bash" 'resultSummary 'completed)))
+      (define msgs (gui-state-messages (unbox sb)))
+      (check-equal? (length msgs) 0 "no message added for orphan completion"))))
+
 (run-tests (test-suite "gui-state-sync"
              test-user-input
              test-stream-delta
@@ -241,4 +287,5 @@
              test-unknown-event
              test-notify-callback
              test-tool-call-with-args
-             test-tool-execution-completed))
+             test-tool-execution-completed
+             test-parallel-tool-completions))

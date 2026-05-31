@@ -162,7 +162,7 @@
                                                              (hasheq 'name name 'arguments args))))
           (notify!)))]
 
-      ;; Tool execution completed → update last tool message with result
+      ;; Tool execution completed → update matching tool message with result
       [(equal? ev "tool.execution.completed")
        (define name (hash-ref payload 'toolName "unknown"))
        (define result-summary (hash-ref payload 'resultSummary 'completed))
@@ -171,16 +171,13 @@
         gui-state-lock
         (lambda ()
           (define old (unbox state-box))
-          ;; Update last tool message inline: "Tool: [bash] → OK"
           (set-box! state-box
-                    (gui-state-update-last-message
-                     old
+                    (gui-state-update-tool-message-by-name
+                     old name
                      (lambda (msg)
-                       (if (equal? (gui-message-role msg) "tool")
-                           (gui-message "tool"
-                                        (string-append (gui-message-text msg) " \u2192 " result-text)
-                                        (gui-message-meta msg))
-                           msg))))
+                       (gui-message "tool"
+                                    (string-append (gui-message-text msg) " \u2192 " result-text)
+                                    (hash-set (gui-message-meta msg) 'completed #t)))))
           (notify!)))]
       ;; Error events
       [(and (string? ev) (regexp-match? #rx"(?i:error)" ev))

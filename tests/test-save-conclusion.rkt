@@ -88,6 +88,16 @@
       (define result (call-tool set-task-state (hasheq 'state 'planning 'event 'begin-plan)))
       (define details (tool-result-details result))
       (check-equal? (hash-ref details '_task-state-target #f) 'planning)
-      (check-equal? (hash-ref details '_task-state-event #f) 'begin-plan))))
+      (check-equal? (hash-ref details '_task-state-event #f) 'begin-plan))
+
+    ;; v0.75.9: LLM sends string arguments, not symbols
+    (test-case "set-task-state accepts string args (LLM path)"
+      (define result (call-tool set-task-state (hasheq 'state "exploration" 'event "begin-explore")))
+      (check-false (tool-result-is-error? result)
+                   (format "string args should work, got: ~a" (tool-result-content result))))
+
+    (test-case "set-task-state rejects invalid string state"
+      (define result (call-tool set-task-state (hasheq 'state "invalid" 'event "begin-explore")))
+      (check-true (tool-result-is-error? result)))))
 
 (run-tests suite)
