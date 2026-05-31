@@ -27,10 +27,12 @@
                   message-id
                   message-kind
                   message?
-                  make-message
-                  make-text-part
                   loop-result-termination-reason
                   make-loop-result)
+         (only-in "session-lifecycle-transitions.rkt"
+                  build-user-message
+                  compute-parent-id
+                  inject-system-instructions)
          "../agent/event-bus.rkt"
          (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload)
          (only-in "../util/errors.rkt" raise-session-error)
@@ -105,49 +107,7 @@
 ;; ensure-persisted!, buffer-or-append! from agent-session.rkt
 
 ;; ============================================================
-;; Pure helpers (extracted for testability)
-;; ============================================================
-
-;; build-user-message : string? (or/c message-id? #f) -> message?
-;; Pure: creates a user message from a string prompt.
-(define (build-user-message text parent-id)
-  (make-message (generate-id)
-                parent-id
-                'user
-                'message
-                (list (make-text-part text))
-                (now-seconds)
-                (hasheq)))
-
-;; compute-parent-id : (listof message?) (or/c index? #f) -> (or/c message-id? #f)
-;; Pure: determines the parent message ID from entries or index.
-;; File-read is done by the caller; this function only inspects data.
-(define (compute-parent-id entries [idx #f])
-  (if idx
-      (let ([leaf (active-leaf idx)])
-        (cond
-          [(not leaf) #f]
-          ;; Skip session-info entries for parent calculation
-          [(eq? (message-kind leaf) 'session-info) #f]
-          [else (message-id leaf)]))
-      (let ([existing (filter (lambda (m) (not (eq? (message-kind m) 'session-info))) entries)])
-        (if (null? existing)
-            #f
-            (message-id (last existing))))))
-
-;; inject-system-instructions : (listof message?) (listof string?) -> (listof message?)
-;; Pure: prepends a system message if instructions are non-empty.
-(define (inject-system-instructions context-messages system-instrs)
-  (if (null? system-instrs)
-      context-messages
-      (cons (make-message (generate-id)
-                          #f
-                          'system
-                          'system-instruction
-                          (list (make-text-part (string-join system-instrs "\n\n")))
-                          (now-seconds)
-                          (hasheq))
-            context-messages)))
+;; Pure helpers moved to session-lifecycle-transitions.rkt (v0.74.4)
 
 ;; ============================================================
 ;; build-session-context-for-prompt

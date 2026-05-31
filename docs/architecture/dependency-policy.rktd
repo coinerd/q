@@ -45,6 +45,10 @@
        (rationale . "injection-event-topic import (extracted from agent-session/iteration)")
        (owner . "runtime")
        (revisit-by . "2026-07-01"))
+      (session-lifecycle-transitions.rkt
+       (rationale . "pure FSM transitions extracted from session-lifecycle")
+       (owner . "runtime")
+       (revisit-by . "2026-09-01"))
       (runtime-helpers.rkt (rationale . "hook dispatch for session events (via adapter)")
                            (owner . "runtime")
                            (revisit-by . "2026-07-01"))
