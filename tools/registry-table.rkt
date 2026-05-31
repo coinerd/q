@@ -19,7 +19,9 @@
          "builtins/firecrawl.rkt"
          "builtins/spawn-subagent.rkt"
          "builtins/session-recall.rkt"
-         "builtins/skill-router.rkt")
+         "builtins/skill-router.rkt"
+         "builtins/save-conclusion.rkt"
+         "builtins/set-task-state.rkt")
 
 ;; M-03: Named struct replacing raw list access.
 ;; Each spec was a list: (name description schema handler [prompt-guidelines])
@@ -227,6 +229,54 @@
       'timeout
       (hasheq 'type "integer" 'description "Timeout in seconds for crawl polling (default 30)")))
     tool-firecrawl
+    #f)
+   ;; save-conclusion
+   (tool-spec
+    "save-conclusion"
+    "Save a distilled insight or conclusion about the current task. Use after discovering important facts, making decisions, identifying patterns, finding error causes, or getting test results."
+    (hasheq
+     'type
+     "object"
+     'required
+     '("content")
+     'properties
+     (hasheq 'content
+             (hasheq 'type "string" 'description "The conclusion text")
+             'category
+             (hasheq 'type
+                     "string"
+                     'description
+                     "Category: fact, decision, pattern, error-cause, test-result (default: fact)")
+             'tags
+             (hasheq 'type
+                     "array"
+                     'description
+                     "List of relevance tags (symbols) for state-aware filtering")))
+    tool-save-conclusion
+    #f)
+   ;; set-task-state
+   (tool-spec
+    "set-task-state"
+    "Transition the current task state. Valid states: idle, exploration, planning, implementation, verification, debugging."
+    (hasheq
+     'type
+     "object"
+     'required
+     '("state" "event")
+     'properties
+     (hasheq
+      'state
+      (hasheq 'type
+              "string"
+              'description
+              "Target state: idle, exploration, planning, implementation, verification, debugging")
+      'event
+      (hasheq
+       'type
+       "string"
+       'description
+       "Transition event: begin-explore, begin-plan, begin-implement, begin-verify, begin-debug, task-complete, revisit, force-transition")))
+    tool-set-task-state
     #f)
    ;; spawn-subagent
    (tool-spec
