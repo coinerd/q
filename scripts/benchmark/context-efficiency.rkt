@@ -67,6 +67,19 @@
 (struct ab-result (label tokens-a tokens-b savings-pct tier-a-count tier-b-count tier-c-count)
   #:transparent)
 
+(provide ab-result
+         ab-result?
+         ab-result-label
+         ab-result-tokens-a
+         ab-result-tokens-b
+         ab-result-savings-pct
+         ab-result-tier-a-count
+         ab-result-tier-b-count
+         ab-result-tier-c-count
+         make-conclusion
+         generate-context-messages
+         run-ab-comparison)
+
 (define (run-ab-comparison messages task-state conclusions label)
   ;; A: state-aware ON
   (define tc-a

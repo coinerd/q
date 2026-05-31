@@ -26,6 +26,7 @@ Each ADR describes a decision that was made, the context that led to it, and its
 | [0016](0016-native-tui-architecture.md) | Native TUI architecture | Accepted |
 | [0017](0017-gui-architecture.md) | GUI architecture | Accepted |
 | [0018](0018-gui-extension-integration.md) | GUI extension integration | Accepted |
+| [0019](0019-context-assembly-activation.md) | Context assembly activation | Accepted |
 
 ## Conventions
 
