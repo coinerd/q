@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.75.5 (2026-05-30)
+
+### Advanced Context Assembly (v0.75.0-v0.75.5)
+
+- **Task-State FSM**: 6-state FSM with 8 events using `define-fsm-machine`
+- **Tools + Session**: `save-conclusion` and `set-task-state` tools, session fields
+- **State Inference**: Heuristic tool-call pattern analysis, event-wired
+- **State-Aware Assembly**: Relevance matrix, feature-flagged context assembly
+- **Working-Set Evolution**: State-transition-driven WS clearing/filtering
+- **System Prompt Injection**: State-awareness preamble with guidance + conclusions
+- ~106 new tests across 7 test files
+
+
 ## v0.74.8 (2026-05-31)
 
 ### Context-Assembly Contract Bugfix + Test Quality Remediation
