@@ -16,7 +16,7 @@
   (make-message id #f 'user 'text (list (make-text-part text)) (current-seconds) (hasheq)))
 
 (define (make-conclusion text #:origin-ids [origin-ids '()])
-  (task-conclusion "c1" text 'fact 'exploration origin-ids (current-seconds) '()))
+  (task-conclusion "c1" text 'fact 'exploration origin-ids (current-seconds) '() '()))
 
 ;; ── W0: working-set-entry->conclusion-or-self ──
 

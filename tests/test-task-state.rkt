@@ -148,7 +148,14 @@
 
     (test-case "task-conclusion creation with all fields"
       (define c
-        (task-conclusion "c1" "Found the bug" 'fact 'exploration '("m1" "m2") 1000 '(bug pattern)))
+        (task-conclusion "c1"
+                         "Found the bug"
+                         'fact
+                         'exploration
+                         '("m1" "m2")
+                         1000
+                         '(bug pattern)
+                         '()))
       (check-equal? (task-conclusion-id c) "c1")
       (check-equal? (task-conclusion-text c) "Found the bug")
       (check-equal? (task-conclusion-category c) 'fact)
@@ -169,7 +176,14 @@
 
     (test-case "conclusion->hash / hash->conclusion round-trip"
       (define c
-        (task-conclusion "c2" "Decided to use FSM" 'decision 'planning '("m3") 2000 '(architecture)))
+        (task-conclusion "c2"
+                         "Decided to use FSM"
+                         'decision
+                         'planning
+                         '("m3")
+                         2000
+                         '(architecture)
+                         '()))
       (define h (conclusion->hash c))
       (define c2 (hash->conclusion h))
       (check-equal? (task-conclusion-id c2) "c2")
@@ -189,8 +203,8 @@
 
     (test-case "add-conclusion appends and returns new store"
       (define m (make-task-memory))
-      (define c1 (task-conclusion "c1" "text1" 'fact 'exploration '() 1000 '()))
-      (define c2 (task-conclusion "c2" "text2" 'decision 'planning '() 2000 '()))
+      (define c1 (task-conclusion "c1" "text1" 'fact 'exploration '() 1000 '() '()))
+      (define c2 (task-conclusion "c2" "text2" 'decision 'planning '() 2000 '() '()))
       (define m1 (add-conclusion m c1))
       (check-equal? (length (task-memory-conclusions m1)) 1)
       (define m2 (add-conclusion m1 c2))
@@ -199,9 +213,9 @@
       (check-equal? (length (task-memory-conclusions m)) 0))
 
     (test-case "conclusions-for-states filters correctly"
-      (define c1 (task-conclusion "c1" "t1" 'fact 'exploration '() 1000 '()))
-      (define c2 (task-conclusion "c2" "t2" 'decision 'planning '() 2000 '()))
-      (define c3 (task-conclusion "c3" "t3" 'pattern 'implementation '() 3000 '()))
+      (define c1 (task-conclusion "c1" "t1" 'fact 'exploration '() 1000 '() '()))
+      (define c2 (task-conclusion "c2" "t2" 'decision 'planning '() 2000 '() '()))
+      (define c3 (task-conclusion "c3" "t3" 'pattern 'implementation '() 3000 '() '()))
       (define m (add-conclusion (add-conclusion (add-conclusion (make-task-memory) c1) c2) c3))
       ;; Filter by exploration only
       (check-equal? (length (conclusions-for-states m '(exploration))) 1)
@@ -211,9 +225,9 @@
       (check-equal? (length (conclusions-for-states m '(idle))) 0))
 
     (test-case "conclusions-with-tags filters correctly"
-      (define c1 (task-conclusion "c1" "t1" 'fact 'exploration '() 1000 '(bug)))
-      (define c2 (task-conclusion "c2" "t2" 'decision 'planning '() 2000 '(architecture)))
-      (define c3 (task-conclusion "c3" "t3" 'pattern 'exploration '() 3000 '(bug pattern)))
+      (define c1 (task-conclusion "c1" "t1" 'fact 'exploration '() 1000 '(bug) '()))
+      (define c2 (task-conclusion "c2" "t2" 'decision 'planning '() 2000 '(architecture) '()))
+      (define c3 (task-conclusion "c3" "t3" 'pattern 'exploration '() 3000 '(bug pattern) '()))
       (define m (add-conclusion (add-conclusion (add-conclusion (make-task-memory) c1) c2) c3))
       (check-equal? (length (conclusions-with-tags m '(bug))) 2)
       (check-equal? (length (conclusions-with-tags m '(architecture))) 1)
@@ -230,6 +244,7 @@
                            (if (even? i) 'exploration 'planning)
                            '()
                            (* (add1 i) 1000)
+                           '()
                            '())))
       (define filled
         (for/fold ([m m]) ([c conclusions])
@@ -241,7 +256,7 @@
 
     (test-case "task-memory serialization round-trip"
       (define m (make-task-memory 10))
-      (define c (task-conclusion "c1" "test" 'fact 'exploration '("m1") 1000 '(tag)))
+      (define c (task-conclusion "c1" "test" 'fact 'exploration '("m1") 1000 '(tag) '()))
       (define m1 (add-conclusion m c))
       (define h (task-memory->hash m1))
       (define m2 (hash->task-memory h))

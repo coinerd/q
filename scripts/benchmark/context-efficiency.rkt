@@ -43,7 +43,14 @@
      (for/sum ([m (tiered-context-tier-c tc)]) (msg-tokens m))))
 
 (define (make-conclusion text)
-  (task-conclusion (format "c~a" (random 100000)) text 'fact 'exploration '() (current-seconds) '()))
+  (task-conclusion (format "c~a" (random 100000))
+                   text
+                   'fact
+                   'exploration
+                   '()
+                   (current-seconds)
+                   '()
+                   '()))
 
 ;; ── Generate synthetic context for benchmark ──
 

@@ -49,7 +49,8 @@
                         'idle ; fsm-state-origin: will be set by session
                         '() ; origin-message-ids: set by session
                         (current-seconds)
-                        tags))
+                        tags
+                        '())) ; dependencies — v0.76.5
      (make-success-result
       (list (hasheq 'type "text" 'text (format "Conclusion saved: [~a] ~a" category content)))
       (hasheq '_conclusion c))]))

@@ -14,7 +14,7 @@
   (make-message "id" #f 'user 'text (list (make-text-part text)) (current-seconds) (hasheq)))
 
 (define (make-conclusion text)
-  (task-conclusion "c1" text 'fact 'exploration '() (current-seconds) '()))
+  (task-conclusion "c1" text 'fact 'exploration '() (current-seconds) '() '()))
 
 ;; ── Trigger 1: Excessive savings warning (savings > 50%) ──
 

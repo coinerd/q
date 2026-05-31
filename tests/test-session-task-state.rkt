@@ -70,7 +70,7 @@
 
     (test-case "guarded-set-task-conclusions! updates conclusions"
       (define s (make-test-session))
-      (define c (task-conclusion "c1" "test" 'fact 'exploration '() 1000 '()))
+      (define c (task-conclusion "c1" "test" 'fact 'exploration '() 1000 '() '()))
       (guarded-set-task-conclusions! s (list c))
       (check-equal? (length (agent-session-task-conclusions s)) 1)
       (check-equal? (task-conclusion-text (car (agent-session-task-conclusions s))) "test"))
@@ -83,8 +83,8 @@
 
     (test-case "guarded-set-task-conclusions! can accumulate"
       (define s (make-test-session))
-      (define c1 (task-conclusion "c1" "first" 'fact 'exploration '() 1000 '()))
-      (define c2 (task-conclusion "c2" "second" 'decision 'planning '() 2000 '()))
+      (define c1 (task-conclusion "c1" "first" 'fact 'exploration '() 1000 '() '()))
+      (define c2 (task-conclusion "c2" "second" 'decision 'planning '() 2000 '() '()))
       (guarded-set-task-conclusions! s (list c1))
       (guarded-set-task-conclusions! s (append (agent-session-task-conclusions s) (list c2)))
       (check-equal? (length (agent-session-task-conclusions s)) 2))))

@@ -62,7 +62,7 @@
     (test-case "state-aware with conclusions adds conclusion entries"
       (define msgs (make-test-msgs 5))
       (define conclusions
-        (list (task-conclusion "c1" "Found the bug" 'fact 'exploration '() 1000 '())))
+        (list (task-conclusion "c1" "Found the bug" 'fact 'exploration '() 1000 '() '())))
       (define tc
         (build-tiered-context/state-aware msgs
                                           #:task-state 'implementation
@@ -93,7 +93,7 @@
 
     (test-case "preamble includes conclusions text"
       (define conclusions
-        (list (task-conclusion "c1" "Bug in line 42" 'fact 'debugging '() 1000 '())))
+        (list (task-conclusion "c1" "Bug in line 42" 'fact 'debugging '() 1000 '() '())))
       (define preamble (build-state-awareness-preamble 'debugging conclusions))
       (check-not-false preamble))
 

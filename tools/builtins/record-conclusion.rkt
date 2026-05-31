@@ -69,7 +69,8 @@
                               'idle ; placeholder — session layer overrides
                               '() ; origin-message-ids — set by session layer
                               (current-seconds)
-                              tags))
+                              tags
+                              '())) ; dependencies — v0.76.5
 
            ;; Emit event for session layer to persist
            (define ev-pub (and exec-ctx (exec-context-event-publisher exec-ctx)))
