@@ -50,7 +50,8 @@
                   simple-summary-count
                   extract-message-text
                   truncate-string)
-         (only-in "../util/message.rkt" message?))
+         (only-in "../util/message.rkt" message?)
+         (only-in "../util/hook-types.rkt" hook-result?))
 
 ;; Explicit re-exports from sub-modules (S1-F4)
 ;; Struct: context-assembly-config
@@ -159,7 +160,7 @@
                                 #:hook-dispatcher (or/c procedure? #f)
                                 #:max-tokens exact-nonnegative-integer?
                                 #:working-set-messages (or/c (listof message?) #f))
-                (values tiered-context? (or/c hash? #f)))]
+                (values tiered-context? (or/c hook-result? #f)))]
           [compute-dynamic-tier-b-count (-> exact-nonnegative-integer? exact-nonnegative-integer?)]
           [summarize-tool-result (-> message? message?)]
           ;; Struct: context-assembly-payload

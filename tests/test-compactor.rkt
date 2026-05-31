@@ -438,6 +438,16 @@
    ;; Tiers should be unchanged
    (check-equal? (length (tiered-context-tier-c tc)) 3)
    (check-equal? (length (tiered-context-tier-b tc)) 5))
+ (test-case "build-tiered-context-with-hooks contract accepts hook-result (regression v0.74.8)"
+   (define msgs (make-n-messages 10))
+   (define pass-hook (λ (hook-point data) (hook-pass data)))
+   (define-values (tc hr)
+     (build-tiered-context-with-hooks msgs
+                                      #:hook-dispatcher pass-hook
+                                      #:tier-b-count 3
+                                      #:tier-c-count 2))
+   (check-pred hook-result? hr)
+   (check-equal? (hook-result-action hr) 'pass))
  (test-case "build-tiered-context-with-hooks: hook returns 'amend"
    ;; Hook that modifies tier composition via amend
    (define msgs (make-n-messages 20))
