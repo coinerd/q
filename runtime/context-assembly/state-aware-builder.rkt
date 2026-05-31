@@ -14,7 +14,8 @@
 
 (provide current-task-state-aware-assembly?
          build-tiered-context/state-aware
-         build-state-awareness-preamble)
+         build-state-awareness-preamble
+         check-rollback-triggers)
 
 ;; Feature flag: state-aware context assembly (v0.75.3)
 (define current-task-state-aware-assembly? (make-parameter #f))
@@ -172,3 +173,45 @@
                    (list (make-text-part preamble-text))
                    (current-seconds)
                    (hasheq))]))
+
+;; ════════════════════════════════════════════════════════════════
+;; v0.76.3 W2: Rollback trigger checks (observational only)
+;; ════════════════════════════════════════════════════════════════
+
+;; check-rollback-triggers :
+;;   #:before-tokens number? #:after-tokens number?
+;;   #:conclusion-coverage number? #:repeat-tool-count exact-nonnegative-integer?
+;;   -> (listof (list/c symbol? string?))
+;;
+;; Returns a list of warning tuples: (trigger-type message).
+;; Triggers are observational — callers decide what to do.
+(define (check-rollback-triggers #:before-tokens before-tokens
+                                 #:after-tokens after-tokens
+                                 #:conclusion-coverage conclusion-coverage
+                                 #:repeat-tool-count repeat-tool-count)
+  (define warnings '())
+
+  ;; Trigger 1: Excessive savings (>50% tokens cut)
+  ;; R2 risk: context may be too small to work effectively
+  (when (and (> before-tokens 0) (> after-tokens 0) (< after-tokens (* before-tokens 0.50)))
+    (set! warnings
+          (cons (list 'excessive-savings
+                      (format "Context reduced by >50%: ~a → ~a tokens" before-tokens after-tokens))
+                warnings)))
+
+  ;; Trigger 2: Low conclusion coverage (amnesia risk)
+  ;; R0 risk: agent forgetting key findings
+  (when (< conclusion-coverage 0.20)
+    (set! warnings
+          (cons (list 'amnesia-risk (format "Conclusion coverage too low: ~a" conclusion-coverage))
+                warnings)))
+
+  ;; Trigger 3: Repeated tool calls (same file re-read > 2x)
+  ;; Indicates agent is re-reading files it should have conclusions for
+  (when (> repeat-tool-count 2)
+    (set! warnings
+          (cons (list 'task-amnesia-detected
+                      (format "Repeated tool calls detected: ~a re-reads" repeat-tool-count))
+                warnings)))
+
+  (reverse warnings))
