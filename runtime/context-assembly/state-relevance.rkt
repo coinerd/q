@@ -85,7 +85,7 @@
                   'conclusions
                   'full
                   'working-set
-                  'filtered
+                  'excluded
                   'recent-messages
                   'summary
                   'tool-results
