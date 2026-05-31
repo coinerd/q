@@ -403,13 +403,28 @@
                        (text-part-text (car content)))])
         (string->symbol text))))
 
+;; Convert conclusion hash to JSON-safe (symbols → strings)
+(define (conclusion-hash->json-safe h)
+  (for/hash ([(k v) (in-hash h)])
+    (values k
+            (cond
+              [(symbol? v) (symbol->string v)]
+              [(list? v)
+               (map (lambda (x)
+                      (if (symbol? x)
+                          (symbol->string x)
+                          x))
+                    v)]
+              [else v]))))
+
 (define (append-conclusion! path conclusion)
+  (define json-safe (conclusion-hash->json-safe (conclusion->hash conclusion)))
   (append-entry! path
                  (make-message (generate-id)
                                #f
                                'system
                                'task-conclusion
-                               (list (make-text-part (jsexpr->string (conclusion->hash conclusion))))
+                               (list (make-text-part (jsexpr->string json-safe)))
                                (current-seconds)
                                (hasheq))))
 
@@ -425,7 +440,21 @@
           content
           (text-part-text (car content))))
     (with-handlers ([exn:fail? (lambda (_) #f)])
-      (hash->conclusion (string->jsexpr text)))))
+      (define raw (string->jsexpr text))
+      ;; Restore symbol values for category/fsm-state-origin fields
+      (define restored
+        (for/hash ([(k v) (in-hash raw)])
+          (values k
+                  (cond
+                    [(and (string? v) (memq k '(category fsm-state-origin))) (string->symbol v)]
+                    [(and (list? v) (memq k '(origin-message-ids relevance-tags)))
+                     (map (lambda (x)
+                            (if (string? x)
+                                (string->symbol x)
+                                x))
+                          v)]
+                    [else v]))))
+      (hash->conclusion restored))))
 
 ;; ---------------------------------------------------------------------------
 ;; F11: Consumer/Admin submodule split
