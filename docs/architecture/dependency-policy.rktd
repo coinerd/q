@@ -70,6 +70,11 @@
        (rationale . "dynamic-require to extensions for lazy loading (avoids circular dependency)")
        (owner . "runtime")
        (revisit-by . "2026-07-01"))))
+  (agent
+   . ((iteration/loop-state.rkt
+      (rationale . "typed require from extensions/api.rkt for opaque ExtRegistry")
+      (owner . "agent")
+      (revisit-by . "2026-08-01"))))
   (extensions
    .
    ((dialog-api.rkt (rationale . "TUI dialog interface") (owner . "tui") (revisit-by . "2026-07-01"))
