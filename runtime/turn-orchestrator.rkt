@@ -105,6 +105,10 @@
          "../agent/event-emitter.rkt"
          "../agent/event-structs/iteration-events.rkt"
          "../agent/event-structs/session-events.rkt"
+         (only-in "../runtime/session-types.rkt"
+                  agent-session?
+                  agent-session-task-fsm-state
+                  agent-session-task-conclusions)
          (only-in "../runtime/session-config.rkt"
                   session-config?
                   hash->session-config
@@ -130,13 +134,13 @@
                 (#:tool-list-proc (or/c procedure? #f))
                 loop-result?)]
           [build-assembled-context
-           (-> list?
-               session-config?
-               (or/c extension-registry? #f)
-               event-bus?
-               string?
-               exact-nonnegative-integer?
-               list?)]
+           (->* (list? session-config?
+                       (or/c extension-registry? #f)
+                       event-bus?
+                       string?
+                       exact-nonnegative-integer?)
+                (#:session (or/c any/c #f))
+                list?)]
           [register-session-extensions!
            (-> tool-registry? (or/c extension-registry? #f) event-bus? string? (listof hash?))]
           [assemble-context/pure
@@ -190,7 +194,13 @@
 
 ;; Build assembled context using tiered context assembly with hooks.
 ;; Returns the assembled message list.
-(define (build-assembled-context ctx-to-use config-raw ext-reg bus session-id iteration)
+(define (build-assembled-context ctx-to-use
+                                 config-raw
+                                 ext-reg
+                                 bus
+                                 session-id
+                                 iteration
+                                 #:session [session #f])
   ;; WP-37 + R2-6: Context Assembly with Tier A/B/C separation and Hook support
   (define config config-raw)
   (define ws (config-working-set config))
@@ -202,9 +212,16 @@
            (define result (dispatch-hooks hook-point payload ext-reg))
            result)))
 
+  ;; v0.75.6: Extract task state from session for state-aware assembly
+  (define task-state (and session (agent-session-task-fsm-state session)))
+  (define conclusions (and session (agent-session-task-conclusions session)))
   ;; FD-05: Delegate pure assembly to assemble-context/pure
   (define-values (ctx-assembled assembly-hook-result tc-struct)
-    (assemble-context/pure ctx-to-use config-raw #:hook-dispatcher ctx-assembly-hook-dispatcher))
+    (assemble-context/pure ctx-to-use
+                           config-raw
+                           #:hook-dispatcher ctx-assembly-hook-dispatcher
+                           #:task-state task-state
+                           #:conclusions conclusions))
 
   ;; Handle block action from context-assembly hook
   (when (and assembly-hook-result (eq? (hook-result-action assembly-hook-result) 'block))

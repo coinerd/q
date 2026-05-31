@@ -32,11 +32,7 @@
          (only-in "../event-emitter.rkt" emit-typed-event!)
          (only-in "../event-structs/hook-events.rkt" turn-cancelled-event)
          (only-in "../event-structs/iteration-events.rkt" make-iteration-decision-event)
-         (only-in "../queue.rkt"
-                  queue-status
-                  queue?
-                  dequeue-followup!
-                  dequeue-all-followups!)
+         (only-in "../queue.rkt" queue-status queue? dequeue-followup! dequeue-all-followups!)
          (only-in "tool-turn-bridge.rkt" dequeue-all-steering! drain-injected-messages!)
          (only-in "../../runtime/runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
          (only-in "../../util/hook-types.rkt" hook-result-action hook-result?)
@@ -59,7 +55,10 @@
          (only-in "counters.rkt" check-cancellation)
          (only-in "../../runtime/iteration/decision.rkt" iteration-ctx compute-step-result)
          (only-in "step-interpreter.rkt" interpret-step)
-         (only-in "../../runtime/iteration/directive.rkt" directive-recurse directive-stop directive-yield)
+         (only-in "../../runtime/iteration/directive.rkt"
+                  directive-recurse
+                  directive-stop
+                  directive-yield)
          (only-in "../../runtime/iteration/fsm-types.rkt"
                   state-idle
                   state-provider-turn
@@ -197,7 +196,8 @@
                   ;; R-06/R-07: FSM: provider-turn + hook-block -> aborted
                   (current-iteration-fsm-state (next-iteration-state state-provider-turn
                                                                      event-hook-block))
-                  (log-q-main-loop-info "turn blocked at iteration ~a" (loop-counters-iteration counters))
+                  (log-q-main-loop-info "turn blocked at iteration ~a"
+                                        (loop-counters-iteration counters))
                   (emit-session-event! bus
                                        session-id
                                        "turn.blocked"
@@ -213,7 +213,8 @@
                                              ext-reg
                                              bus
                                              session-id
-                                             (loop-counters-iteration counters)))
+                                             (loop-counters-iteration counters)
+                                             #:session sess))
                   (define result
                     (run-provider-turn ctx-final
                                        prov
@@ -229,7 +230,8 @@
                   ;; R-06/R-07: FSM: provider-turn + model-response -> decision
                   (current-iteration-fsm-state (next-iteration-state state-provider-turn
                                                                      event-model-response))
-                  (log-q-main-loop-info "model response received at iteration ~a" (loop-counters-iteration counters))
+                  (log-q-main-loop-info "model response received at iteration ~a"
+                                        (loop-counters-iteration counters))
                   (emit-typed-event! bus
                                      (make-iteration-decision-event
                                       #:session-id session-id
@@ -263,7 +265,9 @@
                      ;; R-06/R-07: FSM: decision + termination -> complete
                      (current-iteration-fsm-state (next-iteration-state state-decision
                                                                         event-termination-reason))
-                     (log-q-main-loop-info "iteration complete: ~a at iteration ~a" termination (loop-counters-iteration counters))
+                     (log-q-main-loop-info "iteration complete: ~a at iteration ~a"
+                                           termination
+                                           (loop-counters-iteration counters))
                      final-result]
                     [(directive-recurse new-ctx new-counters ws2)
                      (loop new-ctx new-counters ws2)])])]))))))

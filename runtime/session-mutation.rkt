@@ -10,7 +10,8 @@
          (submod "session-types.rkt" internal)
          (only-in "session-config.rkt" session-config?)
          (only-in "../util/errors.rkt" raise-session-error)
-         (only-in "session-index/schema.rkt" session-index?))
+         (only-in "session-index/schema.rkt" session-index?)
+         (only-in "context-assembly/task-state.rkt" task-states-list))
 
 (provide (contract-out [guarded-set-prompt-running! (-> agent-session? boolean? void?)]
                        [guarded-set-compacting! (-> agent-session? boolean? void?)]
@@ -26,7 +27,7 @@
                        [guarded-set-thinking-level! (-> agent-session? (or/c symbol? #f) void?)]
                        [guarded-set-last-compaction-time!
                         (-> agent-session? (or/c exact-nonnegative-integer? #f) void?)]
-                       [guarded-set-task-fsm-state! (-> agent-session? symbol? void?)]
+                       [guarded-set-task-fsm-state! (-> agent-session? (or/c symbol? #f) void?)]
                        [guarded-set-task-conclusions! (-> agent-session? list? void?)]
                        [valid-session-phase? (-> symbol? boolean?)]
                        [session-phase (-> agent-session? symbol?)]))
@@ -111,7 +112,10 @@
   (set-agent-session-last-compaction-time! sess value))
 
 ;; Guard task-fsm-state — validates FSM transition
+;; v0.75.6: Validate that value is a known FSM state symbol.
 (define (guarded-set-task-fsm-state! sess value)
+  (when (and value (not (member value (task-states-list))))
+    (raise-session-error (format "invalid task FSM state: ~a" value) #f))
   (set-agent-session-task-fsm-state! sess value))
 
 ;; Guard task-conclusions — type-safe wrapper
