@@ -73,6 +73,7 @@
 (define wave-header-rx #rx"^# Wave [0-9]+\nStatus: ([^\n]+)\n")
 (define wave-header-full-rx #rx"^# Wave [0-9]+\nStatus: [^\n]+\n\n(.*)$")
 (define index-line-rx #rx"^[-*] +\\[([A-Za-z-]+)\\] +W([0-9]+): +(.+?)(?: +\u2192 +(.+))?$")
+(define relaxed-index-line-rx #rx"^[-*] +W([0-9]+): +(.+?)(?: +→ +(.+))?$")
 (define slug-from-target-rx #rx"waves/W[0-9]+-(.+?)\\.md")
 
 ;; ============================================================
@@ -155,6 +156,7 @@
   (for/fold ([entries '()]) ([line lines])
     (define m (regexp-match index-line-rx line))
     (if m
+        ;; Standard format: - [Inbox] W0: Title
         (let* ([raw-status (cadr m)]
                [status (or (normalize-status! raw-status) raw-status)]
                [idx (string->number (caddr m))]
@@ -164,8 +166,17 @@
                          (extract-slug-from-target target)
                          (slugify title))])
           (append entries (list (wave-index-entry idx title slug status))))
-        entries)))
-
+        ;; Try relaxed format: - W0: Title (without status bracket)
+        (let ([rm (regexp-match relaxed-index-line-rx line)])
+          (if rm
+              (let* ([idx (string->number (cadr rm))]
+                     [title (string-trim (caddr rm))]
+                     [target (and (list? rm) (> (length rm) 3) (list-ref rm 3))]
+                     [slug (if target
+                               (extract-slug-from-target target)
+                               (slugify title))])
+                (append entries (list (wave-index-entry idx title slug STATUS-INBOX))))
+              entries)))))
 (define (extract-slug-from-target target)
   (define m (regexp-match slug-from-target-rx target))
   (if m
