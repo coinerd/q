@@ -9,6 +9,9 @@
          "../runtime/context-assembly/task-state.rkt"
          "../runtime/context-assembly/task-conclusion.rkt"
          "../runtime/context-assembly/task-memory.rkt"
+         "../runtime/session-mutation.rkt"
+         "../runtime/session-types.rkt"
+         "../tests/helpers/session-fixture.rkt"
          (only-in "../util/fsm.rkt" fsm-state-name))
 
 ;; ── FSM Tests ──
@@ -247,3 +250,48 @@
       (check-equal? (task-conclusion-id (first (task-memory-conclusions m2))) "c1"))))
 
 (run-tests conclusion-suite)
+
+;; ── Session Mutation Tests ──
+
+(define mutation-suite
+  (test-suite "session-mutation"
+
+    (test-case "guarded-set-task-fsm-state! allows initialization from idle"
+      (define sess (make-test-session))
+      (guarded-set-task-fsm-state! sess 'exploration)
+      (check-equal? (agent-session-task-fsm-state sess) 'exploration))
+
+    (test-case "guarded-set-task-fsm-state! allows valid forward transition"
+      (define sess (make-test-session))
+      (guarded-set-task-fsm-state! sess 'exploration)
+      (guarded-set-task-fsm-state! sess 'planning)
+      (check-equal? (agent-session-task-fsm-state sess) 'planning))
+
+    (test-case "guarded-set-task-fsm-state! allows transition to idle (reset)"
+      (define sess (make-test-session))
+      (guarded-set-task-fsm-state! sess 'implementation)
+      (guarded-set-task-fsm-state! sess 'idle)
+      (check-equal? (agent-session-task-fsm-state sess) 'idle))
+
+    (test-case "guarded-set-task-fsm-state! rejects invalid transition"
+      (define sess (make-test-session))
+      (guarded-set-task-fsm-state! sess 'exploration)
+      (check-exn exn:fail? (lambda () (guarded-set-task-fsm-state! sess 'verification))))
+
+    (test-case "guarded-set-task-fsm-state! rejects unknown state"
+      (define sess (make-test-session))
+      (check-exn exn:fail? (lambda () (guarded-set-task-fsm-state! sess 'unknown-state))))
+
+    (test-case "guarded-set-task-fsm-state! allows any state from #f (uninitialized)"
+      (define sess (make-test-session))
+      ;; task-fsm-state defaults to #f for new sessions
+      (guarded-set-task-fsm-state! sess 'debugging)
+      (check-equal? (agent-session-task-fsm-state sess) 'debugging))
+
+    (test-case "guarded-set-recent-tool-calls! validates input"
+      (define sess (make-test-session))
+      (guarded-set-recent-tool-calls! sess '("read" "edit" "bash"))
+      (check-equal? (length (agent-session-recent-tool-calls sess)) 3)
+      (check-exn exn:fail? (lambda () (guarded-set-recent-tool-calls! sess '(read 42)))))))
+
+(run-tests mutation-suite)
