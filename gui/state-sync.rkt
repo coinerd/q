@@ -41,6 +41,26 @@
 ;; Listens to event-bus events and accumulates messages
 ;; into the gui-state struct that the GUI polls.
 ;; --------------------------------------------------
+(define (arg-summary-text args)
+  (cond
+    [(not args) ""]
+    [(hash? args)
+     (define keys (hash-keys args))
+     (if (null? keys)
+         ""
+         (format " ~a"
+                 (string-join (for/list ([k (in-list keys)])
+                                (define v (hash-ref args k))
+                                (format "~a: ~a"
+                                        k
+                                        (if (string? v)
+                                            (if (> (string-length v) 30)
+                                                (string-append (substring v 0 27) "...")
+                                                v)
+                                            v)))
+                              ", ")))]
+    [else ""]))
+
 (define (make-gui-event-subscriber state-box [notify-callback-box #f])
   (define current-response-text (box ""))
   ;; notify-callback-box: (boxof (or/c (-> void?) #f)) — set by launch-gui-window
@@ -75,7 +95,7 @@
             (define last-msg (and (pair? msgs) (last msgs)))
             (cond
               [(and last-msg (equal? (gui-message-role last-msg) "assistant"))
-               (define updated-last (gui-message "assistant" (unbox current-response-text)))
+               (define updated-last (gui-message "assistant" (unbox current-response-text) (hasheq)))
                (define all-but-last (drop-right msgs 1))
                (set-box!
                 state-box
@@ -126,17 +146,44 @@
                               (set-box! state-box (gui-state-set-status old 'idle))
                               (notify!)))]
 
-      ;; Tool call started → show in transcript
+      ;; Tool call started → show in transcript with args
       [(equal? ev "tool.call.started")
        (define name (hash-ref payload 'name "unknown"))
+       (define args (hash-ref payload 'arguments #f))
+       (define arg-summary (arg-summary-text args))
        (call-with-semaphore
         gui-state-lock
         (lambda ()
           (define old (unbox state-box))
           (set-box! state-box
-                    (gui-state-add-message old (make-gui-message "tool" (format "[~a]" name))))
+                    (gui-state-add-message old
+                                           (make-gui-message "tool"
+                                                             (format "[~a]~a" name arg-summary)
+                                                             (hasheq 'name name 'arguments args))))
           (notify!)))]
 
+      ;; Tool execution completed → show result
+      [(equal? ev "tool.execution.completed")
+       (define name (hash-ref payload 'name "unknown"))
+       (define result-raw (hash-ref payload 'result #f))
+       (define result-text
+         (let ([s (cond
+                    [(string? result-raw) result-raw]
+                    [(hash? result-raw) (hash-ref result-raw 'text "")]
+                    [else (format "~a" result-raw)])])
+           (if (> (string-length s) 120)
+               (string-append (substring s 0 117) "...")
+               s)))
+       (call-with-semaphore
+        gui-state-lock
+        (lambda ()
+          (define old (unbox state-box))
+          (set-box! state-box
+                    (gui-state-add-message old
+                                           (make-gui-message "tool-result"
+                                                             (format "\u2192 ~a" result-text)
+                                                             (hasheq 'name name 'result result-raw))))
+          (notify!)))]
       ;; Error events
       [(and (string? ev) (regexp-match? #rx"(?i:error)" ev))
        (call-with-semaphore gui-state-lock

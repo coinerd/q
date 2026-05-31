@@ -10,7 +10,7 @@
 
 (provide (struct-out gui-message)
          (struct-out gui-state)
-         (contract-out [make-gui-message (->* (string? string?) () gui-message?)]
+         (contract-out [make-gui-message (->* (string? string?) (any/c) gui-message?)]
                        [make-gui-state
                         (->* ()
                              (#:model (or/c string? #f)
@@ -29,15 +29,15 @@
                        [hash->gui-message (-> hash? gui-message?)]))
 
 ;; A single chat message in the GUI transcript.
-(struct gui-message (role text) #:transparent)
+(struct gui-message (role text meta) #:transparent)
 
 ;; The full GUI state: messages, status, model name.
 (struct gui-state (messages status model active-goal) #:transparent)
 
 ;; --- Constructors with defaults ---
 
-(define (make-gui-message role text)
-  (gui-message role text))
+(define (make-gui-message role text [meta (hasheq)])
+  (gui-message role text meta))
 
 (define (make-gui-state #:model [model #f]
                         #:messages [messages '()]
@@ -68,10 +68,10 @@
 ;; --- Hash conversion (backward compatibility) ---
 
 (define (gui-message->hash msg)
-  (hash 'role (gui-message-role msg) 'text (gui-message-text msg)))
+  (hash 'role (gui-message-role msg) 'text (gui-message-text msg) 'meta (gui-message-meta msg)))
 
 (define (hash->gui-message h)
-  (gui-message (hash-ref h 'role "") (hash-ref h 'text "")))
+  (gui-message (hash-ref h 'role "") (hash-ref h 'text "") (hash-ref h 'meta (hasheq))))
 
 (define (gui-state->hash gs)
   (hash 'messages
