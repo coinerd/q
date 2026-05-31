@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.75.6 (2026-05-30)
+
+### Audit Closure (v0.75.6)
+
+- **Assembly Wiring**: Thread session through `build-assembled-context` for task-state-aware context.
+- **Preamble Integration**: Wire `build-state-awareness-preamble` into `build-tiered-context/state-aware`.
+- **FSM Validation**: `guarded-set-task-fsm-state!` now rejects invalid state symbols.
+- **Unique IDs**: Replace duplicate conclusion message IDs with `generate-id`.
+- **Persistence**: Task-state and conclusion round-trip to session log.
+- **Inference Accumulation**: `recent-tool-calls` field accumulates last 10 tool calls for better state inference.
+- **Dual Input**: Context assembly accepts both fsm-state structs and bare symbols.
+- **14 new tests** in `test-v0756-audit-closure.rkt`.
+
 ## v0.75.5 (2026-05-30)
 
 ### Advanced Context Assembly (v0.75.0-v0.75.5)

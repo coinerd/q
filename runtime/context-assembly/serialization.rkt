@@ -27,8 +27,8 @@
          "budgeting.rkt"
          (only-in "state-relevance.rkt" context-level-for-state)
          (only-in "task-conclusion.rkt" task-conclusion? task-conclusion-text)
-         (only-in "../../util/fsm.rkt" fsm-state-name)
-         (only-in "../../util/ids.rkt" generate-id))
+         (only-in "../../util/ids.rkt" generate-id)
+         (only-in "../../util/fsm.rkt" fsm-state? fsm-state-name))
 
 (provide tiered-context
          tiered-context?
@@ -282,9 +282,15 @@
                                           #:task-state [task-state #f]
                                           #:conclusions [conclusions '()]
                                           #:trace [trace-cb #f])
-  (define state-name (and task-state (fsm-state-name task-state)))
-  (define ws-level (and state-name (context-level-for-state task-state 'working-set)))
-  (define conclusions-level (and state-name (context-level-for-state task-state 'conclusions)))
+  ;; Accept both fsm-state structs and bare symbols
+  (define state-name
+    (cond
+      [(not task-state) #f]
+      [(symbol? task-state) task-state]
+      [(fsm-state? task-state) (fsm-state-name task-state)]
+      [else #f]))
+  (define ws-level (and state-name (context-level-for-state state-name 'working-set)))
+  (define conclusions-level (and state-name (context-level-for-state state-name 'conclusions)))
 
   ;; Adjust working-set based on state relevance
   (define effective-ws
@@ -376,7 +382,13 @@
 ;; Generates a system prompt section describing the current task state.
 ;; Returns #f if no meaningful preamble (idle state with no conclusions).
 (define (build-state-awareness-preamble task-state conclusions)
-  (define state-name (and task-state (fsm-state-name task-state)))
+  ;; Accept both fsm-state structs and bare symbols
+  (define state-name
+    (cond
+      [(not task-state) #f]
+      [(symbol? task-state) task-state]
+      [(fsm-state? task-state) (fsm-state-name task-state)]
+      [else #f]))
   (cond
     [(not state-name) #f]
     [(eq? state-name 'idle) #f]
