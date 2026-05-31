@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.76.0 (2026-05-31)
+
+### Context Assembly Activation — Gap Closure (M1)
+
+First milestone of the v0.76.xx series: close all v0.75.xx infrastructure gaps
+so state-aware context assembly is technically complete.
+
+#### New Features
+- **Tools**: `record_conclusion` tool — agent can save distilled insights as
+  `task-conclusion` structs with category, tags, and FSM state origin.
+  Emits `tool.record_conclusion.completed` event; session layer persists.
+
+#### Architecture
+- **Extraction**: `serialization.rkt` reduced from 494 → 173 lines
+  - `context-floor.rkt`: core tiered context building (structs, partitioning, hooks)
+  - `state-aware-builder.rkt`: state-aware extensions (preamble, conclusion injection)
+- **FSM**: `guarded-set-task-fsm-state!` now validates state→state transitions
+  (rejects e.g. exploration → verification; allows reset to idle)
+- **Inference**: `guarded-set-recent-tool-calls!` validates accumulated tool history
+- **Relevance**: `implementation` state hard-excludes `working-set` (was filtered)
+
+#### Tests Added
+- test-record-conclusion.rkt: 13 tests (tool validation, event emission, persistence)
+- test-task-state.rkt: +7 tests (transition validation, guarded setter)
+- test-task-state-inference.rkt: +4 tests (symbol names, batch caps, multi-turn)
+- test-state-aware-builder.rkt: 13 tests (feature flag, preamble, conclusions)
+- test-state-relevance.rkt: 11 tests (all states × categories)
+
+
 ## v0.75.9 (2026-05-31)
 
 ### Post-v0.75.8 Audit Fix
