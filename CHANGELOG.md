@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.74.4 -- 2026-05-30
+
+### Session Lifecycle FSM Extraction (M5)
+- **W0**: Expanded pure function tests (8 test cases, 19 assertions)
+- **W1**: Extracted `session-lifecycle-transitions.rkt` from session-lifecycle
+  - `build-user-message`, `compute-parent-id`, `inject-system-instructions`
+  - ~40 LOC reduction in session-lifecycle.rkt hotspot
+  - Fixed `build-tiered-context-with-hooks` contract: `hash?` → `(or/c hash? #f)`
+  - Registered in dependency-policy.rktd
+- **W2**: Added 5 fault-injection tests for edge cases
+  - Special characters, long strings, malformed entries, message order preservation
+
+
 ## v0.74.3 -- 2026-05-30
 
 ### Widened Contract Reconciliation — Investigation Batch (M4)

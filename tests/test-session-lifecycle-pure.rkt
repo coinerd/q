@@ -124,5 +124,42 @@
     (define result (inject-system-instructions msgs '("sys")))
     (check-equal? (message-parent-id (car result)) #f)))
 
+
+;; -- Fault injection tests for transitions ------------------------------
+;; Verify graceful handling of edge cases that could occur during errors
+
+(define-test-suite fault-injection-tests
+
+  (test-case "compute-parent-id handles malformed entries gracefully"
+    ;; Entries with unusual kind values should still work
+    (define m1 (make-test-message "id1" #f 'user 'message))
+    (check-equal? (compute-parent-id (list m1)) "id1"))
+
+  (test-case "inject-system-instructions with very long instruction"
+    (define long-str (make-string 10000 #\x))
+    (define msgs (list (make-test-message "id1" #f 'user 'message)))
+    (define result (inject-system-instructions msgs (list long-str)))
+    (check-equal? (length result) 2)
+    (check-equal? (message-role (car result)) 'system))
+
+  (test-case "build-user-message with special characters"
+    (define msg (build-user-message "hello\nworld\ttab\"quote" #f))
+    (check-true (message? msg))
+    (check-equal? (message-role msg) 'user))
+
+  (test-case "compute-parent-id with single session-info returns #f"
+    (define m (make-test-message "info" #f 'system 'session-info))
+    (check-equal? (compute-parent-id (list m)) #f))
+
+  (test-case "inject-system-instructions preserves message order"
+    (define m1 (make-test-message "a" #f 'user 'message))
+    (define m2 (make-test-message "b" #f 'assistant 'message))
+    (define result (inject-system-instructions (list m1 m2) '("sys")))
+    (check-equal? (length result) 3)
+    (check-equal? (message-role (cadr result)) 'user)
+    (check-equal? (message-role (caddr result)) 'assistant))
+  )
+
 (module+ main
-  (run-tests pure-helper-tests))
+  (run-tests pure-helper-tests)
+  (run-tests fault-injection-tests))
