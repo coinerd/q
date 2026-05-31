@@ -188,7 +188,9 @@
                              #:thinking-level [thinking-level #f]
                              #:shutdown-requested? [shutdown-requested? #f]
                              #:force-shutdown? [force-shutdown? #f]
-                             #:prompt-running? [prompt-running? #f])
+                             #:prompt-running? [prompt-running? #f]
+                             #:task-fsm-state [task-fsm-state 'idle]
+                             #:task-conclusions [task-conclusions '()])
   (agent-session id
                  dir
                  provider
@@ -209,7 +211,9 @@
                  thinking-level
                  shutdown-requested?
                  force-shutdown?
-                 prompt-running?))
+                 prompt-running?
+                 task-fsm-state
+                 task-conclusions))
 
 ;; ============================================================
 ;; make-agent-session

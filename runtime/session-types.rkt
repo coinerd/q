@@ -99,7 +99,7 @@
          [force-shutdown? #:mutable]
          [prompt-running? #:mutable]
          [task-fsm-state #:mutable]
-         [task-conclusions #:mutable]) ; boolean — concurrent prompt execution guard
+         [task-conclusions #:mutable]) ; (listof task-conclusion?) — agent task conclusions
   #:transparent)
 
 ;; ============================================================
