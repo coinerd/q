@@ -13,15 +13,20 @@
          "session-store.rkt"
          (only-in "../util/protocol-types.rkt" message?))
 
-(provide (contract-out [write-crash-log! (-> (or/c string? #f) string? string? void?)]
+(provide current-crash-log-dir
+         (contract-out [write-crash-log! (-> (or/c string? #f) string? string? void?)]
                        [ensure-persisted! (-> agent-session? void?)]
                        [buffer-or-append! (-> agent-session? message? void?)]))
+
+;; --- Parameter for test isolation ---
+
+(define current-crash-log-dir (make-parameter #f))
 
 ;; --- Crash logging ---
 
 (define (write-crash-log! sid error-msg phase)
   (with-handlers ([exn:fail? void])
-    (define q-dir (build-path (find-system-path 'home-dir) ".q"))
+    (define q-dir (or (current-crash-log-dir) (build-path (find-system-path 'home-dir) ".q")))
     (make-directory* q-dir)
     (define crash-path (build-path q-dir (format "crash-~a.jsonl" (current-seconds))))
     (call-with-output-file
