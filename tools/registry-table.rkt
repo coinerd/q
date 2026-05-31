@@ -21,7 +21,8 @@
          "builtins/session-recall.rkt"
          "builtins/skill-router.rkt"
          "builtins/save-conclusion.rkt"
-         "builtins/set-task-state.rkt")
+         "builtins/set-task-state.rkt"
+         "builtins/record-conclusion.rkt")
 
 ;; M-03: Named struct replacing raw list access.
 ;; Each spec was a list: (name description schema handler [prompt-guidelines])
@@ -253,6 +254,32 @@
                      'description
                      "List of relevance tags (symbols) for state-aware filtering")))
     tool-save-conclusion
+    #f)
+   ;; set-task-state
+   (tool-spec
+    "record_conclusion"
+    (string-append
+     "Record a distilled insight or conclusion about the current task. "
+     "Use after discovering important facts, making decisions, identifying patterns, "
+     "finding error causes, or getting test results. "
+     "Conclusions replace raw file contents in the prompt when the agent moves past exploration, "
+     "enabling context optimization.")
+    (hasheq
+     'type
+     "object"
+     'required
+     '("text")
+     'properties
+     (hasheq 'text
+             (hasheq 'type "string" 'description "The conclusion text")
+             'category
+             (hasheq 'type
+                     "string"
+                     'description
+                     "Category: fact, decision, pattern, error-cause, test-result (default: fact)")
+             'tags
+             (hasheq 'type "array" 'description "List of relevance tags for state-aware filtering")))
+    tool-record_conclusion
     #f)
    ;; set-task-state
    (tool-spec
