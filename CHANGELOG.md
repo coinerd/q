@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.77.10 (2026-06-01)
+
+### Deep Audit Finding Resolution
+
+Resolves 3 minor findings (M1–M3) from deep post-remediation audit of v0.77.9.
+All feature flags remain OFF by default — no behavior change without explicit activation.
+
+#### M1: WS Evolution Mutation Wiring
+- Session-events subscriber now emits `context.ws-evolve-requested` event on state transitions
+- Removed unused `evolve-working-set-for-state` import from session-events.rkt
+- Event enables turn-orchestrator to handle WS evolution with WS in scope
+
+#### M2: Real Rollback Action Execution
+- `maybe-execute-action` dispatches to injectable callbacks (`current-force-distill-fn`, `current-expand-context-fn`)
+- `force-distill` enables auto-distillation flag; `expand-context` doubles conclusion budget
+- `current-rollback-action-log` records executed actions for observability
+- `'revert-state` remains blocked even when execution enabled
+
+#### M4: Graph Selection Convenience
+- Added `graph-select-conclusions` to conclusion-graph.rkt — returns conclusion objects directly
+- State-aware-builder uses convenience wrapper instead of manual ID→object hash lookup
+
+#### M5: Integration Tests
+- New `test-context-assembly-integration.rkt` with 5 tests exercising full pipeline
+- Tests: graph selection with dependencies, bounded profile, rollback callbacks, WS evolution, auto-distill
+
 ## v0.77.9 (2026-06-01)
 
 ### Post-v0.77.xx Audit Remediation
