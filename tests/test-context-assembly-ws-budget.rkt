@@ -8,7 +8,17 @@
          racket/list
          "../util/protocol-types.rkt"
          "../runtime/working-set.rkt"
-         "../runtime/context-assembly.rkt")
+         "../runtime/context-assembly.rkt"
+         (only-in "../runtime/context-assembly/token-metrics.rkt"
+                  context-token-telemetry?
+                  context-token-telemetry-tier-a-tokens
+                  context-token-telemetry-tier-b-tokens
+                  context-token-telemetry-tier-c-tokens
+                  context-token-telemetry-working-set-tokens
+                  context-token-telemetry-conclusion-tokens
+                  context-token-telemetry-recent-tokens
+                  context-token-telemetry-total-tokens
+                  measure-context-token-telemetry))
 
 ;; Helper: create a test message
 (define (make-test-msg id role kind text [parent #f])
@@ -87,7 +97,47 @@
       (check-true (tiered-context? tc-without-ws))
 
       ;; Tier-a should include system + working set messages
-      (check-true (>= (length (tiered-context-tier-a tc-with-ws)) 3)))))
+      (check-true (>= (length (tiered-context-tier-a tc-with-ws)) 3)))
+
+    (test-case "T03: token telemetry reports tier/category estimates without changing assembly"
+      (define ws-msg
+        (make-message "ws-telemetry"
+                      #f
+                      'tool
+                      'tool-result
+                      (list (make-text-part "working set content"))
+                      (current-seconds)
+                      (hasheq)))
+      (define conclusion-msg
+        (make-message "c-telemetry"
+                      #f
+                      'system-instruction
+                      'text
+                      (list (make-text-part "[Conclusion] important decision"))
+                      (current-seconds)
+                      (hasheq)))
+      (define msgs
+        (list (make-test-msg "sys" 'system 'system-instruction "System")
+              (make-test-msg "recent-1" 'user 'message "recent context")))
+      (define tc (build-tiered-context msgs #:working-set-messages (list ws-msg)))
+      (define tier-a-before (tiered-context-tier-a tc))
+      (define telemetry
+        (measure-context-token-telemetry tc
+                                         #:conclusion-messages (list conclusion-msg)
+                                         #:working-set-messages (list ws-msg)
+                                         #:recent-messages msgs))
+      (check-true (context-token-telemetry? telemetry))
+      (check-equal? (tiered-context-tier-a tc) tier-a-before "telemetry must be observation-only")
+      (check-true (>= (context-token-telemetry-tier-a-tokens telemetry) 0))
+      (check-true (>= (context-token-telemetry-tier-b-tokens telemetry) 0))
+      (check-true (>= (context-token-telemetry-tier-c-tokens telemetry) 0))
+      (check-true (> (context-token-telemetry-working-set-tokens telemetry) 0))
+      (check-true (> (context-token-telemetry-conclusion-tokens telemetry) 0))
+      (check-true (> (context-token-telemetry-recent-tokens telemetry) 0))
+      (check-equal? (context-token-telemetry-total-tokens telemetry)
+                    (+ (context-token-telemetry-tier-a-tokens telemetry)
+                       (context-token-telemetry-tier-b-tokens telemetry)
+                       (context-token-telemetry-tier-c-tokens telemetry))))))
 
 (module+ main
   (run-tests budget-tests))

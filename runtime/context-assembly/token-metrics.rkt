@@ -24,9 +24,20 @@
          context-metrics-savings-pct
          context-metrics-category-breakdown
          context-metrics-timestamp
+         context-token-telemetry
+         context-token-telemetry?
+         context-token-telemetry-tier-a-tokens
+         context-token-telemetry-tier-b-tokens
+         context-token-telemetry-tier-c-tokens
+         context-token-telemetry-conclusion-tokens
+         context-token-telemetry-working-set-tokens
+         context-token-telemetry-recent-tokens
+         context-token-telemetry-total-tokens
+         context-token-telemetry-timestamp
          measure-context-size
          compute-savings
          category-breakdown
+         measure-context-token-telemetry
          compute-conclusion-coverage
          measure-context-assembly)
 
@@ -39,6 +50,19 @@
                     savings-pct
                     category-breakdown
                     timestamp)
+  #:transparent)
+
+;; Observation-only tier/category token telemetry.
+;; The category fields intentionally measure caller-supplied slices rather than
+;; mutating the tiered context; later v0.77 waves reuse this as a baseline.
+(struct context-token-telemetry
+        (tier-a-tokens tier-b-tokens
+                       tier-c-tokens
+                       conclusion-tokens
+                       working-set-tokens
+                       recent-tokens
+                       total-tokens
+                       timestamp)
   #:transparent)
 
 ;; ── Token counting ──
@@ -72,6 +96,30 @@
           tier-c-tokens
           'total
           (+ tier-a-tokens tier-b-tokens tier-c-tokens)))
+
+;; measure-context-token-telemetry :
+;;   tiered-context?
+;;   #:conclusion-messages (listof message?)
+;;   #:working-set-messages (listof message?)
+;;   #:recent-messages (listof message?)
+;;   -> context-token-telemetry?
+;; Reports tier A/B/C token estimates plus category estimates without changing
+;; assembly behavior.
+(define (measure-context-token-telemetry tc
+                                         #:conclusion-messages [conclusion-messages '()]
+                                         #:working-set-messages [working-set-messages '()]
+                                         #:recent-messages [recent-messages '()])
+  (define tier-a-tokens (measure-context-size (tiered-context-tier-a tc)))
+  (define tier-b-tokens (measure-context-size (tiered-context-tier-b tc)))
+  (define tier-c-tokens (measure-context-size (tiered-context-tier-c tc)))
+  (context-token-telemetry tier-a-tokens
+                           tier-b-tokens
+                           tier-c-tokens
+                           (measure-context-size conclusion-messages)
+                           (measure-context-size working-set-messages)
+                           (measure-context-size recent-messages)
+                           (+ tier-a-tokens tier-b-tokens tier-c-tokens)
+                           (current-seconds)))
 
 ;; ── Assembly wrapper ──
 

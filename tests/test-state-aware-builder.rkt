@@ -70,6 +70,26 @@
       (define tier-a (tiered-context-tier-a tc))
       (check-true (>= (length tier-a) 2)))
 
+    (test-case "state-aware implementation currently injects all conclusion entries (v0.77.0 baseline)"
+      (define msgs (make-test-msgs 5))
+      (define conclusions
+        (for/list ([i (in-range 25)])
+          (task-conclusion (format "c~a" i)
+                           (format "important conclusion ~a" i)
+                           'fact
+                           'implementation
+                           '()
+                           (+ 1000 i)
+                           '()
+                           '())))
+      (define tc
+        (build-tiered-context/state-aware msgs
+                                          #:task-state 'implementation
+                                          #:conclusions conclusions))
+      ;; Baseline guard: v0.77.0 documents the pre-budget behavior. Later waves
+      ;; may replace this assertion with a hard conclusion-token budget.
+      (check-true (>= (length (tiered-context-tier-a tc)) (+ 1 (length conclusions)))))
+
     (test-case "state-aware filters working-set for implementation"
       (define msgs (make-test-msgs 5))
       (define ws (list (make-test-msg 'system "ws1")))
