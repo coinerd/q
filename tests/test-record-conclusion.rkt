@@ -31,9 +31,9 @@
 (define (call-tool-with-ctx t args #:call-id [call-id "test-call-42"])
   (define captured-events (quote ()))
   (define mock-ctx
-    ((dynamic-require "../tools/exec-context.rkt" (quote make-exec-context))
-     #:call-id call-id
-     #:event-publisher (lambda (event-type payload)
+    (make-exec-context #:call-id call-id
+                       #:event-publisher
+                       (lambda (event-type payload)
                          (set! captured-events (cons (cons event-type payload) captured-events)))))
   (define result ((tool-execute t) args mock-ctx))
   (values result captured-events))
