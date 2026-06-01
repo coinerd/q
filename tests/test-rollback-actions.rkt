@@ -20,7 +20,8 @@
                   current-rollback-action-execution?
                   current-rollback-action-log
                   current-force-distill-fn
-                  current-expand-context-fn))
+                  current-expand-context-fn
+                  current-revert-state-fn))
 
 (define suite
   (test-suite "rollback-actions"
@@ -56,10 +57,19 @@
         (check-equal? (maybe-execute-action (make-force-distill-action "test" (hasheq)))
                       'force-distill)))
 
-    (test-case "maybe-execute-action never executes revert-state"
+    (test-case "maybe-execute-action skips revert-state when no fn wired (GAP-6)"
       (parameterize ([current-rollback-action-execution? #t]
-                     [current-rollback-action-log '()])
+                     [current-rollback-action-log '()]
+                     [current-revert-state-fn #f])
         (check-false (maybe-execute-action (make-revert-state-action "danger" (hasheq))))))
+
+    (test-case "maybe-execute-action executes revert-state when fn wired (GAP-6)"
+      (define executed? (box #f))
+      (parameterize ([current-rollback-action-execution? #t]
+                     [current-rollback-action-log '()]
+                     [current-revert-state-fn (lambda (_action) (set-box! executed? #t))])
+        (check-equal? (maybe-execute-action (make-revert-state-action "test" (hasheq))) 'revert-state)
+        (check-true (unbox executed?))))
 
     (test-case "warnings->actions maps amnesia to force-distill"
       (define actions (warnings->actions '("amnesia detected: 80% context lost")))

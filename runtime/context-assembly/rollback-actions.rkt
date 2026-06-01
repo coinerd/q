@@ -61,6 +61,7 @@
 ;; Signature: (-> rollback-action? void?)
 (define current-force-distill-fn (make-parameter #f))
 (define current-expand-context-fn (make-parameter #f))
+(define current-revert-state-fn (make-parameter #f))
 
 ;; v0.77.10 M2: Action execution log for observability.
 ;; Each entry is a hash with 'type, 'reason, 'timestamp.
@@ -70,23 +71,36 @@
 ;; Calls the injectable callback if available, then logs.
 (define (execute-force-distill! action)
   (define fn (current-force-distill-fn))
-  (when fn (fn action))
+  (when fn
+    (fn action))
   (log-action! action))
 
 ;; v0.77.10 M2: Execute expand-context action.
 ;; Calls the injectable callback if available, then logs.
 (define (execute-expand-context! action)
   (define fn (current-expand-context-fn))
-  (when fn (fn action))
+  (when fn
+    (fn action))
+  (log-action! action))
+
+;; v0.79.1 GAP-6: Execute revert-state action.
+;; Calls the injectable callback if available, then logs.
+;; Only executes when current-revert-state-fn is wired.
+(define (execute-revert-state! action)
+  (define fn (current-revert-state-fn))
+  (when fn
+    (fn action))
   (log-action! action))
 
 ;; Log an executed action to the rollback action log.
 (define (log-action! action)
-  (current-rollback-action-log
-   (append (current-rollback-action-log)
-           (list (hasheq 'type (rollback-action-type action)
-                         'reason (rollback-action-reason action)
-                         'timestamp (current-seconds))))))
+  (current-rollback-action-log (append (current-rollback-action-log)
+                                       (list (hasheq 'type
+                                                     (rollback-action-type action)
+                                                     'reason
+                                                     (rollback-action-reason action)
+                                                     'timestamp
+                                                     (current-seconds))))))
 
 ;; Execute a rollback action if execution is enabled.
 ;; v0.77.10 M2: Now dispatches to real execution functions.
@@ -96,7 +110,12 @@
   (cond
     [(not action) #f]
     [(not (current-rollback-action-execution?)) #f]
-    [(eq? (rollback-action-type action) 'revert-state) #f] ; too risky
+    [(eq? (rollback-action-type action) 'revert-state)
+     (if (current-revert-state-fn)
+         (begin
+           (execute-revert-state! action)
+           'revert-state)
+         #f)]
     [(eq? (rollback-action-type action) 'force-distill)
      (execute-force-distill! action)
      'force-distill]
@@ -128,6 +147,7 @@
          current-rollback-action-log
          current-force-distill-fn
          current-expand-context-fn
+         current-revert-state-fn
          rollback-action-type?
          (contract-out [make-warn-action (-> string? rollback-action?)]
                        [make-expand-context-action (-> string? hash? rollback-action?)]
