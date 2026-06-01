@@ -1,5 +1,117 @@
 # Changelog
 
+## v0.76.7 (2026-06-01)
+
+### Audit Closure for v0.76.xx Context Assembly Activation
+
+Post-implementation audit fix: 3 CRITICAL + 11 WARNING findings resolved.
+No behavior change (feature flag still defaults `#f`).
+
+#### Critical Fixes
+- **C1**: `origin-message-ids` deserialization type corruption — kept as strings
+  (were being converted to symbols, breaking conclusion-first WS replacement)
+- **C2**: `origin-message-id` now wired from `exec-context-call-id` into
+  `record_conclusion` event payload; session subscriber reads and persists it
+- **C3**: `set-task-state` tool now emits `tool.set-task-state.completed` event;
+  session subscriber calls `guarded-set-task-fsm-state!` for explicit transitions
+
+#### Warning Fixes
+- **W1**: `save-conclusion` deprecated (emits `tool.deprecated` event)
+- **W2**: `record_conclusion` added to inference `'meta` category
+- **W5**: Debugging WS changed from `'full` to `'filtered` per decision A7
+- **W6**: `check-rollback-triggers` wired into `build-tiered-context/state-aware`
+- **W7**: Fixed tautological test assertion in `test-token-metrics.rkt`
+- **W8**: Added `'excluded` WS path test for implementation state
+- **W9**: Refactored brittle manual constructors in 3 test files to shared fixture
+- **W10**: Fixed VALIDATION SG-12 ADR reference (0017 → 0019)
+- **W11**: Fixed plan header series description
+
+#### Tests Improved
+- test-token-metrics.rkt: preamble verification (non-tautological)
+- test-ws-conclusion-fallback.rkt: excluded WS path coverage
+- test-session-task-state.rkt, test-v0756-audit-closure.rkt, test-record-conclusion.rkt:
+  migrated to shared `make-test-session` fixture
+
+
+## v0.76.6 (2026-05-31)
+
+### Context Assembly Activation — Production Hardening (M7)
+
+Final milestone: context efficiency dashboard, ADR, cleanup.
+
+#### Changes
+- **Dashboard**: `scripts/benchmark/context-efficiency.rkt` — parallel benchmark
+  runner with per-scenario metrics, token savings table, and low-coverage flags
+- **ADR 0019**: `docs/adr/0019-context-assembly-activation.md` — architecture
+  decision record for the full v0.76.xx activation series
+- **Cleanup**: removed dead code paths, consolidated imports, final integration
+  tests across all 7 milestones
+
+#### Tests Added
+- test-v0756-audit-closure.rkt: persistence round-trip, preamble integration,
+  FSM validation edge cases
+- test-state-aware-assembly.rkt: end-to-end state-dependent assembly
+
+
+## v0.76.5 (2026-05-31)
+
+### Context Assembly Activation — Conclusion Dependencies (M6)
+
+Sixth milestone: track file dependencies on conclusions for traceability.
+
+#### Changes
+- **Dependencies field**: `task-conclusion` struct gains `dependencies` field
+  (list of file paths), acyclic by construction (simple tagging, no DAG)
+- **Serialization**: `conclusion->hash` / `hash->conclusion` handle the new field
+  with backward-compatible deserialization (defaults to `'()`)
+- **Record tool**: `record_conclusion` accepts optional `dependencies` parameter
+
+#### Tests Added
+- test-conclusion-dependencies.rkt: dependency tracking, serialization round-trip,
+  backward compatibility
+
+
+## v0.76.4 (2026-05-31)
+
+### Context Assembly Activation — Working-Set Evolution (M5)
+
+Fifth milestone: replace working-set entries with conclusions when state
+filters or excludes the WS.
+
+#### Changes
+- **Conclusion-first replacement**: `ws-entry->conclusion-or-self` replaces
+  WS entries that match a conclusion's `origin-message-ids` with compact text
+- **State-dependent WS behavior**: `evolve-working-set-for-state` applies
+  state-specific WS levels (`'full`, `'filtered`, `'excluded`)
+- **WS evolution module**: `runtime/context-assembly/ws-evolution.rkt` —
+  per-state WS relevance configuration with conclusion overlay
+
+#### Tests Added
+- test-ws-conclusion-fallback.rkt: conclusion-first replacement, fallback,
+  mixed WS, token reduction verification
+- test-ws-evolution.rkt: per-state WS levels, conclusion overlay
+
+
+## v0.76.3 (2026-05-31)
+
+### Context Assembly Activation — Graduated Activation (M4)
+
+Fourth milestone: safe rollout infrastructure with per-session config,
+A/B comparison harness, and rollback triggers.
+
+#### Changes
+- **Per-session config**: `task-state-aware?` field on session config —
+  deterministic hash-based rollout (default 0%, no behavior change)
+- **A/B harness**: benchmark scenarios comparing state-aware vs. legacy assembly
+  with 6 test scenarios across all task states
+- **Rollback triggers**: `check-rollback-triggers` — detects excessive savings,
+  amnesia-risk, and task-amnesia conditions for safety rollback
+
+#### Tests Added
+- test-session-rollout.rkt: rollout hash, per-session config, default safety
+- test-rollback-triggers.rkt: all 3 trigger conditions, threshold boundaries
+
+
 ## v0.76.2 (2026-05-31)
 
 ### Context Assembly Activation — Measurement Infrastructure (M3)
