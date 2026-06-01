@@ -19,7 +19,10 @@
                   task-conclusion
                   task-conclusion?
                   task-conclusion-text)
-         (only-in "helpers/session-fixture.rkt" make-test-session))
+         (only-in "helpers/session-fixture.rkt" make-test-session)
+         (only-in "../agent/event-bus.rkt" make-event-bus publish!)
+         (only-in "../util/event.rkt" make-event)
+         (only-in "../runtime/session-events.rkt" wire-session-event-handlers!))
 
 (define suite
   (test-suite "session-task-state"
@@ -62,4 +65,20 @@
       (guarded-set-task-conclusions! s (append (agent-session-task-conclusions s) (list c2)))
       (check-equal? (length (agent-session-task-conclusions s)) 2))))
 
+(test-case "tool.set-task-state.completed event triggers guarded-set-task-fsm-state! (C3 integration)"
+  (define bus (make-event-bus))
+  (define sess (make-test-session #:event-bus bus))
+  (wire-session-event-handlers! sess (lambda (s e) s))
+  ;; Verify initial state
+  (check-equal? (agent-session-task-fsm-state sess) (quote idle))
+  ;; Publish set-task-state event (as if from tool)
+  (publish! bus
+            (make-event
+             "tool.set-task-state.completed"
+             (current-seconds)
+             (agent-session-session-id sess)
+             #f
+             (hasheq (quote target-state) "implementation" (quote event-name) "begin-implement")))
+  ;; Verify state transitioned
+  (check-equal? (agent-session-task-fsm-state sess) (quote implementation)))
 (run-tests suite)
