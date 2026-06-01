@@ -120,7 +120,13 @@
                   config-model-name
                   config-task-state-aware?)
          (only-in "../util/protocol-types.rkt" message-kind message-content)
-         racket/set)
+         racket/set
+         (only-in "../runtime/context-assembly/auto-distillation.rkt"
+                  auto-distill
+                  current-auto-distillation-enabled?)
+         (only-in "../runtime/session-config.rkt"
+                  config-context-assembly-profile
+                  apply-context-assembly-profile!))
 
 (provide (contract-out
           [run-provider-turn
@@ -217,14 +223,25 @@
   ;; v0.75.6: Extract task state from session for state-aware assembly
   (define task-state (and session (agent-session-task-fsm-state session)))
   (define conclusions (and session (agent-session-task-conclusions session)))
+  ;; v0.77.9 T2.1: Auto-distill uncovered WS entries when enabled
+  (define ws-early (config-working-set config-raw))
+  (define augmented-conclusions
+    (if (and (current-auto-distillation-enabled?) session conclusions task-state ws-early)
+        (let ([ws-msgs (working-set-resolve-messages ws-early ctx-to-use message-id)])
+          (append conclusions (auto-distill (map message-id ws-msgs) conclusions task-state)))
+        (or conclusions '())))
   ;; FD-05: Delegate pure assembly to assemble-context/pure
   ;; v0.76.3: Pass per-session rollout flag
+  ;; v0.77.9 T2.4: Apply context-assembly profile before assembly
+  (define profile (config-context-assembly-profile config-raw))
+  (unless (eq? profile 'off)
+    (apply-context-assembly-profile! profile))
   (define-values (ctx-assembled assembly-hook-result tc-struct)
     (assemble-context/pure ctx-to-use
                            config-raw
                            #:hook-dispatcher ctx-assembly-hook-dispatcher
                            #:task-state task-state
-                           #:conclusions conclusions
+                           #:conclusions augmented-conclusions
                            #:state-aware? (config-task-state-aware? config)))
 
   ;; Handle block action from context-assembly hook

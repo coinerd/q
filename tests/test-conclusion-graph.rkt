@@ -61,6 +61,15 @@
       (define cycles (graph-detect-cycles g))
       (check-true (pair? cycles)))
 
+    (test-case "v0.77.9 T2.5: detect multi-node cycle (A→B→C→A)"
+      (define cA (task-conclusion "a" "textA" 'fact 'idle '() 100 '() '("b")))
+      (define cB (task-conclusion "b" "textB" 'fact 'idle '() 200 '() '("c")))
+      (define cC (task-conclusion "c" "textC" 'fact 'idle '() 300 '() '("a")))
+      (define g (build-conclusion-graph (list cA cB cC)))
+      (define cycles (graph-detect-cycles g))
+      (check-true (pair? cycles))
+      (check-true (>= (length cycles) 1)))
+
     (test-case "no cycles in acyclic graph"
       (define g (build-conclusion-graph (list c1 c2)))
       (check-equal? (graph-detect-cycles g) '()))

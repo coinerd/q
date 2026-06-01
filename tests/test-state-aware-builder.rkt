@@ -86,9 +86,12 @@
         (build-tiered-context/state-aware msgs
                                           #:task-state 'implementation
                                           #:conclusions conclusions))
-      ;; Baseline guard: v0.77.0 documents the pre-budget behavior. Later waves
-      ;; may replace this assertion with a hard conclusion-token budget.
-      (check-true (>= (length (tiered-context-tier-a tc)) (+ 1 (length conclusions)))))
+      ;; v0.77.9: Budget enforcement is now active (default 2000 tokens).
+      ;; With 25 conclusions × ~132 tokens each ≈ 3300 total, budget trims to ~15.
+      ;; Tier-a should have preamble + budgeted conclusions + base tier-a entries.
+      (define tier-a (tiered-context-tier-a tc))
+      (check-true (>= (length tier-a) 2)) ; at least preamble + some conclusions
+      (check-true (< (length tier-a) (+ 1 (length conclusions))))) ; budget was enforced
 
     (test-case "state-aware filters working-set for implementation"
       (define msgs (make-test-msgs 5))

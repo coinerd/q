@@ -29,7 +29,10 @@
                   fallback-select-conclusions
                   conclusion-graph-nodes)
          (only-in "conclusion-ranker.rkt" rank-and-budget)
-         (only-in "rollback-actions.rkt" warnings->actions select-highest-priority-action))
+         (only-in "rollback-actions.rkt"
+                  warnings->actions
+                  select-highest-priority-action
+                  maybe-execute-action))
 
 (provide current-task-state-aware-assembly?
          build-tiered-context/state-aware
@@ -206,20 +209,24 @@
         '()))
   ;; Prepend preamble + conclusion entries to tier-a
   (define new-tier-a (append preamble-entries conclusion-entries (tiered-context-tier-a base-tc)))
-  ;; v0.76.7 W6: Run rollback trigger checks (observational only)
+  ;; v0.76.7 W6 + v0.77.9 T2.2: Run rollback trigger checks with action execution
   (when (current-task-state-aware-assembly?)
     (define n-conclusions (length (filter task-conclusion? conclusions)))
     (define coverage
       (if (> (length ws-messages) 0)
           (/ n-conclusions (length ws-messages))
           0.0))
-    (define warnings
-      (check-rollback-triggers #:before-messages (length ws-messages)
-                               #:after-messages (length effective-ws)
-                               #:conclusion-coverage coverage
-                               #:repeat-tool-count 0))
+    (define-values (warnings recommended-action)
+      (check-rollback-triggers-with-actions #:before-messages (length ws-messages)
+                                            #:after-messages (length effective-ws)
+                                            #:conclusion-coverage coverage
+                                            #:repeat-tool-count 0))
     (when (pair? warnings)
-      (log-warning "context-assembly: rollback triggers fired: ~a" warnings)))
+      (log-warning "context-assembly: rollback triggers fired: ~a" warnings))
+    (when recommended-action
+      (define executed (maybe-execute-action recommended-action))
+      (when executed
+        (log-warning "context-assembly: executed rollback action: ~a" executed))))
   (if (and (null? preamble-entries) (null? conclusion-entries))
       base-tc
       (tiered-context new-tier-a (tiered-context-tier-b base-tc) (tiered-context-tier-c base-tc))))

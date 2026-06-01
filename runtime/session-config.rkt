@@ -110,7 +110,8 @@
           [config-max-tokens (-> session-config? exact-positive-integer?)]
           [config-token-budget-threshold (-> session-config? (or/c #f exact-nonnegative-integer?))]
           [config-session-index (-> session-config? (or/c #f session-index?))]
-          [config-task-state-aware? (-> session-config? boolean?)]))
+          [config-task-state-aware? (-> session-config? boolean?)]
+          [config-context-assembly-profile (-> session-config? symbol?)]))
 
 ;; ── session-config struct ────────────────────────────────────────
 
@@ -204,6 +205,10 @@
   (hash-ref (session-config-data c) 'session-index #f))
 (define (config-task-state-aware? c)
   (hash-ref (session-config-data c) 'task-state-aware? #f))
+
+;; v0.77.9 T2.4: Profile accessor from config hash
+(define (config-context-assembly-profile c)
+  (hash-ref (session-config-data c) 'context-assembly-profile 'off))
 
 ;; ── Dynamic default resolution ─────────────────────────────────
 
