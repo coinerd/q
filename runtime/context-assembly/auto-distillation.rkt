@@ -37,21 +37,25 @@
 ;; ── Deterministic Fallback ──
 
 ;; Generate a deterministic fallback conclusion for an uncovered entry.
-;; Uses the message ID and a generic template.
-(define (make-deterministic-fallback msg-id current-state)
-  (task-conclusion (format "auto-~a" msg-id)
-                   (format "[Auto] Previously read file (origin: ~a)" msg-id)
-                   'fact
-                   (or current-state 'idle)
-                   (list msg-id)
-                   (current-seconds)
-                   '(auto-distilled)
-                   '()))
+;; v0.79.2 GAP-3: Accept optional content summary for richer fallback text.
+(define (make-deterministic-fallback msg-id current-state [content-summary #f])
+  (task-conclusion
+   (format "auto-~a" msg-id)
+   (if content-summary
+       (format "[Auto] ~a" (substring content-summary 0 (min (string-length content-summary) 200)))
+       (format "[Auto] Previously read file (origin: ~a)" msg-id))
+   'fact
+   (or current-state 'idle)
+   (list msg-id)
+   (current-seconds)
+   '(auto-distilled)
+   '()))
 
 ;; Generate fallback conclusions for all uncovered entries.
-(define (generate-fallback-conclusions uncovered-ids current-state)
+;; v0.79.2 GAP-3: Accept optional content-summary hash (msg-id -> string).
+(define (generate-fallback-conclusions uncovered-ids current-state [content-summaries (hash)])
   (for/list ([id (in-list uncovered-ids)])
-    (make-deterministic-fallback id current-state)))
+    (make-deterministic-fallback id current-state (hash-ref content-summaries id #f))))
 
 ;; ── Optional LLM Distillation Interface ──
 
@@ -79,13 +83,14 @@
 
 ;; Generate auto-conclusions for uncovered WS entries.
 ;; Returns (listof task-conclusion?) — either LLM-distilled or deterministic fallbacks.
-(define (auto-distill ws-message-ids conclusions current-state)
+;; v0.79.2 GAP-3: Accept optional content-summary hash for richer fallback text.
+(define (auto-distill ws-message-ids conclusions current-state [content-summaries (hash)])
   (define uncovered (find-uncovered-entries ws-message-ids conclusions))
   (cond
     [(null? uncovered) '()]
     [(not (current-auto-distillation-enabled?)) '()]
     [(current-llm-distill-fn) (distill-with-llm uncovered current-state (current-llm-distill-fn) 5)]
-    [else (generate-fallback-conclusions uncovered current-state)]))
+    [else (generate-fallback-conclusions uncovered current-state content-summaries)]))
 
 ;; ── Exports ──
 
@@ -94,9 +99,8 @@
          (contract-out [find-uncovered-entries
                         (-> (listof string?) (listof task-conclusion?) (listof string?))]
                        [generate-fallback-conclusions
-                        (-> (listof string?) (or/c symbol? #f) (listof task-conclusion?))]
+                        (->* ((listof string?) (or/c symbol? #f)) (hash?) (listof task-conclusion?))]
                        [auto-distill
-                        (-> (listof string?)
-                            (listof task-conclusion?)
-                            (or/c symbol? #f)
-                            (listof task-conclusion?))]))
+                        (->* ((listof string?) (listof task-conclusion?) (or/c symbol? #f))
+                             (hash?)
+                             (listof task-conclusion?))]))
