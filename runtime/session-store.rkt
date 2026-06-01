@@ -447,12 +447,16 @@
           (values k
                   (cond
                     [(and (string? v) (memq k '(category fsm-state-origin))) (string->symbol v)]
-                    [(and (list? v) (memq k '(origin-message-ids relevance-tags)))
+                    ;; v0.76.7 C1: relevance-tags values are symbols,
+                    ;; but origin-message-ids are strings (message IDs).
+                    [(and (list? v) (eq? k 'relevance-tags))
                      (map (lambda (x)
                             (if (string? x)
                                 (string->symbol x)
                                 x))
                           v)]
+                    [(and (list? v) (eq? k 'origin-message-ids))
+                     v] ;; keep as strings — message IDs are strings
                     [else v]))))
       (hash->conclusion restored))))
 

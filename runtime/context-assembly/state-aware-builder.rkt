@@ -246,10 +246,13 @@
 ;; Otherwise returns the original message unchanged.
 (define (ws-entry->conclusion-or-self ws-msg conclusions)
   (define msg-id-val (message-id ws-msg))
+  ;; v0.76.7 C1+C2: Use ormap+equal? for robust matching across types
+  (define (origin-matches? c)
+    (define oids (task-conclusion-origin-message-ids c))
+    (and (pair? oids) (ormap (lambda (oid) (equal? msg-id-val oid)) oids)))
   (define matching-conclusion
     (for/first ([c (in-list conclusions)]
-                #:when (and (task-conclusion? c)
-                            (member msg-id-val (task-conclusion-origin-message-ids c))))
+                #:when (and (task-conclusion? c) (origin-matches? c)))
       c))
   (cond
     [matching-conclusion

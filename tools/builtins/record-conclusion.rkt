@@ -16,7 +16,10 @@
                   task-conclusion?
                   task-conclusion-category?
                   valid-categories)
-         (only-in "../../tools/exec-context.rkt" exec-context-event-publisher exec-context?))
+         (only-in "../../tools/exec-context.rkt"
+                  exec-context-event-publisher
+                  exec-context?
+                  exec-context-call-id))
 
 ;; --------------------------------------------------
 ;; Helpers
@@ -75,8 +78,18 @@
            ;; Emit event for session layer to persist
            (define ev-pub (and exec-ctx (exec-context-event-publisher exec-ctx)))
            (when ev-pub
+             (define origin-id (or (and exec-ctx (exec-context-call-id exec-ctx)) ""))
              (ev-pub "tool.record_conclusion.completed"
-                     (hasheq 'conclusion-id id 'text text 'category category-raw 'tags tags)))
+                     (hasheq 'conclusion-id
+                             id
+                             'text
+                             text
+                             'category
+                             category-raw
+                             'tags
+                             tags
+                             'origin-message-id
+                             origin-id)))
 
            (make-success-result
             (list (hasheq 'type "text" 'text (format "Conclusion recorded: [~a] ~a" category text))

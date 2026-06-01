@@ -128,12 +128,18 @@
                         (if (string? t)
                             (string->symbol t)
                             t)))
+                    ;; v0.76.7 C2: Extract origin-message-id from event payload
+                    (define origin-id (and (hash? payload) (hash-ref payload 'origin-message-id #f)))
+                    (define origin-ids
+                      (if (and origin-id (string? origin-id) (not (string=? origin-id "")))
+                          (list origin-id)
+                          '()))
                     (define c
                       (task-conclusion (or id (format "c~a" (current-inexact-milliseconds)))
                                        text
                                        category-sym
                                        current-state
-                                       '()
+                                       origin-ids ; was: '() — now wired from tool event
                                        (current-seconds)
                                        tag-syms
                                        '())) ; dependencies — v0.76.5
