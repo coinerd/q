@@ -88,16 +88,17 @@
 (test-case "guarded-set-working-set-evolved! merges conclusions, does not replace"
   ;; Create session with existing conclusions from multiple phases
   (define sess (make-test-session))
-  (guarded-set-task-conclusions! sess
-    (list (task-conclusion "existing-1" "old fact" 'fact 'exploration '() 1000 '() '())
-          (task-conclusion "existing-2" "old decision" 'decision 'implementation '() 2000 '() '())))
+  (guarded-set-task-conclusions!
+   sess
+   (list (task-conclusion "existing-1" "old fact" 'fact 'exploration '() 1000 '() '())
+         (task-conclusion "existing-2" "old decision" 'decision 'implementation '() 2000 '() '())))
   (check-equal? (length (agent-session-task-conclusions sess)) 2)
   ;; Simulate evolution result with new conclusions (the "evicted" set)
   (define evo-res
     (evolution-result
-      '() ; kept-entries
-      '() ; archived-entries
-      (list (task-conclusion "new-1" "injected fact" 'fact 'implementation '() 3000 '() '()))))
+     '() ; kept-entries
+     '() ; archived-entries
+     (list (task-conclusion "new-1" "injected fact" 'fact 'implementation '() 3000 '() '()))))
   ;; Call the function
   (guarded-set-working-set-evolved! sess evo-res)
   ;; Verify: ALL original conclusions survive + new ones added
@@ -110,10 +111,42 @@
 
 (test-case "guarded-set-working-set-evolved! with empty evolution result preserves conclusions"
   (define sess (make-test-session))
-  (guarded-set-task-conclusions! sess
-    (list (task-conclusion "keep-me" "important" 'fact 'exploration '() 1000 '() '())))
+  (guarded-set-task-conclusions!
+   sess
+   (list (task-conclusion "keep-me" "important" 'fact 'exploration '() 1000 '() '())))
   (define evo-res (evolution-result '() '() '()))
   (guarded-set-working-set-evolved! sess evo-res)
   ;; Original conclusion should survive since nothing to merge
   (check-equal? (length (agent-session-task-conclusions sess)) 1)
   (check-equal? (task-conclusion-id (car (agent-session-task-conclusions sess))) "keep-me"))
+
+;; v0.78.6 C3: G3 auto-distill persistence test
+;; Verifies that guarded-set-task-conclusions! persists conclusions correctly,
+;; simulating the auto-distill path where new conclusions are appended.
+(test-case "auto-distill persistence: new conclusions survive through guarded-set"
+  (define sess (make-test-session))
+  ;; Start with existing conclusions from exploration phase
+  (guarded-set-task-conclusions!
+   sess
+   (list (task-conclusion "exp-1" "found auth module" 'fact 'exploration '() 1000 '() '())
+         (task-conclusion "exp-2" "config in env vars" 'fact 'exploration '() 2000 '() '())))
+  (check-equal? (length (agent-session-task-conclusions sess)) 2)
+  ;; Simulate auto-distill appending a new distilled conclusion
+  (define existing (agent-session-task-conclusions sess))
+  (define distilled
+    (task-conclusion "dist-1"
+                     "auth uses OAuth2 + refresh tokens"
+                     'decision
+                     'implementation
+                     '()
+                     3000
+                     '()
+                     '()))
+  (guarded-set-task-conclusions! sess (append existing (list distilled)))
+  ;; Verify all 3 conclusions survive
+  (define final (agent-session-task-conclusions sess))
+  (check-equal? (length final) 3)
+  (define final-ids (map task-conclusion-id final))
+  (check-not-false (member "exp-1" final-ids) "existing exp-1 should survive")
+  (check-not-false (member "exp-2" final-ids) "existing exp-2 should survive")
+  (check-not-false (member "dist-1" final-ids) "new distilled conclusion should survive"))

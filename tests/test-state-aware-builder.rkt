@@ -10,6 +10,7 @@
          "../runtime/context-assembly/task-conclusion.rkt"
          (only-in "../runtime/context-assembly/rollback-actions.rkt"
                   current-rollback-action-execution?)
+         (only-in "../runtime/context-assembly/state-aware-builder.rkt" check-rollback-triggers)
          (only-in "../util/protocol-types.rkt" make-message make-text-part message-role)
          (only-in "../util/fsm.rkt" fsm-state))
 
@@ -137,8 +138,18 @@
                                             #:task-state 'implementation
                                             #:working-set-messages msgs
                                             #:recent-tool-calls '(read read read read bash)))
-        ;; Should succeed — the rollback trigger should have fired but not crashed
-        (check-not-false tc)))
+        ;; v0.78.6 C4: Verify amnesia warning actually fires for repeat count > 2
+        (check-not-false tc "tiered context should be produced")
+        ;; Directly verify trigger fires: 4 repeats > 2 threshold
+        (define warnings
+          (check-rollback-triggers #:before-messages 10
+                                   #:after-messages 10
+                                   #:conclusion-coverage 0.5
+                                   #:repeat-tool-count 4))
+        (check-true (pair? warnings) "repeat count 4 should produce warnings")
+        (define amnesia-warn (assoc 'task-amnesia-detected warnings))
+        (check-not-false amnesia-warn
+                         "task-amnesia-detected warning should fire for 4 repeat tool calls")))
 
     (test-case "repeat-tool-count defaults to 0 with no recent-tool-calls"
       (parameterize ([current-task-state-aware-assembly? #t])
