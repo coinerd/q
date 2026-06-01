@@ -26,7 +26,8 @@
                   build-conclusion-graph
                   graph-select-by-seeds
                   graph-detect-cycles
-                  fallback-select-conclusions)
+                  fallback-select-conclusions
+                  conclusion-graph-nodes)
          (only-in "conclusion-ranker.rkt" rank-and-budget)
          (only-in "rollback-actions.rkt" warnings->actions select-highest-priority-action))
 
@@ -107,7 +108,7 @@
        (map (λ (m) (ws-entry->conclusion-or-self m conclusions)) filtered)]
       [else ws-messages]))
 
-  ;; v0.77.3 W3.3: Graph-based conclusion filtering when flag is enabled
+  ;; v0.77.3 W3.3 + v0.77.9 T1.1: Graph-based conclusion filtering when flag is enabled
   (define effective-conclusions
     (cond
       [(not (current-graph-conclusion-selection?)) conclusions]
@@ -120,16 +121,41 @@
          (if state-name
              (list state-name)
              '()))
-       ;; Use graph-based selection with degraded fallback
-       (define selected (fallback-select-conclusions conclusions 20 current-states))
-       selected]))
+       ;; Build the dependency graph and use seed-based selection
+       (define graph (build-conclusion-graph conclusions))
+       (define cycles (graph-detect-cycles graph))
+       (cond
+         [(pair? cycles)
+          ;; Cycles detected — log and fall back to recency selection
+          (log-warning "context-assembly: conclusion graph has ~a cycle(s), falling back"
+                       (length cycles))
+          (fallback-select-conclusions conclusions 20 current-states)]
+         [else
+          ;; Seed-based subgraph selection
+          (define selected-ids (graph-select-by-seeds graph seed-ids))
+          (if (null? selected-ids)
+              ;; No seeds matched — fall back to recency selection
+              (fallback-select-conclusions conclusions 20 current-states)
+              ;; Map selected IDs back to conclusion objects
+              (for/list ([id (in-list selected-ids)]
+                         #:when (hash-has-key? (conclusion-graph-nodes graph) id))
+                (hash-ref (conclusion-graph-nodes graph) id)))])]))
+
+  ;; v0.77.9 T1.2: Apply rank-and-budget when budget is configured (>0)
+  (define budgeted-conclusions
+    (let ([budget (current-conclusion-token-budget)])
+      (if (and budget (> budget 0) (pair? effective-conclusions))
+          (rank-and-budget effective-conclusions
+                           #:current-state state-name
+                           #:max-conclusion-tokens budget)
+          effective-conclusions)))
 
   ;; Add conclusions as context entries when relevant
   (define conclusion-entries
     (cond
       [(or (not state-name) (eq? conclusions-level 'excluded)) '()]
       [(eq? conclusions-level 'full)
-       (for/list ([c (in-list effective-conclusions)]
+       (for/list ([c (in-list budgeted-conclusions)]
                   #:when (task-conclusion? c))
          (make-message (generate-id)
                        #f
@@ -139,8 +165,8 @@
                        (current-seconds)
                        (hasheq)))]
       [(eq? conclusions-level 'summary)
-       (if (<= (length effective-conclusions) 3)
-           (for/list ([c (in-list effective-conclusions)]
+       (if (<= (length budgeted-conclusions) 3)
+           (for/list ([c (in-list budgeted-conclusions)]
                       #:when (task-conclusion? c))
              (make-message (generate-id)
                            #f
@@ -150,8 +176,8 @@
                            (current-seconds)
                            (hasheq)))
            ;; Summarize: take first + last
-           (let ([first-c (car effective-conclusions)]
-                 [last-c (car (reverse effective-conclusions))])
+           (let ([first-c (car budgeted-conclusions)]
+                 [last-c (car (reverse budgeted-conclusions))])
              (for/list ([c (list first-c last-c)]
                         #:when (task-conclusion? c))
                (make-message (generate-id)
