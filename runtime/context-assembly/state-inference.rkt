@@ -104,7 +104,7 @@
        [(and (>= n-read 3) (= n-write 0)) (values task-exploration 0.85)]
 
        ;; planning: meta tools (save-conclusion) + reads (gathering info)
-       [(and (>= (count-category recent-calls 'meta) 1) (= n-write 0)) (values task-planning 0.6)]
+       [(and (>= (count-category recent-calls 'meta) 1) (= n-write 0)) (values task-planning 0.75)]
 
        ;; Light exploration: some reads, no writes
        [(and (>= n-read 1) (= n-write 0)) (values task-exploration 0.5)]

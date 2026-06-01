@@ -183,10 +183,11 @@
                            (list (make-text-part (format "[Conclusion] ~a" (task-conclusion-text c))))
                            (current-seconds)
                            (hasheq)))
-           ;; Summarize: take first + last
-           (let ([first-c (car budgeted-conclusions)]
-                 [last-c (car (reverse budgeted-conclusions))])
-             (for/list ([c (list first-c last-c)]
+           ;; v0.78.3 G8: Use rank-and-budget for summary (not first+last)
+           (let ([ranked (rank-and-budget budgeted-conclusions
+                                          #:current-state state-name
+                                          #:max-conclusion-tokens 500)])
+             (for/list ([c (in-list ranked)]
                         #:when (task-conclusion? c))
                (make-message (generate-id)
                              #f
@@ -207,7 +208,8 @@
                           #:trace trace-cb))
 
   ;; v0.75.6: Prepend state-awareness preamble to tier-a
-  (define preamble (build-state-awareness-preamble task-state conclusions))
+  ;; v0.78.3 G7: Use budgeted conclusions (not raw) for preamble
+  (define preamble (build-state-awareness-preamble task-state budgeted-conclusions))
   (define preamble-entries
     (if preamble
         (list preamble)
