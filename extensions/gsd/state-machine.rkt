@@ -18,7 +18,11 @@
          racket/set
          "runtime-state-types.rkt"
          (only-in "policy.rkt" blocked-tools-for gsd-decide-action policy-allowed?)
-         (only-in "events.rkt" emit-gsd-event! ctx-emit-gsd-event! current-gsd-correlation-id emit-to-bus!)
+         (only-in "events.rkt"
+                  emit-gsd-event!
+                  ctx-emit-gsd-event!
+                  current-gsd-correlation-id
+                  emit-to-bus!)
          (only-in "event-structs.rkt"
                   make-gsd-transition-attempted-event
                   make-gsd-transition-succeeded-event
@@ -176,10 +180,10 @@
 ;; ============================================================
 
 (define (gsm-current)
-  (gsd-runtime-state-mode (gsd-state-snapshot)))
+  (gsm-ctx-current gsd-default-ctx))
 
 (define (gsm-history)
-  (gsd-history-snapshot))
+  (gsm-ctx-history gsd-default-ctx))
 
 ;; Pure transition kernel (Finding 3.1.3)
 ;; Compute next state without side effects.
@@ -230,12 +234,12 @@
        [else
         (emit-to-bus! event-bus
                       'gsd.transition.failed
-                      (make-gsd-transition-failed-event
-                       #:session-id ""
-                       #:turn-id 0
-                       #:from current
-                       #:to target
-                       #:reason (format "invalid: ~a -> ~a" current target)))
+                      (make-gsd-transition-failed-event #:session-id ""
+                                                        #:turn-id 0
+                                                        #:from current
+                                                        #:to target
+                                                        #:reason
+                                                        (format "invalid: ~a -> ~a" current target)))
         result]))))
 
 ;; FF-01: Auto-routing transition — finds shortest path via BFS and follows it.
@@ -261,19 +265,17 @@
      (ok-result old 'idle))))
 
 (define (reset-gsm!)
-  (gsd-ctx-transaction!
-   gsd-default-ctx
-   (lambda (state history event-bus set-state! set-history!)
-     (set-state! (make-initial-gsd-state))
-     (set-history! '())
-     (void))))
+  (gsd-ctx-transaction! gsd-default-ctx
+                        (lambda (state history event-bus set-state! set-history!)
+                          (set-state! (make-initial-gsd-state))
+                          (set-history! '())
+                          (void))))
 
 (define (gsm-valid-next-states)
-  (define current (gsm-current))
-  (valid-targets current))
+  (gsm-ctx-valid-next-states gsd-default-ctx))
 
 (define (gsm-snapshot)
-  (gsd-state-snapshot))
+  (gsm-ctx-snapshot gsd-default-ctx))
 
 ;; ============================================================
 ;; Tool access
@@ -328,40 +330,35 @@
 ;; ============================================================
 
 (define (gsm-wave-executor)
-  (gsd-runtime-state-wave-executor (gsd-state-snapshot)))
+  (gsm-ctx-wave-executor gsd-default-ctx))
 
 (define (gsm-set-wave-executor! exec)
-  (gsd-state-update! (lambda (state) (struct-copy gsd-runtime-state state [wave-executor exec]))))
+  (gsm-ctx-set-wave-executor! gsd-default-ctx exec))
 
 (define (gsm-total-waves)
-  (gsd-runtime-state-total-waves (gsd-state-snapshot)))
+  (gsm-ctx-total-waves gsd-default-ctx))
 
 (define (gsm-set-total-waves! n)
-  (gsd-state-update! (lambda (state) (struct-copy gsd-runtime-state state [total-waves n]))))
+  (gsm-ctx-set-total-waves! gsd-default-ctx n))
 
 (define (gsm-current-wave)
-  (gsd-runtime-state-current-wave (gsd-state-snapshot)))
+  (gsm-ctx-current-wave gsd-default-ctx))
 
 (define (gsm-set-current-wave! n)
-  (gsd-state-update! (lambda (state) (struct-copy gsd-runtime-state state [current-wave n]))))
+  (gsm-ctx-set-current-wave! gsd-default-ctx n))
 
 (define (gsm-completed-waves)
-  (gsd-runtime-state-completed-waves (gsd-state-snapshot)))
+  (gsm-ctx-completed-waves gsd-default-ctx))
 
 (define (gsm-mark-wave-complete! idx)
-  (gsd-state-update! (lambda (state)
-                       (struct-copy gsd-runtime-state
-                                    state
-                                    [completed-waves
-                                     (set-add (gsd-runtime-state-completed-waves state) idx)]))))
+  (gsm-ctx-mark-wave-complete! gsd-default-ctx idx))
 
 (define (gsm-wave-complete? idx)
-  (set-member? (gsd-runtime-state-completed-waves (gsd-state-snapshot)) idx))
+  (set-member? (gsm-completed-waves) idx))
 
 (define (gsm-next-pending-wave)
-  (define state (gsd-state-snapshot))
-  (define tw (gsd-runtime-state-total-waves state))
-  (define cw (gsd-runtime-state-completed-waves state))
+  (define tw (gsm-total-waves))
+  (define cw (gsm-completed-waves))
   (for/first ([i (in-range tw)]
               #:when (not (set-member? cw i)))
     i))
@@ -450,12 +447,12 @@
        [else
         (emit-to-bus! event-bus
                       'gsd.transition.failed
-                      (make-gsd-transition-failed-event
-                       #:session-id ""
-                       #:turn-id 0
-                       #:from current
-                       #:to target
-                       #:reason (format "invalid: ~a -> ~a" current target)))
+                      (make-gsd-transition-failed-event #:session-id ""
+                                                        #:turn-id 0
+                                                        #:from current
+                                                        #:to target
+                                                        #:reason
+                                                        (format "invalid: ~a -> ~a" current target)))
         result]))))
 
 (define (gsm-ctx-reset! ctx)
