@@ -70,40 +70,43 @@
   (define received-done? (box #f))
 
   ;; Error boundary — emit cleanup events on provider crash.
-  (with-handlers
-      ([exn:fail?
-        (lambda (e)
-          ;; AF5 (RC2): Persist partial assistant message before re-raising.
-          (define partial-text (streaming-message-text sm))
-          (when (and partial-text (> (string-length partial-text) 0))
-            (define partial-msg
-              (make-message (generate-id)
-                            #f
-                            'assistant
-                            'message
-                            (list (make-text-part partial-text))
-                            (now-seconds)
-                            (hasheq 'turnId turn-id 'partial #t)))
-            (state-add-message! state partial-msg))
-          (when (streaming-message-message-started? sm)
-            (emit-typed-event! bus
-                               (make-stream-message-end-event #:session-id session-id
-                                                              #:turn-id turn-id
-                                                              #:message-id message-id
-                                                              #:usage (hasheq))
-                               #:state state))
-          ;; v0.75.9: Emit stream-completed so GUI resets current-response-text
-          (emit-typed-event! bus
-                             (make-stream-completed-event #:session-id session-id #:turn-id turn-id)
-                             #:state state)
-          (emit-typed-event! bus
-                             (make-stream-turn-completed-event #:session-id session-id
-                                                               #:turn-id turn-id
-                                                               #:termination 'error
-                                                               #:turn-id-str turn-id
-                                                               #:reason "provider-stream-error")
-                             #:state state)
-          (raise e))])
+  (with-handlers ([exn:fail?
+                   (lambda (e)
+                     ;; AF5 (RC2): Persist partial assistant message before re-raising.
+                     (define partial-text (streaming-message-text sm))
+                     (when (and partial-text (> (string-length partial-text) 0))
+                       (define partial-msg
+                         (make-message (generate-id)
+                                       #f
+                                       'assistant
+                                       'message
+                                       (list (make-text-part partial-text))
+                                       (now-seconds)
+                                       (hasheq 'turnId turn-id 'partial #t)))
+                       (state-add-message! state partial-msg))
+                     (when (streaming-message-message-started? sm)
+                       (emit-typed-event! bus
+                                          (make-stream-message-end-event #:session-id session-id
+                                                                         #:turn-id turn-id
+                                                                         #:message-id message-id
+                                                                         #:usage (hasheq))
+                                          #:state state))
+                     ;; v0.75.9: Emit stream-completed so GUI resets current-response-text
+                     (emit-typed-event! bus
+                                        (make-stream-completed-event #:session-id session-id
+                                                                     #:turn-id turn-id
+                                                                     #:usage (hasheq)
+                                                                     #:finish_reason "error")
+                                        #:state state)
+                     (emit-typed-event! bus
+                                        (make-stream-turn-completed-event #:session-id session-id
+                                                                          #:turn-id turn-id
+                                                                          #:termination 'error
+                                                                          #:turn-id-str turn-id
+                                                                          #:reason
+                                                                          "provider-stream-error")
+                                        #:state state)
+                     (raise e))])
     (let stream-loop ()
       (define chunk (stream-gen))
       (when (and chunk (not (eq? chunk #f)))
