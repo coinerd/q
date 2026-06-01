@@ -20,6 +20,10 @@
          (only-in "context-assembly/task-conclusion.rkt" task-conclusion-id))
 
 (define-logger q-session-mutation)
+
+;; v0.79.2 GAP-4: Injectable callback for persisting archived WS entries.
+;; Signature: (-> ws-entry? void?). Runtime wires real implementation.
+(define current-archive-entry-fn (make-parameter #f))
 (provide (contract-out [guarded-set-prompt-running! (-> agent-session? boolean? void?)]
                        [guarded-set-compacting! (-> agent-session? boolean? void?)]
                        [guarded-set-shutdown-requested! (-> agent-session? boolean? void?)]
@@ -39,7 +43,8 @@
                        [guarded-set-recent-tool-calls! (-> agent-session? list? void?)]
                        [guarded-set-working-set-evolved! (-> agent-session? evolution-result? void?)]
                        [valid-session-phase? (-> symbol? boolean?)]
-                       [session-phase (-> agent-session? symbol?)]))
+                       [session-phase (-> agent-session? symbol?)])
+         current-archive-entry-fn)
 
 ;; Valid session phases derived from boolean flags
 (define (valid-session-phase? phase)
@@ -153,7 +158,12 @@
     ;; v0.79.2 GAP-4: Log archived entries (no longer silently dropped)
     (define archived (evolution-result-archived-entries evolution-res))
     (when (pair? archived)
-      (log-q-session-mutation-info (format "WS evolution archived ~a entries" (length archived))))
+      (log-q-session-mutation-info (format "WS evolution archived ~a entries" (length archived)))
+      ;; v0.79.2 GAP-4: Persist archived entries via injectable callback
+      (define archive-fn (current-archive-entry-fn))
+      (when archive-fn
+        (for ([e (in-list archived)])
+          (archive-fn e))))
     ;; Merge injected conclusions
     (define injected (evolution-result-evicted-conclusions evolution-res))
     (when (pair? injected)
