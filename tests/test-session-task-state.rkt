@@ -23,7 +23,8 @@
          (only-in "../agent/event-bus.rkt" make-event-bus publish! subscribe!)
          (only-in "../util/event.rkt" make-event event-ev event-payload)
          (only-in "../runtime/session-events.rkt"
-                  wire-session-event-handlers!
+                  wire-session-event-handlers!)
+         (only-in "../runtime/context-assembly/state-aware-builder.rkt"
                   current-ws-evolution-enabled?))
 
 (define suite

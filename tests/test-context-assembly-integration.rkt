@@ -39,7 +39,8 @@
                   current-task-state-aware-assembly?
                   current-conclusion-token-budget
                   current-graph-conclusion-selection?)
-         (only-in "../runtime/session-events.rkt" current-ws-evolution-enabled?)
+         (only-in "../runtime/context-assembly/state-aware-builder.rkt"
+                  current-ws-evolution-enabled?)
          (only-in "../runtime/session-config.rkt"
                   apply-context-assembly-profile!
                   current-context-assembly-profile)

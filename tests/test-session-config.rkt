@@ -14,7 +14,17 @@
          racket/dict
          racket/hash
          "../runtime/session-config.rkt"
-         (only-in "../runtime/session-index/schema.rkt" make-empty-index session-index?))
+         (only-in "../runtime/session-index/schema.rkt" make-empty-index session-index?)
+         (only-in "../runtime/context-assembly/state-aware-builder.rkt"
+                  current-task-state-aware-assembly?
+                  current-conclusion-token-budget
+                  current-graph-conclusion-selection?)
+         (only-in "../runtime/context-assembly/auto-distillation.rkt"
+                  current-auto-distillation-enabled?)
+         (only-in "../runtime/context-assembly/rollback-actions.rkt"
+                  current-rollback-action-execution?)
+         (only-in "../runtime/context-assembly/state-aware-builder.rkt"
+                  current-ws-evolution-enabled?))
 
 ;; ── Constructor tests ────────────────────────────────────────────
 
@@ -268,3 +278,48 @@
 
 (test-case "default profile is off"
   (check-equal? (current-context-assembly-profile) 'off))
+
+;; v0.78.1 G1: Profile activation matrix tests
+(test-case "profile 'off disables all flags"
+  (apply-context-assembly-profile! 'off)
+  (check-false (current-task-state-aware-assembly?))
+  (check-false (current-graph-conclusion-selection?))
+  (check-false (current-auto-distillation-enabled?))
+  (check-false (current-rollback-action-execution?))
+  (check-false (current-ws-evolution-enabled?)))
+
+(test-case "profile 'observe enables assembly only"
+  (apply-context-assembly-profile! 'observe)
+  (check-true (current-task-state-aware-assembly?))
+  (check-false (current-graph-conclusion-selection?))
+  (check-false (current-auto-distillation-enabled?))
+  (check-false (current-rollback-action-execution?))
+  (check-false (current-ws-evolution-enabled?))
+  (apply-context-assembly-profile! 'off))
+
+(test-case "profile 'bounded enables assembly + graph + budget"
+  (apply-context-assembly-profile! 'bounded)
+  (check-true (current-task-state-aware-assembly?))
+  (check-true (current-graph-conclusion-selection?))
+  (check-false (current-auto-distillation-enabled?))
+  (check-false (current-rollback-action-execution?))
+  (check-false (current-ws-evolution-enabled?))
+  (apply-context-assembly-profile! 'off))
+
+(test-case "profile 'self-healing enables bounded + distill + rollback"
+  (apply-context-assembly-profile! 'self-healing)
+  (check-true (current-task-state-aware-assembly?))
+  (check-true (current-graph-conclusion-selection?))
+  (check-true (current-auto-distillation-enabled?))
+  (check-true (current-rollback-action-execution?))
+  (check-false (current-ws-evolution-enabled?))
+  (apply-context-assembly-profile! 'off))
+
+(test-case "profile 'full enables everything"
+  (apply-context-assembly-profile! 'full)
+  (check-true (current-task-state-aware-assembly?))
+  (check-true (current-graph-conclusion-selection?))
+  (check-true (current-auto-distillation-enabled?))
+  (check-true (current-rollback-action-execution?))
+  (check-true (current-ws-evolution-enabled?))
+  (apply-context-assembly-profile! 'off))

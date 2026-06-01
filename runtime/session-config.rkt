@@ -36,7 +36,11 @@
          (only-in "../runtime/session-index/schema.rkt" session-index?)
          (only-in "context-assembly/state-aware-builder.rkt"
                   current-task-state-aware-assembly?
-                  current-conclusion-token-budget))
+                  current-conclusion-token-budget
+                  current-graph-conclusion-selection?
+                  current-ws-evolution-enabled?)
+         (only-in "context-assembly/auto-distillation.rkt" current-auto-distillation-enabled?)
+         (only-in "context-assembly/rollback-actions.rkt" current-rollback-action-execution?))
 
 ;; Global rollout rate for state-aware assembly (0.0 = none, 1.0 = all)
 (define current-task-state-aware-rollout-rate (make-parameter 0.0))
@@ -56,18 +60,44 @@
   (and (symbol? v) (memq v valid-profiles) #t))
 
 ;; Apply a profile: sets individual feature flags according to the profile.
+;; v0.78.1 G1: Proper activation matrix with all feature flags.
+;; Each profile is a superset of the previous one.
 (define (apply-context-assembly-profile! profile)
   (case profile
-    [(off) (current-task-state-aware-assembly? #f)]
-    [(observe) (current-task-state-aware-assembly? #f)] ; telemetry still works
+    [(off)
+     (current-task-state-aware-assembly? #f)
+     (current-graph-conclusion-selection? #f)
+     (current-auto-distillation-enabled? #f)
+     (current-rollback-action-execution? #f)
+     (current-ws-evolution-enabled? #f)
+     (current-conclusion-token-budget 2000)]
+    [(observe)
+     (current-task-state-aware-assembly? #t)
+     (current-graph-conclusion-selection? #f)
+     (current-auto-distillation-enabled? #f)
+     (current-rollback-action-execution? #f)
+     (current-ws-evolution-enabled? #f)
+     (current-conclusion-token-budget 2000)]
     [(bounded)
      (current-task-state-aware-assembly? #t)
+     (current-graph-conclusion-selection? #t)
+     (current-auto-distillation-enabled? #f)
+     (current-rollback-action-execution? #f)
+     (current-ws-evolution-enabled? #f)
      (current-conclusion-token-budget 2000)]
     [(self-healing)
      (current-task-state-aware-assembly? #t)
+     (current-graph-conclusion-selection? #t)
+     (current-auto-distillation-enabled? #t)
+     (current-rollback-action-execution? #t)
+     (current-ws-evolution-enabled? #f)
      (current-conclusion-token-budget 2000)]
     [(full)
      (current-task-state-aware-assembly? #t)
+     (current-graph-conclusion-selection? #t)
+     (current-auto-distillation-enabled? #t)
+     (current-rollback-action-execution? #t)
+     (current-ws-evolution-enabled? #t)
      (current-conclusion-token-budget 2000)]
     [else (void)]))
 
