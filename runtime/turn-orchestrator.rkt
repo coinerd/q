@@ -163,11 +163,16 @@
                 (#:hook-dispatcher (or/c procedure? #f)
                                    #:state-aware? (or/c boolean? #f)
                                    #:recent-tool-calls list?)
-                (values list? (or/c hook-result? #f) tiered-context?))]))
+                (values list? (or/c hook-result? #f) tiered-context?))])
+         current-last-task-fsm-state)
 
 ;; ============================================================
 ;; Context assembly
 ;; ============================================================
+
+;; v0.79.2 GAP-2: Track last task FSM state for WS evolution old-state.
+;; Set each turn from agent-session-task-fsm-state before it gets updated.
+(define current-last-task-fsm-state (make-parameter #f))
 
 ;; Pure: assemble context from messages and config without side effects.
 ;; Returns the assembled message list and hook result (no events emitted here).
@@ -254,8 +259,12 @@
   ;; Only when WS evolution enabled and session has a working set
   (when (and (current-ws-evolution-enabled?) ws-early session task-state (not (eq? task-state 'idle)))
     ;; v0.78.6 C1+W1: Use /result variant (returns evolution-result? struct)
-    ;; Pass #f for old-state since we don't know the previous state inline.
-    (define result (evolve-working-set-for-state/result ws-early #f task-state augmented-conclusions))
+    ;; v0.79.2 GAP-2: Pass tracked old-state instead of #f.
+    (define old-state (current-last-task-fsm-state))
+    (define result
+      (evolve-working-set-for-state/result ws-early old-state task-state augmented-conclusions))
+    ;; Update tracked state for next turn
+    (current-last-task-fsm-state task-state)
     (when (and (evolution-result? result) session)
       (guarded-set-working-set-evolved! session result)))
   ;; FD-05: Delegate pure assembly to assemble-context/pure
