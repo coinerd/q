@@ -20,7 +20,7 @@
                   category-breakdown
                   compute-conclusion-coverage
                   measure-context-assembly)
-         (only-in "../util/protocol-types.rkt" make-message make-text-part)
+         (only-in "../util/protocol-types.rkt" make-message make-text-part message-kind message-role)
          (only-in "../runtime/context-assembly/context-floor.rkt"
                   tiered-context?
                   tiered-context-tier-a
@@ -156,10 +156,16 @@
       (define-values (tc metrics) (measure-context-assembly (msgs 3 "test")))
       (check-equal? (context-metrics-task-state metrics) 'none))
 
-    (test-case "state-aware assembly with preamble adds some overhead"
+    (test-case "state-aware assembly with preamble adds preamble overhead"
       (define-values (tc metrics)
         (measure-context-assembly (msgs 10 "test message content") #:task-state 'implementation))
-      ;; Preamble adds tokens, so after may be > before when no filtering happens
-      (check-true (context-metrics? metrics)))))
+      ;; v0.76.7 W7: Non-tautological — verify preamble exists in tier-a
+      ;; for non-idle states (implementation state injects state-awareness preamble)
+      (check-true (context-metrics? metrics))
+      (define preamble-msg
+        (for/first ([m (tiered-context-tier-a tc)]
+                    #:when (equal? (message-role m) 'system-instruction))
+          m))
+      (check-not-false preamble-msg "preamble message should be present for implementation state"))))
 
 (run-tests suite)

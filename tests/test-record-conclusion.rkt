@@ -11,13 +11,17 @@
          (only-in "../util/event.rkt" make-event)
          "../runtime/session-events.rkt"
          "../runtime/session-types.rkt"
+         (only-in "../runtime/session-mutation.rkt" guarded-set-task-fsm-state!)
          (only-in "../runtime/context-assembly/task-conclusion.rkt"
                   task-conclusion?
                   task-conclusion-text
                   task-conclusion-category
                   task-conclusion-fsm-state-origin
-                  task-conclusion-relevance-tags)
-         (submod "../runtime/session-types.rkt" internal))
+                  task-conclusion-relevance-tags
+                  task-conclusion-origin-message-ids)
+         (submod "../runtime/session-types.rkt" internal)
+         ;; v0.76.7 W9: Shared session fixture
+         (only-in "helpers/session-fixture.rkt" make-test-session))
 
 ;; Helper: call tool handler directly
 (define (call-tool t args)
@@ -104,38 +108,14 @@
 
     (test-case "session handler persists conclusion from event"
       (define bus (make-event-bus))
-      (define sess
-        (agent-session "test-sess"
-                       "/tmp/q-test-record"
-                       #f
-                       #f
-                       bus
-                       #f
-                       #f
-                       '()
-                       #f
-                       #f
-                       #f
-                       #f
-                       #t
-                       0
-                       #f
-                       #f
-                       #f
-                       #f
-                       #f
-                       #f
-                       #f
-                       'idle
-                       '()
-                       '()))
+      (define sess (make-test-session #:event-bus bus))
       (wire-session-event-handlers! sess (lambda (s e) s))
       ;; Publish a record_conclusion event
       (publish! bus
                 (make-event
                  "tool.record_conclusion.completed"
                  (current-seconds)
-                 "test-sess"
+                 (agent-session-session-id sess)
                  #f
                  (hasheq 'text "handler test" 'conclusion-id "c123" 'category "fact" 'tags '())))
       ;; Allow event processing (synchronous bus)
@@ -149,36 +129,14 @@
 
     (test-case "session handler sets fsm-state-origin to current state"
       (define bus (make-event-bus))
-      (define sess
-        (agent-session "test-sess"
-                       "/tmp/q-test-record"
-                       #f
-                       #f
-                       bus
-                       #f
-                       #f
-                       '()
-                       #f
-                       #f
-                       #f
-                       #f
-                       #t
-                       0
-                       #f
-                       #f
-                       #f
-                       #f
-                       #f
-                       #f
-                       #f
-                       'implementation
-                       '()
-                       '()))
+      (define sess (make-test-session #:event-bus bus))
+      ;; Set state to implementation before wiring handlers
+      (guarded-set-task-fsm-state! sess 'implementation)
       (wire-session-event-handlers! sess (lambda (s e) s))
       (publish! bus
                 (make-event "tool.record_conclusion.completed"
                             (current-seconds)
-                            "test-sess"
+                            (agent-session-session-id sess)
                             #f
                             (hasheq 'text "state test" 'category "decision" 'tags '())))
       (define conclusions (agent-session-task-conclusions sess))

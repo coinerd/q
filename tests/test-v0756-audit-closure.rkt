@@ -31,7 +31,9 @@
          (only-in "../runtime/context-assembly/serialization.rkt" build-state-awareness-preamble)
          ;; Message content access
          (only-in "../util/content-parts.rkt" text-part-text)
-         (only-in "../util/protocol-types.rkt" message-content message-kind))
+         (only-in "../util/protocol-types.rkt" message-content message-kind)
+         ;; v0.76.7 W9: Shared session fixture
+         (only-in "helpers/session-fixture.rkt" make-test-session))
 
 ;; ============================================================
 ;; Helpers
@@ -49,34 +51,8 @@
     (with-handlers ([exn:fail? void])
       (delete-directory/files parent))))
 
-;; Create a minimal agent-session for FSM validation tests
-(define (make-test-session)
-  (apply agent-session
-         (list "test-session"
-               "/tmp/test-session"
-               #f
-               #f
-               #f
-               #f
-               #f
-               '()
-               #f
-               #f
-               (hasheq)
-               #f
-               0
-               #f
-               #f
-               #f
-               '()
-               #f
-               #f
-               #f
-               #f
-               'idle
-               '()
-               '())))
-
+;; ============================================================
+;; Tests
 ;; ============================================================
 ;; Test Suite
 ;; ============================================================
