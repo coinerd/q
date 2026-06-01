@@ -109,6 +109,12 @@
                   agent-session?
                   agent-session-task-fsm-state
                   agent-session-task-conclusions)
+         (only-in "../runtime/session-mutation.rkt"
+                  guarded-set-working-set-evolved!
+                  guarded-set-task-conclusions!)
+         (only-in "../runtime/context-assembly/ws-evolution.rkt" evolve-working-set-for-state)
+         (only-in "../runtime/context-assembly/task-state.rkt" task-idle)
+         (only-in "../runtime/context-assembly/state-aware-builder.rkt" current-ws-evolution-enabled?)
          (only-in "../runtime/session-config.rkt"
                   session-config?
                   hash->session-config
@@ -230,6 +236,20 @@
         (let ([ws-msgs (working-set-resolve-messages ws-early ctx-to-use message-id)])
           (append conclusions (auto-distill (map message-id ws-msgs) conclusions task-state)))
         (or conclusions '())))
+  ;; v0.78.2 G3: Persist auto-distilled conclusions back to session
+  ;; Only when auto-distill added new conclusions
+  (when (and (current-auto-distillation-enabled?)
+             session
+             (pair? augmented-conclusions)
+             conclusions
+             (> (length augmented-conclusions) (length conclusions)))
+    (guarded-set-task-conclusions! session augmented-conclusions))
+  ;; v0.78.2 G2: WS evolution — evolve working set on state transition
+  ;; Only when WS evolution enabled and session has a working set
+  (when (and (current-ws-evolution-enabled?) ws-early session task-state (not (eq? task-state 'idle)))
+    (define result (evolve-working-set-for-state ws-early task-idle task-state augmented-conclusions))
+    (when (and result session)
+      (guarded-set-working-set-evolved! session result)))
   ;; FD-05: Delegate pure assembly to assemble-context/pure
   ;; v0.76.3: Pass per-session rollout flag
   ;; v0.77.9 T2.4: Apply context-assembly profile before assembly

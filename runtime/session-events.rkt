@@ -20,8 +20,7 @@
                   infer-task-state-from-tools
                   current-state-inference-threshold))
 (require (only-in "../util/fsm.rkt" fsm-state-name))
-(require (only-in "context-assembly/state-aware-builder.rkt"
-                  current-ws-evolution-enabled?))
+(require (only-in "context-assembly/state-aware-builder.rkt" current-ws-evolution-enabled?))
 ;; v0.77.10 M1: evolve-working-set-for-state import removed — subscriber now emits
 ;; context.ws-evolve-requested event for turn-orchestrator to handle.
 ;; (require (only-in "context-assembly/ws-evolution.rkt" evolve-working-set-for-state))
@@ -88,34 +87,41 @@
                                                               compact-result))))))))
                 #:filter (lambda (evt) (equal? (event-ev evt) "compact.requested")))
     ;; Subscribe to tool.execution.completed — infer task state
-    (subscribe!
-     bus
-     (lambda (evt)
-       (define payload (event-payload evt))
-       (define tool-name (and (hash? payload) (hash-ref payload 'tool-name #f)))
-       (when tool-name
-         ;; v0.75.6: Accumulate tool calls for better inference
-         (define current-recent (agent-session-recent-tool-calls sess))
-         (define updated-recent (append current-recent (list tool-name)))
-         ;; Keep last 10 tool calls
-         (guarded-set-recent-tool-calls! sess
-                                         (if (> (length updated-recent) 10)
-                                             (list-tail updated-recent (- (length updated-recent) 10))
-                                             updated-recent))
-         (define-values (inferred-state confidence)
-           (infer-task-state-from-tools (agent-session-recent-tool-calls sess)))
-         (when (and inferred-state (>= confidence (current-state-inference-threshold)))
-           (guarded-set-task-fsm-state! sess (fsm-state-name inferred-state))
-           ;; v0.75.6: Persist task state change
-           (define log-path (session-log-path (agent-session-session-dir sess)))
-           (when (file-exists? log-path)
-             (append-task-state! log-path (fsm-state-name inferred-state)))
-           (emit-session-event!
-            bus
-            (agent-session-session-id sess)
-            "task.state.inferred"
-            (hasheq 'state (fsm-state-name inferred-state) 'confidence confidence 'tool tool-name)))))
-     #:filter (lambda (evt) (equal? (event-ev evt) "tool.execution.completed")))
+    (subscribe! bus
+                (lambda (evt)
+                  (define payload (event-payload evt))
+                  (define tool-name (and (hash? payload) (hash-ref payload 'tool-name #f)))
+                  (when tool-name
+                    ;; v0.75.6: Accumulate tool calls for better inference
+                    (define current-recent (agent-session-recent-tool-calls sess))
+                    (define updated-recent (append current-recent (list tool-name)))
+                    ;; Keep last 10 tool calls
+                    (guarded-set-recent-tool-calls! sess
+                                                    (if (> (length updated-recent) 10)
+                                                        (list-tail updated-recent
+                                                                   (- (length updated-recent) 10))
+                                                        updated-recent))
+                    (define-values (inferred-state confidence)
+                      (infer-task-state-from-tools (agent-session-recent-tool-calls sess)))
+                    (when (and inferred-state (>= confidence (current-state-inference-threshold)))
+                      (define old-state (agent-session-task-fsm-state sess))
+                      (guarded-set-task-fsm-state! sess (fsm-state-name inferred-state))
+                      ;; v0.75.6: Persist task state change
+                      (define log-path (session-log-path (agent-session-session-dir sess)))
+                      (when (file-exists? log-path)
+                        (append-task-state! log-path (fsm-state-name inferred-state)))
+                      (emit-session-event! bus
+                                           (agent-session-session-id sess)
+                                           "task.state.inferred"
+                                           (hasheq 'state
+                                                   (fsm-state-name inferred-state)
+                                                   'old-state
+                                                   old-state
+                                                   'confidence
+                                                   confidence
+                                                   'tool
+                                                   tool-name)))))
+                #:filter (lambda (evt) (equal? (event-ev evt) "tool.execution.completed")))
     ;; Subscribe to tool.record_conclusion.completed — persist conclusion
     (subscribe! bus
                 (lambda (evt)
@@ -182,25 +188,27 @@
                 #:filter (lambda (evt) (equal? (event-ev evt) "tool.record_conclusion.completed")))
 
     ;; v0.76.7 C3: Subscribe to tool.set-task-state.completed — explicit state transition
-    (subscribe! bus
-                (lambda (evt)
-                  (define payload (event-payload evt))
-                  (define target (and (hash? payload) (hash-ref payload 'target-state #f)))
-                  (when (and target (or (string? target) (symbol? target)))
-                    (define target-sym
-                      (if (string? target)
-                          (string->symbol target)
-                          target))
-                    (guarded-set-task-fsm-state! sess target-sym)
-                    ;; Persist task state change
-                    (define log-path (session-log-path-for sess))
-                    (when (file-exists? log-path)
-                      (append-task-state! log-path target-sym))
-                    (emit-session-event! bus
-                                         (agent-session-session-id sess)
-                                         "task.state.transitioned"
-                                         (hasheq 'state target-sym 'source "explicit"))))
-                #:filter (lambda (evt) (equal? (event-ev evt) "tool.set-task-state.completed")))
+    (subscribe!
+     bus
+     (lambda (evt)
+       (define payload (event-payload evt))
+       (define target (and (hash? payload) (hash-ref payload 'target-state #f)))
+       (when (and target (or (string? target) (symbol? target)))
+         (define target-sym
+           (if (string? target)
+               (string->symbol target)
+               target))
+         (define old-state (agent-session-task-fsm-state sess))
+         (guarded-set-task-fsm-state! sess target-sym)
+         ;; Persist task state change
+         (define log-path (session-log-path-for sess))
+         (when (file-exists? log-path)
+           (append-task-state! log-path target-sym))
+         (emit-session-event! bus
+                              (agent-session-session-id sess)
+                              "task.state.transitioned"
+                              (hasheq 'state target-sym 'old-state old-state 'source "explicit"))))
+     #:filter (lambda (evt) (equal? (event-ev evt) "tool.set-task-state.completed")))
 
     ;; v0.77.1 W1.3: WS evolution flag exported for turn-orchestrator wiring
     ;; (subscriber deferred — working-set lives in turn scope, not session)
@@ -208,23 +216,22 @@
     ;; v0.77.10 M1: WS evolution subscriber on state transitions.
     ;; Emits context.ws-evolve-requested event for turn-orchestrator to handle.
     ;; Turn-orchestrator has access to the working-set in turn scope.
-    (subscribe!
-     bus
-     (lambda (evt)
-       (when (current-ws-evolution-enabled?)
-         (define payload (event-payload evt))
-         (define new-state (and (hash? payload) (hash-ref payload 'state #f)))
-         (when new-state
-           (define current-state (agent-session-task-fsm-state sess))
-           (when (and current-state (not (eq? current-state new-state)))
-             (log-info "session-events: WS evolution requested: ~a → ~a" current-state new-state)
-             (emit-session-event! bus
-                                  (agent-session-session-id sess)
-                                  "context.ws-evolve-requested"
-                                  (hasheq 'old-state current-state 'new-state new-state))))))
-     #:filter (lambda (evt)
-                (or (equal? (event-ev evt) "task.state.transitioned")
-                    (equal? (event-ev evt) "task.state.inferred"))))
+    (subscribe! bus
+                (lambda (evt)
+                  (when (current-ws-evolution-enabled?)
+                    (define payload (event-payload evt))
+                    (define new-state (and (hash? payload) (hash-ref payload 'state #f)))
+                    (define old-state (and (hash? payload) (hash-ref payload 'old-state #f)))
+                    ;; v0.78.2 G2: Read old-state from event payload (not session) to avoid race
+                    (when (and old-state new-state (not (eq? old-state new-state)))
+                      (log-info "session-events: WS evolution requested: ~a → ~a" old-state new-state)
+                      (emit-session-event! bus
+                                           (agent-session-session-id sess)
+                                           "context.ws-evolve-requested"
+                                           (hasheq 'old-state old-state 'new-state new-state)))))
+                #:filter (lambda (evt)
+                           (or (equal? (event-ev evt) "task.state.transitioned")
+                               (equal? (event-ev evt) "task.state.inferred"))))
 
     (void))
 

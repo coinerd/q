@@ -102,7 +102,7 @@
                               (current-seconds)
                               (agent-session-session-id sess)
                               #f
-                              (hasheq 'state 'planning))))
+                              (hasheq 'state 'planning 'old-state 'exploration))))
       ;; Verify event was emitted
       (check-true (>= (length received-events) 1))
       (define evt (car received-events))
