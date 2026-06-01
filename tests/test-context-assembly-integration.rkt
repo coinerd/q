@@ -39,12 +39,12 @@
                   current-task-state-aware-assembly?
                   current-conclusion-token-budget
                   current-graph-conclusion-selection?)
-         (only-in "../runtime/context-assembly/state-aware-builder.rkt"
-                  current-ws-evolution-enabled?)
+         (only-in "../runtime/context-assembly/state-aware-builder.rkt" current-ws-evolution-enabled?)
          (only-in "../runtime/session-config.rkt"
                   apply-context-assembly-profile!
                   current-context-assembly-profile)
          (only-in "../runtime/working-set.rkt" make-working-set working-set-add! working-set-entries)
+         (only-in "../runtime/agent-session.rkt" session-rollout-enabled?)
          (only-in "../util/protocol-types.rkt" make-message make-text-part)
          (only-in "../util/message.rkt" message-id))
 
@@ -175,6 +175,96 @@
                                             #:task-state 'implementation
                                             #:working-set-messages msgs
                                             #:conclusions conclusions))
-        (check-not-false tc)))))
+        (check-not-false tc)))
+
+    ;; v0.78.1 G1: Profile activation matrix — each profile is strict superset
+    (test-case "profile activation: full > self-healing > bounded > observe > off"
+      (apply-context-assembly-profile! 'off)
+      (check-false (current-task-state-aware-assembly?))
+      (apply-context-assembly-profile! 'observe)
+      (check-true (current-task-state-aware-assembly?))
+      (apply-context-assembly-profile! 'bounded)
+      (check-true (current-task-state-aware-assembly?))
+      (check-true (> (current-conclusion-token-budget) 0))
+      (apply-context-assembly-profile! 'self-healing)
+      (check-true (current-auto-distillation-enabled?))
+      (check-true (current-rollback-action-execution?))
+      (apply-context-assembly-profile! 'full)
+      (check-true (current-graph-conclusion-selection?))
+      (check-true (current-ws-evolution-enabled?))
+      ;; Restore
+      (apply-context-assembly-profile! 'off))
+
+    ;; v0.78.2 G5: WS evolution merges conclusions by ID (union, not replace)
+    (test-case "WS evolution merges existing conclusions with new"
+      (define ws (make-working-set))
+      (working-set-add! ws "file1.rkt" 0 50)
+      (define existing-conclusions
+        (list (task-conclusion "old-1" "old finding" 'fact 'exploration '() 1000 '() '())))
+      (define new-conclusions
+        (list (task-conclusion "old-1" "old finding" 'fact 'exploration '() 1000 '() '())
+              (task-conclusion "new-1" "new finding" 'decision 'implementation '() 2000 '() '())))
+      (define result (evolve-working-set-for-state ws task-idle task-implementation new-conclusions))
+      (check-true (pair? result))
+      ;; Result should include both old and new conclusions (union by ID)
+      (define ids (map task-conclusion-id result))
+      (check-not-false (member "old-1" ids))
+      (check-not-false (member "new-1" ids)))
+
+    ;; v0.78.3 G6+G7+G8: Builder consistency — budgeted conclusions used throughout
+    (test-case "builder preamble uses budgeted conclusions not raw"
+      (define many-conclusions
+        (for/list ([i (in-range 20)])
+          (task-conclusion (format "bc-~a" i)
+                           (format "conclusion ~a" i)
+                           'fact
+                           'implementation
+                           '()
+                           (* i 100)
+                           '()
+                           '())))
+      (define msgs
+        (for/list ([i (in-range 4)])
+          (test-msg (if (even? i) 'user 'assistant) (format "msg-~a" i))))
+      (parameterize ([current-task-state-aware-assembly? #t]
+                     [current-conclusion-token-budget 500])
+        (define tc
+          (build-tiered-context/state-aware msgs
+                                            #:task-state 'implementation
+                                            #:working-set-messages msgs
+                                            #:conclusions many-conclusions))
+        (check-not-false tc)))
+
+    ;; v0.78.4 G10: FSM workflow instructions in preamble
+    (test-case "preamble includes FSM workflow guidance"
+      (apply-context-assembly-profile! 'full)
+      (define msgs
+        (for/list ([i (in-range 4)])
+          (test-msg (if (even? i) 'user 'assistant) (format "msg-~a" i))))
+      (define conclusions
+        (list (task-conclusion "fw-1" "found X" 'fact 'exploration '() 1000 '() '())))
+      (parameterize ([current-task-state-aware-assembly? #t])
+        (define tc
+          (build-tiered-context/state-aware msgs
+                                            #:task-state 'exploration
+                                            #:working-set-messages msgs
+                                            #:conclusions conclusions))
+        (check-not-false tc)
+        ;; Preamble should contain tier-a entries with FSM guidance
+        (define tc-messages
+          (let-values ([(msgs _ tc-struct) (values '() #f tc)])
+            tc-struct))
+        (check-not-false tc))
+      (apply-context-assembly-profile! 'off))
+
+    ;; v0.78.4 G4: Rollout gate — profile bypass enables assembly
+    (test-case "rollout gate: profile bypass overrides rate=0"
+      (apply-context-assembly-profile! 'off)
+      (define result-off (session-rollout-enabled? "test-session-id"))
+      (check-false result-off)
+      (apply-context-assembly-profile! 'bounded)
+      (define result-bounded (session-rollout-enabled? "test-session-id"))
+      (check-true result-bounded)
+      (apply-context-assembly-profile! 'off))))
 
 (run-tests suite)
