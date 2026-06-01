@@ -43,39 +43,40 @@
                              q-settings?)])
 
          ;; Loading — all contracted
-         (contract-out [load-global-settings (->* () (path-string?) hash?)]
-                       [load-project-settings (->* () (path-string?) hash?)]
-                       [make-minimal-settings
-                        (->* ()
-                             (#:provider (or/c string? #f) #:model (or/c string? #f) #:overrides (or/c hash? #f))
-                             q-settings?)]
-                       [merge-settings (-> hash? hash? hash?)]
-                       [deep-merge-hash (-> hash? hash? hash?)]
-                       [setting-ref (->* (q-settings? (or/c symbol? string?)) (any/c) any/c)]
-                       [setting-ref* (->* (q-settings? (listof any/c)) (any/c) any/c)]
-                       [provider-config (-> q-settings? (or/c symbol? string?) (or/c hash? #f))]
-                       [provider-names (-> q-settings? (listof symbol?))]
-                       [config-parse-error (-> path-string? (or/c string? #f))]
-                       [parallel-tools-enabled? (-> q-settings? boolean?)]
-                       [http-request-timeout (-> q-settings? number?)]
-                       [get-model-timeout (-> q-settings? string? symbol? (or/c number? #f))]
-                       [effective-request-timeout (-> q-settings? string? number?)]
-                       [warn-on-destructive? (-> q-settings? boolean?)]
-                       [security-config-from-settings (-> q-settings? hash?)]
-                       [default-session-dir (-> path-string?)]
-                       [default-project-dir (-> path?)]
-                       [session-dir-from-settings (-> q-settings? (or/c path-string? #f))]
-                       [project-dir-from-settings (-> q-settings? (or/c path-string? #f))]
-                       [trace-enabled? (-> q-settings? boolean?)]
-                       [trace-max-files (-> q-settings? exact-positive-integer?)]
-                       [steering-gentle-threshold (-> q-settings? number?)]
-                       [steering-strong-threshold (-> q-settings? number?)]
-                       [steering-hard-cap (-> q-settings? number?)]
-                       [steering-same-file-dedup? (-> q-settings? boolean?)]
-                       [credential-policy
-                        (-> q-settings?
-                            (or/c 'auto 'keychain-preferred 'keychain-required 'env-only))]
-                       [shell-risk-classifier (-> q-settings? (or/c 'regex 'structured 'both))])
+         (contract-out
+          [load-global-settings (->* () (path-string?) hash?)]
+          [load-project-settings (->* () (path-string?) hash?)]
+          [make-minimal-settings
+           (->* ()
+                (#:provider (or/c string? #f) #:model (or/c string? #f) #:overrides (or/c hash? #f))
+                q-settings?)]
+          [merge-settings (-> hash? hash? hash?)]
+          [deep-merge-hash (-> hash? hash? hash?)]
+          [setting-ref (->* (q-settings? (or/c symbol? string?)) (any/c) any/c)]
+          [setting-ref* (->* (q-settings? (listof any/c)) (any/c) any/c)]
+          [provider-config (-> q-settings? (or/c symbol? string?) (or/c hash? #f))]
+          [provider-names (-> q-settings? (listof symbol?))]
+          [config-parse-error (-> path-string? (or/c string? #f))]
+          [parallel-tools-enabled? (-> q-settings? boolean?)]
+          [http-request-timeout (-> q-settings? number?)]
+          [get-model-timeout (-> q-settings? string? symbol? (or/c number? #f))]
+          [effective-request-timeout (-> q-settings? string? number?)]
+          [warn-on-destructive? (-> q-settings? boolean?)]
+          [security-config-from-settings (-> q-settings? hash?)]
+          [default-session-dir (-> path-string?)]
+          [default-project-dir (-> path?)]
+          [session-dir-from-settings (-> q-settings? (or/c path-string? #f))]
+          [project-dir-from-settings (-> q-settings? (or/c path-string? #f))]
+          [trace-enabled? (-> q-settings? boolean?)]
+          [trace-max-files (-> q-settings? exact-positive-integer?)]
+          [steering-gentle-threshold (-> q-settings? number?)]
+          [steering-strong-threshold (-> q-settings? number?)]
+          [steering-hard-cap (-> q-settings? number?)]
+          [steering-same-file-dedup? (-> q-settings? boolean?)]
+          [credential-policy
+           (-> q-settings? (or/c 'auto 'keychain-preferred 'keychain-required 'env-only))]
+          [shell-risk-classifier (-> q-settings? (or/c 'regex 'structured 'both))]
+          [setting-context-assembly-profile (-> q-settings? symbol?)])
 
          ;; Sandbox settings (re-exported, not locally defined)
          sandbox-enabled?
@@ -401,6 +402,22 @@
 ;; Whether same-file dedup is enabled. Default: #t.
 (define (steering-same-file-dedup? settings)
   (setting-ref* settings '(steering same_file_dedup) #t))
+
+;; ============================================================
+;; Context assembly profile (v0.79.0)
+;; ============================================================
+
+;; Context assembly profile from settings.
+;; Reads (context-assembly profile) from merged settings.
+;; Returns a symbol: off, observe, bounded, self-healing, or full.
+;; Default: 'off.
+(define (setting-context-assembly-profile settings)
+  (define raw (setting-ref* settings '(context-assembly profile) "off"))
+  (define sym
+    (if (symbol? raw)
+        raw
+        (string->symbol raw)))
+  (if (memq sym '(off observe bounded self-healing full)) sym 'off))
 
 ;; ============================================================
 ;; Credential policy (v0.70.1)

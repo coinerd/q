@@ -324,3 +324,13 @@
   (check-true (current-rollback-action-execution?))
   (check-true (current-ws-evolution-enabled?))
   (apply-context-assembly-profile! 'off))
+
+;; v0.79.0 GAP-1: Config hash round-trip for context-assembly-profile
+(test-case "config-context-assembly-profile reads from config hash"
+  (define h (hash 'context-assembly-profile 'observe))
+  (define cfg (hash->session-config h))
+  (check-eq? (config-context-assembly-profile cfg) 'observe))
+
+(test-case "config-context-assembly-profile defaults to off"
+  (define cfg (hash->session-config (hash)))
+  (check-eq? (config-context-assembly-profile cfg) 'off))
