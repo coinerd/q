@@ -44,6 +44,17 @@
            item))]
     [else '()]))
 
+;; Coerce dependencies argument to list of strings.
+(define (parse-dependencies v)
+  (cond
+    [(null? v) '()]
+    [(list? v)
+     (for/list ([item (in-list v)])
+       (if (string? item)
+           item
+           (format "~a" item)))]
+    [else '()]))
+
 ;; --------------------------------------------------
 ;; Handler function
 ;; --------------------------------------------------
@@ -52,6 +63,7 @@
   (define text (hash-ref args 'text #f))
   (define category-raw (hash-ref args 'category "fact"))
   (define tags-raw (hash-ref args 'tags '()))
+  (define deps-raw (hash-ref args 'dependencies '()))
 
   (cond
     [(not text) (make-error-result "Missing required argument: text")]
@@ -59,6 +71,7 @@
     [else
      (define category (parse-category category-raw))
      (define tags (parse-tags tags-raw))
+     (define deps (parse-dependencies deps-raw))
      (if (not category)
          (make-error-result (format "Invalid category: ~a. Valid: ~a"
                                     category-raw
@@ -73,7 +86,7 @@
                               '() ; origin-message-ids — set by session layer
                               (current-seconds)
                               tags
-                              '())) ; dependencies — v0.76.5
+                              deps))
 
            ;; Emit event for session layer to persist
            (define ev-pub (and exec-ctx (exec-context-event-publisher exec-ctx)))
@@ -88,6 +101,8 @@
                              category
                              'tags
                              tags
+                             'dependencies
+                             deps
                              'origin-message-id
                              origin-id)))
 
@@ -107,7 +122,8 @@
  #:properties
  [(text "string" "The conclusion text")
   (category "string" "Category: fact, decision, pattern, error-cause, test-result (default: fact)")
-  (tags "array" "List of relevance tags for state-aware filtering")]
+  (tags "array" "List of relevance tags for state-aware filtering")
+  (dependencies "array" "List of conclusion IDs or file paths this depends on")]
  record-conclusion-handler)
 
 (provide (contract-out [record_conclusion any/c]))
