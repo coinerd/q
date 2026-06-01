@@ -11,7 +11,10 @@
          (only-in "session-config.rkt" session-config?)
          (only-in "../util/errors.rkt" raise-session-error)
          (only-in "session-index/schema.rkt" session-index?)
-         (only-in "context-assembly/task-state.rkt" task-states-list task-valid-direct-transition?))
+         (only-in "context-assembly/task-state.rkt" task-states-list task-valid-direct-transition?)
+         (only-in "context-assembly/ws-evolution.rkt"
+                  evolution-result?
+                  evolution-result-evicted-conclusions))
 
 (provide (contract-out [guarded-set-prompt-running! (-> agent-session? boolean? void?)]
                        [guarded-set-compacting! (-> agent-session? boolean? void?)]
@@ -136,5 +139,14 @@
   (set-agent-session-recent-tool-calls! sess value))
 
 ;; Guard task-conclusions — type-safe wrapper
+;; v0.77.1 W1.2: Guarded setter for WS evolution results.
+;; Updates conclusions from evolution result; WS is already mutated in-place.
+(define (guarded-set-working-set-evolved! sess evolution-res)
+  (when (and (agent-session? sess) (evolution-result? evolution-res))
+    (define evicted (evolution-result-evicted-conclusions evolution-res))
+    (when (pair? evicted)
+      ;; Replace conclusions with evicted set (already filtered by evolution)
+      (guarded-set-task-conclusions! sess evicted))))
+
 (define (guarded-set-task-conclusions! sess value)
   (set-agent-session-task-conclusions! sess value))
