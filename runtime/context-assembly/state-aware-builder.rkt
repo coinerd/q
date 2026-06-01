@@ -14,21 +14,32 @@
          (only-in "task-conclusion.rkt"
                   task-conclusion?
                   task-conclusion-text
-                  task-conclusion-origin-message-ids)
+                  task-conclusion-origin-message-ids
+                  task-conclusion-id
+                  task-conclusion-fsm-state-origin)
          (only-in "state-relevance.rkt" context-level-for-state)
          (only-in "../../util/ids.rkt" generate-id)
          (only-in "../../util/fsm.rkt" fsm-state? fsm-state-name)
          (only-in "../../util/content-parts.rkt" text-part-text text-part? text-part)
-         "context-floor.rkt")
+         "context-floor.rkt"
+         (only-in "conclusion-graph.rkt"
+                  build-conclusion-graph
+                  graph-select-by-seeds
+                  graph-detect-cycles
+                  fallback-select-conclusions))
 
 (provide current-task-state-aware-assembly?
          build-tiered-context/state-aware
          build-state-awareness-preamble
          check-rollback-triggers
-         ws-entry->conclusion-or-self)
+         ws-entry->conclusion-or-self
+         current-graph-conclusion-selection?)
 
 ;; Feature flag: state-aware context assembly (v0.75.3)
 (define current-task-state-aware-assembly? (make-parameter #f))
+
+;; v0.77.3 W3.3: Graph-based conclusion selection (disabled by default)
+(define current-graph-conclusion-selection? (make-parameter #f))
 
 ;; State-specific guidance strings (action-oriented instructions)
 (define state-guidance-table
@@ -89,12 +100,29 @@
        (map (λ (m) (ws-entry->conclusion-or-self m conclusions)) filtered)]
       [else ws-messages]))
 
+  ;; v0.77.3 W3.3: Graph-based conclusion filtering when flag is enabled
+  (define effective-conclusions
+    (cond
+      [(not (current-graph-conclusion-selection?)) conclusions]
+      [(null? conclusions) '()]
+      [else
+       (define seed-ids
+         (for/list ([m (in-list ws-messages)])
+           (message-id m)))
+       (define current-states
+         (if state-name
+             (list state-name)
+             '()))
+       ;; Use graph-based selection with degraded fallback
+       (define selected (fallback-select-conclusions conclusions 20 current-states))
+       selected]))
+
   ;; Add conclusions as context entries when relevant
   (define conclusion-entries
     (cond
       [(or (not state-name) (eq? conclusions-level 'excluded)) '()]
       [(eq? conclusions-level 'full)
-       (for/list ([c (in-list conclusions)]
+       (for/list ([c (in-list effective-conclusions)]
                   #:when (task-conclusion? c))
          (make-message (generate-id)
                        #f
@@ -104,8 +132,8 @@
                        (current-seconds)
                        (hasheq)))]
       [(eq? conclusions-level 'summary)
-       (if (<= (length conclusions) 3)
-           (for/list ([c (in-list conclusions)]
+       (if (<= (length effective-conclusions) 3)
+           (for/list ([c (in-list effective-conclusions)]
                       #:when (task-conclusion? c))
              (make-message (generate-id)
                            #f
@@ -115,8 +143,8 @@
                            (current-seconds)
                            (hasheq)))
            ;; Summarize: take first + last
-           (let ([first-c (car conclusions)]
-                 [last-c (car (reverse conclusions))])
+           (let ([first-c (car effective-conclusions)]
+                 [last-c (car (reverse effective-conclusions))])
              (for/list ([c (list first-c last-c)]
                         #:when (task-conclusion? c))
                (make-message (generate-id)

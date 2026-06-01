@@ -123,6 +123,7 @@
                     (define id (and (hash? payload) (hash-ref payload 'conclusion-id #f)))
                     (define category-raw (and (hash? payload) (hash-ref payload 'category "fact")))
                     (define tags (and (hash? payload) (hash-ref payload 'tags '())))
+                    (define deps-raw (and (hash? payload) (hash-ref payload 'dependencies '())))
                     (define category-sym
                       (if (symbol? category-raw)
                           category-raw
@@ -136,6 +137,13 @@
                         (if (string? t)
                             (string->symbol t)
                             t)))
+                    (define deps
+                      (for/list ([d (in-list (if (list? deps-raw)
+                                                 deps-raw
+                                                 '()))])
+                        (if (string? d)
+                            d
+                            (format "~a" d))))
                     ;; v0.76.7 C2: Extract origin-message-id from event payload
                     (define origin-id (and (hash? payload) (hash-ref payload 'origin-message-id #f)))
                     (define origin-ids
@@ -150,7 +158,7 @@
                                        origin-ids ; was: '() — now wired from tool event
                                        (current-seconds)
                                        tag-syms
-                                       '())) ; dependencies — v0.76.5
+                                       deps))
                     ;; Add to session
                     (define current-conclusions (agent-session-task-conclusions sess))
                     (guarded-set-task-conclusions! sess (append current-conclusions (list c)))
