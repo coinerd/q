@@ -108,12 +108,14 @@
          (only-in "../runtime/session-types.rkt"
                   agent-session?
                   agent-session-task-fsm-state
-                  agent-session-task-conclusions)
+                  agent-session-task-conclusions
+                  agent-session-recent-tool-calls)
          (only-in "../runtime/session-mutation.rkt"
                   guarded-set-working-set-evolved!
                   guarded-set-task-conclusions!)
-         (only-in "../runtime/context-assembly/ws-evolution.rkt" evolve-working-set-for-state)
-         (only-in "../runtime/context-assembly/task-state.rkt" task-idle)
+         (only-in "../runtime/context-assembly/ws-evolution.rkt"
+                  evolve-working-set-for-state/result
+                  evolution-result?)
          (only-in "../runtime/context-assembly/state-aware-builder.rkt" current-ws-evolution-enabled?)
          (only-in "../runtime/session-config.rkt"
                   session-config?
@@ -158,7 +160,9 @@
            (-> tool-registry? (or/c extension-registry? #f) event-bus? string? (listof hash?))]
           [assemble-context/pure
            (->* (list? session-config?)
-                (#:hook-dispatcher (or/c procedure? #f) #:state-aware? (or/c boolean? #f))
+                (#:hook-dispatcher (or/c procedure? #f)
+                                   #:state-aware? (or/c boolean? #f)
+                                   #:recent-tool-calls list?)
                 (values list? (or/c hook-result? #f) tiered-context?))]))
 
 ;; ============================================================
@@ -172,7 +176,8 @@
                                #:hook-dispatcher [hook-dispatcher #f]
                                #:task-state [task-state #f]
                                #:conclusions [conclusions '()]
-                               #:state-aware? [state-aware? #f])
+                               #:state-aware? [state-aware? #f]
+                               #:recent-tool-calls [recent-tool-calls '()])
   (define config config-raw)
   (define tier-b-count (config-tier-b-count config))
   (define tier-c-count (config-tier-c-count config))
@@ -194,7 +199,8 @@
                                            #:tier-c-count tier-c-count
                                            #:working-set-messages ws-messages
                                            #:task-state task-state
-                                           #:conclusions conclusions))
+                                           #:conclusions conclusions
+                                           #:recent-tool-calls recent-tool-calls))
        (values sa-tc #f)]
       ;; Standard assembly path
       [else
@@ -247,8 +253,10 @@
   ;; v0.78.2 G2: WS evolution — evolve working set on state transition
   ;; Only when WS evolution enabled and session has a working set
   (when (and (current-ws-evolution-enabled?) ws-early session task-state (not (eq? task-state 'idle)))
-    (define result (evolve-working-set-for-state ws-early task-idle task-state augmented-conclusions))
-    (when (and result session)
+    ;; v0.78.6 C1+W1: Use /result variant (returns evolution-result? struct)
+    ;; Pass #f for old-state since we don't know the previous state inline.
+    (define result (evolve-working-set-for-state/result ws-early #f task-state augmented-conclusions))
+    (when (and (evolution-result? result) session)
       (guarded-set-working-set-evolved! session result)))
   ;; FD-05: Delegate pure assembly to assemble-context/pure
   ;; v0.76.3: Pass per-session rollout flag
@@ -262,7 +270,10 @@
                            #:hook-dispatcher ctx-assembly-hook-dispatcher
                            #:task-state task-state
                            #:conclusions augmented-conclusions
-                           #:state-aware? (config-task-state-aware? config)))
+                           #:state-aware? (config-task-state-aware? config)
+                           #:recent-tool-calls (if session
+                                                   (agent-session-recent-tool-calls session)
+                                                   '())))
 
   ;; Handle block action from context-assembly hook
   (when (and assembly-hook-result (eq? (hook-result-action assembly-hook-result) 'block))
