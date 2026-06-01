@@ -19,6 +19,24 @@
                   build-tiered-context/state-aware
                   tiered-context-tier-a
                   current-task-state-aware-assembly?)
+         (only-in "../runtime/context-assembly/conclusion-graph.rkt"
+                  build-conclusion-graph
+                  graph-detect-cycles)
+         (only-in "../runtime/context-assembly/conclusion-ranker.rkt" rank-and-budget)
+         (only-in "../runtime/context-assembly/auto-distillation.rkt"
+                  auto-distill
+                  current-auto-distillation-enabled?)
+         (only-in "../runtime/context-assembly/rollback-actions.rkt"
+                  warnings->actions
+                  select-highest-priority-action
+                  maybe-execute-action
+                  current-rollback-action-execution?
+                  rollback-action-type)
+         (only-in "../runtime/session-config.rkt"
+                  apply-context-assembly-profile!
+                  current-context-assembly-profile)
+         (only-in "../runtime/context-assembly/state-aware-builder.rkt"
+                  current-conclusion-token-budget)
          (only-in "../runtime/working-set.rkt"
                   make-working-set
                   working-set-entry-count
@@ -136,6 +154,69 @@
       (define c1 (evolve-working-set-for-state ws task-exploration task-planning original))
       (check-equal? (length c1) 5 "preserved through exploration→planning")
       (define c2 (evolve-working-set-for-state ws task-planning task-implementation c1))
-      (check-equal? (length c2) 5 "preserved through planning→impl"))))
+      (check-equal? (length c2) 5 "preserved through planning→impl"))
+
+    ;; v0.77.9 T3.2: Wiring verification tests
+    (test-case "graph selection builds DAG from conclusions with dependencies"
+      (define cA (task-conclusion "a" "textA" 'fact 'implementation '("m1") 100 '() '("b")))
+      (define cB (task-conclusion "b" "textB" 'fact 'implementation '("m2") 200 '() '()))
+      (define g (build-conclusion-graph (list cA cB)))
+      (check-equal? (graph-detect-cycles g) '() "acyclic graph has no cycles"))
+
+    (test-case "rank-and-budget enforces token budget"
+      (define concs
+        (for/list ([i (in-range 20)])
+          (task-conclusion (format "bc~a" i)
+                           (format "A substantial conclusion about finding ~a" i)
+                           'fact
+                           'implementation
+                           '()
+                           1000
+                           '()
+                           '())))
+      (define budgeted
+        (rank-and-budget concs #:current-state 'implementation #:max-conclusion-tokens 500))
+      (check-true (< (length budgeted) (length concs))
+                  (format "budget trims ~a to ~a" (length concs) (length budgeted))))
+
+    (test-case "auto-distill generates conclusions for uncovered entries"
+      (parameterize ([current-auto-distillation-enabled? #t])
+        (define ws-ids '("m1" "m2" "m3" "m4"))
+        (define existing (list (task-conclusion "c1" "covers m1" 'fact 'idle '("m1") 100 '() '())))
+        (define result (auto-distill ws-ids existing 'idle))
+        (check-equal? (length result) 3 "3 uncovered entries get fallback conclusions")))
+
+    (test-case "auto-distill returns empty when disabled"
+      (parameterize ([current-auto-distillation-enabled? #f])
+        (define result (auto-distill '("m1" "m2") '() 'idle))
+        (check-equal? result '() "no distillation when flag off")))
+
+    (test-case "rollback action executes when enabled"
+      (parameterize ([current-rollback-action-execution? #t])
+        (define actions (warnings->actions '("amnesia detected")))
+        (define best (select-highest-priority-action actions))
+        (check-true (eq? (rollback-action-type best) 'force-distill))
+        (define result (maybe-execute-action best))
+        (check-true (symbol? result) "action was executed")))
+
+    (test-case "rollback action blocked when disabled"
+      (parameterize ([current-rollback-action-execution? #f])
+        (define actions (warnings->actions '("amnesia detected")))
+        (define best (select-highest-priority-action actions))
+        (check-false (maybe-execute-action best) "action blocked when flag off")))
+
+    (test-case "profile bounded activates state-aware + budget"
+      (parameterize ([current-task-state-aware-assembly? #f]
+                     [current-conclusion-token-budget 0])
+        (apply-context-assembly-profile! 'bounded)
+        (check-true (current-task-state-aware-assembly?))
+        (check-equal? (current-conclusion-token-budget) 2000)
+        ;; Reset
+        (apply-context-assembly-profile! 'off)))
+
+    (test-case "profile off deactivates state-aware"
+      (parameterize ([current-task-state-aware-assembly? #t])
+        (apply-context-assembly-profile! 'off)
+        (check-false (current-task-state-aware-assembly?))))))
 
 (run-tests suite)
