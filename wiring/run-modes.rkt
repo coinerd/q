@@ -186,8 +186,10 @@
   ;; v0.25.2 (F3): Wire security config from config.json
   (wire-security-config! settings)
 
-  ;; v0.79.0 (GAP-1): Wire context assembly profile from settings
-  (define profile (setting-context-assembly-profile settings))
+  ;; v0.79.0 (GAP-1): Wire context assembly profile — CLI overrides settings
+  (define settings-profile (setting-context-assembly-profile settings))
+  (define cli-profile (cli-config-context-profile cfg))
+  (define profile (or cli-profile settings-profile))
   (define final-hash-with-profile (hash-set final-hash 'context-assembly-profile profile))
   (apply-context-assembly-profile! profile)
 

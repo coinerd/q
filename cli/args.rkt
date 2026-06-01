@@ -37,6 +37,7 @@
          cli-config-sessions-args
          cli-config-keybindings-path
          cli-config-print-mode?
+         cli-config-context-profile
          (contract-out [parse-cli-args
                         (->* () ((or/c (vectorof string?) (listof string?) #f)) cli-config?)]
                        [cli-config->runtime-config (-> cli-config? hash?)]
@@ -66,12 +67,13 @@
          sessions-args ; list of string (subcommand args)
          keybindings-path ; path-string or #f -- custom keybindings file (#1118)
          print-mode? ; boolean -- -p/--print flag (G9.3)
+         context-profile ; symbol: off|observe|bounded|self-healing|full, or #f
          )
   #:transparent)
 
 ;; Helper: construct a "help" config (used for parse errors and --help)
 (define (make-help-config)
-  (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f))
+  (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f #f #f))
 
 ;; ============================================================
 ;; Flag definition table (QUAL-12)
@@ -171,7 +173,8 @@
               #f ; sessions-subcommand
               '() ; sessions-args
               (acc-ref acc 'keybindings-path)
-              (acc-ref acc 'print-mode?)))
+              (acc-ref acc 'print-mode?)
+              (acc-ref acc 'context-profile)))
 
 ;; ============================================================
 ;; Flag table -- all option definitions
@@ -309,7 +312,19 @@
                   'boolean
                   "Print mode: run once, output plain text to stdout"
                   #f
-                  (lambda (val acc) (acc-set (acc-set acc 'print-mode? #t) 'mode 'print)))))
+                  (lambda (val acc) (acc-set (acc-set acc 'print-mode? #t) 'mode 'print)))
+        ;; --context-profile <profile>
+        (flag-def "context-profile"
+                  #f
+                  "context-profile"
+                  'string
+                  "Context assembly profile: off|observe|bounded|self-healing|full"
+                  #f
+                  (lambda (val acc)
+                    (define sym (string->symbol val))
+                    (if (memq sym '(off observe bounded self-healing full))
+                        (acc-set acc 'context-profile sym)
+                        (acc-set acc 'context-profile 'off))))))
 
 ;; Build lookup tables for fast matching
 (define long-flag-table
@@ -372,7 +387,7 @@
        (cond
          [(eq? result 'help) (make-help-config)]
          [(eq? result 'version)
-          (cli-config 'version #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f)]
+          (cli-config 'version #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f #f)]
          [else (loop (add1 i) result)]))]
     [(or (eq? t 'string) (eq? t 'integer) (eq? t 'accumulate))
      (if (< (add1 i) n)
@@ -426,6 +441,7 @@
                              sub-sym
                              rest
                              #f
+                             #f
                              #f))
                (make-help-config)))
          (make-help-config))]
@@ -449,6 +465,7 @@
                        #f
                        'verify
                        (cons path-arg rest-args)
+                       #f
                        #f
                        #f))
          (make-help-config))]

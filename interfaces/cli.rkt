@@ -31,6 +31,7 @@
          cli-config-sessions-args
          cli-config-keybindings-path
          cli-config-print-mode?
+         cli-config-context-profile
          ;; from args.rkt
          parse-cli-args
          cli-config->runtime-config
