@@ -30,7 +30,8 @@
                   task-revisit
                   task-force-transition
                   task-states-list)
-         (only-in "../../util/fsm.rkt" fsm-state-name fsm-state?))
+         (only-in "../../util/fsm.rkt" fsm-state-name fsm-state?)
+         (only-in "../exec-context.rkt" exec-context-event-publisher exec-context?))
 
 ;; State name → singleton mapping
 (define state-lookup
@@ -74,8 +75,14 @@
   (define state-name (hash-ref args 'state #f))
   (define event-name (hash-ref args 'event #f))
   ;; Convert strings to symbols for hasheq lookup (LLM sends strings)
-  (define state-sym (if (string? state-name) (string->symbol state-name) state-name))
-  (define event-sym (if (string? event-name) (string->symbol event-name) event-name))
+  (define state-sym
+    (if (string? state-name)
+        (string->symbol state-name)
+        state-name))
+  (define event-sym
+    (if (string? event-name)
+        (string->symbol event-name)
+        event-name))
   (cond
     [(not state-name) (make-error-result "Missing required argument: state")]
     [(not event-name) (make-error-result "Missing required argument: event")]
@@ -91,6 +98,11 @@
           "Unknown event: ~a. Valid: begin-explore, begin-plan, begin-implement, begin-verify, begin-debug, task-complete, revisit, force-transition"
           event-name))]
        [else
+        ;; v0.76.7 C3: Emit event for session layer to consume
+        (define ev-pub (and exec-ctx (exec-context-event-publisher exec-ctx)))
+        (when ev-pub
+          (ev-pub "tool.set-task-state.completed"
+                  (hasheq 'target-state state-name 'event-name event-name)))
         ;; The actual transition validation happens in session mutation
         ;; Here we just package the request
         (make-success-result
