@@ -1,5 +1,48 @@
 # Changelog
 
+## v0.77.0 (2026-06-01)
+
+### Advanced Context Assembly Completion
+
+9 milestones (v0.77.0-v0.77.8) turning state-aware context plumbing into a measured, bounded, dependency-aware, self-healing context system. All new behavior is behind feature flags and disabled by default.
+
+#### New Modules
+- `runtime/context-assembly/conclusion-graph.rkt` - Pure DAG with cycle detection, topological sort, seed selection
+- `runtime/context-assembly/conclusion-ranker.rkt` - Deterministic scoring by state match, category, recency, tags
+- `runtime/context-assembly/auto-distillation.rkt` - Uncovered WS entry detection + deterministic/LLM fallback
+- `runtime/context-assembly/rollback-actions.rkt` - Bounded action model for self-healing assembly
+- `scripts/context-assembly-report.rkt` - Activation summary report
+
+#### Key Changes
+- `token-metrics.rkt`: conclusion-budget-remaining telemetry field
+- `ws-evolution.rkt`: evolution-result struct with kept/archived/evicted entries
+- `session-mutation.rkt`: guarded-set-working-set-evolved!
+- `session-events.rkt`: current-ws-evolution-enabled? flag; dependency wiring
+- `session-store.rkt`: append-archive-marker! + load-conclusions-archived
+- `record-conclusion.rkt`: Optional dependencies parameter
+- `task-memory.rkt`: conclusions-for-context with graph + degraded fallback
+- `state-aware-builder.rkt`: graph selection flag, hard token budget, triggers-with-actions
+- `budgeting.rkt`: conclusion-budget-config (Typed Racket)
+- `session-config.rkt`: 5-level graduated activation profiles
+
+#### Feature Flags (all disabled by default)
+- current-task-state-aware-assembly? - master switch
+- current-ws-evolution-enabled? - WS evolution
+- current-graph-conclusion-selection? - graph-based selection
+- current-conclusion-token-budget - hard budget (2000)
+- current-auto-distillation-enabled? - auto conclusions
+- current-rollback-action-execution? - self-healing actions
+- current-context-assembly-profile - activation profile (default: 'off)
+
+#### New Tests (69+)
+- 12 ws-evolution, 14 conclusion-graph, 8 ranker, 8 auto-distillation
+- 10 rollback-actions, 3 session-config profiles, 24 token-metrics, 14 builder
+
+#### Migration
+- Fully backward-compatible. No behavior changes without explicit flag activation.
+- record_conclusion gains optional dependencies arg; old calls unaffected.
+
+
 ## v0.76.9 (2026-06-01)
 
 ### Post-v0.76.8 Audit Hotfix
