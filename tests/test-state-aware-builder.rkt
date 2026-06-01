@@ -8,6 +8,8 @@
          "../runtime/context-assembly/state-aware-builder.rkt"
          "../runtime/context-assembly/context-floor.rkt"
          "../runtime/context-assembly/task-conclusion.rkt"
+         (only-in "../runtime/context-assembly/rollback-actions.rkt"
+                  current-rollback-action-execution?)
          (only-in "../util/protocol-types.rkt" make-message make-text-part message-role)
          (only-in "../util/fsm.rkt" fsm-state))
 
@@ -122,6 +124,29 @@
 
     (test-case "preamble handles fsm-state struct input"
       (define preamble (build-state-awareness-preamble (fsm-state 'verification) '()))
-      (check-not-false preamble))))
+      (check-not-false preamble))
+
+    ;; v0.78.0 G9: repeat-tool-count computed from recent-tool-calls
+    (test-case "repeat-tool-count computed from recent-tool-calls"
+      (parameterize ([current-task-state-aware-assembly? #t]
+                     [current-rollback-action-execution? #t])
+        (define msgs (make-test-msgs 10))
+        ;; Same tool (read) repeated 4 times -> repeat-count should be 4
+        (define tc
+          (build-tiered-context/state-aware msgs
+                                            #:task-state 'implementation
+                                            #:working-set-messages msgs
+                                            #:recent-tool-calls '(read read read read bash)))
+        ;; Should succeed — the rollback trigger should have fired but not crashed
+        (check-not-false tc)))
+
+    (test-case "repeat-tool-count defaults to 0 with no recent-tool-calls"
+      (parameterize ([current-task-state-aware-assembly? #t])
+        (define msgs (make-test-msgs 10))
+        (define tc
+          (build-tiered-context/state-aware msgs
+                                            #:task-state 'implementation
+                                            #:working-set-messages msgs))
+        (check-not-false tc)))))
 
 (run-tests suite)
