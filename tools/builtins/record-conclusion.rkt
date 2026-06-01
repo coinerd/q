@@ -85,7 +85,7 @@
                              'text
                              text
                              'category
-                             category-raw
+                             category
                              'tags
                              tags
                              'origin-message-id

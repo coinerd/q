@@ -99,11 +99,14 @@
           event-name))]
        [else
         ;; v0.76.7 C3: Emit event for session layer to consume
-        (define ev-pub (and exec-ctx (exec-context-event-publisher exec-ctx)))
-        (when ev-pub
-          (ev-pub "tool.set-task-state.completed"
-                  (hasheq 'target-state state-name 'event-name event-name)))
-        ;; The actual transition validation happens in session mutation
+        ;; v0.76.8 I2: Guard event emission against failures
+        (with-handlers ([exn:fail? (lambda (e)
+                                     (log-warning "set-task-state: event emission failed: ~a"
+                                                  (exn-message e)))])
+          (define ev-pub (and exec-ctx (exec-context-event-publisher exec-ctx)))
+          (when ev-pub
+            (ev-pub "tool.set-task-state.completed"
+                    (hasheq (quote target-state) state-name (quote event-name) event-name))))
         ;; Here we just package the request
         (make-success-result
          (list (hasheq 'type

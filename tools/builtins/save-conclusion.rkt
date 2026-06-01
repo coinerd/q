@@ -67,7 +67,7 @@
 (define-tool
  save-conclusion
  #:description
- "Save a distilled insight or conclusion about the current task. Use after discovering important facts, making decisions, identifying patterns, finding error causes, or getting test results. Conclusions replace raw file contents in the prompt when the agent moves past exploration, enabling context optimization."
+ "[DEPRECATED - use record_conclusion instead] Save a distilled insight or conclusion about the current task. Use after discovering important facts, making decisions, identifying patterns, finding error causes, or getting test results. Conclusions replace raw file contents in the prompt when the agent moves past exploration, enabling context optimization."
  #:required ("content")
  #:properties
  [(content "string" "The conclusion text")
