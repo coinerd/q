@@ -582,3 +582,20 @@
   (define config (security-config-from-settings settings))
   (check-equal? (hash-ref config 'secret-scrub-extra-denylist) '("CUSTOM_.*"))
   (check-equal? (hash-ref config 'secret-scrub-allowlist) '("SAFE_VAR")))
+
+;; v0.79.0 GAP-1: Context assembly profile from settings
+(test-case "setting-context-assembly-profile defaults to off"
+  (define settings (q-settings (hash) (hash) (hash)))
+  (check-eq? (setting-context-assembly-profile settings) 'off))
+
+(test-case "setting-context-assembly-profile reads from config"
+  (define settings (q-settings (hash) (hash) (hash 'context-assembly (hash 'profile "observe"))))
+  (check-eq? (setting-context-assembly-profile settings) 'observe))
+
+(test-case "setting-context-assembly-profile reads symbol value"
+  (define settings (q-settings (hash) (hash) (hash 'context-assembly (hash 'profile 'bounded))))
+  (check-eq? (setting-context-assembly-profile settings) 'bounded))
+
+(test-case "setting-context-assembly-profile falls back for invalid profile"
+  (define settings (q-settings (hash) (hash) (hash 'context-assembly (hash 'profile "invalid"))))
+  (check-eq? (setting-context-assembly-profile settings) 'off))

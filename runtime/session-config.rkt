@@ -276,7 +276,8 @@
                max-tokens
                token-budget-threshold
                session-index
-               task-state-aware?))
+               task-state-aware?
+               context-assembly-profile))
   (define base
     (if (hash? h)
         (make-immutable-hash (hash->list h))

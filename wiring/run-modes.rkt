@@ -39,16 +39,16 @@
                   make-trace-logger
                   start-trace-logger!
                   project-tree->string)
-         (only-in "extension-setup.rkt" make-wired-extension-registry load-extensions-from-dir!))
+         (only-in "extension-setup.rkt" make-wired-extension-registry load-extensions-from-dir!)
+         (only-in "../runtime/session-config.rkt" apply-context-assembly-profile!))
 
 ;; Re-export mode runners from sub-modules
 (require "run-interactive.rkt"
          "run-json-rpc.rkt")
 
-(provide (contract-out
-          [build-runtime-from-cli (-> any/c any/c)]
-          [mode-for-config (-> any/c symbol?)]
-          [reload-config! (-> any/c any/c)])
+(provide (contract-out [build-runtime-from-cli (-> any/c any/c)]
+                       [mode-for-config (-> any/c symbol?)]
+                       [reload-config! (-> any/c any/c)])
          ;; Direct re-exports (no contracts needed — re-exported)
          load-extensions-from-dir!
          make-terminal-subscriber
@@ -186,7 +186,12 @@
   ;; v0.25.2 (F3): Wire security config from config.json
   (wire-security-config! settings)
 
-  (hash->session-config final-hash))
+  ;; v0.79.0 (GAP-1): Wire context assembly profile from settings
+  (define profile (setting-context-assembly-profile settings))
+  (define final-hash-with-profile (hash-set final-hash 'context-assembly-profile profile))
+  (apply-context-assembly-profile! profile)
+
+  (hash->session-config final-hash-with-profile))
 
 ;; ============================================================
 ;; mode-for-config
