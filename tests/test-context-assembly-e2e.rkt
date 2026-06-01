@@ -43,7 +43,8 @@
                      'idle
                      '()
                      (current-seconds)
-                     '())))
+                     '() ; relevance-tags
+                     '()))) ; dependencies
 
 (define base-messages
   (list (test-msg 'user "explore the codebase")
