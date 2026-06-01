@@ -20,12 +20,13 @@
                   infer-task-state-from-tools
                   current-state-inference-threshold))
 (require (only-in "../util/fsm.rkt" fsm-state-name))
+(require (only-in "context-assembly/state-aware-builder.rkt"
+                  current-ws-evolution-enabled?))
 ;; v0.77.10 M1: evolve-working-set-for-state import removed — subscriber now emits
 ;; context.ws-evolve-requested event for turn-orchestrator to handle.
 ;; (require (only-in "context-assembly/ws-evolution.rkt" evolve-working-set-for-state))
 
-(provide (contract-out [wire-session-event-handlers! (-> agent-session? procedure? void?)])
-         current-ws-evolution-enabled?)
+(provide (contract-out [wire-session-event-handlers! (-> agent-session? procedure? void?)]))
 
 ;; ============================================================
 ;; Event bus wiring
@@ -34,9 +35,8 @@
 ;; Wire event-bus subscribers for fork.requested, compact.requested,
 ;; tool execution, conclusions, and state transitions.
 
-;; v0.77.1 W1.3: Feature flag for WS evolution subscriber.
-;; Disabled by default — preserves v0.76 behavior until v0.77.7 activation.
-(define current-ws-evolution-enabled? (make-parameter #f))
+;; v0.78.1 G1: current-ws-evolution-enabled? moved to state-aware-builder.rkt
+;; to avoid cycle (session-config → session-events → session-store → ...)
 ;; These events are published by TUI/CLI commands and need runtime handlers.
 (define (wire-session-event-handlers! sess fork-handler)
   (define bus (agent-session-event-bus sess))

@@ -44,6 +44,7 @@
          ws-entry->conclusion-or-self
          current-graph-conclusion-selection?
          current-conclusion-token-budget
+         current-ws-evolution-enabled?
          check-rollback-triggers-with-actions)
 
 ;; Feature flag: state-aware context assembly (v0.75.3)
@@ -54,6 +55,9 @@
 
 ;; v0.77.4 W4.3: Hard conclusion token budget (0 = unlimited)
 (define current-conclusion-token-budget (make-parameter 2000))
+
+;; v0.78.1 G1: WS evolution flag (moved from session-events.rkt to avoid cycle)
+(define current-ws-evolution-enabled? (make-parameter #f))
 
 ;; State-specific guidance strings (action-oriented instructions)
 (define state-guidance-table
