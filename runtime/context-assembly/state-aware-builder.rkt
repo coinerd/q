@@ -86,7 +86,8 @@
                                           #:working-set-messages [ws-messages '()]
                                           #:task-state [task-state #f]
                                           #:conclusions [conclusions '()]
-                                          #:trace [trace-cb #f])
+                                          #:trace [trace-cb #f]
+                                          #:recent-tool-calls [recent-tool-calls '()])
   ;; Accept both fsm-state structs and bare symbols
   (define state-name
     (cond
@@ -216,11 +217,21 @@
       (if (> (length ws-messages) 0)
           (/ n-conclusions (length ws-messages))
           0.0))
+    ;; v0.78.0 G9: Compute repeat-tool-count from recent tool calls
+    ;; Count the max frequency of any single tool name in recent history
+    (define repeat-count
+      (if (null? recent-tool-calls)
+          0
+          (let ()
+            (define freq (make-hash))
+            (for ([tc (in-list recent-tool-calls)])
+              (hash-set! freq tc (add1 (hash-ref freq tc 0))))
+            (apply max (hash-values freq)))))
     (define-values (warnings recommended-action)
       (check-rollback-triggers-with-actions #:before-messages (length ws-messages)
                                             #:after-messages (length effective-ws)
                                             #:conclusion-coverage coverage
-                                            #:repeat-tool-count 0))
+                                            #:repeat-tool-count repeat-count))
     (when (pair? warnings)
       (log-warning "context-assembly: rollback triggers fired: ~a" warnings))
     (when recommended-action
