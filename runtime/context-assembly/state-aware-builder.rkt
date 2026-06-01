@@ -27,7 +27,8 @@
                   graph-select-by-seeds
                   graph-detect-cycles
                   fallback-select-conclusions)
-         (only-in "conclusion-ranker.rkt" rank-and-budget))
+         (only-in "conclusion-ranker.rkt" rank-and-budget)
+         (only-in "rollback-actions.rkt" warnings->actions select-highest-priority-action))
 
 (provide current-task-state-aware-assembly?
          build-tiered-context/state-aware
@@ -35,7 +36,8 @@
          check-rollback-triggers
          ws-entry->conclusion-or-self
          current-graph-conclusion-selection?
-         current-conclusion-token-budget)
+         current-conclusion-token-budget
+         check-rollback-triggers-with-actions)
 
 ;; Feature flag: state-aware context assembly (v0.75.3)
 (define current-task-state-aware-assembly? (make-parameter #f))
@@ -282,6 +284,23 @@
                 warnings)))
 
   (reverse warnings))
+
+;; v0.77.6 W6.2: Extended trigger output with recommended actions.
+;; Returns (values warnings recommended-action) where recommended-action
+;; is the highest-priority rollback-action or #f.
+(define (check-rollback-triggers-with-actions #:before-messages before-messages
+                                              #:after-messages after-messages
+                                              #:conclusion-coverage conclusion-coverage
+                                              #:repeat-tool-count repeat-tool-count)
+  (define warnings
+    (check-rollback-triggers #:before-messages before-messages
+                             #:after-messages after-messages
+                             #:conclusion-coverage conclusion-coverage
+                             #:repeat-tool-count repeat-tool-count))
+  (define warning-strs (map (lambda (w) (cadr w)) warnings))
+  (define actions (warnings->actions warning-strs))
+  (define recommended (select-highest-priority-action actions))
+  (values warnings recommended))
 
 ;; ════════════════════════════════════════════════════════════════
 ;; v0.76.4 M5 W0: Conclusion-first working-set replacement
