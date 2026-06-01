@@ -274,10 +274,10 @@
       [else #f]))
   (cond
     [(not state-name) #f]
-    [(eq? state-name 'idle) #f]
     [else
      (define label
        (case state-name
+         [(idle) "IDLE"]
          [(exploration) "EXPLORATION"]
          [(planning) "PLANNING"]
          [(implementation) "IMPLEMENTATION"]

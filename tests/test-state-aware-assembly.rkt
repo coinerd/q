@@ -198,9 +198,19 @@
 
     ;; ── v0.75.5: System prompt preamble tests ──
 
-    (test-case "preamble returns #f for idle state"
+    (test-case "preamble returns message for idle state (GAP-5 fix)"
       (define p (build-state-awareness-preamble task-idle '()))
-      (check-false p))
+      (check-not-false p)
+      (define text (text-part-text (car (message-content p))))
+      (check-not-false (string-contains? text "IDLE")))
+
+    (test-case "preamble returns idle with conclusions (GAP-5 fix)"
+      (define conclusions
+        (list (task-conclusion "c1" "Found X" 'fact 'idle '() (current-seconds) '() '())))
+      (define p (build-state-awareness-preamble task-idle conclusions))
+      (check-not-false p)
+      (define text (text-part-text (car (message-content p))))
+      (check-not-false (string-contains? text "Found X")))
 
     (test-case "preamble returns #f for #f state"
       (define p (build-state-awareness-preamble #f '()))
