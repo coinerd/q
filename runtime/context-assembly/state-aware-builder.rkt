@@ -26,20 +26,25 @@
                   build-conclusion-graph
                   graph-select-by-seeds
                   graph-detect-cycles
-                  fallback-select-conclusions))
+                  fallback-select-conclusions)
+         (only-in "conclusion-ranker.rkt" rank-and-budget))
 
 (provide current-task-state-aware-assembly?
          build-tiered-context/state-aware
          build-state-awareness-preamble
          check-rollback-triggers
          ws-entry->conclusion-or-self
-         current-graph-conclusion-selection?)
+         current-graph-conclusion-selection?
+         current-conclusion-token-budget)
 
 ;; Feature flag: state-aware context assembly (v0.75.3)
 (define current-task-state-aware-assembly? (make-parameter #f))
 
 ;; v0.77.3 W3.3: Graph-based conclusion selection (disabled by default)
 (define current-graph-conclusion-selection? (make-parameter #f))
+
+;; v0.77.4 W4.3: Hard conclusion token budget (0 = unlimited)
+(define current-conclusion-token-budget (make-parameter 2000))
 
 ;; State-specific guidance strings (action-oriented instructions)
 (define state-guidance-table

@@ -7,7 +7,9 @@
 
 (provide (struct-out context-assembly-config)
          make-context-assembly-config
-         (struct-out context-result))
+         (struct-out context-result)
+         (struct-out conclusion-budget-config)
+         make-conclusion-budget-config)
 
 ;; Note: 0 is valid for max-catalog-* (disables catalog)
 (struct context-assembly-config
@@ -15,6 +17,24 @@
                                             [max-catalog-tokens : Nonnegative-Integer]
                                             [summary-window : Positive-Integer])
   #:transparent)
+
+;; v0.77.4 W4.2: Conclusion token budget configuration
+(struct conclusion-budget-config
+        ([max-conclusion-tokens : Positive-Integer] [min-conclusions : Nonnegative-Integer]
+                                                    [prefer-categories : (Listof Symbol)])
+  #:transparent)
+
+(: make-conclusion-budget-config
+   (->* ()
+        (#:max-conclusion-tokens Positive-Integer
+                                 #:min-conclusions Nonnegative-Integer
+                                 #:prefer-categories (Listof Symbol))
+        conclusion-budget-config))
+(define (make-conclusion-budget-config #:max-conclusion-tokens [max-tokens 2000]
+                                       #:min-conclusions [min-c 1]
+                                       #:prefer-categories
+                                       [prefs (quote (error-cause decision test-result))])
+  (conclusion-budget-config max-tokens min-c prefs))
 
 (: make-context-assembly-config
    (->* ()
