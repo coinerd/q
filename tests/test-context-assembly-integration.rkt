@@ -5,6 +5,7 @@
 
 (require rackunit
          rackunit/text-ui
+         racket/string
          (only-in "../runtime/context-assembly/task-state.rkt"
                   task-exploration
                   task-planning
@@ -17,7 +18,10 @@
                   task-conclusion-id)
          (only-in "../runtime/context-assembly/serialization.rkt"
                   build-tiered-context/state-aware
-                  current-task-state-aware-assembly?)
+                  current-task-state-aware-assembly?
+                  tiered-context-tier-a
+                  tiered-context-tier-b
+                  tiered-context-tier-c)
          (only-in "../runtime/context-assembly/conclusion-graph.rkt"
                   build-conclusion-graph
                   graph-select-conclusions)
@@ -45,7 +49,11 @@
                   current-context-assembly-profile)
          (only-in "../runtime/working-set.rkt" make-working-set working-set-add! working-set-entries)
          (only-in "../runtime/agent-session.rkt" session-rollout-enabled?)
-         (only-in "../util/protocol-types.rkt" make-message make-text-part)
+         (only-in "../util/protocol-types.rkt"
+                  make-message
+                  make-text-part
+                  message-role
+                  message-content)
          (only-in "../util/message.rkt" message-id))
 
 ;; Helper: create a simple test message
@@ -156,7 +164,14 @@
                                             #:working-set-messages
                                             (list (car msgs) (cadr msgs) (caddr msgs))
                                             #:conclusions conclusions))
-        (check-not-false tc)))
+        (check-not-false tc)
+        ;; v0.78.6 W3: Verify preamble was injected (state-aware adds system-instruction)
+        (define tier-a (tiered-context-tier-a tc))
+        (check-true (> (length tier-a) 0) "tier-a should not be empty")
+        ;; Preamble should have system-instruction role
+        (check-true (for/or ([m (in-list tier-a)])
+                      (eq? (message-role m) 'system-instruction))
+                    "tier-a should contain system-instruction preamble")))
 
     ;; v0.78.0 AW1: Graph-through-builder with current-graph-conclusion-selection? #t
     (test-case "graph selection integrates with builder when flag ON"
@@ -175,7 +190,14 @@
                                             #:task-state 'implementation
                                             #:working-set-messages msgs
                                             #:conclusions conclusions))
-        (check-not-false tc)))
+        (check-not-false tc)
+        ;; v0.78.6 W3: Verify graph selection ran — context should have tier-a entries
+        ;; The key validation is that the pipeline didn't crash with graph selection ON.
+        ;; Graph selection filters conclusions by reachability from seeds, so gc3
+        ;; (unrelated exploration) is a candidate for filtering.
+        (define tier-a (tiered-context-tier-a tc))
+        (check-true (> (length tier-a) 0) "tier-a should have entries after graph selection")
+        (check-true (<= (length tier-a) 20) "graph selection should produce reasonable tier-a size")))
 
     ;; v0.78.1 G1: Profile activation matrix — each profile is strict superset
     (test-case "profile activation: full > self-healing > bounded > observe > off"
@@ -233,7 +255,14 @@
                                             #:task-state 'implementation
                                             #:working-set-messages msgs
                                             #:conclusions many-conclusions))
-        (check-not-false tc)))
+        (check-not-false tc)
+        ;; v0.78.6 W3: Verify budget was enforced — not all 20 conclusions should appear
+        (define tier-a (tiered-context-tier-a tc))
+        (define conclusion-count
+          (for/sum ([m (in-list tier-a)] #:when (message-content m))
+                   (for/sum ([p (in-list (message-content m))])
+                            (if (regexp-match? #rx"conclusion" (format "~a" p)) 1 0))))
+        (check-true (< conclusion-count 20) "budget should reduce conclusion count below raw 20")))
 
     ;; v0.78.4 G10: FSM workflow instructions in preamble
     (test-case "preamble includes FSM workflow guidance"
@@ -250,11 +279,18 @@
                                             #:working-set-messages msgs
                                             #:conclusions conclusions))
         (check-not-false tc)
-        ;; Preamble should contain tier-a entries with FSM guidance
-        (define tc-messages
-          (let-values ([(msgs _ tc-struct) (values '() #f tc)])
-            tc-struct))
-        (check-not-false tc))
+        ;; v0.78.6 C5: Verify preamble text contains FSM guidance keywords
+        (define tier-a (tiered-context-tier-a tc))
+        (define preamble-text
+          (string-join (for*/list ([m (in-list tier-a)]
+                                   #:when (message-content m)
+                                   [p (in-list (message-content m))])
+                         (format "~a" p))))
+        (check-true (> (string-length preamble-text) 0) "preamble should not be empty")
+        (check-not-false (regexp-match? #rx"record_conclusion" preamble-text)
+                         "preamble should mention record_conclusion tool")
+        (check-not-false (regexp-match? #rx"set_task_state" preamble-text)
+                         "preamble should mention set_task_state tool"))
       (apply-context-assembly-profile! 'off))
 
     ;; v0.78.4 G4: Rollout gate — profile bypass enables assembly
