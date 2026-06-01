@@ -277,6 +277,7 @@
   (check-true #t))
 
 (test-case "default profile is off"
+  (apply-context-assembly-profile! 'off)
   (check-equal? (current-context-assembly-profile) 'off))
 
 ;; v0.78.1 G1: Profile activation matrix tests

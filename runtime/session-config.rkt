@@ -63,6 +63,7 @@
 ;; v0.78.1 G1: Proper activation matrix with all feature flags.
 ;; Each profile is a superset of the previous one.
 (define (apply-context-assembly-profile! profile)
+  (current-context-assembly-profile profile)
   (case profile
     [(off)
      (current-task-state-aware-assembly? #f)

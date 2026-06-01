@@ -1,5 +1,50 @@
 # Changelog
 
+## v0.78.0 (2026-06-01)
+
+### Comprehensive Context Assembly
+
+Resolves 10 audit gaps (G1-G10) from v0.77.9 deep audit across 5 sub-milestones.
+All feature flags remain OFF by default -- no behavior change without explicit activation.
+
+#### G1: Profile Activation Matrix (v0.78.1)
+- Rewrote apply-context-assembly-profile! with 5 profiles: off/observe/bounded/self-healing/full
+- Each profile is strict superset of previous
+- Profile parameter now properly tracked via current-context-assembly-profile
+- Moved current-ws-evolution-enabled? to state-aware-builder.rkt to break cycle
+
+#### G2: WS Evolution Wiring (v0.78.2)
+- Fixed subscriber race condition: event payloads now include old-state captured BEFORE mutation
+- Wired WS evolution into turn-orchestrator context assembly path
+
+#### G3: Auto-Distill Persistence (v0.78.2)
+- Auto-distilled conclusions now persist back to session via guarded-set-task-conclusions!
+
+#### G4: Rollout Gate (v0.78.4)
+- session-rollout-enabled? bypasses rate check when profile is not off
+- Profile-based activation is cleaner than rate-based A/B testing
+
+#### G5: WS Evolution Merge (v0.78.0)
+- guarded-set-working-set-evolved! now merges (union by ID) instead of replacing
+
+#### G6: Planning Inference Confidence (v0.78.3)
+- Planning heuristic confidence raised from 0.6 to 0.75 (above 0.7 threshold)
+
+#### G7: Preamble Budgeting (v0.78.3)
+- build-state-awareness-preamble now receives budgeted conclusions (not raw)
+
+#### G8: Summary Mode Ranking (v0.78.3)
+- Summary mode uses rank-and-budget instead of first+last heuristic
+
+#### G9: Repeat Tool Count (v0.78.0)
+- repeat-tool-count now computed from recent-tool-calls parameter (was hardcoded 0)
+
+#### G10: FSM Workflow Instructions (v0.78.4)
+- Preamble now includes brief FSM workflow guidance (~30 tokens)
+
+#### Integration Tests
+- Expanded from 7 to 12 integration tests covering all 10 gaps
+
 ## v0.77.10 (2026-06-01)
 
 ### Deep Audit Finding Resolution
