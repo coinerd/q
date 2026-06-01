@@ -1,5 +1,49 @@
 # Changelog
 
+## v0.79.0 (2026-06-01)
+
+### Final Context Assembly Activation
+
+**6 gaps resolved across 4 milestones.** All feature flags OFF by default.
+
+#### GAP-1: CLI/Config Entry Point for Profile
+- Add `setting-context-assembly-profile` to settings.rkt (reads `(context-assembly profile)` from config.json)
+- Add `context-assembly-profile` to session-config known-keys
+- Add `--context-profile` CLI flag to args.rkt with validation
+- CLI flag overrides settings in run-modes.rkt
+
+#### GAP-2: WS Evolution Old-State Tracking
+- Add `current-last-task-fsm-state` parameter to track previous task state across turns
+- WS evolution now receives real old-state instead of always #f
+
+#### GAP-3: Auto-Distillation Content Summaries
+- Auto-distillation accepts optional content-summary hash
+- Fallback conclusions use actual file content (truncated to 200 chars) instead of placeholder text
+- Turn-orchestrator builds summaries from working-set messages
+
+#### GAP-4: Archived WS Entries Persistence
+- Add `current-archive-entry-fn` injectable callback for persisting archived WS entries
+- `guarded-set-working-set-evolved!` logs archived entries count + calls callback when wired
+
+#### GAP-5: Idle State Preamble
+- `build-state-awareness-preamble` now returns proper preamble for idle state
+- Agent sees guidance and conclusions even before first state transition
+
+#### GAP-6: Revert-State Rollback Action
+- Add `current-revert-state-fn` injectable callback to rollback-actions.rkt
+- `maybe-execute-action` dispatches revert-state when fn is wired, safe #f default
+- Wire callback in state-aware-builder.rkt with logging
+
+### Test Summary
+- settings accessor: 4 tests
+- session-config round-trip: 2 tests
+- CLI: 32 tests
+- state-aware assembly: 20 tests
+- rollback actions: 17 tests
+- WS evolution: 12 tests
+- session mutation: expanded (archive callback)
+- auto-distillation: 12 tests
+
 ## v0.78.6 (2026-06-01)
 
 ### Post-Audit Remediation
