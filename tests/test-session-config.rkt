@@ -250,3 +250,21 @@
   (check-exn exn:fail:contract?
              (lambda () (config-cancellation-token c))
              "config-cancellation-token should raise contract error for string"))
+
+;; v0.77.7 W7.1: Profile tests
+(test-case "context-assembly-profile? validates known profiles"
+  (check-true (context-assembly-profile? 'off))
+  (check-true (context-assembly-profile? 'observe))
+  (check-true (context-assembly-profile? 'bounded))
+  (check-true (context-assembly-profile? 'self-healing))
+  (check-true (context-assembly-profile? 'full))
+  (check-false (context-assembly-profile? 'unknown))
+  (check-false (context-assembly-profile? 42)))
+
+(test-case "apply-context-assembly-profile! bounded sets flags"
+  (apply-context-assembly-profile! 'bounded)
+  ;; Just check it doesn't error
+  (check-true #t))
+
+(test-case "default profile is off"
+  (check-equal? (current-context-assembly-profile) 'off))

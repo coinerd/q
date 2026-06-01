@@ -33,13 +33,49 @@
          (only-in "../runtime/trace-logger.rkt" trace-logger?)
          (only-in "../runtime/settings.rkt" q-settings?)
          (only-in "../util/cancellation.rkt" cancellation-token?)
-         (only-in "../runtime/session-index/schema.rkt" session-index?))
+         (only-in "../runtime/session-index/schema.rkt" session-index?)
+         (only-in "context-assembly/state-aware-builder.rkt"
+                  current-task-state-aware-assembly?
+                  current-conclusion-token-budget))
 
 ;; Global rollout rate for state-aware assembly (0.0 = none, 1.0 = all)
 (define current-task-state-aware-rollout-rate (make-parameter 0.0))
 
+;; v0.77.7 W7.1: Graduated activation profile.
+;; Profiles control which context assembly features are active:
+;;   'off           — everything disabled (safe default)
+;;   'observe       — telemetry only, no behavior change
+;;   'bounded       — budget + ranking active, no auto-distill/rollback
+;;   'self-healing  — bounded + auto-distill + rollback actions (behind flags)
+;;   'full          — all features active (not recommended yet)
+(define current-context-assembly-profile (make-parameter 'off))
+
+(define valid-profiles '(off observe bounded self-healing full))
+
+(define (context-assembly-profile? v)
+  (and (symbol? v) (memq v valid-profiles) #t))
+
+;; Apply a profile: sets individual feature flags according to the profile.
+(define (apply-context-assembly-profile! profile)
+  (case profile
+    [(off) (current-task-state-aware-assembly? #f)]
+    [(observe) (current-task-state-aware-assembly? #f)] ; telemetry still works
+    [(bounded)
+     (current-task-state-aware-assembly? #t)
+     (current-conclusion-token-budget 2000)]
+    [(self-healing)
+     (current-task-state-aware-assembly? #t)
+     (current-conclusion-token-budget 2000)]
+    [(full)
+     (current-task-state-aware-assembly? #t)
+     (current-conclusion-token-budget 2000)]
+    [else (void)]))
+
 (provide session-config?
          current-task-state-aware-rollout-rate
+         current-context-assembly-profile
+         context-assembly-profile?
+         apply-context-assembly-profile!
          ;; Smart accessors with defaults
          (contract-out
           [hash->session-config (-> hash? session-config?)]
