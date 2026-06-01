@@ -6,6 +6,10 @@
 ;; Represents rollback actions as pure data. Actions are prioritized:
 ;; warn-only < expand-context < force-distill < revert-state.
 ;; At most one action is executed per turn to prevent recursive loops.
+;;
+;; v0.77.10 M2: Real execution via injectable callbacks.
+;; Default callbacks are no-ops. The runtime (state-aware-builder) wires
+;; real callbacks that set feature flags and budgets.
 
 (require racket/contract
          racket/list
@@ -52,7 +56,40 @@
 ;; Feature flag for action execution (disabled by default — warn-only mode)
 (define current-rollback-action-execution? (make-parameter #f))
 
+;; v0.77.10 M2: Injectable execution callbacks.
+;; Default to no-op. Runtime wires real implementations.
+;; Signature: (-> rollback-action? void?)
+(define current-force-distill-fn (make-parameter #f))
+(define current-expand-context-fn (make-parameter #f))
+
+;; v0.77.10 M2: Action execution log for observability.
+;; Each entry is a hash with 'type, 'reason, 'timestamp.
+(define current-rollback-action-log (make-parameter '()))
+
+;; v0.77.10 M2: Execute force-distill action.
+;; Calls the injectable callback if available, then logs.
+(define (execute-force-distill! action)
+  (define fn (current-force-distill-fn))
+  (when fn (fn action))
+  (log-action! action))
+
+;; v0.77.10 M2: Execute expand-context action.
+;; Calls the injectable callback if available, then logs.
+(define (execute-expand-context! action)
+  (define fn (current-expand-context-fn))
+  (when fn (fn action))
+  (log-action! action))
+
+;; Log an executed action to the rollback action log.
+(define (log-action! action)
+  (current-rollback-action-log
+   (append (current-rollback-action-log)
+           (list (hasheq 'type (rollback-action-type action)
+                         'reason (rollback-action-reason action)
+                         'timestamp (current-seconds))))))
+
 ;; Execute a rollback action if execution is enabled.
+;; v0.77.10 M2: Now dispatches to real execution functions.
 ;; Returns the action type if executed, #f otherwise.
 ;; Never executes 'revert-state unless explicitly enabled.
 (define (maybe-execute-action action)
@@ -60,6 +97,15 @@
     [(not action) #f]
     [(not (current-rollback-action-execution?)) #f]
     [(eq? (rollback-action-type action) 'revert-state) #f] ; too risky
+    [(eq? (rollback-action-type action) 'force-distill)
+     (execute-force-distill! action)
+     'force-distill]
+    [(eq? (rollback-action-type action) 'expand-context)
+     (execute-expand-context! action)
+     'expand-context]
+    [(eq? (rollback-action-type action) 'warn-only)
+     (log-action! action)
+     'warn-only]
     [else (rollback-action-type action)]))
 
 ;; ── Trigger to Action Mapping ──
@@ -79,6 +125,9 @@
 
 (provide (struct-out rollback-action)
          current-rollback-action-execution?
+         current-rollback-action-log
+         current-force-distill-fn
+         current-expand-context-fn
          rollback-action-type?
          (contract-out [make-warn-action (-> string? rollback-action?)]
                        [make-expand-context-action (-> string? hash? rollback-action?)]

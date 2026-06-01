@@ -32,7 +32,11 @@
          (only-in "rollback-actions.rkt"
                   warnings->actions
                   select-highest-priority-action
-                  maybe-execute-action))
+                  maybe-execute-action
+                  current-force-distill-fn
+                  current-expand-context-fn
+                  current-rollback-action-log)
+         (only-in "auto-distillation.rkt" current-auto-distillation-enabled?))
 
 (provide current-task-state-aware-assembly?
          build-tiered-context/state-aware
@@ -224,9 +228,22 @@
     (when (pair? warnings)
       (log-warning "context-assembly: rollback triggers fired: ~a" warnings))
     (when recommended-action
-      (define executed (maybe-execute-action recommended-action))
-      (when executed
-        (log-warning "context-assembly: executed rollback action: ~a" executed))))
+      ;; v0.77.10 M2: Wire real execution callbacks
+      (parameterize ([current-force-distill-fn
+                      (lambda (a)
+                        (log-warning "context-assembly: force-distill enabling auto-distillation")
+                        (current-auto-distillation-enabled? #t))]
+                     [current-expand-context-fn
+                      (lambda (a)
+                        (define current-budget (current-conclusion-token-budget))
+                        (define expanded (* current-budget 2))
+                        (log-warning "context-assembly: expanding budget ~a \xe2\x86\x92 ~a"
+                                     current-budget
+                                     expanded)
+                        (current-conclusion-token-budget expanded))])
+        (define executed (maybe-execute-action recommended-action))
+        (when executed
+          (log-warning "context-assembly: executed rollback action: ~a" executed)))))
   (if (and (null? preamble-entries) (null? conclusion-entries))
       base-tc
       (tiered-context new-tier-a (tiered-context-tier-b base-tc) (tiered-context-tier-c base-tc))))
