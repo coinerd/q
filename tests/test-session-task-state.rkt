@@ -63,22 +63,21 @@
       (define c2 (task-conclusion "c2" "second" 'decision 'planning '() 2000 '() '()))
       (guarded-set-task-conclusions! s (list c1))
       (guarded-set-task-conclusions! s (append (agent-session-task-conclusions s) (list c2)))
-      (check-equal? (length (agent-session-task-conclusions s)) 2))))
+      (check-equal? (length (agent-session-task-conclusions s)) 2))
+    (test-case "tool.set-task-state.completed event triggers guarded-set-task-fsm-state! (C3 integration)"
+      (define bus (make-event-bus))
+      (define sess (make-test-session #:event-bus bus))
+      (wire-session-event-handlers! sess (lambda (s e) s))
+      ;; Verify initial state
+      (check-equal? (agent-session-task-fsm-state sess) 'idle)
+      ;; Publish set-task-state event (as if from tool)
+      (publish! bus
+                (make-event "tool.set-task-state.completed"
+                            (current-seconds)
+                            (agent-session-session-id sess)
+                            #f
+                            (hasheq 'target-state "implementation" 'event-name "begin-implement")))
+      ;; Verify state transitioned
+      (check-equal? (agent-session-task-fsm-state sess) 'implementation))))
 
-(test-case "tool.set-task-state.completed event triggers guarded-set-task-fsm-state! (C3 integration)"
-  (define bus (make-event-bus))
-  (define sess (make-test-session #:event-bus bus))
-  (wire-session-event-handlers! sess (lambda (s e) s))
-  ;; Verify initial state
-  (check-equal? (agent-session-task-fsm-state sess) (quote idle))
-  ;; Publish set-task-state event (as if from tool)
-  (publish! bus
-            (make-event
-             "tool.set-task-state.completed"
-             (current-seconds)
-             (agent-session-session-id sess)
-             #f
-             (hasheq (quote target-state) "implementation" (quote event-name) "begin-implement")))
-  ;; Verify state transitioned
-  (check-equal? (agent-session-task-fsm-state sess) (quote implementation)))
 (run-tests suite)

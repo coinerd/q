@@ -1,6 +1,20 @@
 # Changelog
 
-## v0.76.8 (2026-05-30)
+## v0.76.9 (2026-06-01)
+
+### Post-v0.76.8 Audit Hotfix
+
+Fixes 2 CRITICAL + 3 WARNING findings from v0.76.8 audit.
+
+#### Changes
+- Fixed VALIDATION gates SG-12 + M7-G4: ADR reference corrected from 0017 to 0019 (was claimed in v0.76.8 but not applied)
+- Fixed PLAN-v0.76.xx series header and status
+- Fixed STATE.md version (0.76.8) and status (RELEASED)
+- Fixed CHANGELOG v0.76.8 date (was 2026-05-30, now 2026-06-01)
+- Updated HANDOFF.json current_version to 0.76.8
+- Moved 2 test-cases inside their test-suite forms (test-record-conclusion.rkt, test-session-task-state.rkt)
+
+## v0.76.8 (2026-06-01)
 
 ### Post-v0.76.7 Audit Closure
 
