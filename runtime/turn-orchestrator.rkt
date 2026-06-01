@@ -245,7 +245,14 @@
   (define augmented-conclusions
     (if (and (current-auto-distillation-enabled?) session conclusions task-state ws-early)
         (let ([ws-msgs (working-set-resolve-messages ws-early ctx-to-use message-id)])
-          (append conclusions (auto-distill (map message-id ws-msgs) conclusions task-state)))
+          ;; v0.79.2 GAP-3: Build content summaries for richer auto-distill text
+          (define summaries
+            (for/hash ([m (in-list ws-msgs)])
+              (define text-parts (filter text-part? (message-content m)))
+              (define full-text (string-join (map text-part-text text-parts) " "))
+              (values (message-id m) full-text)))
+          (append conclusions
+                  (auto-distill (map message-id ws-msgs) conclusions task-state summaries)))
         (or conclusions '())))
   ;; v0.78.2 G3: Persist auto-distilled conclusions back to session
   ;; Only when auto-distill added new conclusions

@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require rackunit
+         racket/string
          rackunit/text-ui
          (only-in "../runtime/context-assembly/task-conclusion.rkt"
                   task-conclusion
@@ -8,7 +9,8 @@
                   task-conclusion-origin-message-ids
                   task-conclusion-relevance-tags
                   task-conclusion-category
-                  task-conclusion-id)
+                  task-conclusion-id
+                  task-conclusion-text)
          (only-in "../runtime/context-assembly/auto-distillation.rkt"
                   find-uncovered-entries
                   generate-fallback-conclusions
@@ -62,3 +64,33 @@
         (check-equal? result '())))))
 
 (run-tests suite)
+
+;; v0.79.2 GAP-3: Content summary produces richer fallback text
+(test-case "auto-distill with content summary produces richer text"
+  (parameterize ([current-auto-distillation-enabled? #t])
+    (define summaries (hash "m1" "This file implements the authentication module using OAuth2"))
+    (define result (auto-distill '("m1") '() 'exploration summaries))
+    (check-equal? (length result) 1)
+    (define c (car result))
+    (check-not-false (string-contains? (task-conclusion-text c) "OAuth2"))
+    (check-false (string-contains? (task-conclusion-text c) "Previously read file"))))
+
+(test-case "auto-distill without content summary uses placeholder"
+  (parameterize ([current-auto-distillation-enabled? #t])
+    (define result (auto-distill '("m1") '() 'idle))
+    (check-equal? (length result) 1)
+    (check-not-false (string-contains? (task-conclusion-text (car result)) "Previously read file"))))
+
+(test-case "auto-distill passes content summaries to fallback"
+  (parameterize ([current-auto-distillation-enabled? #t])
+    (define summaries (hash "m1" "Authentication uses JWT tokens with refresh"))
+    (define result (auto-distill '("m1") '() 'exploration summaries))
+    (check-equal? (length result) 1)
+    (check-not-false (string-contains? (task-conclusion-text (car result)) "JWT"))))
+
+(test-case "content summary truncates at 200 chars"
+  (parameterize ([current-auto-distillation-enabled? #t])
+    (define long-text (make-string 300 #\x))
+    (define summaries (hash "m1" long-text))
+    (define result (auto-distill '("m1") '() 'idle summaries))
+    (check-true (<= (string-length (task-conclusion-text (car result))) 210))))
