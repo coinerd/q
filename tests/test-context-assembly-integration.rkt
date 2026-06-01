@@ -17,13 +17,10 @@
                   task-conclusion-id)
          (only-in "../runtime/context-assembly/serialization.rkt"
                   build-tiered-context/state-aware
-                  tiered-context->message-list
-                  tiered-context-tier-b
                   current-task-state-aware-assembly?)
          (only-in "../runtime/context-assembly/conclusion-graph.rkt"
                   build-conclusion-graph
-                  graph-select-conclusions
-                  graph-detect-cycles)
+                  graph-select-conclusions)
          (only-in "../runtime/context-assembly/conclusion-ranker.rkt" rank-and-budget)
          (only-in "../runtime/context-assembly/auto-distillation.rkt"
                   auto-distill
@@ -138,6 +135,45 @@
     (test-case "auto-distill with no conclusions returns empty"
       (parameterize ([current-auto-distillation-enabled? #t])
         (define result (auto-distill '() '() 'exploration))
-        (check-equal? result '())))))
+        (check-equal? result '())))
+
+    ;; v0.78.0 AC2: Real pipeline with build-tiered-context/state-aware + flags ON
+    (test-case "full pipeline produces valid tiered context with flags ON"
+      (define conclusions
+        (list
+         (task-conclusion "c1" "found bug in parser" 'fact 'debugging '() 1000 '() '())
+         (task-conclusion "c2" "fix: add null check" 'decision 'implementation '() 2000 '() '())))
+      (define msgs
+        (for/list ([i (in-range 8)])
+          (test-msg (if (even? i) 'user 'assistant) (format "msg-~a" i))))
+      (parameterize ([current-task-state-aware-assembly? #t]
+                     [current-conclusion-token-budget 2000]
+                     [current-rollback-action-execution? #t])
+        (define tc
+          (build-tiered-context/state-aware msgs
+                                            #:task-state 'implementation
+                                            #:working-set-messages
+                                            (list (car msgs) (cadr msgs) (caddr msgs))
+                                            #:conclusions conclusions))
+        (check-not-false tc)))
+
+    ;; v0.78.0 AW1: Graph-through-builder with current-graph-conclusion-selection? #t
+    (test-case "graph selection integrates with builder when flag ON"
+      (define conclusions
+        (list (task-conclusion "gc1" "use module A" 'decision 'implementation '() 1000 '() '())
+              (task-conclusion "gc2" "A requires B" 'dependency 'implementation '() 2000 '() '("gc1"))
+              (task-conclusion "gc3" "unrelated note" 'fact 'exploration '() 3000 '() '())))
+      (define msgs
+        (for/list ([i (in-range 6)])
+          (test-msg (if (even? i) 'user 'assistant) (format "msg-~a" i))))
+      (parameterize ([current-task-state-aware-assembly? #t]
+                     [current-graph-conclusion-selection? #t]
+                     [current-conclusion-token-budget 2000])
+        (define tc
+          (build-tiered-context/state-aware msgs
+                                            #:task-state 'implementation
+                                            #:working-set-messages msgs
+                                            #:conclusions conclusions))
+        (check-not-false tc)))))
 
 (run-tests suite)
