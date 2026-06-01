@@ -70,6 +70,7 @@
                   session-config?
                   hash->session-config
                   current-task-state-aware-rollout-rate
+                  current-context-assembly-profile
                   config-provider
                   config-tool-registry
                   config-event-bus
@@ -224,7 +225,11 @@
 ;; Deterministic A/B assignment using session-id hash modulo 100.
 (define (session-rollout-enabled? sid)
   (define rate (current-task-state-aware-rollout-rate))
-  (and (> rate 0.0) (< (modulo (equal-hash-code sid) 100) (inexact->exact (round (* rate 100))))))
+  (define profile (current-context-assembly-profile))
+  ;; v0.78.4 G4: If an explicit profile is set (not 'off), always allow
+  (or (not (eq? profile 'off))
+      (and (> rate 0.0)
+           (< (modulo (equal-hash-code sid) 100) (inexact->exact (round (* rate 100)))))))
 
 ;; ============================================================
 ;; make-agent-session
