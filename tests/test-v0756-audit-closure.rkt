@@ -22,6 +22,7 @@
                   task-conclusion
                   task-conclusion?
                   task-conclusion-text
+                  task-conclusion-origin-message-ids
                   conclusion->hash
                   hash->conclusion)
          ;; Session types + mutation
@@ -91,8 +92,8 @@
       (append-conclusion! log-path c1)
       (define loaded (load-conclusions log-path))
       (check-equal? (length loaded) 1)
-      (when (and (pair? loaded) (task-conclusion? (car loaded)))
-        (check-equal? (task-conclusion-text (car loaded)) "test fact"))
+      (check-true (and (pair? loaded) (task-conclusion? (car loaded))) "should load one conclusion")
+      (check-equal? (task-conclusion-text (car loaded)) "test fact")
       (cleanup-path log-path))
 
     (test-case "append-conclusion! accumulates multiple conclusions"
@@ -103,6 +104,28 @@
       (append-conclusion! log-path c2)
       (define loaded (load-conclusions log-path))
       (check-equal? (length loaded) 2)
+      (cleanup-path log-path))
+
+    (test-case "append-conclusion! + load-conclusions preserves string origin-message-ids (C1 regression)"
+      (define log-path (make-temp-log-path))
+      (define c1
+        (task-conclusion "c1"
+                         "origin test"
+                         (quote fact)
+                         (quote exploration)
+                         (quote ("msg-42" "msg-43"))
+                         1000
+                         (quote ())
+                         (quote ())))
+      (append-conclusion! log-path c1)
+      (define loaded (load-conclusions log-path))
+      (check-equal? (length loaded) 1)
+      (define loaded-c (car loaded))
+      (check-true (task-conclusion? loaded-c))
+      (check-equal? (task-conclusion-text loaded-c) "origin test")
+      (define origin-ids (task-conclusion-origin-message-ids loaded-c))
+      (check-equal? origin-ids (quote ("msg-42" "msg-43")))
+      (check-true (andmap string? origin-ids) "origin-message-ids must be strings, not symbols")
       (cleanup-path log-path))
 
     (test-case "load-conclusions returns empty for empty log"

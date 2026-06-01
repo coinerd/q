@@ -28,10 +28,11 @@
   ((tool-execute t) args #f))
 
 ;; Helper: call tool with exec-ctx that captures events
-(define (call-tool-with-ctx t args)
-  (define captured-events '())
+(define (call-tool-with-ctx t args #:call-id [call-id "test-call-42"])
+  (define captured-events (quote ()))
   (define mock-ctx
-    ((dynamic-require "../tools/exec-context.rkt" 'make-exec-context)
+    ((dynamic-require "../tools/exec-context.rkt" (quote make-exec-context))
+     #:call-id call-id
      #:event-publisher (lambda (event-type payload)
                          (set! captured-events (cons (cons event-type payload) captured-events)))))
   (define result ((tool-execute t) args mock-ctx))
@@ -94,7 +95,10 @@
       (define ev (assoc "tool.record_conclusion.completed" events))
       (check-not-false ev)
       (check-equal? (hash-ref (cdr ev) 'text #f) "event test")
-      (check-equal? (hash-ref (cdr ev) 'category #f) "fact"))
+      (check-equal? (hash-ref (cdr ev) (quote category) #f) (quote fact))
+      (define origin-id (hash-ref (cdr ev) (quote origin-message-id) #f))
+      (check-not-false origin-id "event payload should contain origin-message-id")
+      (check-true (string? origin-id) "origin-message-id should be a string"))
 
     (test-case "record_conclusion event includes tags"
       (define-values (result events)
@@ -142,5 +146,31 @@
       (define conclusions (agent-session-task-conclusions sess))
       (check-true (> (length conclusions) 0))
       (check-equal? (task-conclusion-fsm-state-origin (car conclusions)) 'implementation))))
+
+(test-case "session handler preserves origin-message-ids from event"
+  (define bus (make-event-bus))
+  (define sess (make-test-session #:event-bus bus))
+  (wire-session-event-handlers! sess (lambda (s e) s))
+  ;; Publish event WITH origin-message-id
+  (publish! bus
+            (make-event "tool.record_conclusion.completed"
+                        (current-seconds)
+                        (agent-session-session-id sess)
+                        #f
+                        (hasheq (quote text)
+                                "origin test"
+                                (quote conclusion-id)
+                                "c-orig"
+                                (quote category)
+                                "fact"
+                                (quote tags)
+                                (quote ())
+                                (quote origin-message-id)
+                                "msg-42")))
+  (define conclusions (agent-session-task-conclusions sess))
+  (check-true (> (length conclusions) 0))
+  (define c (car conclusions))
+  (check-true (task-conclusion? c))
+  (check-equal? (task-conclusion-origin-message-ids c) (quote ("msg-42"))))
 
 (run-tests suite)
