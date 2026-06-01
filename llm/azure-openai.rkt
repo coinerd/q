@@ -126,8 +126,7 @@
       #:cleanup (lambda ()
                   (define rp (unbox response-port-box))
                   (when rp
-                    (with-handlers ([exn:fail? void])
-                      (close-input-port rp))))
+                    (with-logged-error "port cleanup" (close-input-port rp))))
       (lambda ()
         (define-values (status-line response-headers response-port)
           (if url-port-val
@@ -185,5 +184,4 @@
      ;; W2.4: always close response port on exit
      (define rp (unbox response-port-box))
      (when rp
-       (with-handlers ([exn:fail? void])
-         (close-input-port rp))))))
+       (with-logged-error "port cleanup" (close-input-port rp))))))

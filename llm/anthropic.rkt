@@ -1,5 +1,6 @@
 #lang racket/base
 
+(require "../util/error-helpers.rkt")
 ;; llm/anthropic.rkt — Anthropic provider adapter
 ;;
 ;; Translates normalized model-request structs into Anthropic Messages
@@ -180,7 +181,8 @@
          (define round-trip (tool-call-intent->hash tci))
          (unless (equal? (hash-ref tc-hash 'name) (hash-ref round-trip 'name))
            (log-warning "tool-call-intent shadow mismatch in anthropic: ~a vs ~a"
-                        (hash-ref tc-hash 'name) (hash-ref round-trip 'name)))
+                        (hash-ref tc-hash 'name)
+                        (hash-ref round-trip 'name)))
          tc-hash]
         [_ block])))
 
@@ -328,16 +330,15 @@
      (lambda ()
        ;; Wrap initial HTTP request in overall timeout (SEC-11)
        (define result-vec
-         (call-with-request-timeout #:cleanup (lambda ()
-                                                (define rp (unbox response-port-box))
-                                                (when rp
-                                                  (with-handlers ([exn:fail? void])
-                                                    (close-input-port rp))))
-                                    (lambda ()
-                                      (define-values (sl rh rp)
-                                        (http-sendrecv uri 'POST #:headers headers #:data body-bytes))
-                                      (set-box! response-port-box rp)
-                                      (vector sl rh rp))))
+         (call-with-request-timeout
+          #:cleanup (lambda ()
+                      (define rp (unbox response-port-box))
+                      (when rp
+                        (with-logged-error "port cleanup" (close-input-port rp))))
+          (lambda ()
+            (define-values (sl rh rp) (http-sendrecv uri 'POST #:headers headers #:data body-bytes))
+            (set-box! response-port-box rp)
+            (vector sl rh rp))))
        (define status-line (vector-ref result-vec 0))
        (define response-headers (vector-ref result-vec 1))
        (define response-port (vector-ref result-vec 2))
@@ -385,8 +386,7 @@
      (lambda ()
        (define rp (unbox response-port-box))
        (when rp
-         (with-handlers ([exn:fail? void])
-           (close-input-port rp))))))
+         (with-logged-error "port cleanup" (close-input-port rp))))))
 
   (make-provider (lambda () "anthropic")
                  (lambda () (hasheq 'streaming #t 'token-counting #f))
