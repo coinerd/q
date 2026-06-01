@@ -34,7 +34,9 @@
                   maybe-execute-action
                   current-force-distill-fn
                   current-expand-context-fn
-                  current-rollback-action-log)
+                  current-revert-state-fn
+                  current-rollback-action-log
+                  rollback-action-reason)
          (only-in "auto-distillation.rkt" current-auto-distillation-enabled?))
 
 (provide current-task-state-aware-assembly?
@@ -253,7 +255,11 @@
                         (log-warning "context-assembly: expanding budget ~a \xe2\x86\x92 ~a"
                                      current-budget
                                      expanded)
-                        (current-conclusion-token-budget expanded))])
+                        (current-conclusion-token-budget expanded))]
+                     [current-revert-state-fn
+                      (lambda (a)
+                        (log-warning "context-assembly: revert-state action triggered: ~a"
+                                     (rollback-action-reason a)))])
         (define executed (maybe-execute-action recommended-action))
         (when executed
           (log-warning "context-assembly: executed rollback action: ~a" executed)))))
