@@ -15,9 +15,11 @@
          (only-in "context-assembly/task-state.rkt" task-states-list task-valid-direct-transition?)
          (only-in "context-assembly/ws-evolution.rkt"
                   evolution-result?
-                  evolution-result-evicted-conclusions)
+                  evolution-result-evicted-conclusions
+                  evolution-result-archived-entries)
          (only-in "context-assembly/task-conclusion.rkt" task-conclusion-id))
 
+(define-logger q-session-mutation)
 (provide (contract-out [guarded-set-prompt-running! (-> agent-session? boolean? void?)]
                        [guarded-set-compacting! (-> agent-session? boolean? void?)]
                        [guarded-set-shutdown-requested! (-> agent-session? boolean? void?)]
@@ -148,6 +150,11 @@
 ;; We now merge (union by ID) with existing session conclusions.
 (define (guarded-set-working-set-evolved! sess evolution-res)
   (when (and (agent-session? sess) (evolution-result? evolution-res))
+    ;; v0.79.2 GAP-4: Log archived entries (no longer silently dropped)
+    (define archived (evolution-result-archived-entries evolution-res))
+    (when (pair? archived)
+      (log-q-session-mutation-info (format "WS evolution archived ~a entries" (length archived))))
+    ;; Merge injected conclusions
     (define injected (evolution-result-evicted-conclusions evolution-res))
     (when (pair? injected)
       (define existing (agent-session-task-conclusions sess))
