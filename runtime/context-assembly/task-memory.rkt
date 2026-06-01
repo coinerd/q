@@ -9,7 +9,12 @@
 (require racket/contract
          racket/list
          "task-conclusion.rkt"
-         (only-in "task-state.rkt" task-state?))
+         (only-in "task-state.rkt" task-state?)
+         (only-in "conclusion-graph.rkt"
+                  build-conclusion-graph
+                  graph-select-by-seeds
+                  graph-detect-cycles
+                  fallback-select-conclusions))
 
 ;; ── Struct ──
 
@@ -88,6 +93,37 @@
 (define (hash->task-memory h)
   (task-memory (map hash->conclusion (hash-ref h 'conclusions '())) (hash-ref h 'max-conclusions 50)))
 
+;; v0.77.2 W2.2: Graph-aware context selection combining state relevance + graph seeds.
+;; Falls back to bounded recency when graph is empty or has cycles.
+(define (conclusions-for-context mem current-states seed-ids [max-count 20])
+  (define concs (task-memory-conclusions mem))
+  (cond
+    [(null? concs) '()]
+    ;; Degraded fallback: no seeds, use state-based bounded recency
+    [(null? seed-ids) (fallback-select-conclusions concs max-count current-states)]
+    [else
+     (define g (build-conclusion-graph concs))
+     (define cycles (graph-detect-cycles g))
+     (cond
+       ;; Degraded fallback: graph has cycles, use state-based bounded recency
+       [(pair? cycles) (fallback-select-conclusions concs max-count current-states)]
+       [else
+        (define selected-ids (graph-select-by-seeds g seed-ids))
+        (define id-set
+          (for/hash ([id (in-list selected-ids)])
+            (values id #t)))
+        (define state-set
+          (for/hash ([s (in-list current-states)])
+            (values s #t)))
+        ;; Filter by state relevance, then limit by max-count
+        (define filtered
+          (filter (lambda (c)
+                    (and (hash-has-key? id-set (task-conclusion-id c))
+                         (or (null? current-states)
+                             (hash-has-key? state-set (task-conclusion-fsm-state-origin c)))))
+                  concs))
+        (take-at-most filtered max-count)])]))
+
 ;; ── Exports ──
 
 (provide (struct-out task-memory)
@@ -98,4 +134,8 @@
           [conclusions-with-tags (-> task-memory? (listof symbol?) (listof task-conclusion?))]
           [evict-stale-conclusions (->* (task-memory?) ((listof symbol?) integer?) task-memory?)]
           [task-memory->hash (-> task-memory? hash?)]
-          [hash->task-memory (-> hash? task-memory?)]))
+          [hash->task-memory (-> hash? task-memory?)]
+          [conclusions-for-context
+           (->* (task-memory? (listof symbol?) (listof string?))
+                (exact-nonnegative-integer?)
+                (listof task-conclusion?))]))
