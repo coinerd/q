@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.76.8 (2026-05-30)
+
+### Post-v0.76.7 Audit Closure
+
+1 CRITICAL documentation integrity fix + 8 WARNING fixes + 3 INFO fixes.
+
+#### Changes
+- Fixed VALIDATION gates SG-12 + M7-G4: ADR reference corrected from 0017 to 0019
+- Fixed STATE.md version (was stale at 0.76.6)
+- Fixed PLAN-v0.76.xx series header (main series vs audit closure distinction)
+- Removed dead `tc-result` binding in `state-aware-builder.rkt`
+- Renamed `check-rollback-triggers` parameters from `#:before-tokens`/`#:after-tokens` to `#:before-messages`/`#:after-messages`
+- Added `[DEPRECATED]` prefix to `save-conclusion` tool description
+- Fixed `record-conclusion.rkt` event payload to send validated category symbol instead of raw string
+- Added error guard around `set-task-state` event emission
+- Fixed `when` guard in `test-v0756-audit-closure.rkt` that could swallow test failures
+
+#### Tests Added
+- Persistence round-trip test for string `origin-message-ids` (C1 regression guard)
+- Assertion for `origin-message-id` in record_conclusion event payload (C2 regression guard)
+- Integration test for `tool.set-task-state.completed` → session state change (C3 regression guard)
+- Session handler test: `origin-message-ids` populated from event payload
+
 ## v0.76.7 (2026-06-01)
 
 ### Audit Closure for v0.76.xx Context Assembly Activation
