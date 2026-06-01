@@ -10,6 +10,7 @@
                   build-conclusion-graph
                   conclusion-graph?
                   graph-select-by-seeds
+                  graph-select-conclusions
                   graph-topological-sort
                   graph-detect-cycles
                   graph-conclusion-count
@@ -115,6 +116,21 @@
       (define mem (make-task-memory))
       (check-equal? (conclusions-for-context mem '() '()) '()))
     (test-case "fallback with empty input"
-      (check-equal? (fallback-select-conclusions '() 5) '()))))
+      (check-equal? (fallback-select-conclusions '() 5) '()))
+
+    ;; v0.77.10 M4: graph-select-conclusions returns conclusion objects directly
+    (test-case "graph-select-conclusions returns conclusion objects"
+      (define g (build-conclusion-graph (list c1 c2 c3)))
+      (define selected (graph-select-conclusions g '("c3")))
+      ;; c3 depends on c1, so both should be selected
+      (check-true (>= (length selected) 2))
+      (define ids (map task-conclusion-id selected))
+      (check-not-false (member "c3" ids))
+      (check-not-false (member "c1" ids)))
+
+    (test-case "graph-select-conclusions with unknown seeds returns empty"
+      (define g (build-conclusion-graph (list c1 c2)))
+      (define selected (graph-select-conclusions g '("nonexistent")))
+      (check-equal? selected '()))))
 
 (run-tests suite)

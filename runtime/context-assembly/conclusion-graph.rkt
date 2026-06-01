@@ -136,17 +136,27 @@
       (drop lst (- (length lst) n))
       lst))
 
+;; v0.77.10 M4: Convenience wrapper — returns conclusion objects directly.
+;; Wraps graph-select-by-seeds + ID→conclusion lookup.
+(define (graph-select-conclusions g seed-ids)
+  (define nodes (conclusion-graph-nodes g))
+  (define selected-ids (graph-select-by-seeds g seed-ids))
+  (for/list ([id (in-list selected-ids)]
+             #:when (hash-has-key? nodes id))
+    (hash-ref nodes id)))
+
 ;; ── Exports ──
 
 (provide (struct-out conclusion-graph)
-         (contract-out [build-conclusion-graph (-> (listof task-conclusion?) conclusion-graph?)]
-                       [graph-conclusion-count (-> conclusion-graph? exact-nonnegative-integer?)]
-                       [graph-edge-count (-> conclusion-graph? exact-nonnegative-integer?)]
-                       [graph-detect-cycles (-> conclusion-graph? (listof string?))]
-                       [graph-topological-sort (-> conclusion-graph? (listof string?))]
-                       [graph-select-by-seeds
-                        (-> conclusion-graph? (listof string?) (listof string?))]
-                       [fallback-select-conclusions
-                        (->* ((listof task-conclusion?) exact-nonnegative-integer?)
-                             ((listof symbol?))
-                             (listof task-conclusion?))]))
+         (contract-out
+          [build-conclusion-graph (-> (listof task-conclusion?) conclusion-graph?)]
+          [graph-conclusion-count (-> conclusion-graph? exact-nonnegative-integer?)]
+          [graph-edge-count (-> conclusion-graph? exact-nonnegative-integer?)]
+          [graph-detect-cycles (-> conclusion-graph? (listof string?))]
+          [graph-topological-sort (-> conclusion-graph? (listof string?))]
+          [graph-select-by-seeds (-> conclusion-graph? (listof string?) (listof string?))]
+          [graph-select-conclusions (-> conclusion-graph? (listof string?) (listof task-conclusion?))]
+          [fallback-select-conclusions
+           (->* ((listof task-conclusion?) exact-nonnegative-integer?)
+                ((listof symbol?))
+                (listof task-conclusion?))]))

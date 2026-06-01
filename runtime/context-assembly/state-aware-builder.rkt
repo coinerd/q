@@ -24,10 +24,9 @@
          "context-floor.rkt"
          (only-in "conclusion-graph.rkt"
                   build-conclusion-graph
-                  graph-select-by-seeds
+                  graph-select-conclusions
                   graph-detect-cycles
-                  fallback-select-conclusions
-                  conclusion-graph-nodes)
+                  fallback-select-conclusions)
          (only-in "conclusion-ranker.rkt" rank-and-budget)
          (only-in "rollback-actions.rkt"
                   warnings->actions
@@ -138,15 +137,12 @@
                        (length cycles))
           (fallback-select-conclusions conclusions 20 current-states)]
          [else
-          ;; Seed-based subgraph selection
-          (define selected-ids (graph-select-by-seeds graph seed-ids))
-          (if (null? selected-ids)
+          ;; Seed-based subgraph selection (v0.77.10 M4: uses convenience wrapper)
+          (define selected-conclusions (graph-select-conclusions graph seed-ids))
+          (if (null? selected-conclusions)
               ;; No seeds matched — fall back to recency selection
               (fallback-select-conclusions conclusions 20 current-states)
-              ;; Map selected IDs back to conclusion objects
-              (for/list ([id (in-list selected-ids)]
-                         #:when (hash-has-key? (conclusion-graph-nodes graph) id))
-                (hash-ref (conclusion-graph-nodes graph) id)))])]))
+              selected-conclusions)])]))
 
   ;; v0.77.9 T1.2: Apply rank-and-budget when budget is configured (>0)
   (define budgeted-conclusions
