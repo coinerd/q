@@ -164,7 +164,7 @@
       (check-true (context-metrics? metrics))
       (define preamble-msg
         (for/first ([m (tiered-context-tier-a tc)]
-                    #:when (equal? (message-role m) 'system-instruction))
+                    #:when (equal? (message-kind m) 'system-instruction))
           m))
       (check-not-false preamble-msg "preamble message should be present for implementation state"))))
 

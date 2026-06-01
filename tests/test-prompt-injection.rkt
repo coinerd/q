@@ -15,6 +15,7 @@
                   message-role
                   make-message
                   make-text-part)
+         (only-in "../util/message.rkt" message-kind)
          (only-in "../util/content-parts.rkt" text-part-text)
          (only-in "../util/fsm.rkt" fsm-state))
 
@@ -55,10 +56,14 @@
     (test-case "preamble present for exploration state"
       (define p (build-state-awareness-preamble 'exploration '()))
       (check-not-false p)
-      (check-equal? (message-role p) 'system-instruction))
+      (check-equal? (message-role p) 'system)
+      (check-equal? (message-kind p) 'system-instruction))
 
-    (test-case "preamble absent for idle state"
-      (check-false (build-state-awareness-preamble 'idle '())))
+    (test-case "preamble present for idle state (v0.79.1 GAP-5)"
+      (define p (build-state-awareness-preamble 'idle '()))
+      (check-not-false p)
+      (check-equal? (message-role p) 'system)
+      (check-equal? (message-kind p) 'system-instruction))
 
     (test-case "preamble absent for #f state"
       (check-false (build-state-awareness-preamble #f '())))
@@ -145,7 +150,7 @@
                             (hasheq))))
       (define tc (build-tiered-context/state-aware msgs #:task-state 'planning))
       (define tier-a (tiered-context-tier-a tc))
-      (define preamble-count (count (lambda (m) (eq? (message-role m) 'system-instruction)) tier-a))
+      (define preamble-count (count (lambda (m) (eq? (message-kind m) 'system-instruction)) tier-a))
       (check-true (>= preamble-count 1) "Should have at least the preamble")
       (check-true (<= preamble-count 2)
                   (format "Too many system-instruction messages: ~a" preamble-count)))
@@ -172,6 +177,7 @@
       (define tc (build-tiered-context/state-aware msgs #:task-state 'verification))
       (define tier-a (tiered-context-tier-a tc))
       (check-true (>= (length tier-a) 1))
-      (check-equal? (message-role (car tier-a)) 'system-instruction))))
+      (check-equal? (message-role (car tier-a)) 'system)
+      (check-equal? (message-kind (car tier-a)) 'system-instruction))))
 
 (run-tests suite)

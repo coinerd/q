@@ -73,7 +73,7 @@
 
 ;; Helper: construct a "help" config (used for parse errors and --help)
 (define (make-help-config)
-  (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f #f #f))
+  (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f #f))
 
 ;; ============================================================
 ;; Flag definition table (QUAL-12)

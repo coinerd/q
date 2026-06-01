@@ -12,6 +12,7 @@
                   current-rollback-action-execution?)
          (only-in "../runtime/context-assembly/state-aware-builder.rkt" check-rollback-triggers)
          (only-in "../util/protocol-types.rkt" make-message make-text-part message-role)
+         (only-in "../util/message.rkt" message-kind)
          (only-in "../util/fsm.rkt" fsm-state))
 
 (define (make-test-msg role text [meta (hasheq)])
@@ -54,7 +55,8 @@
       (define tc (build-tiered-context/state-aware msgs #:task-state 'exploration))
       (define tier-a (tiered-context-tier-a tc))
       (check-true (> (length tier-a) 0))
-      (check-equal? (message-role (car tier-a)) 'system-instruction))
+      (check-equal? (message-role (car tier-a)) 'system)
+      (check-equal? (message-kind (car tier-a)) 'system-instruction))
 
     (test-case "state-aware with fsm-state struct works"
       (define msgs (make-test-msgs 5))
@@ -115,7 +117,8 @@
     (test-case "preamble returns message for exploration"
       (define preamble (build-state-awareness-preamble 'exploration '()))
       (check-not-false preamble)
-      (check-equal? (message-role preamble) 'system-instruction))
+      (check-equal? (message-role preamble) 'system)
+      (check-equal? (message-kind preamble) 'system-instruction))
 
     (test-case "preamble includes conclusions text"
       (define conclusions

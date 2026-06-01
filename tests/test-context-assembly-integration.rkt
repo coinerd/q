@@ -54,7 +54,7 @@
                   make-text-part
                   message-role
                   message-content)
-         (only-in "../util/message.rkt" message-id))
+         (only-in "../util/message.rkt" message-id message-kind))
 
 ;; Helper: create a simple test message
 (define (test-msg role text)
@@ -168,9 +168,9 @@
         ;; v0.78.6 W3: Verify preamble was injected (state-aware adds system-instruction)
         (define tier-a (tiered-context-tier-a tc))
         (check-true (> (length tier-a) 0) "tier-a should not be empty")
-        ;; Preamble should have system-instruction role
+        ;; Preamble should have role=system, kind=system-instruction
         (check-true (for/or ([m (in-list tier-a)])
-                      (eq? (message-role m) 'system-instruction))
+                      (and (eq? (message-role m) 'system) (eq? (message-kind m) 'system-instruction)))
                     "tier-a should contain system-instruction preamble")))
 
     ;; v0.78.0 AW1: Graph-through-builder with current-graph-conclusion-selection? #t

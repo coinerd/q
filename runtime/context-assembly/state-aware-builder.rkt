@@ -169,8 +169,8 @@
                   #:when (task-conclusion? c))
          (make-message (generate-id)
                        #f
+                       'system
                        'system-instruction
-                       'text
                        (list (make-text-part (format "[Conclusion] ~a" (task-conclusion-text c))))
                        (current-seconds)
                        (hasheq)))]
@@ -180,8 +180,8 @@
                       #:when (task-conclusion? c))
              (make-message (generate-id)
                            #f
+                           'system
                            'system-instruction
-                           'text
                            (list (make-text-part (format "[Conclusion] ~a" (task-conclusion-text c))))
                            (current-seconds)
                            (hasheq)))
@@ -193,8 +193,8 @@
                         #:when (task-conclusion? c))
                (make-message (generate-id)
                              #f
+                             'system
                              'system-instruction
-                             'text
                              (list (make-text-part (format "[Conclusion] ~a"
                                                            (task-conclusion-text c))))
                              (current-seconds)
@@ -309,8 +309,8 @@
         conclusion-section))
      (make-message "state-awareness-preamble"
                    #f
+                   'system
                    'system-instruction
-                   'text
                    (list (make-text-part preamble-text))
                    (current-seconds)
                    (hasheq))]))
@@ -398,8 +398,8 @@
     [matching-conclusion
      (make-message (message-id ws-msg)
                    #f
+                   'system
                    'system-instruction
-                   'text
                    (list (make-text-part (format "[Conclusion replaces context] ~a"
                                                  (task-conclusion-text matching-conclusion))))
                    (current-seconds)
