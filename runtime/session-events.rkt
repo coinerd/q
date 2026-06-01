@@ -20,7 +20,9 @@
                   infer-task-state-from-tools
                   current-state-inference-threshold))
 (require (only-in "../util/fsm.rkt" fsm-state-name))
-(require (only-in "context-assembly/ws-evolution.rkt" evolve-working-set-for-state))
+;; v0.77.10 M1: evolve-working-set-for-state import removed — subscriber now emits
+;; context.ws-evolve-requested event for turn-orchestrator to handle.
+;; (require (only-in "context-assembly/ws-evolution.rkt" evolve-working-set-for-state))
 
 (provide (contract-out [wire-session-event-handlers! (-> agent-session? procedure? void?)])
          current-ws-evolution-enabled?)
@@ -203,23 +205,26 @@
     ;; v0.77.1 W1.3: WS evolution flag exported for turn-orchestrator wiring
     ;; (subscriber deferred — working-set lives in turn scope, not session)
 
-    ;; v0.77.9 T2.3: WS evolution subscriber on state transitions
-    ;; When WS evolution is enabled, logs evolution opportunity for each state change.
-    ;; Full WS mutation requires config update — logged here for observability.
-    (subscribe! bus
-                (lambda (evt)
-                  (when (current-ws-evolution-enabled?)
-                    (define payload (event-payload evt))
-                    (define new-state (and (hash? payload) (hash-ref payload 'state #f)))
-                    (when new-state
-                      (define current-state (agent-session-task-fsm-state sess))
-                      (when (and current-state (not (eq? current-state new-state)))
-                        (log-info "session-events: WS evolution opportunity: ~a → ~a"
-                                  current-state
-                                  new-state)))))
-                #:filter (lambda (evt)
-                           (or (equal? (event-ev evt) "task.state.transitioned")
-                               (equal? (event-ev evt) "task.state.inferred"))))
+    ;; v0.77.10 M1: WS evolution subscriber on state transitions.
+    ;; Emits context.ws-evolve-requested event for turn-orchestrator to handle.
+    ;; Turn-orchestrator has access to the working-set in turn scope.
+    (subscribe!
+     bus
+     (lambda (evt)
+       (when (current-ws-evolution-enabled?)
+         (define payload (event-payload evt))
+         (define new-state (and (hash? payload) (hash-ref payload 'state #f)))
+         (when new-state
+           (define current-state (agent-session-task-fsm-state sess))
+           (when (and current-state (not (eq? current-state new-state)))
+             (log-info "session-events: WS evolution requested: ~a → ~a" current-state new-state)
+             (emit-session-event! bus
+                                  (agent-session-session-id sess)
+                                  "context.ws-evolve-requested"
+                                  (hasheq 'old-state current-state 'new-state new-state))))))
+     #:filter (lambda (evt)
+                (or (equal? (event-ev evt) "task.state.transitioned")
+                    (equal? (event-ev evt) "task.state.inferred"))))
 
     (void))
 

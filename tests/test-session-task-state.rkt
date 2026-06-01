@@ -20,9 +20,11 @@
                   task-conclusion?
                   task-conclusion-text)
          (only-in "helpers/session-fixture.rkt" make-test-session)
-         (only-in "../agent/event-bus.rkt" make-event-bus publish!)
-         (only-in "../util/event.rkt" make-event)
-         (only-in "../runtime/session-events.rkt" wire-session-event-handlers!))
+         (only-in "../agent/event-bus.rkt" make-event-bus publish! subscribe!)
+         (only-in "../util/event.rkt" make-event event-ev event-payload)
+         (only-in "../runtime/session-events.rkt"
+                  wire-session-event-handlers!
+                  current-ws-evolution-enabled?))
 
 (define suite
   (test-suite "session-task-state"
@@ -78,6 +80,34 @@
                             #f
                             (hasheq 'target-state "implementation" 'event-name "begin-implement")))
       ;; Verify state transitioned
-      (check-equal? (agent-session-task-fsm-state sess) 'implementation))))
+      (check-equal? (agent-session-task-fsm-state sess) 'implementation))
+
+    (test-case "WS evolution subscriber emits context.ws-evolve-requested event (M1)"
+      (define bus (make-event-bus))
+      (define sess (make-test-session #:event-bus bus))
+      (define received-events '())
+      ;; Subscribe to capture emitted events
+      (subscribe! bus
+                  (lambda (evt) (set! received-events (cons evt received-events)))
+                  #:filter (lambda (evt) (equal? (event-ev evt) "context.ws-evolve-requested")))
+      (wire-session-event-handlers! sess (lambda (s e) s))
+      ;; Set initial state
+      (guarded-set-task-fsm-state! sess 'exploration)
+      ;; Enable WS evolution
+      (parameterize ([current-ws-evolution-enabled? #t])
+        ;; Publish state transition event
+        (publish! bus
+                  (make-event "task.state.transitioned"
+                              (current-seconds)
+                              (agent-session-session-id sess)
+                              #f
+                              (hasheq 'state 'planning))))
+      ;; Verify event was emitted
+      (check-true (>= (length received-events) 1))
+      (define evt (car received-events))
+      (define payload (event-payload evt))
+      (check-equal? (hash-ref payload 'old-state) 'exploration)
+      (check-equal? (hash-ref payload 'new-state) 'planning))))
+
 
 (run-tests suite)
