@@ -212,26 +212,11 @@
 
     ;; v0.77.1 W1.3: WS evolution flag exported for turn-orchestrator wiring
     ;; (subscriber deferred — working-set lives in turn scope, not session)
-
-    ;; v0.77.10 M1: WS evolution subscriber on state transitions.
-    ;; Emits context.ws-evolve-requested event for turn-orchestrator to handle.
-    ;; Turn-orchestrator has access to the working-set in turn scope.
-    (subscribe! bus
-                (lambda (evt)
-                  (when (current-ws-evolution-enabled?)
-                    (define payload (event-payload evt))
-                    (define new-state (and (hash? payload) (hash-ref payload 'state #f)))
-                    (define old-state (and (hash? payload) (hash-ref payload 'old-state #f)))
-                    ;; v0.78.2 G2: Read old-state from event payload (not session) to avoid race
-                    (when (and old-state new-state (not (eq? old-state new-state)))
-                      (log-info "session-events: WS evolution requested: ~a → ~a" old-state new-state)
-                      (emit-session-event! bus
-                                           (agent-session-session-id sess)
-                                           "context.ws-evolve-requested"
-                                           (hasheq 'old-state old-state 'new-state new-state)))))
-                #:filter (lambda (evt)
-                           (or (equal? (event-ev evt) "task.state.transitioned")
-                               (equal? (event-ev evt) "task.state.inferred"))))
+    ;;
+    ;; v0.78.6 W2: Removed orphaned context.ws-evolve-requested subscriber.
+    ;; WS evolution is handled inline in turn-orchestrator.rkt's build-assembled-context.
+    ;; The event-driven approach was abandoned because the subscriber in session-events
+    ;; doesn't have access to the working-set (which lives in session config scope).
 
     (void))
 
