@@ -101,7 +101,9 @@
          append-task-state!
          load-latest-task-state
          append-conclusion!
+         append-archive-marker!
          load-conclusions
+         load-conclusions-archived
          ;; R-09/R-10: Session sink interface (v0.39.0)
          session-sink<%>
          file-session-sink%
@@ -457,6 +459,53 @@
                           v)]
                     [(and (list? v) (eq? k 'origin-message-ids))
                      v] ;; keep as strings — message IDs are strings
+                    [else v]))))
+      (hash->conclusion restored))))
+
+;; v0.77.1 W1.4: Append-only archive markers for evicted conclusions.
+;; Archived conclusions are logged but skipped by load-conclusions by default.
+;; Use load-conclusions-archived to include them.
+
+(define (append-archive-marker! path conclusion)
+  (define json-safe (conclusion-hash->json-safe (conclusion->hash conclusion)))
+  (append-entry! path
+                 (make-message (generate-id)
+                               #f
+                               'system
+                               'task-conclusion-archived
+                               (list (make-text-part (jsexpr->string json-safe)))
+                               (current-seconds)
+                               (hasheq))))
+
+(define (load-conclusions-archived path)
+  (define entries (load-session-log path))
+  (define conc-entries
+    (filter (lambda (e)
+              (and (message? e)
+                   (or (eq? (message-kind e) 'task-conclusion)
+                       (eq? (message-kind e) 'task-conclusion-archived))))
+            entries))
+  (for/list ([e (in-list conc-entries)]
+             #:when (message? e))
+    (define content (message-content e))
+    (define text
+      (if (string? content)
+          content
+          (text-part-text (car content))))
+    (with-handlers ([exn:fail? (lambda (_) #f)])
+      (define raw (string->jsexpr text))
+      (define restored
+        (for/hash ([(k v) (in-hash raw)])
+          (values k
+                  (cond
+                    [(and (string? v) (memq k '(category fsm-state-origin))) (string->symbol v)]
+                    [(and (list? v) (eq? k 'relevance-tags))
+                     (map (lambda (x)
+                            (if (string? x)
+                                (string->symbol x)
+                                x))
+                          v)]
+                    [(and (list? v) (eq? k 'origin-message-ids)) v]
                     [else v]))))
       (hash->conclusion restored))))
 

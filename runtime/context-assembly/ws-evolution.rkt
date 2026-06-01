@@ -26,10 +26,17 @@
                   task-debugging)
          (only-in "task-conclusion.rkt" task-conclusion? task-conclusion-text)
          (only-in "../../util/fsm.rkt" fsm-state-name)
+         racket/set
          racket/string)
 
 (provide evolve-working-set-for-state
-         working-set-selective-keep)
+         working-set-selective-keep
+         evolution-result
+         evolution-result?
+         evolution-result-kept-entries
+         evolution-result-archived-entries
+         evolution-result-evicted-conclusions
+         evolve-working-set-for-state/result)
 
 ;; working-set-selective-keep : working-set? (-> any/c boolean?) → void?
 ;; Keep only entries matching predicate. Removes all others.
@@ -76,3 +83,32 @@
 
     ;; No evolution needed for other transitions
     [else (filter task-conclusion? conclusions)]))
+
+;; ════════════════════════════════════════════════════════════════
+;; v0.77.1 W1.1: Structured evolution result
+;; ════════════════════════════════════════════════════════════════
+
+(struct evolution-result
+        (kept-entries ; (listof ws-entry?) — entries remaining in the WS
+         archived-entries ; (listof ws-entry?) — entries removed (for append-only log)
+         evicted-conclusions) ; (listof task-conclusion?) — conclusions to inject
+  #:transparent)
+
+;; evolve-working-set-for-state/result :
+;;   working-set? task-state? task-state? (listof task-conclusion?) -> evolution-result?
+;;
+;; Like evolve-working-set-for-state but returns a structured result with
+;; archived entries for append-only persistence.
+(define (evolve-working-set-for-state/result ws old-state new-state conclusions)
+  (define entries-before (working-set-entries ws))
+  (define injected (evolve-working-set-for-state ws old-state new-state conclusions))
+  (define entries-after (working-set-entries ws))
+  ;; Compute archived: entries present before but not after
+  (define after-paths
+    (for/set ([e (in-list entries-after)])
+      (ws-entry-path e)))
+  (define archived
+    (for/list ([e (in-list entries-before)]
+               #:when (not (set-member? after-paths (ws-entry-path e))))
+      e))
+  (evolution-result entries-after archived injected))

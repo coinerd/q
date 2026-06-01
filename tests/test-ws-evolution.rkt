@@ -17,7 +17,12 @@
                   ws-entry-path)
          (only-in "../runtime/context-assembly/ws-evolution.rkt"
                   evolve-working-set-for-state
-                  working-set-selective-keep)
+                  working-set-selective-keep
+                  evolve-working-set-for-state/result
+                  evolution-result?
+                  evolution-result-kept-entries
+                  evolution-result-archived-entries
+                  evolution-result-evicted-conclusions)
          (only-in "../runtime/context-assembly/task-state.rkt"
                   task-idle
                   task-exploration
@@ -119,6 +124,36 @@
       (define remaining (map ws-entry-path (working-set-entries ws)))
       (check-equal? (length remaining) 2 "only test files kept")
       (check-not-false (member "test-a.rkt" remaining))
-      (check-not-false (member "test-c.rkt" remaining)))))
+      (check-not-false (member "test-c.rkt" remaining)))
+
+    ;; v0.77.1 W1.1: evolution-result struct
+
+    (test-case "evolution-result exploration->planning archives all"
+      (define ws (make-working-set))
+      (populate-ws ws '("file1.rkt" "file2.rkt" "file3.rkt"))
+      (define result
+        (evolve-working-set-for-state/result ws task-exploration task-planning conclusions))
+      (check-true (evolution-result? result))
+      (check-equal? (length (evolution-result-kept-entries result)) 0)
+      (check-equal? (length (evolution-result-archived-entries result)) 3)
+      (check-equal? (length (evolution-result-evicted-conclusions result)) 2))
+
+    (test-case "evolution-result impl->debugging archives non-error files"
+      (define ws (make-working-set))
+      (populate-ws ws '("src/main.rkt" "tests/test-foo.rkt" "src/error-handler.rkt"))
+      (define result
+        (evolve-working-set-for-state/result ws task-implementation task-debugging conclusions))
+      (check-true (evolution-result? result))
+      (check-equal? (length (evolution-result-kept-entries result)) 2)
+      (check-equal? (length (evolution-result-archived-entries result)) 1))
+
+    (test-case "evolution-result no-change transition has empty archives"
+      (define ws (make-working-set))
+      (populate-ws ws '("plan.rkt"))
+      (define result
+        (evolve-working-set-for-state/result ws task-planning task-verification conclusions))
+      (check-true (evolution-result? result))
+      (check-equal? (length (evolution-result-kept-entries result)) 1)
+      (check-equal? (length (evolution-result-archived-entries result)) 0))))
 
 (run-tests suite)
