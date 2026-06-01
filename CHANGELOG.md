@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.77.9 (2026-06-01)
+
+### Post-v0.77.xx Audit Remediation
+
+Fixes 5 CRITICAL + 8 WARNING findings from v0.77.xx post-implementation audit.
+v0.77.0 delivered pure library modules; v0.77.9 wires them into the runtime.
+
+#### Runtime Wiring (was dead code in v0.77.0)
+- Graph selection: `build-conclusion-graph` + `graph-select-by-seeds` wired into `state-aware-builder.rkt` when `current-graph-conclusion-selection?` is ON
+- Budget enforcement: `rank-and-budget` wired into conclusion injection path when `current-conclusion-token-budget` > 0
+- Auto-distillation: `auto-distill` wired into `turn-orchestrator.rkt` pre-assembly when `current-auto-distillation-enabled?` is ON
+- Rollback actions: `check-rollback-triggers-with-actions` + `maybe-execute-action` wired into `state-aware-builder.rkt` when `current-rollback-action-execution?` is ON
+- WS evolution: subscriber on `task.state.transitioned`/`task.state.inferred` events for observability
+- Profile activation: `apply-context-assembly-profile!` wired into `build-assembled-context` via `config-context-assembly-profile`
+
+#### Bug Fixes
+- Fixed `make-conclusions` arity in E2E test (missing dependencies field)
+- Fixed `dynamic-require` in test-record-conclusion.rkt (replaced with direct require)
+- Fixed stale version refs (0.74.6 → 0.77.0) across 12 docs/wiki files
+- Synced `info.rkt` version 0.76.9 → 0.77.0
+
+#### Tests
+- Added multi-node cycle detection test (A→B→C→A)
+- Updated budget enforcement test to reflect active trimming
+- All 69+ context-assembly tests pass
+
+#### Changed Files
+- `runtime/turn-orchestrator.rkt` — auto-distill wiring, profile activation
+- `runtime/context-assembly/state-aware-builder.rkt` — graph selection, budget, rollback actions
+- `runtime/session-events.rkt` — WS evolution subscriber
+- `runtime/session-config.rkt` — config-context-assembly-profile accessor
+
 ## v0.77.0 (2026-06-01)
 
 ### Advanced Context Assembly Completion
