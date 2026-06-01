@@ -296,7 +296,11 @@
                      (string-join texts "\n")))
            "\n\nNo conclusions in memory yet. Use record_conclusion to save findings."))
      (define preamble-text
-       (format "You are currently in the ~a phase.~a~a" label guidance conclusion-section))
+       (format
+        "You are currently in the ~a phase.~a~a\n\nWorkflow: Use record_conclusion to persist findings. Use set_task_state to transition: exploration→planning→implementation→verification→debugging."
+        label
+        guidance
+        conclusion-section))
      (make-message "state-awareness-preamble"
                    #f
                    'system-instruction
