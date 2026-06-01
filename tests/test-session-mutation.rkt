@@ -8,6 +8,7 @@
          "../runtime/session-types.rkt"
          "../runtime/session-mutation.rkt"
          "../runtime/context-assembly/ws-evolution.rkt"
+         (only-in "../runtime/working-set.rkt" make-working-set ws-entry ws-entry?)
          (only-in "../runtime/context-assembly/task-conclusion.rkt"
                   task-conclusion
                   task-conclusion?
@@ -150,3 +151,17 @@
   (check-not-false (member "exp-1" final-ids) "existing exp-1 should survive")
   (check-not-false (member "exp-2" final-ids) "existing exp-2 should survive")
   (check-not-false (member "dist-1" final-ids) "new distilled conclusion should survive"))
+
+;; v0.79.2 GAP-4: Archive entry callback test
+(test-case "guarded-set-working-set-evolved! calls archive callback for archived entries"
+  (define sess (make-test-session))
+  (define archived-entries (box '()))
+  ;; Create an evolution result with archived entries
+  (define ws (make-working-set #:max-entries 10 #:max-tokens 1000))
+  (define e1 (ws-entry "file1.rkt" "m1" 100 1000))
+  (define e2 (ws-entry "file2.rkt" "m2" 200 2000))
+  (define result (evolution-result '() (list e1 e2) '()))
+  (parameterize ([current-archive-entry-fn
+                  (lambda (e) (set-box! archived-entries (cons e (unbox archived-entries))))])
+    (guarded-set-working-set-evolved! sess result))
+  (check-equal? (length (unbox archived-entries)) 2))
