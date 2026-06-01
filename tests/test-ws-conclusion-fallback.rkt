@@ -116,3 +116,34 @@
        (for/sum ([m (tiered-context-tier-c tc)])
                 (string-length (text-part-text (car (message-content m)))))))
   (check-true (< (tc-tokens tc-replace) (tc-tokens tc-no-replace))))
+
+;; ── W2-T2 (v0.76.7 W8): excluded WS path test ──
+
+(test-case "excluded WS: matched entries replaced, unmatched dropped"
+  ;; implementation state has ws-level='excluded
+  ;; Matched WS entries become compact conclusions; unmatched entries are dropped entirely
+  (define ws-1 (make-test-msg "ws-1" (make-string 500 #\x)))
+  (define ws-2 (make-test-msg "ws-2" (make-string 500 #\y)))
+  (define conclusions (list (make-conclusion "Summary of ws-1" #:origin-ids '("ws-1"))))
+  (define tc
+    (build-tiered-context/state-aware (list (make-test-msg "m1" "hello"))
+                                      #:tier-b-count 5
+                                      #:tier-c-count 2
+                                      #:working-set-messages (list ws-1 ws-2)
+                                      #:task-state 'implementation
+                                      #:conclusions conclusions))
+  (define tier-a-texts
+    (for/list ([m (tiered-context-tier-a tc)])
+      (text-part-text (car (message-content m)))))
+  ;; ws-1 should be replaced with conclusion (present in tier-a)
+  (check-true (ormap (λ (t) (string-contains? t "Summary of ws-1")) tier-a-texts)
+              "matched WS entry should be replaced with conclusion")
+  ;; ws-2 should be completely dropped (not in any tier)
+  (define all-texts
+    (append tier-a-texts
+            (for/list ([m (tiered-context-tier-b tc)])
+              (text-part-text (car (message-content m))))
+            (for/list ([m (tiered-context-tier-c tc)])
+              (text-part-text (car (message-content m))))))
+  (check-false (ormap (λ (t) (string-contains? t (make-string 500 #\y))) all-texts)
+               "unmatched WS entry should be dropped entirely in excluded state"))

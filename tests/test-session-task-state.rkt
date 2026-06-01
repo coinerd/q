@@ -2,6 +2,7 @@
 
 ;; tests/test-session-task-state.rkt — tests for task-state session fields + persistence
 ;; v0.75.1 W1: Session fields + guarded setters
+;; v0.76.7 W9: Refactored to use shared session fixture
 
 (require rackunit
          rackunit/text-ui
@@ -17,36 +18,8 @@
          (only-in "../runtime/context-assembly/task-conclusion.rkt"
                   task-conclusion
                   task-conclusion?
-                  task-conclusion-text))
-
-;; Helper: create a minimal agent-session with default fields
-(define (make-test-session)
-  (apply agent-session
-         (list "test-session"
-               "/tmp/test-session"
-               #f ; provider
-               #f ; tool-registry
-               #f ; event-bus
-               #f ; extension-registry
-               #f ; model-name
-               '() ; system-instructions
-               #f ; index
-               #f ; queue
-               (hasheq) ; config
-               #f ; active?
-               0 ; start-time
-               #f ; compacting?
-               #f ; last-compaction-time
-               #f ; persisted?
-               '() ; pending-entries
-               #f ; thinking-level
-               #f ; shutdown-requested?
-               #f ; force-shutdown?
-               #f ; prompt-running?
-               'idle ; task-fsm-state
-               '() ; task-conclusions
-               '() ; recent-tool-calls
-               )))
+                  task-conclusion-text)
+         (only-in "helpers/session-fixture.rkt" make-test-session))
 
 (define suite
   (test-suite "session-task-state"
