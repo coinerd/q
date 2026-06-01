@@ -38,7 +38,7 @@
     [(member s '("read" "find" "grep" "ls")) 'read]
     [(member s '("edit" "write" "edit-normalize")) 'write]
     [(member s '("bash")) 'bash]
-    [(member s '("save-conclusion" "set-task-state")) 'meta]
+    [(member s '("save-conclusion" "set-task-state" "record_conclusion")) 'meta]
     [else 'other]))
 
 ;; ── Pattern counters ──

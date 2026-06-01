@@ -46,8 +46,8 @@
       (check-equal? (context-level-for-state 'verification 'tool-results) 'full)
       (check-equal? (context-level-for-state 'verification 'working-set) 'filtered))
 
-    (test-case "debugging state includes full working-set"
-      (check-equal? (context-level-for-state 'debugging 'working-set) 'full)
+    (test-case "debugging state uses filtered working-set (v0.76.7 W5)"
+      (check-equal? (context-level-for-state 'debugging 'working-set) 'filtered)
       (check-equal? (context-level-for-state 'debugging 'tool-results) 'full))
 
     (test-case "fsm-state struct input works"

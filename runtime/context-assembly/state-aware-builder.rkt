@@ -145,6 +145,27 @@
         '()))
   ;; Prepend preamble + conclusion entries to tier-a
   (define new-tier-a (append preamble-entries conclusion-entries (tiered-context-tier-a base-tc)))
+  ;; v0.76.7 W6: Run rollback trigger checks (observational only)
+  (when (current-task-state-aware-assembly?)
+    (define tc-result
+      (if (and (null? preamble-entries) (null? conclusion-entries))
+          base-tc
+          (tiered-context new-tier-a
+                          (tiered-context-tier-b base-tc)
+                          (tiered-context-tier-c base-tc))))
+    (define n-conclusions (length (filter task-conclusion? conclusions)))
+    (define coverage
+      (if (> (length ws-messages) 0)
+          (/ n-conclusions (length ws-messages))
+          0.0))
+    (define warnings
+      (check-rollback-triggers #:before-tokens (length ws-messages)
+                               #:after-tokens (length effective-ws)
+                               #:conclusion-coverage coverage
+                               #:repeat-tool-count 0))
+    (when (pair? warnings)
+      (log-warning "context-assembly: rollback triggers fired: ~a" warnings))
+    tc-result)
   (if (and (null? preamble-entries) (null? conclusion-entries))
       base-tc
       (tiered-context new-tier-a (tiered-context-tier-b base-tc) (tiered-context-tier-c base-tc))))

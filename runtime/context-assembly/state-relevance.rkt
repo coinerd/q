@@ -106,14 +106,15 @@
                   'full
                   'plan-notes
                   'summary)
-          ;; debugging: error-focused — full working-set + tool-results
+          ;; debugging: error-focused — filtered working-set + full tool-results
+          ;; v0.76.7 W5: Changed from 'full to 'filtered per decision A7
           'debugging
           (hasheq 'system-prompt
                   'full
                   'conclusions
                   'full
                   'working-set
-                  'full
+                  'filtered
                   'recent-messages
                   'full
                   'tool-results

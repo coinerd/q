@@ -21,7 +21,8 @@
                   task-memory?
                   task-memory-conclusions
                   add-conclusion
-                  make-task-memory))
+                  make-task-memory)
+         (only-in "../exec-context.rkt" exec-context-event-publisher exec-context?))
 
 ;; --------------------------------------------------
 ;; Handler function
@@ -40,6 +41,10 @@
     [(not (and (list? tags) (andmap symbol? tags)))
      (make-error-result "tags must be a list of symbols")]
     [else
+     ;; v0.76.7 W1: Emit deprecation event
+     (define ev-pub (and exec-ctx (exec-context-event-publisher exec-ctx)))
+     (when ev-pub
+       (ev-pub "tool.deprecated" (hasheq 'tool "save-conclusion" 'replacement "record_conclusion")))
      ;; Generate a unique ID and create the conclusion
      (define id (format "c~a" (current-inexact-milliseconds)))
      (define c

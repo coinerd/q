@@ -161,6 +161,28 @@
                                                  'state
                                                  current-state))))
                 #:filter (lambda (evt) (equal? (event-ev evt) "tool.record_conclusion.completed")))
+
+    ;; v0.76.7 C3: Subscribe to tool.set-task-state.completed — explicit state transition
+    (subscribe! bus
+                (lambda (evt)
+                  (define payload (event-payload evt))
+                  (define target (and (hash? payload) (hash-ref payload 'target-state #f)))
+                  (when (and target (or (string? target) (symbol? target)))
+                    (define target-sym
+                      (if (string? target)
+                          (string->symbol target)
+                          target))
+                    (guarded-set-task-fsm-state! sess target-sym)
+                    ;; Persist task state change
+                    (define log-path (session-log-path-for sess))
+                    (when (file-exists? log-path)
+                      (append-task-state! log-path target-sym))
+                    (emit-session-event! bus
+                                         (agent-session-session-id sess)
+                                         "task.state.transitioned"
+                                         (hasheq 'state target-sym 'source "explicit"))))
+                #:filter (lambda (evt) (equal? (event-ev evt) "tool.set-task-state.completed")))
+
     (void)))
 
 ;; ============================================================
