@@ -26,6 +26,7 @@
          context-metrics-timestamp
          context-token-telemetry
          context-token-telemetry?
+         context-token-telemetry-conclusion-budget-remaining
          context-token-telemetry-tier-a-tokens
          context-token-telemetry-tier-b-tokens
          context-token-telemetry-tier-c-tokens
@@ -62,7 +63,8 @@
                        working-set-tokens
                        recent-tokens
                        total-tokens
-                       timestamp)
+                       timestamp
+                       conclusion-budget-remaining)
   #:transparent)
 
 ;; ── Token counting ──
@@ -112,14 +114,21 @@
   (define tier-a-tokens (measure-context-size (tiered-context-tier-a tc)))
   (define tier-b-tokens (measure-context-size (tiered-context-tier-b tc)))
   (define tier-c-tokens (measure-context-size (tiered-context-tier-c tc)))
+  (define conc-tokens (measure-context-size conclusion-messages))
+  (define budget (current-conclusion-token-budget))
+  (define remaining
+    (if (> budget 0)
+        (- budget conc-tokens)
+        -1))
   (context-token-telemetry tier-a-tokens
                            tier-b-tokens
                            tier-c-tokens
-                           (measure-context-size conclusion-messages)
+                           conc-tokens
                            (measure-context-size working-set-messages)
                            (measure-context-size recent-messages)
                            (+ tier-a-tokens tier-b-tokens tier-c-tokens)
-                           (current-seconds)))
+                           (current-seconds)
+                           remaining))
 
 ;; ── Assembly wrapper ──
 
