@@ -1,5 +1,53 @@
 # Changelog
 
+## v0.78.6 (2026-06-01)
+
+### Post-Audit Remediation
+
+Resolves 8 CRITICAL and 4 WARNING findings from v0.78.xx post-implementation audit.
+All feature flags remain OFF by default — no behavior change without explicit activation.
+
+#### C1: WS Evolution Type Mismatch (W0)
+- Replaced `evolve-working-set-for-state` with `/result` variant in turn-orchestrator
+- Returns `evolution-result?` struct that `guarded-set-working-set-evolved!` expects
+
+#### C2: Recent Tool Calls Not Threaded (W0)
+- Added `#:recent-tool-calls` keyword to `assemble-context/pure` contract and signature
+- Now forwards `agent-session-recent-tool-calls` from session to `build-tiered-context/state-aware`
+
+#### C3: G3 Auto-Distill Persistence Test (W1)
+- Added test verifying auto-distilled conclusions persist through `guarded-set-task-conclusions!`
+
+#### C4: G9 Amnesia Trigger Assertion (W1)
+- Fixed weak test — now verifies `task-amnesia-detected` warning fires for repeat tool count > 2
+
+#### C5: G10 FSM Preamble Test (W1)
+- Replaced broken `let-values` with proper preamble text extraction
+- Verifies `record_conclusion` and `set_task_state` appear in preamble text
+
+#### C6: STATE.md Stale (W2)
+- Updated to reflect v0.78.6 and all completed milestones
+
+#### C7: HANDOFF.json Stale (W2)
+- Updated with current version, milestone status, and wave PR references
+
+#### C8: PLAN Status Stale (W2)
+- Marked PLAN-v0.78.6-AUDIT-REMEDIATION.md as COMPLETE
+
+#### W1: WS Evolution Old-State (W0)
+- Changed hardcoded `task-idle` to `#f` (unknown) for inline WS evolution
+
+#### W2: Orphaned Event Subscriber (W0)
+- Removed `context.ws-evolve-requested` subscriber from session-events.rkt
+- Event was emitted but never consumed; inline evolution is the actual path
+
+#### W3: Weak Integration Assertions (W1)
+- Strengthened `check-not-false tc` assertions with meaningful content checks
+- Added preamble verification and budget enforcement assertions
+
+#### W4: README Sync (W2)
+- Synced README status section to reflect v0.78.6
+
 ## v0.78.0 (2026-06-01)
 
 ### Comprehensive Context Assembly
