@@ -91,7 +91,8 @@
 (define-syntax-rule (with-fresh-event-registries body ...)
   (parameterize ([current-event-field-registry (make-hasheq)]
                  [current-event-serializer-registry (make-hash)]
-                 [current-event-deserializer-registry (make-hash)])
+                 [current-event-deserializer-registry (make-hash)]
+                 [current-event-schema-registry (make-hash)])
     body ...))
 
 ;; ===========================================================
