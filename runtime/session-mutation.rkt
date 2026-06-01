@@ -6,6 +6,7 @@
 ;; Prevents invalid state transitions like #t→#t on prompt-running?.
 
 (require racket/contract
+         racket/set
          "session-types.rkt"
          (submod "session-types.rkt" internal)
          (only-in "session-config.rkt" session-config?)
@@ -14,7 +15,8 @@
          (only-in "context-assembly/task-state.rkt" task-states-list task-valid-direct-transition?)
          (only-in "context-assembly/ws-evolution.rkt"
                   evolution-result?
-                  evolution-result-evicted-conclusions))
+                  evolution-result-evicted-conclusions)
+         (only-in "context-assembly/task-conclusion.rkt" task-conclusion-id))
 
 (provide (contract-out [guarded-set-prompt-running! (-> agent-session? boolean? void?)]
                        [guarded-set-compacting! (-> agent-session? boolean? void?)]
@@ -33,6 +35,7 @@
                        [guarded-set-task-fsm-state! (-> agent-session? (or/c symbol? #f) void?)]
                        [guarded-set-task-conclusions! (-> agent-session? list? void?)]
                        [guarded-set-recent-tool-calls! (-> agent-session? list? void?)]
+                       [guarded-set-working-set-evolved! (-> agent-session? evolution-result? void?)]
                        [valid-session-phase? (-> symbol? boolean?)]
                        [session-phase (-> agent-session? symbol?)]))
 
@@ -139,14 +142,24 @@
   (set-agent-session-recent-tool-calls! sess value))
 
 ;; Guard task-conclusions — type-safe wrapper
-;; v0.77.1 W1.2: Guarded setter for WS evolution results.
-;; Updates conclusions from evolution result; WS is already mutated in-place.
+;; v0.78.0 W1: Fixed G5 — MERGE instead of REPLACE.
+;; The "evicted-conclusions" field name is misleading; it's actually the
+;; set of conclusions INJECTED by the evolution (to add to session).
+;; We now merge (union by ID) with existing session conclusions.
 (define (guarded-set-working-set-evolved! sess evolution-res)
   (when (and (agent-session? sess) (evolution-result? evolution-res))
-    (define evicted (evolution-result-evicted-conclusions evolution-res))
-    (when (pair? evicted)
-      ;; Replace conclusions with evicted set (already filtered by evolution)
-      (guarded-set-task-conclusions! sess evicted))))
+    (define injected (evolution-result-evicted-conclusions evolution-res))
+    (when (pair? injected)
+      (define existing (agent-session-task-conclusions sess))
+      (define existing-ids
+        (for/set ([c (in-list existing)])
+          (task-conclusion-id c)))
+      ;; Merge: keep all existing + add new ones that don't already exist
+      (define merged
+        (append existing
+                (filter (lambda (c) (not (set-member? existing-ids (task-conclusion-id c))))
+                        injected)))
+      (guarded-set-task-conclusions! sess merged))))
 
 (define (guarded-set-task-conclusions! sess value)
   (set-agent-session-task-conclusions! sess value))
