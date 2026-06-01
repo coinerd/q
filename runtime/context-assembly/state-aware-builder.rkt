@@ -147,25 +147,18 @@
   (define new-tier-a (append preamble-entries conclusion-entries (tiered-context-tier-a base-tc)))
   ;; v0.76.7 W6: Run rollback trigger checks (observational only)
   (when (current-task-state-aware-assembly?)
-    (define tc-result
-      (if (and (null? preamble-entries) (null? conclusion-entries))
-          base-tc
-          (tiered-context new-tier-a
-                          (tiered-context-tier-b base-tc)
-                          (tiered-context-tier-c base-tc))))
     (define n-conclusions (length (filter task-conclusion? conclusions)))
     (define coverage
       (if (> (length ws-messages) 0)
           (/ n-conclusions (length ws-messages))
           0.0))
     (define warnings
-      (check-rollback-triggers #:before-tokens (length ws-messages)
-                               #:after-tokens (length effective-ws)
+      (check-rollback-triggers #:before-messages (length ws-messages)
+                               #:after-messages (length effective-ws)
                                #:conclusion-coverage coverage
                                #:repeat-tool-count 0))
     (when (pair? warnings)
-      (log-warning "context-assembly: rollback triggers fired: ~a" warnings))
-    tc-result)
+      (log-warning "context-assembly: rollback triggers fired: ~a" warnings)))
   (if (and (null? preamble-entries) (null? conclusion-entries))
       base-tc
       (tiered-context new-tier-a (tiered-context-tier-b base-tc) (tiered-context-tier-c base-tc))))
@@ -219,25 +212,26 @@
 ;; ════════════════════════════════════════════════════════════════
 
 ;; check-rollback-triggers :
-;;   #:before-tokens number? #:after-tokens number?
+;;   #:before-messages number? #:after-messages number?
 ;;   #:conclusion-coverage number? #:repeat-tool-count exact-nonnegative-integer?
 ;;   -> (listof (list/c symbol? string?))
 ;;
 ;; Returns a list of warning tuples: (trigger-type message).
 ;; Triggers are observational — callers decide what to do.
-(define (check-rollback-triggers #:before-tokens before-tokens
-                                 #:after-tokens after-tokens
+(define (check-rollback-triggers #:before-messages before-messages
+                                 #:after-messages after-messages
                                  #:conclusion-coverage conclusion-coverage
                                  #:repeat-tool-count repeat-tool-count)
   (define warnings '())
 
-  ;; Trigger 1: Excessive savings (>50% tokens cut)
+  ;; Trigger 1: Excessive savings (>50% messages cut)
   ;; R2 risk: context may be too small to work effectively
-  (when (and (> before-tokens 0) (> after-tokens 0) (< after-tokens (* before-tokens 0.50)))
-    (set! warnings
-          (cons (list 'excessive-savings
-                      (format "Context reduced by >50%: ~a → ~a tokens" before-tokens after-tokens))
-                warnings)))
+  (when (and (> before-messages 0) (> after-messages 0) (< after-messages (* before-messages 0.50)))
+    (set!
+     warnings
+     (cons (list 'excessive-savings
+                 (format "Context reduced by >50%: ~a → ~a messages" before-messages after-messages))
+           warnings)))
 
   ;; Trigger 2: Low conclusion coverage (amnesia risk)
   ;; R0 risk: agent forgetting key findings

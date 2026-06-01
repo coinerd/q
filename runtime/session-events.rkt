@@ -118,9 +118,11 @@
                     (define category-raw (and (hash? payload) (hash-ref payload 'category "fact")))
                     (define tags (and (hash? payload) (hash-ref payload 'tags '())))
                     (define category-sym
-                      (if (string? category-raw)
-                          (string->symbol category-raw)
-                          category-raw))
+                      (if (symbol? category-raw)
+                          category-raw
+                          (if (string? category-raw)
+                              (string->symbol category-raw)
+                              category-raw)))
                     (define tag-syms
                       (for/list ([t (in-list (if (list? tags)
                                                  tags
