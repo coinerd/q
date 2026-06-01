@@ -7,6 +7,11 @@
 (require rackunit
          "../runtime/session-types.rkt"
          "../runtime/session-mutation.rkt"
+         "../runtime/context-assembly/ws-evolution.rkt"
+         (only-in "../runtime/context-assembly/task-conclusion.rkt"
+                  task-conclusion
+                  task-conclusion?
+                  task-conclusion-id)
          "../util/ids.rkt"
          "../agent/queue.rkt")
 
@@ -31,7 +36,10 @@
                  'medium ; thinking-level
                  #f ; shutdown-requested?
                  #f ; force-shutdown?
-                 #f)) ; prompt-running?
+                 #f ; prompt-running?
+                 #f ; task-fsm-state
+                 '() ; task-conclusions
+                 '())) ; recent-tool-calls
 
 ;; W-04: prompt-running? transition guards
 
@@ -74,3 +82,38 @@
 (test-case "valid-session-phase? rejects unknown phases"
   (check-false (valid-session-phase? 'unknown))
   (check-false (valid-session-phase? 'foo)))
+
+;; ── G5 Fix: WS Evolution Conclusion Merge ──
+
+(test-case "guarded-set-working-set-evolved! merges conclusions, does not replace"
+  ;; Create session with existing conclusions from multiple phases
+  (define sess (make-test-session))
+  (guarded-set-task-conclusions! sess
+    (list (task-conclusion "existing-1" "old fact" 'fact 'exploration '() 1000 '() '())
+          (task-conclusion "existing-2" "old decision" 'decision 'implementation '() 2000 '() '())))
+  (check-equal? (length (agent-session-task-conclusions sess)) 2)
+  ;; Simulate evolution result with new conclusions (the "evicted" set)
+  (define evo-res
+    (evolution-result
+      '() ; kept-entries
+      '() ; archived-entries
+      (list (task-conclusion "new-1" "injected fact" 'fact 'implementation '() 3000 '() '()))))
+  ;; Call the function
+  (guarded-set-working-set-evolved! sess evo-res)
+  ;; Verify: ALL original conclusions survive + new ones added
+  (define final-conclusions (agent-session-task-conclusions sess))
+  (check-equal? (length final-conclusions) 3)
+  (define final-ids (map task-conclusion-id final-conclusions))
+  (check-not-false (member "existing-1" final-ids))
+  (check-not-false (member "existing-2" final-ids))
+  (check-not-false (member "new-1" final-ids)))
+
+(test-case "guarded-set-working-set-evolved! with empty evolution result preserves conclusions"
+  (define sess (make-test-session))
+  (guarded-set-task-conclusions! sess
+    (list (task-conclusion "keep-me" "important" 'fact 'exploration '() 1000 '() '())))
+  (define evo-res (evolution-result '() '() '()))
+  (guarded-set-working-set-evolved! sess evo-res)
+  ;; Original conclusion should survive since nothing to merge
+  (check-equal? (length (agent-session-task-conclusions sess)) 1)
+  (check-equal? (task-conclusion-id (car (agent-session-task-conclusions sess))) "keep-me"))
