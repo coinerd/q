@@ -12,6 +12,7 @@
          "../agent/stream-runner.rkt"
          "../agent/loop-phases.rkt"
          "../util/cancellation.rkt"
+         "../util/message.rkt"
          "../agent/event-bus.rkt")
 
 (test-case "stream-from-provider: procedure exists with tightened contract"
@@ -25,13 +26,20 @@
   (check-equal? effects '()))
 
 (test-case "phase-build-request: rejects non-hash in messages list"
-  (check-exn
-   exn:fail:contract?
-   (lambda ()
-     (phase-build-request (list "not-a-hash") #f (hasheq)))))
+  (check-exn exn:fail:contract? (lambda () (phase-build-request (list "not-a-hash") #f (hasheq)))))
 
-(test-case "phase-emit-start: procedure exists"
-  (check-pred procedure? phase-emit-start))
+(test-case "phase-emit-start: accepts listof message and returns listof message"
+  (define msgs (list (make-message "id1" #f 'user 'user '("hello") 1000 (hasheq))))
+  (define st (make-loop-state "s" "t"))
+  (define-values (ctx1 effects) (phase-emit-start "s" "t" st msgs))
+  (check-equal? ctx1 msgs)
+  (check-pred list? effects))
+
+(test-case "phase-emit-start: rejects non-message in context list"
+  (check-exn exn:fail:contract?
+             (lambda ()
+               (define st (make-loop-state "s" "t"))
+               (phase-emit-start "s" "t" st (list (hasheq 'role "user"))))))
 
 (test-case "phase-build-context: procedure exists"
   (check-pred procedure? phase-build-context))

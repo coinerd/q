@@ -41,17 +41,21 @@
          (only-in "event-bus.rkt" event-bus?)
          (only-in "loop-stream.rkt" stream-from-provider handle-cancellation build-stream-result)
          (only-in "../util/cancellation.rkt" cancellation-token?)
+         (only-in "../util/message.rkt" message?)
          "../util/loop-result.rkt")
 
-(provide (contract-out
-          [phase-emit-start
-           (-> string? string? loop-state? (listof hash?) (values (listof hash?) (listof effect?)))])
+(provide (contract-out [phase-emit-start
+                        (-> string?
+                            string?
+                            loop-state?
+                            (listof message?)
+                            (values (listof message?) (listof effect?)))])
          (contract-out [phase-build-context
                         (-> event-bus?
                             string?
                             string?
                             loop-state?
-                            (listof hash?)
+                            (listof message?)
                             (values (listof hash?) (listof effect?)))])
          (contract-out [phase-build-request
                         (-> (listof hash?)
