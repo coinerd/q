@@ -1,21 +1,4 @@
 #lang racket/base
-
-;; util/glob.rkt — Shared glob-to-regexp conversion
-
-(require racket/contract
-         racket/string)
-
-(provide (contract-out [glob->regexp (->* (string?) (#:allow-slash? boolean?) regexp?)]))
-
-;; Convert a glob pattern to a regexp.
-;; #:allow-slash? #t means * matches / (for path-based tools like find)
-;; #:allow-slash? #f means * does NOT match / (for file-pattern tools like grep)
-(define (glob->regexp pattern #:allow-slash? [allow-slash? #f])
-  (define escaped
-    (for/list ([ch (in-string pattern)])
-      (case ch
-        [(#\*) (if allow-slash? ".*" "[^/]*")]
-        [(#\?) "."]
-        [(#\. #\+ #\( #\) #\[ #\] #\{ #\} #\\ #\^ #\$ #\|) (string #\\ ch)]
-        [else (string ch)])))
-  (regexp (string-append "^" (string-join escaped "") "$")))
+;; DEPRECATED: This module has moved to util/path/glob.rkt. Remove this facade in v0.83.
+(provide (all-from-out "path/glob.rkt"))
+(require "path/glob.rkt")
