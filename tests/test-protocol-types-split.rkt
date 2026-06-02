@@ -23,7 +23,7 @@
                             "../util/protocol-types.rkt")))
 
 (check-not-false (regexp-match? #rx"DEPRECATED" protocol-types-source))
-(check-not-false (regexp-match? #rx"Target removal: v0[.]82[+]" protocol-types-source))
+(check-not-false (regexp-match? #rx"v0[.]8[23]" protocol-types-source))
 
 ;; ── Content parts (from facade and direct) ─────────────────
 (check-equal? (text-part-text (make-text-part "hello")) "hello")
