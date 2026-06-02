@@ -7,7 +7,7 @@
 ;; Lives in agent/ because it depends on agent/event-bus.
 
 (require racket/contract
-         "../util/protocol-types.rkt"
+         (only-in "../util/event.rkt" event-ev event-session-id)
          "event-bus.rkt")
 
 (provide (contract-out [wait-for-idle! (->* (event-bus? string?) ((or/c #f number?)) any)]))

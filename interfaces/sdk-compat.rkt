@@ -16,7 +16,8 @@
          racket/file
          racket/math
          racket/list
-         "../util/protocol-types.rkt"
+         (only-in "../util/tree-entries.rkt" make-branch-entry make-tree-navigation-entry)
+         (only-in "../util/message.rkt" message-id)
          (prefix-in session: "../runtime/agent-session.rkt")
          (only-in "../runtime/compactor.rkt"
                   compact-history
