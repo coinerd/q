@@ -155,9 +155,13 @@
                      "exceeds the maximum"))
 
 (define (context-overflow-error? exn)
-  (define msg (exn-message exn))
-  (for/or ([pattern (in-list CONTEXT_OVERFLOW_PATTERNS)])
-    (string-contains? (string-downcase msg) pattern)))
+  ;; Fast path: structured provider-error
+  (or (and (provider-error? exn) (eq? (provider-error-category exn) 'context-overflow))
+      ;; Fallback: string matching for non-structured errors
+      (let ()
+        (define msg (exn-message exn))
+        (for/or ([pattern (in-list CONTEXT_OVERFLOW_PATTERNS)])
+          (string-contains? (string-downcase msg) pattern)))))
 
 ;; ============================================================
 ;; Permanent tool error predicate (v0.19.3 Wave 2)
@@ -186,16 +190,24 @@
 (define TIMEOUT_PATTERNS '("timeout" "timed out" "connection reset" "broken pipe" "read error" "eof"))
 
 (define (timeout-error? exn)
-  (define msg (exn-message exn))
-  (for/or ([pattern (in-list TIMEOUT_PATTERNS)])
-    (string-contains? (string-downcase msg) pattern)))
+  ;; Fast path: structured provider-error
+  (or (and (provider-error? exn) (eq? (provider-error-category exn) 'timeout))
+      ;; Fallback: string matching for non-structured errors
+      (let ()
+        (define msg (exn-message exn))
+        (for/or ([pattern (in-list TIMEOUT_PATTERNS)])
+          (string-contains? (string-downcase msg) pattern)))))
 
 (define RATE_LIMIT_PATTERNS '("429" "rate" "overloaded" "quota" "too many requests"))
 
 (define (rate-limit-error? exn)
-  (define msg (exn-message exn))
-  (for/or ([pattern (in-list RATE_LIMIT_PATTERNS)])
-    (string-contains? (string-downcase msg) pattern)))
+  ;; Fast path: structured provider-error
+  (or (and (provider-error? exn) (eq? (provider-error-category exn) 'rate-limit))
+      ;; Fallback: string matching for non-structured errors
+      (let ()
+        (define msg (exn-message exn))
+        (for/or ([pattern (in-list RATE_LIMIT_PATTERNS)])
+          (string-contains? (string-downcase msg) pattern)))))
 
 ;; Classify an error into a symbolic type for recovery hint rendering.
 ;; Returns one of: 'timeout, 'rate-limit, 'auth, 'context-overflow,
