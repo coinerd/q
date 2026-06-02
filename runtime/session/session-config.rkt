@@ -53,7 +53,7 @@
 ;;   'self-healing  — bounded + auto-distill + rollback actions (behind flags)
 ;;   'full          — all features active (not recommended yet)
 (define current-context-assembly-profile (make-parameter 'off))
-(define current-goal-loop-enabled? (make-parameter #f))
+(define current-goal-loop-enabled? (make-parameter #t))
 
 (define valid-profiles '(off observe bounded self-healing full))
 

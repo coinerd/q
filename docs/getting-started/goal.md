@@ -1,6 +1,6 @@
 # Goal Feature
 
-The `/goal` command sets an autonomous goal that the agent works toward across multiple turns, with an independent evaluator checking progress.
+The `/goal` command sets an autonomous goal that the agent works toward across multiple turns, with an independent evaluator checking progress. This feature is **enabled by default** since v0.82.5.
 
 ## Basic Usage
 
