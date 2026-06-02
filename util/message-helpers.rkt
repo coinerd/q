@@ -13,7 +13,9 @@
          racket/list
          racket/path
          racket/file
-         "../util/protocol-types.rkt")
+         (only-in "content-parts.rkt" tool-call-part tool-call-part-id tool-call-part?)
+         (only-in "message.rkt" message message-content message-kind message?)
+         (only-in "tool-types.rkt" tool-result))
 
 (provide (contract-out [has-tool-calls? (-> any/c boolean?)]
                        [tool-result-message? (-> message? boolean?)]

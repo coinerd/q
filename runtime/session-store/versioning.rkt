@@ -7,7 +7,11 @@
          racket/match
          racket/file
          json
-         "../../util/protocol-types.rkt"
+         (only-in "../../util/message.rkt"
+                  jsexpr->message
+                  make-message
+                  message->jsexpr
+                  message-meta-safe)
          "../../util/jsonl.rkt"
          (only-in "../../util/message-helpers.rkt" ensure-parent-dirs!)
          (only-in "../../util/ids.rkt" generate-id)

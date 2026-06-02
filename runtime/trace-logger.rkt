@@ -12,7 +12,14 @@
          racket/file
          racket/class
          "../agent/event-bus.rkt"
-         "../util/protocol-types.rkt"
+         (only-in "../util/event.rkt"
+                  event
+                  event-ev
+                  event-payload
+                  event-session-id
+                  event-time
+                  event-turn-id
+                  event?)
          "trace-sink.rkt")
 
 (provide (contract-out

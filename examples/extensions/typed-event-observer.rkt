@@ -9,29 +9,31 @@
 
 (require "../../agent/event-bus.rkt"
          "../../agent/event-types.rkt"
-         "../../util/protocol-types.rkt")
+         (only-in "../../util/event.rkt" event event-ev event-payload))
 
 ;; Start an observer that logs all events on the bus.
 ;; Returns subscription ID for cleanup.
 (define (start-observer! bus)
-  (subscribe!
-   bus
-   (lambda (evt)
-     (define ev-name (event-ev evt))
-     (define payload (event-payload evt))
-     (printf "[event] ~a | payload keys: ~a\n"
-             ev-name
-             (if (hash? payload) (hash-keys payload) '())))
-   #:filter (lambda (evt) #t)))
+  (subscribe! bus
+              (lambda (evt)
+                (define ev-name (event-ev evt))
+                (define payload (event-payload evt))
+                (printf "[event] ~a | payload keys: ~a\n"
+                        ev-name
+                        (if (hash? payload)
+                            (hash-keys payload)
+                            '())))
+              #:filter (lambda (evt) #t)))
 
 ;; Demonstrate publishing a typed event through the bus bridge.
 ;; The typed event is converted to a raw event internally.
 (define (demo-typed-emit! bus session-id turn-id)
   ;; Create a typed turn-start event
-  (define te (make-turn-start-event #:session-id session-id
-                                     #:turn-id turn-id
-                                     #:model "gpt-4"
-                                     #:provider "openai"))
+  (define te
+    (make-turn-start-event #:session-id session-id
+                           #:turn-id turn-id
+                           #:model "gpt-4"
+                           #:provider "openai"))
   ;; Emit via the typed bridge
   (define raw-evt (bus-emit-typed! bus te))
   ;; The raw event now has the typed event's type as event name

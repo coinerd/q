@@ -8,7 +8,6 @@
 (require racket/contract
          racket/match
          racket/string
-         "../util/protocol-types.rkt"
          "../llm/provider-errors.rkt")
 
 ;; Predicates

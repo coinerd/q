@@ -17,7 +17,13 @@
          racket/list
          racket/string
          racket/set
-         "../util/protocol-types.rkt")
+         (only-in "../util/content-parts.rkt" text-part text-part-text text-part?)
+         (only-in "../util/message.rkt"
+                  message-content
+                  message-id
+                  message-parent-id
+                  message-role
+                  message-timestamp))
 
 (provide tree-node?
          tree-node-timestamp
@@ -35,7 +41,10 @@
                                     #:bookmarks (or/c hash? #f))
                 (listof string?))]
           [make-tree-node
-           (->* ((or/c string? #f) (or/c string? symbol?) string? exact-nonnegative-integer? (listof any/c))
+           (->* ((or/c string? #f) (or/c string? symbol?)
+                                   string?
+                                   exact-nonnegative-integer?
+                                   (listof any/c))
                 ((or/c number? #f))
                 tree-node?)]
           [build-tree-nodes (-> (listof any/c) (listof list?))]

@@ -10,7 +10,6 @@
          racket/file
          racket/path
          "../state.rkt"
-         "../../util/protocol-types.rkt"
          "../../agent/event-bus.rkt"
          "../../runtime/extension-catalog.rkt"
          "../../extensions/hooks.rkt"

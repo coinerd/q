@@ -16,7 +16,16 @@
          "../llm/model.rkt"
          "streaming-message.rkt"
          "state.rkt"
-         "../util/protocol-types.rkt"
+         (only-in "../util/content-parts.rkt"
+                  make-text-part
+                  make-tool-call-part
+                  text-part
+                  text-part-text
+                  tool-call-part-arguments
+                  tool-call-part-id
+                  tool-call-part-name)
+         (only-in "../util/loop-result.rkt" make-loop-result)
+         (only-in "../util/message.rkt" make-message message message-id)
          "../util/ids.rkt"
          (only-in "../util/cancellation.rkt" cancellation-token? cancellation-token-cancelled?)
          (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload)

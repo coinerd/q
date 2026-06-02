@@ -22,7 +22,22 @@
          racket/string
          racket/list
          racket/set
-         "../util/protocol-types.rkt"
+         (only-in "../util/content-parts.rkt"
+                  make-text-part
+                  text-part
+                  text-part-text
+                  text-part?
+                  tool-call-part
+                  tool-call-part-arguments
+                  tool-call-part-name
+                  tool-call-part?)
+         (only-in "../util/message.rkt"
+                  make-message
+                  message-content
+                  message-id
+                  message-kind
+                  message-meta-safe
+                  message-role)
          (only-in "../util/time.rkt" now-epoch-ms)
          "../util/message-helpers.rkt"
          (only-in "../util/telemetry.rkt" with-telemetry)
@@ -127,7 +142,8 @@
 ;;                  'modifiedFiles -> list of paths.
 (define (extract-file-tracker messages)
   (define-values (reads writes)
-    (for*/fold ([reads (set)] [writes (set)])
+    (for*/fold ([reads (set)]
+                [writes (set)])
                ([m (in-list messages)]
                 [part (in-list (message-content m))])
       (cond
@@ -172,11 +188,13 @@
 ;; #768: Merge two file trackers, deduplicating file paths.
 (define (merge-file-trackers . trackers)
   (define-values (all-reads all-writes)
-    (for*/fold ([reads (set)] [writes (set)])
+    (for*/fold ([reads (set)]
+                [writes (set)])
                ([ft (in-list trackers)])
-      (values
-       (for/fold ([r reads]) ([path (in-list (hash-ref ft 'readFiles '()))]) (set-add r path))
-       (for/fold ([w writes]) ([path (in-list (hash-ref ft 'modifiedFiles '()))]) (set-add w path)))))
+      (values (for/fold ([r reads]) ([path (in-list (hash-ref ft 'readFiles '()))])
+                (set-add r path))
+              (for/fold ([w writes]) ([path (in-list (hash-ref ft 'modifiedFiles '()))])
+                (set-add w path)))))
   (hasheq 'readFiles (set->list all-reads) 'modifiedFiles (set->list all-writes)))
 
 ;; ============================================================

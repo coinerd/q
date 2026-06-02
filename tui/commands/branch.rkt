@@ -11,7 +11,7 @@
          "../render.rkt"
          "../terminal.rkt"
          "../tree-view.rkt"
-         "../../util/protocol-types.rkt"
+         (only-in "../../util/message.rkt" message-id message-parent-id message-role)
          "../../runtime/session-index.rkt"
          "context.rkt")
 

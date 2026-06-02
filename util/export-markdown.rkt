@@ -8,14 +8,28 @@
 (require racket/string
          racket/format
          racket/list
-         "../util/protocol-types.rkt")
+         (only-in "content-parts.rkt"
+                  text-part
+                  text-part-text
+                  text-part?
+                  tool-call-part
+                  tool-call-part-arguments
+                  tool-call-part-name
+                  tool-call-part?
+                  tool-result-part
+                  tool-result-part-content
+                  tool-result-part-is-error?
+                  tool-result-part?)
+         (only-in "message.rkt" message-content message-kind message-role message-timestamp))
 
 (provide session->markdown)
 
 ;; ── Helpers ──
 
 (define (symbol->display-string s)
-  (if (symbol? s) (symbol->string s) s))
+  (if (symbol? s)
+      (symbol->string s)
+      s))
 
 (define (message-sort-key msg)
   (message-timestamp msg))
@@ -33,11 +47,7 @@
       [(string? args) args]
       [(hash? args) (~a args)]
       [else (~a args)]))
-  (string-append
-   (format "**Tool: ~a**\n" name)
-   "```json\n"
-   args-str
-   "\n```\n"))
+  (string-append (format "**Tool: ~a**\n" name) "```json\n" args-str "\n```\n"))
 
 (define (render-tool-result-part trp)
   (define content (tool-result-part-content trp))
@@ -46,13 +56,12 @@
     (cond
       [(string? content) content]
       [(list? content)
-       (string-join
-        (for/list ([p (in-list content)])
-          (cond
-            [(string? p) p]
-            [(hash? p) (~a p)]
-            [else (~a p)]))
-        "\n")]
+       (string-join (for/list ([p (in-list content)])
+                      (cond
+                        [(string? p) p]
+                        [(hash? p) (~a p)]
+                        [else (~a p)]))
+                    "\n")]
       [(hash? content) (~a content)]
       [else (~a content)]))
   (if is-err?
@@ -71,8 +80,7 @@
 (define (session->markdown messages)
   ;; Converts a list of message structs to a Markdown string.
   ;; Messages are sorted by timestamp for deterministic output.
-  (define sorted
-    (sort messages < #:key message-sort-key))
+  (define sorted (sort messages < #:key message-sort-key))
   (define parts
     (for/list ([msg (in-list sorted)])
       (render-message msg)))
@@ -86,8 +94,7 @@
   (define heading (format "### ~a (~a)" role kind))
   (define ts-line (format "_Timestamp: ~a_" ts))
   (define body
-    (string-join
-     (for/list ([cp (in-list content-parts)])
-       (render-content-part cp))
-     "\n"))
+    (string-join (for/list ([cp (in-list content-parts)])
+                   (render-content-part cp))
+                 "\n"))
   (string-join (list heading ts-line body) "\n"))

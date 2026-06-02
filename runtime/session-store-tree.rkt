@@ -12,7 +12,7 @@
 
 (require racket/contract
          racket/function
-         "../util/protocol-types.rkt")
+         (only-in "../util/message.rkt" message message-id message-kind message-parent-id message?))
 
 ;; Runtime parameters — set by session-store.rkt on load
 (define current-load-session-log (make-parameter #f))

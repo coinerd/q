@@ -8,7 +8,19 @@
 (require racket/string
          racket/format
          racket/list
-         "../util/protocol-types.rkt")
+         (only-in "content-parts.rkt"
+                  text-part
+                  text-part-text
+                  text-part?
+                  tool-call-part
+                  tool-call-part-arguments
+                  tool-call-part-name
+                  tool-call-part?
+                  tool-result-part
+                  tool-result-part-content
+                  tool-result-part-is-error?
+                  tool-result-part?)
+         (only-in "message.rkt" message message-content message-kind message-role message-timestamp))
 
 (provide session->html)
 
@@ -25,7 +37,9 @@
 ;; ── Helpers ──
 
 (define (symbol->display-string s)
-  (if (symbol? s) (symbol->string s) s))
+  (if (symbol? s)
+      (symbol->string s)
+      s))
 
 ;; ── CSS ──
 
@@ -49,10 +63,9 @@ summary { cursor: pointer; font-weight: bold; color: #555; }
 (define (render-text-part-html tp)
   (define text (text-part-text tp))
   (define lines (string-split text "\n"))
-  (string-join
-   (for/list ([line (in-list lines)])
-     (format "<p>~a</p>" (html-escape line)))
-   "\n"))
+  (string-join (for/list ([line (in-list lines)])
+                 (format "<p>~a</p>" (html-escape line)))
+               "\n"))
 
 (define (render-tool-call-part-html tcp)
   (define name (tool-call-part-name tcp))
@@ -73,20 +86,18 @@ summary { cursor: pointer; font-weight: bold; color: #555; }
     (cond
       [(string? content) content]
       [(list? content)
-       (string-join
-        (for/list ([p (in-list content)])
-          (cond
-            [(string? p) p]
-            [(hash? p) (~a p)]
-            [else (~a p)]))
-        "\n")]
+       (string-join (for/list ([p (in-list content)])
+                      (cond
+                        [(string? p) p]
+                        [(hash? p) (~a p)]
+                        [else (~a p)]))
+                    "\n")]
       [(hash? content) (~a content)]
       [else (~a content)]))
   (if is-err?
       (format "<div class=\"error\"><strong>⚠ Error:</strong><pre><code>~a</code></pre></div>"
               (html-escape content-str))
-      (format "<pre><code>~a</code></pre>"
-              (html-escape content-str))))
+      (format "<pre><code>~a</code></pre>" (html-escape content-str))))
 
 (define (render-content-part-html cp)
   (cond
@@ -100,17 +111,19 @@ summary { cursor: pointer; font-weight: bold; color: #555; }
 (define (session->html messages)
   ;; Converts a list of message structs to a full HTML5 document.
   ;; Messages sorted by timestamp for deterministic output.
-  (define sorted
-    (sort messages < #:key message-timestamp))
+  (define sorted (sort messages < #:key message-timestamp))
   (define body-parts
     (for/list ([msg (in-list sorted)])
       (render-message-html msg)))
   (define body (string-join body-parts "\n"))
-  (string-append
-   "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
-   "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
-   "<title>q Session Export</title>\n<style>\n" INLINE-CSS "\n</style>\n"
-   "</head>\n<body>\n" body "\n</body>\n</html>"))
+  (string-append "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
+                 "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
+                 "<title>q Session Export</title>\n<style>\n"
+                 INLINE-CSS
+                 "\n</style>\n"
+                 "</head>\n<body>\n"
+                 body
+                 "\n</body>\n</html>"))
 
 (define (render-message-html msg)
   (define role (symbol->display-string (message-role msg)))
@@ -118,13 +131,13 @@ summary { cursor: pointer; font-weight: bold; color: #555; }
   (define ts (message-timestamp msg))
   (define content-parts (message-content msg))
   (define content-html
-    (string-join
-     (for/list ([cp (in-list content-parts)])
-       (render-content-part-html cp))
-     "\n"))
-  (format "<div class=\"message ~a\"><div class=\"role\">~a (~a)<span class=\"timestamp\">~a</span></div><div class=\"content\">~a</div></div>"
-          (html-escape role)
-          (html-escape role)
-          (html-escape kind)
-          ts
-          content-html))
+    (string-join (for/list ([cp (in-list content-parts)])
+                   (render-content-part-html cp))
+                 "\n"))
+  (format
+   "<div class=\"message ~a\"><div class=\"role\">~a (~a)<span class=\"timestamp\">~a</span></div><div class=\"content\">~a</div></div>"
+   (html-escape role)
+   (html-escape role)
+   (html-escape kind)
+   ts
+   content-html))

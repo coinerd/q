@@ -21,7 +21,15 @@
          racket/file
          json
          "../util/jsonl.rkt"
-         "../util/protocol-types.rkt"
+         (only-in "../util/entry-predicates.rkt" session-info-entry?)
+         (only-in "../util/message.rkt"
+                  jsexpr->message
+                  make-message
+                  message
+                  message->jsexpr
+                  message-kind
+                  message-meta-safe
+                  message?)
          (only-in "../util/ids.rkt" generate-id)
          (only-in "../util/errors.rkt" with-logged-catch raise-session-error))
 

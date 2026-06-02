@@ -12,7 +12,20 @@
          racket/list
          racket/set
          racket/match
-         "../util/protocol-types.rkt"
+         (only-in "../util/content-parts.rkt"
+                  text-part
+                  text-part-text
+                  text-part?
+                  tool-call-part
+                  tool-call-part-arguments
+                  tool-call-part-id
+                  tool-call-part-name
+                  tool-call-part?
+                  tool-result-part
+                  tool-result-part-content
+                  tool-result-part-tool-call-id
+                  tool-result-part?)
+         (only-in "../util/message.rkt" message message-content message-role message?)
          (only-in "../util/content-helpers.rkt" result-content->string)
          (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload))
 

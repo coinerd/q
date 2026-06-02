@@ -27,7 +27,6 @@
          "../tui/layout.rkt"
          "../tui/clipboard.rkt"
          "../tui/char-width.rkt"
-         "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
          ;; W15: tui-ctx struct, constructor, mark-dirty! extracted to context.rkt
          (only-in "context.rkt"

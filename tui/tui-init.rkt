@@ -19,7 +19,7 @@
          "../tui/state.rkt"
          "../tui/scrollback.rkt"
          "../tui/render.rkt"
-         "../util/protocol-types.rkt"
+         (only-in "../util/message.rkt" message)
          "../agent/event-bus.rkt"
          "../runtime/agent-session.rkt"
          "../runtime/provider-factory.rkt"
