@@ -40,43 +40,51 @@
          (only-in "../util/tool-types.rkt" tool?)
          (only-in "event-bus.rkt" event-bus?)
          (only-in "loop-stream.rkt" stream-from-provider handle-cancellation build-stream-result)
+         (only-in "../util/cancellation.rkt" cancellation-token?)
          "../util/loop-result.rkt")
 
-(provide (contract-out [phase-emit-start
-                        (-> string? string? loop-state? any/c (values any/c (listof effect?)))])
-         (contract-out
-          [phase-build-context
-           (-> event-bus? string? string? loop-state? any/c (values any/c (listof effect?)))])
-         (contract-out
-          [phase-build-request
-           (-> (listof any/c) (or/c (listof any/c) #f) any/c (values any/c (listof effect?)))])
-         (contract-out [phase-pre-hook
-                        (-> (or/c procedure? #f)
-                            provider?
-                            (listof any/c)
-                            any/c
-                            string?
-                            string?
-                            (values any/c (listof effect?)))])
-         (contract-out [phase-msg-hook
-                        (-> (or/c procedure? #f)
-                            provider?
-                            any/c
-                            (listof any/c)
+(provide (contract-out
+          [phase-emit-start
+           (-> string? string? loop-state? (listof hash?) (values (listof hash?) (listof effect?)))])
+         (contract-out [phase-build-context
+                        (-> event-bus?
                             string?
                             string?
                             loop-state?
-                            (values any/c (listof effect?)))])
+                            (listof hash?)
+                            (values (listof hash?) (listof effect?)))])
+         (contract-out [phase-build-request
+                        (-> (listof hash?)
+                            (or/c (listof hash?) #f)
+                            hash?
+                            (values model-request? (listof effect?)))])
+         (contract-out [phase-pre-hook
+                        (-> (or/c procedure? #f)
+                            provider?
+                            (listof hash?)
+                            model-request?
+                            string?
+                            string?
+                            (values model-request? (listof effect?)))])
+         (contract-out [phase-msg-hook
+                        (-> (or/c procedure? #f)
+                            provider?
+                            model-request?
+                            (listof hash?)
+                            string?
+                            string?
+                            loop-state?
+                            (values model-request? (listof effect?)))])
          (contract-out [phase-stream
                         (-> provider?
-                            any/c
+                            model-request?
                             event-bus?
                             string?
                             string?
                             loop-state?
                             (or/c procedure? #f)
-                            (or/c any/c #f)
-                            (values any/c (listof effect?)))]))
+                            (or/c cancellation-token? #f)
+                            (values hash? (listof effect?)))]))
 
 ;; ---------------------------------------------------------------------------
 ;; Phase 1: Emit turn-started event
