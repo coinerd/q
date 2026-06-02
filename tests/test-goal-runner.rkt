@@ -330,3 +330,30 @@
                     void))
   (check-not-false (assoc 'goal-check-completed events)
                    "goal-check-completed event emitted when checks exist (WARN-1)"))
+
+;; ============================================================
+;; System instruction injection: prompt includes turn context
+;; ============================================================
+
+(let ()
+  (define captured-prompt #f)
+  (define eval-prov (make-eval-provider (list (eval-achieved-response))))
+  (define initial-st (make-goal-state #:goal-text "fix the bug" #:max-turns 4))
+  (define result-st
+    (goal-loop-step initial-st
+                    eval-prov
+                    "mock-eval"
+                    (lambda (prompt)
+                      (set! captured-prompt prompt)
+                      (values #f (hash 'messages (list (hasheq 'role "assistant" 'content "Done")))))
+                    void
+                    void))
+  ;; First turn should include system instructions with turn count and goal text
+  (check-not-false (regexp-match? #rx"autonomous goal loop" captured-prompt)
+                   "system instructions injected")
+  (check-not-false (regexp-match? #rx"fix the bug" captured-prompt)
+                   "goal text in prompt")
+  (check-not-false (regexp-match? #rx"turn 1/4" captured-prompt)
+                   "turn context in prompt"))
+
+(displayln "System instruction injection test passed.")
