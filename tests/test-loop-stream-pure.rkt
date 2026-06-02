@@ -136,8 +136,8 @@
   (define sm (make-streaming-message "msg-test"))
   (define tc (hasheq 'id "tc-1" 'name "read"))
   (streaming-message-append-tool-call! sm tc)
-  (check-equal? (length (streaming-message-tool-calls sm)) 1)
-  (check-equal? (streaming-message-tool-calls sm) (list tc)))
+  (check-equal? (length (streaming-message-get-tool-calls sm)) 1)
+  (check-equal? (streaming-message-get-tool-calls sm) (list tc)))
 
 (test-case "streaming-message: ->hash includes FSM state data"
   (define sm (make-streaming-message "msg-test"))
