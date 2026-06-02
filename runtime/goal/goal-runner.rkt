@@ -199,13 +199,16 @@
   (on-event 'goal-turn-started (hasheq 'turn-number turns 'goal-text goal-text))
   (on-status (format "Goal turn ~a/~a: working..." turns (goal-state-max-turns goal-st)))
 
-  ;; Build the prompt — prepend system instructions for evidence-driven behavior
+  ;; Build the prompt — prepend evidence-driven system instructions
   (define sys-instructions
-    (format
-     "You are in an autonomous goal loop (turn ~a/~a). Goal: ~a\nProvide specific evidence: run commands, check files, show outputs."
-     turns
-     (goal-state-max-turns goal-st)
-     goal-text))
+    (string-append
+     GOAL-EVIDENCE-SYSTEM-PROMPT
+     "\n\n"
+     (format
+      "You are in an autonomous goal loop (turn ~a/~a). Goal: ~a\nProvide specific evidence: run commands, check files, show outputs."
+      turns
+      (goal-state-max-turns goal-st)
+      goal-text)))
   (define prompt
     (if (= turns 1)
         (string-append sys-instructions "\n\n" goal-text)

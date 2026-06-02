@@ -378,11 +378,15 @@
                          (char=? (string-ref t (sub1 (string-length t))) #\')))
                 (substring t 1 (sub1 (string-length t)))
                 t)))
-        ;; Check for --evaluator flag
+        ;; Check for --evaluator flag (only next token after --evaluator)
         (define evaluator-mode
-          (if (string-contains? arg-text "--evaluator")
-              (let ([parts (string-split arg-text)]) (if (member "agent" parts) 'agent 'transcript))
-              'transcript))
+          (let ([parts (string-split arg-text)])
+            (define eval-idx (index-of parts "--evaluator"))
+            (if eval-idx
+                (let ([next-token (and (< (add1 eval-idx) (length parts))
+                                       (list-ref parts (add1 eval-idx)))])
+                  (if (equal? next-token "agent") 'agent 'transcript))
+                'transcript)))
         ;; Validate check safety
         (define safety-reasons (validate-check-safety checks))
         (cond
