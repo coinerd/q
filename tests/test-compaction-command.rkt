@@ -11,7 +11,7 @@
          "../util/protocol-types.rkt")
 
 (define (make-test-cctx [bus #f])
-  (cmd-ctx (box (initial-ui-state)) (box #t) bus #f (box #f) #f (box #f) #f (box "") #f #f))
+  (cmd-ctx (box (initial-ui-state)) (box #t) bus #f (box #f) #f (box #f) #f (box "") #f #f (box #f) (box #f)))
 
 (define compact-tests
   (test-suite "/compact command"

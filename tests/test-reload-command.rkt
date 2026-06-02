@@ -66,7 +66,9 @@
            #f ; session-runner
            (box #f) ; input-text-box
            (box ext-reg)
-           #f)) ; session-factory-runner
+           #f ; session-factory-runner
+           (box #f) ; agent-session-box
+           (box #f))) ; goal-cancel-box
 
 ;; ============================================================
 ;; Test suite

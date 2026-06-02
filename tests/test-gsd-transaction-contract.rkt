@@ -54,7 +54,9 @@
            #f ; session-runner
            (box "/go") ; input-text-box
            (box ext-reg) ; extension-registry-box
-           #f)) ; session-factory-runner
+           #f ; session-factory-runner
+           (box #f) ; agent-session-box
+           (box #f))) ; goal-cancel-box
 
 (define (make-ext-reg-with-execute-command handler)
   (define reg (make-extension-registry))

@@ -55,7 +55,9 @@
            #f ; session-runner
            (box "") ; input-text-box
            (box #f)
-           #f)) ; extension-registry-box + session-factory-runner
+           #f ; session-factory-runner
+           (box #f) ; agent-session-box
+           (box #f))) ; goal-cancel-box
 
 ;; Extract transcript text from a cmd-ctx
 (define (cctx-transcript-text cctx)

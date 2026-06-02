@@ -29,7 +29,9 @@
            #f ;; session-runner
            (box "") ;; input-text-box
            (box #f) ;; extension-registry-box
-           #f)) ;; session-factory-runner
+           #f ;; session-factory-runner
+           (box #f) ;; agent-session-box
+           (box #f))) ;; goal-cancel-box
 
 ;; Helper: get transcript text entries from cctx state
 (define (get-transcript-texts cctx)

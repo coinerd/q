@@ -49,6 +49,8 @@
                   tui-ctx-extension-registry-box
                   tui-ctx-session-queue-box
                   tui-ctx-session-factory-runner
+                  tui-ctx-agent-session-box
+                  tui-ctx-goal-cancel-box
                   make-tui-ctx
                   mark-dirty!)
          ;; W16: selection-text, handle-mouse, tree overlay extracted to selection.rkt
@@ -88,6 +90,8 @@
          tui-ctx-extension-registry-box
          tui-ctx-session-queue-box
          tui-ctx-session-factory-runner
+         tui-ctx-agent-session-box
+         tui-ctx-goal-cancel-box
          ;; Re-exports (no contract needed — re-exported from other modules)
          copy-text!
          copy-selection!
@@ -165,7 +169,8 @@
                     (box "")
                     (tui-ctx-extension-registry-box ctx)
                     (tui-ctx-session-factory-runner ctx)
-                    (box #f)))
+                    (tui-ctx-agent-session-box ctx)
+                    (tui-ctx-goal-cancel-box ctx)))
 
 ;; Process a slash command. Returns 'continue | 'quit
 ;; cmd can be: symbol | (list symbol args...)
