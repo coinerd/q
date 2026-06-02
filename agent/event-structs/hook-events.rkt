@@ -21,7 +21,7 @@
 ;; Assistant message completed
 
 (define-typed-event assistant-message-completed-event
-                    "assistant.message.completed"
+                    "assistant.message.hook.completed"
                     (content-length)
                     #:defaults (content-length 0) #:schema-version 1)
 
