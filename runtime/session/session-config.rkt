@@ -53,6 +53,7 @@
 ;;   'self-healing  — bounded + auto-distill + rollback actions (behind flags)
 ;;   'full          — all features active (not recommended yet)
 (define current-context-assembly-profile (make-parameter 'off))
+(define current-goal-loop-enabled? (make-parameter #f))
 
 (define valid-profiles '(off observe bounded self-healing full))
 
@@ -105,6 +106,7 @@
 (provide session-config?
          current-task-state-aware-rollout-rate
          current-context-assembly-profile
+          current-goal-loop-enabled?
          context-assembly-profile?
          apply-context-assembly-profile!
          ;; Smart accessors with defaults
