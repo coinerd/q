@@ -24,7 +24,7 @@
                   message-parent-id
                   message-content
                   make-message)
-         (only-in "../../util/protocol-types.rkt" compaction-summary-entry?)
+         (only-in "../../util/entry-predicates.rkt" compaction-summary-entry?)
          (only-in "../context-policy.rkt"
                   estimate-message-tokens
                   ensure-first-user-pinned

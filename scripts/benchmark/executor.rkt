@@ -29,7 +29,7 @@
          (only-in "../../llm/provider.rkt" make-mock-provider)
          (only-in "../../llm/model.rkt" make-model-response)
          (only-in "../../util/message.rkt" message-role message-content)
-         (only-in "../../util/protocol-types.rkt" text-part-text)
+         (only-in "../../util/content-parts.rkt" text-part-text)
          (only-in "../../util/jsonl.rkt" jsonl-read-all-valid)
          (only-in "../../extensions/gsd/state-machine.rkt" [gsm-snapshot gsd-snapshot])
          "task.rkt")

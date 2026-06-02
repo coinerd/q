@@ -18,7 +18,7 @@
                   message-meta-safe
                   message-kind
                   make-message)
-         (only-in "../util/protocol-types.rkt" content-part->jsexpr)
+         (only-in "../util/content-parts.rkt" content-part->jsexpr)
          "../util/jsonl.rkt"
          "../runtime/session-store.rkt")
 

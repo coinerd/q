@@ -8,7 +8,7 @@
          (only-in "../../llm/token-budget.rkt" estimate-context-tokens)
          (only-in "../../util/content-parts.rkt" text-part?)
          (only-in "../../util/message.rkt" message? message-content message-role)
-         (only-in "../../util/protocol-types.rkt" text-part-text)
+         (only-in "../../util/content-parts.rkt" text-part-text)
          "context-floor.rkt"
          "state-aware-builder.rkt")
 

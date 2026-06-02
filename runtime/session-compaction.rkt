@@ -11,7 +11,7 @@
          "../llm/token-budget.rkt"
          "../runtime/compactor.rkt"
          (only-in "../util/message.rkt" message-role message-content)
-         (only-in "../util/protocol-types.rkt" content-part->jsexpr)
+         (only-in "../util/content-parts.rkt" content-part->jsexpr)
          (only-in "../util/hook-types.rkt" hook-result-action)
          (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
          "../agent/event-emitter.rkt"

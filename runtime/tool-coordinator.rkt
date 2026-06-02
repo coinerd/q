@@ -40,11 +40,11 @@
                   tool-call-id
                   tool-call-name
                   tool-result-content)
-         (only-in "../util/protocol-types.rkt"
+         (only-in "../util/content-parts.rkt"
                   tool-call-part-id
                   tool-call-part-name
-                  tool-call-part-arguments
-                  tool-result-is-error?)
+                  tool-call-part-arguments)
+         (only-in "../util/tool-types.rkt" tool-result-is-error?)
          "../agent/event-bus.rkt"
          ;; ARCH-01 upward import — runtime→tools
          (only-in "layer-adapters.rkt" make-exec-context make-error-result list-tools-jsexpr)

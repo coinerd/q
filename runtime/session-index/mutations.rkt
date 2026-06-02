@@ -22,7 +22,7 @@
                   make-message
                   message
                   message?)
-         (only-in "../../util/protocol-types.rkt" message->jsexpr jsexpr->message)
+         (only-in "../../util/message.rkt" message->jsexpr jsexpr->message)
          (only-in "../../util/message-helpers.rkt" ensure-parent-dirs!)
          (only-in "../../util/ids.rkt" generate-id)
          (only-in "../../util/jsonl.rkt" jsonl-read-all-valid)

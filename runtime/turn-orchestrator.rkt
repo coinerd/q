@@ -33,12 +33,9 @@
          (only-in "../util/loop-result.rkt" make-loop-result loop-result-messages)
          (only-in "../util/message.rkt" message? message-id message-role message-content make-message)
          (only-in "../util/tool-types.rkt" tool-call-name tool-call-arguments)
-         (only-in "../util/protocol-types.rkt"
-                  text-part-text
-                  loop-result-termination-reason
-                  loop-result-metadata
-                  event-payload
-                  tool-result-part-is-error?)
+         (only-in "../util/content-parts.rkt" text-part-text tool-result-part-is-error?)
+         (only-in "../util/event.rkt" event-payload)
+         (only-in "../util/loop-result.rkt" loop-result-termination-reason loop-result-metadata)
          "../agent/event-bus.rkt"
          (only-in "../util/loop-result.rkt" loop-result?)
          (only-in "../util/cancellation.rkt" cancellation-token?)

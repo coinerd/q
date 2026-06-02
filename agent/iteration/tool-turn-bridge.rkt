@@ -12,10 +12,8 @@
          (only-in "../../util/event.rkt" event-ev)
          (only-in "../../util/message.rkt" message-role message? message-id message-content)
          (only-in "../../util/tool-types.rkt" tool-call-name tool-call-arguments)
-         (only-in "../../util/protocol-types.rkt"
-                  text-part-text
-                  tool-result-part-is-error?
-                  event-payload)
+         (only-in "../../util/content-parts.rkt" text-part-text tool-result-part-is-error?)
+         (only-in "../../util/event.rkt" event-payload)
          "../event-bus.rkt"
          (only-in "../queue.rkt" dequeue-steering! dequeue-followup! dequeue-all-followups!)
          "../../runtime/working-set.rkt"
