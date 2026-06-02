@@ -19,7 +19,6 @@
          "timing.rkt"
          (only-in "model-defaults.rkt" OPENAI-DEFAULT-MODEL)
          racket/string
-         racket/generator
          racket/port
          json
          net/url
@@ -119,69 +118,37 @@
   (define body-bytes (jsexpr->bytes body))
   (define response-port-box (box #f))
   (log-stream-setup-timing "azure" _stream-t0)
-  (dynamic-wind
-   (lambda () (void))
-   (lambda ()
-     (call-with-request-timeout
-      #:cleanup (lambda ()
+  (dynamic-wind (lambda () (void))
+                (lambda ()
+                  (call-with-request-timeout
+                   #:cleanup (lambda ()
+                               (define rp (unbox response-port-box))
+                               (when rp
+                                 (with-logged-error "port cleanup" (close-input-port rp))))
+                   (lambda ()
+                     (define-values (status-line response-headers response-port)
+                       (if url-port-val
+                           (http-sendrecv host
+                                          path-str
+                                          #:port url-port-val
+                                          #:ssl? ssl?
+                                          #:method "POST"
+                                          #:headers headers
+                                          #:data body-bytes)
+                           (http-sendrecv host
+                                          path-str
+                                          #:ssl? ssl?
+                                          #:method "POST"
+                                          #:headers headers
+                                          #:data body-bytes)))
+                     (set-box! response-port-box response-port)
+                     (check-azure-status! status-line #"")
+                     ;; v0.81.0 W1: Replaced inline SSE loop with shared stream-sse-events.
+                     ;; Bonus: now handles tool_calls deltas (was missing in inline version).
+                     (stream-sse-events response-port
+                                        (lambda (parsed) (list (normalize-openai-chunk parsed)))))))
+                (lambda ()
+                  ;; W2.4: always close response port on exit
                   (define rp (unbox response-port-box))
                   (when rp
-                    (with-logged-error "port cleanup" (close-input-port rp))))
-      (lambda ()
-        (define-values (status-line response-headers response-port)
-          (if url-port-val
-              (http-sendrecv host
-                             path-str
-                             #:port url-port-val
-                             #:ssl? ssl?
-                             #:method "POST"
-                             #:headers headers
-                             #:data body-bytes)
-              (http-sendrecv host
-                             path-str
-                             #:ssl? ssl?
-                             #:method "POST"
-                             #:headers headers
-                             #:data body-bytes)))
-        (set-box! response-port-box response-port)
-        (check-azure-status! status-line #"")
-        (in-generator
-         (let loop ()
-           (define line (read-line/timeout response-port))
-           (cond
-             [(eq? line #f) (void)] ; read timeout
-             [(eof-object? line) (void)]
-             [(string-prefix? line "data: ")
-              (define data (string-trim (substring line 6)))
-              (cond
-                ;; W2.3: proper done chunk
-                [(string=? data "[DONE]") (yield (make-stream-chunk #f #f #f #t))]
-                [else
-                 (define js (with-safe-fallback #f (string->jsexpr data)))
-                 (when js
-                   (define choices (hash-ref js 'choices '()))
-                   (when (pair? choices)
-                     (define first-choice (car choices))
-                     (define delta (hash-ref first-choice 'delta (hasheq)))
-                     (define text (hash-ref delta 'content ""))
-                     ;; W2.3: extract finish-reason and usage from chunks
-                     (define finish-reason
-                       (let ([fr (hash-ref first-choice 'finish_reason #f)])
-                         (and (string? fr) (translate-stop-reason #f fr))))
-                     (define usage
-                       (let ([u (hash-ref js 'usage #f)])
-                         (and u
-                              (hasheq 'prompt-tokens
-                                      (hash-ref u 'prompt_tokens 0)
-                                      'completion-tokens
-                                      (hash-ref u 'completion_tokens 0)
-                                      'total-tokens
-                                      (hash-ref u 'total_tokens 0)))))
-                     (yield (make-stream-chunk text #f usage #f #:finish-reason finish-reason))))
-                 (loop)])]
-             [else (loop)]))))))
-   (lambda ()
-     ;; W2.4: always close response port on exit
-     (define rp (unbox response-port-box))
-     (when rp
-       (with-logged-error "port cleanup" (close-input-port rp))))))
+                    (with-logged-error "port cleanup" (close-input-port rp))))))
