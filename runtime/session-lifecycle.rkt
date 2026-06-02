@@ -22,12 +22,9 @@
          racket/list
          (only-in racket/dict dict-ref dict-set)
          racket/path
-         (only-in "../util/protocol-types.rkt"
-                  message-id
-                  message-kind
-                  message?
-                  loop-result-termination-reason
-                  make-loop-result)
+         (only-in "../util/loop-result.rkt" make-loop-result)
+         (only-in "../util/message.rkt" message-id message-kind message?)
+         (only-in "../util/protocol-types.rkt" loop-result-termination-reason)
          (only-in "session-lifecycle-transitions.rkt"
                   build-user-message
                   compute-parent-id

@@ -28,25 +28,16 @@
          (only-in racket/string string-contains? string-join)
          (only-in "../util/errors.rkt" raise-extension-error)
          (only-in "../util/json-helpers.rkt" ensure-hash-args)
+         (only-in "../util/content-parts.rkt" make-text-part text-part? tool-result-part?)
+         (only-in "../util/event.rkt" make-event event-ev)
+         (only-in "../util/loop-result.rkt" make-loop-result loop-result-messages)
+         (only-in "../util/message.rkt" message? message-id message-role message-content make-message)
+         (only-in "../util/tool-types.rkt" tool-call-name tool-call-arguments)
          (only-in "../util/protocol-types.rkt"
-                  message?
-                  message-id
-                  message-role
-                  message-content
-                  make-message
-                  make-text-part
-                  text-part?
                   text-part-text
-                  make-loop-result
                   loop-result-termination-reason
-                  loop-result-messages
                   loop-result-metadata
-                  make-event
-                  event-ev
                   event-payload
-                  tool-call-name
-                  tool-call-arguments
-                  tool-result-part?
                   tool-result-part-is-error?)
          "../agent/event-bus.rkt"
          (only-in "../util/loop-result.rkt" loop-result?)
@@ -127,7 +118,7 @@
                   config-settings
                   config-model-name
                   config-task-state-aware?)
-         (only-in "../util/protocol-types.rkt" message-kind message-content)
+         (only-in "../util/message.rkt" message-kind message-content)
          racket/set
          (only-in "../runtime/context-assembly/auto-distillation.rkt"
                   auto-distill

@@ -11,15 +11,15 @@
          racket/string
          racket/file
          racket/match
-         (only-in "../../util/protocol-types.rkt"
+         (only-in "../../util/content-parts.rkt" make-text-part)
+         (only-in "../../util/message.rkt"
                   message
                   message-id
                   message-kind
                   message-role
                   message-content
                   message-meta-safe
-                  make-message
-                  make-text-part)
+                  make-message)
          (only-in "../../util/content-parts.rkt" text-part text-part? text-part-text)
          (only-in "../context-policy.rkt" estimate-message-tokens)
          (only-in "../context-fit.rkt" truncate-messages-to-budget)

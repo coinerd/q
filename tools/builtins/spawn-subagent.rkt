@@ -18,20 +18,16 @@
          (only-in "../../runtime/settings.rkt" q-settings? setting-ref)
          "../model-bridge.rkt"
          "../../util/ids.rkt"
-         (only-in "../../util/protocol-types.rkt"
-                  make-message
-                  message-role
-                  message-content
-                  message-id
+         (only-in "../../util/content-parts.rkt"
                   tool-call-part?
+                  make-tool-call-part
+                  make-tool-result-part)
+         (only-in "../../util/message.rkt" make-message message-role message-content message-id)
+         (only-in "../../util/tool-types.rkt" make-tool-call tool-call-id tool-result-content)
+         (only-in "../../util/protocol-types.rkt"
                   tool-call-part-id
                   tool-call-part-name
                   tool-call-part-arguments
-                  make-tool-call
-                  make-tool-call-part
-                  make-tool-result-part
-                  tool-call-id
-                  tool-result-content
                   tool-result-is-error?)
          (only-in "../../util/json-helpers.rkt" ensure-hash-args)
          (only-in "../../util/error-sanitizer.rkt" sanitize-error-message)

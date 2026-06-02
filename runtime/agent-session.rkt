@@ -27,7 +27,8 @@
          racket/path
          racket/dict
          (only-in "../util/errors.rkt" raise-session-error)
-         (only-in "../util/protocol-types.rkt" message-id message-kind make-loop-result message?)
+         (only-in "../util/loop-result.rkt" make-loop-result)
+         (only-in "../util/message.rkt" message-id message-kind message?)
          "../agent/queue.rkt"
          "../agent/event-bus.rkt"
          (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload)

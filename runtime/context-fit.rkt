@@ -9,7 +9,7 @@
 (require racket/contract
          racket/list
          racket/set
-         (only-in "../util/protocol-types.rkt" message-role message-kind message-id)
+         (only-in "../util/message.rkt" message-role message-kind message-id)
          (only-in "../runtime/context-policy.rkt"
                   estimate-message-tokens
                   estimate-message-tokens-cached

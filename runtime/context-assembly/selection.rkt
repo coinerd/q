@@ -14,7 +14,8 @@
          racket/match
          racket/list
          racket/set
-         (only-in "../../util/protocol-types.rkt"
+         (only-in "../../util/content-parts.rkt" make-text-part)
+         (only-in "../../util/message.rkt"
                   message
                   message?
                   message-id
@@ -22,9 +23,8 @@
                   message-role
                   message-parent-id
                   message-content
-                  make-message
-                  make-text-part
-                  compaction-summary-entry?)
+                  make-message)
+         (only-in "../../util/protocol-types.rkt" compaction-summary-entry?)
          (only-in "../context-policy.rkt"
                   estimate-message-tokens
                   ensure-first-user-pinned
@@ -58,8 +58,7 @@
   (define kept-ids
     (for/hash ([m (in-list kept)])
       (values (message-id m) #t)))
-  (define excluded
-    (filter-not (lambda (m) (hash-has-key? kept-ids (message-id m))) removable))
+  (define excluded (filter-not (lambda (m) (hash-has-key? kept-ids (message-id m))) removable))
   (values kept excluded))
 
 (define (make-context-assembly-call-options #:cache [cache #f]

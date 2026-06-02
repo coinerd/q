@@ -32,23 +32,19 @@
          (only-in "../util/tool-types.rkt" tool-call?)
          (only-in "layer-adapters.rkt" tool-result? tool-registry?)
          (only-in "../util/json-helpers.rkt" ensure-hash-args)
-         (only-in "../util/protocol-types.rkt"
-                  message?
-                  message-id
-                  message-role
-                  message-content
-                  make-message
-                  make-tool-result-part
-                  tool-call-part?
-                  tool-call-part-id
-                  tool-call-part-name
-                  tool-call-part-arguments
+         (only-in "../util/content-parts.rkt" make-tool-result-part tool-call-part?)
+         (only-in "../util/event.rkt" make-event)
+         (only-in "../util/message.rkt" message? message-id message-role message-content make-message)
+         (only-in "../util/tool-types.rkt"
                   make-tool-call
                   tool-call-id
                   tool-call-name
-                  tool-result-is-error?
-                  tool-result-content
-                  make-event)
+                  tool-result-content)
+         (only-in "../util/protocol-types.rkt"
+                  tool-call-part-id
+                  tool-call-part-name
+                  tool-call-part-arguments
+                  tool-result-is-error?)
          "../agent/event-bus.rkt"
          ;; ARCH-01 upward import — runtime→tools
          (only-in "layer-adapters.rkt" make-exec-context make-error-result list-tools-jsexpr)

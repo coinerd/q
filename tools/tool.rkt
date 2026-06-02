@@ -16,7 +16,7 @@
          (only-in "../util/cancellation.rkt" cancellation-token?)
          (only-in "../runtime/settings.rkt" q-settings?)
          (only-in "../tools/permission-gate.rkt" permission-config?)
-         (only-in "../util/protocol-types.rkt"
+         (only-in "../util/tool-types.rkt"
                   tool-call
                   tool-call?
                   tool-call-id
@@ -26,8 +26,8 @@
                   tool-result
                   tool-result?
                   tool-result-content
-                  tool-result-details
-                  tool-result-is-error?)
+                  tool-result-details)
+         (only-in "../util/protocol-types.rkt" tool-result-is-error?)
          ;; Submodule imports
          "tool-struct.rkt"
          "exec-context.rkt"
@@ -64,9 +64,10 @@
 
          ;; ── Tool result (re-exported from agent/types.rkt) ──
          tool-result?
-         (contract-out [make-tool-result (-> (or/c string? hash? list?) (or/c hash? #f) boolean? tool-result?)]
-                       [make-error-result (-> string? tool-result?)]
-                       [make-success-result (->* ((or/c string? hash? list?)) ((or/c hash? #f)) tool-result?)])
+         (contract-out
+          [make-tool-result (-> (or/c string? hash? list?) (or/c hash? #f) boolean? tool-result?)]
+          [make-error-result (-> string? tool-result?)]
+          [make-success-result (->* ((or/c string? hash? list?)) ((or/c hash? #f)) tool-result?)])
          tool-result-content
          tool-result-details
          tool-result-is-error?

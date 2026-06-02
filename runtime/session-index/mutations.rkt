@@ -13,17 +13,16 @@
          racket/list
          json
          "../../util/json-helpers.rkt"
-         (only-in "../../util/protocol-types.rkt"
+         (only-in "../../util/content-parts.rkt" make-text-part)
+         (only-in "../../util/message.rkt"
                   message-id
                   message-parent-id
                   message-kind
                   message-role
                   make-message
-                  make-text-part
-                  message->jsexpr
-                  jsexpr->message
                   message
                   message?)
+         (only-in "../../util/protocol-types.rkt" message->jsexpr jsexpr->message)
          (only-in "../../util/message-helpers.rkt" ensure-parent-dirs!)
          (only-in "../../util/ids.rkt" generate-id)
          (only-in "../../util/jsonl.rkt" jsonl-read-all-valid)

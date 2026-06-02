@@ -20,14 +20,10 @@
                   loop-counters-iteration
                   loop-counters-consecutive-tool-count
                   loop-counters-explore-count)
-         (only-in "../../util/protocol-types.rkt"
-                  message?
-                  make-message
-                  make-text-part
-                  make-loop-result
-                  loop-result-termination-reason
-                  loop-result-messages
-                  loop-result-metadata)
+         (only-in "../../util/content-parts.rkt" make-text-part)
+         (only-in "../../util/loop-result.rkt" make-loop-result loop-result-messages)
+         (only-in "../../util/message.rkt" message? make-message)
+         (only-in "../../util/protocol-types.rkt" loop-result-termination-reason loop-result-metadata)
          (only-in "../../util/ids.rkt" generate-id)
          (only-in "../event-emitter.rkt" emit-typed-event!)
          (only-in "../event-structs/hook-events.rkt" turn-cancelled-event)

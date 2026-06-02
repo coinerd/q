@@ -10,16 +10,16 @@
 (require racket/list
          racket/match
          racket/string
-         (only-in "../../util/protocol-types.rkt"
+         (only-in "../../util/content-parts.rkt" make-text-part)
+         (only-in "../../util/message.rkt"
                   message
                   message-id
                   message-kind
                   message-role
                   message-content
                   message-meta
-                  make-message
-                  make-text-part
-                  compaction-summary-entry?)
+                  make-message)
+         (only-in "../../util/protocol-types.rkt" compaction-summary-entry?)
          (only-in "../../util/content-parts.rkt" text-part text-part? text-part-text)
          (only-in "../session-index.rkt" active-leaf get-branch))
 
