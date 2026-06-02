@@ -21,20 +21,20 @@
 ;; Migration status (v0.81.1): non-test source consumers have been migrated.
 ;; Tests may still require the facade to verify compatibility until removal.
 
-(require "../content-parts.rkt"
+(require "../content/content-parts.rkt"
          "message.rkt"
-         "../event.rkt"
+         "../event/event.rkt"
          "../entry-predicates.rkt"
          "../tree-entries.rkt"
          "../loop-result.rkt"
-         "../custom-entries.rkt"
-         "../tool-types.rkt")
+         "../content/custom-entries.rkt"
+         "../tool/tool-types.rkt")
 
-(provide (all-from-out "../content-parts.rkt")
+(provide (all-from-out "../content/content-parts.rkt")
          (all-from-out "message.rkt")
-         (all-from-out "../event.rkt")
+         (all-from-out "../event/event.rkt")
          (all-from-out "../entry-predicates.rkt")
          (all-from-out "../tree-entries.rkt")
          (all-from-out "../loop-result.rkt")
-         (all-from-out "../custom-entries.rkt")
-         (all-from-out "../tool-types.rkt"))
+         (all-from-out "../content/custom-entries.rkt")
+         (all-from-out "../tool/tool-types.rkt"))

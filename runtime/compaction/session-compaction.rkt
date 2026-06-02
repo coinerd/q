@@ -7,7 +7,7 @@
 ;; Token budget checking and compaction triggering.
 
 (require racket/contract
-         (only-in "../session-config.rkt" config-max-context-tokens)
+         (only-in "../session/session-config.rkt" config-max-context-tokens)
          "../../llm/token-budget.rkt"
          "compactor.rkt"
          (only-in "../../util/message.rkt" message-role message-content)
@@ -16,8 +16,8 @@
          (only-in "../runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
          "../../agent/event-emitter.rkt"
          "../../agent/event-structs/iteration-events.rkt"
-         "../session-types.rkt")
-(require "../session-mutation.rkt")
+         "../session/session-types.rkt")
+(require "../session/session-mutation.rkt")
 (require (only-in "../../util/time.rkt" now-epoch-ms))
 
 (provide (contract-out [maybe-compact-context

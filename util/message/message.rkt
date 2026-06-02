@@ -6,7 +6,7 @@
 ;; Message struct with JSON serialization/deserialization.
 
 (require racket/contract
-         "../content-parts.rkt")
+         "../content/content-parts.rkt")
 
 (provide message
          message?
