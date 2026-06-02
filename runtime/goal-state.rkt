@@ -1,12 +1,4 @@
 #lang racket/base
-
-;; q/runtime/goal-state.rkt — Facade: re-exports from goal-types + goal-codec
-;;
-;; Backward-compatible facade. All identifiers previously provided
-;; by this module are still available from the same import path.
-
-(require "goal-types.rkt"
-         "goal-codec.rkt")
-
-(provide (all-from-out "goal-types.rkt")
-         (all-from-out "goal-codec.rkt"))
+;; DEPRECATED: This module has moved to runtime/goal/goal-state.rkt. Remove this facade in v0.83.
+(provide (all-from-out "goal/goal-state.rkt"))
+(require "goal/goal-state.rkt")
