@@ -10,7 +10,7 @@
          racket/string
          (only-in "../util/content-parts.rkt" text-part?)
          (only-in "../util/message.rkt" message? message-content)
-         (only-in "../util/protocol-types.rkt" text-part-text))
+         (only-in "../util/content-parts.rkt" text-part-text))
 
 (provide DEFAULT-TOKEN-BUDGET-THRESHOLD
          DEFAULT-SAFETY-MARGIN-PCT

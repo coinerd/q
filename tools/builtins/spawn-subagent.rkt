@@ -24,11 +24,11 @@
                   make-tool-result-part)
          (only-in "../../util/message.rkt" make-message message-role message-content message-id)
          (only-in "../../util/tool-types.rkt" make-tool-call tool-call-id tool-result-content)
-         (only-in "../../util/protocol-types.rkt"
+         (only-in "../../util/content-parts.rkt"
                   tool-call-part-id
                   tool-call-part-name
-                  tool-call-part-arguments
-                  tool-result-is-error?)
+                  tool-call-part-arguments)
+         (only-in "../../util/tool-types.rkt" tool-result-is-error?)
          (only-in "../../util/json-helpers.rkt" ensure-hash-args)
          (only-in "../../util/error-sanitizer.rkt" sanitize-error-message)
          "../../tools/scheduler.rkt"

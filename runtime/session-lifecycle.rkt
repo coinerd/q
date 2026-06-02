@@ -24,7 +24,7 @@
          racket/path
          (only-in "../util/loop-result.rkt" make-loop-result)
          (only-in "../util/message.rkt" message-id message-kind message?)
-         (only-in "../util/protocol-types.rkt" loop-result-termination-reason)
+         (only-in "../util/loop-result.rkt" loop-result-termination-reason)
          (only-in "session-lifecycle-transitions.rkt"
                   build-user-message
                   compute-parent-id

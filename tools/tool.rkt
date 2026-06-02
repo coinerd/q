@@ -27,7 +27,7 @@
                   tool-result?
                   tool-result-content
                   tool-result-details)
-         (only-in "../util/protocol-types.rkt" tool-result-is-error?)
+         (only-in "../util/tool-types.rkt" tool-result-is-error?)
          ;; Submodule imports
          "tool-struct.rkt"
          "exec-context.rkt"

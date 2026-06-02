@@ -33,7 +33,7 @@
                   message-kind
                   message-timestamp
                   message-meta)
-         (only-in "../util/protocol-types.rkt" text-part-text tool-call-part-name tool-call-part-id))
+         (only-in "../util/content-parts.rkt" text-part-text tool-call-part-name tool-call-part-id))
 
 (provide (contract-out [extract-metrics (-> any/c any/c)]
                        [format-report (-> any/c string?)]
