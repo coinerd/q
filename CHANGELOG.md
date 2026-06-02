@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.82.3 (2026-06-02)
+
+### System Instruction Injection
+- Prepend turn context and evidence instructions to every goal turn.
+- System instructions include turn count, max turns, and goal text.
+
 ## v0.82.2 (2026-06-02)
 
 ### TUI /goal Core Activation
