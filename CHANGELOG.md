@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.82.1 (2026-06-02)
+
+### Goal Wiring Foundation
+- Add `agent-session-box` field to `cmd-ctx` struct for goal-runner access.
+- Create `tui/commands/goal-bridge.rkt` with `make-goal-event-bridge` and `make-goal-run-prompt!`.
+
 ## v0.82.0 (2026-06-02)
 
 ### Goal Feature Foundation
