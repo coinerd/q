@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.81.1 (2026-06-02)
+
+### Protocol-Types Migration
+- Migrated source imports away from `util/protocol-types.rkt` to focused canonical sub-modules.
+- Added source migration guardrail test for non-test facade references.
+- Marked `util/protocol-types.rkt` as deprecated with target removal in v0.82+.
+
 ## v0.81.0 (2026-06-02)
 
 ### SSE Dedup + Contract Tightening
