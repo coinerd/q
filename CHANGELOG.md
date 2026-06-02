@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.82.6 (2026-06-02)
+
+### Goal Feature Hotfix
+- **F-1 CRITICAL**: Wire `agent-session-box` through TUI context pipeline — was always `#f`, so `/goal` always failed.
+- **F-2 CRITICAL**: Add `goal-cancel-box` — `/goal clear` now signals running thread to stop.
+- **F-5**: Fix `--evaluator` flag parsing — only check next token after `--evaluator`, not entire goal text.
+- **F-6**: Inject `GOAL-EVIDENCE-SYSTEM-PROMPT` into every goal turn for evidence-driven behavior.
+- **F-3**: Integration tests for session-box wiring and cancel mechanism (5 test cases).
+- **F-4**: Add TUI slash commands reference to README.
+- Update `cmd-ctx` struct (12→13 fields) and `tui-ctx` struct (19→21 fields).
+- Update 10 test files for new cmd-ctx constructor arity.
+
 ## v0.82.5 (2026-06-02)
 
 ### Feature Flag Activation
