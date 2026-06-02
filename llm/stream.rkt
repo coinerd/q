@@ -34,6 +34,10 @@
            (->* (input-port?)
                 (#:initial-timeout positive? #:stream-timeout positive? #:max-total-timeout positive?)
                 generator?)]
+          [stream-sse-events
+           (->* (input-port? procedure?)
+                (#:initial-timeout positive? #:stream-timeout positive? #:max-total-timeout positive?)
+                generator?)]
           ;; Response body reading
           [read-response-body (-> input-port? bytes?)]
           [read-response-body/timeout (->* (input-port?) (#:timeout positive?) bytes?)]
@@ -413,5 +417,52 @@
                     [(eq? parsed 'done) (yield #f)]
                     [(hash? parsed)
                      (yield (normalize-openai-chunk parsed))
+                     (loop #f 0)]
+                    [else (loop #f (add1 consecutive-empty))])]))))
+
+;; Provider-agnostic SSE event generator.
+;; Takes a port and an event->chunks callback that converts parsed JSON events
+;; into provider-specific chunks. Handles SSE lifecycle, timeouts, and
+;; keep-alive protection. Returns a generator yielding chunks or #f when done.
+(define (stream-sse-events port
+                           event->chunks
+                           #:initial-timeout [initial-secs http-read-timeout-default]
+                           #:stream-timeout [stream-secs http-stream-timeout-default]
+                           #:max-total-timeout [max-total-secs 600])
+  (generator ()
+             (define stream-start (current-inexact-milliseconds))
+             (define deadline (+ stream-start (* max-total-secs 1000.0)))
+             (define max-consecutive-empty 100)
+             (let loop ([first-read? #t]
+                        [consecutive-empty 0])
+               (when (> (current-inexact-milliseconds) deadline)
+                 (raise (exn:fail:network:timeout
+                         (format "Stream exceeded maximum total duration (~a seconds)" max-total-secs)
+                         (current-continuation-marks))))
+               (when (>= consecutive-empty max-consecutive-empty)
+                 (raise (exn:fail:network:timeout (format "Stream exceeded ~a consecutive empty lines"
+                                                          max-consecutive-empty)
+                                                  (current-continuation-marks))))
+               (define elapsed-ms (- (current-inexact-milliseconds) stream-start))
+               (define base-timeout (if first-read? initial-secs stream-secs))
+               (define timeout-secs
+                 (if (and (not first-read?) (> elapsed-ms (* stream-secs 1000.0)))
+                     (min (* stream-secs 2) (* base-timeout 2))
+                     base-timeout))
+               (define line (read-line/timeout port #:timeout timeout-secs))
+               (cond
+                 [(eq? line #f)
+                  (raise (exn:fail:network:timeout
+                          (format "HTTP read timeout (~a seconds) waiting for SSE chunk" timeout-secs)
+                          (current-continuation-marks)))]
+                 [(eof-object? line) (yield #f)]
+                 [else
+                  (define parsed (parse-sse-line line))
+                  (cond
+                    [(eq? parsed 'done) (yield #f)]
+                    [(hash? parsed)
+                     (define chunks (event->chunks parsed))
+                     (for ([ch (in-list chunks)])
+                       (yield ch))
                      (loop #f 0)]
                     [else (loop #f (add1 consecutive-empty))])]))))

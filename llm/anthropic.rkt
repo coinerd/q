@@ -357,32 +357,12 @@
        (define current-tool-name (box #f))
        (define current-tool-index (box 0))
        (log-stream-setup-timing "anthropic" _stream-t0)
-       (generator ()
-                  (let loop ([first-read? #t])
-                    (define timeout-secs
-                      (if first-read? http-read-timeout-default http-stream-timeout-default))
-                    (define line (read-line/timeout raw-port #:timeout timeout-secs))
-                    (cond
-                      [(or (eq? line #f) (eof-object? line))
-                       (close-input-port raw-port)
-                       (yield #f)]
-                      [else
-                       (define parsed (parse-sse-line line))
-                       (cond
-                         [(eq? parsed 'done)
-                          (close-input-port raw-port)
-                          (yield #f)]
-                         [(hash? parsed)
-                          ;; Parse the Anthropic event into stream-chunks
-                          (define chunks
+       (stream-sse-events raw-port
+                          (lambda (parsed)
                             (anthropic-parse-single-event parsed
                                                           current-tool-id
                                                           current-tool-name
-                                                          current-tool-index))
-                          (for ([ch (in-list chunks)])
-                            (yield ch))
-                          (loop #f)]
-                         [else (loop #f)])]))))
+                                                          current-tool-index))))
      (lambda ()
        (define rp (unbox response-port-box))
        (when rp
