@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.82.0 (2026-06-02)
+
+### Goal Feature Foundation
+- Fix `extract-transcript-from-result` to handle `loop-result?` struct.
+- Add `current-goal-loop-enabled?` feature flag (default `#f`).
+- Remove all facade-dependent imports in `runtime/session/`, `runtime/compaction/`, `util/message/`.
+
 ## v0.81.5 (2026-06-02)
 
 ### runtime/ Safe Sub-Packaging
