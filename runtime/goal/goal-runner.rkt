@@ -32,7 +32,8 @@
          "goal-evidence.rkt"
          "goal-checks.rkt"
          "../../llm/provider.rkt"
-         (only-in "../../util/time.rkt" now-epoch-ms))
+         (only-in "../../util/time.rkt" now-epoch-ms)
+         (only-in "../../util/loop-result.rkt" loop-result? loop-result-messages))
 
 ;; ============================================================
 ;; Provides
@@ -43,7 +44,8 @@
          goal-loop-step
          build-continuation-prompt
          collect-evaluations
-         execute-checks-for-goal)
+         execute-checks-for-goal
+         extract-transcript-from-result)
 
 ;; Collect all evaluations from goal-state evaluations field + last-evaluation
 (define (collect-evaluations goal-st)
@@ -111,10 +113,7 @@
   (cond
     [(shutdown-check)
      (define final-st
-       (struct-copy goal-state
-                    goal-st
-                    [status 'cancelled]
-                    [updated-at (now-epoch-ms)]))
+       (struct-copy goal-state goal-st [status 'cancelled] [updated-at (now-epoch-ms)]))
      (on-event 'goal-failed
                (hasheq 'goal-text
                        (goal-state-goal-text final-st)
@@ -127,11 +126,7 @@
 
     ;; Max turns reached
     [(>= (goal-state-turns-used goal-st) (goal-state-max-turns goal-st))
-     (define final-st
-       (struct-copy goal-state
-                    goal-st
-                    [status 'failed]
-                    [updated-at (now-epoch-ms)]))
+     (define final-st (struct-copy goal-state goal-st [status 'failed] [updated-at (now-epoch-ms)]))
      (on-event 'goal-failed
                (hasheq 'goal-text
                        (goal-state-goal-text final-st)
@@ -143,11 +138,7 @@
      final-st]
 
     [(detect-no-progress (collect-evaluations goal-st))
-     (define final-st
-       (struct-copy goal-state
-                    goal-st
-                    [status 'failed]
-                    [updated-at (now-epoch-ms)]))
+     (define final-st (struct-copy goal-state goal-st [status 'failed] [updated-at (now-epoch-ms)]))
      (on-event 'goal-failed
                (hasheq 'goal-text
                        (goal-state-goal-text final-st)
@@ -194,7 +185,6 @@
       "unknown"))
 
 ;; Sum token costs from all evaluations
-
 
 ;; ============================================================
 ;; Single step
@@ -291,6 +281,7 @@
   ;; Try to extract messages from the loop result
   ;; The loop-result may have an 'assistant-response or 'messages field
   (cond
+    [(loop-result? loop-result) (loop-result-messages loop-result)]
     [(hash? loop-result)
      (define messages (hash-ref loop-result 'messages '()))
      (if (list? messages)
