@@ -14,10 +14,12 @@
 ;;
 ;; This file re-exports everything for backward compatibility.
 ;;
-;; TRANSITIONAL (I2 v0.72.5): Remaining direct consumers:
-;;   - runtime/iteration/retry-policy.rkt
-;;   - tui/render.rkt
-;; Consider migrating these to import from specific sub-modules.
+;; TRANSITIONAL (I2 v0.72.5): New code should import from specific sub-modules.
+;; v0.80.4 migrated: cli/render.rkt, runtime/iteration/retry-policy.rkt,
+;;   runtime/session-lifecycle-transitions.rkt, interfaces/json-mode.rkt,
+;;   interfaces/rpc-mode.rkt, extensions/events.rkt
+;; Remaining consumers: ~88 files in tui/, extensions/, interfaces/.
+;; Target: remove this facade in v0.82+ after all consumers migrated.
 
 (require "content-parts.rkt"
          "message.rkt"

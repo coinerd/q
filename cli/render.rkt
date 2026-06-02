@@ -15,7 +15,7 @@
 ;;   format-classified-error    — error formatting
 
 (require "../util/error-helpers.rkt")
-(require "../util/protocol-types.rkt"
+(require (only-in "../util/event.rkt" event-ev event-payload)
          "../util/ansi.rkt"
          "../util/markdown.rkt"
          "../util/error-classify.rkt"
