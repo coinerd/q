@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.82.2 (2026-06-02)
+
+### TUI /goal Core Activation
+- Wire `goal-run!` in `handle-goal-command` replacing stub message.
+- Thread spawning with `exn:fail?` handler and shutdown-check.
+- Event bridge adapter for goal-runner → event bus.
+- Feature flag guard (`current-goal-loop-enabled?` default `#f`).
+
 ## v0.82.1 (2026-06-02)
 
 ### Goal Wiring Foundation
