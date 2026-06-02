@@ -5,7 +5,11 @@
 ### Architecture Polish
 - Protocol-types facade consumer migration (14 files migrated to direct imports)
 - Runtime sub-package documentation in dependency-policy.rktd
-- Struct mutability fixes, session config helpers, event macro polish
+- T3-1: streaming-message.rkt — replaced 5 boxes with #:mutable struct fields
+- T3-9: wave-executor.rkt — replaced statuses-box with #:mutable field
+- T3-5: Fixed tui-init.rkt layer violation — moved GSD wiring to wiring/run-modes.rkt
+- Session config regression guards (4 tests)
+- Struct mutability tests (8 tests)
 
 
 ## v0.79.0 (2026-06-01)
