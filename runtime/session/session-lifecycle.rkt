@@ -32,12 +32,12 @@
          "../../agent/event-bus.rkt"
          (only-in "../../util/hook-types.rkt" hook-result-action hook-result-payload)
          (only-in "../../util/errors.rkt" raise-session-error)
-         "../session-store.rkt"
+         "session-store.rkt"
          (only-in "../../agent/state.rkt" current-loop-state-for-error-recovery loop-state-messages)
-         "../session-index.rkt"
+         "../session-index/schema.rkt" "../session-index/mutations.rkt" "../session-index/query.rkt"
          (only-in "../../util/event-payloads.rkt" error-payload input-payload payload->hash)
          (only-in "../../util/telemetry.rkt" with-telemetry)
-         (only-in "../context-assembly.rkt"
+         (only-in "../context/context-assembly.rkt"
                   (build-session-context build-session-context/from-index)
                   build-tiered-context-with-hooks
                   tiered-context->message-list)
@@ -45,7 +45,7 @@
                   make-working-set
                   working-set-reset!
                   working-set-resolve-messages)
-         (only-in "../session-context.rkt" extract-path-settings)
+         (only-in "session-context.rkt" extract-path-settings)
          "../../util/ids.rkt"
          (only-in "../runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
          (only-in "../../agent/iteration/main-loop.rkt" run-iteration-loop/v2)
@@ -55,7 +55,7 @@
          "session-types.rkt"
          (only-in "session-controls.rkt" set-model! shutdown-requested? force-shutdown-requested?)
          (only-in "../../llm/token-budget.rkt" DEFAULT-TOKEN-BUDGET-THRESHOLD)
-         (only-in "../session-compaction.rkt" maybe-compact-context)
+         (only-in "../compaction/session-compaction.rkt" maybe-compact-context)
          (only-in "../trace-logger.rkt" make-trace-logger start-trace-logger! stop-trace-logger!)
          (only-in "../auto-retry.rkt"
                   classify-error
@@ -64,7 +64,7 @@
                   retry-exhausted-total-delay-ms
                   retry-exhausted-error-history)
          (only-in "../../llm/token-budget.rkt" estimate-context-tokens)
-         (only-in "../context-pressure.rkt" check-context-pressure)
+         (only-in "../context/context-pressure.rkt" check-context-pressure)
          "session-persistence.rkt")
 
 (provide (contract-out

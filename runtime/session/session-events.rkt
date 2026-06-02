@@ -8,9 +8,9 @@
 
 (require racket/contract
          "../../agent/event-bus.rkt"
-         "../session-store.rkt"
-         "../compactor.rkt"
-         "../session-index.rkt"
+         "session-store.rkt"
+         "../compaction/compactor.rkt"
+         "../session-index/schema.rkt" "../session-index/mutations.rkt" "../session-index/query.rkt"
          (only-in "../../util/event.rkt" event-ev)
          (only-in "../../util/message.rkt" message-id)
          (only-in "../../util/event.rkt" event-payload)

@@ -20,7 +20,7 @@
          racket/port
          racket/class
          json
-         "../goal-state.rkt"
+         "../goal/goal-state.rkt"
          (only-in "../context-assembly/task-state.rkt" task-states-list)
          (only-in "../context-assembly/task-conclusion.rkt"
                   task-conclusion

@@ -29,7 +29,7 @@
          (only-in "../layer-adapters.rkt" tool-registry?)
          (only-in "../../agent/event-bus.rkt" event-bus?)
          (only-in "../layer-adapters.rkt" extension-registry?)
-         (only-in "../model-registry.rkt" model-registry?)
+         (only-in "../provider/model-registry.rkt" model-registry?)
          (only-in "../trace-logger.rkt" trace-logger?)
          (only-in "../settings.rkt" q-settings?)
          (only-in "../../util/cancellation.rkt" cancellation-token?)

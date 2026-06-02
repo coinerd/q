@@ -9,7 +9,7 @@
 
 (require racket/contract
          racket/list
-         (only-in "../model-registry.rkt" available-models model-entry-name model-registry?)
+         (only-in "../provider/model-registry.rkt" available-models model-entry-name model-registry?)
          "session-types.rkt")
 (require "session-mutation.rkt")
 

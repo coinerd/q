@@ -16,7 +16,7 @@
                   message-content)
          (only-in "../../util/content-parts.rkt" make-text-part)
          (only-in "../../util/ids.rkt" generate-id now-seconds)
-         (only-in "../session-index.rkt" active-leaf)
+         (only-in "../session-index/query.rkt" active-leaf)
          racket/list
          racket/string
          racket/contract)

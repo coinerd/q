@@ -128,7 +128,7 @@
 (register-migration! 1 migrate-v1->v2!)
 
 ;; Load session log entries and version header writer (re-export helpers)
-(require (only-in "../session-store.rkt" load-session-log write-session-version-header!))
+(require (only-in "session-store.rkt" load-session-log write-session-version-header!))
 
 ;; Ensure session has a version header (write if missing)
 (define (ensure-session-version! path)
