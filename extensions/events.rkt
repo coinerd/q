@@ -15,7 +15,6 @@
 
 (require racket/contract
          "api.rkt"
-         "../util/protocol-types.rkt"
          "../util/event.rkt")
 
 (define-logger ext-events)

@@ -31,8 +31,8 @@
                 ([summary-message : (U String #f)] [removed-count : Integer]
                                                    [kept-messages : (Listof Any)])])
 
-(require/typed "../../util/protocol-types.rkt"
-               [message-content (-> Any (U String (Listof Any)))]
+(require/typed "../../util/message.rkt" [message-content (-> Any (U String (Listof Any)))])
+(require/typed "../../util/content-parts.rkt"
                [text-part? (-> Any Boolean)]
                [text-part-text (-> Any String)])
 

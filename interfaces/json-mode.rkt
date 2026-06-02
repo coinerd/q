@@ -3,10 +3,9 @@
 (require racket/contract
          racket/string
          json
-         "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
-         (only-in "../util/event.rkt" event?)
-         (only-in "../util/message.rkt" message?))
+         (only-in "../util/event.rkt" event? event->jsexpr)
+         (only-in "../util/message.rkt" message? message->jsexpr))
 
 (provide intent
          intent?
