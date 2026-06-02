@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.82.5 (2026-06-02)
+
+### Feature Flag Activation
+- Flip `current-goal-loop-enabled?` default to `#t` — goal loop is now active by default.
+- Updated `docs/getting-started/goal.md` with activation note.
+
 ## v0.82.4 (2026-06-02)
 
 ### GUI Activation + Integration Tests
