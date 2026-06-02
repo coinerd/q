@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.82.4 (2026-06-02)
+
+### GUI Activation + Integration Tests
+- Wire GUI `/goal` handler to `goal-run!` (mirrors TUI pattern).
+- Feature flag guard with session-null safety.
+- 2 new GUI goal tests (feature flag guard + enable path).
+
 ## v0.82.3 (2026-06-02)
 
 ### System Instruction Injection
