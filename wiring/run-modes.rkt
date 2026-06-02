@@ -40,7 +40,9 @@
                   start-trace-logger!
                   project-tree->string)
          (only-in "extension-setup.rkt" make-wired-extension-registry load-extensions-from-dir!)
-         (only-in "../runtime/session-config.rkt" apply-context-assembly-profile!))
+         (only-in "../runtime/session-config.rkt" apply-context-assembly-profile!)
+         (only-in "../extensions/gsd/state-machine.rkt" gsm-current)
+         (only-in "../tui/state-events.rkt" current-gsd-mode-query))
 
 ;; Re-export mode runners from sub-modules
 (require "run-interactive.rkt"
@@ -124,6 +126,10 @@
   ;; Load order: global (~/.q/extensions/) first, then project-local.
   ;; Project-local extensions override global ones (same name wins from later registration).
   (define-values (ext-reg ext-cmds ext-shortcuts) (make-wired-extension-registry bus project-dir))
+
+  ;; T3-5: Wire GSD mode query — moved from tui/tui-init.rkt to fix layer violation.
+  ;; TUI imports are clean; GSD state is queried via parameter set here in wiring layer.
+  (current-gsd-mode-query (lambda () (gsm-current)))
 
   ;; Model name from CLI --model flag
   (define model-name (hash-ref base-config 'model #f))

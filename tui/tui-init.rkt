@@ -28,8 +28,7 @@
          "../tui/tui-keybindings.rkt"
          "../tui/tui-render-loop.rkt"
          "../cli/args.rkt"
-         "../extensions/ui-surface.rkt"
-         (only-in "../extensions/gsd/state-machine.rkt" gsm-current))
+         "../extensions/ui-surface.rkt")
 
 (provide (contract-out [run-tui (->* () () any)]
                        [run-tui-with-runtime (-> any/c any/c any)]
@@ -69,8 +68,8 @@
   ;; Determine session dir
   (define sess-dir (or (dict-ref rt-config 'session-dir #f) (dict-ref rt-config 'store-dir #f)))
 
-  ;; Wire GSD mode query callback
-  (current-gsd-mode-query (lambda () (gsm-current)))
+  ;; Wire GSD mode query callback — defaults to 'idle
+  ;; Caller (main.rkt) sets current-gsd-mode-query to gsm-current if GSD is loaded
 
   (define ctx
     (make-tui-ctx
