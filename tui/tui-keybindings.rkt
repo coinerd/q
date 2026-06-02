@@ -125,7 +125,8 @@
                              #:model-registry any/c
                              #:extension-registry any/c
                              #:session-queue any/c
-                             #:session-factory-runner any/c)
+                             #:session-factory-runner any/c
+                             #:agent-session-box any/c)
                 tui-ctx?)]
           [mark-dirty! (-> tui-ctx? void?)]
           [handle-key (-> tui-ctx? any/c any/c)]
