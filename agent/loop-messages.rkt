@@ -22,11 +22,22 @@
                        [merge-consecutive-roles (-> (listof hash?) (listof hash?))]
                        [build-raw-messages (-> (listof message?) (listof hash?))]
                        [classify-hook-result
-                        (-> any/c (or/c 'pass (list/c 'block any/c) (list/c 'amend any/c)))]))
+                        (-> any/c (or/c 'pass (list/c 'block any/c) (list/c 'amend any/c)))]
+                       [message-role->api-role (-> symbol? string?)]))
 
 ;; ============================================================
 ;; Helpers
 ;; ============================================================
+
+;; Convert internal message role symbol to API role string.
+;; Centralizes role mapping so providers don't repeat this logic.
+(define (message-role->api-role role)
+  (case role
+    [(user) "user"]
+    [(assistant) "assistant"]
+    [(system) "system"]
+    [(tool) "tool"]
+    [else (symbol->string role)]))
 
 ;; Check whether usage hash is empty/zero (provider didn't return real usage).
 (define (usage-empty? u)
@@ -170,7 +181,8 @@
                     (result-content->string (tool-result-part-content p))))]
 
          ;; fallback -- unknown role
-         [else (list (hasheq 'role (symbol->string role) 'content (parts->text-string parts)))]))))
+         [else
+          (list (hasheq 'role (message-role->api-role role) 'content (parts->text-string parts)))]))))
   ;; Safety net: merge consecutive user messages.
   ;; Some providers (GLM) reject consecutive same-role messages.
   (merge-consecutive-roles raw-msgs))
