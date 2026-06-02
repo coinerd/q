@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.81.0 (2026-06-02)
+
+### SSE Dedup + Contract Tightening
+- Azure OpenAI SSE inline loop migrated to shared stream-sse-events
+- any/c contracts tightened in stream-runner.rkt (7) and loop-phases.rkt (15)
+- with-safe-fallback logging + placeholder test fixes
+
 ## v0.80.5 (2026-06-01)
 
 ### Architecture Polish
