@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.81.5 (2026-06-02)
+
+### runtime/ Safe Sub-Packaging
+- Moved 10 compaction files into `runtime/compaction/` sub-package.
+- Moved 17 session core files into `runtime/session/` sub-package.
+- All re-export facades at original paths, deprecated for v0.83 removal.
+
 ## v0.81.4 (2026-06-02)
 
 ### runtime/ Safe Sub-Packaging
