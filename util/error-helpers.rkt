@@ -16,7 +16,9 @@
 ;; (with-safe-fallback #f
 ;;   (dangerous-operation ...))
 (define-syntax-rule (with-safe-fallback default body ...)
-  (with-handlers ([exn:fail? (lambda (_) default)])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-warning "with-safe-fallback caught: ~a" (exn-message e))
+                               default)])
     body ...))
 
 ;; with-logged-error — Execute body, logging exception message and returning #f.

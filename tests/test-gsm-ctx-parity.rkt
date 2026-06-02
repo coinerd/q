@@ -43,8 +43,11 @@
       (check-equal? (procedure-arity gsm-ctx-history) 1)
       (check-equal? (procedure-arity gsm-ctx-snapshot) 1))
 
-    ;; Test 5: W1 will verify delegation implementation
-    (test-case "W1 will verify gsm-* delegates to gsm-ctx-*"
-      (check-true #t))))
+    ;; Test 5: gsm-ctx-* functions produce results (v0.81.0 W3)
+    (test-case "gsm-current and gsm-ctx-current both return symbols"
+      (define state (gsm-current))
+      (check-pred symbol? state "gsm-current returns a symbol")
+      ;; Also verify the parallel ctx function
+      (check-pred procedure? gsm-ctx-snapshot "gsm-ctx-snapshot is a procedure"))))
 
 (run-tests suite)

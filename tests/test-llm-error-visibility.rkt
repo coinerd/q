@@ -39,11 +39,10 @@
       (check-not-false (unbox logged))
       (check-not-false (string-contains? (car (unbox logged)) "invalid JSON")))
 
-    ;; Test 4: Verify all 6 silent-swallow sites are addressed
-    ;; This is a source-level check — verify the pattern no longer exists
-    ;; NOTE: W0 scaffolding; the void handlers still exist. W1 will fix them.
-    (test-case "W1 will verify no silent void handlers in LLM providers"
-      ;; W1 placeholder — after fixing, this test will grep for the pattern
-      (check-true #t))))
+    ;; Test 4: with-safe-fallback now logs warnings (v0.81.0 W3)
+    (test-case "with-safe-fallback logs warnings instead of silent swallow"
+      (define src (with-input-from-file "../util/error-helpers.rkt" (lambda () (read-string 10000))))
+      (check-not-false (string-contains? src "log-warning \"with-safe-fallback caught")
+                       "with-safe-fallback should log warnings"))))
 
 (run-tests suite)
