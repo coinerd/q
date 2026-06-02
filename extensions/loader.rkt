@@ -19,7 +19,7 @@
          racket/port
          racket/string
          json
-         "../util/protocol-types.rkt"
+         (only-in "../util/event.rkt" make-event)
          "../agent/event-bus.rkt"
          "api.rkt"
          "../util/checksum.rkt"

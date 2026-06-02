@@ -19,7 +19,9 @@
 (require racket/contract
          "event-api.rkt"
          "api.rkt"
-         "../util/protocol-types.rkt"
+         (only-in "../util/event.rkt" make-event)
+         (only-in "../util/message.rkt" make-message message?)
+         (only-in "../util/content-parts.rkt" make-text-part)
          "../util/ids.rkt"
          "../util/event.rkt")
 

@@ -18,7 +18,9 @@
          (only-in "../tools/tool.rkt" make-tool-registry tool-registry?)
          (only-in "../tools/registry-defaults.rkt" register-default-tools!)
          "../agent/event-bus.rkt"
-         "../util/protocol-types.rkt"
+         (only-in "../util/loop-result.rkt" loop-result)
+         (only-in "../util/event.rkt" make-event)
+         (only-in "../util/message.rkt" message?)
          (prefix-in session: "../runtime/agent-session.rkt")
          (only-in "../runtime/turn-orchestrator.rkt" register-session-extensions!)
          (only-in "../runtime/compactor.rkt"

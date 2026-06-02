@@ -96,7 +96,7 @@
          (only-in "../runtime/provider-factory.rkt" build-provider)
          (only-in "../agent/event-bus.rkt" make-event-bus event-bus? subscribe! publish!)
          (only-in "../util/event.rkt" event?)
-         (only-in "../util/protocol-types.rkt" message?)
+         (only-in "../util/message.rkt" message?)
          (only-in "../extensions/api.rkt"
                   make-extension-registry
                   register-extension!

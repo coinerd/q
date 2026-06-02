@@ -13,7 +13,6 @@
 
 (require racket/contract
          racket/match
-         "../util/protocol-types.rkt"
          "../util/event.rkt"
          "event-types.rkt")
 
