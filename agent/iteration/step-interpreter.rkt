@@ -36,11 +36,8 @@
                   loop-counters-iteration
                   loop-counters-consecutive-tool-count
                   loop-counters-recent-tool-names)
-         (only-in "../../util/protocol-types.rkt"
-                  message-role
-                  message-id
-                  tool-call-name
-                  tool-call-arguments)
+         (only-in "../../util/message.rkt" message-role message-id)
+         (only-in "../../util/tool-types.rkt" tool-call-name tool-call-arguments)
          (only-in "../../runtime/layer-adapters.rkt" permission-config?)
          (only-in "../../runtime/tool-coordinator.rkt"
                   handle-tool-calls-pending
@@ -78,13 +75,19 @@
                   estimate-mid-turn-tokens
                   maybe-compact-mid-turn
                   detect-exploration-loop)
-         (only-in "../../runtime/iteration/decision.rkt" step-result step-result? step-result-action step-result-new-counters)
+         (only-in "../../runtime/iteration/decision.rkt"
+                  step-result
+                  step-result?
+                  step-result-action
+                  step-result-new-counters)
          (only-in "../../runtime/iteration/internal.rkt" assert-payload)
          (only-in "../../runtime/iteration/directive.rkt" directive-recurse directive-stop))
 
 (provide (contract-out
-          [interpret-step (-> step-result? loop-result? (listof any/c) loop-infra? iteration-snapshot? any/c)]
-          [handle-stop-action (-> loop-result? (listof any/c) loop-infra? loop-counters? any/c any/c loop-result?)]
+          [interpret-step
+           (-> step-result? loop-result? (listof any/c) loop-infra? iteration-snapshot? any/c)]
+          [handle-stop-action
+           (-> loop-result? (listof any/c) loop-infra? loop-counters? any/c any/c loop-result?)]
           [execute-pending-tool-calls (-> (listof any/c) loop-infra? any/c any/c (listof any/c))]
           [sink-append-entries! (->* (loop-infra? (listof any/c)) ((or/c any/c #f)) void?)]))
 
@@ -194,10 +197,7 @@
   (define action (step-result-action step-res))
   ;; Local emit helper — avoids repeating bus/session-id everywhere
   (define (emit name payload)
-    (emit-session-event! (loop-infra-bus infra)
-                         (loop-infra-session-id infra)
-                         name
-                         payload))
+    (emit-session-event! (loop-infra-bus infra) (loop-infra-session-id infra) name payload))
 
   (match action
     ['stop

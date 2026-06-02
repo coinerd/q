@@ -6,7 +6,7 @@
 ;; Pure functions for context message analysis.
 
 (require racket/contract
-         (only-in "../util/protocol-types.rkt" message-kind message-meta-safe))
+         (only-in "../util/message.rkt" message-kind message-meta-safe))
 
 ;; extract-path-settings — walk context messages to find latest
 ;;   model-change and thinking-level-change entries.

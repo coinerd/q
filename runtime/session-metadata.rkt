@@ -11,14 +11,14 @@
          racket/list
          racket/port
          (only-in "../util/ids.rkt" generate-id)
-         (only-in "../util/protocol-types.rkt"
+         (only-in "../util/content-parts.rkt" make-text-part)
+         (only-in "../util/message.rkt"
                   message?
                   message-content
                   message-meta-safe
                   message-kind
-                  make-message
-                  make-text-part
-                  content-part->jsexpr)
+                  make-message)
+         (only-in "../util/protocol-types.rkt" content-part->jsexpr)
          "../util/jsonl.rkt"
          "../runtime/session-store.rkt")
 

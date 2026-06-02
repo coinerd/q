@@ -6,7 +6,7 @@
 ;; All struct definitions live in schema.rkt (single source of truth).
 
 (require racket/contract
-         (only-in "../util/protocol-types.rkt" message?)
+         (only-in "../util/message.rkt" message?)
          "session-index/schema.rkt"
          "session-index/mutations.rkt"
          "session-index/query.rkt")

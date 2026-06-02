@@ -25,18 +25,15 @@
          racket/port
          racket/string
          (only-in "../runtime/session-store.rkt" load-session-log)
-         (only-in "../util/protocol-types.rkt"
+         (only-in "../util/content-parts.rkt" text-part? tool-call-part?)
+         (only-in "../util/message.rkt"
                   message?
                   message-role
                   message-content
                   message-kind
                   message-timestamp
-                  message-meta
-                  text-part?
-                  text-part-text
-                  tool-call-part?
-                  tool-call-part-name
-                  tool-call-part-id))
+                  message-meta)
+         (only-in "../util/protocol-types.rkt" text-part-text tool-call-part-name tool-call-part-id))
 
 (provide (contract-out [extract-metrics (-> any/c any/c)]
                        [format-report (-> any/c string?)]

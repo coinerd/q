@@ -18,11 +18,10 @@
                   loop-counters-implement-count
                   loop-counters-consecutive-error-count
                   loop-counters-recent-tool-names)
-         (only-in "../../util/protocol-types.rkt"
-                  message-content
-                  tool-result-part?
-                  tool-result-part-is-error?
-                  tool-call-name)
+         (only-in "../../util/content-parts.rkt" tool-result-part?)
+         (only-in "../../util/message.rkt" message-content)
+         (only-in "../../util/tool-types.rkt" tool-call-name)
+         (only-in "../../util/content-parts.rkt" tool-result-part-is-error?)
          (only-in "../../runtime/tool-coordinator.rkt" extract-tool-calls-from-messages)
          (only-in "tool-turn-bridge.rkt" update-seen-paths take-at-most)
          (only-in "../event-emitter.rkt" emit-typed-event!)

@@ -11,7 +11,9 @@
          "../runtime/session-store.rkt"
          "../runtime/compactor.rkt"
          "../runtime/session-index.rkt"
-         (only-in "../util/protocol-types.rkt" event-ev event-payload message-id)
+         (only-in "../util/event.rkt" event-ev)
+         (only-in "../util/message.rkt" message-id)
+         (only-in "../util/protocol-types.rkt" event-payload)
          (only-in "runtime-helpers.rkt" emit-session-event!)
          "session-types.rkt"
          (only-in "context-assembly/task-conclusion.rkt" task-conclusion task-conclusion-id))

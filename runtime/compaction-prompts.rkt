@@ -7,13 +7,9 @@
 
 (require racket/contract
          racket/string
-         (only-in "../util/protocol-types.rkt"
-                  message?
-                  message-role
-                  message-id
-                  message-content
-                  text-part?
-                  text-part-text))
+         (only-in "../util/content-parts.rkt" text-part?)
+         (only-in "../util/message.rkt" message? message-role message-id message-content)
+         (only-in "../util/protocol-types.rkt" text-part-text))
 
 (provide (contract-out [summary-prompt (-> string? (or/c #f hash?) string?)]
                        [iterative-update-prompt (-> string? string? (or/c #f hash?) string?)]

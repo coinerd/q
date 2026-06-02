@@ -8,18 +8,13 @@
 (require racket/contract
          racket/list
          (only-in racket/string string-join)
+         (only-in "../../util/content-parts.rkt" text-part? tool-result-part?)
+         (only-in "../../util/event.rkt" event-ev)
+         (only-in "../../util/message.rkt" message-role message? message-id message-content)
+         (only-in "../../util/tool-types.rkt" tool-call-name tool-call-arguments)
          (only-in "../../util/protocol-types.rkt"
-                  message-role
-                  message?
-                  message-id
-                  message-content
-                  text-part?
                   text-part-text
-                  tool-call-name
-                  tool-call-arguments
-                  tool-result-part?
                   tool-result-part-is-error?
-                  event-ev
                   event-payload)
          "../event-bus.rkt"
          (only-in "../queue.rkt" dequeue-steering! dequeue-followup! dequeue-all-followups!)

@@ -6,12 +6,9 @@
 (require racket/list
          racket/string
          (only-in "../../llm/token-budget.rkt" estimate-context-tokens)
-         (only-in "../../util/protocol-types.rkt"
-                  message?
-                  message-content
-                  message-role
-                  text-part?
-                  text-part-text)
+         (only-in "../../util/content-parts.rkt" text-part?)
+         (only-in "../../util/message.rkt" message? message-content message-role)
+         (only-in "../../util/protocol-types.rkt" text-part-text)
          "context-floor.rkt"
          "state-aware-builder.rkt")
 

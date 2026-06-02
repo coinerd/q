@@ -5,12 +5,8 @@
 
 (require racket/list
          racket/string
-         (only-in "../../util/protocol-types.rkt"
-                  message
-                  message-id
-                  message-content
-                  make-message
-                  make-text-part)
+         (only-in "../../util/content-parts.rkt" make-text-part)
+         (only-in "../../util/message.rkt" message message-id message-content make-message)
          (only-in "task-conclusion.rkt"
                   task-conclusion?
                   task-conclusion-text

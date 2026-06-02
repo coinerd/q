@@ -26,13 +26,10 @@
 
          "../tools/tool.rkt"
          "../agent/event-bus.rkt"
-         (only-in "../util/protocol-types.rkt"
-                  event-ev
-                  event-payload
-                  message-role
-                  message-content
-                  text-part?
-                  text-part-text)
+         (only-in "../util/content-parts.rkt" text-part?)
+         (only-in "../util/event.rkt" event-ev)
+         (only-in "../util/message.rkt" message-role message-content)
+         (only-in "../util/protocol-types.rkt" event-payload text-part-text)
          "../extensions/api.rkt"
          (only-in "../extensions/loader.rkt" load-extension!))
 
