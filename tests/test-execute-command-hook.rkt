@@ -52,7 +52,9 @@
            #f ; session-runner
            (box "/go") ; input-text-box
            (box ext-reg) ; extension-registry-box
-           #f)) ; session-factory-runner
+           #f ; session-factory-runner
+           (box #f) ; agent-session-box
+           (box #f))) ; goal-cancel-box
 
 (define (get-transcript-texts cctx)
   (define state (unbox (cmd-ctx-state-box cctx)))

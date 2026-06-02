@@ -26,15 +26,17 @@
          "../extensions/hooks.rkt"
          "../extensions/api.rkt"
          "../runtime/goal-checks.rkt"
-         (only-in "../runtime/goal-state.rkt" goal-check-label goal-check-command
-                  goal-state-turns-used goal-state-status)
+         (only-in "../runtime/goal-state.rkt"
+                  goal-check-label
+                  goal-check-command
+                  goal-state-turns-used
+                  goal-state-status)
          (only-in "../runtime/agent-session.rkt"
                   agent-session?
                   session-provider
                   session-event-bus
                   session-id)
-         (only-in "../runtime/session/session-config.rkt"
-                  current-goal-loop-enabled?)
+         (only-in "../runtime/session/session-config.rkt" current-goal-loop-enabled?)
          ;; Sub-module imports
          (only-in "commands/context.rkt"
                   cmd-ctx
@@ -80,10 +82,8 @@
                   handle-login-command)
          ;; Goal runner + bridge
          (only-in "../runtime/goal/goal-runner.rkt" goal-run!)
-         (only-in "commands/goal-bridge.rkt"
-                  make-goal-event-bridge
-                  make-goal-run-prompt!)
-         (only-in "commands/context.rkt" cmd-ctx-agent-session-box))
+         (only-in "commands/goal-bridge.rkt" make-goal-event-bridge make-goal-run-prompt!)
+         (only-in "commands/context.rkt" cmd-ctx-agent-session-box cmd-ctx-goal-cancel-box))
 
 ;; Re-export all public APIs
 (provide cmd-ctx
@@ -104,7 +104,8 @@
          apply-slash-command
          process-extension-command
          execute-extension-command
-         cmd-ctx-session-factory-runner)
+         cmd-ctx-session-factory-runner
+         cmd-ctx-goal-cancel-box)
 
 ;; ============================================================
 ;; Extension command dispatch (extracted W-09)
@@ -332,6 +333,10 @@
   (cond
     ;; /goal clear — cancel active goal
     [(string=? arg-text "clear")
+     ;; Signal the running goal thread to stop
+     (define cancel-box (cmd-ctx-goal-cancel-box cctx))
+     (when cancel-box
+       (set-box! cancel-box #t))
      (define cleared-state (struct-copy ui-state state [active-goal #f]))
      (define entry (make-system-entry "[goal] Active goal cancelled."))
      (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry cleared-state entry))
@@ -414,8 +419,7 @@
               (define sess (unbox (cmd-ctx-agent-session-box cctx)))
               (cond
                 [(not (agent-session? sess))
-                 (define entry
-                   (make-system-entry "[goal] No active session. Start a session first."))
+                 (define entry (make-system-entry "[goal] No active session. Start a session first."))
                  (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
                  'continue]
                 [else
@@ -428,39 +432,49 @@
                  (define on-event (make-goal-event-bridge bus sid))
                  (define on-status (lambda (msg) (displayln (format "goal: ~a" msg))))
                  (define shutdown-box (cmd-ctx-running-box cctx))
+                 (define cancel-box (cmd-ctx-goal-cancel-box cctx))
                  (define run-prompt! (make-goal-run-prompt! sess))
                  ;; Set initial state in UI
                  (set-box! (cmd-ctx-state-box cctx) init-state)
                  ;; Spawn autonomous loop in background thread
                  (thread
                   (lambda ()
-                    (with-handlers ([exn:fail?
-                                     (lambda (e)
-                                       (on-event 'goal-failed
-                                                 (hasheq 'goal-text clean-text
-                                                         'reason (exn-message e)
-                                                         'turns-used 0))
-                                       (displayln (format "goal loop failed: ~a" (exn-message e))))])
+                    (with-handlers
+                        ([exn:fail?
+                          (lambda (e)
+                            (on-event
+                             'goal-failed
+                             (hasheq 'goal-text clean-text 'reason (exn-message e) 'turns-used 0))
+                            (displayln (format "goal loop failed: ~a" (exn-message e))))])
                       (define result
-                        (goal-run! clean-text provider evaluator-model run-prompt!
+                        (goal-run! clean-text
+                                   provider
+                                   evaluator-model
+                                   run-prompt!
                                    #:max-turns 8
                                    #:evaluator-mode evaluator-mode
                                    #:on-event on-event
                                    #:on-status on-status
-                                   #:shutdown-check (lambda () (not (unbox shutdown-box)))))
-                      ;; Update display state with final result
-                      (define final-info
-                        (goal-display-info clean-text
-                                           (goal-state-turns-used result)
-                                           8
-                                           (goal-state-status result)))
-                      ;; Read current state, update active-goal, write back
-                      (define cur-state (unbox (cmd-ctx-state-box cctx)))
-                      (set-box! (cmd-ctx-state-box cctx)
-                                (struct-copy ui-state cur-state [active-goal final-info])))))
+                                   #:shutdown-check (lambda ()
+                                                      (or (and cancel-box (unbox cancel-box))
+                                                          (not (unbox shutdown-box))))))
+                      ;; Update display state with final result (skip if cancelled)
+                      (define was-cancelled (and cancel-box (unbox cancel-box)))
+                      (unless was-cancelled
+                        (define final-info
+                          (goal-display-info clean-text
+                                             (goal-state-turns-used result)
+                                             8
+                                             (goal-state-status result)))
+                        (define cur-state (unbox (cmd-ctx-state-box cctx)))
+                        (set-box! (cmd-ctx-state-box cctx)
+                                  (struct-copy ui-state cur-state [active-goal final-info])))
+                      (when cancel-box
+                        (set-box! cancel-box #f)))))
                  (define entry
-                   (make-system-entry
-                    (format "[goal] Autonomous loop started: ~a~a~a"
-                            clean-text check-info eval-info)))
+                   (make-system-entry (format "[goal] Autonomous loop started: ~a~a~a"
+                                              clean-text
+                                              check-info
+                                              eval-info)))
                  (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry init-state entry))
                  'continue])])])])]))

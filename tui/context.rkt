@@ -32,7 +32,9 @@
          session-queue-box ; (boxof (or/c queue? #f)) — agent queue for followup during streaming (G3.1)
          session-factory-runner ; (or/c (string -> void) #f) — creates fresh session for /go
          component-registry-box ; (boxof (or/c (hash/c symbol? q-component?) #f)) — persistent components
-         focused-component-id-box) ; (boxof (or/c symbol? #f)) — currently focused component
+         focused-component-id-box ; (boxof (or/c symbol? #f)) — currently focused component
+         agent-session-box ; (boxof (or/c any/c #f)) — live agent session for goal-runner
+         goal-cancel-box) ; (boxof boolean?) — #t signals goal thread to stop
   #:transparent)
 
 (define (make-tui-ctx #:event-bus [bus #f]
@@ -41,7 +43,8 @@
                       #:model-registry [reg #f]
                       #:extension-registry [ext-reg #f]
                       #:session-queue [sess-queue #f]
-                      #:session-factory-runner [factory #f])
+                      #:session-factory-runner [factory #f]
+                      #:agent-session-box [sess-box #f])
   (tui-ctx (box (initial-ui-state))
            (box (initial-input-state))
            bus
@@ -60,7 +63,9 @@
            (box sess-queue) ; session-queue-box
            factory
            (box #f) ; component-registry-box - lazy init on first render
-           (box #f))) ; focused-component-id-box - no component focused initially
+           (box #f) ; focused-component-id-box - no component focused initially
+           (or sess-box (box #f)) ; agent-session-box
+           (box #f))) ; goal-cancel-box
 
 ;; Mark that the frame needs redraw.
 (define (mark-dirty! ctx)
@@ -95,6 +100,8 @@
          tui-ctx-session-factory-runner
          tui-ctx-component-registry-box
          tui-ctx-focused-component-id-box
+         tui-ctx-agent-session-box
+         tui-ctx-goal-cancel-box
          (contract-out [make-tui-ctx
                         (->* ()
                              (#:event-bus (or/c event-bus? #f)
@@ -103,7 +110,8 @@
                                           #:model-registry any/c
                                           #:extension-registry any/c
                                           #:session-queue any/c
-                                          #:session-factory-runner any/c)
+                                          #:session-factory-runner any/c
+                                          #:agent-session-box any/c)
                              tui-ctx?)]
                        [mark-dirty! (-> tui-ctx? void?)]
                        [tui-ctx-focused-component-id (-> tui-ctx? (or/c symbol? #f))]

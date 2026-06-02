@@ -100,11 +100,14 @@
                           #:new-bus bus
                           #:new-extension-registry (dict-ref rt-config 'extension-registry #f)
                           #:reason 'fork)
+         ;; Update agent-session-box with new session for goal-runner
+         (set-box! (tui-ctx-agent-session-box ctx) new-sess)
          (set-box! (tui-ctx-ui-state-box ctx)
                    (initial-ui-state #:session-id new-sid
                                      #:model-name (dict-ref rt-config 'model-name #f)))
          (set-box! (tui-ctx-needs-redraw-box ctx) #t)
-         (run-prompt! new-sess prompt)))))
+         (run-prompt! new-sess prompt)))
+     #:agent-session-box (box sess)))
 
   ;; Scrollback path
   (define scrollback-path

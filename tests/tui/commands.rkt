@@ -26,7 +26,8 @@
            (box "") ;; input-text-box
            (box #f) ;; extension-registry-box
            #f ;; session-factory-runner
-           (box #f)))
+           (box #f) ;; agent-session-box
+           (box #f))) ;; goal-cancel-box
 
 (define commands-tests
   (test-suite "TUI Commands"
@@ -183,7 +184,8 @@
                  (box "")
                  (box #f)
                  factory
-                 (box #f)))
+                 (box #f) ;; agent-session-box
+                 (box #f))) ;; goal-cancel-box
       (check-true (procedure? (cmd-ctx-session-factory-runner cctx))))))
 
 (run-tests commands-tests)

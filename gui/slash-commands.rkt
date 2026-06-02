@@ -82,7 +82,11 @@
 ;;
 ;; Returns (-> string? boolean?) — #t if handled, #f otherwise
 ;; --------------------------------------------------
-(define (make-slash-command-handler sess state-box gui-state-lock [notify! void])
+(define (make-slash-command-handler sess
+                                    state-box
+                                    gui-state-lock
+                                    [notify! void]
+                                    #:goal-cancel-box [goal-cancel-box (box #f)])
   (lambda (input-text)
     (define parsed (parse-command-name input-text))
     (cond
@@ -243,24 +247,28 @@
                                               #:max-turns 8
                                               #:on-event on-event
                                               #:on-status (lambda (msg) (void))
-                                              #:shutdown-check (lambda () #f)))
-                                 ;; Update display with final result
-                                 (define final-info
-                                   (hash 'goal-text
-                                         clean-text
-                                         'turns-used
-                                         (goal-state-turns-used result)
-                                         'max-turns
-                                         8
-                                         'status
-                                         (goal-state-status result)))
-                                 (call-with-semaphore
-                                  gui-state-lock
-                                  (lambda ()
-                                    (set-box! state-box
-                                              (gui-state-set-active-goal (unbox state-box)
-                                                                         final-info))
-                                    (notify!)))))))
+                                              #:shutdown-check (lambda () (unbox goal-cancel-box))))
+                                 ;; Update display with final result (skip if cancelled)
+                                 (define was-cancelled (unbox goal-cancel-box))
+                                 (unless was-cancelled
+                                   (define final-info
+                                     (hash 'goal-text
+                                           clean-text
+                                           'turns-used
+                                           (goal-state-turns-used result)
+                                           'max-turns
+                                           8
+                                           'status
+                                           (goal-state-status result)))
+                                   (call-with-semaphore
+                                    gui-state-lock
+                                    (lambda ()
+                                      (set-box! state-box
+                                                (gui-state-set-active-goal (unbox state-box)
+                                                                           final-info))
+                                      (notify!))))
+                                 ;; Reset cancel box for next goal
+                                 (set-box! goal-cancel-box #f)))))
                    #t))])]
          [(interrupt)
           (add-system-msg! "Interrupt not yet supported in GUI mode."
