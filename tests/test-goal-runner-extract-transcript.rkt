@@ -23,9 +23,9 @@
 (test-case "extract-transcript-from-result handles unknown type"
   (check-equal? (extract-transcript-from-result 42) '()))
 
-(test-case "current-goal-loop-enabled? default is #f"
-  (check-false (current-goal-loop-enabled?)))
+(test-case "current-goal-loop-enabled? default is #t"
+  (check-true (current-goal-loop-enabled?)))
 
-(test-case "current-goal-loop-enabled? can be set to #t"
-  (parameterize ([current-goal-loop-enabled? #t])
-    (check-true (current-goal-loop-enabled?))))
+(test-case "current-goal-loop-enabled? can be set to #f"
+  (parameterize ([current-goal-loop-enabled? #f])
+    (check-false (current-goal-loop-enabled?))))
