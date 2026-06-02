@@ -134,7 +134,15 @@
                   current-auto-distillation-enabled?)
          (only-in "../runtime/session-config.rkt"
                   config-context-assembly-profile
-                  apply-context-assembly-profile!))
+                  apply-context-assembly-profile!)
+         ;; Task-state singletons for symbol->task-state conversion
+         (only-in "../runtime/context-assembly/task-state.rkt"
+                  task-idle
+                  task-exploration
+                  task-planning
+                  task-implementation
+                  task-verification
+                  task-debugging))
 
 (provide (contract-out
           [run-provider-turn
@@ -173,6 +181,21 @@
 ;; v0.79.2 GAP-2: Track last task FSM state for WS evolution old-state.
 ;; Set each turn from agent-session-task-fsm-state before it gets updated.
 (define current-last-task-fsm-state (make-parameter #f))
+
+;; Convert a raw state symbol to the canonical fsm-state? struct.
+;; The runtime stores task-fsm-state as raw symbols, but downstream consumers
+;; (ws-evolution, state-aware-builder) expect fsm-state? structs.
+;; Returns #f if symbol is not a known task state.
+(define (symbol->task-state sym)
+  (and (symbol? sym)
+       (case sym
+         [(idle) task-idle]
+         [(exploration) task-exploration]
+         [(planning) task-planning]
+         [(implementation) task-implementation]
+         [(verification) task-verification]
+         [(debugging) task-debugging]
+         [else #f])))
 
 ;; Pure: assemble context from messages and config without side effects.
 ;; Returns the assembled message list and hook result (no events emitted here).
@@ -238,7 +261,8 @@
            result)))
 
   ;; v0.75.6: Extract task state from session for state-aware assembly
-  (define task-state (and session (agent-session-task-fsm-state session)))
+  (define task-state-raw (and session (agent-session-task-fsm-state session)))
+  (define task-state (or (symbol->task-state task-state-raw) task-state-raw))
   (define conclusions (and session (agent-session-task-conclusions session)))
   ;; v0.77.9 T2.1: Auto-distill uncovered WS entries when enabled
   (define ws-early (config-working-set config-raw))

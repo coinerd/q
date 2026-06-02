@@ -25,7 +25,7 @@
                   task-verification
                   task-debugging)
          (only-in "task-conclusion.rkt" task-conclusion? task-conclusion-text)
-         (only-in "../../util/fsm.rkt" fsm-state-name)
+         (only-in "../../util/fsm.rkt" fsm-state? fsm-state-name)
          racket/set
          racket/string)
 
@@ -50,9 +50,20 @@
 ;; old-state: the previous task state (or #f if unknown)
 ;; new-state: the new task state
 ;; conclusions: current conclusions list
+;; Coerce fsm-state? struct or raw symbol to a state-name symbol.
+;; The runtime stores task states as raw symbols (e.g., 'exploration)
+;; in agent-session-task-fsm-state, while FSM singletons are fsm-state? structs.
+;; Both must be accepted.
+(define (state->name s)
+  (cond
+    [(not s) #f]
+    [(fsm-state? s) (fsm-state-name s)]
+    [(symbol? s) s]
+    [else #f]))
+
 (define (evolve-working-set-for-state ws old-state new-state conclusions)
-  (define old-name (and old-state (fsm-state-name old-state)))
-  (define new-name (and new-state (fsm-state-name new-state)))
+  (define old-name (state->name old-state))
+  (define new-name (state->name new-state))
 
   (cond
     ;; exploration → planning or implementation: clear ws, return conclusions
