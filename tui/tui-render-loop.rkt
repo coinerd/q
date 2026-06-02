@@ -46,7 +46,7 @@
                   styled-line->text
                   plain-line
                   apply-selection-highlight)
-         "../util/protocol-types.rkt"
+         (only-in "../util/event.rkt" event)
          "../agent/event-bus.rkt"
          "../tui/tui-keybindings.rkt"
          "../tui/terminal-input.rkt"
@@ -162,10 +162,10 @@
       (take-right content height)
       content))
 
-(provide (contract-out
-          [clip-visible-lines (-> list? exact-nonnegative-integer? list?)]
-          [compute-pad-count (-> list? exact-nonnegative-integer? exact-nonnegative-integer?)]
-          [clip-overlay-content (-> list? exact-nonnegative-integer? list?)]))
+(provide (contract-out [clip-visible-lines (-> list? exact-nonnegative-integer? list?)]
+                       [compute-pad-count
+                        (-> list? exact-nonnegative-integer? exact-nonnegative-integer?)]
+                       [clip-overlay-content (-> list? exact-nonnegative-integer? list?)]))
 
 ;; Render the complete frame to the terminal using ubuf.
 ;; Hides cursor during redraw to prevent flicker, shows after.

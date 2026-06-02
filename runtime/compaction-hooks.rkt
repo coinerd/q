@@ -17,7 +17,7 @@
          racket/list
          racket/match
          (only-in "../util/event.rkt" event?)
-         "../util/protocol-types.rkt"
+         (only-in "../util/event.rkt" event event? make-event)
          "../util/hook-types.rkt"
          "../agent/event-bus.rkt"
          "compactor.rkt"

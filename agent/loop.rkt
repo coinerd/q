@@ -38,7 +38,8 @@
          racket/date
          racket/set
          "../util/ids.rkt"
-         "../util/protocol-types.rkt"
+         (only-in "../util/loop-result.rkt" loop-result loop-result?)
+         (only-in "../util/message.rkt" message message?)
          "event-bus.rkt"
          "state.rkt"
          "../llm/model.rkt"
@@ -81,8 +82,7 @@
                   phase-pre-hook
                   phase-msg-hook
                   phase-stream)
-         (only-in "loop-dispatch.rkt"
-                  run-streaming-phase))
+         (only-in "loop-dispatch.rkt" run-streaming-phase))
 
 (provide (contract-out [run-agent-turn
                         (->i ([ctx (listof message?)] [prov provider?] [bus event-bus?])
@@ -189,12 +189,12 @@
       [_
        ;; v0.46.10 (I-1): Streaming dispatch extracted to run-streaming-phase
        (run-streaming-phase provider
-                                 req
-                                 bus
-                                 session-id
-                                 turn-id
-                                 st
-                                 raw-messages
-                                 tools
-                                 hook-dispatcher
-                                 cancellation-token)])))
+                            req
+                            bus
+                            session-id
+                            turn-id
+                            st
+                            raw-messages
+                            tools
+                            hook-dispatcher
+                            cancellation-token)])))

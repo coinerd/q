@@ -13,7 +13,21 @@
          racket/list
          racket/string
          racket/set
-         "../util/protocol-types.rkt"
+         (only-in "../util/content-parts.rkt"
+                  text-part
+                  text-part-text
+                  text-part?
+                  tool-call-part
+                  tool-call-part?)
+         (only-in "../util/message.rkt"
+                  message
+                  message-content
+                  message-id
+                  message-kind
+                  message-meta-safe
+                  message-parent-id
+                  message-role
+                  message?)
          (only-in "../util/message.rkt" message-meta-safe)
          "../llm/token-budget.rkt"
          "../util/token-estimate-cache.rkt")

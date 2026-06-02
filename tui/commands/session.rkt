@@ -8,7 +8,8 @@
 (require racket/string
          racket/list
          "../state.rkt"
-         "../../util/protocol-types.rkt"
+         (only-in "../../util/event.rkt" make-event)
+         (only-in "../../util/message.rkt" message-role)
          "../../agent/event-bus.rkt"
          "../../runtime/session-index.rkt"
          "../../interfaces/sessions.rkt"

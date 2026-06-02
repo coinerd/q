@@ -10,7 +10,8 @@
          racket/match
          racket/string
          racket/list
-         "../util/protocol-types.rkt"
+         (only-in "../util/content-parts.rkt" text-part text-part-text text-part?)
+         (only-in "../util/message.rkt" message message-content message-id message-role message?)
          "../util/string-helpers.rkt"
          "../llm/token-budget.rkt"
          (only-in "../runtime/compaction-prompts.rkt" format-messages-for-summary)

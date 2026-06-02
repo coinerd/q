@@ -20,7 +20,6 @@
          racket/port
          file/sha1
          json
-         "../util/protocol-types.rkt"
          "../util/jsonl.rkt"
          (only-in "../util/message-helpers.rkt" ensure-parent-dirs!))
 

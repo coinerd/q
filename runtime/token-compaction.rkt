@@ -17,7 +17,6 @@
 
 (require racket/contract
          racket/list
-         "../util/protocol-types.rkt"
          "../llm/token-budget.rkt"
          "context-policy.rkt")
 

@@ -9,7 +9,7 @@
          racket/string
          racket/system
          "../state.rkt"
-         "../../util/protocol-types.rkt"
+         (only-in "../../util/event.rkt" make-event)
          "../../agent/event-bus.rkt"
          "../../runtime/oauth.rkt"
          "../../runtime/oauth-callback.rkt"

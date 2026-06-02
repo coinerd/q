@@ -11,7 +11,7 @@
          racket/match
          racket/list
          "../util/ids.rkt"
-         "../util/protocol-types.rkt"
+         (only-in "../util/loop-result.rkt" loop-result)
          "../llm/model.rkt"
          "../llm/token-budget.rkt"
          (only-in "../llm/provider.rkt" provider-name provider?)

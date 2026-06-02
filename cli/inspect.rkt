@@ -13,7 +13,20 @@
          racket/list
          racket/string
          racket/format
-         "../util/protocol-types.rkt"
+         (only-in "../util/content-parts.rkt"
+                  tool-call-part
+                  tool-call-part-arguments
+                  tool-call-part-name
+                  tool-call-part?
+                  tool-result-part
+                  tool-result-part-is-error?
+                  tool-result-part?)
+         (only-in "../util/message.rkt"
+                  message-content
+                  message-meta-safe
+                  message-parent-id
+                  message-role
+                  message-timestamp)
          "../runtime/session-store.rkt")
 
 (require racket/contract)

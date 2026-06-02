@@ -17,7 +17,17 @@
          racket/match
          racket/string
          racket/format
-         "../util/protocol-types.rkt"
+         (only-in "../util/content-parts.rkt"
+                  tool-call-part
+                  tool-call-part-arguments
+                  tool-call-part-id
+                  tool-call-part-name
+                  tool-call-part?
+                  tool-result-part
+                  tool-result-part-content
+                  tool-result-part-tool-call-id
+                  tool-result-part?)
+         (only-in "../util/message.rkt" message-content message-timestamp)
          "../runtime/session-store.rkt")
 
 (require racket/contract)

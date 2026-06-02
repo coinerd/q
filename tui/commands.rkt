@@ -22,7 +22,6 @@
                   parsed-command-args
                   parsed-command-arg-kind)
          "palette.rkt"
-         "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
          "../extensions/hooks.rkt"
          "../extensions/api.rkt"

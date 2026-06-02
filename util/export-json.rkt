@@ -10,7 +10,7 @@
          racket/format
          racket/list
          json
-         "../util/protocol-types.rkt")
+         (only-in "message.rkt" message->jsexpr))
 
 (provide (contract-out [session->json-string (-> list? string?)]))
 

@@ -17,7 +17,8 @@
          "../agent/event-bus.rkt"
          "../runtime/compactor.rkt"
          "../runtime/compaction-hooks.rkt"
-         "../util/protocol-types.rkt")
+         (only-in "../util/content-parts.rkt" make-text-part)
+         (only-in "../util/message.rkt" make-message))
 
 ;; Compact request struct
 (provide ctx-compact-request

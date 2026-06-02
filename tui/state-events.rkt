@@ -9,7 +9,8 @@
 (require racket/string
          racket/match
          racket/list
-         "../util/protocol-types.rkt"
+         (only-in "../util/event.rkt" event event-ev event-payload event-time event?)
+         (only-in "../util/message.rkt" message)
          "../util/cost-tracker.rkt"
          "../util/content-helpers.rkt"
          "state-types.rkt"

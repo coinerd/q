@@ -6,7 +6,7 @@
 ;; Handles /model [list|<name>] for model listing and switching.
 
 (require "../state.rkt"
-         "../../util/protocol-types.rkt"
+         (only-in "../../util/event.rkt" make-event)
          "../../agent/event-bus.rkt"
          "../../runtime/model-registry.rkt"
          "context.rkt")

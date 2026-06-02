@@ -27,7 +27,17 @@
                   task-conclusion?
                   conclusion->hash
                   hash->conclusion)
-         "../util/protocol-types.rkt"
+         (only-in "../util/content-parts.rkt" make-text-part text-part-text)
+         (only-in "../util/message.rkt"
+                  jsexpr->message
+                  make-message
+                  message
+                  message->jsexpr
+                  message-content
+                  message-id
+                  message-kind
+                  message-parent-id
+                  message?)
          "../util/jsonl.rkt"
          (only-in "../util/message-helpers.rkt" ensure-parent-dirs!)
          (only-in "../util/ids.rkt" generate-id)

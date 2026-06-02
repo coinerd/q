@@ -19,7 +19,8 @@
 (require racket/contract
          racket/list
          racket/match
-         "../util/protocol-types.rkt"
+         (only-in "../util/content-parts.rkt" make-text-part)
+         (only-in "../util/message.rkt" make-message message message-role)
          "../util/message-helpers.rkt"
          (only-in "../util/ids.rkt" generate-id)
          "compactor.rkt")
