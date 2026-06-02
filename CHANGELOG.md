@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.81.4 (2026-06-02)
+
+### runtime/ Safe Sub-Packaging
+- Moved 8 goal files into `runtime/goal/` sub-package.
+- Moved 8 provider+auth files into `runtime/provider/` and `runtime/auth/`.
+- Moved 6 context surface files into `runtime/context/` sub-package.
+- All re-export facades at original paths, deprecated for v0.83 removal.
+
 ## v0.81.3 (2026-06-02)
 
 ### util/ Event + Error + Message Sub-Packages
