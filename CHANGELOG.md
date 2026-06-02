@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.80.5 (2026-06-01)
+
+### Architecture Polish
+- Protocol-types facade consumer migration (14 files migrated to direct imports)
+- Runtime sub-package documentation in dependency-policy.rktd
+- Struct mutability fixes, session config helpers, event macro polish
+
+
 ## v0.79.0 (2026-06-01)
 
 ### Final Context Assembly Activation
