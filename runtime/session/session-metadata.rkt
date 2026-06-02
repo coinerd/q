@@ -20,7 +20,7 @@
                   make-message)
          (only-in "../../util/content-parts.rkt" content-part->jsexpr)
          "../../util/jsonl.rkt"
-         "../session-store.rkt")
+         "session-store.rkt")
 
 (provide (contract-out
           ;; #710: Session naming
