@@ -33,14 +33,14 @@
          (only-in "stream-reducer.rkt" MAX-STREAM-CHUNKS))
 
 (provide (contract-out [stream-from-provider
-                        (-> any/c ; provider
-                            any/c ; req
-                            (or/c any/c #f) ; bus
+                        (-> provider? ; provider
+                            model-request? ; req
+                            (or/c event-bus? #f) ; bus
                             string? ; session-id
                             string? ; turn-id
-                            any/c ; state
+                            loop-state? ; state
                             (or/c procedure? #f) ; hook-dispatcher
-                            (or/c any/c #f) ; cancellation-token
+                            (or/c cancellation-token? #f) ; cancellation-token
                             hash?)]))
 
 ;; ============================================================
