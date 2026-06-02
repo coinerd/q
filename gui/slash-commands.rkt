@@ -13,6 +13,10 @@
          "../runtime/agent-session.rkt"
          "../extensions/hooks.rkt"
          "../tui/command-parse.rkt"
+         (only-in "../runtime/goal/goal-runner.rkt" goal-run!)
+         (only-in "../tui/commands/goal-bridge.rkt" make-goal-event-bridge make-goal-run-prompt!)
+         (only-in "../runtime/session/session-config.rkt" current-goal-loop-enabled?)
+         (only-in "../runtime/goal-state.rkt" goal-state-turns-used goal-state-status)
          "gui-types.rkt")
 
 (provide make-slash-command-handler
@@ -182,14 +186,82 @@
                                   notify!))
              #t]
             [else
-             (add-system-msg!
-              (format
-               "[goal] Goal set: ~a\nThe autonomous goal loop will be available in a future update."
-               goal-arg)
-              state-box
-              gui-state-lock
-              notify!)
-             #t])]
+             ;; Feature flag guard
+             (if (not (current-goal-loop-enabled?))
+                 (begin
+                   (add-system-msg!
+                    "[goal] Goal loop disabled. Enable with (current-goal-loop-enabled? #t)"
+                    state-box
+                    gui-state-lock
+                    notify!)
+                   #t)
+                 ;; Goal loop enabled — set up and spawn
+                 (let ()
+                   ;; Strip surrounding quotes from goal text
+                   (define clean-text
+                     (let ([t goal-arg])
+                       (if (and (> (string-length t) 1)
+                                (or (char=? (string-ref t 0) #\") (char=? (string-ref t 0) #\'))
+                                (or (char=? (string-ref t (sub1 (string-length t))) #\")
+                                    (char=? (string-ref t (sub1 (string-length t))) #\')))
+                           (substring t 1 (sub1 (string-length t)))
+                           t)))
+                   ;; Set initial goal state
+                   (define goal-info
+                     (hash 'goal-text clean-text 'turns-used 0 'max-turns 8 'status 'active))
+                   (call-with-semaphore
+                    gui-state-lock
+                    (lambda ()
+                      (set-box! state-box (gui-state-set-active-goal (unbox state-box) goal-info))
+                      (notify!)))
+                   ;; Get session resources (guard for no session)
+                   (define provider (and sess (session-provider sess)))
+                   (define bus (and sess (session-event-bus sess)))
+                   (define sid (and sess (session-id sess)))
+                   (define on-event (and bus sid (make-goal-event-bridge bus sid)))
+                   (define run-prompt! (and sess (make-goal-run-prompt! sess)))
+                   (add-system-msg! (format "[goal] Autonomous loop started: ~a" clean-text)
+                                    state-box
+                                    gui-state-lock
+                                    notify!)
+                   ;; Spawn autonomous loop in background thread (only if session available)
+                   (when (and provider on-event run-prompt!)
+                     (thread (lambda ()
+                               (with-handlers ([exn:fail? (lambda (e)
+                                                            (on-event 'goal-failed
+                                                                      (hasheq 'goal-text
+                                                                              clean-text
+                                                                              'reason
+                                                                              (exn-message e)
+                                                                              'turns-used
+                                                                              0)))])
+                                 (define result
+                                   (goal-run! clean-text
+                                              provider
+                                              "default"
+                                              run-prompt!
+                                              #:max-turns 8
+                                              #:on-event on-event
+                                              #:on-status (lambda (msg) (void))
+                                              #:shutdown-check (lambda () #f)))
+                                 ;; Update display with final result
+                                 (define final-info
+                                   (hash 'goal-text
+                                         clean-text
+                                         'turns-used
+                                         (goal-state-turns-used result)
+                                         'max-turns
+                                         8
+                                         'status
+                                         (goal-state-status result)))
+                                 (call-with-semaphore
+                                  gui-state-lock
+                                  (lambda ()
+                                    (set-box! state-box
+                                              (gui-state-set-active-goal (unbox state-box)
+                                                                         final-info))
+                                    (notify!)))))))
+                   #t))])]
          [(interrupt)
           (add-system-msg! "Interrupt not yet supported in GUI mode."
                            state-box
