@@ -18,7 +18,7 @@
 (require racket/contract
          racket/list
          "../../llm/token-budget.rkt"
-         "../context-policy.rkt")
+         "../context/context-policy.rkt")
 
 (provide token-compaction-config
          token-compaction-config?

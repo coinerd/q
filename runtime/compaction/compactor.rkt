@@ -41,7 +41,7 @@
          (only-in "../../util/time.rkt" now-epoch-ms)
          "../../util/message-helpers.rkt"
          (only-in "../../util/telemetry.rkt" with-telemetry)
-         "../session-store.rkt"
+         "../session/session-store.rkt"
          (only-in "compaction-prompts.rkt"
                   format-messages-for-summary
                   MAX-TOOL-RESULT-CHARS
