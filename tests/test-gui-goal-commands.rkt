@@ -4,7 +4,9 @@
 
 (require rackunit
          racket/string
-         "../gui/gui-types.rkt")
+         "../gui/gui-types.rkt"
+         (only-in "../runtime/session/session-config.rkt" current-goal-loop-enabled?)
+         "../gui/slash-commands.rkt")
 
 ;; ============================================================
 ;; gui-state active-goal field
@@ -52,3 +54,32 @@
   (check-false (gui-state-active-goal gs2)))
 
 (displayln "All GUI goal-command tests passed.")
+
+;; Feature flag guard: /goal rejected when loop disabled (default)
+(let ()
+  (define state-box (box (make-gui-state)))
+  (define lock (make-semaphore 1))
+  (define notified #f)
+  (define (notify!)
+    (set! notified #t))
+  ;; Without enabling the feature flag, goal should be rejected
+  (parameterize ([current-goal-loop-enabled? #f])
+    (define handler (make-slash-command-handler #f state-box lock notify!))
+    (handler "/goal test goal"))
+  ;; Should NOT have set an active goal
+  (check-false (gui-state-active-goal (unbox state-box)) "goal not set when feature flag disabled"))
+
+;; Feature flag enabled: /goal accepted and state updated
+(let ()
+  (define state-box (box (make-gui-state)))
+  (define lock (make-semaphore 1))
+  (define notified #f)
+  (define (notify!)
+    (set! notified #t))
+  (parameterize ([current-goal-loop-enabled? #t])
+    (define handler (make-slash-command-handler #f state-box lock notify!))
+    (handler "/goal \"make tests pass\""))
+  ;; Active goal should be set (even though thread will fail without session)
+  (check-not-false (gui-state-active-goal (unbox state-box)) "goal set when feature flag enabled"))
+
+(displayln "GUI goal feature flag tests passed.")
