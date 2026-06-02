@@ -69,7 +69,7 @@
                             model-request?
                             string?
                             string?
-                            (values model-request? (listof effect?)))])
+                            (values (or/c any/c #f) (listof effect?)))])
          (contract-out [phase-msg-hook
                         (-> (or/c procedure? #f)
                             provider?
@@ -78,7 +78,7 @@
                             string?
                             string?
                             loop-state?
-                            (values model-request? (listof effect?)))])
+                            (values (or/c any/c #f) (listof effect?)))])
          (contract-out [phase-stream
                         (-> provider?
                             model-request?

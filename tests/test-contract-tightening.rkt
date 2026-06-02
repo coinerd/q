@@ -41,6 +41,25 @@
                (define st (make-loop-state "s" "t"))
                (phase-emit-start "s" "t" st (list (hasheq 'role "user"))))))
 
+(test-case "phase-pre-hook: returns #f when no hook dispatcher"
+  (define msgs (list (hasheq 'role "user" 'content "hello")))
+  (define req (make-model-request msgs #f (hasheq)))
+  (define mock-prov
+    (make-provider (lambda () "mock") (lambda () (hasheq)) (lambda (r) (hasheq)) (lambda (r) '())))
+  (define-values (result effects) (phase-pre-hook #f mock-prov msgs req "s" "t"))
+  (check-false result)
+  (check-equal? effects '()))
+
+(test-case "phase-msg-hook: returns #f when no hook dispatcher"
+  (define msgs (list (hasheq 'role "user" 'content "hello")))
+  (define req (make-model-request msgs #f (hasheq)))
+  (define mock-prov
+    (make-provider (lambda () "mock") (lambda () (hasheq)) (lambda (r) (hasheq)) (lambda (r) '())))
+  (define st (make-loop-state "s" "t"))
+  (define-values (result effects) (phase-msg-hook #f mock-prov req msgs "s" "t" st))
+  (check-false result)
+  (check-equal? effects '()))
+
 (test-case "phase-build-context: procedure exists"
   (check-pred procedure? phase-build-context))
 
