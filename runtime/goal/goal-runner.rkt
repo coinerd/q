@@ -165,6 +165,13 @@
         (on-status (format "Goal achieved in ~a turns!" (goal-state-turns-used updated-st)))
         updated-st]
        [(eq? (goal-state-status updated-st) 'failed)
+        (on-event 'goal-failed
+                  (hasheq 'goal-text
+                          (goal-state-goal-text updated-st)
+                          'reason
+                          (goal-state-last-evaluation-reason updated-st)
+                          'turns-used
+                          (goal-state-turns-used updated-st)))
         (on-status (format "Goal failed: ~a" (goal-state-last-evaluation-reason updated-st)))
         updated-st]
        [else

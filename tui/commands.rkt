@@ -462,17 +462,7 @@
                                    #:shutdown-check (lambda ()
                                                       (or (and cancel-box (unbox cancel-box))
                                                           (not (unbox shutdown-box))))))
-                      ;; Update display state with final result (skip if cancelled)
-                      (define was-cancelled (and cancel-box (unbox cancel-box)))
-                      (unless was-cancelled
-                        (define final-info
-                          (goal-display-info clean-text
-                                             (goal-state-turns-used result)
-                                             8
-                                             (goal-state-status result)))
-                        (define cur-state (unbox (cmd-ctx-state-box cctx)))
-                        (set-box! (cmd-ctx-state-box cctx)
-                                  (struct-copy ui-state cur-state [active-goal final-info])))
+                      ;; Reset cancel-box for next goal (no state mutation — events handle display)
                       (when cancel-box
                         (set-box! cancel-box #f)))))
                  (define entry
