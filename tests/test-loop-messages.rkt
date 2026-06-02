@@ -21,3 +21,13 @@
 
 (test-case "parts->text-string returns empty for empty list"
   (check-equal? (parts->text-string '()) ""))
+
+;; T2-3 (A2-U7): message-role->api-role helper
+(test-case "message-role->api-role maps standard roles"
+  (check-equal? (message-role->api-role 'user) "user")
+  (check-equal? (message-role->api-role 'assistant) "assistant")
+  (check-equal? (message-role->api-role 'system) "system")
+  (check-equal? (message-role->api-role 'tool) "tool"))
+
+(test-case "message-role->api-role falls back to symbol->string"
+  (check-equal? (message-role->api-role 'custom) "custom"))
