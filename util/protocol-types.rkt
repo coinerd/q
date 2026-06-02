@@ -1,6 +1,10 @@
 #lang racket/base
 
-;; util/protocol-types.rkt -- Backward-compat re-export facade
+;; util/protocol-types.rkt -- DEPRECATED backward-compat re-export facade
+;;
+;; DEPRECATED (v0.81.1): New source code must import the focused protocol
+;; sub-modules directly. This facade remains only for tests, external
+;; compatibility, and staged removal. Target removal: v0.82+.
 ;;
 ;; ARCH-05: Decomposed into focused sub-modules:
 ;;   - content-parts.rkt      -- text-part, tool-call-part, tool-result-part
@@ -14,12 +18,8 @@
 ;;
 ;; This file re-exports everything for backward compatibility.
 ;;
-;; TRANSITIONAL (I2 v0.72.5): New code should import from specific sub-modules.
-;; v0.80.4 migrated: cli/render.rkt, runtime/iteration/retry-policy.rkt,
-;;   runtime/session-lifecycle-transitions.rkt, interfaces/json-mode.rkt,
-;;   interfaces/rpc-mode.rkt, extensions/events.rkt
-;; Remaining consumers: ~88 files in tui/, extensions/, interfaces/.
-;; Target: remove this facade in v0.82+ after all consumers migrated.
+;; Migration status (v0.81.1): non-test source consumers have been migrated.
+;; Tests may still require the facade to verify compatibility until removal.
 
 (require "content-parts.rkt"
          "message.rkt"

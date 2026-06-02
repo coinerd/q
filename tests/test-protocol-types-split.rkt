@@ -8,6 +8,7 @@
 ;; and that sub-modules can be imported independently (ARCH-05).
 
 (require rackunit
+         racket/file
          "../util/protocol-types.rkt"
          ;; Also test direct sub-module imports
          "../util/content-parts.rkt"
@@ -16,6 +17,13 @@
          "../util/entry-predicates.rkt"
          "../util/tree-entries.rkt"
          "../util/loop-result.rkt")
+
+(define protocol-types-source
+  (file->string (build-path (or (current-load-relative-directory) (current-directory))
+                            "../util/protocol-types.rkt")))
+
+(check-not-false (regexp-match? #rx"DEPRECATED" protocol-types-source))
+(check-not-false (regexp-match? #rx"Target removal: v0[.]82[+]" protocol-types-source))
 
 ;; ── Content parts (from facade and direct) ─────────────────
 (check-equal? (text-part-text (make-text-part "hello")) "hello")
@@ -61,10 +69,11 @@
 (check-true (tree-entry? tne))
 (check-equal? (tree-navigation-entry-target-entry-id tne) "to1")
 
-(define bse (make-branch-summary-entry "s1" #f "summary text" '(1 . 10) 500))
+(define bse (make-branch-summary-entry "s1" #f "summary text" "1..10" 500))
 (check-true (branch-summary-entry? bse))
 (check-true (tree-entry? bse))
 (check-equal? (branch-summary-entry-summary bse) "summary text")
+(check-equal? (branch-summary-entry-entry-range bse) "1..10")
 
 ;; ── Loop result ────────────────────────────────────────────
 (define lr (make-loop-result '(msg1 msg2) 'max-turns (hash)))
