@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.81.3 (2026-06-02)
+
+### util/ Event + Error + Message Sub-Packages
+- Moved 9 event files into `util/event/` sub-package.
+- Moved 6 error files into `util/error/` sub-package.
+- Moved 3 message files into `util/message/` sub-package (including deprecated protocol-types.rkt).
+- All re-export facades at original paths, deprecated for v0.83 removal.
+
+## v0.81.2 (2026-06-02)
+
+### util/ Safe Reclassification
+- Moved 20 files into 8 sub-packages with re-export facades.
+- `util/export/`, `util/tool/`, `util/json/`, `util/safe-mode/`, `util/path/`, `util/fsm/`, `util/content/`, `util/extension/`
+- All facades marked DEPRECATED with target removal in v0.83.
+
 ## v0.81.1 (2026-06-02)
 
 ### Protocol-Types Migration
