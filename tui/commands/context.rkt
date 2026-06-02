@@ -22,7 +22,8 @@
          cmd-ctx-session-runner
          cmd-ctx-input-text-box
          cmd-ctx-extension-registry-box
-         cmd-ctx-session-factory-runner)
+         cmd-ctx-session-factory-runner
+         cmd-ctx-agent-session-box)
 
 ;; ============================================================
 ;; Command context — lightweight alternative to tui-ctx
@@ -41,5 +42,6 @@
          session-runner ; (string -> void) or #f — for /retry resubmission
          input-text-box ; (boxof string?) — raw input text for commands like /activate
          extension-registry-box
-         session-factory-runner) ; (or/c (boxof (or/c extension-registry? #f)) #f) — for ext command dispatch
+         session-factory-runner
+         agent-session-box) ; (boxof (or/c agent-session? #f)) — live session for goal-runner
   #:transparent)

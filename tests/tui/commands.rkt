@@ -25,7 +25,8 @@
            #f ;; session-runner
            (box "") ;; input-text-box
            (box #f) ;; extension-registry-box
-           #f)) ;; session-factory-runner
+           #f ;; session-factory-runner
+           (box #f)))
 
 (define commands-tests
   (test-suite "TUI Commands"
@@ -181,7 +182,8 @@
                  #f
                  (box "")
                  (box #f)
-                 factory))
+                 factory
+                 (box #f)))
       (check-true (procedure? (cmd-ctx-session-factory-runner cctx))))))
 
 (run-tests commands-tests)

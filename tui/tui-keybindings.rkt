@@ -164,7 +164,8 @@
                     (tui-ctx-session-runner ctx)
                     (box "")
                     (tui-ctx-extension-registry-box ctx)
-                    (tui-ctx-session-factory-runner ctx)))
+                    (tui-ctx-session-factory-runner ctx)
+                    (box #f)))
 
 ;; Process a slash command. Returns 'continue | 'quit
 ;; cmd can be: symbol | (list symbol args...)
