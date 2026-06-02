@@ -134,9 +134,27 @@
    (budget . 400)
    (convention . "Session tree operations. Parent kept for consumer compatibility."))
   (runtime/context-assembly (parent . "runtime/context-assembly.rkt")
-                            (sub-modules . (budgeting selection serialization))
+                            (sub-modules . (budgeting selection serialization config))
                             (budget . 250)
-                            (convention . "Context budget, message selection, serialization."))
+                            (convention . "Context budget, message selection, serialization, config."))
+  ;; v0.80.4: Logical runtime sub-packages (not yet physical sub-dirs)
+  ;; These document the intended grouping. Physical move deferred to v0.82+.
+  (runtime/session-logical
+   (convention . "Session lifecycle, persistence, migration, types, config, compaction, FSM, controls, events, mutations, index")
+   (files . "session-store*, session-index*, session-persistence, session-migration, session-types, session-config, session-compaction, session-controls, session-events, session-mutation, session-fsm, session-lifecycle*, session-switch")
+   (status . "logical-only"))
+  (runtime/goal-logical
+   (convention . "Goal system: runner, state, types, checks, evidence, evaluator, codec, agent-evaluator")
+   (files . "goal-runner, goal-state, goal-types, goal-checks, goal-evidence, goal-evaluator, goal-codec, goal-agent-evaluator")
+   (status . "logical-only"))
+  (runtime/compaction-logical
+   (convention . "Context compaction: compactor, prompts, hooks, LLM bridge")
+   (files . "compactor, compactor-llm-bridge, compaction-hooks, context-summary, incremental-summarizer, branch-summarizer")
+   (status . "logical-only"))
+  (runtime/credential-logical
+   (convention . "Credential backends: auth-store, credential-backend, oauth, credentials/ sub-dir")
+   (files . "auth-store, credential-backend, oauth, oauth-callback, credentials/*")
+   (status . "partial — credentials/ sub-dir exists; top-level facades remain"))
   (extensions/gsd-planning (parent . "extensions/gsd-planning.rkt")
                            (sub-modules . (command-normalization execution-policy plan-diff))
                            (budget . 130)
