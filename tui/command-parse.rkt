@@ -133,12 +133,7 @@
 (define (validate-args entry args)
   (cond
     [(eq? (cdr entry) 'none) (parsed-command (car entry) '() 'none)]
-    [(eq? (cdr entry) 'optional)
-     (parsed-command (car entry)
-                     (if (null? args)
-                         '()
-                         (list (car args)))
-                     'optional)]
+    [(eq? (cdr entry) 'optional) (parsed-command (car entry) args 'optional)]
     [(eq? (cdr entry) 'required)
      (if (null? args)
          (parsed-command (string->symbol (format "~a-error" (symbol->string (car entry))))
