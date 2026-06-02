@@ -263,6 +263,8 @@
   ;; v0.75.6: Extract task state from session for state-aware assembly
   (define task-state-raw (and session (agent-session-task-fsm-state session)))
   (define task-state (or (symbol->task-state task-state-raw) task-state-raw))
+  ;; task-state-raw: raw symbol ('idle, 'exploration, etc.) — for auto-distill, eq? checks
+  ;; task-state: fsm-state? struct (or raw symbol if unknown) — for ws-evolution, state-aware-builder
   (define conclusions (and session (agent-session-task-conclusions session)))
   ;; v0.77.9 T2.1: Auto-distill uncovered WS entries when enabled
   (define ws-early (config-working-set config-raw))
@@ -276,7 +278,7 @@
               (define full-text (string-join (map text-part-text text-parts) " "))
               (values (message-id m) full-text)))
           (append conclusions
-                  (auto-distill (map message-id ws-msgs) conclusions task-state summaries)))
+                  (auto-distill (map message-id ws-msgs) conclusions task-state-raw summaries)))
         (or conclusions '())))
   ;; v0.78.2 G3: Persist auto-distilled conclusions back to session
   ;; Only when auto-distill added new conclusions
@@ -288,7 +290,11 @@
     (guarded-set-task-conclusions! session augmented-conclusions))
   ;; v0.78.2 G2: WS evolution — evolve working set on state transition
   ;; Only when WS evolution enabled and session has a working set
-  (when (and (current-ws-evolution-enabled?) ws-early session task-state (not (eq? task-state 'idle)))
+  (when (and (current-ws-evolution-enabled?)
+             ws-early
+             session
+             task-state
+             (not (eq? task-state-raw 'idle)))
     ;; v0.78.6 C1+W1: Use /result variant (returns evolution-result? struct)
     ;; v0.79.2 GAP-2: Pass tracked old-state instead of #f.
     (define old-state (current-last-task-fsm-state))
