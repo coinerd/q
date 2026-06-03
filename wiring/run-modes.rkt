@@ -48,9 +48,9 @@
 (require "run-interactive.rkt"
          "run-json-rpc.rkt")
 
-(provide (contract-out [build-runtime-from-cli (-> any/c any/c)]
-                       [mode-for-config (-> any/c symbol?)]
-                       [reload-config! (-> any/c any/c)])
+(provide (contract-out [build-runtime-from-cli (-> cli-config? session-config?)]
+                       [mode-for-config (-> cli-config? symbol?)]
+                       [reload-config! (-> session-config? (values session-config? model-registry?))])
          ;; Direct re-exports (no contracts needed — re-exported)
          load-extensions-from-dir!
          make-terminal-subscriber
