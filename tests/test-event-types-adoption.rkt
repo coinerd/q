@@ -13,7 +13,7 @@
 (require rackunit
          "../agent/event-bus.rkt"
          "../agent/event-types.rkt"
-         "../util/protocol-types.rkt")
+         "../util/message/protocol-types.rkt")
 
 (define TS 1000)
 

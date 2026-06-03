@@ -13,7 +13,7 @@
 (require rackunit
          "../llm/provider.rkt"
          "../llm/model.rkt"
-         "../runtime/provider-registry.rkt")
+         "../runtime/provider/provider-registry.rkt")
 
 ;; ============================================================
 ;; Helpers

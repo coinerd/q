@@ -24,16 +24,16 @@
          racket/match
          racket/port
          racket/string
-         (only-in "../runtime/session-store.rkt" load-session-log)
-         (only-in "../util/content-parts.rkt" text-part? tool-call-part?)
-         (only-in "../util/message.rkt"
+         (only-in "../runtime/session/session-store.rkt" load-session-log)
+         (only-in "../util/content/content-parts.rkt" text-part? tool-call-part?)
+         (only-in "../util/message/message.rkt"
                   message?
                   message-role
                   message-content
                   message-kind
                   message-timestamp
                   message-meta)
-         (only-in "../util/content-parts.rkt" text-part-text tool-call-part-name tool-call-part-id))
+         (only-in "../util/content/content-parts.rkt" text-part-text tool-call-part-name tool-call-part-id))
 
 (provide (contract-out [extract-metrics (-> any/c any/c)]
                        [format-report (-> any/c string?)]

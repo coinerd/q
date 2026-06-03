@@ -12,7 +12,7 @@
 ;; 6 states, 8 events, 18 transitions (including explicit "any->X" expansions).
 
 (require racket/contract
-         (only-in "../../util/fsm.rkt"
+         (only-in "../../util/fsm/fsm.rkt"
                   define-fsm-machine
                   fsm-state
                   fsm-state-name

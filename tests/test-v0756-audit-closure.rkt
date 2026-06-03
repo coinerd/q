@@ -10,8 +10,8 @@
          racket/file
          racket/list
          ;; Persistence
-         "../runtime/session-store.rkt"
-         "../util/protocol-types.rkt"
+         "../runtime/session/session-store.rkt"
+         "../util/message/protocol-types.rkt"
          ;; Task state
          (only-in "../runtime/context-assembly/task-state.rkt"
                   task-idle
@@ -26,13 +26,13 @@
                   conclusion->hash
                   hash->conclusion)
          ;; Session types + mutation
-         "../runtime/session-types.rkt"
-         "../runtime/session-mutation.rkt"
+         "../runtime/session/session-types.rkt"
+         "../runtime/session/session-mutation.rkt"
          ;; Preamble
          (only-in "../runtime/context-assembly/serialization.rkt" build-state-awareness-preamble)
          ;; Message content access
-         (only-in "../util/content-parts.rkt" text-part-text)
-         (only-in "../util/protocol-types.rkt" message-content message-kind)
+         (only-in "../util/content/content-parts.rkt" text-part-text)
+         (only-in "../util/message/protocol-types.rkt" message-content message-kind)
          ;; v0.76.7 W9: Shared session fixture
          (only-in "helpers/session-fixture.rkt" make-test-session))
 

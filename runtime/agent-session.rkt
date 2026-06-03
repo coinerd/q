@@ -26,20 +26,20 @@
          racket/list
          racket/path
          racket/dict
-         (only-in "../util/errors.rkt" raise-session-error)
+         (only-in "../util/error/errors.rkt" raise-session-error)
          (only-in "../util/loop-result.rkt" make-loop-result)
-         (only-in "../util/message.rkt" message-id message-kind message?)
+         (only-in "../util/message/message.rkt" message-id message-kind message?)
          "../agent/queue.rkt"
          "../agent/event-bus.rkt"
          (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload)
-         "../runtime/session-store.rkt"
+         "session/session-store.rkt"
          "../runtime/session-index.rkt"
-         (only-in "../util/event-types.rkt" injection-event-topic)
-         "../runtime/compactor.rkt"
-         (only-in "../util/extensions.rkt" extension-name)
+         (only-in "../util/event/event-types.rkt" injection-event-topic)
+         "compaction/compactor.rkt"
+         (only-in "../util/extension/extensions.rkt" extension-name)
          (only-in "layer-adapters.rkt" list-extensions)
          ;; TR BOUNDARY: event-payloads.rkt is #lang typed/racket.
-         (only-in "../util/event-payloads.rkt"
+         (only-in "../util/event/event-payloads.rkt"
                   session-start-payload
                   session-end-payload
                   session-switch-payload)
@@ -49,10 +49,10 @@
          (only-in "../agent/event-structs/session-events.rkt"
                   session-start-event
                   session-shutdown-event)
-         "session-types.rkt"
-         (only-in "session-events.rkt" wire-session-event-handlers!)
+         "session/session-types.rkt"
+         (only-in "session/session-events.rkt" wire-session-event-handlers!)
          (only-in "../llm/token-budget.rkt" estimate-context-tokens)
-         (only-in "session-controls.rkt"
+         (only-in "session/session-controls.rkt"
                   set-model!
                   cycle-model!
                   thinking-levels
@@ -65,9 +65,9 @@
                   force-shutdown-requested?
                   reset-shutdown-flags!)
          ;; v0.22.9: extracted from this module
-         (only-in "session-lifecycle.rkt" run-prompt! ensure-persisted! buffer-or-append!)
-         (only-in "session-compaction.rkt" maybe-compact-context)
-         (only-in "session-config.rkt"
+         (only-in "session/session-lifecycle.rkt" run-prompt! ensure-persisted! buffer-or-append!)
+         (only-in "compaction/session-compaction.rkt" maybe-compact-context)
+         (only-in "session/session-config.rkt"
                   session-config?
                   hash->session-config
                   current-task-state-aware-rollout-rate
@@ -80,8 +80,8 @@
                   config-system-instructions
                   config-thinking-level
                   config-session-dir)
-         (only-in "model-registry.rkt" model-registry?))
-(require "session-mutation.rkt")
+         (only-in "provider/model-registry.rkt" model-registry?))
+(require "session/session-mutation.rkt")
 
 (provide agent-session?
          ;; v0.32.8: Convenience accessors (stable API)

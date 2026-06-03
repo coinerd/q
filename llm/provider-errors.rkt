@@ -14,7 +14,7 @@
 ;;   'network          — DNS failure, connection refused
 
 (require racket/contract
-         (only-in "../util/errors.rkt"
+         (only-in "../util/error/errors.rkt"
                   q-error
                   q-error?
                   q-llm-error

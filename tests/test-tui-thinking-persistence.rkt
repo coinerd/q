@@ -10,7 +10,7 @@
          rackunit/text-ui
          "../tui/state-types.rkt"
          "../tui/state-events.rkt"
-         "../util/protocol-types.rkt")
+         "../util/message/protocol-types.rkt")
 
 ;; Helpers to build events
 (define (make-test-event ev payload [ts 0])

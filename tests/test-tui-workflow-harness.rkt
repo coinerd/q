@@ -13,7 +13,7 @@
          "tui/workflow-harness.rkt"
          "tui/mock-tui-session.rkt"
          "../tui/state.rkt"
-         "../util/protocol-types.rkt")
+         "../util/message/protocol-types.rkt")
 
 ;; ── Workflow Harness Smoke Tests ──────────────────────────
 

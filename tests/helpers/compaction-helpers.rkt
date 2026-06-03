@@ -8,7 +8,7 @@
 ;; Provides a standard low-token configuration so compaction actually
 ;; triggers with test-sized messages (~4 tokens each).
 
-(require "../../runtime/token-compaction.rkt")
+(require "../../runtime/compaction/token-compaction.rkt")
 
 (provide LOW-TOKEN-CONFIG
          low-token-config)

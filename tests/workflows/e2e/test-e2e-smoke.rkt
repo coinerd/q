@@ -14,7 +14,7 @@
          "../fixtures/workflow-runner.rkt"
          "../fixtures/session-assert.rkt"
          "../fixtures/temp-project.rkt"
-         "../../../util/protocol-types.rkt"
+         "../../../util/message/protocol-types.rkt"
          (only-in "../../../tools/tool.rkt"
                   make-tool-registry
                   register-tool!

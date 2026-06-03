@@ -4,7 +4,7 @@
 
 (require rackunit
          racket/string
-         (only-in "../runtime/goal-state.rkt"
+         (only-in "../runtime/goal/goal-state.rkt"
                   goal-check?
                   goal-check-command
                   goal-check-label
@@ -14,7 +14,7 @@
                   check-result-stdout
                   check-result-label
                   check-result-timed-out?)
-         "../runtime/goal-checks.rkt")
+         "../runtime/goal/goal-checks.rkt")
 
 ;; ============================================================
 ;; parse-goal-checks — no checks

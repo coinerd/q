@@ -14,7 +14,7 @@
 ;;   - Query: setting-ref (flat), setting-ref* (nested path)
 ;;   - Provider access: convenience functions for providers section
 
-(require "../util/json-helpers.rkt")
+(require "../util/json/json-helpers.rkt")
 (require racket/contract
          racket/match
          racket/file

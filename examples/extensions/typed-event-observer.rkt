@@ -9,7 +9,7 @@
 
 (require "../../agent/event-bus.rkt"
          "../../agent/event-types.rkt"
-         (only-in "../../util/event.rkt" event event-ev event-payload))
+         (only-in "../../util/event/event.rkt" event event-ev event-payload))
 
 ;; Start an observer that logs all events on the bus.
 ;; Returns subscription ID for cleanup.

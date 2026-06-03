@@ -5,7 +5,7 @@
 (require rackunit
          racket/list
          "../tui/state.rkt"
-         "../util/protocol-types.rkt")
+         "../util/message/protocol-types.rkt")
 
 ;; ============================================================
 ;; v0.13.1: TUI Transcript O(n²) Fix — cons+reverse-on-read

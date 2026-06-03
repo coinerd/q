@@ -4,7 +4,7 @@
 ;;
 ;; Pure data definitions. No logic.
 
-(require "../../util/error-helpers.rkt")
+(require "../../util/error/error-helpers.rkt")
 (require racket/contract
          racket/string
          racket/list

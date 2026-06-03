@@ -12,8 +12,8 @@
 
 (require rackunit
          rackunit/text-ui
-         "../util/protocol-types.rkt"
-         "../util/error-classify.rkt"
+         "../util/message/protocol-types.rkt"
+         "../util/error/error-classify.rkt"
          "../interfaces/cli.rkt")
 
 (define/provide-test-suite

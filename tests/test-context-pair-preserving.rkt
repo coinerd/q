@@ -9,8 +9,8 @@
 (require rackunit
          racket/list
          racket/string
-         "../util/protocol-types.rkt"
-         "../runtime/context-assembly.rkt"
+         "../util/message/protocol-types.rkt"
+         "../runtime/context/context-assembly.rkt"
          "../llm/token-budget.rkt")
 
 (define (make-text-msg role text [kind 'message])

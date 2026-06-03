@@ -15,7 +15,7 @@
          "../tui/tui-keybindings.rkt"
          "../tui/state.rkt"
          "../agent/event-bus.rkt"
-         (only-in "../util/event.rkt" make-event))
+         (only-in "../util/event/event.rkt" make-event))
 
 (define test-tui-init
   (test-suite "tui/tui-init"

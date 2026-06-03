@@ -5,7 +5,7 @@
 ;; Provides convenient constructors for building events in tests.
 ;; Replaces duplicated ad-hoc event construction across test files.
 
-(require "../../util/event.rkt"
+(require "../../util/event/event.rkt"
          "../../agent/event-structs/stream-events.rkt"
          "../../agent/event-structs/session-events.rkt"
          "../../agent/event-structs/turn-events.rkt"

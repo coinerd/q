@@ -9,7 +9,7 @@
 
 (require rackunit
          rackunit/text-ui
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          "../agent/event-bus.rkt"
          "../runtime/agent-session.rkt")
 

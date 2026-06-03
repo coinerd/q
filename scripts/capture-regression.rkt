@@ -19,7 +19,7 @@
          racket/port
          racket/string
          json
-         (only-in "../util/jsonl.rkt" jsonl-read-all-valid))
+         (only-in "../util/json/jsonl.rkt" jsonl-read-all-valid))
 
 (provide capture-baseline
          compare-to-baseline

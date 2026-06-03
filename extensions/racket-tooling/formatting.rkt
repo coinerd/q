@@ -7,7 +7,7 @@
 ;; cond-insert-clause, match-insert-clause, rewrite-form.
 
 (require racket/string
-         (only-in "../../util/errors.rkt" raise-extension-error)
+         (only-in "../../util/error/errors.rkt" raise-extension-error)
          racket/list
          (only-in "../racket-tooling-helpers.rkt"
                   raco-fmt

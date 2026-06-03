@@ -16,7 +16,7 @@
 ;; This delegates to the tool-registry stored in the extension-ctx.
 
 (require racket/contract
-         (only-in "../util/errors.rkt" raise-extension-error)
+         (only-in "../util/error/errors.rkt" raise-extension-error)
          "context.rkt"
          "tool-api.rkt")
 

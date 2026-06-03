@@ -13,7 +13,7 @@
 ;; natural layer for code that interacts with the extension API.
 
 (require racket/list
-         (only-in "../util/errors.rkt" raise-extension-error)
+         (only-in "../util/error/errors.rkt" raise-extension-error)
          "api.rkt"
          "hooks.rkt")
 

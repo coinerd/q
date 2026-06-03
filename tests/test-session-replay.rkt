@@ -18,8 +18,8 @@
          rackunit/text-ui
          racket/file
          racket/list
-         "../util/protocol-types.rkt"
-         "../runtime/session-store.rkt"
+         "../util/message/protocol-types.rkt"
+         "../runtime/session/session-store.rkt"
          "../cli/replay.rkt")
 
 ;; ============================================================

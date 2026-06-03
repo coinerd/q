@@ -10,7 +10,7 @@
 ;;;   jsonl-line-valid?     — check if a line is complete valid JSON
 
 (require racket/contract
-         "../error-helpers.rkt"
+         "../error/error-helpers.rkt"
          json
          racket/port
          racket/string

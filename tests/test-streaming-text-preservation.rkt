@@ -9,7 +9,7 @@
 
 (require rackunit
          "../tui/state.rkt"
-         "../util/protocol-types.rkt")
+         "../util/message/protocol-types.rkt")
 
 ;; ============================================================
 ;; Streaming text preservation on runtime.error

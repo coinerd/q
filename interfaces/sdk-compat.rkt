@@ -17,9 +17,9 @@
          racket/math
          racket/list
          (only-in "../util/tree-entries.rkt" make-branch-entry make-tree-navigation-entry)
-         (only-in "../util/message.rkt" message-id)
+         (only-in "../util/message/message.rkt" message-id)
          (prefix-in session: "../runtime/agent-session.rkt")
-         (only-in "../runtime/compactor.rkt"
+         (only-in "../runtime/compaction/compactor.rkt"
                   compact-history
                   compact-and-persist!
                   compaction-result-removed-count
@@ -28,7 +28,7 @@
          (only-in "../extensions/gsd/state-machine.rkt" [gsm-snapshot gsd-snapshot])
          (only-in "../extensions/gsd/core.rkt" reset-all-gsd-state!)
          (only-in "../extensions/gsd/runtime-state-types.rkt" gsd-runtime-state-mode)
-         (prefix-in store: "../runtime/session-store.rkt")
+         (prefix-in store: "../runtime/session/session-store.rkt")
          "../agent/event-bus.rkt"
          ;; Core SDK types
          "sdk-core.rkt")

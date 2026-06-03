@@ -7,7 +7,7 @@
 (require rackunit
          racket/file
          racket/port
-         "../runtime/oauth.rkt")
+         "../runtime/auth/oauth.rkt")
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; OAuth config struct tests

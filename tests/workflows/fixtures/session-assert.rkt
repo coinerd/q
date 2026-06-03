@@ -9,9 +9,9 @@
 
 (require racket/file
          racket/list
-         "../../../util/jsonl.rkt"
-         "../../../util/protocol-types.rkt"
-         "../../../runtime/session-store.rkt")
+         "../../../util/json/jsonl.rkt"
+         "../../../util/message/protocol-types.rkt"
+         "../../../runtime/session/session-store.rkt")
 
 (provide check-session-jsonl-valid
          check-session-contains-turns

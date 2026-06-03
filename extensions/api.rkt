@@ -12,7 +12,7 @@
 (require racket/contract
          racket/list
          ;; v0.33.0 W1: extension struct moved to foundation layer
-         (only-in "../util/extensions.rkt"
+         (only-in "../util/extension/extensions.rkt"
                   extension
                   extension?
                   extension-name
@@ -25,7 +25,7 @@
 ;; Moving it to util/ would break 20+ import paths for minimal architectural benefit.
          (only-in "../agent/event-bus.rkt" publish! subscribe! unsubscribe! make-event-bus event-bus?)
          ;; Backward-compat: re-export injection-event-topic
-         (rename-in "../util/event-types.rkt" [injection-event-topic api-injection-event-topic]))
+         (rename-in "../util/event/event-types.rkt" [injection-event-topic api-injection-event-topic]))
 
 ;; JSON Schema predicate (for extension tool schemas)
 (define (json-schema? v)

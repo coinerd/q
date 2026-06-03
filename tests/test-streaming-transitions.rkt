@@ -11,7 +11,7 @@
          rackunit/text-ui
          "tui/event-simulator.rkt"
          "../tui/state.rkt"
-         "../util/protocol-types.rkt")
+         "../util/message/protocol-types.rkt")
 
 (define streaming-transition-tests
   (test-suite "TUI Streaming State Transitions"

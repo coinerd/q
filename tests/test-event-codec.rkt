@@ -3,7 +3,7 @@
 ;; BOUNDARY: serialization
 
 (require rackunit
-         "../util/event-codec.rkt"
+         "../util/event/event-codec.rkt"
          "../agent/event-structs/turn-events.rkt"
          "../agent/event-structs/session-events.rkt"
          "../agent/event-json.rkt"
@@ -11,7 +11,7 @@
                   typed-event?
                   typed-event-session-id
                   typed-event-turn-id)
-         (only-in "../util/event-payloads.rkt"
+         (only-in "../util/event/event-payloads.rkt"
                   session-start-payload
                   session-start-payload?
                   error-payload

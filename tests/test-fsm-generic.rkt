@@ -5,7 +5,7 @@
 
 (require rackunit
          rackunit/text-ui
-         (only-in "../util/fsm.rkt"
+         (only-in "../util/fsm/fsm.rkt"
                   make-fsm
                   fsm?
                   fsm-states

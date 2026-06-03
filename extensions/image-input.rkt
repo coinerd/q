@@ -6,7 +6,7 @@
 ;; and multi-modal message construction.
 
 (require racket/string
-         (only-in "../util/errors.rkt" raise-extension-error)
+         (only-in "../util/error/errors.rkt" raise-extension-error)
          racket/file
          racket/path
          net/base64

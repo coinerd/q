@@ -10,11 +10,11 @@
 ;;   - #699: Parent feature integration
 
 (require rackunit
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          "../util/hook-types.rkt"
          "../agent/event-bus.rkt"
-         "../runtime/compactor.rkt"
-         "../runtime/compaction-hooks.rkt")
+         "../runtime/compaction/compactor.rkt"
+         "../runtime/compaction/compaction-hooks.rkt")
 
 ;; ============================================================
 ;; Helpers

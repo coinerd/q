@@ -10,11 +10,11 @@
          "../llm/provider-errors.rkt"
          "../llm/http-helpers.rkt"
          "../agent/streaming-message.rkt"
-         "../util/protocol-types.rkt"
-         (only-in "../util/content-parts.rkt" text-part?)
+         "../util/message/protocol-types.rkt"
+         (only-in "../util/content/content-parts.rkt" text-part?)
          "../agent/state.rkt"
          "../agent/event-bus.rkt"
-         "../util/event-access.rkt"
+         "../util/event/event-access.rkt"
          "../llm/provider.rkt"
          "../llm/model.rkt"
          (only-in "../agent/loop-stream.rkt" stream-from-provider))

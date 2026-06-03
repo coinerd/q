@@ -9,8 +9,8 @@
 
 (require rackunit
          rackunit/text-ui
-         "../runtime/incremental-summarizer.rkt"
-         "../util/protocol-types.rkt"
+         "../runtime/compaction/incremental-summarizer.rkt"
+         "../util/message/protocol-types.rkt"
          "../tests/helpers/mock-provider.rkt")
 
 ;; Helper: build a message with a single text content part.

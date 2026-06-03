@@ -9,9 +9,9 @@
 
 (require rackunit
          racket/match
-         "../runtime/session-config.rkt"
+         "../runtime/session/session-config.rkt"
          "../agent/event-bus.rkt"
-         "../util/event.rkt"
+         "../util/event/event.rkt"
          (only-in "../agent/event-structs/base.rkt" typed-event?))
 
 (test-case "T-04: runtime.error payload is hash? -- non-retry path"

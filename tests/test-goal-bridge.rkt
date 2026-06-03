@@ -7,7 +7,7 @@
                   make-goal-run-prompt!)
          (only-in "../agent/event-bus.rkt"
                   make-event-bus subscribe! publish!)
-         (only-in "../util/event.rkt" event-ev event?))
+         (only-in "../util/event/event.rkt" event-ev event?))
 
 (test-case "make-goal-event-bridge maps symbols to event names"
   (define bus (make-event-bus))

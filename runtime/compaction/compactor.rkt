@@ -22,7 +22,7 @@
          racket/string
          racket/list
          racket/set
-         (only-in "../../util/content-parts.rkt"
+         (only-in "../../util/content/content-parts.rkt"
                   make-text-part
                   text-part
                   text-part-text
@@ -31,7 +31,7 @@
                   tool-call-part-arguments
                   tool-call-part-name
                   tool-call-part?)
-         (only-in "../../util/message.rkt"
+         (only-in "../../util/message/message.rkt"
                   make-message
                   message-content
                   message-id
@@ -39,7 +39,7 @@
                   message-meta-safe
                   message-role)
          (only-in "../../util/time.rkt" now-epoch-ms)
-         "../../util/message-helpers.rkt"
+         "../../util/message/message-helpers.rkt"
          (only-in "../../util/telemetry.rkt" with-telemetry)
          "../session/session-store.rkt"
          (only-in "compaction-prompts.rkt"

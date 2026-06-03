@@ -15,9 +15,9 @@
          "../runtime/auto-retry.rkt"
          (only-in "../runtime/iteration/retry-policy.rkt" call-with-overflow-recovery)
          "../runtime/runtime-helpers.rkt"
-         "../runtime/compactor.rkt"
+         "../runtime/compaction/compactor.rkt"
          "../agent/event-bus.rkt"
-         "../util/protocol-types.rkt")
+         "../util/message/protocol-types.rkt")
 
 ;; Helper: create a simple message for testing
 (define (make-test-msg [role 'user] [content "test"])

@@ -20,7 +20,7 @@
          "../llm/model.rkt"
          "../agent/event-bus.rkt"
          (only-in "../agent/event-emitter.rkt" emit-session-event!)
-         (only-in "../util/event.rkt" event-ev event-payload)
+         (only-in "../util/event/event.rkt" event-ev event-payload)
          "../util/ids.rkt")
 
 ;; ============================================================

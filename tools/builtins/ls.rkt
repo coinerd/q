@@ -10,8 +10,8 @@
          (only-in "../tool.rkt" make-success-result make-error-result)
          (only-in "../define-tool.rkt" define-tool)
          (only-in "builtin-helpers.rkt" require-safe-path!)
-         (only-in "../../util/path-filters.rkt" hidden-name?)
-         (only-in "../../util/path-helpers.rkt" expand-home-path))
+         (only-in "../../util/path/path-filters.rkt" hidden-name?)
+         (only-in "../../util/path/path-helpers.rkt" expand-home-path))
 
 ;; --------------------------------------------------
 ;; Entry classification

@@ -14,11 +14,11 @@
          racket/set
          "../runtime/settings.rkt"
          (only-in "../llm/provider.rkt" provider-name)
-         "../runtime/provider-factory.rkt"
+         "../runtime/provider/provider-factory.rkt"
          "../extensions/loader.rkt"
          "../extensions/gsd-planning.rkt"
          "../agent/event-bus.rkt"
-         (only-in "../util/event.rkt" event-ev event-payload)
+         (only-in "../util/event/event.rkt" event-ev event-payload)
          "../tools/tool.rkt"
          "../interfaces/sdk.rkt"
          (only-in "../extensions/gsd/state-machine.rkt" [gsm-snapshot gsd-snapshot])

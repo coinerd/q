@@ -14,7 +14,7 @@
          rackunit/text-ui
          racket/file
          racket/path
-         "../runtime/context-assembly.rkt")
+         "../runtime/context/context-assembly.rkt")
 
 ;; Helpers
 

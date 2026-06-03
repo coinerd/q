@@ -10,7 +10,7 @@
 
 (require rackunit
          rackunit/text-ui
-         "../util/event-contracts.rkt"
+         "../util/event/event-contracts.rkt"
          "../agent/event-bus.rkt"
          "../runtime/runtime-helpers.rkt")
 

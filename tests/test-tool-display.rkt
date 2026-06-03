@@ -2,7 +2,7 @@
 
 (require rackunit
          rackunit/text-ui
-         "../util/tool-display.rkt"
+         "../util/tool/tool-display.rkt"
          json)
 
 (define-test-suite test-tool-display

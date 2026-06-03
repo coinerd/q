@@ -12,13 +12,13 @@
 (require rackunit
          rackunit/text-ui
          racket/file
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          "../agent/event-bus.rkt"
          "../runtime/agent-session.rkt"
-         "../runtime/session-types.rkt"
-         (only-in "../runtime/session-mutation.rkt" guarded-set-compacting!)
-         "../runtime/session-store.rkt"
-         "../runtime/compactor.rkt")
+         "../runtime/session/session-types.rkt"
+         (only-in "../runtime/session/session-mutation.rkt" guarded-set-compacting!)
+         "../runtime/session/session-store.rkt"
+         "../runtime/compaction/compactor.rkt")
 
 (define (make-temp-dir)
   (make-temporary-file "q-guard-test-~a" 'directory))

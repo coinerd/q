@@ -11,7 +11,7 @@
          "session-types.rkt"
          "session-mutation.rkt"
          "session-store.rkt"
-         (only-in "../../util/message.rkt" message?))
+         (only-in "../../util/message/message.rkt" message?))
 
 (provide current-crash-log-dir
          (contract-out [write-crash-log! (-> (or/c string? #f) string? string? void?)]

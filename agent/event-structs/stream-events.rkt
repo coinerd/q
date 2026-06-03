@@ -8,7 +8,7 @@
 ;; v0.32.3: Created for complete typed event migration (replaces raw emit! calls).
 
 (require "base.rkt"
-         "../../util/event-macro.rkt")
+         "../../util/event/event-macro.rkt")
 
 ;; ============================================================
 ;; Stream lifecycle events

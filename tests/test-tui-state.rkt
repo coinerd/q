@@ -6,7 +6,7 @@
 
 (require rackunit
          "../tui/state.rkt"
-         "../util/protocol-types.rkt")
+         "../util/message/protocol-types.rkt")
 
 ;; ============================================================
 ;; Helper: extract last transcript entry text

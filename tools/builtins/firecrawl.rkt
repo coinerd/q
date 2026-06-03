@@ -1,7 +1,7 @@
 #lang racket/base
 
-(require "../../util/error-helpers.rkt")
-(require "../../util/json-helpers.rkt")
+(require "../../util/error/error-helpers.rkt")
+(require "../../util/json/json-helpers.rkt")
 (require racket/contract
          racket/string
          racket/format
@@ -10,7 +10,7 @@
          net/http-client
          net/url
          (only-in "../tool.rkt" make-success-result make-error-result exec-context? tool-result?)
-         (only-in "../../util/errors.rkt" raise-tool-error)
+         (only-in "../../util/error/errors.rkt" raise-tool-error)
          "../../util/string-helpers.rkt"
          (only-in "../../util/truncation.rkt" MAX-OUTPUT-CHARS))
 

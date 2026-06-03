@@ -9,7 +9,7 @@
 
 (require rackunit
          rackunit/text-ui
-         "../util/errors.rkt")
+         "../util/error/errors.rkt")
 
 (define errors-tests
   (test-suite "errors.rkt — domain-specific exception types"

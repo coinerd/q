@@ -3,7 +3,7 @@
 ;; BOUNDARY: integration
 
 (require rackunit
-         (only-in "../util/error-sanitizer.rkt" sanitize-error-message))
+         (only-in "../util/error/error-sanitizer.rkt" sanitize-error-message))
 
 (define home-str (path->string (find-system-path 'home-dir)))
 

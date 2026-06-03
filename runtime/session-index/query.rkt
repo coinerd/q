@@ -7,9 +7,9 @@
 (require racket/contract
          racket/list
          racket/set
-         (only-in "../../util/content-parts.rkt" text-part?)
-         (only-in "../../util/message.rkt" message? message-id message-parent-id message-content)
-         (only-in "../../util/content-parts.rkt" text-part-text)
+         (only-in "../../util/content/content-parts.rkt" text-part?)
+         (only-in "../../util/message/message.rkt" message? message-id message-parent-id message-content)
+         (only-in "../../util/content/content-parts.rkt" text-part-text)
          "schema.rkt")
 
 (provide (contract-out

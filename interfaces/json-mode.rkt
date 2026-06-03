@@ -4,8 +4,8 @@
          racket/string
          json
          "../agent/event-bus.rkt"
-         (only-in "../util/event.rkt" event? event->jsexpr)
-         (only-in "../util/message.rkt" message? message->jsexpr))
+         (only-in "../util/event/event.rkt" event? event->jsexpr)
+         (only-in "../util/message/message.rkt" message? message->jsexpr))
 
 (provide intent
          intent?

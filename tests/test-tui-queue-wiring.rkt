@@ -13,7 +13,7 @@
          "../tui/state.rkt"
          "../tui/tui-keybindings.rkt"
          "../agent/queue.rkt"
-         "../util/protocol-types.rkt")
+         "../util/message/protocol-types.rkt")
 
 ;; ============================================================
 ;; Helpers

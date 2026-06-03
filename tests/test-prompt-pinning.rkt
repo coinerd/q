@@ -6,8 +6,8 @@
 ;; Wave 4 of v0.13.0: Pin first user prompt in context assembly
 
 (require rackunit
-         "../util/protocol-types.rkt"
-         "../runtime/context-assembly.rkt")
+         "../util/message/protocol-types.rkt"
+         "../runtime/context/context-assembly.rkt")
 
 ;; Helper: create a simple message
 (define (make-test-msg role kind text [id (format "msg-~a" (random 100000))])

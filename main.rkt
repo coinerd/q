@@ -15,9 +15,9 @@
          "interfaces/tui.rkt"
          "interfaces/gui.rkt"
          "interfaces/sessions.rkt"
-         "util/message.rkt"
+         "util/message/message.rkt"
          (only-in "llm/provider.rkt" provider? provider-name)
-         (only-in "runtime/provider-factory.rkt" build-provider build-mock-provider local-provider?)
+         (only-in "runtime/provider/provider-factory.rkt" build-provider build-mock-provider local-provider?)
          (only-in "tools/registry-defaults.rkt" register-default-tools!)
          (only-in "wiring/run-modes.rkt"
                   build-runtime-from-cli
@@ -28,7 +28,7 @@
                   run-json
                   run-rpc
                   run-print-mode)
-         (only-in "runtime/session-config.rkt" session-config?)
+         (only-in "runtime/session/session-config.rkt" session-config?)
          (only-in "runtime/agent-session.rkt"
                   make-agent-session
                   resume-agent-session

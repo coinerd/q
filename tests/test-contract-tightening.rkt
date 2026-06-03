@@ -12,7 +12,7 @@
          "../agent/stream-runner.rkt"
          "../agent/loop-phases.rkt"
          "../util/cancellation.rkt"
-         "../util/message.rkt"
+         "../util/message/message.rkt"
          "../agent/event-bus.rkt")
 
 (test-case "stream-from-provider: procedure exists with tightened contract"

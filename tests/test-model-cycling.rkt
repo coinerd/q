@@ -6,7 +6,7 @@
 
 (require rackunit
          "../runtime/agent-session.rkt"
-         "../runtime/model-registry.rkt"
+         "../runtime/provider/model-registry.rkt"
          "../agent/event-bus.rkt"
          "../tools/tool.rkt")
 

@@ -13,7 +13,7 @@
          file/sha1
          net/base64
          net/uri-codec
-         "../../util/errors.rkt")
+         "../../util/error/errors.rkt")
 
 (provide (contract-out
           [generate-pkce (-> (values string? string?))]

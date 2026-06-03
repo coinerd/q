@@ -13,7 +13,7 @@
          "../agent/iteration/loop-state.rkt"
          (only-in "../agent/event-bus.rkt" make-event-bus)
          (only-in "../llm/provider.rkt" make-provider)
-         (only-in "../util/protocol-types.rkt" make-message make-text-part message-role)
+         (only-in "../util/message/protocol-types.rkt" make-message make-text-part message-role)
          (only-in "../util/loop-result.rkt" loop-result? loop-result-termination-reason)
          (only-in "../llm/model.rkt"
                   model-response-content

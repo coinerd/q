@@ -16,7 +16,7 @@
 (require rackunit
          rackunit/text-ui
          racket/file
-         (only-in "../runtime/compactor.rkt"
+         (only-in "../runtime/compaction/compactor.rkt"
                   compact-and-persist!
                   compact-history
                   compaction-result
@@ -26,11 +26,11 @@
                   compaction-result->message-list
                   build-summary-window
                   default-strategy)
-         "../runtime/context-assembly.rkt"
+         "../runtime/context/context-assembly.rkt"
          "../runtime/session-index.rkt"
-         "../runtime/session-store.rkt"
-         "../runtime/token-compaction.rkt"
-         "../util/protocol-types.rkt"
+         "../runtime/session/session-store.rkt"
+         "../runtime/compaction/token-compaction.rkt"
+         "../util/message/protocol-types.rkt"
          (only-in "../util/hook-types.rkt" hook-result hook-result-action))
 
 (define (make-temp-dir)

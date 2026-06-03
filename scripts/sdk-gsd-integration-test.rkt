@@ -15,7 +15,7 @@
          "../tools/tool.rkt"
          (only-in "../interfaces/sdk.rkt" make-runtime open-session)
          "../runtime/settings.rkt"
-         "../runtime/provider-factory.rkt"
+         "../runtime/provider/provider-factory.rkt"
          (only-in "../llm/provider.rkt" provider-name)
          racket/file
          racket/port)

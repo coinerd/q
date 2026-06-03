@@ -9,7 +9,7 @@
 
 (require "../../tui/state.rkt"
          "../../tui/render.rkt"
-         "../../util/protocol-types.rkt"
+         "../../util/message/protocol-types.rkt"
          "workflow-harness.rkt")
 
 (provide (struct-out mock-session)

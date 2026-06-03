@@ -23,15 +23,15 @@
 
 (require/typed "../event-bus.rkt" [#:opaque EventBus event-bus?])
 
-(require/typed "../../util/tool-registry-struct.rkt" [#:opaque ToolRegistry tool-registry?])
+(require/typed "../../util/tool/tool-registry-struct.rkt" [#:opaque ToolRegistry tool-registry?])
 
-(require/typed "../../util/extension-types.rkt" [#:opaque ExtRegistry extension-registry?])
+(require/typed "../../util/extension/extension-types.rkt" [#:opaque ExtRegistry extension-registry?])
 
 (require/typed "../../util/cancellation.rkt" [#:opaque CancellationToken cancellation-token?])
 
-(require/typed "../../runtime/session-config.rkt" [#:opaque SessionConfig session-config?])
+(require/typed "../../runtime/session/session-config.rkt" [#:opaque SessionConfig session-config?])
 
-(require/typed "../../runtime/session-types.rkt" [#:opaque AgentSession agent-session?])
+(require/typed "../../runtime/session/session-types.rkt" [#:opaque AgentSession agent-session?])
 
 (require/typed "../../runtime/working-set.rkt" [#:opaque WorkingSet working-set?])
 

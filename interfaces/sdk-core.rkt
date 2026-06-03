@@ -19,11 +19,11 @@
          (only-in "../tools/registry-defaults.rkt" register-default-tools!)
          "../agent/event-bus.rkt"
          (only-in "../util/loop-result.rkt" loop-result)
-         (only-in "../util/event.rkt" make-event)
-         (only-in "../util/message.rkt" message?)
+         (only-in "../util/event/event.rkt" make-event)
+         (only-in "../util/message/message.rkt" message?)
          (prefix-in session: "../runtime/agent-session.rkt")
          (only-in "../runtime/turn-orchestrator.rkt" register-session-extensions!)
-         (only-in "../runtime/compactor.rkt"
+         (only-in "../runtime/compaction/compactor.rkt"
                   compact-history
                   compact-and-persist!
                   compaction-result-removed-count
@@ -52,7 +52,7 @@
                   navigate-next-leaf!
                   navigate-prev-leaf!
                   navigate-result?)
-         (only-in "../runtime/session-store.rkt"
+         (only-in "../runtime/session/session-store.rkt"
                   make-in-memory-session-manager
                   in-memory-session-manager?
                   in-memory-append!

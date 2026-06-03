@@ -11,8 +11,8 @@
          rackunit/text-ui
          "../agent/iteration/counters.rkt"
          "../agent/iteration/loop-state.rkt"
-         (only-in "../util/message.rkt" make-message)
-         (only-in "../util/content-parts.rkt" make-tool-call-part))
+         (only-in "../util/message/message.rkt" make-message)
+         (only-in "../util/content/content-parts.rkt" make-tool-call-part))
 
 ;; Helper: create a message struct with tool-call content parts
 (define (make-tool-msg tool-names)

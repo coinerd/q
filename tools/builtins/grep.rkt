@@ -7,12 +7,12 @@
          racket/path
          (only-in "../tool.rkt" make-success-result make-error-result tool-result?)
          (only-in "builtin-helpers.rkt" require-safe-path!)
-         (only-in "../../util/glob.rkt" glob->regexp)
-         (only-in "../../util/path-helpers.rkt"
+         (only-in "../../util/path/glob.rkt" glob->regexp)
+         (only-in "../../util/path/path-helpers.rkt"
                   contains-null-bytes?
                   bytes->display-lines
                   expand-home-path)
-         (only-in "../../util/path-filters.rkt" hidden-name? should-skip-entry? skip-dirs))
+         (only-in "../../util/path/path-filters.rkt" hidden-name? should-skip-entry? skip-dirs))
 
 (require racket/contract)
 (provide (contract-out [tool-grep (-> hash? tool-result?)]))

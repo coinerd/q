@@ -10,8 +10,8 @@
 (require rackunit
          rackunit/text-ui
          racket/file
-         "../runtime/session-store.rkt"
-         "../util/protocol-types.rkt")
+         "../runtime/session/session-store.rkt"
+         "../util/message/protocol-types.rkt")
 
 ;; Helper: create temp session directory
 (define (make-temp-dir)

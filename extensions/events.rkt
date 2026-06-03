@@ -15,7 +15,7 @@
 
 (require racket/contract
          "api.rkt"
-         "../util/event.rkt")
+         "../util/event/event.rkt")
 
 (define-logger ext-events)
 

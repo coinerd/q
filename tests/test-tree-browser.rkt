@@ -15,7 +15,7 @@
          rackunit/text-ui
          "../tui/state.rkt"
          "../tui/tree-view.rkt"
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          racket/set)
 
 ;; ============================================================

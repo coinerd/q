@@ -9,12 +9,12 @@
 ;;   - simple-summary-text file path extraction (context-summary.rkt)
 
 (require rackunit
-         (only-in "../util/protocol-types.rkt" make-message make-text-part)
+         (only-in "../util/message/protocol-types.rkt" make-message make-text-part)
          (only-in "../runtime/context-assembly/summary-entities.rkt"
                   extract-key-entities
                   check-entity-preservation
                   entity-preservation-appendix)
-         (only-in "../runtime/context-summary.rkt" simple-summary-text)
+         (only-in "../runtime/context/context-summary.rkt" simple-summary-text)
          racket/string)
 
 ;; Helper: create a simple message

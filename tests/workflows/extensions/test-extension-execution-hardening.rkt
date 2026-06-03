@@ -23,10 +23,10 @@
          "../../../extensions/hooks.rkt"
          "../../../tools/tool.rkt"
          "../../../agent/event-bus.rkt"
-         "../../../runtime/compactor.rkt"
-         "../../../runtime/session-store.rkt"
-         "../../../util/jsonl.rkt"
-         (only-in "../../../util/event.rkt" make-event))
+         "../../../runtime/compaction/compactor.rkt"
+         "../../../runtime/session/session-store.rkt"
+         "../../../util/json/jsonl.rkt"
+         (only-in "../../../util/event/event.rkt" make-event))
 
 ;; ── Helpers ──
 

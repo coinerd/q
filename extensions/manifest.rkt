@@ -6,14 +6,14 @@
 ;;   - qpm-manifest struct with all package metadata fields
 ;;   - Validation, serialization (JSON), file I/O, comparison, and checksum
 
-(require "../util/error-helpers.rkt")
+(require "../util/error/error-helpers.rkt")
 (require racket/contract
          racket/string
          racket/list
          racket/port
          racket/file
          json
-         "../util/checksum.rkt")
+         "../util/json/checksum.rkt")
 
 ;; ============================================================
 ;; Provides

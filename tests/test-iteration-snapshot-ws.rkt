@@ -18,7 +18,7 @@
                   iteration-snapshot-max-iterations
                   loop-counters
                   loop-counters?)
-         (only-in "../runtime/session-config.rkt" session-config? hash->session-config))
+         (only-in "../runtime/session/session-config.rkt" session-config? hash->session-config))
 
 (test-case "T-03: iteration-snapshot with #f ws passes TR boundary"
   ;; Construct a minimal session-config for the config field

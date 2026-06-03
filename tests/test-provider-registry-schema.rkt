@@ -6,8 +6,8 @@
 
 (require rackunit
          rackunit/text-ui
-         "../runtime/provider-registry.rkt"
-         "../runtime/provider-schema.rkt"
+         "../runtime/provider/provider-registry.rkt"
+         "../runtime/provider/provider-schema.rkt"
          "../llm/provider.rkt")
 
 (define provider-registry-schema-tests

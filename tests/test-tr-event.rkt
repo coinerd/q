@@ -4,7 +4,7 @@
 
 ;; Test that util/event.rkt (now #lang typed/racket) exports work from untyped
 (require rackunit
-         "../util/event.rkt")
+         "../util/event/event.rkt")
 
 (test-case "make-event creates event with positional args"
   (define evt (make-event 'test-event 1000 "sess1" #f (hasheq 'key "val")))

@@ -15,7 +15,7 @@
 (require rackunit
          rackunit/text-ui
          "../tui/state.rkt"
-         "../util/protocol-types.rkt")
+         "../util/message/protocol-types.rkt")
 
 ;; Helper: make a test event with defaults
 (define (make-test-event ev-type

@@ -19,7 +19,7 @@
                   make-tree-node
                   build-tree-nodes
                   selected-node)
-         (only-in "../util/protocol-types.rkt" make-text-part make-message))
+         (only-in "../util/message/protocol-types.rkt" make-text-part make-message))
 
 ;; ============================================================
 ;; Tree node struct

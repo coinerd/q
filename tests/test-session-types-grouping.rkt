@@ -9,13 +9,13 @@
 
 (require rackunit
          racket/runtime-path
-         "../runtime/session-types.rkt"
-         (only-in "../runtime/session-mutation.rkt"
+         "../runtime/session/session-types.rkt"
+         (only-in "../runtime/session/session-mutation.rkt"
                   guarded-set-compacting!
                   guarded-set-persisted!
                   guarded-set-prompt-running!
                   guarded-set-shutdown-requested!)
-         "../runtime/session-config.rkt"
+         "../runtime/session/session-config.rkt"
          "../agent/queue.rkt"
          "../agent/event-bus.rkt")
 

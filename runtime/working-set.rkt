@@ -16,7 +16,7 @@
 
 (require racket/contract
          racket/list
-         (only-in "../util/errors.rkt" raise-session-error))
+         (only-in "../util/error/errors.rkt" raise-session-error))
 
 ;; ────────────────────────────────────────────────────────────
 ;; Data structures

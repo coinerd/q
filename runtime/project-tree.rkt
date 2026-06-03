@@ -8,7 +8,7 @@
 ;;
 ;; v0.19.3 Wave 3: Context Seeding with Project File Tree (C4)
 
-(require "../util/error-helpers.rkt")
+(require "../util/error/error-helpers.rkt")
 (require racket/contract
          racket/list
          racket/match

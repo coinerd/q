@@ -9,7 +9,7 @@
          racket/format
          racket/string
          json
-         (only-in "../errors.rkt" raise-tool-error))
+         (only-in "../error/errors.rkt" raise-tool-error))
 
 ;; JSON argument normalization
 (provide (contract-out [ensure-hash-args (->* (any/c) (#:graceful? boolean?) hash?)]

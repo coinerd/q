@@ -12,7 +12,7 @@
          racket/match
          "../agent/iteration/loop-state.rkt"
          (only-in "../agent/iteration/counters.rkt" compute-next-counters)
-         (only-in "../util/protocol-types.rkt"
+         (only-in "../util/message/protocol-types.rkt"
                   make-message
                   make-text-part
                   make-tool-call-part

@@ -4,7 +4,7 @@
 
 (require rackunit
          racket/string
-         (only-in "../runtime/goal-state.rkt"
+         (only-in "../runtime/goal/goal-state.rkt"
                   make-goal-state
                   make-evaluation-result
                   evaluation-result?
@@ -14,7 +14,7 @@
                   goal-state-turns-used
                   goal-state-max-turns
                   goal-state?)
-         "../runtime/goal-evidence.rkt")
+         "../runtime/goal/goal-evidence.rkt")
 
 ;; ============================================================
 ;; GOAL-EVIDENCE-SYSTEM-PROMPT is a non-empty string

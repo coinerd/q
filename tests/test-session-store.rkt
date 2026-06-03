@@ -9,10 +9,10 @@
          racket/file
          racket/list
          json
-         "../util/protocol-types.rkt"
-         "../runtime/session-store.rkt"
+         "../util/message/protocol-types.rkt"
+         "../runtime/session/session-store.rkt"
          "../runtime/session-index.rkt"
-         "../util/jsonl.rkt")
+         "../util/json/jsonl.rkt")
 
 ;; ── Helpers ──
 

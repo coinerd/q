@@ -12,7 +12,7 @@
          racket/file
          racket/port
          json
-         "../util/jsonl.rkt"
+         "../util/json/jsonl.rkt"
          "../interfaces/sessions.rkt")
 
 ;; ── Helpers ──

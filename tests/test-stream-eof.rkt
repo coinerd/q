@@ -16,7 +16,7 @@
          "../agent/event-bus.rkt"
          "../agent/state.rkt"
          "../agent/loop.rkt"
-         "../util/protocol-types.rkt")
+         "../util/message/protocol-types.rkt")
 
 ;; ============================================================
 ;; Test helpers

@@ -11,15 +11,15 @@
          racket/path
          racket/list
          json
-         (only-in "../util/jsonl.rkt" jsonl-append! jsonl-read-all jsonl-read-all-valid)
-         (only-in "../util/protocol-types.rkt"
+         (only-in "../util/json/jsonl.rkt" jsonl-append! jsonl-read-all jsonl-read-all-valid)
+         (only-in "../util/message/protocol-types.rkt"
                   make-message
                   make-text-part
                   message?
                   message-id
                   message->jsexpr
                   jsexpr->message)
-         (only-in "../runtime/session-store.rkt"
+         (only-in "../runtime/session/session-store.rkt"
                   append-entry!
                   load-session-log
                   verify-session-integrity

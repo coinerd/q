@@ -6,7 +6,7 @@
 ;; from edit.rkt, write.rkt, and read.rkt into a single helper.
 
 (require racket/contract
-         (only-in "../../util/safe-mode-predicates.rkt"
+         (only-in "../../util/safe-mode/safe-mode-predicates.rkt"
                   safe-mode?
                   allowed-path?
                   safe-mode-project-root))

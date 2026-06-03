@@ -6,7 +6,7 @@
 ;; v0.29.13: Smoke tests for hash-chain creation and verification.
 
 (require rackunit
-         "../runtime/session-store-integrity.rkt")
+         "../runtime/session/session-store-integrity.rkt")
 
 (test-case "GENESIS-HASH is a non-empty string"
   (check-true (string? GENESIS-HASH))

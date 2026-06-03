@@ -12,10 +12,10 @@
          racket/string
          "../runtime/context-assembly/selection.rkt"
          "../runtime/context-assembly/budgeting.rkt"
-         "../runtime/context-summary.rkt"
-         "../util/message.rkt"
-         "../util/content-parts.rkt"
-         (only-in "../util/content-parts.rkt" text-part? text-part-text))
+         "../runtime/context/context-summary.rkt"
+         "../util/message/message.rkt"
+         "../util/content/content-parts.rkt"
+         (only-in "../util/content/content-parts.rkt" text-part? text-part-text))
 
 (define (make-test-msg text [id "msg-1"] [role 'user])
   (make-message id #f role 'text (list (make-text-part text)) 0 #f))

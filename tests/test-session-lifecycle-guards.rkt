@@ -11,7 +11,7 @@
          rackunit/text-ui
          racket/file
          racket/path
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          "../agent/event-bus.rkt"
          "../agent/queue.rkt"
          "../llm/model.rkt"

@@ -7,7 +7,7 @@
 
 (require racket/contract
          racket/sandbox
-         (only-in "../util/errors.rkt" with-logged-catch))
+         (only-in "../util/error/errors.rkt" with-logged-catch))
 
 (provide
  ;; Struct (transparent, no contract needed)

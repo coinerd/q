@@ -12,7 +12,7 @@
          racket/list
          racket/set
          racket/match
-         (only-in "../util/content-parts.rkt"
+         (only-in "../util/content/content-parts.rkt"
                   text-part
                   text-part-text
                   text-part?
@@ -25,8 +25,8 @@
                   tool-result-part-content
                   tool-result-part-tool-call-id
                   tool-result-part?)
-         (only-in "../util/message.rkt" message message-content message-role message?)
-         (only-in "../util/content-helpers.rkt" result-content->string)
+         (only-in "../util/message/message.rkt" message message-content message-role message?)
+         (only-in "../util/content/content-helpers.rkt" result-content->string)
          (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload))
 
 (provide (contract-out [usage-empty? (-> (or/c hash? #f) boolean?)]

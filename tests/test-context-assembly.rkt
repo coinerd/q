@@ -9,11 +9,11 @@
          racket/list
          racket/string
          racket/file
-         "../util/protocol-types.rkt"
-         "../util/content-parts.rkt"
-         "../runtime/session-store.rkt"
+         "../util/message/protocol-types.rkt"
+         "../util/content/content-parts.rkt"
+         "../runtime/session/session-store.rkt"
          "../runtime/session-index.rkt"
-         "../runtime/context-assembly.rkt")
+         "../runtime/context/context-assembly.rkt")
 
 ;; Helper: create a test message
 (define (make-test-msg id role kind text [parent #f])

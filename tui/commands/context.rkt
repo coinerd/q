@@ -8,7 +8,7 @@
 
 (require "../state.rkt"
          "../../agent/event-bus.rkt"
-         "../../runtime/model-registry.rkt")
+         "../../runtime/provider/model-registry.rkt")
 
 (provide cmd-ctx
          cmd-ctx?

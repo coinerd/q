@@ -11,7 +11,7 @@
          "../agent/loop-phases.rkt"
          "../agent/loop-fsm.rkt"
          "../agent/effect-types.rkt"
-         (only-in "../util/fsm.rkt" fsm-state? fsm-event?))
+         (only-in "../util/fsm/fsm.rkt" fsm-state? fsm-event?))
 
 ;; ---------------------------------------------------------------------------
 ;; Regression tests

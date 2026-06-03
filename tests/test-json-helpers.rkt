@@ -5,7 +5,7 @@
 (require rackunit
          racket/file
          json
-         "../util/json-helpers.rkt")
+         "../util/json/json-helpers.rkt")
 
 (define tmp-dir (make-temporary-file "json-helpers-test-~a" 'directory))
 

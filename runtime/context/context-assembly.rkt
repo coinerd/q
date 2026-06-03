@@ -50,7 +50,7 @@
                   simple-summary-count
                   extract-message-text
                   truncate-string)
-         (only-in "../../util/message.rkt" message?)
+         (only-in "../../util/message/message.rkt" message?)
          (only-in "../../util/hook-types.rkt" hook-result?))
 
 ;; Explicit re-exports from sub-modules (S1-F4)

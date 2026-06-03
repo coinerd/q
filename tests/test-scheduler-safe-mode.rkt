@@ -39,14 +39,14 @@
                   scheduler-batch-stats?
                   scheduler-batch-stats-total
                   scheduler-batch-stats-blocked)
-         (only-in "../util/protocol-types.rkt"
+         (only-in "../util/message/protocol-types.rkt"
                   tool-call
                   tool-call?
                   tool-call-id
                   tool-call-name
                   tool-call-arguments)
          (only-in "../runtime/safe-mode.rkt" current-safe-mode project-root)
-         (only-in "../util/safe-mode-predicates.rkt"
+         (only-in "../util/safe-mode/safe-mode-predicates.rkt"
                   safe-mode?
                   allowed-tool?
                   allowed-path?

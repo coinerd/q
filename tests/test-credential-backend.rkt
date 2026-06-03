@@ -10,7 +10,7 @@
 (require rackunit
          racket/file
          racket/path
-         (only-in "../runtime/credential-backend.rkt"
+         (only-in "../runtime/auth/credential-backend.rkt"
                   make-file-credential-backend
                   make-env-credential-backend
                   make-memory-credential-backend

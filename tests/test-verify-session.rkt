@@ -10,9 +10,9 @@
          racket/file
          racket/path
          racket/list
-         (only-in "../util/jsonl.rkt" jsonl-append!)
-         (only-in "../util/protocol-types.rkt" make-message make-text-part message->jsexpr)
-         (only-in "../runtime/session-store.rkt"
+         (only-in "../util/json/jsonl.rkt" jsonl-append!)
+         (only-in "../util/message/protocol-types.rkt" make-message make-text-part message->jsexpr)
+         (only-in "../runtime/session/session-store.rkt"
                   append-entry!
                   verify-hash-chain
                   verify-session-integrity

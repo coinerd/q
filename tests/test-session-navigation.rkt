@@ -6,7 +6,7 @@
 
 (require rackunit
          "../runtime/session-index.rkt"
-         "../util/protocol-types.rkt")
+         "../util/message/protocol-types.rkt")
 
 ;; Helper: create a session-index from a list of messages (in order)
 (define (build-test-index messages)

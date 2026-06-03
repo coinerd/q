@@ -9,7 +9,7 @@
 ;; Reference: Unicode East Asian Width property (UAX #11)
 
 (require racket/contract
-         "../util/error-helpers.rkt")
+         "../util/error/error-helpers.rkt")
 (require racket/match
          racket/string)
 

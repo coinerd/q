@@ -10,10 +10,10 @@
 (require rackunit
          "../extensions/loader.rkt"
          "../extensions/api.rkt"
-         "../runtime/session-store.rkt"
+         "../runtime/session/session-store.rkt"
          "../extensions/resource-discovery.rkt"
          "../util/hook-types.rkt"
-         "../util/protocol-types.rkt")
+         "../util/message/protocol-types.rkt")
 
 ;; ============================================================
 ;; #1146: Hot reload

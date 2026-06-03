@@ -6,9 +6,9 @@
 ;; v0.29.13: Smoke tests for message truncation within token budgets.
 
 (require rackunit
-         "../runtime/context-fit.rkt"
-         "../runtime/context-policy.rkt"
-         "../util/protocol-types.rkt")
+         "../runtime/context/context-fit.rkt"
+         "../runtime/context/context-policy.rkt"
+         "../util/message/protocol-types.rkt")
 
 (test-case "truncate-messages-to-budget returns empty for empty input"
   (check-equal? (truncate-messages-to-budget '() 1000) '()))

@@ -13,9 +13,9 @@
          "context.rkt"
          "state.rkt"
          "../agent/event-bus.rkt"
-         "../util/event.rkt"
+         "../util/event/event.rkt"
          "../agent/queue.rkt"
-         (only-in "../runtime/session-lifecycle.rkt" write-crash-log!))
+         (only-in "../runtime/session/session-lifecycle.rkt" write-crash-log!))
 
 ;; Handle a user submit: enqueue if busy, debounce duplicates, or run via runner.
 ;; Mutates ctx's ui-state-box and spawns a thread for the runner.

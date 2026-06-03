@@ -10,12 +10,12 @@
          rackunit/text-ui
          "../interfaces/sdk.rkt"
          "../extensions/resource-discovery.rkt"
-         (only-in "../runtime/session-store.rkt"
+         (only-in "../runtime/session/session-store.rkt"
                   in-memory-session-manager?
                   in-memory-append!
                   in-memory-load
                   in-memory-fork!)
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          racket/file)
 
 (define (make-temp-dir)

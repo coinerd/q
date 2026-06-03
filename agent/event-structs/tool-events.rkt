@@ -9,8 +9,8 @@
 ;; Per-tool events (tool-call-event parent with complex constructors) remain manual.
 
 (require "base.rkt"
-         "../../util/event-macro.rkt"
-         (only-in "../../util/event-macro.rkt" register-event-fields!))
+         "../../util/event/event-macro.rkt"
+         (only-in "../../util/event/event-macro.rkt" register-event-fields!))
 
 ;; ============================================================
 ;; Tool execution lifecycle (typed-event parent)

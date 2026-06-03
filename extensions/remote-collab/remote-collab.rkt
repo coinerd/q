@@ -6,7 +6,7 @@
 ;; via SSH + tmux. Actions: status, start, send, capture, wait, interrupt, stop.
 
 (require racket/contract
-         (only-in "../../util/errors.rkt" raise-extension-error)
+         (only-in "../../util/error/errors.rkt" raise-extension-error)
          racket/string
          racket/port
          "../define-extension.rkt"

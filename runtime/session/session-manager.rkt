@@ -17,8 +17,8 @@
          racket/file
          racket/path
          "session-store.rkt"
-         (only-in "../../util/message.rkt" message?)
-         (only-in "../../util/errors.rkt" raise-session-error))
+         (only-in "../../util/message/message.rkt" message?)
+         (only-in "../../util/error/errors.rkt" raise-session-error))
 
 (provide (contract-out [session-manager? (-> any/c boolean?)]
                        [persistent-session-manager? (-> any/c boolean?)]

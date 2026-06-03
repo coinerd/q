@@ -8,7 +8,7 @@
 ;; This separation enables dry-run testing of agent loop phases.
 
 (require racket/contract
-         (only-in "../util/fsm.rkt" fsm-state? fsm-event?))
+         (only-in "../util/fsm/fsm.rkt" fsm-state? fsm-event?))
 
 (provide (contract-out (struct effect-base ()))
          (contract-out (struct effect:emit-event ([type symbol?] [payload any/c])))

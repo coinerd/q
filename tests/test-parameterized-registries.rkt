@@ -6,7 +6,7 @@
 
 (require rackunit
          rackunit/text-ui
-         "../util/event-macro.rkt"
+         "../util/event/event-macro.rkt"
          "../extensions/ui-surface.rkt")
 
 (define registry-suite

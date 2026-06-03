@@ -3,7 +3,7 @@
 ;; agent/event-structs/session-events.rkt — session, input, model, agent, context events
 
 (require "base.rkt"
-         "../../util/event-macro.rkt")
+         "../../util/event/event-macro.rkt")
 
 ;; Session lifecycle
 

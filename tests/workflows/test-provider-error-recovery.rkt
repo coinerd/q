@@ -13,7 +13,7 @@
 (require rackunit
          rackunit/text-ui
          "../../tui/state.rkt"
-         "../../util/protocol-types.rkt"
+         "../../util/message/protocol-types.rkt"
          "../tui/event-simulator.rkt"
          "../tui/state-assertions.rkt")
 

@@ -6,8 +6,8 @@
 
 (require rackunit
          rackunit/text-ui
-         "../runtime/session-types.rkt"
-         "../runtime/session-mutation.rkt"
+         "../runtime/session/session-types.rkt"
+         "../runtime/session/session-mutation.rkt"
          (only-in "../runtime/context-assembly/task-state.rkt"
                   task-idle
                   task-exploration
@@ -21,8 +21,8 @@
                   task-conclusion-text)
          (only-in "helpers/session-fixture.rkt" make-test-session)
          (only-in "../agent/event-bus.rkt" make-event-bus publish! subscribe!)
-         (only-in "../util/event.rkt" make-event event-ev event-payload)
-         (only-in "../runtime/session-events.rkt"
+         (only-in "../util/event/event.rkt" make-event event-ev event-payload)
+         (only-in "../runtime/session/session-events.rkt"
                   wire-session-event-handlers!)
          (only-in "../runtime/context-assembly/state-aware-builder.rkt"
                   current-ws-evolution-enabled?))

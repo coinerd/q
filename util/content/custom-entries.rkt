@@ -6,7 +6,7 @@
 ;; and extension metadata in the meta field.
 
 (require racket/contract
-         "../message.rkt")
+         "../message/message.rkt")
 
 (provide (contract-out [make-custom-entry (-> string? string? any/c any/c)]
                        [custom-entry? (-> any/c boolean?)]

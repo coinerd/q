@@ -4,12 +4,12 @@
 ;; Extracted from session-store.rkt (W3 v0.72.5)
 
 (require racket/match
-         (only-in "../../util/custom-entries.rkt"
+         (only-in "../../util/content/custom-entries.rkt"
                   custom-entry-extension
                   custom-entry-key
                   custom-entry?
                   make-custom-entry)
-         (only-in "../../util/message.rkt" message-id))
+         (only-in "../../util/message/message.rkt" message-id))
 
 (provide in-memory-session-manager?
          in-memory-session-manager

@@ -20,7 +20,7 @@
          "../tools/tool.rkt"
          "../llm/provider.rkt"
          "../llm/model.rkt"
-         (only-in "../util/event.rkt" event-ev event-event)
+         (only-in "../util/event/event.rkt" event-ev event-event)
          "helpers/mock-provider.rkt"
          "helpers/temp-fs.rkt")
 

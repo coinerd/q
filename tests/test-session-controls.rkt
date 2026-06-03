@@ -6,7 +6,7 @@
 ;; v0.29.13: Smoke tests for session control functions.
 
 (require rackunit
-         "../runtime/session-controls.rkt")
+         "../runtime/session/session-controls.rkt")
 
 (test-case "thinking-levels is a non-empty list of symbols"
   (check-true (list? thinking-levels))

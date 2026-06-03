@@ -8,11 +8,11 @@
          rackunit/text-ui
          racket/file
          racket/list
-         "../util/protocol-types.rkt"
-         "../runtime/session-store.rkt"
+         "../util/message/protocol-types.rkt"
+         "../runtime/session/session-store.rkt"
          "../runtime/session-index.rkt"
-         "../runtime/context-assembly.rkt"
-         (only-in "../runtime/context-policy.rkt" estimate-message-tokens))
+         "../runtime/context/context-assembly.rkt"
+         (only-in "../runtime/context/context-policy.rkt" estimate-message-tokens))
 
 ;; Helpers
 (define (make-temp-dir)

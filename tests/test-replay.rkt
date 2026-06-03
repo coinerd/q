@@ -20,12 +20,12 @@
          racket/list
          racket/string
          racket/hash
-         "../util/protocol-types.rkt"
-         "../runtime/session-store.rkt"
+         "../util/message/protocol-types.rkt"
+         "../runtime/session/session-store.rkt"
          "../runtime/agent-session.rkt"
          "../runtime/session-index.rkt"
-         "../runtime/compactor.rkt"
-         (only-in "../runtime/token-compaction.rkt" token-compaction-config)
+         "../runtime/compaction/compactor.rkt"
+         (only-in "../runtime/compaction/token-compaction.rkt" token-compaction-config)
          "helpers/compaction-helpers.rkt"
          "../agent/event-bus.rkt"
          "../llm/model.rkt"

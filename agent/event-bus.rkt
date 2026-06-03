@@ -13,7 +13,7 @@
 
 (require racket/contract
          racket/match
-         "../util/event.rkt"
+         "../util/event/event.rkt"
          "event-types.rkt")
 
 ;; Pub/sub event bus

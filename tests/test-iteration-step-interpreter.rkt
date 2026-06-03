@@ -15,7 +15,7 @@
          (only-in "../agent/event-bus.rkt" make-event-bus)
          (only-in "../llm/provider.rkt" make-provider)
          (only-in "../llm/model.rkt" make-model-response make-stream-chunk)
-         (only-in "../util/protocol-types.rkt"
+         (only-in "../util/message/protocol-types.rkt"
                   make-message
                   make-text-part
                   make-tool-call-part

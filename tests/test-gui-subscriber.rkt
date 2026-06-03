@@ -4,7 +4,7 @@
          rackunit/text-ui
          "../gui/state-sync.rkt"
          "../agent/event-bus.rkt"
-         "../util/event.rkt")
+         "../util/event/event.rkt")
 
 (define (mk-event tag payload)
   (make-event tag (current-inexact-milliseconds) #f #f payload))

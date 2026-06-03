@@ -14,7 +14,7 @@
          racket/match
          racket/path
          "./manifest.rkt"
-         "../util/checksum.rkt")
+         "../util/json/checksum.rkt")
 
 ;; ============================================================
 ;; Structs

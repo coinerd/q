@@ -6,7 +6,7 @@
 ;; These functions are pure state transitions: given data inputs,
 ;; they produce data outputs without I/O side effects.
 
-(require (only-in "../../util/message.rkt"
+(require (only-in "../../util/message/message.rkt"
                   make-message
                   message?
                   message-id
@@ -14,7 +14,7 @@
                   message-parent-id
                   message-role
                   message-content)
-         (only-in "../../util/content-parts.rkt" make-text-part)
+         (only-in "../../util/content/content-parts.rkt" make-text-part)
          (only-in "../../util/ids.rkt" generate-id now-seconds)
          (only-in "../session-index/query.rkt" active-leaf)
          racket/list

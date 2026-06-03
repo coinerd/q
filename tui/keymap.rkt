@@ -5,7 +5,7 @@
 ;; Provides a data-driven keymap that replaces hardcoded key handling.
 ;; Users can override keybindings via ~/.q/keybindings.json.
 
-(require "../util/error-helpers.rkt")
+(require "../util/error/error-helpers.rkt")
 (require racket/contract
          racket/string
          racket/port

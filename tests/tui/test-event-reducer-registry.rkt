@@ -7,7 +7,7 @@
 (require rackunit
          "../../tui/state-events.rkt"
          "../../tui/state-types.rkt"
-         "../../util/protocol-types.rkt")
+         "../../util/message/protocol-types.rkt")
 
 (define (make-test-event ev-type payload #:time [time 1000])
   (event 1 ev-type time "test-session" "turn-1" payload))

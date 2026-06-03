@@ -19,8 +19,8 @@
          rackunit/text-ui
          racket/file
          json
-         "../util/protocol-types.rkt"
-         "../runtime/session-store.rkt"
+         "../util/message/protocol-types.rkt"
+         "../runtime/session/session-store.rkt"
          "../cli/inspect.rkt")
 
 ;; ── Helpers ──

@@ -6,7 +6,7 @@
 (require rackunit
          rackunit/text-ui
          "../runtime/context-assembly/selection.rkt"
-         "../util/message.rkt")
+         "../util/message/message.rkt")
 
 (define (make-test-msg id text)
   (message id #f 'user 'user text 0 (hash)))

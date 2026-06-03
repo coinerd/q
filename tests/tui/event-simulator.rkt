@@ -10,7 +10,7 @@
 
 (require racket/match
          "../../tui/state.rkt"
-         "../../util/protocol-types.rkt")
+         "../../util/message/protocol-types.rkt")
 
 (provide make-test-event
          simulate-events

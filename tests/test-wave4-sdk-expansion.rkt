@@ -14,7 +14,7 @@
          rackunit/text-ui
          "../llm/provider.rkt"
          "../llm/model.rkt"
-         "../runtime/provider-registry.rkt"
+         "../runtime/provider/provider-registry.rkt"
          "../extensions/api.rkt"
          "../extensions/context.rkt"
          "../extensions/hooks.rkt"

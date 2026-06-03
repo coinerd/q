@@ -5,8 +5,8 @@
 ;; tests/test-session-mutation.rkt — Session mutation guard tests (W-04)
 
 (require rackunit
-         "../runtime/session-types.rkt"
-         "../runtime/session-mutation.rkt"
+         "../runtime/session/session-types.rkt"
+         "../runtime/session/session-mutation.rkt"
          "../runtime/context-assembly/ws-evolution.rkt"
          (only-in "../runtime/working-set.rkt" make-working-set ws-entry ws-entry?)
          (only-in "../runtime/context-assembly/task-conclusion.rkt"

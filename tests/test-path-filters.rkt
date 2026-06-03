@@ -5,7 +5,7 @@
 (require rackunit
          rackunit/text-ui
          racket/path
-         "../util/path-filters.rkt")
+         "../util/path/path-filters.rkt")
 
 (define path-filters-suite
   (test-suite "path-filters tests"

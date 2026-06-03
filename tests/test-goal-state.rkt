@@ -7,8 +7,8 @@
 (require racket/port
          racket/string
          rackunit
-         "../runtime/goal-state.rkt"
-         "../util/jsonl.rkt")
+         "../runtime/goal/goal-state.rkt"
+         "../util/json/jsonl.rkt")
 
 ;; ============================================================
 ;; Helper

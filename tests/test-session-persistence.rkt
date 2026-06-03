@@ -7,10 +7,10 @@
          rackunit/text-ui
          racket/file
          racket/string
-         "../runtime/session-persistence.rkt"
-         "../runtime/session-types.rkt"
-         (only-in "../util/message.rkt" message)
-         (only-in "../util/content-parts.rkt" text-part)
+         "../runtime/session/session-persistence.rkt"
+         "../runtime/session/session-types.rkt"
+         (only-in "../util/message/message.rkt" message)
+         (only-in "../util/content/content-parts.rkt" text-part)
          "helpers/session-fixture.rkt")
 
 ;; --- Test isolation helper ---

@@ -20,9 +20,9 @@
                   loop-counters-iteration
                   loop-counters-consecutive-tool-count
                   loop-counters-explore-count)
-         (only-in "../../util/content-parts.rkt" make-text-part)
+         (only-in "../../util/content/content-parts.rkt" make-text-part)
          (only-in "../../util/loop-result.rkt" make-loop-result loop-result-messages)
-         (only-in "../../util/message.rkt" message? make-message)
+         (only-in "../../util/message/message.rkt" message? make-message)
          (only-in "../../util/loop-result.rkt" loop-result-termination-reason loop-result-metadata)
          (only-in "../../util/ids.rkt" generate-id)
          (only-in "../event-emitter.rkt" emit-typed-event!)
@@ -32,15 +32,15 @@
          (only-in "tool-turn-bridge.rkt" dequeue-all-steering! drain-injected-messages!)
          (only-in "../../runtime/runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
          (only-in "../../util/hook-types.rkt" hook-result-action hook-result?)
-         (only-in "../../util/event-contracts.rkt"
+         (only-in "../../util/event/event-contracts.rkt"
                   injection-count-payload/c
                   iteration-decision-payload/c
                   reason-payload/c)
          (only-in "../../runtime/turn-orchestrator.rkt" run-provider-turn build-assembled-context)
          (only-in "../../runtime/working-set.rkt" working-set? make-working-set)
          (only-in "../../util/cancellation.rkt" cancellation-token?)
-         (only-in "../../runtime/session-types.rkt" agent-session?)
-         (only-in "../../runtime/session-config.rkt"
+         (only-in "../../runtime/session/session-types.rkt" agent-session?)
+         (only-in "../../runtime/session/session-config.rkt"
                   session-config?
                   hash->session-config
                   resolve-max-iterations-hard)

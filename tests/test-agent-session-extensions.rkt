@@ -25,7 +25,7 @@
          rackunit/text-ui
          racket/file
          racket/string
-         (only-in "../util/protocol-types.rkt"
+         (only-in "../util/message/protocol-types.rkt"
                   message
                   message?
                   message-id
@@ -66,12 +66,12 @@
                   extension)
          (only-in "../extensions/hooks.rkt" hook-pass hook-amend hook-block)
          "../runtime/agent-session.rkt"
-         (only-in "../runtime/session-store.rkt" append-entry! load-session-log)
-         (only-in "../runtime/compactor.rkt"
+         (only-in "../runtime/session/session-store.rkt" append-entry! load-session-log)
+         (only-in "../runtime/compaction/compactor.rkt"
                   compaction-strategy
                   compaction-result->message-list
                   compact-history)
-         (only-in "../runtime/context-assembly.rkt"
+         (only-in "../runtime/context/context-assembly.rkt"
                   build-tiered-context
                   tiered-context
                   tiered-context?
@@ -79,7 +79,7 @@
                   tiered-context-tier-b
                   tiered-context-tier-c
                   tiered-context->message-list)
-         (only-in "../runtime/token-compaction.rkt" token-compaction-config)
+         (only-in "../runtime/compaction/token-compaction.rkt" token-compaction-config)
          (only-in "helpers/mock-provider.rkt"
                   make-multi-mock-provider
                   make-test-config

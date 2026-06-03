@@ -11,9 +11,9 @@
 ;;   - #696: Parent feature integration
 
 (require rackunit
-         "../util/protocol-types.rkt"
-         "../runtime/cutpoint-rules.rkt"
-         "../runtime/compactor.rkt")
+         "../util/message/protocol-types.rkt"
+         "../runtime/compaction/cutpoint-rules.rkt"
+         "../runtime/compaction/compactor.rkt")
 
 ;; ============================================================
 ;; Helpers

@@ -15,8 +15,8 @@
          "../extensions/hooks.rkt"
          "../extensions/context.rkt"
          "../extensions/api.rkt"
-         "../util/protocol-types.rkt"
-         "../runtime/session-switch.rkt")
+         "../util/message/protocol-types.rkt"
+         "../runtime/session/session-switch.rkt")
 
 ;; ============================================================
 ;; Helpers

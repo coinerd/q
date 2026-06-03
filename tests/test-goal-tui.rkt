@@ -6,7 +6,7 @@
          racket/string
          "../tui/state-types.rkt"
          "../tui/state-events.rkt"
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          "../tui/render/status-line.rkt"
          (only-in "../tui/render/message-layout.rkt"
                   styled-segment-text

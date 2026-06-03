@@ -9,7 +9,7 @@
 (require rackunit
          racket/base
          "../agent/event-structs/base.rkt"
-         "../util/event-macro.rkt")
+         "../util/event/event-macro.rkt")
 
 ;; ============================================================
 ;; Test: define-typed-event with 2 fields
@@ -174,7 +174,7 @@
   (check-equal? turn-cancelled-event-fields '(reason iteration)))
 
 ;; -- T-05: Macro registry wiring break-glass test --
-(require (only-in "../util/event-macro.rkt" lookup-event-fields register-event-fields!))
+(require (only-in "../util/event/event-macro.rkt" lookup-event-fields register-event-fields!))
 
 (test-case "T-05: register-event-fields! is required for field lookup"
   ;; Verify that a known event type has its fields registered

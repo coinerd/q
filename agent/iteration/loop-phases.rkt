@@ -12,7 +12,7 @@
 (require racket/contract
          racket/list
          (only-in "../event-bus.rkt" event-bus? publish!)
-         (only-in "../../util/event-contracts.rkt" injection-count-payload/c)
+         (only-in "../../util/event/event-contracts.rkt" injection-count-payload/c)
          (only-in "tool-turn-bridge.rkt" dequeue-all-steering! drain-injected-messages!)
          (only-in "loop-config.rkt"
                   loop-config-queue
@@ -26,8 +26,8 @@
          (only-in "../../runtime/layer-adapters.rkt" extension-registry?)
          (only-in "../../runtime/iteration/internal.rkt" assert-payload)
          (only-in "../../util/ids.rkt" generate-id)
-         (only-in "../../util/message.rkt" make-message message?)
-         (only-in "../../util/content-parts.rkt" make-text-part))
+         (only-in "../../util/message/message.rkt" make-message message?)
+         (only-in "../../util/content/content-parts.rkt" make-text-part))
 
 ;; Re-export for consumers
 (provide (contract-out [prepare-iteration-context

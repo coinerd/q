@@ -14,7 +14,7 @@
          "../tools/define-tool.rkt"
          "../tools/tool.rkt"
          "../tools/tool-struct.rkt"
-         "../util/event-macro.rkt")
+         "../util/event/event-macro.rkt")
 
 ;; ============================================================
 ;; define-tool expansion tests

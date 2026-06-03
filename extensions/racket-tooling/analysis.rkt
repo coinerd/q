@@ -6,7 +6,7 @@
 ;; handle-racket-check: format, syntax, test, expand, and all-mode checks.
 
 (require racket/string
-         (only-in "../../util/errors.rkt" raise-extension-error)
+         (only-in "../../util/error/errors.rkt" raise-extension-error)
          racket/list
          json
          (only-in "../racket-tooling-helpers.rkt"

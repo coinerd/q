@@ -5,7 +5,7 @@
 ;; R8: Replaces raw hasheq emissions with typed events for compile-time
 ;; field checking and auto-serialization via define-typed-event macro.
 
-(require "../../util/event-macro.rkt")
+(require "../../util/event/event-macro.rkt")
 
 (define-typed-event gsd-mode-changed-event "gsd.mode.changed" (mode)
   #:optional ([reason #f]

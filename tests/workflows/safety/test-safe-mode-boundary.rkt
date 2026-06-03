@@ -14,7 +14,7 @@
          racket/file
          (prefix-in sdk: "../../../interfaces/sdk.rkt")
          "../../../agent/event-bus.rkt"
-         "../../../util/protocol-types.rkt"
+         "../../../util/message/protocol-types.rkt"
          (only-in "../../../tools/tool.rkt"
                   make-tool-registry
                   register-tool!

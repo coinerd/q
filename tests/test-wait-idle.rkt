@@ -7,7 +7,7 @@
 (require rackunit
          rackunit/text-ui
          "../agent/event-bus.rkt"
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          "../agent/wait-idle.rkt")
 
 (define (make-timestamp)

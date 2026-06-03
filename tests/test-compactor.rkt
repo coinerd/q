@@ -17,9 +17,9 @@
 (require rackunit
          rackunit/text-ui
          racket/file
-         "../util/protocol-types.rkt"
-         "../runtime/compactor.rkt"
-         (only-in "../runtime/context-assembly.rkt"
+         "../util/message/protocol-types.rkt"
+         "../runtime/compaction/compactor.rkt"
+         (only-in "../runtime/context/context-assembly.rkt"
                   build-tiered-context
                   tiered-context
                   tiered-context?
@@ -37,8 +37,8 @@
                   context-assembly-payload-metadata
                   payload->tiered-context
                   tiered-context->payload)
-         "../runtime/session-store.rkt"
-         "../runtime/token-compaction.rkt"
+         "../runtime/session/session-store.rkt"
+         "../runtime/compaction/token-compaction.rkt"
          ;; R2-6: Import hooks for context-assembly testing
          "../util/hook-types.rkt")
 

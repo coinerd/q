@@ -4,8 +4,8 @@
 
 (require rackunit
          rackunit/text-ui
-         "../runtime/session-store.rkt"
-         "../util/protocol-types.rkt"
+         "../runtime/session/session-store.rkt"
+         "../util/message/protocol-types.rkt"
          "../extensions/hooks.rkt"
          racket/file)
 

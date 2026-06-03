@@ -18,11 +18,11 @@
          racket/file
          json
          "../runtime/settings.rkt"
-         (only-in "../runtime/auth-store.rkt"
+         (only-in "../runtime/auth/auth-store.rkt"
                   credential-file-path
                   lookup-credential
                   credential-provider-name)
-         "../runtime/model-registry.rkt"
+         "../runtime/provider/model-registry.rkt"
          "../util/config-paths.rkt")
 
 ;; Struct

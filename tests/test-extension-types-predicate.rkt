@@ -9,7 +9,7 @@
 
 (require rackunit
          rackunit/text-ui
-         "../util/extension-types.rkt")
+         "../util/extension/extension-types.rkt")
 
 (define ext-pred-tests
   (test-suite "extension-types-predicate"

@@ -6,7 +6,7 @@
 (require rackunit
          rackunit/text-ui
          json
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          "../interfaces/cli.rkt")
 
 (define-test-suite

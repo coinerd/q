@@ -8,7 +8,7 @@
 ;;
 ;; Extracted from cli/interactive.rkt (Issue #203).
 
-(require "../util/error-helpers.rkt")
+(require "error/error-helpers.rkt")
 (require racket/string
          (only-in ffi/unsafe ffi-lib get-ffi-obj _fun _string _int))
 

@@ -4,20 +4,20 @@
 ;;
 ;; v0.33.2 W0: Converted to define-tool macro.
 
-(require "../../util/error-helpers.rkt"
+(require "../../util/error/error-helpers.rkt"
          racket/file
          racket/string
          racket/path
          (only-in "../tool.rkt" make-success-result make-error-result)
          (only-in "../define-tool.rkt" define-tool)
          (only-in "builtin-helpers.rkt" require-safe-path!)
-         (only-in "../../util/glob.rkt" glob->regexp)
-         (only-in "../../util/path-filters.rkt"
+         (only-in "../../util/path/glob.rkt" glob->regexp)
+         (only-in "../../util/path/path-filters.rkt"
                   hidden-name?
                   vcs-dir?
                   skip-dirs
                   path-component-hidden?)
-         (only-in "../../util/path-helpers.rkt" expand-home-path))
+         (only-in "../../util/path/path-helpers.rkt" expand-home-path))
 
 ;; --------------------------------------------------
 ;; Core recursive walk

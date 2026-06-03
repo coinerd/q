@@ -12,7 +12,7 @@
 (require racket/class
          racket/string
          racket/list
-         "../util/event.rkt"
+         "../util/event/event.rkt"
          "../gui/components/rich-transcript-view.rkt"
          "../ui-core/theme-protocol.rkt"
          "../gui/gui-types.rkt")

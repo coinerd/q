@@ -3,7 +3,7 @@
 ;; BOUNDARY: integration
 
 (require rackunit
-         "../util/error-helpers.rkt")
+         "../util/error/error-helpers.rkt")
 
 ;; with-safe-fallback returns #f on exception
 (test-case "with-safe-fallback returns default on exception"

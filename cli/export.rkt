@@ -8,10 +8,10 @@
 
 (require racket/contract
          racket/file
-         "../runtime/session-store.rkt"
-         "../util/export-markdown.rkt"
-         "../util/export-html.rkt"
-         "../util/export-json.rkt")
+         "../runtime/session/session-store.rkt"
+         "../util/export/export-markdown.rkt"
+         "../util/export/export-html.rkt"
+         "../util/export/export-json.rkt")
 
 (provide (contract-out [export-session (-> path-string? symbol? string?)]
                        [export-session-to-file (-> path-string? symbol? path-string? void?)]))

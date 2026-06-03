@@ -3,7 +3,7 @@
 ;; agent/event-structs/turn-events.rkt — turn lifecycle events
 
 (require "base.rkt"
-         "../../util/event-macro.rkt")
+         "../../util/event/event-macro.rkt")
 
 (define-typed-event turn-start-event "turn.started" (model provider) #:schema-version 1)
 

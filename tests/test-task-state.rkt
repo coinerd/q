@@ -9,10 +9,10 @@
          "../runtime/context-assembly/task-state.rkt"
          "../runtime/context-assembly/task-conclusion.rkt"
          "../runtime/context-assembly/task-memory.rkt"
-         "../runtime/session-mutation.rkt"
-         "../runtime/session-types.rkt"
+         "../runtime/session/session-mutation.rkt"
+         "../runtime/session/session-types.rkt"
          "../tests/helpers/session-fixture.rkt"
-         (only-in "../util/fsm.rkt" fsm-state-name))
+         (only-in "../util/fsm/fsm.rkt" fsm-state-name))
 
 ;; ── FSM Tests ──
 

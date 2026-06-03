@@ -5,7 +5,7 @@
 ;; tests/test-event-payloads.rkt — Tests for util/event-payloads.rkt
 
 (require rackunit
-         "../util/event-payloads.rkt")
+         "../util/event/event-payloads.rkt")
 
 ;; ============================================================
 ;; Session lifecycle payloads

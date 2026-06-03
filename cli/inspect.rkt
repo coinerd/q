@@ -8,12 +8,12 @@
 ;;   inspect-session-safe    — error-handling wrapper for corrupted/missing sessions
 ;;   format-inspection       — human-readable multi-line string for CLI output
 
-(require "../util/error-helpers.rkt")
+(require "../util/error/error-helpers.rkt")
 (require racket/match
          racket/list
          racket/string
          racket/format
-         (only-in "../util/content-parts.rkt"
+         (only-in "../util/content/content-parts.rkt"
                   tool-call-part
                   tool-call-part-arguments
                   tool-call-part-name
@@ -21,13 +21,13 @@
                   tool-result-part
                   tool-result-part-is-error?
                   tool-result-part?)
-         (only-in "../util/message.rkt"
+         (only-in "../util/message/message.rkt"
                   message-content
                   message-meta-safe
                   message-parent-id
                   message-role
                   message-timestamp)
-         "../runtime/session-store.rkt")
+         "../runtime/session/session-store.rkt")
 
 (require racket/contract)
 (provide (contract-out [inspect-session (-> path-string? any)]

@@ -21,8 +21,8 @@
          (only-in "../../extensions/gsd/session-state.rkt"
                   [current-edit-limit current-max-old-text-len]
                   [set-edit-limit! set-current-max-old-text-len!])
-         (only-in "../../util/path-helpers.rkt" expand-home-path)
-         (only-in "../../util/error-sanitizer.rkt" sanitize-error-message)
+         (only-in "../../util/path/path-helpers.rkt" expand-home-path)
+         (only-in "../../util/error/error-sanitizer.rkt" sanitize-error-message)
          (only-in "builtin-helpers.rkt" require-safe-path!)
          "edit-normalize.rkt")
 

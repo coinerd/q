@@ -7,7 +7,7 @@
          racket/list
          "../llm/model.rkt"
          "../llm/provider.rkt"
-         (only-in "../runtime/goal-state.rkt"
+         (only-in "../runtime/goal/goal-state.rkt"
                   goal-state?
                   goal-state-status
                   goal-state-turns-used
@@ -28,10 +28,10 @@
                   check-result-timed-out?
                   check-result-stdout
                   check-result-stderr)
-         (except-in "../runtime/goal-state.rkt" NO-PROGRESS-THRESHOLD)
-         "../runtime/goal-evaluator.rkt"
-         "../runtime/goal-runner.rkt"
-         "../runtime/goal-evidence.rkt")
+         (except-in "../runtime/goal/goal-state.rkt" NO-PROGRESS-THRESHOLD)
+         "../runtime/goal/goal-evaluator.rkt"
+         "../runtime/goal/goal-runner.rkt"
+         "../runtime/goal/goal-evidence.rkt")
 
 ;; ============================================================
 ;; Mock evaluator provider — returns JSON evaluation responses

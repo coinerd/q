@@ -39,7 +39,7 @@
          racket/set
          "../util/ids.rkt"
          (only-in "../util/loop-result.rkt" loop-result loop-result?)
-         (only-in "../util/message.rkt" message message?)
+         (only-in "../util/message/message.rkt" message message?)
          "event-bus.rkt"
          "state.rkt"
          "../llm/model.rkt"
@@ -48,7 +48,7 @@
          (only-in "../llm/token-budget.rkt" estimate-turn-tokens estimate-context-tokens)
          (only-in "../util/cancellation.rkt" cancellation-token? cancellation-token-cancelled?)
          (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload)
-         (only-in "../util/content-helpers.rkt" result-content->string)
+         (only-in "../util/content/content-helpers.rkt" result-content->string)
          "streaming-message.rkt"
          "loop-messages.rkt"
          "loop-stream.rkt"

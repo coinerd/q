@@ -16,8 +16,8 @@
 (require racket/contract
          racket/list
          racket/match
-         (only-in "../../util/event.rkt" event?)
-         (only-in "../../util/event.rkt" event event? make-event)
+         (only-in "../../util/event/event.rkt" event?)
+         (only-in "../../util/event/event.rkt" event event? make-event)
          "../../util/hook-types.rkt"
          "../../agent/event-bus.rkt"
          "compactor.rkt"

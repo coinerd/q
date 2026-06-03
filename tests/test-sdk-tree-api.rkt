@@ -10,8 +10,8 @@
 (require rackunit
          rackunit/text-ui
          "../interfaces/sdk.rkt"
-         "../util/protocol-types.rkt"
-         (only-in "../runtime/session-store.rkt"
+         "../util/message/protocol-types.rkt"
+         (only-in "../runtime/session/session-store.rkt"
                   append-entry!
                   load-tree
                   append-tree-entry!

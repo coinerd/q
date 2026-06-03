@@ -6,7 +6,7 @@
 ;; Event payloads carry typed data (event-ev extracts the raw event struct).
 
 (require "../../interfaces/sdk.rkt"
-         (only-in "../../util/event.rkt" event-ev))
+         (only-in "../../util/event/event.rkt" event-ev))
 
 (define rt (create-agent-session #:provider (hasheq 'type 'test)))
 

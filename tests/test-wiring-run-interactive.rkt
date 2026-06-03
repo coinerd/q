@@ -14,7 +14,7 @@
          (only-in "../wiring/run-interactive.rkt"
                   make-terminal-subscriber
                   handle-sessions-interactive-command)
-         (only-in "../util/protocol-types.rkt" make-event))
+         (only-in "../util/message/protocol-types.rkt" make-event))
 
 (define test-wiring-run-interactive
   (test-suite "wiring/run-interactive"

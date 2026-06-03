@@ -11,7 +11,7 @@
 (require rackunit
          rackunit/text-ui
          "../util/version.rkt"
-         "../util/event-payloads.rkt"
+         "../util/event/event-payloads.rkt"
          "../extensions/gsd/plan-types.rkt"
          "../extensions/gsd/plan-validator.rkt")
 

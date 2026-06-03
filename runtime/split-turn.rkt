@@ -21,8 +21,8 @@
 (require racket/contract
          racket/list
          racket/string
-         (only-in "../util/content-parts.rkt" text-part text-part-text text-part?)
-         (only-in "../util/message.rkt" message-content message-kind message-role))
+         (only-in "../util/content/content-parts.rkt" text-part text-part-text text-part?)
+         (only-in "../util/message/message.rkt" message-content message-kind message-role))
 
 (provide split-turn-result
          split-turn-result?

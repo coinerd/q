@@ -37,7 +37,7 @@
          (only-in "../tools/tool-struct.rkt" tool-execute)
          (only-in "../tools/registry-defaults.rkt" register-default-tools!)
          "../tools/scheduler.rkt"
-         (only-in "../util/protocol-types.rkt"
+         (only-in "../util/message/protocol-types.rkt"
                   tool-call
                   tool-call?
                   tool-call-id

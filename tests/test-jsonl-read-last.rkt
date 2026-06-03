@@ -6,7 +6,7 @@
          json
          racket/file
          racket/port
-         "../util/jsonl.rkt")
+         "../util/json/jsonl.rkt")
 
 ;; Helper: create a temp JSONL file, run body, clean up.
 (define (with-temp-jsonl entries body-fn)

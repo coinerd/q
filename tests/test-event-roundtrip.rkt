@@ -10,7 +10,7 @@
          racket/string
          "../agent/event-json.rkt"
          "../agent/event-structs/typed-event-predicates.rkt"
-         "../util/event-macro.rkt"
+         "../util/event/event-macro.rkt"
          "../agent/event-structs/session-events.rkt"
          "../agent/event-structs/iteration-events.rkt")
 

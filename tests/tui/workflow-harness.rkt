@@ -10,7 +10,7 @@
 (require rackunit
          "../../tui/state.rkt"
          "../../tui/render.rkt"
-         "../../util/protocol-types.rkt")
+         "../../util/message/protocol-types.rkt")
 
 (provide make-test-event
          apply-events

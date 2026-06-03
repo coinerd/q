@@ -12,9 +12,9 @@
 (require rackunit
          racket/file
          racket/path
-         "../util/protocol-types.rkt"
-         "../runtime/session-store.rkt"
-         "../runtime/session-metadata.rkt")
+         "../util/message/protocol-types.rkt"
+         "../runtime/session/session-store.rkt"
+         "../runtime/session/session-metadata.rkt")
 
 ;; ============================================================
 ;; Helpers

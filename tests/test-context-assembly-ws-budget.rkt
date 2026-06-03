@@ -6,9 +6,9 @@
 (require rackunit
          rackunit/text-ui
          racket/list
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          "../runtime/working-set.rkt"
-         "../runtime/context-assembly.rkt"
+         "../runtime/context/context-assembly.rkt"
          (only-in "../runtime/context-assembly/token-metrics.rkt"
                   context-token-telemetry?
                   context-token-telemetry-tier-a-tokens

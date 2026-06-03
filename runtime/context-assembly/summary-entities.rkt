@@ -8,8 +8,8 @@
 (require racket/contract
          racket/string
          racket/list
-         (only-in "../../util/message.rkt" message-content)
-         (only-in "../../util/content-parts.rkt" text-part? text-part-text))
+         (only-in "../../util/message/message.rkt" message-content)
+         (only-in "../../util/content/content-parts.rkt" text-part? text-part-text))
 
 (provide (contract-out [extract-key-entities (->* (list?) (exact-positive-integer?) any/c)]
                        [check-entity-preservation (-> list? string? list?)]

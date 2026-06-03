@@ -11,7 +11,7 @@
          "../runtime/iteration/retry-policy.rkt"
          "../runtime/runtime-helpers.rkt"
          "../agent/event-bus.rkt"
-         "../util/event.rkt")
+         "../util/event/event.rkt")
 
 (define suite
   (test-suite "Exploration loop detection wiring"

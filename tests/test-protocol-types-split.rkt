@@ -9,18 +9,18 @@
 
 (require rackunit
          racket/file
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          ;; Also test direct sub-module imports
-         "../util/content-parts.rkt"
-         "../util/message.rkt"
-         "../util/event.rkt"
+         "../util/content/content-parts.rkt"
+         "../util/message/message.rkt"
+         "../util/event/event.rkt"
          "../util/entry-predicates.rkt"
          "../util/tree-entries.rkt"
          "../util/loop-result.rkt")
 
 (define protocol-types-source
   (file->string (build-path (or (current-load-relative-directory) (current-directory))
-                            "../util/protocol-types.rkt")))
+                            "../util/message/protocol-types.rkt")))
 
 (check-not-false (regexp-match? #rx"DEPRECATED" protocol-types-source))
 (check-not-false (regexp-match? #rx"v0[.]8[23]" protocol-types-source))

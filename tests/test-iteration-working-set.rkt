@@ -9,7 +9,7 @@
          racket/list
          "../runtime/working-set.rkt"
          (only-in "../agent/iteration/main-loop.rkt" run-iteration-loop)
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          "../agent/event-bus.rkt"
          "../util/ids.rkt"
          (only-in "../llm/provider.rkt" make-mock-provider)

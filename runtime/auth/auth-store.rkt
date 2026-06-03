@@ -6,7 +6,7 @@
 ;;; first, then falling back to config. No coupling to settings.rkt —
 ;;; all config is received as parameter hashes.
 
-(require "../../util/json-helpers.rkt")
+(require "../../util/json/json-helpers.rkt")
 (require json
          racket/contract
          racket/file

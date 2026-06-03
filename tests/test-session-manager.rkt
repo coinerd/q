@@ -8,8 +8,8 @@
 
 (require rackunit
          rackunit/text-ui
-         "../runtime/session-manager.rkt"
-         "../util/protocol-types.rkt"
+         "../runtime/session/session-manager.rkt"
+         "../util/message/protocol-types.rkt"
          racket/file)
 
 (define (make-temp-dir)

@@ -7,7 +7,7 @@
 (require rackunit
          racket/file
          racket/port
-         "../util/checksum.rkt"
+         "../util/json/checksum.rkt"
          "../extensions/manifest.rkt"
          "../extensions/manifest-audit.rkt")
 

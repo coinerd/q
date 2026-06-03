@@ -4,15 +4,15 @@
 
 (require rackunit
          rackunit/text-ui
-         "../runtime/context-pressure.rkt"
+         "../runtime/context/context-pressure.rkt"
          "../llm/token-budget.rkt"
          "../agent/event-bus.rkt"
          "../agent/event-structs/base.rkt"
          "../agent/event-structs/context-pressure-events.rkt"
-         "../runtime/session-types.rkt"
-         "../runtime/session-store.rkt"
+         "../runtime/session/session-types.rkt"
+         "../runtime/session/session-store.rkt"
          "../runtime/agent-session.rkt"
-         "../util/event.rkt")
+         "../util/event/event.rkt")
 
 (define (make-temp-dir)
   (make-temporary-file "q-pressure-test-~a" 'directory))

@@ -13,13 +13,13 @@
          racket/list
          racket/string
          racket/set
-         (only-in "../../util/content-parts.rkt"
+         (only-in "../../util/content/content-parts.rkt"
                   text-part
                   text-part-text
                   text-part?
                   tool-call-part
                   tool-call-part?)
-         (only-in "../../util/message.rkt"
+         (only-in "../../util/message/message.rkt"
                   message
                   message-content
                   message-id
@@ -28,7 +28,7 @@
                   message-parent-id
                   message-role
                   message?)
-         (only-in "../../util/message.rkt" message-meta-safe)
+         (only-in "../../util/message/message.rkt" message-meta-safe)
          "../../llm/token-budget.rkt"
          "../../util/token-estimate-cache.rkt")
 

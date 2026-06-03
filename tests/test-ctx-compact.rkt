@@ -10,9 +10,9 @@
 
 (require rackunit
          "../agent/event-bus.rkt"
-         "../runtime/compactor.rkt"
-         "../runtime/ctx-compact.rkt"
-         "../util/protocol-types.rkt")
+         "../runtime/compaction/compactor.rkt"
+         "../runtime/compaction/ctx-compact.rkt"
+         "../util/message/protocol-types.rkt")
 
 ;; ============================================================
 ;; Helpers

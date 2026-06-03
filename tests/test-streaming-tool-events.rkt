@@ -15,8 +15,8 @@
          "../agent/event-bus.rkt"
          "../llm/provider.rkt"
          "../llm/model.rkt"
-         "../util/protocol-types.rkt"
-         "../util/protocol-types.rkt")
+         "../util/message/protocol-types.rkt"
+         "../util/message/protocol-types.rkt")
 
 (define streaming-tool-event-tests
   (test-suite "Agent Loop Streaming → Tool Event Ordering"

@@ -7,11 +7,11 @@
 (require rackunit
          rackunit/text-ui
          racket/file
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          "../agent/event-bus.rkt"
          "../extensions/api.rkt"
          "../extensions/loader.rkt"
-         (only-in "../runtime/context-assembly.rkt"
+         (only-in "../runtime/context/context-assembly.rkt"
                   make-context-assembly-config
                   context-assembly-config?
                   context-assembly-config-recent-tokens)

@@ -3,7 +3,7 @@
 ;; BOUNDARY: integration
 
 (require rackunit
-         "../runtime/provider-factory.rkt"
+         "../runtime/provider/provider-factory.rkt"
          "../runtime/settings.rkt"
          "../llm/model.rkt"
          "../llm/provider.rkt")

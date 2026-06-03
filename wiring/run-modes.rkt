@@ -24,12 +24,12 @@
          "../runtime/settings.rkt"
          "../skills/types.rkt"
          (only-in "../skills/resource-loader.rkt" skills-summary-section)
-         "../runtime/model-registry.rkt"
-         (only-in "../runtime/provider-factory.rkt" build-provider)
+         "../runtime/provider/model-registry.rkt"
+         (only-in "../runtime/provider/provider-factory.rkt" build-provider)
          "../tools/tool.rkt"
          (only-in "../tools/registry-defaults.rkt" register-default-tools!)
          "../agent/event-bus.rkt"
-         (only-in "../runtime/session-config.rkt"
+         (only-in "../runtime/session/session-config.rkt"
                   hash->session-config
                   session-config?
                   session-config->hash)
@@ -40,7 +40,7 @@
                   start-trace-logger!
                   project-tree->string)
          (only-in "extension-setup.rkt" make-wired-extension-registry load-extensions-from-dir!)
-         (only-in "../runtime/session-config.rkt" apply-context-assembly-profile!)
+         (only-in "../runtime/session/session-config.rkt" apply-context-assembly-profile!)
          (only-in "../extensions/gsd/state-machine.rkt" gsm-current)
          (only-in "../tui/state-events.rkt" current-gsd-mode-query))
 

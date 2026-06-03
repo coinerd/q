@@ -12,7 +12,7 @@
          racket/port
          racket/file
          racket/path
-         (only-in "error-helpers.rkt" with-logged-error))
+         (only-in "error/error-helpers.rkt" with-logged-error))
 
 (provide audit-log!
          with-audit-log

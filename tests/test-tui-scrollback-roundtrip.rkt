@@ -13,7 +13,7 @@
          "tui/workflow-harness.rkt"
          "../tui/state.rkt"
          "../tui/scrollback.rkt"
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          racket/file)
 
 (define scrollback-roundtrip-tests

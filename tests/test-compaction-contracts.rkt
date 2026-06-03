@@ -11,10 +11,10 @@
 (require rackunit
          rackunit/text-ui
          racket/file
-         "../util/protocol-types.rkt"
-         "../runtime/compactor.rkt"
-         "../runtime/session-store.rkt"
-         "../runtime/token-compaction.rkt"
+         "../util/message/protocol-types.rkt"
+         "../runtime/compaction/compactor.rkt"
+         "../runtime/session/session-store.rkt"
+         "../runtime/compaction/token-compaction.rkt"
          "helpers/compaction-helpers.rkt")
 
 (define compaction-contract-tests

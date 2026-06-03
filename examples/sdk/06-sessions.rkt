@@ -2,7 +2,7 @@
 
 ;; examples/sdk/06-sessions.rkt — In-memory sessions, resume, list
 
-(require "../../runtime/session-manager.rkt"
+(require "../../runtime/session/session-manager.rkt"
          (only-in "../../interfaces/sdk-core.rkt" create-agent-session session-info))
 
 (define mgr (make-in-memory-session-manager))

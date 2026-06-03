@@ -11,16 +11,16 @@
          rackunit/text-ui
          (prefix-in sdk: "../../../interfaces/sdk.rkt")
          "../../../agent/event-bus.rkt"
-         "../../../util/protocol-types.rkt"
+         "../../../util/message/protocol-types.rkt"
          (only-in "../../../tools/tool.rkt" make-tool-registry)
-         (only-in "../../../runtime/compactor.rkt"
+         (only-in "../../../runtime/compaction/compactor.rkt"
                   compaction-result?
                   compaction-result-removed-count
                   compaction-result-summary-message
                   compaction-result-kept-messages
                   compact-and-persist!
                   compact-history)
-         (only-in "../../../runtime/token-compaction.rkt" token-compaction-config)
+         (only-in "../../../runtime/compaction/token-compaction.rkt" token-compaction-config)
          "../../helpers/compaction-helpers.rkt"
          (only-in "../../../runtime/agent-session.rkt" session-history)
          "../fixtures/mock-provider.rkt"

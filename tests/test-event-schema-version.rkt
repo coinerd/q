@@ -9,7 +9,7 @@
 (require rackunit
          rackunit/text-ui
          "../agent/event-json.rkt"
-         "../util/event-macro.rkt"
+         "../util/event/event-macro.rkt"
          "../agent/event-structs/base.rkt")
 
 (define schema-suite

@@ -5,7 +5,7 @@
 (require rackunit
          rackunit/text-ui
          "../llm/provider-errors.rkt"
-         "../util/errors.rkt")
+         "../util/error/errors.rkt")
 
 (define provider-error-tests
   (test-suite "provider-errors"

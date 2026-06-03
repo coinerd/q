@@ -9,7 +9,7 @@
 
 (require rackunit
          "../agent/event-bus.rkt"
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          (only-in "../runtime/iteration/retry-policy.rkt"
                   call-with-overflow-recovery
                   check-mid-turn-budget!

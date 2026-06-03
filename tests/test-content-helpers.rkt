@@ -3,7 +3,7 @@
 ;; BOUNDARY: integration
 
 (require rackunit
-         "../util/content-helpers.rkt")
+         "../util/content/content-helpers.rkt")
 
 ;; ============================================================
 ;; Test suite: util/content-helpers.rkt — content helpers

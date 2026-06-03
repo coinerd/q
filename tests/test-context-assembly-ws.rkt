@@ -7,11 +7,11 @@
          rackunit/text-ui
          racket/list
          racket/file
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          "../runtime/working-set.rkt"
-         "../runtime/context-pinning.rkt"
-         "../runtime/context-assembly.rkt"
-         "../runtime/session-store.rkt"
+         "../runtime/context/context-pinning.rkt"
+         "../runtime/context/context-assembly.rkt"
+         "../runtime/session/session-store.rkt"
          "../runtime/session-index.rkt")
 
 ;; Helper: create a test message

@@ -7,7 +7,7 @@
 (require rackunit
          rackunit/text-ui
          racket/list
-         "../util/error-classify.rkt")
+         "../util/error/error-classify.rkt")
 
 (define (make-exn msg)
   (exn:fail msg (current-continuation-marks)))

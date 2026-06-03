@@ -15,9 +15,9 @@
          racket/file
          racket/path
          "../tui/keymap.rkt"
-         "../runtime/compactor.rkt"
+         "../runtime/compaction/compactor.rkt"
          "../runtime/package.rkt"
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          "../extensions/manifest.rkt")
 
 ;; ============================================================

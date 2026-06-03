@@ -9,7 +9,7 @@
 
 (require rackunit
          rackunit/text-ui
-         "../runtime/context-assembly.rkt")
+         "../runtime/context/context-assembly.rkt")
 
 (define eviction-tests
   (test-suite "summary-cache-eviction"

@@ -13,8 +13,8 @@
 ;; Extracted from github-integration.rkt to reduce its size (Q01).
 ;; Provides shell quoting, input validation, gh/git execution, and repo info.
 
-(require "../../util/error-helpers.rkt"
-         (only-in "../../util/errors.rkt" raise-extension-error))
+(require "../../util/error/error-helpers.rkt"
+         (only-in "../../util/error/errors.rkt" raise-extension-error))
 (require racket/contract
          racket/format
          racket/port

@@ -7,8 +7,8 @@
          racket/port
          racket/tcp
          racket/file
-         "../runtime/oauth-callback.rkt"
-         "../runtime/oauth.rkt")
+         "../runtime/auth/oauth-callback.rkt"
+         "../runtime/auth/oauth.rkt")
 
 (define oauth-tests
   (test-suite "OAuth2 callback"

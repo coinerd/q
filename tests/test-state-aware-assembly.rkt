@@ -16,8 +16,8 @@
                   task-debugging)
          (only-in "../runtime/context-assembly/task-conclusion.rkt" task-conclusion task-conclusion?)
          (only-in "../runtime/context-assembly/task-conclusion.rkt" task-conclusion)
-         (only-in "../util/protocol-types.rkt" message-content)
-         (only-in "../util/content-parts.rkt" text-part-text)
+         (only-in "../util/message/protocol-types.rkt" message-content)
+         (only-in "../util/content/content-parts.rkt" text-part-text)
          (only-in "../runtime/context-assembly/serialization.rkt"
                   build-tiered-context
                   build-tiered-context/state-aware
@@ -27,12 +27,12 @@
                   tiered-context->message-list
                   current-task-state-aware-assembly?
                   build-state-awareness-preamble)
-         (only-in "../util/protocol-types.rkt"
+         (only-in "../util/message/protocol-types.rkt"
                   make-message
                   make-text-part
                   message-meta-safe
                   message-content)
-         (only-in "../util/content-parts.rkt" text-part? text-part-text))
+         (only-in "../util/content/content-parts.rkt" text-part? text-part-text))
 
 ;; Helper: create a simple test message
 (define (test-msg role text)

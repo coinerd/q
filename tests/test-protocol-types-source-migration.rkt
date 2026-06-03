@@ -12,7 +12,7 @@
          racket/list
          racket/path
          racket/string
-         (only-in "../util/event-classes.rkt" make-stream-text-event stream-text-event?))
+         (only-in "../util/event/event-classes.rkt" make-stream-text-event stream-text-event?))
 
 (define project-root
   (simplify-path (build-path (or (current-load-relative-directory) (current-directory)) "..")))

@@ -5,8 +5,8 @@
 
 (require racket/list
          racket/string
-         (only-in "../../util/content-parts.rkt" make-text-part)
-         (only-in "../../util/message.rkt" message message-id message-content make-message)
+         (only-in "../../util/content/content-parts.rkt" make-text-part)
+         (only-in "../../util/message/message.rkt" message message-id message-content make-message)
          (only-in "task-conclusion.rkt"
                   task-conclusion?
                   task-conclusion-text
@@ -15,8 +15,8 @@
                   task-conclusion-fsm-state-origin)
          (only-in "state-relevance.rkt" context-level-for-state)
          (only-in "../../util/ids.rkt" generate-id)
-         (only-in "../../util/fsm.rkt" fsm-state? fsm-state-name)
-         (only-in "../../util/content-parts.rkt" text-part-text text-part? text-part)
+         (only-in "../../util/fsm/fsm.rkt" fsm-state? fsm-state-name)
+         (only-in "../../util/content/content-parts.rkt" text-part-text text-part? text-part)
          "context-floor.rkt"
          (only-in "conclusion-graph.rkt"
                   build-conclusion-graph

@@ -9,11 +9,11 @@
          rackunit/text-ui
          racket/string
          racket/file
-         "../util/message.rkt"
-         "../util/content-parts.rkt"
-         "../util/event.rkt"
-         (only-in "../runtime/session-compaction.rkt" compact-context-mid-turn)
-         "../runtime/compactor.rkt"
+         "../util/message/message.rkt"
+         "../util/content/content-parts.rkt"
+         "../util/event/event.rkt"
+         (only-in "../runtime/compaction/session-compaction.rkt" compact-context-mid-turn)
+         "../runtime/compaction/compactor.rkt"
          "../runtime/agent-session.rkt"
          "../runtime/runtime-helpers.rkt"
          "../runtime/iteration/retry-policy.rkt"

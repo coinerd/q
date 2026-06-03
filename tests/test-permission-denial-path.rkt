@@ -6,7 +6,7 @@
          rackunit/text-ui
          "../tools/permission-gate.rkt"
          "../tools/tool.rkt"
-         (only-in "../util/tool-types.rkt" make-tool-call tool-call?)
+         (only-in "../util/tool/tool-types.rkt" make-tool-call tool-call?)
          "../tools/scheduler.rkt")
 
 (define (run-single-tool name args-hash perm-cfg)

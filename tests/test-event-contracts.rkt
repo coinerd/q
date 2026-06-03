@@ -2,7 +2,7 @@
 
 (require rackunit
          rackunit/text-ui
-         "../util/event-classes.rkt")
+         "../util/event/event-classes.rkt")
 
 (define event-contract-tests
   (test-suite "event-classes contracts"

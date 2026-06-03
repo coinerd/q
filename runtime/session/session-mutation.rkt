@@ -10,7 +10,7 @@
          "session-types.rkt"
          (submod "session-types.rkt" internal)
          (only-in "session-config.rkt" session-config?)
-         (only-in "../../util/errors.rkt" raise-session-error)
+         (only-in "../../util/error/errors.rkt" raise-session-error)
          (only-in "../session-index/schema.rkt" session-index?)
          (only-in "../context-assembly/task-state.rkt" task-states-list task-valid-direct-transition?)
          (only-in "../context-assembly/ws-evolution.rkt"

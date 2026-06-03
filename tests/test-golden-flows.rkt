@@ -27,7 +27,7 @@
                   stream-chunk-done?
                   make-stream-chunk)
          (only-in "../agent/event-bus.rkt" make-event-bus event-bus? subscribe! unsubscribe! publish!)
-         (only-in "../util/protocol-types.rkt"
+         (only-in "../util/message/protocol-types.rkt"
                   make-event
                   event-event
                   event-ev
@@ -60,15 +60,15 @@
                   tool-result-is-error?)
          "../extensions/api.rkt"
          "../util/cancellation.rkt"
-         "../util/jsonl.rkt"
+         "../util/json/jsonl.rkt"
          (prefix-in sdk: "../interfaces/sdk.rkt")
-         (only-in "../runtime/compactor.rkt"
+         (only-in "../runtime/compaction/compactor.rkt"
                   compaction-result?
                   compaction-result-removed-count
                   compaction-result-kept-messages
                   compaction-result->message-list
                   compact-and-persist!)
-         (only-in "../runtime/token-compaction.rkt" token-compaction-config)
+         (only-in "../runtime/compaction/token-compaction.rkt" token-compaction-config)
          "helpers/compaction-helpers.rkt"
          (only-in "../runtime/agent-session.rkt" session-history)
          (only-in "../interfaces/cli.rkt"
@@ -91,7 +91,7 @@
                   intent?
                   intent
                   event->json-line)
-         (only-in "../runtime/session-store.rkt" load-session-log))
+         (only-in "../runtime/session/session-store.rkt" load-session-log))
 
 ;; ============================================================
 ;; Helpers

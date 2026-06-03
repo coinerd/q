@@ -9,7 +9,7 @@
 (require rackunit
          rackunit/text-ui
          "../tui/state.rkt"
-         "../util/protocol-types.rkt")
+         "../util/message/protocol-types.rkt")
 
 (define (make-test-event ev-type
                          payload

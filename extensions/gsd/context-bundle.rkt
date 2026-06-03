@@ -9,7 +9,7 @@
 
 (require racket/contract
          racket/string
-         (only-in "../../util/errors.rkt" raise-extension-error)
+         (only-in "../../util/error/errors.rkt" raise-extension-error)
          racket/match
          "plan-types.rkt")
 

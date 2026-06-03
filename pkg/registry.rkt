@@ -8,7 +8,7 @@
 ;; Provides functions to search, resolve, and query the package index.
 
 (require racket/contract
-         "../util/json-helpers.rkt")
+         "../util/json/json-helpers.rkt")
 (require json
          racket/string
          racket/list

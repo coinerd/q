@@ -23,7 +23,7 @@
          (only-in racket/dict dict-ref dict-set)
          racket/path
          (only-in "../../util/loop-result.rkt" make-loop-result)
-         (only-in "../../util/message.rkt" message-id message-kind message?)
+         (only-in "../../util/message/message.rkt" message-id message-kind message?)
          (only-in "../../util/loop-result.rkt" loop-result-termination-reason)
          (only-in "session-lifecycle-transitions.rkt"
                   build-user-message
@@ -31,11 +31,11 @@
                   inject-system-instructions)
          "../../agent/event-bus.rkt"
          (only-in "../../util/hook-types.rkt" hook-result-action hook-result-payload)
-         (only-in "../../util/errors.rkt" raise-session-error)
+         (only-in "../../util/error/errors.rkt" raise-session-error)
          "session-store.rkt"
          (only-in "../../agent/state.rkt" current-loop-state-for-error-recovery loop-state-messages)
          "../session-index/schema.rkt" "../session-index/mutations.rkt" "../session-index/query.rkt"
-         (only-in "../../util/event-payloads.rkt" error-payload input-payload payload->hash)
+         (only-in "../../util/event/event-payloads.rkt" error-payload input-payload payload->hash)
          (only-in "../../util/telemetry.rkt" with-telemetry)
          (only-in "../context/context-assembly.rkt"
                   (build-session-context build-session-context/from-index)

@@ -6,7 +6,7 @@
 
 (require rackunit
          racket/generator
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          "../agent/event-bus.rkt"
          "../agent/state.rkt"
          "../agent/queue.rkt"

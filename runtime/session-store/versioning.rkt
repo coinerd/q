@@ -7,13 +7,13 @@
          racket/match
          racket/file
          json
-         (only-in "../../util/message.rkt"
+         (only-in "../../util/message/message.rkt"
                   jsexpr->message
                   make-message
                   message->jsexpr
                   message-meta-safe)
-         "../../util/jsonl.rkt"
-         (only-in "../../util/message-helpers.rkt" ensure-parent-dirs!)
+         "../../util/json/jsonl.rkt"
+         (only-in "../../util/message/message-helpers.rkt" ensure-parent-dirs!)
          (only-in "../../util/ids.rkt" generate-id)
          (only-in "../../util/entry-predicates.rkt" session-info-entry?))
 

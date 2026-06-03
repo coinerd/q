@@ -6,7 +6,7 @@
 
 (require racket/contract
          (only-in racket/string string-prefix?)
-         (only-in "../util/event.rkt" make-event event?)
+         (only-in "../util/event/event.rkt" make-event event?)
          (only-in "../agent/event-bus.rkt" publish! event-bus? typed-event->event)
          (only-in "../agent/state.rkt" state-add-event! loop-state?)
          (only-in "../agent/event-structs/base.rkt"
@@ -16,8 +16,8 @@
                   typed-event-session-id
                   typed-event-turn-id)
          ;; Auto-populated field registry from define-typed-event (I-12)
-         (only-in "../util/event-macro.rkt" lookup-event-fields lookup-event-serializer)
-         (only-in "../util/event-contracts.rkt" event-payload-contract)
+         (only-in "../util/event/event-macro.rkt" lookup-event-fields lookup-event-serializer)
+         (only-in "../util/event/event-contracts.rkt" event-payload-contract)
          (only-in "../util/ids.rkt" now-seconds))
 
 ;; NOTE (v0.29.14): emit-typed-event! has 2+ production callers (runtime/session-switch.rkt).

@@ -12,8 +12,8 @@
 ;;
 ;; #1195: Additional LLM Provider Adapters
 
-(require "../util/error-helpers.rkt")
-(require "../util/errors.rkt")
+(require "../util/error/error-helpers.rkt")
+(require "../util/error/errors.rkt")
 (require "provider-errors.rkt")
 (require racket/contract
          "timing.rkt"

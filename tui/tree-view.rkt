@@ -17,8 +17,8 @@
          racket/list
          racket/string
          racket/set
-         (only-in "../util/content-parts.rkt" text-part text-part-text text-part?)
-         (only-in "../util/message.rkt"
+         (only-in "../util/content/content-parts.rkt" text-part text-part-text text-part?)
+         (only-in "../util/message/message.rkt"
                   message-content
                   message-id
                   message-parent-id

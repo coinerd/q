@@ -10,10 +10,10 @@
 (require rackunit
          rackunit/text-ui
          racket/list
-         "../util/protocol-types.rkt"
-         "../runtime/session-store.rkt"
+         "../util/message/protocol-types.rkt"
+         "../runtime/session/session-store.rkt"
          "../runtime/session-index.rkt"
-         "../runtime/context-assembly.rkt"
+         "../runtime/context/context-assembly.rkt"
          "../llm/token-budget.rkt")
 
 ;; ── Helpers ──────────────────────────────────────────────────

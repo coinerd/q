@@ -16,7 +16,7 @@
          "../ui-core/dispatch.rkt"
          "../ui-core/theme-protocol.rkt"
          "../ui-core/layout-protocol.rkt"
-         "../util/event.rkt"
+         "../util/event/event.rkt"
          "../util/version.rkt"
          "../extensions/hooks.rkt"
          "../tui/command-parse.rkt"

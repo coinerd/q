@@ -14,7 +14,7 @@
 ;;   racket scripts/arch-report.rkt --ci         # CI mode: exit 1 on violations
 ;;   racket scripts/arch-report.rkt --json       # JSON output
 
-(require "../util/error-helpers.rkt")
+(require "../util/error/error-helpers.rkt")
 (require racket/port
          racket/string
          racket/list

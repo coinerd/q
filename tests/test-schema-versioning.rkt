@@ -5,7 +5,7 @@
 
 (require rackunit
          rackunit/text-ui
-         (only-in "../util/event-macro.rkt"
+         (only-in "../util/event/event-macro.rkt"
                   define-typed-event
                   with-fresh-event-registries
                   current-event-schema-registry

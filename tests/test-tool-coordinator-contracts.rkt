@@ -9,7 +9,7 @@
 
 (require rackunit
          racket/hash
-         (only-in "../util/protocol-types.rkt"
+         (only-in "../util/message/protocol-types.rkt"
                   message?
                   message-role
                   message-content

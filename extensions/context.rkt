@@ -18,7 +18,7 @@
 ;;   - Transparent struct for testability and debugging
 
 (require racket/contract
-         (only-in "../runtime/provider-registry.rkt"
+         (only-in "../runtime/provider/provider-registry.rkt"
                   register-provider!
                   unregister-provider!
                   list-providers
@@ -27,7 +27,7 @@
                   provider-info-provider)
          (only-in "../llm/provider.rkt" provider?)
          ;; M-06: Import struct from pure types module
-         "../util/extension-types.rkt")
+         "../util/extension/extension-types.rkt")
 
 ;; Struct and predicate
 (provide extension-ctx

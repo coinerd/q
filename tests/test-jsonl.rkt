@@ -7,7 +7,7 @@
          racket/file
          racket/port
          json
-         "../util/jsonl.rkt")
+         "../util/json/jsonl.rkt")
 
 ;; Helper: create a temp file path, clean up after test
 (define (with-temp-file proc)

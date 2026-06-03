@@ -11,8 +11,8 @@
 (require rackunit
          racket/file
          "../runtime/agent-session.rkt"
-         "../runtime/session-types.rkt"
-         (only-in "../runtime/session-mutation.rkt" guarded-set-prompt-running!)
+         "../runtime/session/session-types.rkt"
+         (only-in "../runtime/session/session-mutation.rkt" guarded-set-prompt-running!)
          "../agent/event-bus.rkt"
          "../tools/tool.rkt")
 

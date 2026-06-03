@@ -14,7 +14,7 @@
          "../tui/state.rkt"
          "../tui/input.rkt"
          "../tui/char-width.rkt"
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          "tui/event-simulator.rkt")
 
 ;; ============================================================

@@ -6,7 +6,7 @@
 ;; handle-racket-codemod: pattern/template-based structural rewrites.
 
 (require racket/string
-         (only-in "../../util/errors.rkt" raise-extension-error)
+         (only-in "../../util/error/errors.rkt" raise-extension-error)
          racket/list
          (only-in "../racket-tooling-helpers.rkt"
                   raco-fmt
