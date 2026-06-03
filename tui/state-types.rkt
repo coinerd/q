@@ -118,10 +118,10 @@
           [assign-entry-id (-> transcript-entry? ui-state? (values transcript-entry? ui-state?))]
           [next-entry-id (-> ui-state? exact-nonnegative-integer?)]
           ;; Render cache helpers
-          [rendered-cache-ref (-> ui-state? any/c (or/c (listof styled-line?) #f))]
-          [rendered-cache-set (-> ui-state? any/c (listof styled-line?) ui-state?)]
+          [rendered-cache-ref (-> ui-state? exact-integer? (or/c (listof styled-line?) #f))]
+          [rendered-cache-set (-> ui-state? exact-integer? (listof styled-line?) ui-state?)]
           [rendered-cache-clear (-> ui-state? ui-state?)]
-          [rendered-cache-invalidate-entry (-> ui-state? any/c ui-state?)]
+          [rendered-cache-invalidate-entry (-> ui-state? exact-integer? ui-state?)]
           [rendered-cache-width-valid? (-> ui-state? exact-nonnegative-integer? boolean?)]
           [rendered-cache-set-width (-> ui-state? exact-nonnegative-integer? ui-state?)]
           [ui-state-rendered-cache (-> ui-state? hash?)]
@@ -134,7 +134,7 @@
           [ui-state-streaming-text (-> ui-state? (or/c string? #f))]
           [ui-state-streaming-thinking (-> ui-state? (or/c string? #f))]
           [ui-state-streaming-phase (-> ui-state? symbol?)]
-          [ui-state-busy-since (-> ui-state? any/c)]
+          [ui-state-busy-since (-> ui-state? (or/c exact-integer? #f))]
           ;; Streaming update helpers
           [update-streaming (-> ui-state? (-> streaming-state? streaming-state?) ui-state?)]
           [set-busy (-> ui-state? boolean? ui-state?)]
@@ -143,7 +143,7 @@
           [set-streaming-text (-> ui-state? (or/c string? #f) ui-state?)]
           [set-streaming-thinking (-> ui-state? (or/c string? #f) ui-state?)]
           [set-streaming-phase (-> ui-state? symbol? ui-state?)]
-          [set-busy-since (-> ui-state? any/c ui-state?)]
+          [set-busy-since (-> ui-state? (or/c exact-integer? #f) ui-state?)]
           [clear-streaming (-> ui-state? ui-state?)]
           ;; String helpers
           [truncate-string (-> string? exact-nonnegative-integer? string?)]

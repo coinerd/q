@@ -11,13 +11,16 @@
 (require racket/contract)
 
 ;; Agent steering/followup message queue
-(provide (contract-out [make-queue (-> queue?)]
+(define queue-element? string?)
+
+(provide queue-element?
+         (contract-out [make-queue (-> queue?)]
                        [queue? (-> any/c boolean?)]
-                       [enqueue-steering! (-> queue? any/c void?)]
-                       [enqueue-followup! (-> queue? any/c void?)]
-                       [dequeue-steering! (-> queue? (or/c any/c #f))]
-                       [dequeue-followup! (-> queue? (or/c any/c #f))]
-                       [dequeue-all-followups! (-> queue? list?)]
+                       [enqueue-steering! (-> queue? queue-element? void?)]
+                       [enqueue-followup! (-> queue? queue-element? void?)]
+                       [dequeue-steering! (-> queue? (or/c queue-element? #f))]
+                       [dequeue-followup! (-> queue? (or/c queue-element? #f))]
+                       [dequeue-all-followups! (-> queue? (listof queue-element?))]
                        [queue-empty? (-> queue? boolean?)]
                        [queue-status (-> queue? hash?)]
                        [queue-set-event-callback! (-> queue? (or/c procedure? #f) void?)]))
