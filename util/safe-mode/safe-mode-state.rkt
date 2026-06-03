@@ -82,11 +82,15 @@
        [(and (list? allowed-paths) (not (eq? allowed-paths 'default)))
         (for/or ([ap (in-list allowed-paths)])
           (define resolved-path
-            (with-handlers ([exn:fail? (λ (_) #f)])
-              (resolve-path path)))
+            (or (with-handlers ([exn:fail? (λ (_) #f)])
+                  (resolve-path path))
+                (with-handlers ([exn:fail? (λ (_) #f)])
+                  (simplify-path path))))
           (define resolved-ap
-            (with-handlers ([exn:fail? (λ (_) #f)])
-              (resolve-path ap)))
+            (or (with-handlers ([exn:fail? (λ (_) #f)])
+                  (resolve-path ap))
+                (with-handlers ([exn:fail? (λ (_) #f)])
+                  (simplify-path ap))))
           (and resolved-path
                resolved-ap
                (let* ([path-str (path->string
@@ -103,12 +107,18 @@
                  (or (string=? path-str ap-str)
                      (string-prefix? path-str ap-prefix)))))]
        [else
-        (and (with-handlers ([exn:fail? (λ (_) #f)])
-               (resolve-path root-path))
-             (with-handlers ([exn:fail? (λ (_) #f)])
-               (resolve-path path))
-             (let* ([resolved-root (resolve-path root-path)]
-                    [resolved-path (resolve-path path)]
+        (and (or (with-handlers ([exn:fail? (λ (_) #f)])
+                   (resolve-path root-path))
+                 (with-handlers ([exn:fail? (λ (_) #f)])
+                   (simplify-path root-path)))
+             (or (with-handlers ([exn:fail? (λ (_) #f)])
+                   (resolve-path path))
+                 (with-handlers ([exn:fail? (λ (_) #f)])
+                   (simplify-path path)))
+             (let* ([resolved-root (or (resolve-path root-path)
+                                       (simplify-path root-path))]
+                    [resolved-path (or (resolve-path path)
+                                       (simplify-path path))]
                     [root-str (path->string
                                (if (complete-path? resolved-root)
                                    resolved-root

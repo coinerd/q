@@ -213,7 +213,9 @@
          (let ([p (if (string? expanded)
                       expanded
                       (path->string expanded))])
-           (with-handlers ([exn:fail? (lambda (_) p)])
+           (with-handlers ([exn:fail? (lambda (e)
+                                        (log-warning "edit: path canonicalization failed for ~a: ~a" p (exn-message e))
+                                        p)])
              (path->string (simplify-path (resolve-path p)))))))
   ;; Argument validation via match — flattened pyramid
   (match (list path-str (hash-ref args 'old-text #f) (hash-ref args 'new-text #f))
