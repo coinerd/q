@@ -24,7 +24,10 @@
          (only-in "../../runtime/runtime-helpers.rkt" maybe-dispatch-hooks emit-session-event!)
          (only-in "../../util/hook-types.rkt" hook-result-action hook-result?)
          (only-in "../../runtime/layer-adapters.rkt" extension-registry?)
-         (only-in "../../runtime/iteration/internal.rkt" assert-payload))
+         (only-in "../../runtime/iteration/internal.rkt" assert-payload)
+         (only-in "../../util/ids.rkt" generate-id)
+         (only-in "../../util/message.rkt" make-message message?)
+         (only-in "../../util/content-parts.rkt" make-text-part))
 
 ;; Re-export for consumers
 (provide (contract-out [prepare-iteration-context
@@ -42,6 +45,21 @@
 ;; Pure-ish: Context preparation
 ;; ============================================================
 
+;; Convert steering queue items to context messages.
+;; TUI steering can arrive as raw strings while iteration context consumers expect message?.
+(define (steering-item->message item)
+  (cond
+    [(message? item) item]
+    [(string? item)
+     (make-message (generate-id)
+                   #f
+                   'user
+                   'message
+                   (list (make-text-part item))
+                   (current-seconds)
+                   (hasheq 'source 'steering))]
+    [else #f]))
+
 ;; Prepare iteration context by dequeuing steering and injected messages.
 ;; Returns the augmented context list.
 (define (prepare-iteration-context ctx steering-queue injected-box bus ext-reg session-id)
@@ -52,9 +70,10 @@
           (let ([qs (queue-status steering-queue)])
             (when (or (> (hash-ref qs 'steering 0) 0) (> (hash-ref qs 'followup 0) 0))
               (emit-session-event! bus session-id "queue.status-update" qs)))
-          (if (null? steering-msgs)
+          (define steering-msgs* (filter values (map steering-item->message steering-msgs)))
+          (if (null? steering-msgs*)
               ctx
-              (append ctx steering-msgs)))
+              (append ctx steering-msgs*)))
         ctx))
   ;; Injected messages
   (if injected-box
