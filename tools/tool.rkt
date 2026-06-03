@@ -4,6 +4,12 @@
 ;; v0.30.8: Decomposed into submodules (exec-context, registry, schema-helpers)
 ;;          W1 verified: all 44 consumers unaffected via re-export.
 ;;          This file re-exports everything for backward compatibility.
+;;
+;; FACADE STATUS (C2-08 assessment, v0.85.1):
+;;   This is NOT a deprecated facade — it is the stable public API for the tool subsystem.
+;;   New consumers should import from tools/tool.rkt directly.
+;;   Sub-modules (tool-struct, exec-context, registry, schema-helpers) are internal.
+;;   Zero consumers bypass this facade to import sub-modules directly.
 
 (require racket/contract
          racket/hash
