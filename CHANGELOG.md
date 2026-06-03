@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.84.1 (2026-06-03)
+
+### Contract Tightening
+
+**W0 (#6799):**
+- `build-stream-result` in `agent/loop-stream.rkt`: all params tightened (hash? event-bus? string? loop-state? tool? provider? loop-result?)
+- `run-streaming-phase` in `agent/loop-dispatch.rkt`: req model-request?, tools (listof tool?), cancellation-token?, return loop-result?
+- `make-tui-ctx` in `tui/context.rkt`: model-registry?, extension-registry?, queue?, box? for optional args
+
+**W1 (#6800):**
+- `turn-model.rkt`: extension-registry (or/c extension-registry? #f), payload hash?, result hash?
+- `state-types.rkt`: cache key exact-integer?, busy-since (or/c exact-integer? #f)
+- `context-files.rkt`: path params use path-string?
+- `queue.rkt`: define queue-element? as string?, tighten enqueue/dequeue contracts
+- 20 contract tests in `test-contract-tightening.rkt` (all pass)
+
 ## v0.84.0 (2026-06-03)
 
 ### Facade Purge & Version Sync
