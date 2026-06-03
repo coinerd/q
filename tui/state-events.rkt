@@ -288,6 +288,13 @@
                                                                #f))
                        'idle))
 
+;; v0.83.10: Handle stream.turn.completed from iteration loop.
+;; Same cleanup as turn.completed but handles the iteration loop's completion path.
+(define (handle-stream-turn-completed state evt)
+  (set-streaming-phase (clear-streaming (set-pending-tool-name (set-busy-since (set-busy state #f) #f)
+                                                               #f))
+                       'idle))
+
 (define (handle-compaction-warning state evt)
   (define payload (event-payload evt))
   (define tc (hash-ref payload 'tokenCount "?"))
@@ -500,6 +507,7 @@
 (register-event-reducer! "auto-retry.context-reduced" handle-auto-retry-lifecycle)
 (register-event-reducer! "model.stream.thinking" handle-model-stream-thinking)
 (register-event-reducer! "model.stream.completed" handle-model-stream-completed)
+(register-event-reducer! "stream.turn.completed" handle-stream-turn-completed)
 (register-event-reducer! "context.pressure" handle-context-pressure)
 
 ;; ============================================================

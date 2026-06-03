@@ -52,6 +52,7 @@
          (only-in "../../agent/iteration/loop-config.rkt" make-loop-config)
          (only-in "../../agent/event-emitter.rkt" emit-typed-event!)
          (only-in "../../agent/event-structs/turn-events.rkt" turn-end-event turn-start-event)
+         (only-in "../../agent/event-structs/session-events.rkt" context-event)
          "session-types.rkt"
          (only-in "session-controls.rkt" set-model! shutdown-requested? force-shutdown-requested?)
          (only-in "../../llm/token-budget.rkt" DEFAULT-TOKEN-BUDGET-THRESHOLD)
@@ -269,6 +270,7 @@
                          #:cancellation-token cancellation-tok
                          #:config cfg
                          #:working-set ws
+                         #:queue (agent-session-queue sess)
                          #:shutdown-check (lambda () (agent-session-shutdown-requested? sess))
                          #:force-shutdown-check (lambda () (agent-session-force-shutdown? sess))
                          #:session sess)))
@@ -296,7 +298,8 @@
   (define ws (make-working-set))
   (define base-cfg (agent-session-config sess))
   ;; v0.30.4: dict-set works on both hash? and session-config?
-  (guarded-set-config! sess (dict-set base-cfg 'working-set ws))
+  (guarded-set-config! sess (dict-set (dict-set base-cfg 'working-set ws)
+                                          'session-index (agent-session-index sess)))
 
   ;; 1. Build context: convert message, append to log, load history, inject system instructions
   (define context-with-system
@@ -309,6 +312,15 @@
   ;; 2a. Emit context-pressure event for TUI/extensions
   (define token-count (estimate-context-tokens context-after-compact))
   (check-context-pressure sess token-count token-budget-threshold)
+
+  ;; 2b. v0.83.10: Emit context.built so TUI status bar shows token count
+  (emit-typed-event!
+   bus
+   (context-event #:session-id sid
+                   #:turn-id #f
+                   #:timestamp (current-inexact-milliseconds)
+                   #:token-count token-count
+                   #:window-size (length context-after-compact)))
 
   ;; 3. Ensure session directory exists before iteration writes assistant messages
   (ensure-persisted!-fn sess)

@@ -376,8 +376,8 @@
     [(= (length jobs) 0) (make-error-result "jobs array must not be empty")]
     [(> (length jobs) 12) (make-error-result "jobs array must not exceed 12 items")]
     [(< max-parallel 1) (make-error-result "maxParallel must be at least 1")]
-    [(> max-parallel 3) (make-error-result "maxParallel must not exceed 3")]
     [else
+     ;; v0.83.10: Clamp instead of reject. Semaphore-based queuing handles excess.
      (define effective-parallel (min max-parallel (length jobs) 3))
      (with-handlers ([exn:fail? (lambda (e)
                                   (make-error-result (format "spawn-subagents failed: ~a"

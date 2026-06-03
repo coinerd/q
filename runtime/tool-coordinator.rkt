@@ -28,7 +28,8 @@
                   config-provider
                   config-model-name
                   config-session-index
-                  config-parallel-tools)
+                  config-parallel-tools
+                  config-project-dir)
          (only-in "../util/tool-types.rkt" tool-call?)
          (only-in "layer-adapters.rkt" tool-result? tool-registry?)
          (only-in "../util/json-helpers.rkt" ensure-hash-args)
@@ -197,7 +198,7 @@
           #:hook-dispatcher hook-dispatcher-fn
           #:exec-context
           (make-exec-context
-           #:working-directory (path-only log-path)
+           #:working-directory (or (config-project-dir config) (path-only log-path))
            #:cancellation-token token
            #:event-publisher
            (lambda (event-type payload)
