@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.83.12 (2026-06-03)
+
+### TUI Status Bar Visual Gap
+
+**W0 (#6784):**
+- TUI status bar goal-state coverage: `test-tui-goal-status-bar.rkt` with 7 tests
+- `handle-stream-turn-completed` preserves active-goal visual state (re-sets busy and status-message)
+- `handle-context-built` accepts both `'tokenCount` and `'token-count` payload keys
+- `handle-model-stream-completed` tolerates missing/`#f` usage (hash? guard, positive? check)
+- `handle-goal-turn-started` sets `busy?` to `#t` and `busy-since` to event timestamp
+- `handle-goal-status` sets `ui-state-status-message` in addition to transcript entry
+
+**W1 (#6785):**
+- Steering normalization: raw steering strings become `message?` values (role `'user`, meta source `'steering`) before context append
+- Bash warning suppression: benign command substitution (e.g., `name=$(basename "$f")`) no longer prints destructive warning or `[CLASSIFIER-DIAG]`
+- Regex-only risky commands (e.g., `source /tmp/...`) still warn/block as before
+
 ## v0.83.11 (2026-06-03)
 
 ### Audit Closure Hotfix
