@@ -91,10 +91,24 @@
                                     #:timeout [timeout-secs #f]
                                     #:status-checker [status-checker #f])
   (define uri (string->url url-str))
+  (define host (url-host uri))
+  (define path-str
+    (string-append "/"
+                   (string-join (for/list ([p (in-list (url-path uri))])
+                                  (path/param-path p))
+                                "/")))
+  (define ssl? (and (url-scheme uri) (not (equal? (url-scheme uri) "http"))))
+  (define port (or (url-port uri) (if ssl? 443 80)))
   (define effective-timeout (or timeout-secs (current-http-request-timeout)))
   (call-with-request-timeout (lambda ()
                                (define-values (status-line response-headers response-port)
-                                 (http-sendrecv uri 'POST #:headers headers #:data body-bytes))
+                                 (http-sendrecv host
+                                                path-str
+                                                #:port port
+                                                #:ssl? ssl?
+                                                #:method #"POST"
+                                                #:headers headers
+                                                #:data body-bytes))
                                (define response-body (read-response-body/timeout response-port))
                                (when status-checker
                                  (status-checker status-line response-body))

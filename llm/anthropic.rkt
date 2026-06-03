@@ -319,6 +319,14 @@
     (define body (anthropic-build-request-body merged-req #:stream? #t))
     (define url-str (string-append (string-trim base-url "/") "/v1/messages"))
     (define uri (string->url url-str))
+    (define host (url-host uri))
+    (define path-str
+      (string-append "/"
+                     (string-join (for/list ([p (in-list (url-path uri))])
+                                    (path/param-path p))
+                                  "/")))
+    (define ssl? (and (url-scheme uri) (not (equal? (url-scheme uri) "http"))))
+    (define port (or (url-port uri) (if ssl? 443 80)))
     (define headers
       (list (format "x-api-key: ~a" api-key)
             (format "anthropic-version: ~a" ANTHROPIC-VERSION)
@@ -330,15 +338,22 @@
      (lambda ()
        ;; Wrap initial HTTP request in overall timeout (SEC-11)
        (define result-vec
-         (call-with-request-timeout
-          #:cleanup (lambda ()
-                      (define rp (unbox response-port-box))
-                      (when rp
-                        (with-logged-error "port cleanup" (close-input-port rp))))
-          (lambda ()
-            (define-values (sl rh rp) (http-sendrecv uri 'POST #:headers headers #:data body-bytes))
-            (set-box! response-port-box rp)
-            (vector sl rh rp))))
+         (call-with-request-timeout #:cleanup (lambda ()
+                                                (define rp (unbox response-port-box))
+                                                (when rp
+                                                  (with-logged-error "port cleanup"
+                                                                     (close-input-port rp))))
+                                    (lambda ()
+                                      (define-values (sl rh rp)
+                                        (http-sendrecv host
+                                                       path-str
+                                                       #:port port
+                                                       #:ssl? ssl?
+                                                       #:method #"POST"
+                                                       #:headers headers
+                                                       #:data body-bytes))
+                                      (set-box! response-port-box rp)
+                                      (vector sl rh rp))))
        (define status-line (vector-ref result-vec 0))
        (define response-headers (vector-ref result-vec 1))
        (define response-port (vector-ref result-vec 2))
