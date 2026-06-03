@@ -560,12 +560,18 @@
                     (struct-copy goal-display-info current [turns-used turns] [status 'failed])])
       state))
 
+(define (handle-goal-status state evt)
+  (define payload (event-payload evt))
+  (define msg (hash-ref payload 'message ""))
+  (append-entry state (make-entry 'system (format "[goal] ~a" msg) (event-time evt) (hash))))
+
 (register-event-reducer! "goal.started" handle-goal-started)
 (register-event-reducer! "goal.turn.started" handle-goal-turn-started)
 (register-event-reducer! "goal.evaluated" handle-goal-evaluated)
 (register-event-reducer! "goal.check.completed" handle-goal-check-completed)
 (register-event-reducer! "goal.achieved" handle-goal-achieved)
 (register-event-reducer! "goal.failed" handle-goal-failed)
+(register-event-reducer! "goal.status" handle-goal-status)
 
 ;; ============================================================
 ;; Event reduction dispatch

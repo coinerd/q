@@ -60,18 +60,31 @@
 ;; No-progress detection
 ;; ============================================================
 
+;; Check if an evaluation result is an evaluator infrastructure error
+;; (HTTP crash, timeout, etc.) rather than a genuine "not achieved" verdict.
+(define (evaluator-infrastructure-error? er)
+  (define r (evaluation-result-reason er))
+  (or (string-prefix? r "Agent evaluator error:") (string-prefix? r "Evaluator error:")))
+
 ;; Returns #t if the last NO-PROGRESS-THRESHOLD evaluations have the same reason
 ;; AND none achieved the goal.
+;; Evaluator infrastructure errors (HTTP crashes, timeouts) are excluded — they
+;; indicate the evaluator itself failed, not that the goal made no progress.
 (define/contract (consecutive-same-reason? evaluations)
   (-> (listof evaluation-result?) boolean?)
   (cond
     [(< (length evaluations) NO-PROGRESS-THRESHOLD) #f]
     [else
      (define last-n (take-right evaluations NO-PROGRESS-THRESHOLD))
-     (define reasons (map evaluation-result-reason last-n))
-     (define all-failed? (andmap (lambda (e) (not (evaluation-result-achieved? e))) last-n))
-     (define all-same? (andmap (lambda (r) (equal? r (car reasons))) (cdr reasons)))
-     (and all-failed? all-same?)]))
+     ;; Filter out evaluator infrastructure errors — these are NOT lack of progress
+     (define meaningful (filter (lambda (e) (not (evaluator-infrastructure-error? e))) last-n))
+     (cond
+       [(< (length meaningful) NO-PROGRESS-THRESHOLD) #f]
+       [else
+        (define reasons (map evaluation-result-reason meaningful))
+        (define all-failed? (andmap (lambda (e) (not (evaluation-result-achieved? e))) meaningful))
+        (define all-same? (andmap (lambda (r) (equal? r (car reasons))) (cdr reasons)))
+        (and all-failed? all-same?)])]))
 
 ;; Detect no-progress from a list of evaluation results.
 ;; Returns #t if stall is detected, #f otherwise.

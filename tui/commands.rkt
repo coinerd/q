@@ -36,6 +36,7 @@
                   session-provider
                   session-event-bus
                   session-id)
+         (only-in "../runtime/runtime-helpers.rkt" emit-session-event!)
          (only-in "../runtime/session/session-config.rkt" current-goal-loop-enabled?)
          ;; Sub-module imports
          (only-in "commands/context.rkt"
@@ -434,7 +435,8 @@
                  (define evaluator-model "default")
                  ;; Create adapters
                  (define on-event (make-goal-event-bridge bus sid))
-                 (define on-status (lambda (msg) (displayln (format "goal: ~a" msg))))
+                 (define on-status
+                   (lambda (msg) (emit-session-event! bus sid "goal.status" (hasheq 'message msg))))
                  (define shutdown-box (cmd-ctx-running-box cctx))
                  (define cancel-box (cmd-ctx-goal-cancel-box cctx))
                  (define run-prompt! (make-goal-run-prompt! sess))
