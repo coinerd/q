@@ -182,7 +182,8 @@
      (cond
        [(and tool (clipboard-copy-via-tool (car tool) (cadr tool) text))
         ;; System tool succeeded — also emit OSC 52 for SSH sessions
-        (with-handlers ([exn:fail? (lambda (e) (void))])
+        (with-handlers ([exn:fail? (lambda (e)
+                                    (log-debug "clipboard: OSC 52 copy failed: ~a" (exn-message e)))])
           (osc-52-copy text out))
         'ok-system]
        [else
@@ -263,7 +264,9 @@
                                               (string-trim result "\r\n")
                                               #f))
                                         (lambda ()
-                                          (with-handlers ([exn:fail? (lambda (e) (void))])
+                                          (with-handlers ([exn:fail? (lambda (e)
+                                                                      (log-debug "clipboard: close out failed: ~a" (exn-message e)))])
                                             (close-input-port out))
-                                          (with-handlers ([exn:fail? (lambda (e) (void))])
+                                          (with-handlers ([exn:fail? (lambda (e)
+                                                                      (log-debug "clipboard: close err failed: ~a" (exn-message e)))])
                                             (close-input-port err)))))))

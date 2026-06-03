@@ -73,7 +73,9 @@
     (and (semaphore-try-wait? completion-sema)
          (begin
            ;; Close listener FIRST — ensures no more connections
-           (with-handlers ([exn:fail? (lambda (e) (void))])
+           (with-handlers ([exn:fail? (lambda (e)
+                                        (log-debug "oauth-callback: tcp-close failed: ~a"
+                                                   (exn-message e)))])
              (tcp-close listener))
            ;; Store result non-blocking (box set is immediate)
            (set-box! result-box code)
@@ -81,7 +83,9 @@
            (semaphore-post result-sema)
            ;; Kill server accept loop
            (when server-thread
-             (with-handlers ([exn:fail? (lambda (e) (void))])
+             (with-handlers ([exn:fail? (lambda (e)
+                                          (log-debug "oauth-callback: kill-thread failed: ~a"
+                                                     (exn-message e)))])
                (kill-thread server-thread)))
            #t)))
 
@@ -91,7 +95,9 @@
   ;; enclosing with-handlers.
   (set! server-thread
         (thread (lambda ()
-                  (with-handlers ([exn:fail? (lambda (e) (void))])
+                  (with-handlers ([exn:fail? (lambda (e)
+                                               (log-debug "oauth-callback: accept loop exited: ~a"
+                                                          (exn-message e)))])
                     (let loop ()
                       (define-values (in out) (tcp-accept listener))
                       (thread (lambda () (handle-connection in out state try-complete!)))

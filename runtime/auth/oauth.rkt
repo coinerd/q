@@ -304,6 +304,7 @@
                 (oauth-token->jsexpr v))))
     (define tmp (make-temporary-file "oauth-token-~a.tmp" #f (or dir (find-system-path 'temp-dir))))
     (with-handlers ([exn:fail? (lambda (e)
+                                 (log-warning "oauth: token save failed: ~a" (exn-message e))
                                  (with-handlers ([exn:fail? (lambda (_) (void))])
                                    (delete-file tmp))
                                  (raise e))])

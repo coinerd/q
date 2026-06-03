@@ -34,7 +34,9 @@
          (only-in "../../util/error/errors.rkt" raise-session-error)
          "session-store.rkt"
          (only-in "../../agent/state.rkt" current-loop-state-for-error-recovery loop-state-messages)
-         "../session-index/schema.rkt" "../session-index/mutations.rkt" "../session-index/query.rkt"
+         "../session-index/schema.rkt"
+         "../session-index/mutations.rkt"
+         "../session-index/query.rkt"
          (only-in "../../util/event/event-payloads.rkt" error-payload input-payload payload->hash)
          (only-in "../../util/telemetry.rkt" with-telemetry)
          (only-in "../context/context-assembly.rkt"
@@ -298,8 +300,9 @@
   (define ws (make-working-set))
   (define base-cfg (agent-session-config sess))
   ;; v0.30.4: dict-set works on both hash? and session-config?
-  (guarded-set-config! sess (dict-set (dict-set base-cfg 'working-set ws)
-                                          'session-index (agent-session-index sess)))
+  (guarded-set-config!
+   sess
+   (dict-set (dict-set base-cfg 'working-set ws) 'session-index (agent-session-index sess)))
 
   ;; 1. Build context: convert message, append to log, load history, inject system instructions
   (define context-with-system
@@ -314,13 +317,12 @@
   (check-context-pressure sess token-count token-budget-threshold)
 
   ;; 2b. v0.83.10: Emit context.built so TUI status bar shows token count
-  (emit-typed-event!
-   bus
-   (make-context-event #:session-id sid
-                   #:turn-id #f
-                   #:timestamp (current-inexact-milliseconds)
-                   #:token-count token-count
-                   #:window-size (length context-after-compact)))
+  (emit-typed-event! bus
+                     (make-context-event #:session-id sid
+                                         #:turn-id #f
+                                         #:timestamp (current-inexact-milliseconds)
+                                         #:token-count token-count
+                                         #:window-size (length context-after-compact)))
 
   ;; 3. Ensure session directory exists before iteration writes assistant messages
   (ensure-persisted!-fn sess)
@@ -434,14 +436,19 @@
      ;; v0.45.14 W0a: Safety-net turn.completed for TUI busy-state recovery
      ;; only on abnormal/early-exit paths.
      (when (unbox emit-cleanup-turn-completed?)
-       (with-handlers ([exn:fail? void])
+       (with-handlers ([exn:fail? (lambda (e)
+                                    (log-warning
+                                     "session-lifecycle: cleanup turn.completed failed: ~a"
+                                     (exn-message e)))])
          (define sid (agent-session-session-id sess))
          (define bus (agent-session-event-bus sess))
          (emit-typed-event!
           bus
           (turn-end-event "turn.completed" (current-inexact-milliseconds) sid #f "cleanup" 0))))
      (unless (agent-session-persisted? sess)
-       (with-handlers ([exn:fail? void])
+       (with-handlers ([exn:fail? (lambda (e)
+                                    (log-warning "session-lifecycle: emergency persist failed: ~a"
+                                                 (exn-message e)))])
          (ensure-persisted! sess))))))
 
 ;; ============================================================

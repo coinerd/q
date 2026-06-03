@@ -106,7 +106,8 @@
   (when (and stale-ms (file-exists? lock-file))
     (define existing-pid (read-lock-pid lock-file))
     (when (and existing-pid (not (pid-alive? existing-pid)))
-      (with-handlers ([exn:fail? void])
+      (with-handlers ([exn:fail? (lambda (e)
+                                   (log-debug "lockfile: stale lock delete failed: ~a" (exn-message e)))])
         (delete-file lock-file))))
   ;; Try to create lock file exclusively
   (with-safe-fallback #f
@@ -119,7 +120,8 @@
 
 ;; Release lock by deleting the file (only if we own it)
 (define (release-lock! lock-file)
-  (with-handlers ([exn:fail? void])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-debug "lockfile: release failed: ~a" (exn-message e)))])
     (when (file-exists? lock-file)
       (define our-pid (getpid))
       (define owner-pid (read-lock-pid lock-file))
