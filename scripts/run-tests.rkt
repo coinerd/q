@@ -186,7 +186,9 @@
         f))
   (define base (file-name-from-path s))
   (or (string-contains? s "/helpers/")
-      (string-contains? s "/fixtures/")
+      ;; Exclude fixture support modules, but include fixtures/test-*.rkt self-tests
+      (and (string-contains? s "/fixtures/")
+           (or (not base) (not (string-prefix? (path->string base) "test-"))))
       (and base (member (path->string base) support-test-module-names) #t)))
 
 ;; Base directory for resolving test paths.
@@ -246,7 +248,10 @@
       (file-has-suite-tag? f "extensions")))
 
 (define (workflows-file? f)
-  (and (string-contains? f "/workflows/") (not (string-contains? f "/fixtures/"))))
+  (and (string-contains? f "/workflows/")
+       (or (not (string-contains? f "/fixtures/"))
+           ;; Include fixture self-tests (test-*.rkt)
+           (string-prefix? (path->string (file-name-from-path f)) "test-"))))
 
 (define (collect-test-files suite #:extra-files [extra-files #f])
   (cond
@@ -670,7 +675,7 @@
   (displayln "  arch    Architecture boundary/fitness tests")
   (displayln "  runtime Runtime/session/compaction/iteration tests")
   (displayln "  extensions Extension/GSD/hook tests")
-  (displayln "  workflows All tests/workflows/ excluding fixtures (integration-level)"))
+  (displayln "  workflows All tests/workflows/ including fixture self-tests (integration-level)"))
 
 (define (parse-args args)
   (let loop ([rest args]
@@ -1094,7 +1099,8 @@
   (unless (directory-exists? evid-dir)
     (make-directory evid-dir))
   (define ver
-    (let ([m (regexp-match #rx"define q-version \"([^\"]+)\"" (file->string (build-path base-dir "util/version.rkt")))])
+    (let ([m (regexp-match #rx"define q-version \"([^\"]+)\""
+                           (file->string (build-path base-dir "util/version.rkt")))])
       (or (and m (cadr m)) "unknown")))
   (define sha (get-git-sha))
   (define pass-count (for/sum ([r (in-list results)]) (test-file-result-passed r)))
