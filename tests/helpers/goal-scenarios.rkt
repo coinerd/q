@@ -33,6 +33,7 @@
          make-goal-provider
          make-goal-provider-no-progress
          make-goal-provider-tool-timeout
+         make-goal-provider-per-turn-cap
          
          make-fake-shutdown-check
          make-immediate-shutdown)
@@ -127,6 +128,13 @@
 ;; ---------------------------------------------------------------------------
 ;; Shutdown helpers
 ;; ---------------------------------------------------------------------------
+
+(define (make-goal-provider-per-turn-cap #:iterations [max-iter 5])
+  "Provider that returns incremental progress but never 'achieved'.
+   Forces the goal runner to respect max-iterations cap."
+  (define resp (scenario-text "Working on it... not done yet."))
+  (define-values (prov _cap) (make-scenario-provider (make-list max-iter resp)))
+  prov)
 
 (define (make-fake-shutdown-check)
   (let ([called (box 0)])
