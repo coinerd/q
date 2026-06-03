@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.83.9 (2026-06-03)
+
+### Series Closure, Metrics, and Release Readiness
+- **Metrics report**: Before/after metrics for v0.83.xx series (10 milestones, 23 PRs, 176+ tests).
+- **Test conventions doc**: `docs/TEST_CONVENTIONS.md` with suite guide, metadata tags, sandbox, scenario harnesses, gate evidence.
+- **Series complete**: All 10 milestones (v0.83.0–v0.83.9) delivered.
+
 ## v0.83.8 (2026-06-03)
 
 ### Process Cleanup, Output Bounds, and Flake Burn-In
