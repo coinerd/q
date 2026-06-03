@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.84.0 (2026-06-03)
+
+### Facade Purge & Version Sync
+
+- **Remove 87 deprecated facades** (49 runtime + 38 util)
+  - All runtime/*.rkt facades deleted; imports updated to canonical sub-package paths (runtime/auth/, runtime/compaction/, runtime/context/, runtime/goal/, runtime/session/, runtime/provider/, etc.)
+  - All util/*.rkt facades deleted; imports updated to canonical sub-package paths (util/content/, util/error/, util/event/, util/export/, util/json/, util/message/, util/safe-mode/, util/tool/, etc.)
+  - 620 files changed, 1048 insertions(+), 1399 deletions(-)
+  - Zero deprecated facades remain in q/
+
 ## v0.83.12 (2026-06-03)
 
 ### TUI Status Bar Visual Gap
