@@ -1,0 +1,19 @@
+name: Nightly
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Racket
+        uses: ./.github/actions/setup-racket
+      - name: Run full test suite
+        run: racket scripts/run-tests.rkt --suite fast
+        timeout-minutes: 15
+      - name: Run lint
+        run: racket scripts/lint-all.rkt
