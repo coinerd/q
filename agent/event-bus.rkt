@@ -21,7 +21,8 @@
           [make-event-bus
            (->* ()
                 (#:threshold (or/c exact-nonnegative-integer? #f)
-                             #:cooldown-secs (or/c exact-nonnegative-integer? #f))
+                             #:cooldown-secs (or/c exact-nonnegative-integer? #f)
+                             #:clock procedure?)
                 event-bus?)]
           [subscribe!
            (->* (event-bus? procedure?) (#:filter (or/c procedure? #f)) exact-nonnegative-integer?)]
@@ -95,9 +96,12 @@
                                         (>= (car entry) threshold)
                                         (let ([cooldown (if bus
                                                             (event-bus-cb-cooldown-secs bus)
-                                                            (current-circuit-breaker-cooldown-secs))])
+                                                            (current-circuit-breaker-cooldown-secs))]
+                                                [clock (if bus
+                                                           (event-bus-clock bus)
+                                                           current-seconds)])
                                           (if (and cooldown
-                                                   (> (- (current-seconds) (cdr entry)) cooldown))
+                                                   (> (- (clock) (cdr entry)) cooldown))
                                               (begin
                                                 ;; Cooldown elapsed, reset
                                                 (hash-remove! breaker-state sub-id)
@@ -116,7 +120,7 @@
      (lambda ()
        (define entry (hash-ref breaker-state sub-id (cons 0 0)))
        (define new-count (add1 (car entry)))
-       (hash-set! breaker-state sub-id (cons new-count (current-seconds)))
+       (hash-set! breaker-state sub-id (cons new-count ((if bus (event-bus-clock bus) current-seconds))))
        (when (= new-count threshold)
          (log-warning "event-bus: subscriber ~a circuit-broken after ~a consecutive failures"
                       sub-id
@@ -140,7 +144,7 @@
 ;; ============================================================
 
 (struct event-bus
-        (subscriptions-box semaphore next-id-box breaker-state cb-threshold cb-cooldown-secs)
+        (subscriptions-box semaphore next-id-box breaker-state cb-threshold cb-cooldown-secs clock)
   #:constructor-name make-event-bus-internal)
 
 ;; ============================================================
@@ -151,8 +155,9 @@
 ;; #:threshold — consecutive failures before circuit breaks (default from parameter)
 ;; #:cooldown-secs — seconds before retrying a broken circuit (default from parameter)
 (define (make-event-bus #:threshold [threshold (current-circuit-breaker-threshold)]
-                        #:cooldown-secs [cooldown (current-circuit-breaker-cooldown-secs)])
-  (make-event-bus-internal (box '()) (make-semaphore 1) (box 0) (make-hash) threshold cooldown))
+                        #:cooldown-secs [cooldown (current-circuit-breaker-cooldown-secs)]
+                        #:clock [clock current-seconds])
+  (make-event-bus-internal (box '()) (make-semaphore 1) (box 0) (make-hash) threshold cooldown clock))
 
 ;; Thread-safe event bus lock helper (Finding A3)
 (define (with-event-bus-lock bus thunk)
