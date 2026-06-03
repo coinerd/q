@@ -379,12 +379,14 @@
   (check-equal? (unbox call-count) 3))
 
 (test-case "W-07c: cooldown-secs allows circuit recovery after wait"
-  (define bus (make-event-bus #:threshold 1 #:cooldown-secs 0))
+  (define fake-time (box 0))
+  (define bus (make-event-bus #:threshold 1 #:cooldown-secs 5
+                              #:clock (λ () (unbox fake-time))))
   (define state (make-hash))
   (record-failure! state 1 #:bus bus)
   (check-true (circuit-broken? state 1 #:bus bus))
-  ;; current-seconds has 1s granularity; sleep to ensure elapsed > 0
-  (sleep 1.1)
+  ;; Advance fake clock past cooldown
+  (set-box! fake-time 6)
   (check-false (circuit-broken? state 1 #:bus bus)))
 
 (test-case "W-07d: cooldown-secs #f keeps circuit permanently broken"
