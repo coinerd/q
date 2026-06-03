@@ -10,7 +10,11 @@
          "../tui/state-events.rkt"
          "../tui/state-ui.rkt"
          ;; v0.45.12 L4: Import the actual watchdog function
-         (only-in "../tui/tui-render-loop.rkt" check-busy-watchdog current-busy-watchdog-ms)
+         (only-in "../tui/tui-render-loop.rkt"
+                  apply-busy-watchdog!
+                  check-busy-watchdog
+                  current-busy-watchdog-ms)
+         (only-in "../tui/context.rkt" make-tui-ctx tui-ctx-goal-cancel-box tui-ctx-ui-state-box)
          ;; v0.45.14: event constructor for apply-event-to-state tests
          (only-in "tui/event-simulator.rkt" make-test-event))
 
@@ -53,6 +57,17 @@
   (check-false (ui-state-streaming-thinking result))
   ;; Verify pending-tool-name cleared
   (check-false (ui-state-pending-tool-name result)))
+
+(test-case "watchdog: loop application cancels active goal"
+  (define ctx (make-tui-ctx))
+  (define now (current-inexact-milliseconds))
+  (define expired-since (- now (* 31 60 1000)))
+  (set-box! (tui-ctx-ui-state-box ctx) (make-test-state #:busy? #t #:busy-since expired-since))
+  (check-false (unbox (tui-ctx-goal-cancel-box ctx)))
+  (define fired? (apply-busy-watchdog! ctx now (* 30 60 1000)))
+  (check-true fired?)
+  (check-true (unbox (tui-ctx-goal-cancel-box ctx)))
+  (check-false (ui-state-busy? (unbox (tui-ctx-ui-state-box ctx)))))
 
 (test-case "watchdog: cleared state has watchdog transcript entry"
   (define now (current-inexact-milliseconds))

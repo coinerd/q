@@ -68,6 +68,7 @@
          decode-mouse-message
          current-busy-watchdog-ms
          (contract-out [check-busy-watchdog (-> any/c number? number? (or/c any/c #f))]
+                       [apply-busy-watchdog! (-> tui-ctx? number? number? boolean?)]
                        [tui-ctx-init-terminal! (-> tui-ctx? void?)]
                        [tui-ctx-resize-ubuf! (-> tui-ctx? void?)]
                        [tui-ctx-ubuf (-> tui-ctx? any/c)]
@@ -400,18 +401,28 @@
             #f))
       #f))
 
+;; Apply the pure watchdog state transition to the live TUI context.
+;; When the watchdog fires, also signal goal cancellation so the UI watchdog
+;; does not leave an autonomous goal thread running behind an idle-looking UI.
+(define (apply-busy-watchdog! ctx now-ms watchdog-ms)
+  (define cur-state (unbox (tui-ctx-ui-state-box ctx)))
+  (define watchdog-result (check-busy-watchdog cur-state now-ms watchdog-ms))
+  (cond
+    [watchdog-result
+     (set-box! (tui-ctx-ui-state-box ctx) watchdog-result)
+     (set-box! (tui-ctx-goal-cancel-box ctx) #t)
+     (mark-dirty! ctx)
+     #t]
+    [else #f]))
+
 (define (tui-main-loop ctx)
   (let loop ()
     ;; Drain all pending events from the channel (non-blocking)
     (drain-events! ctx)
 
     ;; Busy-state watchdog — force-clear stale busy state (v0.45.12 L3+L4)
-    (define cur-state (unbox (tui-ctx-ui-state-box ctx)))
-    (define watchdog-result
-      (check-busy-watchdog cur-state (current-inexact-milliseconds) (current-busy-watchdog-ms)))
-    (when watchdog-result
-      (set-box! (tui-ctx-ui-state-box ctx) watchdog-result)
-      (mark-dirty! ctx))
+    ;; and cancel any active goal thread so work does not continue behind an idle UI.
+    (apply-busy-watchdog! ctx (current-inexact-milliseconds) (current-busy-watchdog-ms))
 
     ;; Poll for terminal resize (fallback for stub path where SIGWINCH
     ;; doesn't produce tsizemsg events).
