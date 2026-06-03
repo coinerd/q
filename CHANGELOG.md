@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.85.2 (2026-06-03)
+
+### Layer Dependency Cleanup
+
+**W0 (#6833): Create util/types/ forwarding (A1-02)**
+- Create util/types/session-config.rkt, session-types.rkt, working-set.rkt
+- Update agent/iteration/loop-state.rkt to import from util/types/ instead of runtime/
+- Agent layer now has ZERO runtime/ imports
+
+**W1 (#6834): Break wiring↔TUI coupling (A1-03)**
+- Create runtime/gsd-query.rkt with current-gsd-mode-query parameter
+- Create runtime/command-registry-bridge.rkt re-exporting 5 TUI functions
+- Wiring layer now has ZERO tui/ imports
+
+**W2 (#6835): Tighten wiring contracts (C2-03)**
+- build-runtime-from-cli: any/c → cli-config? → session-config?
+- mode-for-config: any/c → cli-config? → symbol?
+- reload-config!: any/c → session-config? → (values session-config? model-registry?)
+- Add 7 contract tests for wiring/run-modes
+
 ## v0.85.1 (2026-06-03)
 
 ### Typed Racket Migration & Facade Assessment
