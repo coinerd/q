@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.83.11 (2026-06-03)
+
+### Audit Closure Hotfix
+
+- Fix BLOCKER: `context-event` called with keyword args in `session-lifecycle.rkt` → use `make-context-event`
+  - Runtime crash on every prompt in TUI mode; status bar now correctly shows `ctx:NK`
+- Fix stale test: `spawn-subagents rejects maxParallel > 3` → `clamps maxParallel > 3`
+  - Test now expects success since v0.83.10 T15 changed behavior to clamp
+
 ## v0.83.10 (2026-06-03)
 
 ### Audit Closure — Runtime Fixes, Workflow Contracts, Metadata Tags

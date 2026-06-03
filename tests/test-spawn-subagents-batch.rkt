@@ -73,9 +73,11 @@
   (define result (tool-spawn-subagents (hasheq 'jobs (list (hasheq 'task "test")) 'maxParallel 0)))
   (check-true (tool-result-is-error? result)))
 
-(test-case "spawn-subagents rejects maxParallel > 3"
+(test-case "spawn-subagents clamps maxParallel > 3"
+  ;; v0.83.10: maxParallel > 3 is clamped, not rejected.
+  ;; With 1 job and maxParallel=5, effective-parallel=min(5,1,3)=1 → call succeeds.
   (define result (tool-spawn-subagents (hasheq 'jobs (list (hasheq 'task "test")) 'maxParallel 5)))
-  (check-true (tool-result-is-error? result)))
+  (check-false (tool-result-is-error? result)))
 
 ;; ============================================================
 ;; Single job execution

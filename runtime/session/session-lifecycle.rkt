@@ -52,7 +52,7 @@
          (only-in "../../agent/iteration/loop-config.rkt" make-loop-config)
          (only-in "../../agent/event-emitter.rkt" emit-typed-event!)
          (only-in "../../agent/event-structs/turn-events.rkt" turn-end-event turn-start-event)
-         (only-in "../../agent/event-structs/session-events.rkt" context-event)
+         (only-in "../../agent/event-structs/session-events.rkt" make-context-event)
          "session-types.rkt"
          (only-in "session-controls.rkt" set-model! shutdown-requested? force-shutdown-requested?)
          (only-in "../../llm/token-budget.rkt" DEFAULT-TOKEN-BUDGET-THRESHOLD)
@@ -316,7 +316,7 @@
   ;; 2b. v0.83.10: Emit context.built so TUI status bar shows token count
   (emit-typed-event!
    bus
-   (context-event #:session-id sid
+   (make-context-event #:session-id sid
                    #:turn-id #f
                    #:timestamp (current-inexact-milliseconds)
                    #:token-count token-count
