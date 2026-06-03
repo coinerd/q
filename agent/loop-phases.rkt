@@ -120,12 +120,12 @@
      (displayln (format "\n=== phase-build-context turn-id=~a ===" turn-id))
      (displayln (format "context: ~a msgs" (length context)))
      (for ([m (in-list context)]
-           [i (in-range (min 5 (length context)))])
+           [i (in-naturals)])
        (displayln (format "  ~a: role=~a kind=~a" i (message-role m) (message-kind m))))
      (define raw-msgs (build-raw-messages context))
      (displayln (format "raw-messages: ~a total" (length raw-msgs)))
      (for ([m (in-list raw-msgs)]
-           [i (in-range (min 5 (length raw-msgs)))])
+           [i (in-naturals)])
        (displayln (format "  ~a: role=~a content_len=~a"
                           i
                           (hash-ref m 'role "?")
