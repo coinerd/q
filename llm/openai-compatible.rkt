@@ -205,6 +205,13 @@
   (define (send req)
     (define req-with-model (ensure-model-settings req))
     (define body (openai-build-request-body req-with-model))
+    ;; F8-DIAG: Log first 3 message roles to verify system message ordering
+    (let ([msgs (hash-ref body 'messages '())])
+      (log-q-openai-warning "F8-DIAG[non-stream]: sending ~a msgs, first 3 roles: ~a"
+                            (length msgs)
+                            (for/list ([m (in-list msgs)]
+                                       [_ (in-range (min 3 (length msgs)))])
+                              (hash-ref m 'role "???"))))
     (define raw (do-http-request base-url api-key "/chat/completions" body))
     (openai-parse-response raw))
 
@@ -212,6 +219,13 @@
   (define (openai-stream-request req)
     (define req-with-model (ensure-model-settings req))
     (define body (openai-build-request-body req-with-model #:stream? #t))
+    ;; F8-DIAG: Log first 3 message roles to verify system message ordering
+    (let ([msgs (hash-ref body 'messages '())])
+      (log-q-openai-warning "F8-DIAG: sending ~a msgs, first 3 roles: ~a"
+                            (length msgs)
+                            (for/list ([m (in-list msgs)]
+                                       [_ (in-range (min 3 (length msgs)))])
+                              (hash-ref m 'role "???"))))
     (define url-str (string-append (string-trim base-url "/") "/chat/completions"))
     (define uri (string->url url-str))
     (define host (url-host uri))
