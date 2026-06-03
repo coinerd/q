@@ -65,3 +65,27 @@
 
 (test-case "phase-stream: procedure exists"
   (check-pred procedure? phase-stream))
+
+;; ── v0.84.1 contract tightening ──
+(require "../agent/loop-stream.rkt"
+         "../agent/loop-dispatch.rkt"
+         "../tui/context.rkt")
+
+(test-case "build-stream-result: procedure exists with tightened contract"
+  (check-pred procedure? build-stream-result))
+
+(test-case "run-streaming-phase: procedure exists with tightened contract"
+  (check-pred procedure? run-streaming-phase))
+
+(test-case "make-tui-ctx: accepts #f for optional registry args"
+  (define ctx (make-tui-ctx #:model-registry #f #:extension-registry #f #:session-queue #f))
+  (check-pred tui-ctx? ctx))
+
+(test-case "make-tui-ctx: rejects invalid model-registry type"
+  (check-exn exn:fail:contract? (lambda () (make-tui-ctx #:model-registry "not-a-registry"))))
+
+(test-case "make-tui-ctx: rejects invalid extension-registry type"
+  (check-exn exn:fail:contract? (lambda () (make-tui-ctx #:extension-registry "not-a-registry"))))
+
+(test-case "make-tui-ctx: rejects invalid session-queue type"
+  (check-exn exn:fail:contract? (lambda () (make-tui-ctx #:session-queue "not-a-queue"))))

@@ -9,7 +9,10 @@
          racket/async-channel
          "state.rkt"
          "input.rkt"
-         "../agent/event-bus.rkt")
+         "../agent/event-bus.rkt"
+         (only-in "../runtime/provider/model-registry.rkt" model-registry?)
+         (only-in "../extensions/api.rkt" extension-registry?)
+         (only-in "../agent/queue.rkt" queue?))
 
 ;; ── tui-ctx struct ──
 ;; Holds mutable references for the running TUI
@@ -107,11 +110,11 @@
                              (#:event-bus (or/c event-bus? #f)
                                           #:session-runner procedure?
                                           #:session-dir (or/c path-string? #f)
-                                          #:model-registry any/c
-                                          #:extension-registry any/c
-                                          #:session-queue any/c
-                                          #:session-factory-runner any/c
-                                          #:agent-session-box any/c)
+                                          #:model-registry (or/c model-registry? #f)
+                                          #:extension-registry (or/c extension-registry? #f)
+                                          #:session-queue (or/c queue? #f)
+                                          #:session-factory-runner (or/c procedure? #f)
+                                          #:agent-session-box (or/c box? #f))
                              tui-ctx?)]
                        [mark-dirty! (-> tui-ctx? void?)]
                        [tui-ctx-focused-component-id (-> tui-ctx? (or/c symbol? #f))]

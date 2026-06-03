@@ -24,10 +24,11 @@
                   tool-call-part-arguments
                   tool-call-part-id
                   tool-call-part-name)
-         (only-in "../util/loop-result.rkt" make-loop-result)
+         (only-in "../util/loop-result.rkt" make-loop-result loop-result?)
          (only-in "../util/message/message.rkt" make-message message message-id)
          "../util/ids.rkt"
          (only-in "../util/cancellation.rkt" cancellation-token? cancellation-token-cancelled?)
+         (only-in "../util/tool/tool-types.rkt" tool?)
          (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload)
          ;; Re-exported from stream-reducer.rkt (v0.53.2)
          (only-in "stream-reducer.rkt"
@@ -67,7 +68,16 @@
                              (#:hook-dispatcher (or/c procedure? #f))
                              any/c)]
                        [build-stream-result
-                        (-> any/c any/c any/c string? string? any/c any/c any/c any/c any/c)]))
+                        (-> hash?
+                            (listof any/c)
+                            event-bus?
+                            string?
+                            string?
+                            loop-state?
+                            (listof tool?)
+                            provider?
+                            (or/c procedure? #f)
+                            loop-result?)]))
 
 ;; handle-cancellation
 ;; ============================================================
