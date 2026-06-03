@@ -10,7 +10,7 @@
 (require racket/contract
          racket/match
          "../util/ids.rkt"
-         (only-in "../llm/model.rkt" model-request-settings)
+         (only-in "../llm/model.rkt" model-request-settings model-request?)
          (only-in "../llm/provider.rkt" provider-name provider?)
          "effect-types.rkt"
          "loop-messages.rkt"
@@ -25,24 +25,25 @@
          (only-in "turn-model.rkt" make-stream-completion turn-decision-tag)
          (only-in "event-emitter.rkt" emit-typed-event!)
          (only-in "../util/tool/tool-types.rkt" tool?)
+         (only-in "../util/cancellation.rkt" cancellation-token?)
          (only-in "event-bus.rkt" event-bus?)
          (only-in "loop-stream.rkt" handle-cancellation build-stream-result)
          (only-in "loop-phases.rkt" phase-msg-hook phase-stream)
          (only-in "state.rkt" current-loop-state-for-error-recovery)
-         "../util/loop-result.rkt")
+         (only-in "../util/loop-result.rkt" loop-result loop-result?))
 
 (provide (contract-out [run-streaming-phase
                         (-> provider?
-                            any/c
+                            model-request?
                             event-bus?
                             string?
                             string?
                             loop-state?
                             (listof any/c)
-                            (or/c (listof any/c) #f)
+                            (or/c (listof tool?) #f)
                             (or/c procedure? #f)
-                            (or/c any/c #f)
-                            any/c)]))
+                            (or/c cancellation-token? #f)
+                            loop-result?)]))
 
 ;; Phase 7: Full post-pre-hook streaming dispatch
 ;; Returns loop-result directly (this is an effectful dispatch function)
