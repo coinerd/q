@@ -29,6 +29,8 @@
       [(string? part) part]
       [(hash? part) (hash-ref part 'text "")]
       [else (~a part)])))
+(define (result-content-str r)
+  (string-join (result-content r) "\n"))
 (define (result-details r)
   (tool-result-details r))
 (define (result-is-error? r)
@@ -228,7 +230,40 @@
                        (check-equal? (hash-ref d 'total-entries) 4) ; apple, banana, cherry, subdir
                        (check-equal? (hash-ref d 'directories) 1)
                        (check-equal? (hash-ref d 'files) 3)
-                       (check-equal? (hash-ref d 'path) dir))))))
+                       (check-equal? (hash-ref d 'path) dir))))
+
+    ;; --- Edge-case tests (T3-08) ---
+    (test-case "broken symlink in long format"
+      (with-test-dir (λ (dir)
+                       (define target (build-path dir "no-such-target"))
+                       (define link (build-path dir "dangling-link"))
+                       (with-handlers ([exn:fail? void])
+                         (delete-file link #:must-exist? #f))
+                       (make-file-or-directory-link target link)
+                       (define r (tool-ls (hasheq 'path dir 'long? #t 'all? #t)))
+                       (check-false (result-is-error? r))
+                       ;; Should not crash on broken symlink
+                       (define c (result-content-str r))
+                       (check-true (regexp-match? #rx"dangling-link" c)
+                                  (format "Expected dangling-link in output, got: ~a" c)))))
+
+    (test-case "invalid sort-by value falls through to name"
+      (with-test-dir (λ (dir)
+                       (populate-test-dir dir)
+                       (define r (tool-ls (hasheq 'path dir 'sort-by "invalid-value")))
+                       (check-false (result-is-error? r))
+                       ;; Should succeed, defaulting to name sort
+                       (define d (result-details r))
+                       (check-equal? (hash-ref d 'total-entries) 4))))
+
+    (test-case "unreadable directory returns error or raises exception"
+      ;; /root is typically unreadable on Linux — tool should handle gracefully
+      (define r (with-handlers ([exn:fail? (λ (e) #f)])
+                  (tool-ls (hasheq 'path "/root"))))
+      ;; Either returns an error result or raises an exception — both are acceptable
+      (when r
+        (check-true (result-is-error? r)
+                    (format "Expected error for /root, got: ~a" r))))))
 
 ;; ============================================================
 ;; Run
