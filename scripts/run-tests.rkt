@@ -654,6 +654,7 @@
   (displayln "  --strict          Enable strict zero-test detection (default: on)")
   (displayln "  --repeat N        Run suite N times (exit 1 if any run fails)")
   (displayln "  --record-gate-evidence  Write .gate-evidence/<suite>.passed on success")
+  (displayln "  --inventory             Print inventory report (selected/excluded files) and exit")
   (displayln "  --help            Show this help message")
   (newline)
   (displayln "Suites:")
@@ -677,28 +678,77 @@
              [suite 'all]
              [extra '()]
              [repeat 1]
-             [record-gate? #f])
+             [record-gate? #f]
+             [inventory? #f])
     (match rest
-      ['() (values jobs sequential? timeout strict? suite (reverse extra) repeat record-gate?)]
+      ['()
+       (values jobs sequential? timeout strict? suite (reverse extra) repeat record-gate? inventory?)]
       [(list "--help" _ ...)
        (usage)
        (exit 0)]
       [(list "--strict" rest ...)
-       (loop rest jobs sequential? timeout #t suite extra repeat record-gate?)]
+       (loop rest jobs sequential? timeout #t suite extra repeat record-gate? inventory?)]
       [(list "--jobs" n rest ...)
-       (loop rest (string->number n) sequential? timeout strict? suite extra repeat record-gate?)]
+       (loop rest
+             (string->number n)
+             sequential?
+             timeout
+             strict?
+             suite
+             extra
+             repeat
+             record-gate?
+             inventory?)]
       [(list "--sequential" rest ...)
-       (loop rest 1 #t timeout strict? suite extra repeat record-gate?)]
+       (loop rest 1 #t timeout strict? suite extra repeat record-gate? inventory?)]
       [(list "--timeout" secs rest ...)
-       (loop rest jobs sequential? (string->number secs) strict? suite extra repeat record-gate?)]
+       (loop rest
+             jobs
+             sequential?
+             (string->number secs)
+             strict?
+             suite
+             extra
+             repeat
+             record-gate?
+             inventory?)]
       [(list "--suite" name rest ...)
-       (loop rest jobs sequential? timeout strict? (string->symbol name) extra repeat record-gate?)]
+       (loop rest
+             jobs
+             sequential?
+             timeout
+             strict?
+             (string->symbol name)
+             extra
+             repeat
+             record-gate?
+             inventory?)]
       [(list "--repeat" n rest ...)
-       (loop rest jobs sequential? timeout strict? suite extra (string->number n) record-gate?)]
+       (loop rest
+             jobs
+             sequential?
+             timeout
+             strict?
+             suite
+             extra
+             (string->number n)
+             record-gate?
+             inventory?)]
       [(list "--record-gate-evidence" rest ...)
-       (loop rest jobs sequential? timeout strict? suite extra repeat #t)]
+       (loop rest jobs sequential? timeout strict? suite extra repeat #t inventory?)]
+      [(list "--inventory" rest ...)
+       (loop rest jobs sequential? timeout strict? suite extra repeat record-gate? #t)]
       [(list arg rest ...)
-       (loop rest jobs sequential? timeout strict? suite (cons arg extra) repeat record-gate?)])))
+       (loop rest
+             jobs
+             sequential?
+             timeout
+             strict?
+             suite
+             (cons arg extra)
+             repeat
+             record-gate?
+             inventory?)])))
 
 ;; ---------------------------------------------------------------------------
 ;; Pre-flight: stale bytecode cleanup
@@ -762,6 +812,107 @@
     (when (file-exists? path)
       (define git-restore (format "cd ~a && git checkout -- ~a 2>/dev/null" root surface))
       (system git-restore))))
+
+;; ---------------------------------------------------------------------------
+;; Inventory report mode
+;; ---------------------------------------------------------------------------
+
+(define (classify-exclusion-reason f)
+  (cond
+    [(string-contains? f "/compiled/") 'compiled]
+    [(not (string-suffix? f ".rkt")) 'non-rkt]
+    [(support-test-module? f) 'support-module]
+    [else 'unknown]))
+
+(define (detect-high-risk-flags f)
+  (with-handlers ([exn:fail? (lambda (_) '())])
+    (define resolved
+      (if (absolute-path? f)
+          f
+          (build-path base-dir f)))
+    (define content (file->string resolved))
+    (define flags '())
+    (when (regexp-match? #rx"current-directory" content)
+      (set! flags (cons 'cwd flags)))
+    (when (regexp-match? #rx"getenv" content)
+      (set! flags (cons 'env flags)))
+    (when (regexp-match? #rx"make-temporary" content)
+      (set! flags (cons 'temp-file flags)))
+    (when (regexp-match? #rx"subprocess" content)
+      (set! flags (cons 'subprocess flags)))
+    (when (or (regexp-match? #rx"benchmark" content) (regexp-match? #rx"perf" content))
+      (set! flags (cons 'perf flags)))
+    (when (regexp-match? #rx"terminal" content)
+      (set! flags (cons 'terminal flags)))
+    (reverse flags)))
+
+(define (compute-inventory-hash files)
+  (define content (string-join (sort files string<?)))
+  (define bytes (string->bytes/utf-8 content))
+  (format "~x" (equal-hash-code bytes)))
+
+(define (print-inventory suite suite-files)
+  ;; Collect ALL .rkt files for exclusion analysis
+  (define all-rkt-files
+    (for/list ([f (in-directory (build-path base-dir "tests"))]
+               #:when (and (file-exists? f)
+                           (string-suffix? (path->string f) ".rkt")
+                           (not (string-contains? (path->string f) "/compiled/"))))
+      (path->string (find-relative-path base-dir f))))
+  ;; Compute excluded files
+  (define suite-set (list->set suite-files))
+  (define excluded (filter (lambda (f) (not (set-member? suite-set f))) all-rkt-files))
+  ;; Print header
+  (printf ";; INVENTORY REPORT — suite: ~a~n" suite)
+  (printf ";; ═══════════════════════════════════════~n")
+  (printf ";; Selected files: ~a~n" (length suite-files))
+  (printf ";; Excluded files: ~a~n" (length excluded))
+  (printf ";; Inventory hash: ~a~n~n" (compute-inventory-hash suite-files))
+  ;; Selected files with classifier hits and high-risk flags
+  (printf ";; SELECTED FILES:~n")
+  (for ([f (in-list (sort suite-files string<?))])
+    (define resolved
+      (if (absolute-path? f)
+          f
+          (build-path base-dir f)))
+    (define flags
+      (if (file-exists? resolved)
+          (detect-high-risk-flags f)
+          '()))
+    (define suite-hits
+      (filter values
+              (list (and (slow-file? f) 'slow)
+                    (and (tui-file? f) 'tui)
+                    (and (security-file? f) 'security)
+                    (and (mutating-file? f) 'mutating)
+                    (and (arch-file? f) 'arch)
+                    (and (runtime-file? f) 'runtime)
+                    (and (extensions-file? f) 'extensions)
+                    (and (workflows-file? f) 'workflows))))
+    (when (pair? flags)
+      (printf "  ~a  [high-risk: ~a]~n" f (string-join (map symbol->string flags) ",")))
+    (when (pair? suite-hits)
+      (printf "    classifiers: ~a~n" (string-join (map symbol->string suite-hits) ","))))
+  ;; Excluded files with reasons
+  (when (pair? excluded)
+    (newline)
+    (printf ";; EXCLUDED FILES:~n")
+    (for ([f (in-list (sort excluded string<?))])
+      (define reason (classify-exclusion-reason f))
+      (printf "  ~a  [reason: ~a]~n" f reason))))
+
+;; Helper: list->set for membership testing
+(define (list->set lst)
+  (for/hash ([x (in-list lst)])
+    (values x #t)))
+
+(define (set-member? st k)
+  (hash-has-key? st k))
+
+(provide print-inventory
+         classify-exclusion-reason
+         detect-high-risk-flags
+         compute-inventory-hash)
 
 ;; ---------------------------------------------------------------------------
 ;; Main entry point
@@ -861,7 +1012,7 @@
   (printf ";; gate evidence recorded: ~a (v~a)~n" suite-label ver))
 
 (define (main args)
-  (define-values (jobs sequential? timeout strict? suite extra-files repeat record-gate?)
+  (define-values (jobs sequential? timeout strict? suite extra-files repeat record-gate? inventory?)
     (parse-args args))
 
   ;; Pre-flight: clear stale bytecode to avoid linklet mismatches
@@ -875,6 +1026,16 @@
     (if (pair? extra-files)
         (map normalize-test-path extra-files)
         (collect-test-files suite)))
+
+  ;; Inventory mode: print report and exit
+  (when inventory?
+    (if (pair? suite-files)
+        (begin
+          (print-inventory suite suite-files)
+          (exit 0))
+        (begin
+          (displayln "No test files matched the selected suite.")
+          (exit 1))))
 
   (unless (pair? suite-files)
     (displayln "No test files matched the selected suite.")

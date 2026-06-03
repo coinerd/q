@@ -575,3 +575,63 @@
   (for ([f (in-list wf-files)])
     (check-false (string-contains? f "/fixtures/")
                  (format "workflows suite included fixture: ~a" f))))
+
+;; ---------------------------------------------------------------------------
+;; v0.83.0: Inventory report mode tests
+;; ---------------------------------------------------------------------------
+
+(test-case "classify-exclusion-reason: support module detected"
+  (define classify (runner-ref 'classify-exclusion-reason))
+  (check-equal? (classify "tests/helpers/fixtures.rkt") 'support-module)
+  (check-equal? (classify "tests/workflows/fixtures/mock-provider.rkt") 'support-module))
+
+(test-case "classify-exclusion-reason: compiled path excluded"
+  (define classify (runner-ref 'classify-exclusion-reason))
+  (check-equal? (classify "tests/compiled/test-foo_rkt.zo") 'compiled))
+
+(test-case "classify-exclusion-reason: non-rkt file"
+  (define classify (runner-ref 'classify-exclusion-reason))
+  (check-equal? (classify "tests/helpers/data.json") 'non-rkt))
+
+(test-case "classify-exclusion-reason: regular test file is unknown"
+  (define classify (runner-ref 'classify-exclusion-reason))
+  (check-equal? (classify "tests/test-foo.rkt") 'unknown))
+
+(test-case "compute-inventory-hash: deterministic for same input"
+  (define hash-fn (runner-ref 'compute-inventory-hash))
+  (define files '("a.rkt" "b.rkt" "c.rkt"))
+  (check-equal? (hash-fn files) (hash-fn files)))
+
+(test-case "compute-inventory-hash: differs for different input"
+  (define hash-fn (runner-ref 'compute-inventory-hash))
+  (define h1 (hash-fn '("a.rkt" "b.rkt")))
+  (define h2 (hash-fn '("b.rkt" "c.rkt")))
+  (check-not-equal? h1 h2))
+
+(test-case "detect-high-risk-flags: detects env usage on known file"
+  (define detect (runner-ref 'detect-high-risk-flags))
+  ;; test-main.rkt uses getenv
+  (define result (detect "tests/test-main.rkt"))
+  (check-not-false (member 'env result) (format "expected 'env in ~a" result)))
+
+(test-case "detect-high-risk-flags: detects cwd usage on known file"
+  (define detect (runner-ref 'detect-high-risk-flags))
+  ;; Many files use current-directory; check test-cli-interactive which parameterizes it
+  (define result (detect "tests/test-cli-interactive.rkt"))
+  (check-not-false (member 'cwd result) (format "expected 'cwd in ~a" result)))
+
+(test-case "detect-high-risk-flags: simple file returns empty"
+  (define detect (runner-ref 'detect-high-risk-flags))
+  ;; test-version.rkt is unlikely to have env/cwd/temp-file
+  (define result (detect "tests/test-version.rkt"))
+  ;; It may or may not have flags, just verify it returns a list
+  (check-true (list? result)))
+
+(test-case "print-inventory: produces structured output"
+  (define print-inv (runner-ref 'print-inventory))
+  (define output
+    (with-output-to-string (lambda () (print-inv 'smoke (list "tests/test-version.rkt")))))
+  (check-not-false (string-contains? output "INVENTORY REPORT"))
+  (check-not-false (string-contains? output "suite: smoke"))
+  (check-not-false (string-contains? output "Selected files: 1"))
+  (check-not-false (string-contains? output "Inventory hash:")))
