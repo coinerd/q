@@ -55,16 +55,30 @@
 ;; Pure: prepends a system message. Always ensures the first message is a system
 ;; message, even when instructions are empty. This prevents provider 500 errors
 ;; from strict chat templates that require messages[0].role == 'system'.
+;; Empty instructions use a single-space content to avoid empty-string rejection
+;; by some providers.
 (define (inject-system-instructions context-messages system-instrs)
-  (define system-content
-    (if (null? system-instrs)
-        ""
-        (string-join system-instrs "\n\n")))
-  (cons (make-message (generate-id)
-                      #f
-                      'system
-                      'system-instruction
-                      (list (make-text-part system-content))
-                      (now-seconds)
-                      (hasheq))
-        context-messages))
+  (cond
+    ;; Non-empty instructions: always prepend
+    [(pair? system-instrs)
+     (cons (make-message (generate-id)
+                         #f
+                         'system
+                         'system-instruction
+                         (list (make-text-part (string-join system-instrs "\n\n")))
+                         (now-seconds)
+                         (hasheq))
+           context-messages)]
+    ;; Empty instructions: only prepend if first message is not already system
+    [(and (pair? context-messages) (eq? (message-role (car context-messages)) 'system))
+     context-messages]
+    ;; Empty instructions and no leading system message: prepend space-content system
+    [else
+     (cons (make-message (generate-id)
+                         #f
+                         'system
+                         'system-instruction
+                         (list (make-text-part " "))
+                         (now-seconds)
+                         (hasheq))
+           context-messages)]))

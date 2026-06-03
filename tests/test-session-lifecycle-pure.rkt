@@ -83,8 +83,8 @@
    (check-equal? (length result) 2)
    (check-equal? (message-role (car result)) 'system)
    (check-equal? (message-kind (car result)) 'system-instruction)
-   ;; empty instructions -> empty content
-   (check-equal? (message-content (car result)) (list (make-text-part ""))))
+   ;; empty instructions -> space content (avoid empty-string provider rejection)
+   (check-equal? (message-content (car result)) (list (make-text-part " "))))
  (test-case "inject-system-instructions prepends system message"
    (define msgs (list (make-test-message "id1" #f 'user 'message)))
    (define result (inject-system-instructions msgs '("instr1")))
@@ -108,7 +108,7 @@
    (define result (inject-system-instructions '() '()))
    (check-equal? (length result) 1)
    (check-equal? (message-role (car result)) 'system)
-   (check-equal? (message-content (car result)) (list (make-text-part ""))))
+   (check-equal? (message-content (car result)) (list (make-text-part " "))))
  (test-case "inject-system-instructions system msg has no parent"
    (define msgs (list (make-test-message "id1" #f 'user 'message)))
    (define result (inject-system-instructions msgs '("sys")))
@@ -120,7 +120,7 @@
    (define raw (build-raw-messages injected))
    (check > (length raw) 1)
    (check-equal? (hash-ref (car raw) 'role) "system")
-   (check-equal? (hash-ref (car raw) 'content) ""))
+   (check-equal? (hash-ref (car raw) 'content) " "))
  (test-case "build-raw-messages first role is system with instructions"
    (define msgs (list (make-test-message "id1" #f 'user 'message)))
    (define injected (inject-system-instructions msgs '("Be helpful")))
@@ -137,7 +137,15 @@
    (define raw (build-raw-messages (list sys1 sys2 user)))
    (check-equal? (length raw) 2)
    (check-equal? (hash-ref (car raw) 'role) "system")
-   (check-equal? (hash-ref (car raw) 'content) "A\n\nB")))
+   (check-equal? (hash-ref (car raw) 'content) "A\n\nB"))
+ (test-case "inject-system-instructions does not duplicate leading system message"
+   (define sys
+     (make-message "s1" #f 'system 'system-instruction (list (make-text-part "existing")) 0 (hasheq)))
+   (define user (make-test-message "id1" #f 'user 'message))
+   (define result (inject-system-instructions (list sys user) '()))
+   (check-equal? (length result) 2)
+   (check-equal? (message-role (car result)) 'system)
+   (check-equal? (message-content (car result)) (list (make-text-part "existing")))))
 
 ;; -- Fault injection tests for transitions ------------------------------
 ;; Verify graceful handling of edge cases that could occur during errors
