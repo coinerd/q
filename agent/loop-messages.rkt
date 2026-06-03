@@ -217,7 +217,17 @@
           (list (hasheq 'role (message-role->api-role role) 'content (parts->text-string parts)))]))))
   ;; Safety net: merge consecutive user messages.
   ;; Some providers (GLM) reject consecutive same-role messages.
-  (collect-system-messages-front (merge-consecutive-roles raw-msgs)))
+  (define merged (collect-system-messages-front (merge-consecutive-roles raw-msgs)))
+  ;; Safety net: providers with enable_thinking (qwen3/llama.cpp) reject
+  ;; assistant-last messages as "prefill". Strip trailing assistant messages.
+  (define merged-trimmed
+    (if (and (pair? merged) (equal? (hash-ref (last merged) 'role #f) "assistant"))
+        (begin
+          (log-warning "DIAG: build-raw-messages: trimming trailing assistant message (~a total)"
+                       (length merged))
+          (drop-right merged 1))
+        merged))
+  merged-trimmed)
 
 ;; ============================================================
 ;; Match-based hook dispatch (v0.29.1: §10 Match Dispatch)

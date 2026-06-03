@@ -9,6 +9,7 @@
 
 (require racket/contract
          racket/match
+         (only-in racket/list take-right)
          "../util/ids.rkt"
          (only-in "../llm/model.rkt" model-request-settings model-request?)
          (only-in "../llm/provider.rkt" provider-name provider?)
@@ -68,6 +69,15 @@
             [i (in-naturals)])
         (log-warning "  msg[~a]: role=~a keys=~a" i (hash-ref rm 'role #f) (hash-keys rm)))
       (log-warning "End of invalid sequence dump"))
+
+    ;; DIAG: Log last 3 message roles for provider compatibility debugging
+    ;; (qwen3 enable_thinking rejects assistant-last messages)
+    (let ([n (length raw-messages)])
+      (when (> n 0)
+        (define last-roles
+          (for/list ([rm (in-list (take-right raw-messages (min 3 n)))])
+            (hash-ref rm 'role #f)))
+        (log-warning "DIAG: provider request: ~a messages, last roles: ~a" n last-roles)))
 
     (emit-typed-event! bus
                        (make-provider-request-event
