@@ -29,11 +29,11 @@
 
 (require/typed "../../util/cancellation.rkt" [#:opaque CancellationToken cancellation-token?])
 
-(require/typed "../../runtime/session/session-config.rkt" [#:opaque SessionConfig session-config?])
+(require/typed "../../util/types/session-config.rkt" [#:opaque SessionConfig session-config?])
 
-(require/typed "../../runtime/session/session-types.rkt" [#:opaque AgentSession agent-session?])
+(require/typed "../../util/types/session-types.rkt" [#:opaque AgentSession agent-session?])
 
-(require/typed "../../runtime/working-set.rkt" [#:opaque WorkingSet working-set?])
+(require/typed "../../util/types/working-set.rkt" [#:opaque WorkingSet working-set?])
 
 ;; ── Typed imports from untyped modules ──────────────────────────
 
