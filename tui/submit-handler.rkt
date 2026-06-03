@@ -27,8 +27,8 @@
   (define q (unbox (tui-ctx-session-queue-box ctx)))
   (cond
     [(and busy? q (queue? q))
-     ;; Agent is streaming — enqueue as followup
-     (enqueue-followup! q text)
+     ;; Agent is streaming — enqueue as steering
+     (enqueue-steering! q text)
      ;; Show system notification in transcript
      (define queued-entry
        (make-entry 'system

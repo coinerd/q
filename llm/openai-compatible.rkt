@@ -86,7 +86,12 @@
     (if (model-request-tools req)
         (hash-set with-max-tokens 'tools (model-request-tools req))
         with-max-tokens))
-  with-tools)
+  ;; v0.83.10: Request usage in streaming chunks so cost tracker updates
+  (define with-stream-opts
+    (if stream?
+        (hash-set with-tools 'stream_options (hasheq 'include_usage #t))
+        with-tools))
+  with-stream-opts)
 
 ;; ============================================================
 ;; Response parsing
