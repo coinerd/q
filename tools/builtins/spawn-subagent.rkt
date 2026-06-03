@@ -141,18 +141,23 @@
     [else default]))
 
 ;; #1204: Provider injection from parent session.
+;; BUG: make-minimal-settings stores provider under 'default-provider,
+;; not 'provider. Must check both keys to avoid silent mock fallback.
 (define (resolve-provider exec-ctx)
   (define rt (and exec-ctx (exec-context-runtime-settings exec-ctx)))
-  (define prov (and rt (rt-settings-ref rt 'provider #f)))
+  (define prov
+    (or (and rt (rt-settings-ref rt 'provider #f))
+        (and rt (rt-settings-ref rt 'default-provider #f))))
   (if prov
       prov
       (build-mock-provider-for-subagent)))
 
 ;; Resolve model name from exec-context or fall back to "mock-model".
+;; BUG: make-minimal-settings stores model under 'default-model, not 'model.
 (define (resolve-model-name exec-ctx args)
   (or (hash-ref args 'model #f)
       (let ([rt (and exec-ctx (exec-context-runtime-settings exec-ctx))])
-        (and rt (rt-settings-ref rt 'model #f)))
+        (or (and rt (rt-settings-ref rt 'model #f)) (and rt (rt-settings-ref rt 'default-model #f))))
       "mock-model"))
 
 ;; Child-safe tools: read-only + safe write/edit/bash for subagent children.
