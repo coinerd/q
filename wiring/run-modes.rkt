@@ -42,7 +42,7 @@
          (only-in "extension-setup.rkt" make-wired-extension-registry load-extensions-from-dir!)
          (only-in "../runtime/session/session-config.rkt" apply-context-assembly-profile!)
          (only-in "../extensions/gsd/state-machine.rkt" gsm-current)
-         (only-in "../tui/state-events.rkt" current-gsd-mode-query))
+         (only-in "../runtime/gsd-query.rkt" current-gsd-mode-query))
 
 ;; Re-export mode runners from sub-modules
 (require "run-interactive.rkt"
