@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.84.3 (2026-06-03)
+
+### Documentation Reconciliation
+
+**W0 (#6805):**
+- README accuracy: tool count 14 → 17, add missing subcommands
+- Fix subcommands table (q sessions info/delete/trace)
+- Trim Status section to 10 entries
+
+**W1 (#6806):**
+- Archive pre-v0.70 CHANGELOG entries to CHANGELOG-ARCHIVE.md
+- Main CHANGELOG.md ≤ 1500 lines
+
+**W2 (#6807):**
+- Add .github/workflows/nightly.yml
+- Add docs/getting-started/dev-setup.md
+
 ## v0.84.2 (2026-06-03)
 
 ### Observability & Safety Hardening
