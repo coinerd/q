@@ -14,6 +14,7 @@
          "../util/cost-tracker.rkt"
          "../util/content/content-helpers.rkt"
          "state-types.rkt"
+         (only-in "../runtime/gsd-query.rkt" current-gsd-mode-query)
          racket/contract)
 
 (provide current-gsd-mode-query
@@ -25,8 +26,7 @@
                        [format-error-hint
                         (-> symbol? exact-nonnegative-integer? (listof symbol?) string?)]))
 
-;; Injected callback to query GSD mode without direct import.
-(define current-gsd-mode-query (make-parameter (lambda () 'idle)))
+;; current-gsd-mode-query is now imported from runtime/gsd-query.rkt
 
 ;; ============================================================
 ;; Event reducer registry (W-07)

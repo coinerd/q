@@ -14,11 +14,12 @@
          (only-in "../extensions/loader.rkt" load-extension!)
          (only-in "../extensions/hooks.rkt" dispatch-hooks)
          (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload)
-         (only-in "../tui/palette.rkt"
+         (only-in "../runtime/command-registry-bridge.rkt"
                   commands-from-hashes
                   merge-extension-commands
-                  make-command-registry)
-         (only-in "../tui/keymap.rkt" shortcut-specs->keymap keymap-merge))
+                  make-command-registry
+                  shortcut-specs->keymap
+                  keymap-merge))
 
 (provide (contract-out
           [make-wired-extension-registry (-> any/c path-string? (values any/c any/c any/c))]
