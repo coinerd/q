@@ -67,7 +67,8 @@
          extensions-file?
          workflows-file?
          validate-args!
-         known-suites)
+         known-suites
+         record-gate-evidence!)
 
 ;; ---------------------------------------------------------------------------
 ;; Struct: test-file-result
@@ -1019,24 +1020,130 @@
   (define exit-code (summary-exit-code failed-files timeout-files))
   (when (and (zero? exit-code) (> repeat-total 1))
     (printf ";; Run ~a/~a: PASS~n" repeat-num repeat-total))
-  exit-code)
+  (values exit-code results))
 
 ;; ---------------------------------------------------------------------------
 ;; Gate evidence recording
 ;; ---------------------------------------------------------------------------
 
-(define (record-gate-evidence! suite-label)
+(define (get-git-sha)
+  (with-handlers ([exn:fail? (lambda (_) "unknown")])
+    (define-values (sp out in err)
+      (subprocess #f #f #f (find-executable-path "git") "rev-parse" "HEAD"))
+    (close-output-port in)
+    (define sha (string-trim (port->string out)))
+    (close-input-port out)
+    (close-input-port err)
+    (subprocess-wait sp)
+    (if (string=? sha "") "unknown" sha)))
+
+(define (write-json h out)
+  (display "{" out)
+  (define pairs
+    (list (cons "version" (format "~s" (hash-ref h 'version)))
+          (cons "git_sha" (format "~s" (hash-ref h 'git-sha)))
+          (cons "suite" (format "~s" (hash-ref h 'suite)))
+          (cons "args"
+                (format "[~a]"
+                        (string-join (for/list ([a (hash-ref h 'args)])
+                                       (format "~s" a))
+                                     ", ")))
+          (cons "jobs" (format "~a" (hash-ref h 'jobs)))
+          (cons "timeout"
+                (let ([t (hash-ref h 'timeout)])
+                  (if (string? t)
+                      (format "~s" t)
+                      (format "~a" t))))
+          (cons "repeat" (format "~a" (hash-ref h 'repeat)))
+          (cons "selected_file_count" (format "~a" (hash-ref h 'selected-file-count)))
+          (cons "parsed_test_count" (format "~a" (hash-ref h 'parsed-test-count)))
+          (cons "passed" (format "~a" (hash-ref h 'passed)))
+          (cons "failed" (format "~a" (hash-ref h 'failed)))
+          (cons "timed_out" (format "~a" (hash-ref h 'timed-out)))
+          (cons "inventory_hash" (format "~s" (hash-ref h 'inventory-hash)))
+          (cons "timestamp" (format "~a" (hash-ref h 'timestamp)))))
+  (for ([p (in-list pairs)]
+        [i (in-naturals)])
+    (when (> i 0)
+      (display ", " out))
+    (display (format "\"~a\": ~a" (car p) (cdr p)) out))
+  (displayln "}" out))
+
+(define (record-gate-evidence! suite-label
+                               #:results [results '()]
+                               #:args [args '()]
+                               #:jobs [jobs 1]
+                               #:timeout [timeout #f]
+                               #:repeat [repeat 1]
+                               #:file-count [file-count 0]
+                               #:inventory-hash [inv-hash "n/a"])
+  ;; Guard: do not write evidence if no results or zero parsed tests
+  (unless (pair? results)
+    (raise-user-error 'run-tests "cannot record gate evidence: no results"))
+  (define total-parsed (for/sum ([r (in-list results)]) (test-file-result-total r)))
+  (when (zero? total-parsed)
+    (raise-user-error 'run-tests "cannot record gate evidence: zero parsed tests"))
+  ;; Guard: any failure or timeout
+  (define any-fail?
+    (for/or ([r (in-list results)])
+      (not (zero? (test-file-result-failed r)))))
+  (when any-fail?
+    (raise-user-error 'run-tests "cannot record gate evidence: failures present"))
+  ;; Build evidence
   (define evid-dir (build-path (current-directory) ".gate-evidence"))
   (unless (directory-exists? evid-dir)
     (make-directory evid-dir))
   (define ver
-    (let ([m (regexp-match #rx"define q-version \"([^\"]+)\"" (file->string "util/version.rkt"))])
+    (let ([m (regexp-match #rx"define q-version \"([^\"]+)\"" (file->string (build-path base-dir "util/version.rkt")))])
       (or (and m (cadr m)) "unknown")))
-  (define evidence-file (build-path evid-dir (format "~a.passed" suite-label)))
-  (with-output-to-file evidence-file
-                       (lambda () (printf "~a ~a~n" ver (current-seconds)))
-                       #:exists 'truncate)
-  (printf ";; gate evidence recorded: ~a (v~a)~n" suite-label ver))
+  (define sha (get-git-sha))
+  (define pass-count (for/sum ([r (in-list results)]) (test-file-result-passed r)))
+  (define fail-count (for/sum ([r (in-list results)]) (test-file-result-failed r)))
+  (define timeout-count (count (lambda (r) (= (test-file-result-exit-code r) 2)) results))
+  (define evidence-file (build-path evid-dir (format "~a.json" suite-label)))
+  (define evidence-hash
+    (hash 'version
+          ver
+          'git-sha
+          sha
+          'suite
+          suite-label
+          'args
+          (map (lambda (a)
+                 (if (symbol? a)
+                     (symbol->string a)
+                     a))
+               args)
+          'jobs
+          jobs
+          'timeout
+          (or timeout "none")
+          'repeat
+          repeat
+          'selected-file-count
+          file-count
+          'parsed-test-count
+          total-parsed
+          'passed
+          pass-count
+          'failed
+          fail-count
+          'timed-out
+          timeout-count
+          'inventory-hash
+          inv-hash
+          'timestamp
+          (current-seconds)))
+  (call-with-output-file evidence-file
+                         (lambda (out)
+                           (write-json evidence-hash out)
+                           (newline out))
+                         #:exists 'truncate)
+  (printf ";; gate evidence v2 recorded: ~a (v~a) ~a files, ~a tests~n"
+          suite-label
+          ver
+          file-count
+          total-parsed))
 
 (define (main args)
   (define-values (jobs sequential? timeout strict? suite extra-files repeat record-gate? inventory?)
@@ -1090,16 +1197,27 @@
             (if (= repeat 1) "" "s")))
 
   ;; Run suite, optionally repeating N times
+  (define last-results (box '()))
   (for ([run-num (in-range 1 (add1 repeat))])
     (when (> repeat 1)
       (printf "~n;; ── Run ~a/~a ──~n" run-num repeat))
-    (define exit-code (run-suite-once suite-files jobs timeout-ms strict? suite-label run-num repeat))
+    (define-values (exit-code results)
+      (run-suite-once suite-files jobs timeout-ms strict? suite-label run-num repeat))
+    (set-box! last-results results)
     (unless (zero? exit-code)
       (exit exit-code)))
 
   ;; Record gate evidence if requested
   (when record-gate?
-    (record-gate-evidence! suite-label))
+    (define inv-hash (compute-inventory-hash suite-files))
+    (record-gate-evidence! suite-label
+                           #:results (unbox last-results)
+                           #:args args
+                           #:jobs jobs
+                           #:timeout timeout
+                           #:repeat repeat
+                           #:file-count (length suite-files)
+                           #:inventory-hash inv-hash))
 
   (exit 0))
 
