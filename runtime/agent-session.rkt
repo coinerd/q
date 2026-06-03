@@ -50,6 +50,7 @@
                   session-start-event
                   session-shutdown-event)
          "session/session-types.rkt"
+         (only-in "session/lifecycle-state.rkt" make-lifecycle-state lifecycle-state?)
          (only-in "session/session-events.rkt" wire-session-event-handlers!)
          (only-in "../llm/token-budget.rkt" estimate-context-tokens)
          (only-in "session/session-controls.rkt"
@@ -196,7 +197,8 @@
                              #:prompt-running? [prompt-running? #f]
                              #:task-fsm-state [task-fsm-state 'idle]
                              #:task-conclusions [task-conclusions '()]
-                             #:recent-tool-calls [recent-tool-calls '()])
+                             #:recent-tool-calls [recent-tool-calls '()]
+                             #:lifecycle [lifecycle (make-lifecycle-state)])
   (agent-session id
                  dir
                  provider
@@ -220,7 +222,8 @@
                  prompt-running?
                  task-fsm-state
                  task-conclusions
-                 recent-tool-calls))
+                 recent-tool-calls
+                 lifecycle))
 
 ;; session-rollout-enabled? : string? -> boolean?
 ;; Deterministic A/B assignment using session-id hash modulo 100.
