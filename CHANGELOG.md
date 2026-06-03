@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.85.1 (2026-06-03)
+
+### Typed Racket Migration & Facade Assessment
+
+**W0 (#6829): Preflight**
+- Audited all 20 #lang typed/racket modules
+- Documented 40+ consumers of llm/model.rkt
+
+**W1 (#6830): Revert llm/model.rkt from TR to racket/base (C2-07)**
+- Replaced #lang typed/racket with #lang racket/base + explicit contracts
+- Removed all TR type annotations (fields were all Any — zero compile-time safety)
+- Added contract-out for all constructors and conversion functions
+- 9 model tests, 75 conformance tests, 7 provider smoke tests pass
+
+**W2 (#6831): Facade Assessment (C2-08)**
+- Assessed tools/tool.rkt facade — KEEP as stable public API
+- Verified: zero consumers bypass facade to import sub-modules directly
+
 ## v0.85.0 (2026-06-03)
 
 ### Test Quality & Quick Wins
