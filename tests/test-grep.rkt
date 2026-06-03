@@ -172,6 +172,13 @@
                        (define c (string-join (result-content r) ""))
                        (check-true (regexp-match? #rx"[Pp]attern" c)))))
 
+    ;; 9b. Missing path argument returns error
+    (test-case "missing path returns error"
+      (define r (tool-grep (hasheq 'pattern "foo")))
+      (check-true (result-is-error? r))
+      (define c (string-join (result-content r) ""))
+      (check-true (regexp-match? #rx"[Pp]ath" c)))
+
     ;; 10. Hidden files/directories are skipped
     (test-case "hidden files and directories are skipped"
       (with-temp-dir (λ (dir)
