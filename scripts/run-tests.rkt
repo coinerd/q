@@ -112,7 +112,9 @@
          known-suites
          record-gate-evidence!
          get-file-metadata
-         clear-metadata-cache!)
+         clear-metadata-cache!
+         make-unique-log-name
+         truncate-test-output)
 
 ;; ---------------------------------------------------------------------------
 ;; Struct: test-file-result
@@ -680,6 +682,38 @@
                              (display (bytes->string* (test-file-result-stdout-bytes f)) out)
                              (fprintf out "~n--- stderr ---~n")
                              (display (bytes->string* (test-file-result-stderr-bytes f)) out)))))
+
+
+;; ---------------------------------------------------------------------------
+;; Unique failure log names (v0.83.8)
+;; ---------------------------------------------------------------------------
+
+(define (make-unique-log-name test-path)
+  "Create a unique log name from test path, incorporating path hash."
+  (define base (let ([b (file-name-from-path test-path)])
+                 (if b (path->string b) "unknown")))
+  (define safe-base (regexp-replace* #rx"[^a-zA-Z0-9._-]" base "_"))
+  (define path-hash (number->string (equal-hash-code test-path) 16))
+  (string-append "q-test-fail-" (string-replace safe-base ".rkt" "") "-" path-hash ".log"))
+
+;; ---------------------------------------------------------------------------
+;; Output truncation (v0.83.8)
+;; ---------------------------------------------------------------------------
+
+(define DEFAULT-OUTPUT-CAP 65536) ; 64KB
+
+(define (truncate-test-output output max-bytes)
+  "Truncate output to max-bytes, preserving head and tail with marker."
+  (define bts (string->bytes/utf-8 output))
+  (if (<= (bytes-length bts) max-bytes)
+      output
+      (let* ([half (quotient max-bytes 2)]
+             [head (subbytes bts 0 half)]
+             [tail (subbytes bts (- (bytes-length bts) half))]
+             [marker (string->bytes/utf-8
+                      (format "\n... truncated (~a bytes, showing ~a + ~a) ...\n"
+                              (bytes-length bts) half half))])
+        (bytes->string/utf-8 (bytes-append head marker tail)))))
 
 ;; ---------------------------------------------------------------------------
 ;; format-duration - ms → human-readable
