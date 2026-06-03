@@ -8,11 +8,13 @@
 ;; deterministic test cleanup via dynamic-wind.
 
 (require racket/file
-         (only-in "../../util/protocol-types.rkt" message? message-kind))
+         (only-in "../../util/protocol-types.rkt" message? message-kind)
+         (only-in "test-sandbox.rkt" with-test-sandbox test-sandbox-project-dir test-sandbox?))
 
 (provide with-temp-dir
          with-env-var
-         filter-session-info)
+         filter-session-info
+         with-isolated-temp-dir)
 
 ;; Create a temporary directory, pass it to thunk, guarantee cleanup.
 ;; Uses dynamic-wind so cleanup runs even if the test throws.
@@ -47,3 +49,12 @@
               [(hash? m) (not (equal? (hash-ref m 'kind #f) "session-info"))]
               [else #t]))
           entries))
+
+;; with-isolated-temp-dir : (path? -> A) -> A
+;; Adapter: uses test-sandbox for full cwd/env isolation.
+;; Provides the sandbox project-dir as the temp dir.
+;; Restores cwd and env on exit.
+(define (with-isolated-temp-dir thunk)
+  (with-test-sandbox #:isolate-home? #t
+                     #:isolate-cwd? #t
+                     (lambda (sb) (thunk (test-sandbox-project-dir sb)))))

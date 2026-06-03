@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.83.3 (2026-06-03)
+
+### Canonical Test Sandbox and Isolation Pilot
+- **Sandbox helper**: new `tests/helpers/test-sandbox.rkt` with `with-test-sandbox`.
+- Creates isolated temp project/session/home/quarantine directories.
+- Parameterizes `current-directory` and HOME/XDG env vars; restores on exit.
+- Cleans up temp dirs unless `preserve?` is `#t`.
+- 14 self-tests covering creation, isolation, cleanup, exception paths.
+- **Workflow pilot**: `tests/workflows/test-sandbox-integration.rkt` verifies sandbox coexists with existing workflow fixtures.
+- **Fixture adapter**: `with-isolated-temp-dir` in `tests/helpers/fixtures.rkt` wraps sandbox for existing tests.
+- No mass migration — all existing tests backward compatible.
+
 ## v0.83.2 (2026-06-03)
 
 ### Metadata Parser and Fixture Self-Test Inclusion
