@@ -60,7 +60,7 @@
          (contract-out [phase-build-request
                         (-> (listof hash?)
                             (or/c (listof hash?) #f)
-                            hash?
+                            (or/c hash? #f)
                             (values model-request? (listof effect?)))])
          (contract-out [phase-pre-hook
                         (-> (or/c procedure? #f)

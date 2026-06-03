@@ -28,7 +28,6 @@
          (only-in "../util/message/message.rkt" make-message message message-id)
          "../util/ids.rkt"
          (only-in "../util/cancellation.rkt" cancellation-token? cancellation-token-cancelled?)
-         (only-in "../util/tool/tool-types.rkt" tool?)
          (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload)
          ;; Re-exported from stream-reducer.rkt (v0.53.2)
          (only-in "stream-reducer.rkt"
@@ -74,7 +73,7 @@
                             string?
                             string?
                             loop-state?
-                            (listof tool?)
+                            (or/c (listof hash?) #f)
                             provider?
                             (or/c procedure? #f)
                             loop-result?)]))

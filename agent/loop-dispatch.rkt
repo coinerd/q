@@ -24,7 +24,6 @@
          (only-in "turn-reducer.rkt" decide-after-msg-hook decide-after-stream)
          (only-in "turn-model.rkt" make-stream-completion turn-decision-tag)
          (only-in "event-emitter.rkt" emit-typed-event!)
-         (only-in "../util/tool/tool-types.rkt" tool?)
          (only-in "../util/cancellation.rkt" cancellation-token?)
          (only-in "event-bus.rkt" event-bus?)
          (only-in "loop-stream.rkt" handle-cancellation build-stream-result)
@@ -40,7 +39,7 @@
                             string?
                             loop-state?
                             (listof any/c)
-                            (or/c (listof tool?) #f)
+                            (or/c (listof hash?) #f)
                             (or/c procedure? #f)
                             (or/c cancellation-token? #f)
                             loop-result?)]))
