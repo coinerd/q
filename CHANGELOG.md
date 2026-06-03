@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.83.10 (2026-06-03)
+
+### Audit Closure — Runtime Fixes, Workflow Contracts, Metadata Tags
+
+**W0 (#6775):**
+- F1: Unique failure log names via `equal-hash-code` on full test path
+- F2: `@boundary`, `@isolation`, `@timeout` metadata tags recognized by runner
+- F3: `scenario-eof` factory for empty-stream provider testing
+- F4: `make-goal-provider-per-turn-cap` for goal loop turn-limit testing
+
+**W1 (#6776):**
+- T5: `test-goal-workflow-contract.rkt` — 8 goal lifecycle workflow tests
+- T7: Emit `context.built` event so TUI status bar shows token count
+- T9: `stream.turn.completed` handler clears busy state in TUI
+- T10: `stream_options.include_usage` in OpenAI-compatible streaming requests
+- T12: Preserve `session-index` in config when setting working-set
+- T13: Use `project-dir` for tool working-directory instead of log path
+- T14: Wire session queue into `make-loop-config` + use `enqueue-steering!` in submit-handler
+- T15: Clamp `maxParallel` instead of rejecting in `spawn-subagent`
+
+**W2 (#6777):**
+- T6: Document 6 metadata tags in `TEST_CONVENTIONS.md` with reference table
+- T16: Version bump to v0.83.10
+
 ## v0.83.9 (2026-06-03)
 
 ### Series Closure, Metrics, and Release Readiness

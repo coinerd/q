@@ -21,9 +21,22 @@ Add these to the first 30 lines of test files:
 ;; @speed fast           ; fast | slow
 ;; @boundary unit        ; unit | integration
 ;; @mutates none         ; none | env | cwd | env,cwd
+;; @isolation none       ; none | mutating | process (v0.83.10+)
+;; @timeout 30           ; per-file timeout in seconds (v0.83.10+)
 ```
 
 The runner reads these tags for classification. Files without tags use heuristic fallbacks.
+
+### Tag Reference
+
+| Tag | Values | Effect |
+|-----|--------|--------|
+| `@suite` | `runtime`, `tui`, `cli`, `llm`, `tools`, `extensions` | Suite classification for parallel grouping |
+| `@speed` | `fast`, `slow` | Slow tests skipped in `--suite fast` |
+| `@boundary` | `unit`, `integration` | Integration tests may need sandbox isolation |
+| `@mutates` | `none`, `env`, `cwd`, `env,cwd` | Declares what the test mutates; affects sandbox setup |
+| `@isolation` | `none`, `mutating`, `process` | `mutating`/`process` forces sandbox setup; overrides heuristic |
+| `@timeout` | integer (seconds) | Per-file timeout override; replaces default timeout |
 
 ## Test Sandbox
 
