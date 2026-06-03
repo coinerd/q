@@ -207,6 +207,14 @@
   (for/or ([pattern (in-list high-risk-patterns)])
     (regexp-match? pattern lower)))
 
+;; Structured classifier source-of-truth helper for user-visible warnings.
+(define (structured-destructive-command? command)
+  (define findings (classify-shell-risks (tokenize-shell-command command)))
+  (for/or ([f (in-list findings)])
+    (member
+     (shell-risk-finding-type f)
+     '(destructive high-risk windows-destructive network-pipe command-substitution eval exec))))
+
 ;; ── Structured risk classifier shadow mode (v0.70.3) ──
 ;; Compares regex-based detection with structured classifier.
 ;; Returns diagnostic string when they disagree, #f when they agree.
@@ -316,13 +324,24 @@
        [(and block-destructive? (destructive-command? command))
         (make-error-result (format "Blocked destructive command: ~a" command))]
        [else
-        ;; Optional warning
-        (when (and warn-on-destructive? (destructive-command? command))
+        ;; Optional warning. Prefer structured classifier for user-visible warning-only UX:
+        ;; benign command substitutions such as name=$(basename "$f") should not alarm users
+        ;; when the structured classifier finds no risk.
+        (define regex-destructive? (destructive-command? command))
+        (define structured-destructive? (structured-destructive-command? command))
+        (define lower-command (string-downcase command))
+        (define benign-substitution-disagreement?
+          (and regex-destructive?
+               (not structured-destructive?)
+               (or (regexp-match? #rx"\\$\\(" lower-command)
+                   (regexp-match? #rx"`[^`]+`" lower-command))))
+        (define should-warn?
+          (or structured-destructive?
+              (and regex-destructive? (not benign-substitution-disagreement?))))
+        (when (and warn-on-destructive? should-warn?)
           (fprintf warning-port "WARNING: Destructive command detected: ~a~n" command))
-        ;; v0.70.3: Structured classifier shadow mode — log disagreements
-        (define classifier-diag (shell-risk-classifier-diagnostic command))
-        (when classifier-diag
-          (fprintf warning-port "~a" classifier-diag))
+        ;; v0.70.3: Shadow diagnostics remain available through
+        ;; shell-risk-classifier-diagnostic, but are not printed to stderr/TUI by default.
         (define timeout-arg (hash-ref args 'timeout #f))
         (define raw-work-dir (hash-ref args 'working-directory #f))
         (define work-dir (and raw-work-dir (expand-home-path raw-work-dir)))

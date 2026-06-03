@@ -60,6 +60,32 @@
                "ls should NOT produce a destructive-command warning on stderr"))
 
 ;; --------------------------------------------------
+;; Test 4b: Benign command substitution does NOT leak warning/diagnostic
+;; --------------------------------------------------
+(let ([captured-stderr (open-output-string)])
+  (define benign-command
+    "for f in /tmp/example.rkt; do name=$(basename \"$f\"); echo \"$name\"; done")
+  (parameterize ([current-error-port captured-stderr]
+                 [current-bash-execution-config (make-bash-execution-config #:warn? #t #:block? #f)])
+    (tool-bash (hasheq 'command benign-command)))
+  (define stderr-str (get-output-string captured-stderr))
+  (check-false (string-contains? stderr-str "Destructive command detected")
+               "benign command substitution should not produce destructive warning")
+  (check-false (string-contains? stderr-str "[CLASSIFIER-DIAG]")
+               "classifier disagreement diagnostics should not print by default"))
+
+;; --------------------------------------------------
+;; Test 4c: Risky regex-only commands still warn
+;; --------------------------------------------------
+(let ([captured-stderr (open-output-string)])
+  (parameterize ([current-error-port captured-stderr]
+                 [current-bash-execution-config (make-bash-execution-config #:warn? #t #:block? #f)])
+    (tool-bash (hasheq 'command "source /tmp/untrusted-q-test-script")))
+  (define stderr-str (get-output-string captured-stderr))
+  (check-not-false (string-contains? stderr-str "Destructive command detected")
+                   "risky regex-only commands should still warn in warn mode"))
+
+;; --------------------------------------------------
 ;; Test 5: Setting warn? #f suppresses warnings on destructive commands
 ;; --------------------------------------------------
 (let ([captured-stderr (open-output-string)])
