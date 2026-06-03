@@ -20,6 +20,8 @@
          json
          "../../llm/model.rkt"
          "../../llm/provider.rkt"
+         "../../util/message.rkt"
+         "../../util/content-parts.rkt"
          "goal-state.rkt"
          "goal-checks.rkt")
 
@@ -123,8 +125,22 @@ Do NOT include any text outside the JSON object in your final response.")
 ;; Format transcript for agent evaluation
 (define (format-transcript-for-agent messages)
   (string-join (for/list ([msg (in-list messages)])
-                 (define role (hash-ref msg 'role "unknown"))
-                 (define content (hash-ref msg 'content ""))
+                 (define role
+                   (cond
+                     [(message? msg) (message-role msg)]
+                     [(hash? msg) (hash-ref msg 'role "unknown")]
+                     [else "unknown"]))
+                 (define content
+                   (cond
+                     [(message? msg)
+                      (string-join (for/list ([part (in-list (message-content msg))])
+                                     (cond
+                                       [(text-part? part) (text-part-text part)]
+                                       [(string? part) part]
+                                       [else (~a part)]))
+                                   "")]
+                     [(hash? msg) (hash-ref msg 'content "")]
+                     [else ""]))
                  (format "[~a]: ~a" role content))
                "\n\n"))
 
