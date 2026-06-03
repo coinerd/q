@@ -22,7 +22,11 @@
                   tool-call-part?
                   make-tool-call-part
                   make-tool-result-part)
-         (only-in "../../util/message/message.rkt" make-message message-role message-content message-id)
+         (only-in "../../util/message/message.rkt"
+                  make-message
+                  message-role
+                  message-content
+                  message-id)
          (only-in "../../util/tool/tool-types.rkt" make-tool-call tool-call-id tool-result-content)
          (only-in "../../util/content/content-parts.rkt"
                   tool-call-part-id
@@ -59,6 +63,22 @@
 ;; Subagent configuration struct — replaces ad-hoc hash extraction
 (struct subagent-config (task role max-turns tools model) #:transparent)
 
+;; Spawn rate limiter: parameter holding list of spawn timestamps (milliseconds)
+(define current-spawn-timestamps (make-parameter (box '())))
+(define SPAWN-RATE-LIMIT 30) ;; max spawns per minute
+(define SPAWN-RATE-WINDOW 60000) ;; 60 seconds in ms
+
+;; Check and record spawn attempt. Returns #t if allowed, #f if rate-limited.
+(define (check-spawn-rate!)
+  (define now (current-inexact-milliseconds))
+  (define ts-box (current-spawn-timestamps))
+  (define valid-ts (filter (lambda (t) (> (- now t) SPAWN-RATE-WINDOW)) (unbox ts-box)))
+  (if (>= (length valid-ts) SPAWN-RATE-LIMIT)
+      #f
+      (begin
+        (set-box! ts-box (cons now valid-ts))
+        #t)))
+
 ;; Default role prompt when no role is specified
 (define default-role-prompt
   "You are a focused assistant executing a specific delegated task. Complete the task efficiently and return the result.")
@@ -78,10 +98,12 @@
 
 ;; The spawn-subagent tool implementation
 (define (tool-spawn-subagent args [exec-ctx #f])
-  (define cfg (parse-subagent-config args))
-  (if (not (subagent-config-task cfg))
-      (make-error-result "task is required")
-      (run-subagent-with-config cfg exec-ctx)))
+  (if (not (check-spawn-rate!))
+      (make-error-result "spawn rate limit exceeded (30/min)")
+      (let ([cfg (parse-subagent-config args)])
+        (if (not (subagent-config-task cfg))
+            (make-error-result "task is required")
+            (run-subagent-with-config cfg exec-ctx)))))
 
 ;; Parse subagent-config from tool call args hash.
 (define (parse-subagent-config args)
@@ -376,6 +398,7 @@
     [(= (length jobs) 0) (make-error-result "jobs array must not be empty")]
     [(> (length jobs) 12) (make-error-result "jobs array must not exceed 12 items")]
     [(< max-parallel 1) (make-error-result "maxParallel must be at least 1")]
+    [(not (check-spawn-rate!)) (make-error-result "spawn rate limit exceeded (30/min)")]
     [else
      ;; v0.83.10: Clamp instead of reject. Semaphore-based queuing handles excess.
      (define effective-parallel (min max-parallel (length jobs) 3))

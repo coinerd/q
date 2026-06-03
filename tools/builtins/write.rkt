@@ -68,7 +68,9 @@
          (let ([p (if (string? resolved)
                       resolved
                       (path->string resolved))])
-           (with-handlers ([exn:fail? (lambda (_) p)])
+           (with-handlers ([exn:fail? (lambda (e)
+                                        (log-warning "write: path canonicalization failed for ~a: ~a" p (exn-message e))
+                                        p)])
              (path->string (simplify-path (resolve-path p)))))))
   (cond
     [(not path-str) (make-error-result "Missing required argument: path")]
