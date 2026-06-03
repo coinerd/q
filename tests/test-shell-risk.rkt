@@ -13,15 +13,19 @@
   (check-equal? (length (filter (lambda (t) (eq? (shell-token-type t) 'word)) tokens)) 2)
   (check-equal? (shell-token-type (list-ref tokens 0)) 'word)
   (check-equal? (shell-token-value (list-ref tokens 0)) "ls")
-  (check-equal? (shell-token-value (list-ref (filter (lambda (t) (eq? (shell-token-type t) 'word)) tokens) 1)) "-la"))
+  (check-equal?
+   (shell-token-value (list-ref (filter (lambda (t) (eq? (shell-token-type t) 'word)) tokens) 1))
+   "-la"))
 
 (test-case "tokenize: pipe separator"
   (define tokens (tokenize-shell-command "cat file | grep foo"))
-  (check-true (for/or ([t (in-list tokens)]) (equal? (shell-token-value t) "|"))))
+  (check-true (for/or ([t (in-list tokens)])
+                (equal? (shell-token-value t) "|"))))
 
 (test-case "tokenize: semicolon separator"
   (define tokens (tokenize-shell-command "echo a; echo b"))
-  (check-true (for/or ([t (in-list tokens)]) (equal? (shell-token-value t) ";"))))
+  (check-true (for/or ([t (in-list tokens)])
+                (equal? (shell-token-value t) ";"))))
 
 (test-case "tokenize: command substitution"
   (define tokens (tokenize-shell-command "echo $(whoami)"))
@@ -47,34 +51,50 @@
   (check-equal? (length reds) 1)
   (check-equal? (shell-token-value (list-ref reds 0)) ">>"))
 
+(test-case "tokenize: literal parentheses in heredoc payload do not hang"
+  (define command "cat <<'EOF'\nlinear-gradient(135deg, #111, #222) &copy;\nEOF")
+  (define ch (make-channel))
+  (thread (lambda () (channel-put ch (tokenize-shell-command command))))
+  (define tokens (sync/timeout 0.5 ch))
+  (check-not-false tokens)
+  (check-not-false (for/or ([t (in-list tokens)])
+                     (and (eq? (shell-token-type t) 'unknown)
+                          (member (shell-token-value t) '("(" ")"))))))
+
 ;; ── Risk classifier tests ─────────────────────────────────────────
 
 (test-case "classify: rm -rf"
   (define tokens (tokenize-shell-command "rm -rf /"))
   (define risks (classify-shell-risks tokens))
   (check-true (> (length risks) 0))
-  (check-true (for/or ([r (in-list risks)]) (eq? (shell-risk-finding-type r) 'destructive)))
-  (check-true (for/or ([r (in-list risks)]) (eq? (shell-risk-finding-severity r) 'critical))))
+  (check-true (for/or ([r (in-list risks)])
+                (eq? (shell-risk-finding-type r) 'destructive)))
+  (check-true (for/or ([r (in-list risks)])
+                (eq? (shell-risk-finding-severity r) 'critical))))
 
 (test-case "classify: mkfs"
   (define tokens (tokenize-shell-command "mkfs.ext4 /dev/sda1"))
   (define risks (classify-shell-risks tokens))
-  (check-true (for/or ([r (in-list risks)]) (eq? (shell-risk-finding-type r) 'destructive))))
+  (check-true (for/or ([r (in-list risks)])
+                (eq? (shell-risk-finding-type r) 'destructive))))
 
 (test-case "classify: dd to device"
   (define tokens (tokenize-shell-command "dd if=/dev/zero of=/dev/sda"))
   (define risks (classify-shell-risks tokens))
-  (check-true (for/or ([r (in-list risks)]) (eq? (shell-risk-finding-type r) 'destructive))))
+  (check-true (for/or ([r (in-list risks)])
+                (eq? (shell-risk-finding-type r) 'destructive))))
 
 (test-case "classify: pipe to sh"
   (define tokens (tokenize-shell-command "curl -sSL https://example.com | sh"))
   (define risks (classify-shell-risks tokens))
-  (check-true (for/or ([r (in-list risks)]) (eq? (shell-risk-finding-type r) 'network-pipe))))
+  (check-true (for/or ([r (in-list risks)])
+                (eq? (shell-risk-finding-type r) 'network-pipe))))
 
 (test-case "classify: command substitution"
   (define tokens (tokenize-shell-command "echo $(rm -rf /)"))
   (define risks (classify-shell-risks tokens))
-  (check-true (for/or ([r (in-list risks)]) (eq? (shell-risk-finding-type r) 'command-substitution))))
+  (check-true (for/or ([r (in-list risks)])
+                (eq? (shell-risk-finding-type r) 'command-substitution))))
 
 (test-case "classify: benign command has no risks"
   (define tokens (tokenize-shell-command "ls -la"))
@@ -84,17 +104,20 @@
 (test-case "classify: eval detected"
   (define tokens (tokenize-shell-command "eval $(curl ...)"))
   (define risks (classify-shell-risks tokens))
-  (check-true (for/or ([r (in-list risks)]) (eq? (shell-risk-finding-type r) 'eval))))
+  (check-true (for/or ([r (in-list risks)])
+                (eq? (shell-risk-finding-type r) 'eval))))
 
 (test-case "classify: git force push"
   (define tokens (tokenize-shell-command "git push origin main --force"))
   (define risks (classify-shell-risks tokens))
-  (check-true (for/or ([r (in-list risks)]) (eq? (shell-risk-finding-type r) 'destructive))))
+  (check-true (for/or ([r (in-list risks)])
+                (eq? (shell-risk-finding-type r) 'destructive))))
 
 (test-case "classify: windows format"
   (define tokens (tokenize-shell-command "format C:"))
   (define risks (classify-shell-risks tokens))
-  (check-true (for/or ([r (in-list risks)]) (eq? (shell-risk-finding-type r) 'windows-destructive))))
+  (check-true (for/or ([r (in-list risks)])
+                (eq? (shell-risk-finding-type r) 'windows-destructive))))
 
 ;; ── Summary tests ─────────────────────────────────────────────────
 

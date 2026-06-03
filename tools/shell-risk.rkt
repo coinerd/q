@@ -173,6 +173,7 @@
          [(char=? c #\;) (loop (add1 i) (cons (shell-token 'separator ";" i (add1 i)) tokens))]
          [(and (char=? c #\&) (< (add1 i) len) (char=? (list-ref chars (add1 i)) #\&))
           (loop (+ i 2) (cons (shell-token 'separator "&&" i (+ i 2)) tokens))]
+         [(char=? c #\&) (loop (add1 i) (cons (shell-token 'separator "&" i (add1 i)) tokens))]
          [(and (char=? c #\|) (< (add1 i) len) (char=? (list-ref chars (add1 i)) #\|))
           (loop (+ i 2) (cons (shell-token 'separator "||" i (+ i 2)) tokens))]
          [(char=? c #\|) (loop (add1 i) (cons (shell-token 'separator "|" i (add1 i)) tokens))]
@@ -182,6 +183,11 @@
               (and (char-numeric? c) (< (add1 i) len) (char=? (list-ref chars (add1 i)) #\>)))
           (define j (skip-redirect chars i))
           (loop j (cons (shell-token 'redirect (substring command i j) i j) tokens))]
+         ;; Literal parentheses outside command substitutions. Treat as unknown
+         ;; tokens to guarantee tokenizer progress on heredoc/CSS payloads.
+         [(or (char=? c #\() (char=? c #\)))
+          (loop (add1 i)
+                (cons (shell-token 'unknown (substring command i (add1 i)) i (add1 i)) tokens))]
          ;; Word
          [else
           (define j
