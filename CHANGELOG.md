@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.83.6 (2026-06-03)
+
+### Goal and TUI Scenario Harnesses
+- **Goal scenario harness**: `tests/helpers/goal-scenarios.rkt` with event/status capture, fake run-prompt factories, goal provider factories (no-progress, tool-timeout), shutdown check helpers.
+- **Goal loop scenario tests**: `test-goal-loop-scenarios.rkt` with 15 tests covering capture, fake run-prompt, goal-run! integration (shutdown, max-turns cap, event emission, status messages).
+- **TUI event pipeline**: `tests/helpers/tui-scenarios.rkt` with synchronized event capture (semaphore-based), channel pairs, frame snapshot.
+- **TUI concurrency tests**: `test-tui-event-pipeline-concurrency.rkt` with 8 tests (thread-safe concurrent put!, concurrent put+read, frame snapshot).
+- **TUI frame integrity**: `test-tui-frame-integrity.rkt` with 6 tests (row independence, dirty flag determinism, concurrent snapshot creation).
+
 ## v0.83.5 (2026-06-03)
 
 ### Provider and Tool-Turn Scenario Harnesses
