@@ -21,11 +21,11 @@
          agent-context-instructions
          agent-context-examples
          agent-context-tool-preferences
-         (contract-out [load-agent-context (->* () (any/c) (or/c agent-context? #f))]
+         (contract-out [load-agent-context (->* () (path-string?) (or/c agent-context? #f))]
                        [parse-agent-file (-> string? agent-context?)]
-                       [discover-agents-files (->* () (any/c) (listof path?))]
+                       [discover-agents-files (->* () (path-string?) (listof path?))]
                        [merge-agent-contexts (-> (listof agent-context?) agent-context?)]
-                       [find-git-root (-> any/c (or/c path? #f))]))
+                       [find-git-root (-> path-string? (or/c path? #f))]))
 
 ;; ============================================================
 ;; Structs

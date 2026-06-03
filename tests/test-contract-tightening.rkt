@@ -89,3 +89,25 @@
 
 (test-case "make-tui-ctx: rejects invalid session-queue type"
   (check-exn exn:fail:contract? (lambda () (make-tui-ctx #:session-queue "not-a-queue"))))
+
+;; ── v0.84.1 W1 secondary contract tightening ──
+(require "../agent/turn-model.rkt"
+         "../agent/queue.rkt")
+
+(test-case "turn-command payload accepts hash"
+  (check-pred turn-command? (make-turn-start (hasheq))))
+
+(test-case "turn-decision payload accepts hash"
+  (check-pred turn-decision? (make-decision-emit-start (hasheq))))
+
+(test-case "queue-element? is string?"
+  (check-true (queue-element? "hello"))
+  (check-false (queue-element? 42)))
+
+(test-case "enqueue-steering! accepts string"
+  (define q (make-queue))
+  (check-not-exn (lambda () (enqueue-steering! q "hello"))))
+
+(test-case "enqueue-steering! rejects non-string"
+  (define q (make-queue))
+  (check-exn exn:fail:contract? (lambda () (enqueue-steering! q 42))))

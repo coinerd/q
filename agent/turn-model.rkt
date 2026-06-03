@@ -7,15 +7,15 @@
 ;; All immutable, all transparent, no boxes, no parameters.
 ;; STABILITY: stable
 
-(require racket/contract)
+(require racket/contract
+         (only-in "../extensions/api.rkt" extension-registry?))
 
 ;; ============================================================
 ;; Turn context -- 7 immutable fields
 ;; ============================================================
 
 (struct turn-context
-        (session-id iteration messages active-tools model-config budget-ctx extension-registry)
- )
+        (session-id iteration messages active-tools model-config budget-ctx extension-registry))
 
 ;; ============================================================
 ;; Turn command -- discriminated union (4 tags)
@@ -99,8 +99,7 @@
 ;; Stream completion -- replaces raw hash for decide-after-stream
 ;; ============================================================
 
-(struct stream-completion (cancelled? cancel-reason text tool-calls usage model all-chunks)
- )
+(struct stream-completion (cancelled? cancel-reason text tool-calls usage model all-chunks))
 
 (define (make-stream-completion #:cancelled? [cancelled? #f]
                                 #:cancel-reason [cancel-reason #f]
@@ -127,10 +126,11 @@
                                                      [active-tools list?]
                                                      [model-config hash?]
                                                      [budget-ctx hash?]
-                                                     [extension-registry any/c])))
-         (contract-out (struct turn-command ([tag turn-command-tag/c] [payload any/c])))
+                                                     [extension-registry
+                                                      (or/c extension-registry? #f)])))
+         (contract-out (struct turn-command ([tag turn-command-tag/c] [payload hash?])))
          (contract-out (struct turn-decision
-                               ([tag turn-decision-tag/c] [payload any/c] [metadata hash?])))
+                               ([tag turn-decision-tag/c] [payload hash?] [metadata hash?])))
          make-turn-start
          make-turn-hook-result
          make-turn-stream-complete
@@ -165,4 +165,4 @@
                                                       [all-chunks list?])))
          make-stream-completion
          ;; Hook stage payload
-         (contract-out (struct hook-stage-payload ([stage symbol?] [result any/c]))))
+         (contract-out (struct hook-stage-payload ([stage symbol?] [result hash?]))))
