@@ -16,6 +16,7 @@
                   guarded-set-prompt-running!
                   guarded-set-shutdown-requested!)
          "../runtime/session/session-config.rkt"
+         "../runtime/session/lifecycle-state.rkt"
          "../agent/queue.rkt"
          "../agent/event-bus.rkt")
 
@@ -36,20 +37,15 @@
                  (hasheq) ; config
                  #t ; active?
                  (current-seconds)
-                 #f ; compacting?
-                 #f ; last-compaction-time
-                 #f ; persisted?
                  '() ; pending-entries
                  'off ; thinking-level
-                 #f ; shutdown-requested?
-                 #f ; force-shutdown?
-                 #f)) ; prompt-running?
+                 (make-lifecycle-state)))
 
-(test-case "agent-session has 21 fields"
+(test-case "agent-session has 16 fields"
   (define sess (make-test-session))
   (define vec (struct->vector sess))
   ;; struct->vector includes struct name at index 0
-  (check-equal? (vector-length vec) 22 "agent-session should have 21 fields + name slot"))
+  (check-equal? (vector-length vec) 17 "agent-session should have 16 fields + name slot"))
 
 (test-case "identity fields are accessible"
   (define sess (make-test-session))

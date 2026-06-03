@@ -42,7 +42,7 @@
   (check-false (lifecycle-state-shutdown-requested? ls))
   (check-false (lifecycle-state-force-shutdown? ls))
   (check-false (lifecycle-state-prompt-running? ls))
-  (check-false (lifecycle-state-task-fsm-state ls))
+  (check-eq? (lifecycle-state-task-fsm-state ls) 'idle)
   (check-equal? (lifecycle-state-task-conclusions ls) '())
   (check-equal? (lifecycle-state-recent-tool-calls ls) '()))
 
@@ -79,7 +79,7 @@
 
 (test-case "lifecycle-state task-fsm-state evolves"
   (define ls (make-lifecycle-state))
-  (check-false (lifecycle-state-task-fsm-state ls))
+  (check-eq? (lifecycle-state-task-fsm-state ls) 'idle)
   (set-lifecycle-state-task-fsm-state! ls 'implementing)
   (check-eq? (lifecycle-state-task-fsm-state ls) 'implementing))
 

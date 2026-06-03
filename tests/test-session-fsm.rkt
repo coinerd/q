@@ -21,7 +21,9 @@
                   agent-session
                   agent-session-active?
                   agent-session-compacting?
-                  agent-session-prompt-running?))
+                  agent-session-prompt-running?)
+         (only-in "../runtime/session/lifecycle-state.rkt"
+                  lifecycle-state))
 
 ;; Minimal session struct for testing (no dependencies)
 (define (make-test-session #:active? [active? #t]
@@ -29,7 +31,8 @@
                            #:prompt-running? [prompt-running? #f])
   (agent-session "test-id" "/tmp/test" #f #f #f #f
                  #f '() #f #f #f active? 0
-                 compacting? #f #f '() #f #f #f prompt-running?))
+                 '() #f
+                 (lifecycle-state compacting? #f #f #f #f prompt-running? #f '() '())))
 
 (test-case "session-lifecycle FSM machine has correct states"
   (check-not-false (session-lifecycle-state? session-lifecycle-active))
