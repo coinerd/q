@@ -44,17 +44,17 @@
                   current-conclusion-token-budget
                   current-graph-conclusion-selection?)
          (only-in "../runtime/context-assembly/state-aware-builder.rkt" current-ws-evolution-enabled?)
-         (only-in "../runtime/session-config.rkt"
+         (only-in "../runtime/session/session-config.rkt"
                   apply-context-assembly-profile!
                   current-context-assembly-profile)
          (only-in "../runtime/working-set.rkt" make-working-set working-set-add! working-set-entries)
          (only-in "../runtime/agent-session.rkt" session-rollout-enabled?)
-         (only-in "../util/protocol-types.rkt"
+         (only-in "../util/message/protocol-types.rkt"
                   make-message
                   make-text-part
                   message-role
                   message-content)
-         (only-in "../util/message.rkt" message-id message-kind))
+         (only-in "../util/message/message.rkt" message-id message-kind))
 
 ;; Helper: create a simple test message
 (define (test-msg role text)

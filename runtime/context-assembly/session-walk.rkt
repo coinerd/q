@@ -10,8 +10,8 @@
 (require racket/list
          racket/match
          racket/string
-         (only-in "../../util/content-parts.rkt" make-text-part)
-         (only-in "../../util/message.rkt"
+         (only-in "../../util/content/content-parts.rkt" make-text-part)
+         (only-in "../../util/message/message.rkt"
                   message
                   message-id
                   message-kind
@@ -20,7 +20,7 @@
                   message-meta
                   make-message)
          (only-in "../../util/entry-predicates.rkt" compaction-summary-entry?)
-         (only-in "../../util/content-parts.rkt" text-part text-part? text-part-text)
+         (only-in "../../util/content/content-parts.rkt" text-part text-part? text-part-text)
          (only-in "../session-index.rkt" active-leaf get-branch))
 
 (provide build-session-context

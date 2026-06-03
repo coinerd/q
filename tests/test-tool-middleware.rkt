@@ -8,7 +8,7 @@
 
 (require rackunit
          (only-in racket/string string-contains?)
-         (only-in "../util/tool-types.rkt"
+         (only-in "../util/tool/tool-types.rkt"
                   tool-call
                   make-tool-call
                   tool-call-name

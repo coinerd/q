@@ -11,12 +11,12 @@
          (only-in racket/string string-trim string-contains? string-join)
          json
          (only-in racket/base make-semaphore call-with-semaphore)
-         (only-in "../util/json-helpers.rkt" ensure-hash-args)
-         (only-in "../util/errors.rkt" with-logged-catch)
+         (only-in "../util/json/json-helpers.rkt" ensure-hash-args)
+         (only-in "../util/error/errors.rkt" with-logged-catch)
          (only-in "../util/cancellation.rkt" cancellation-token?)
          (only-in "../runtime/settings.rkt" q-settings?)
          (only-in "../tools/permission-gate.rkt" permission-config?)
-         (only-in "../util/tool-types.rkt"
+         (only-in "../util/tool/tool-types.rkt"
                   tool-call
                   tool-call?
                   tool-call-id
@@ -27,7 +27,7 @@
                   tool-result?
                   tool-result-content
                   tool-result-details)
-         (only-in "../util/tool-types.rkt" tool-result-is-error?)
+         (only-in "../util/tool/tool-types.rkt" tool-result-is-error?)
          ;; Submodule imports
          "tool-struct.rkt"
          "exec-context.rkt"

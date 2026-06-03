@@ -7,7 +7,7 @@
 
 (require rackunit
          rackunit/text-ui
-         (only-in "../util/event-macro.rkt"
+         (only-in "../util/event/event-macro.rkt"
                   lookup-event-serializer
                   lookup-event-deserializer
                   current-event-serializer-registry

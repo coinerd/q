@@ -11,7 +11,7 @@
 ;;
 ;; Verdicts: PASS ≥ 70, PARTIAL ≥ 40, FAIL < 40
 
-(require "../../util/error-helpers.rkt")
+(require "../../util/error/error-helpers.rkt")
 (require racket/file
          racket/format
          racket/list
@@ -19,7 +19,7 @@
          racket/string
          json
          racket/system
-         (only-in "../../util/jsonl.rkt" jsonl-read-all-valid)
+         (only-in "../../util/json/jsonl.rkt" jsonl-read-all-valid)
          "task.rkt"
          (only-in "executor.rkt"
                   execution-result?

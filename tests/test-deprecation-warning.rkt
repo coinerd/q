@@ -7,7 +7,7 @@
 (require rackunit
          rackunit/text-ui
          racket/logging
-         (only-in "../util/errors.rkt" warn-deprecated!))
+         (only-in "../util/error/errors.rkt" warn-deprecated!))
 
 (define deprecation-suite
   (test-suite "Deprecation warning utility"

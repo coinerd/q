@@ -14,14 +14,14 @@
 ;;   MAX-TOOL-DISPLAY-LEN       — constant
 ;;   format-classified-error    — error formatting
 
-(require "../util/error-helpers.rkt")
-(require (only-in "../util/event.rkt" event-ev event-payload)
+(require "../util/error/error-helpers.rkt")
+(require (only-in "../util/event/event.rkt" event-ev event-payload)
          "../util/ansi.rkt"
          "../util/markdown.rkt"
-         "../util/error-classify.rkt"
+         "../util/error/error-classify.rkt"
          "../util/string-helpers.rkt"
-         (only-in "../util/tool-display.rkt" extract-arg-summary format-tool-call-display)
-         (only-in "../util/content-helpers.rkt" tool-result-content->string)
+         (only-in "../util/tool/tool-display.rkt" extract-arg-summary format-tool-call-display)
+         (only-in "../util/content/content-helpers.rkt" tool-result-content->string)
          json
          racket/string
          racket/format

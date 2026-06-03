@@ -38,8 +38,8 @@
 ;; ============================================================
 
 ;; Import struct from util/ to break runtime→tools reverse dependency (H1).
-(require "../util/tool-registry-struct.rkt"
-         (submod "../util/tool-registry-struct.rkt" internal))
+(require "../util/tool/tool-registry-struct.rkt"
+         (submod "../util/tool/tool-registry-struct.rkt" internal))
 (provide tool-registry?)
 
 ;; Safe read-only accessor under lock

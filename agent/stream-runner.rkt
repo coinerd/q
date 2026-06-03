@@ -11,8 +11,8 @@
          "../llm/provider.rkt"
          "streaming-message.rkt"
          "state.rkt"
-         (only-in "../util/content-parts.rkt" make-text-part)
-         (only-in "../util/message.rkt" make-message message message-id)
+         (only-in "../util/content/content-parts.rkt" make-text-part)
+         (only-in "../util/message/message.rkt" make-message message message-id)
          "../util/ids.rkt"
          (only-in "../util/cancellation.rkt" cancellation-token? cancellation-token-cancelled?)
          (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload)

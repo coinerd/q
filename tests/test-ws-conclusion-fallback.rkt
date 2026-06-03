@@ -8,8 +8,8 @@
          "../runtime/context-assembly/state-aware-builder.rkt"
          "../runtime/context-assembly/context-floor.rkt"
          "../runtime/context-assembly/task-conclusion.rkt"
-         (only-in "../util/protocol-types.rkt" make-message make-text-part message-content message-id)
-         (only-in "../util/content-parts.rkt" text-part-text))
+         (only-in "../util/message/protocol-types.rkt" make-message make-text-part message-content message-id)
+         (only-in "../util/content/content-parts.rkt" text-part-text))
 
 ;; Helpers
 (define (make-test-msg id text)

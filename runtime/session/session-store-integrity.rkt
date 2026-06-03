@@ -20,8 +20,8 @@
          racket/port
          file/sha1
          json
-         "../../util/jsonl.rkt"
-         (only-in "../../util/message-helpers.rkt" ensure-parent-dirs!))
+         "../../util/json/jsonl.rkt"
+         (only-in "../../util/message/message-helpers.rkt" ensure-parent-dirs!))
 
 (provide GENESIS-HASH
          compute-event-hash

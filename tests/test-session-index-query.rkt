@@ -8,7 +8,7 @@
          rackunit/text-ui
          "../runtime/session-index/schema.rkt"
          "../runtime/session-index/query.rkt"
-         (only-in "../util/protocol-types.rkt"
+         (only-in "../util/message/protocol-types.rkt"
                   make-message
                   make-text-part
                   message-id

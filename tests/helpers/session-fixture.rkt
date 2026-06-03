@@ -6,7 +6,7 @@
 ;; Wraps the real agent-session creation with sensible defaults.
 
 (require "../../runtime/agent-session.rkt"
-         "../../runtime/session-config.rkt"
+         "../../runtime/session/session-config.rkt"
          "../../agent/event-bus.rkt"
          (only-in "../../tools/tool.rkt" make-tool-registry)
          (only-in "../../llm/provider.rkt" make-provider)

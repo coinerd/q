@@ -11,7 +11,7 @@
          racket/file
          "../llm/model.rkt"
          "../llm/provider.rkt"
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          "../benchmarks/metrics.rkt"
          "../benchmarks/tasks.rkt"
          "../benchmarks/run.rkt")

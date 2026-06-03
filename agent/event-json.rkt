@@ -44,7 +44,7 @@
                   tool-call-event-tool-name
                   tool-call-event-arguments)
          ;; Registry functions
-         (only-in "../util/event-macro.rkt"
+         (only-in "../util/event/event-macro.rkt"
                   lookup-event-serializer
                   lookup-event-deserializer
                   register-event-serializer!

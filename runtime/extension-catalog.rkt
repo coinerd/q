@@ -12,8 +12,8 @@
 ;; - deactivate-extension!: remove symlink
 
 (require racket/contract
-         "../util/json-helpers.rkt"
-         "../util/errors.rkt"
+         "../util/json/json-helpers.rkt"
+         "../util/error/errors.rkt"
          racket/file
          racket/path
          json

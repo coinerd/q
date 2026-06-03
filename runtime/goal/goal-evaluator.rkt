@@ -13,8 +13,8 @@
          json
          "../../llm/model.rkt"
          "../../llm/provider.rkt"
-         "../../util/message.rkt"
-         "../../util/content-parts.rkt"
+         "../../util/message/message.rkt"
+         "../../util/content/content-parts.rkt"
          "goal-state.rkt"
          "goal-checks.rkt")
 

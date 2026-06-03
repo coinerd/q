@@ -14,7 +14,7 @@
          "tui/workflow-harness.rkt"
          "../tui/state.rkt"
          "../tui/scrollback.rkt"
-         "../util/protocol-types.rkt")
+         "../util/message/protocol-types.rkt")
 
 (define scrollback-collision-tests
   (test-suite "Scrollback ID Collision Regression Tests"

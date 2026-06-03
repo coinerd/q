@@ -6,7 +6,7 @@
 ;; Includes host validation to prevent injection via malformed host strings.
 
 (require racket/contract
-         (only-in "../../util/errors.rkt" raise-extension-error)
+         (only-in "../../util/error/errors.rkt" raise-extension-error)
          racket/string
          racket/port
          racket/match)

@@ -7,7 +7,7 @@
          "../runtime/context-assembly/state-aware-builder.rkt"
          "../runtime/context-assembly/context-floor.rkt"
          "../runtime/context-assembly/task-conclusion.rkt"
-         (only-in "../util/protocol-types.rkt" make-message make-text-part message-content))
+         (only-in "../util/message/protocol-types.rkt" make-message make-text-part message-content))
 
 ;; Helpers
 (define (make-test-msg text)

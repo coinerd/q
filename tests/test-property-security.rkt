@@ -14,9 +14,9 @@
          racket/file
          racket/string
          quickcheck
-         (only-in "../util/path-filters.rkt" hidden-name?)
-         (only-in "../util/jsonl.rkt" jsonl-append! jsonl-read-all-valid)
-         (only-in "../util/glob.rkt" glob->regexp))
+         (only-in "../util/path/path-filters.rkt" hidden-name?)
+         (only-in "../util/json/jsonl.rkt" jsonl-append! jsonl-read-all-valid)
+         (only-in "../util/path/glob.rkt" glob->regexp))
 
 ;; ============================================================
 ;; Helper: temporary file for JSONL tests

@@ -21,7 +21,7 @@
          racket/list
          racket/path
          json
-         (only-in "../runtime/session-config.rkt"
+         (only-in "session/session-config.rkt"
                   session-config?
                   hash->session-config
                   config-settings
@@ -30,22 +30,22 @@
                   config-session-index
                   config-parallel-tools
                   config-project-dir)
-         (only-in "../util/tool-types.rkt" tool-call?)
+         (only-in "../util/tool/tool-types.rkt" tool-call?)
          (only-in "layer-adapters.rkt" tool-result? tool-registry?)
-         (only-in "../util/json-helpers.rkt" ensure-hash-args)
-         (only-in "../util/content-parts.rkt" make-tool-result-part tool-call-part?)
-         (only-in "../util/event.rkt" make-event)
-         (only-in "../util/message.rkt" message? message-id message-role message-content make-message)
-         (only-in "../util/tool-types.rkt"
+         (only-in "../util/json/json-helpers.rkt" ensure-hash-args)
+         (only-in "../util/content/content-parts.rkt" make-tool-result-part tool-call-part?)
+         (only-in "../util/event/event.rkt" make-event)
+         (only-in "../util/message/message.rkt" message? message-id message-role message-content make-message)
+         (only-in "../util/tool/tool-types.rkt"
                   make-tool-call
                   tool-call-id
                   tool-call-name
                   tool-result-content)
-         (only-in "../util/content-parts.rkt"
+         (only-in "../util/content/content-parts.rkt"
                   tool-call-part-id
                   tool-call-part-name
                   tool-call-part-arguments)
-         (only-in "../util/tool-types.rkt" tool-result-is-error?)
+         (only-in "../util/tool/tool-types.rkt" tool-result-is-error?)
          "../agent/event-bus.rkt"
          ;; ARCH-01 upward import — runtime→tools
          (only-in "layer-adapters.rkt" make-exec-context make-error-result list-tools-jsexpr)
@@ -56,9 +56,9 @@
          ;; Hooks + extension registry via adapter
          (only-in "layer-adapters.rkt" dispatch-hooks extension-registry?)
          (only-in "../agent/event-bus.rkt" event-bus?)
-         (only-in "../runtime/session-store.rkt" append-entries!)
+         (only-in "session/session-store.rkt" append-entries!)
          (only-in "../runtime/settings.rkt" make-minimal-settings setting-ref setting-ref*)
-         (only-in "../util/content-helpers.rkt" tool-result-content->string)
+         (only-in "../util/content/content-helpers.rkt" tool-result-content->string)
          (only-in "../util/ids.rkt" generate-id now-seconds)
          (only-in "../util/cancellation.rkt" cancellation-token?)
          (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload hook-result?)

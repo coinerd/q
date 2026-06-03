@@ -8,10 +8,10 @@
          "../tools/builtins/record-conclusion.rkt"
          "../tools/tool.rkt"
          (only-in "../agent/event-bus.rkt" make-event-bus publish!)
-         (only-in "../util/event.rkt" make-event)
-         "../runtime/session-events.rkt"
-         "../runtime/session-types.rkt"
-         (only-in "../runtime/session-mutation.rkt" guarded-set-task-fsm-state!)
+         (only-in "../util/event/event.rkt" make-event)
+         "../runtime/session/session-events.rkt"
+         "../runtime/session/session-types.rkt"
+         (only-in "../runtime/session/session-mutation.rkt" guarded-set-task-fsm-state!)
          (only-in "../runtime/context-assembly/task-conclusion.rkt"
                   task-conclusion?
                   task-conclusion-text
@@ -19,7 +19,7 @@
                   task-conclusion-fsm-state-origin
                   task-conclusion-relevance-tags
                   task-conclusion-origin-message-ids)
-         (submod "../runtime/session-types.rkt" internal)
+         (submod "../runtime/session/session-types.rkt" internal)
          ;; v0.76.7 W9: Shared session fixture
          (only-in "helpers/session-fixture.rkt" make-test-session))
 

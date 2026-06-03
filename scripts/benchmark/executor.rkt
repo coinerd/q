@@ -6,7 +6,7 @@
 ;; provider (from config) or a mock provider. Captures trace and returns
 ;; structured execution results.
 
-(require "../../util/error-helpers.rkt")
+(require "../../util/error/error-helpers.rkt")
 (require racket/file
          racket/format
          racket/list
@@ -24,13 +24,13 @@
                   make-trace-logger
                   start-trace-logger!
                   stop-trace-logger!)
-         (only-in "../../runtime/provider-factory.rkt" build-provider)
+         (only-in "../../runtime/provider/provider-factory.rkt" build-provider)
          (only-in "../../runtime/settings.rkt" load-settings)
          (only-in "../../llm/provider.rkt" make-mock-provider)
          (only-in "../../llm/model.rkt" make-model-response)
-         (only-in "../../util/message.rkt" message-role message-content)
-         (only-in "../../util/content-parts.rkt" text-part-text)
-         (only-in "../../util/jsonl.rkt" jsonl-read-all-valid)
+         (only-in "../../util/message/message.rkt" message-role message-content)
+         (only-in "../../util/content/content-parts.rkt" text-part-text)
+         (only-in "../../util/json/jsonl.rkt" jsonl-read-all-valid)
          (only-in "../../extensions/gsd/state-machine.rkt" [gsm-snapshot gsd-snapshot])
          "task.rkt")
 

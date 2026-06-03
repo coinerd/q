@@ -12,7 +12,7 @@
          rackunit/text-ui
          "tui/event-simulator.rkt"
          "../tui/state.rkt"
-         "../util/protocol-types.rkt")
+         "../util/message/protocol-types.rkt")
 
 (define overlay-state-tests
   (test-suite "TUI Overlay + Event Interaction"

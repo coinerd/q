@@ -16,7 +16,7 @@
 ;;   drain-events!              — runtime event draining
 ;;   Re-exports: fix-sgr-bg-black, decode-mouse-x10
 
-(require "../util/error-helpers.rkt")
+(require "../util/error/error-helpers.rkt")
 (require racket/contract
          racket/bytes
          racket/string
@@ -46,13 +46,13 @@
                   styled-line->text
                   plain-line
                   apply-selection-highlight)
-         (only-in "../util/event.rkt" event)
+         (only-in "../util/event/event.rkt" event)
          "../agent/event-bus.rkt"
          "../tui/tui-keybindings.rkt"
          "../tui/terminal-input.rkt"
-         "../util/output-guard.rkt"
+         "../util/error/output-guard.rkt"
          "../agent/queue.rkt"
-         (only-in "../runtime/session-lifecycle.rkt" write-crash-log!)
+         (only-in "../runtime/session/session-lifecycle.rkt" write-crash-log!)
          "../tui/tree-view.rkt"
          ;; W17: handle-user-submit! extracted to submit-handler.rkt
          "submit-handler.rkt"

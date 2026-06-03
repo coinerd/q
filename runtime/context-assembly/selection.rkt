@@ -14,8 +14,8 @@
          racket/match
          racket/list
          racket/set
-         (only-in "../../util/content-parts.rkt" make-text-part)
-         (only-in "../../util/message.rkt"
+         (only-in "../../util/content/content-parts.rkt" make-text-part)
+         (only-in "../../util/message/message.rkt"
                   message
                   message?
                   message-id
@@ -25,21 +25,21 @@
                   message-content
                   make-message)
          (only-in "../../util/entry-predicates.rkt" compaction-summary-entry?)
-         (only-in "../context-policy.rkt"
+         (only-in "../context/context-policy.rkt"
                   estimate-message-tokens
                   ensure-first-user-pinned
                   fit-messages-with-importance-rescue)
-         (only-in "../context-pinning.rkt" partition-messages/working-set)
+         (only-in "../context/context-pinning.rkt" partition-messages/working-set)
          (only-in "../working-set.rkt" working-set? working-set-resolve-messages)
          "budgeting.rkt"
-         (only-in "../context-summary.rkt"
+         (only-in "../context/context-summary.rkt"
                   context-summary?
                   context-summary-text
                   context-summary-entry-count
                   summary-cache?
                   context-summary-from-id
                   context-summary-to-id)
-         (only-in "../../util/errors.rkt" warn-deprecated!)
+         (only-in "../../util/error/errors.rkt" warn-deprecated!)
          (only-in "../../llm/provider.rkt" provider?))
 
 ;; R10: Call-options struct bundling keyword args for build-assembled-context

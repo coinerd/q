@@ -6,7 +6,7 @@
 ;; v0.29.17 W0: Tests for interpret-step internals via (module+ for-testing)
 
 (require rackunit
-         (only-in "../runtime/session-config.rkt" hash->session-config)
+         (only-in "../runtime/session/session-config.rkt" hash->session-config)
          racket/set
          racket/file
          (only-in "../agent/iteration/step-interpreter.rkt"
@@ -31,7 +31,7 @@
                   loop-counters-implement-count
                   loop-counters-consecutive-error-count
                   loop-counters-recent-tool-names)
-         (only-in "../util/protocol-types.rkt"
+         (only-in "../util/message/protocol-types.rkt"
                   make-message
                   make-text-part
                   make-tool-result-part
@@ -49,7 +49,7 @@
                   make-cancellation-token
                   cancel-token!
                   cancellation-token-cancelled?)
-         (only-in "../util/event.rkt" event-ev)
+         (only-in "../util/event/event.rkt" event-ev)
          (only-in "../runtime/iteration/decision.rkt" step-result)
          (only-in "../agent/iteration/step-interpreter.rkt"
                   handle-stop-action

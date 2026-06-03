@@ -14,7 +14,7 @@
          "../llm/provider.rkt"
          (only-in "../tools/tool.rkt" make-tool-registry tool-registry? register-tool! list-tools)
          "../agent/event-bus.rkt"
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          (only-in "../extensions/api.rkt"
                   make-extension-registry
                   extension-registry?
@@ -26,12 +26,12 @@
                   hook-result-action
                   hook-result-payload)
          (only-in "../util/hook-types.rkt" hook-amend)
-         (only-in "../runtime/compactor.rkt" compaction-result-removed-count compact-and-persist!)
-         (only-in "../runtime/token-compaction.rkt" token-compaction-config)
+         (only-in "../runtime/compaction/compactor.rkt" compaction-result-removed-count compact-and-persist!)
+         (only-in "../runtime/compaction/token-compaction.rkt" token-compaction-config)
          "helpers/compaction-helpers.rkt"
          (only-in "../runtime/agent-session.rkt" agent-session-system-instructions session-history)
          (only-in "../runtime/settings.rkt" default-session-dir)
-         (only-in "../util/jsonl.rkt" jsonl-read-all-valid)
+         (only-in "../util/json/jsonl.rkt" jsonl-read-all-valid)
          (only-in "../runtime/session-index.rkt" navigate-result?)
          "../interfaces/sdk.rkt")
 

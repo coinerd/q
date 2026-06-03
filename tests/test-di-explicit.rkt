@@ -10,7 +10,7 @@
 (require rackunit
          racket/port
          racket/runtime-path
-         (only-in "../runtime/compactor.rkt" compact-history)
+         (only-in "../runtime/compaction/compactor.rkt" compact-history)
          (only-in "../llm/token-budget.rkt" estimate-context-tokens))
 
 ;; Resolve paths relative to q/ root (works from both q/ and q/tests/ CWD)

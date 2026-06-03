@@ -7,15 +7,15 @@
          racket/list
          racket/match
          racket/string
-         (only-in "../../util/content-parts.rkt" make-text-part)
-         (only-in "../../util/message.rkt"
+         (only-in "../../util/content/content-parts.rkt" make-text-part)
+         (only-in "../../util/message/message.rkt"
                   message
                   message-kind
                   message-role
                   message-content
                   message-meta-safe
                   make-message)
-         (only-in "../../util/content-parts.rkt" text-part text-part? text-part-text)
+         (only-in "../../util/content/content-parts.rkt" text-part text-part? text-part-text)
          (only-in "../../util/hook-types.rkt" hook-result-action hook-result-payload))
 
 (provide tiered-context

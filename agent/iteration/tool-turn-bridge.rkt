@@ -8,17 +8,17 @@
 (require racket/contract
          racket/list
          (only-in racket/string string-join)
-         (only-in "../../util/content-parts.rkt" text-part? tool-result-part?)
-         (only-in "../../util/event.rkt" event-ev)
-         (only-in "../../util/message.rkt" message-role message? message-id message-content)
-         (only-in "../../util/tool-types.rkt" tool-call-name tool-call-arguments)
-         (only-in "../../util/content-parts.rkt" text-part-text tool-result-part-is-error?)
-         (only-in "../../util/event.rkt" event-payload)
+         (only-in "../../util/content/content-parts.rkt" text-part? tool-result-part?)
+         (only-in "../../util/event/event.rkt" event-ev)
+         (only-in "../../util/message/message.rkt" message-role message? message-id message-content)
+         (only-in "../../util/tool/tool-types.rkt" tool-call-name tool-call-arguments)
+         (only-in "../../util/content/content-parts.rkt" text-part-text tool-result-part-is-error?)
+         (only-in "../../util/event/event.rkt" event-payload)
          "../event-bus.rkt"
          (only-in "../queue.rkt" dequeue-steering! dequeue-followup! dequeue-all-followups!)
          "../../runtime/working-set.rkt"
-         (only-in "../../runtime/context-policy.rkt" estimate-message-tokens)
-         (only-in "../../util/event-types.rkt" injection-event-topic)
+         (only-in "../../runtime/context/context-policy.rkt" estimate-message-tokens)
+         (only-in "../../util/event/event-types.rkt" injection-event-topic)
          (only-in "../../util/shared.rkt" take-at-most))
 
 (provide (contract-out [extract-tool-target-path (-> any/c (or/c path-string? #f))]

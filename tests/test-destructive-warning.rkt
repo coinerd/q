@@ -16,7 +16,7 @@
                   current-bash-execution-config
                   bash-execution-config-warn-on-destructive?
                   bash-execution-config-block-destructive?)
-         (only-in "../util/protocol-types.rkt"
+         (only-in "../util/message/protocol-types.rkt"
                   tool-result?
                   tool-result-content
                   tool-result-is-error?))

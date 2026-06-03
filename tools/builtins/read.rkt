@@ -16,7 +16,7 @@
          racket/dict
          (only-in "../tool.rkt" make-success-result make-error-result)
          (only-in "../define-tool.rkt" define-tool)
-         (only-in "../../util/path-helpers.rkt"
+         (only-in "../../util/path/path-helpers.rkt"
                   contains-null-bytes?
                   bytes->display-lines
                   expand-home-path)

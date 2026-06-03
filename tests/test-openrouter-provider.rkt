@@ -8,7 +8,7 @@
          "../llm/openrouter.rkt"
          "../llm/openai-compatible.rkt"
          "../llm/provider.rkt"
-         "../runtime/provider-factory.rkt")
+         "../runtime/provider/provider-factory.rkt")
 
 (define sample-request (make-model-request (list (hash 'role "user" 'content "Hello")) #f (hash)))
 

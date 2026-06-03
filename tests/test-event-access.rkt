@@ -3,8 +3,8 @@
 ;; BOUNDARY: integration
 
 (require rackunit
-         "../util/event.rkt"
-         "../util/event-access.rkt")
+         "../util/event/event.rkt"
+         "../util/event/event-access.rkt")
 
 ;; Test selectors on a sample event
 ;; make-event: ev time session-id turn-id payload [version]

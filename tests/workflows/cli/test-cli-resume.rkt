@@ -12,7 +12,7 @@
          "../fixtures/event-recorder.rkt"
          "../fixtures/workflow-runner.rkt"
          (only-in "../../../tools/tool.rkt" make-tool-registry)
-         "../../../util/protocol-types.rkt"
+         "../../../util/message/protocol-types.rkt"
          (prefix-in sdk: "../../../interfaces/sdk.rkt")
          "../../../agent/event-bus.rkt")
 

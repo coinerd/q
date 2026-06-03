@@ -4,7 +4,7 @@
 ;; tests/test-jsonl-contracts.rkt — Contract boundary tests for jsonl.rkt
 
 (require rackunit
-         "../util/jsonl.rkt")
+         "../util/json/jsonl.rkt")
 
 (test-case "jsonl-append! rejects non-path"
   (check-exn exn:fail:contract? (lambda () (jsonl-append! 42 (hasheq)))))

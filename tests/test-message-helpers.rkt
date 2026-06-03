@@ -6,8 +6,8 @@
 
 (require rackunit
          rackunit/text-ui
-         "../util/message-helpers.rkt"
-         "../util/protocol-types.rkt")
+         "../util/message/message-helpers.rkt"
+         "../util/message/protocol-types.rkt")
 
 (define message-helper-tests
   (test-suite "util/message-helpers"

@@ -15,9 +15,9 @@
          (only-in "../event-bus.rkt" event-bus?)
          (only-in "../../runtime/layer-adapters.rkt" tool-registry? extension-registry?)
          (only-in "../../util/cancellation.rkt" cancellation-token?)
-         (only-in "../../runtime/session-config.rkt" session-config? hash->session-config)
+         (only-in "../../runtime/session/session-config.rkt" session-config? hash->session-config)
          (only-in "../../runtime/working-set.rkt" working-set?)
-         (only-in "../../runtime/session-types.rkt" agent-session?)
+         (only-in "../../runtime/session/session-types.rkt" agent-session?)
          (only-in "../../util/loop-result.rkt" loop-result?))
 
 ;; ============================================================

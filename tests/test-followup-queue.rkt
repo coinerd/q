@@ -17,7 +17,7 @@
          "../agent/event-bus.rkt"
          (only-in "../agent/iteration/main-loop.rkt" run-iteration-loop)
          "../tui/state.rkt"
-         "../util/protocol-types.rkt")
+         "../util/message/protocol-types.rkt")
 
 ;; ============================================================
 ;; 1. Queue helpers

@@ -11,9 +11,9 @@
          "session-store.rkt"
          "../compaction/compactor.rkt"
          "../session-index/schema.rkt" "../session-index/mutations.rkt" "../session-index/query.rkt"
-         (only-in "../../util/event.rkt" event-ev)
-         (only-in "../../util/message.rkt" message-id)
-         (only-in "../../util/event.rkt" event-payload)
+         (only-in "../../util/event/event.rkt" event-ev)
+         (only-in "../../util/message/message.rkt" message-id)
+         (only-in "../../util/event/event.rkt" event-payload)
          (only-in "../runtime-helpers.rkt" emit-session-event!)
          "session-types.rkt"
          (only-in "../context-assembly/task-conclusion.rkt" task-conclusion task-conclusion-id))
@@ -21,7 +21,7 @@
 (require (only-in "../context-assembly/state-inference.rkt"
                   infer-task-state-from-tools
                   current-state-inference-threshold))
-(require (only-in "../../util/fsm.rkt" fsm-state-name))
+(require (only-in "../../util/fsm/fsm.rkt" fsm-state-name))
 (require (only-in "../context-assembly/state-aware-builder.rkt" current-ws-evolution-enabled?))
 ;; v0.77.10 M1: evolve-working-set-for-state import removed — subscriber now emits
 ;; context.ws-evolve-requested event for turn-orchestrator to handle.

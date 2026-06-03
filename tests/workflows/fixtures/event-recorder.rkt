@@ -9,7 +9,7 @@
 
 (require racket/list
          "../../../agent/event-bus.rkt"
-         "../../../util/protocol-types.rkt")
+         "../../../util/message/protocol-types.rkt")
 
 (provide make-event-recorder
          recorded-events

@@ -32,9 +32,9 @@
          racket/string
          racket/date
          json
-         (only-in "../runtime/session-store.rkt" load-session-log)
+         (only-in "../runtime/session/session-store.rkt" load-session-log)
          (only-in "../util/ids.rkt" generate-id)
-         (only-in "../util/jsonl.rkt" jsonl-read-all-valid))
+         (only-in "../util/json/jsonl.rkt" jsonl-read-all-valid))
 
 (provide load-dogfood-task
          validate-dogfood-task

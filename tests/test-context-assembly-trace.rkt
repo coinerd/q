@@ -11,11 +11,11 @@
 
 (require rackunit
          rackunit/text-ui
-         "../util/protocol-types.rkt"
-         "../runtime/session-store.rkt"
+         "../util/message/protocol-types.rkt"
+         "../runtime/session/session-store.rkt"
          "../runtime/session-index.rkt"
-         "../runtime/context-assembly.rkt"
-         "../runtime/context-policy.rkt")
+         "../runtime/context/context-assembly.rkt"
+         "../runtime/context/context-policy.rkt")
 
 ;; ── Helpers ──────────────────────────────────────────────────
 

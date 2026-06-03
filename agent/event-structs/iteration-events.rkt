@@ -4,7 +4,7 @@
 ;; (auto-retry, compaction, injection)
 
 (require "base.rkt"
-         "../../util/event-macro.rkt")
+         "../../util/event/event-macro.rkt")
 
 ;; NOTE (v0.29.16): auto-retry-event has 1 production emission site
 ;; (runtime/turn-orchestrator.rkt). It is wired — not deferred.

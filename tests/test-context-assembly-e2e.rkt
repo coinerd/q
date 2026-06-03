@@ -32,7 +32,7 @@
                   maybe-execute-action
                   current-rollback-action-execution?
                   rollback-action-type)
-         (only-in "../runtime/session-config.rkt"
+         (only-in "../runtime/session/session-config.rkt"
                   apply-context-assembly-profile!
                   current-context-assembly-profile)
          (only-in "../runtime/context-assembly/state-aware-builder.rkt"
@@ -42,7 +42,7 @@
                   working-set-entry-count
                   working-set-add!
                   working-set-token-count)
-         (only-in "../util/protocol-types.rkt" make-message make-text-part)
+         (only-in "../util/message/protocol-types.rkt" make-message make-text-part)
          (only-in "../runtime/context-assembly/state-relevance.rkt" context-level-for-state))
 
 ;; Helpers

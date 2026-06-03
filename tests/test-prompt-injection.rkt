@@ -10,14 +10,14 @@
          "../runtime/context-assembly/state-aware-builder.rkt"
          "../runtime/context-assembly/task-conclusion.rkt"
          "../runtime/context-assembly/context-floor.rkt"
-         (only-in "../util/protocol-types.rkt"
+         (only-in "../util/message/protocol-types.rkt"
                   message-content
                   message-role
                   make-message
                   make-text-part)
-         (only-in "../util/message.rkt" message-kind)
-         (only-in "../util/content-parts.rkt" text-part-text)
-         (only-in "../util/fsm.rkt" fsm-state))
+         (only-in "../util/message/message.rkt" message-kind)
+         (only-in "../util/content/content-parts.rkt" text-part-text)
+         (only-in "../util/fsm/fsm.rkt" fsm-state))
 
 ;; Helper: extract text from a preamble message
 (define (preamble-text p)

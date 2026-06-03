@@ -14,7 +14,7 @@
          "../tools/scheduler.rkt"
          "../agent/event-bus.rkt"
          "../agent/event-emitter.rkt"
-         "../util/protocol-types.rkt")
+         "../util/message/protocol-types.rkt")
 
 ;; Helper to extract text string from a tool-result
 (define (result-text tr)

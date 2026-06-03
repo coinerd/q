@@ -19,7 +19,7 @@
          racket/generic
          racket/string
          "model.rkt"
-         (only-in "../util/errors.rkt" raise-credential-error))
+         (only-in "../util/error/errors.rkt" raise-credential-error))
 
 (provide provider?
          validate-api-key!

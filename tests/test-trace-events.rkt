@@ -15,7 +15,7 @@
          "../llm/model.rkt"
          "../llm/stream.rkt"
          "../llm/provider.rkt"
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          "../util/ids.rkt")
 
 ;; Helper: create event collector

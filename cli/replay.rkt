@@ -17,7 +17,7 @@
          racket/match
          racket/string
          racket/format
-         (only-in "../util/content-parts.rkt"
+         (only-in "../util/content/content-parts.rkt"
                   tool-call-part
                   tool-call-part-arguments
                   tool-call-part-id
@@ -27,8 +27,8 @@
                   tool-result-part-content
                   tool-result-part-tool-call-id
                   tool-result-part?)
-         (only-in "../util/message.rkt" message-content message-timestamp)
-         "../runtime/session-store.rkt")
+         (only-in "../util/message/message.rkt" message-content message-timestamp)
+         "../runtime/session/session-store.rkt")
 
 (require racket/contract)
 (provide replay-result

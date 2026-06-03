@@ -19,12 +19,12 @@
          "../tui/state.rkt"
          "../tui/scrollback.rkt"
          "../tui/render.rkt"
-         (only-in "../util/message.rkt" message)
+         (only-in "../util/message/message.rkt" message)
          "../agent/event-bus.rkt"
          "../runtime/agent-session.rkt"
-         "../runtime/provider-factory.rkt"
+         "../runtime/provider/provider-factory.rkt"
          "../runtime/session-index.rkt"
-         "../runtime/session-switch.rkt"
+         "../runtime/session/session-switch.rkt"
          "../tui/tui-keybindings.rkt"
          "../tui/tui-render-loop.rkt"
          "../cli/args.rkt"

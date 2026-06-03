@@ -7,7 +7,7 @@
 (require rackunit
          rackunit/text-ui
          racket/file
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          "../agent/event-bus.rkt"
          "../agent/loop.rkt"
          "../agent/state.rkt"
@@ -43,7 +43,7 @@
          "../util/ids.rkt"
          (only-in "../llm/provider.rkt" make-mock-provider)
          (only-in "../llm/model.rkt" make-model-response)
-         (only-in "../util/event-payloads.rkt" payload->hash))
+         (only-in "../util/event/event-payloads.rkt" payload->hash))
 
 ;; ============================================================
 ;; Helpers

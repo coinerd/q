@@ -7,7 +7,7 @@
 ;; All events follow: gsd.<category>.<action>
 
 (require racket/match
-         (only-in "../../util/errors.rkt" raise-extension-error)
+         (only-in "../../util/error/errors.rkt" raise-extension-error)
          (only-in "../../agent/event-structs/base.rkt" typed-event?)
          (only-in "../../agent/event-emitter.rkt" event-struct->hasheq)
          (only-in "session-state.rkt"

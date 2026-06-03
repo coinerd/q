@@ -8,7 +8,7 @@
 
 (require racket/contract
          racket/string
-         (only-in "../util/safe-mode-state.rkt"
+         (only-in "../util/safe-mode/safe-mode-state.rkt"
                   current-safe-mode
                   current-safe-mode-config
                   project-root

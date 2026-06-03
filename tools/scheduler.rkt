@@ -50,7 +50,7 @@
                   scheduler-strategy-execution-order
                   default-scheduler-strategy)
          (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload)
-         (only-in "../util/safe-mode-predicates.rkt"
+         (only-in "../util/safe-mode/safe-mode-predicates.rkt"
                   safe-mode?
                   allowed-tool?
                   allowed-path?

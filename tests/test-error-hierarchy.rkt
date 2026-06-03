@@ -5,7 +5,7 @@
 
 (require rackunit
          rackunit/text-ui
-         "../util/errors.rkt"
+         "../util/error/errors.rkt"
          "../llm/provider-errors.rkt")
 
 (define error-hierarchy-tests

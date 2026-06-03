@@ -12,8 +12,8 @@
          (only-in "../agent/iteration/main-loop.rkt" run-iteration-loop)
          "../runtime/turn-orchestrator.rkt"
          "../runtime/agent-session.rkt"
-         "../runtime/session-types.rkt"
-         "../util/protocol-types.rkt"
+         "../runtime/session/session-types.rkt"
+         "../util/message/protocol-types.rkt"
          "../agent/event-bus.rkt"
          "../llm/model.rkt"
          "../llm/provider.rkt"
@@ -23,7 +23,7 @@
                   make-multi-mock-provider
                   make-tool-call-mock-provider
                   make-test-config)
-         (only-in "../runtime/session-config.rkt" hash->session-config))
+         (only-in "../runtime/session/session-config.rkt" hash->session-config))
 
 ;; ── Helpers ──
 

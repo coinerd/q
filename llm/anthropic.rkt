@@ -1,6 +1,6 @@
 #lang racket/base
 
-(require "../util/error-helpers.rkt")
+(require "../util/error/error-helpers.rkt")
 ;; llm/anthropic.rkt — Anthropic provider adapter
 ;;
 ;; Translates normalized model-request structs into Anthropic Messages
@@ -24,7 +24,7 @@
          "provider.rkt"
          "stream.rkt"
          "http-helpers.rkt"
-         (only-in "../util/errors.rkt" with-logged-catch))
+         (only-in "../util/error/errors.rkt" with-logged-catch))
 
 ;; Provider constructor
 (provide (contract-out [make-anthropic-provider (-> hash? provider?)])

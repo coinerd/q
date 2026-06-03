@@ -16,7 +16,7 @@
          (only-in "../runtime/goal/goal-runner.rkt" goal-run!)
          (only-in "../tui/commands/goal-bridge.rkt" make-goal-event-bridge make-goal-run-prompt!)
          (only-in "../runtime/session/session-config.rkt" current-goal-loop-enabled?)
-         (only-in "../runtime/goal-state.rkt" goal-state-turns-used goal-state-status)
+         (only-in "../runtime/goal/goal-state.rkt" goal-state-turns-used goal-state-status)
          "gui-types.rkt")
 
 (provide make-slash-command-handler

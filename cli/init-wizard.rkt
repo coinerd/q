@@ -12,7 +12,7 @@
          racket/string
          racket/file
          racket/list
-         (only-in "../runtime/auth-store.rkt" save-credential-file!))
+         (only-in "../runtime/auth/auth-store.rkt" save-credential-file!))
 
 (require racket/contract)
 (provide (contract-out

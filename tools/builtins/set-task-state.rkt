@@ -30,7 +30,7 @@
                   task-revisit
                   task-force-transition
                   task-states-list)
-         (only-in "../../util/fsm.rkt" fsm-state-name fsm-state?)
+         (only-in "../../util/fsm/fsm.rkt" fsm-state-name fsm-state?)
          (only-in "../exec-context.rkt" exec-context-event-publisher exec-context?))
 
 ;; State name → singleton mapping

@@ -26,13 +26,13 @@
 (require/typed racket/dict [dict-ref (->* ((HashTable Symbol Any) Symbol) (Any) Any)])
 (require/typed "../auto-retry.rkt" [context-overflow-error? (-> Any Boolean)])
 
-(require/typed "../compactor.rkt"
+(require/typed "../compaction/compactor.rkt"
                [#:struct compaction-result
                 ([summary-message : (U String #f)] [removed-count : Integer]
                                                    [kept-messages : (Listof Any)])])
 
-(require/typed "../../util/message.rkt" [message-content (-> Any (U String (Listof Any)))])
-(require/typed "../../util/content-parts.rkt"
+(require/typed "../../util/message/message.rkt" [message-content (-> Any (U String (Listof Any)))])
+(require/typed "../../util/content/content-parts.rkt"
                [text-part? (-> Any Boolean)]
                [text-part-text (-> Any String)])
 

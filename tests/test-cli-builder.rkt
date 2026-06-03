@@ -14,7 +14,7 @@
          rackunit/text-ui
          racket/file
          "../interfaces/cli.rkt"
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          "../extensions/api.rkt"
          "../wiring/run-modes.rkt")
 

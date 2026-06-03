@@ -3,7 +3,7 @@
 ;; agent/event-structs/message-events.rkt — message lifecycle events
 
 (require "base.rkt"
-         "../../util/event-macro.rkt")
+         "../../util/event/event-macro.rkt")
 
 (define-typed-event message-start-event "message.started" (role model) #:schema-version 1)
 

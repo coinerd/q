@@ -14,7 +14,7 @@
                   task-verification
                   task-debugging
                   task-state?)
-         (only-in "../../util/fsm.rkt" fsm-state-name))
+         (only-in "../../util/fsm/fsm.rkt" fsm-state-name))
 
 (provide state-relevance-table
          context-level-for-state

@@ -7,7 +7,7 @@
 
 (require racket/contract
          "api.rkt"
-         "../util/event.rkt"
+         "../util/event/event.rkt"
          "../agent/event-emitter.rkt"
          "../agent/event-structs/iteration-events.rkt")
 

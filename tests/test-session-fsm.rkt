@@ -4,7 +4,7 @@
 ;; Tests the derived FSM overlay on agent-session boolean flags.
 
 (require rackunit
-         (only-in "../runtime/session-fsm.rkt"
+         (only-in "../runtime/session/session-fsm.rkt"
                   session-lifecycle-machine
                   session-lifecycle-state?
                   session-lifecycle-event?
@@ -17,7 +17,7 @@
                   session-current-state-name
                   session-valid-lifecycle?
                   session-can-transition?)
-         (only-in "../runtime/session-types.rkt"
+         (only-in "../runtime/session/session-types.rkt"
                   agent-session
                   agent-session-active?
                   agent-session-compacting?

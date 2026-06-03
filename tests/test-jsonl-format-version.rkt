@@ -5,7 +5,7 @@
 
 (require rackunit
          racket/file
-         "../util/jsonl.rkt")
+         "../util/json/jsonl.rkt")
 
 (define (make-temp-jsonl)
   (make-temporary-file "q-jsonl-fmt-~a.jsonl"))

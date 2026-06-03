@@ -8,7 +8,7 @@
 ;;
 ;; #1194: Process-Safe Settings Writes
 
-(require "../util/error-helpers.rkt")
+(require "error/error-helpers.rkt")
 (require racket/contract
          racket/file
          racket/port

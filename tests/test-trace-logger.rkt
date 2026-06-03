@@ -13,7 +13,7 @@
          json
          "../agent/event-bus.rkt"
          "../runtime/trace-logger.rkt"
-         "../util/protocol-types.rkt")
+         "../util/message/protocol-types.rkt")
 
 (define (make-temp-dir)
   (define tmp (find-system-path 'temp-dir))

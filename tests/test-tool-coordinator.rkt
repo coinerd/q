@@ -10,7 +10,7 @@
 (require rackunit
          rackunit/text-ui
          json
-         (only-in "../util/protocol-types.rkt"
+         (only-in "../util/message/protocol-types.rkt"
                   make-message
                   make-text-part
                   make-tool-call-part

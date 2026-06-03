@@ -13,7 +13,7 @@
 (require rackunit
          racket/dict
          racket/hash
-         "../runtime/session-config.rkt"
+         "../runtime/session/session-config.rkt"
          (only-in "../runtime/session-index/schema.rkt" make-empty-index session-index?)
          (only-in "../runtime/context-assembly/state-aware-builder.rkt"
                   current-task-state-aware-assembly?

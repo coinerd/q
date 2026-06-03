@@ -7,7 +7,7 @@
          rackunit/text-ui
          "../agent/effect-types.rkt"
          "../agent/loop-fsm.rkt"
-         (only-in "../util/fsm.rkt" fsm-state-name fsm-event-name))
+         (only-in "../util/fsm/fsm.rkt" fsm-state-name fsm-event-name))
 
 (define effect-types-tests
   (test-suite "effect-types"

@@ -5,12 +5,12 @@
 
 (require rackunit
          rackunit/text-ui
-         (only-in "../util/event-migration.rkt"
+         (only-in "../util/event/event-migration.rkt"
                   register-event-migration!
                   run-event-migrations!
                   lookup-event-migration
                   current-event-migration-registry)
-         (only-in "../util/event-macro.rkt"
+         (only-in "../util/event/event-macro.rkt"
                   register-event-schema-version!
                   lookup-event-schema-version
                   with-fresh-event-registries))

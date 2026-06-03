@@ -4,7 +4,7 @@
 
 (require rackunit
          rackunit/text-ui
-         "../util/glob.rkt")
+         "../util/path/glob.rkt")
 
 (define glob-suite
   (test-suite "glob tests"

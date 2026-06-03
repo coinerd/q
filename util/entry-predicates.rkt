@@ -6,7 +6,7 @@
 ;; Predicates for different message entry kinds.
 
 (require racket/contract
-         "message.rkt")
+         "message/message.rkt")
 
 (provide (contract-out [message-entry? (-> any/c boolean?)]
                        [model-change-entry? (-> any/c boolean?)]

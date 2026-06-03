@@ -18,7 +18,7 @@
          "../llm/model.rkt"
          "../agent/event-bus.rkt"
          "../agent/loop.rkt"
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          (only-in "../tools/tool.rkt" make-tool-registry register-tool! make-tool make-exec-context make-success-result)
          (only-in "../tools/registry.rkt" tool-registry?))
 

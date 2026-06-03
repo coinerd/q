@@ -20,9 +20,9 @@
 (require racket/contract
          racket/file
          json
-         "../../util/jsonl.rkt"
+         "../../util/json/jsonl.rkt"
          (only-in "../../util/entry-predicates.rkt" session-info-entry?)
-         (only-in "../../util/message.rkt"
+         (only-in "../../util/message/message.rkt"
                   jsexpr->message
                   make-message
                   message
@@ -31,7 +31,7 @@
                   message-meta-safe
                   message?)
          (only-in "../../util/ids.rkt" generate-id)
-         (only-in "../../util/errors.rkt" with-logged-catch raise-session-error))
+         (only-in "../../util/error/errors.rkt" with-logged-catch raise-session-error))
 
 (provide (contract-out [current-session-version exact-nonnegative-integer?]
                        [read-session-version (-> path-string? exact-nonnegative-integer?)]

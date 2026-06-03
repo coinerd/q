@@ -41,7 +41,7 @@
 
     ;; Test 4: with-safe-fallback now logs warnings (v0.81.0 W3)
     (test-case "with-safe-fallback logs warnings instead of silent swallow"
-      (define src (with-input-from-file "../util/error-helpers.rkt" (lambda () (read-string 10000))))
+      (define src (with-input-from-file "../util/error/error-helpers.rkt" (lambda () (read-string 10000))))
       (check-not-false (string-contains? src "log-warning \"with-safe-fallback caught")
                        "with-safe-fallback should log warnings"))))
 

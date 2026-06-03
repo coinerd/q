@@ -12,7 +12,7 @@
          racket/port
          (prefix-in sdk: "../../../interfaces/sdk.rkt")
          "../../../agent/event-bus.rkt"
-         (only-in "../../../util/protocol-types.rkt"
+         (only-in "../../../util/message/protocol-types.rkt"
                   message?
                   message-role
                   message-content
@@ -28,7 +28,7 @@
          (only-in "../../../extensions/loader.rkt" load-extension!)
          (only-in "../../../wiring/run-modes.rkt" load-extensions-from-dir!)
          (only-in "../../../skills/resource-loader.rkt" try-read-file)
-         "../../../util/jsonl.rkt"
+         "../../../util/json/jsonl.rkt"
          "../fixtures/temp-project.rkt"
          "../fixtures/event-recorder.rkt"
          "../fixtures/session-assert.rkt")

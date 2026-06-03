@@ -14,11 +14,11 @@
 (require racket/contract
          "event-structs.rkt"
          "event-json.rkt"
-         "../util/event-access.rkt")
+         "../util/event/event-access.rkt")
 
 (provide (all-from-out "event-structs.rkt")
          (all-from-out "event-json.rkt")
-         (all-from-out "../util/event-access.rkt")
+         (all-from-out "../util/event/event-access.rkt")
          (contract-out [valid-typed-event-type? (-> string? boolean?)]))
 
 ;; Thin validation helper — contract-gated facade utility

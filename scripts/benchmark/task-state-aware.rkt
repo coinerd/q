@@ -8,9 +8,9 @@
          "../../runtime/context-assembly/state-aware-builder.rkt"
          "../../runtime/context-assembly/task-conclusion.rkt"
          "../../runtime/context-assembly/context-floor.rkt"
-         (only-in "../../util/content-parts.rkt" make-text-part)
-         (only-in "../../util/message.rkt" message-content message-role make-message)
-         (only-in "../../util/content-parts.rkt" text-part-text))
+         (only-in "../../util/content/content-parts.rkt" make-text-part)
+         (only-in "../../util/message/message.rkt" message-content message-role make-message)
+         (only-in "../../util/content/content-parts.rkt" text-part-text))
 
 ;; ── Helpers ──
 

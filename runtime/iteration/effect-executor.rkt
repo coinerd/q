@@ -14,7 +14,7 @@
                   loop-infra-session-id
                   loop-infra-log-path)
          (only-in "../../runtime/runtime-helpers.rkt" emit-session-event!)
-         (only-in "../../runtime/session-store.rkt" append-entries!))
+         (only-in "../session/session-store.rkt" append-entries!))
 
 (provide step-effect:append-entries
          step-effect:append-entries?

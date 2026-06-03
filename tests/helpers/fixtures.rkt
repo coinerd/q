@@ -8,7 +8,7 @@
 ;; deterministic test cleanup via dynamic-wind.
 
 (require racket/file
-         (only-in "../../util/protocol-types.rkt" message? message-kind)
+         (only-in "../../util/message/protocol-types.rkt" message? message-kind)
          (only-in "test-sandbox.rkt" with-test-sandbox test-sandbox-project-dir test-sandbox?))
 
 (provide with-temp-dir

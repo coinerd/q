@@ -11,7 +11,7 @@
          "../llm/openai-compatible.rkt"
          "../llm/provider.rkt"
          "../agent/loop.rkt"
-         "../runtime/provider-factory.rkt")
+         "../runtime/provider/provider-factory.rkt")
 
 ;; ============================================================
 ;; Test: max-tokens flows from config to request body

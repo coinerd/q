@@ -9,8 +9,8 @@
 (require racket/contract
          racket/list
          racket/set
-         (only-in "../../util/message.rkt" message-role message-kind message-id)
-         (only-in "../context-policy.rkt"
+         (only-in "../../util/message/message.rkt" message-role message-kind message-id)
+         (only-in "context-policy.rkt"
                   estimate-message-tokens
                   estimate-message-tokens-cached
                   ensure-first-user-pinned

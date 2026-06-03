@@ -27,8 +27,8 @@
                   task-conclusion?
                   conclusion->hash
                   hash->conclusion)
-         (only-in "../../util/content-parts.rkt" make-text-part text-part-text)
-         (only-in "../../util/message.rkt"
+         (only-in "../../util/content/content-parts.rkt" make-text-part text-part-text)
+         (only-in "../../util/message/message.rkt"
                   jsexpr->message
                   make-message
                   message
@@ -38,10 +38,10 @@
                   message-kind
                   message-parent-id
                   message?)
-         "../../util/jsonl.rkt"
-         (only-in "../../util/message-helpers.rkt" ensure-parent-dirs!)
+         "../../util/json/jsonl.rkt"
+         (only-in "../../util/message/message-helpers.rkt" ensure-parent-dirs!)
          (only-in "../../util/ids.rkt" generate-id)
-         (only-in "../../util/errors.rkt" raise-session-error)
+         (only-in "../../util/error/errors.rkt" raise-session-error)
          ;; Extracted modules (v0.22.9 W2)
          "session-store-integrity.rkt"
          (only-in "session-store-tree.rkt"

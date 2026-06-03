@@ -11,12 +11,12 @@
 
 (require rackunit
          racket/port
-         "../util/output-guard.rkt"
-         "../util/protocol-types.rkt"
+         "../util/error/output-guard.rkt"
+         "../util/message/protocol-types.rkt"
          "../runtime/settings.rkt"
-         "../runtime/model-registry.rkt"
-         "../runtime/session-store.rkt"
-         "../runtime/context-assembly.rkt")
+         "../runtime/provider/model-registry.rkt"
+         "../runtime/session/session-store.rkt"
+         "../runtime/context/context-assembly.rkt")
 
 ;; ============================================================
 ;; Helpers

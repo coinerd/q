@@ -11,8 +11,8 @@
          racket/string
          racket/file
          racket/match
-         (only-in "../../util/content-parts.rkt" make-text-part)
-         (only-in "../../util/message.rkt"
+         (only-in "../../util/content/content-parts.rkt" make-text-part)
+         (only-in "../../util/message/message.rkt"
                   message
                   message-id
                   message-kind
@@ -20,9 +20,9 @@
                   message-content
                   message-meta-safe
                   make-message)
-         (only-in "../../util/content-parts.rkt" text-part text-part? text-part-text)
-         (only-in "../context-policy.rkt" estimate-message-tokens)
-         (only-in "../context-fit.rkt" truncate-messages-to-budget)
+         (only-in "../../util/content/content-parts.rkt" text-part text-part? text-part-text)
+         (only-in "../context/context-policy.rkt" estimate-message-tokens)
+         (only-in "../context/context-fit.rkt" truncate-messages-to-budget)
          (only-in "../../llm/provider.rkt" provider?)
          "../../skills/context-files.rkt"
          "session-walk.rkt")

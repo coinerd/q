@@ -10,7 +10,7 @@
 (require racket/function
          rackunit
          "../extensions/define-extension.rkt"
-         "../util/extensions.rkt")
+         "../util/extension/extensions.rkt")
 
 ;; ============================================================
 ;; W2-T1 (M-4): Test the macro, not just the struct

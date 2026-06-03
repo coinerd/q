@@ -4,7 +4,7 @@
 ;;
 ;; Mutation operations on session-index: building, persisting, branching, bookmarking.
 
-(require "../../util/error-helpers.rkt")
+(require "../../util/error/error-helpers.rkt")
 (require racket/contract
          racket/string
          racket/file
@@ -12,9 +12,9 @@
          racket/path
          racket/list
          json
-         "../../util/json-helpers.rkt"
-         (only-in "../../util/content-parts.rkt" make-text-part)
-         (only-in "../../util/message.rkt"
+         "../../util/json/json-helpers.rkt"
+         (only-in "../../util/content/content-parts.rkt" make-text-part)
+         (only-in "../../util/message/message.rkt"
                   message-id
                   message-parent-id
                   message-kind
@@ -22,11 +22,11 @@
                   make-message
                   message
                   message?)
-         (only-in "../../util/message.rkt" message->jsexpr jsexpr->message)
-         (only-in "../../util/message-helpers.rkt" ensure-parent-dirs!)
+         (only-in "../../util/message/message.rkt" message->jsexpr jsexpr->message)
+         (only-in "../../util/message/message-helpers.rkt" ensure-parent-dirs!)
          (only-in "../../util/ids.rkt" generate-id)
-         (only-in "../../util/jsonl.rkt" jsonl-read-all-valid)
-         (only-in "../session-store.rkt" load-session-log)
+         (only-in "../../util/json/jsonl.rkt" jsonl-read-all-valid)
+         (only-in "../session/session-store.rkt" load-session-log)
          "schema.rkt"
          "query.rkt")
 

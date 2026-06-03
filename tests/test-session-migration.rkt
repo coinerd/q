@@ -9,9 +9,9 @@
          rackunit/text-ui
          racket/file
          json
-         "../util/jsonl.rkt"
-         "../util/protocol-types.rkt"
-         "../runtime/session-migration.rkt")
+         "../util/json/jsonl.rkt"
+         "../util/message/protocol-types.rkt"
+         "../runtime/session/session-migration.rkt")
 
 (define (make-temp-file)
   (make-temporary-file "q-migration-test-~a.jsonl"))

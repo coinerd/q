@@ -5,7 +5,7 @@
 (require rackunit
          rackunit/text-ui
          "../runtime/tool-coordinator.rkt"
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          (except-in "../tools/tool.rkt" make-tool-result))
 
 (define phase-suite

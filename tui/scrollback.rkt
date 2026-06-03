@@ -4,7 +4,7 @@
          racket/file
          racket/list
          "state.rkt"
-         "../util/jsonl.rkt"
+         "../util/json/jsonl.rkt"
          json)
 
 ;; Conversion

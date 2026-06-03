@@ -9,9 +9,9 @@
 
 (require rackunit
          rackunit/text-ui
-         "../util/protocol-types.rkt"
-         "../runtime/compactor.rkt"
-         "../runtime/token-compaction.rkt"
+         "../util/message/protocol-types.rkt"
+         "../runtime/compaction/compactor.rkt"
+         "../runtime/compaction/token-compaction.rkt"
          "../util/hook-types.rkt")
 
 ;; Helper: create a simple message

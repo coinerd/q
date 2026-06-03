@@ -6,15 +6,15 @@
          rackunit/text-ui
          racket/file
          racket/format
-         "../runtime/session-store.rkt"
-         "../runtime/compactor.rkt"
-         (only-in "../runtime/context-assembly.rkt"
+         "../runtime/session/session-store.rkt"
+         "../runtime/compaction/compactor.rkt"
+         (only-in "../runtime/context/context-assembly.rkt"
                   build-tiered-context
                   tiered-context?
                   tiered-context->message-list)
          "../runtime/session-index.rkt"
          "../agent/event-bus.rkt"
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          "../util/ids.rkt")
 
 ;; ---------------------------------------------------------------------------

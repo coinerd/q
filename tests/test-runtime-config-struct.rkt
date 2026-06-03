@@ -10,7 +10,7 @@
 
 (require rackunit
          racket/dict
-         "../runtime/session-config.rkt"
+         "../runtime/session/session-config.rkt"
          "../runtime/settings.rkt")
 
 ;; ============================================================

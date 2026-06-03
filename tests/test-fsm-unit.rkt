@@ -4,7 +4,7 @@
 
 (require rackunit
          rackunit/text-ui
-         "../util/fsm.rkt")
+         "../util/fsm/fsm.rkt")
 
 ;; Simple traffic-light FSM: red -> green -> yellow -> red
 (define traffic-machine

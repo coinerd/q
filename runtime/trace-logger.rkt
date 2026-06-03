@@ -12,7 +12,7 @@
          racket/file
          racket/class
          "../agent/event-bus.rkt"
-         (only-in "../util/event.rkt"
+         (only-in "../util/event/event.rkt"
                   event
                   event-ev
                   event-payload

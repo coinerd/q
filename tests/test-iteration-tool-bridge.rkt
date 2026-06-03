@@ -9,7 +9,7 @@
          racket/set
          "../agent/iteration/tool-turn-bridge.rkt"
          "../runtime/working-set.rkt"
-         "../util/protocol-types.rkt")
+         "../util/message/protocol-types.rkt")
 
 (define bridge-tests
   (test-suite "Iteration Tool-Turn Bridge"

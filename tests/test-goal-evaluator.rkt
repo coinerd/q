@@ -9,9 +9,9 @@
          json
          "../llm/model.rkt"
          "../llm/provider.rkt"
-         "../runtime/goal-evaluator.rkt"
-         "../runtime/goal-state.rkt"
-         (only-in "../runtime/goal-state.rkt" check-result))
+         "../runtime/goal/goal-evaluator.rkt"
+         "../runtime/goal/goal-state.rkt"
+         (only-in "../runtime/goal/goal-state.rkt" check-result))
 
 ;; ============================================================
 ;; Helper: create mock provider that returns predefined responses

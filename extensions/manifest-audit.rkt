@@ -13,7 +13,7 @@
          racket/path
          racket/list
          "manifest.rkt"
-         "../util/checksum.rkt")
+         "../util/json/checksum.rkt")
 
 ;; ============================================================
 ;; Provides

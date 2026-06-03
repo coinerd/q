@@ -4,7 +4,7 @@
 
 (require rackunit
          rackunit/text-ui
-         (only-in "../util/fsm.rkt" fsm-states fsm-state-name)
+         (only-in "../util/fsm/fsm.rkt" fsm-states fsm-state-name)
          (only-in "../agent/loop-fsm.rkt"
                   turn-state? turn-event?
                   turn-state->symbol turn-event->symbol

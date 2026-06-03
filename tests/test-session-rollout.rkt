@@ -6,7 +6,7 @@
 (require rackunit
          rackunit/text-ui
          racket/dict
-         (only-in "../runtime/session-config.rkt"
+         (only-in "../runtime/session/session-config.rkt"
                   session-config?
                   hash->session-config
                   current-task-state-aware-rollout-rate
@@ -14,7 +14,7 @@
          (only-in "../runtime/agent-session.rkt" make-agent-session session-rollout-enabled?)
          (only-in "../agent/event-bus.rkt" make-event-bus)
          (only-in "../tools/tool.rkt" make-tool-registry)
-         (only-in "../runtime/session-types.rkt" agent-session-config))
+         (only-in "../runtime/session/session-types.rkt" agent-session-config))
 
 (define (make-test-cfg)
   (hash 'session-dir

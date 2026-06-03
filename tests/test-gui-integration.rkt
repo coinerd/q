@@ -7,7 +7,7 @@
          "../gui/main.rkt"
          "../ui-core/observable-bridge.rkt"
          "../agent/event-bus.rkt"
-         "../util/event.rkt")
+         "../util/event/event.rkt")
 
 (define (test-event type payload)
   (make-event type (current-inexact-milliseconds) #f #f payload))

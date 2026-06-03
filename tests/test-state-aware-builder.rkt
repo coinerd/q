@@ -11,9 +11,9 @@
          (only-in "../runtime/context-assembly/rollback-actions.rkt"
                   current-rollback-action-execution?)
          (only-in "../runtime/context-assembly/state-aware-builder.rkt" check-rollback-triggers)
-         (only-in "../util/protocol-types.rkt" make-message make-text-part message-role)
-         (only-in "../util/message.rkt" message-kind)
-         (only-in "../util/fsm.rkt" fsm-state))
+         (only-in "../util/message/protocol-types.rkt" make-message make-text-part message-role)
+         (only-in "../util/message/message.rkt" message-kind)
+         (only-in "../util/fsm/fsm.rkt" fsm-state))
 
 (define (make-test-msg role text [meta (hasheq)])
   (make-message "test-id" #f role 'text (list (make-text-part text)) (current-seconds) meta))

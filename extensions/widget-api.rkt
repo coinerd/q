@@ -11,7 +11,7 @@
 (require racket/contract
          racket/match
          "api.rkt"
-         (only-in "../util/event.rkt" event-payload)
+         (only-in "../util/event/event.rkt" event-payload)
          "ui-surface.rkt")
 
 ;; Widget API — uses ui-state box for state updates

@@ -4,7 +4,7 @@
 
 (require rackunit
          rackunit/text-ui
-         "../util/protocol-types.rkt")
+         "../util/message/protocol-types.rkt")
 
 (define protocol-types-suite
   (test-suite "protocol-types: tree entry types"

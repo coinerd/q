@@ -24,7 +24,7 @@
                   stream-chunk-done?
                   make-stream-chunk)
          (only-in "../agent/event-bus.rkt" make-event-bus event-bus? subscribe! unsubscribe! publish!)
-         (only-in "../util/protocol-types.rkt"
+         (only-in "../util/message/protocol-types.rkt"
                   make-event
                   event-event
                   event?
@@ -55,9 +55,9 @@
                   tool-result-is-error?)
          "../extensions/api.rkt"
          "../util/cancellation.rkt"
-         "../util/jsonl.rkt"
+         "../util/json/jsonl.rkt"
          (prefix-in sdk: "../interfaces/sdk.rkt")
-         (only-in "../runtime/compactor.rkt" compaction-result?))
+         (only-in "../runtime/compaction/compactor.rkt" compaction-result?))
 
 ;; Import register-default-tools! from main.rkt (which wires all 11 tools)
 (require (only-in "../tools/registry-defaults.rkt" register-default-tools!))

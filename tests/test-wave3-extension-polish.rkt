@@ -11,7 +11,7 @@
 
 (require rackunit
          racket/port
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          "../skills/template.rkt"
          "../extensions/ui-channel.rkt"
          "../wiring/rpc-ui-adapter.rkt")

@@ -10,7 +10,7 @@
          "../../llm/token-budget.rkt"
          "../../agent/event-emitter.rkt"
          "../../agent/event-structs/context-pressure-events.rkt"
-         "../session-types.rkt")
+         "../session/session-types.rkt")
 
 (provide (contract-out [check-context-pressure
                         (-> agent-session?

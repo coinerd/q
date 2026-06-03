@@ -4,7 +4,7 @@
 ;; STABILITY: internal
 
 (require "base.rkt"
-         "../../util/event-macro.rkt")
+         "../../util/event/event-macro.rkt")
 
 ;; Emitted after context assembly to communicate current pressure level.
 ;; level: 'green | 'yellow | 'red

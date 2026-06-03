@@ -5,11 +5,11 @@
 
 (require rackunit
          rackunit/text-ui
-         (only-in "../runtime/session-lifecycle.rkt"
+         (only-in "../runtime/session/session-lifecycle.rkt"
                   build-user-message
                   compute-parent-id
                   inject-system-instructions)
-         (only-in "../util/protocol-types.rkt"
+         (only-in "../util/message/protocol-types.rkt"
                   message?
                   message-role
                   message-kind
@@ -18,7 +18,7 @@
                   message-content
                   make-message
                   make-text-part)
-         (only-in "../util/message.rkt" message-content)
+         (only-in "../util/message/message.rkt" message-content)
          (only-in "../agent/loop-messages.rkt" build-raw-messages))
 
 (define (make-test-message id parent-id role kind)

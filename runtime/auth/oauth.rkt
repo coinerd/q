@@ -6,8 +6,8 @@
 ;; for SSO/corporate auth flows. Token exchange and refresh are
 ;; stub implementations pending an HTTP client library.
 
-(require "../../util/json-helpers.rkt")
-(require "../../util/errors.rkt")
+(require "../../util/json/json-helpers.rkt")
+(require "../../util/error/errors.rkt")
 (require racket/contract
          racket/string
          racket/format

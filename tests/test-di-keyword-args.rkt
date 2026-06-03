@@ -16,16 +16,16 @@
                   check-mid-turn-budget!)
          "../runtime/turn-orchestrator.rkt"
          "../runtime/runtime-helpers.rkt"
-         "../runtime/compactor.rkt"
+         "../runtime/compaction/compactor.rkt"
          "../runtime/auto-retry.rkt"
          "../agent/event-bus.rkt"
          "../llm/provider.rkt"
          "../llm/model.rkt"
          (only-in "../tools/tool.rkt" make-tool-registry)
          "../tools/registry-defaults.rkt"
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          "../util/ids.rkt"
-         (only-in "../runtime/session-config.rkt" hash->session-config))
+         (only-in "../runtime/session/session-config.rkt" hash->session-config))
 
 ;; Helper: create a simple message for testing
 (define (make-test-msg [role 'user] [content "test"])

@@ -6,9 +6,9 @@
 ;; Handles /model [list|<name>] for model listing and switching.
 
 (require "../state.rkt"
-         (only-in "../../util/event.rkt" make-event)
+         (only-in "../../util/event/event.rkt" make-event)
          "../../agent/event-bus.rkt"
-         "../../runtime/model-registry.rkt"
+         "../../runtime/provider/model-registry.rkt"
          "context.rkt")
 (require racket/contract)
 

@@ -14,8 +14,8 @@
          "../agent/event-bus.rkt"
          "../llm/provider.rkt"
          "../llm/model.rkt"
-         "../util/protocol-types.rkt"
-         "../util/protocol-types.rkt")
+         "../util/message/protocol-types.rkt"
+         "../util/message/protocol-types.rkt")
 
 (define event-ordering-tests
   (test-suite "Event Ordering Invariant Regression Guard"

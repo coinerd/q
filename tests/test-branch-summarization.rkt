@@ -7,9 +7,9 @@
 (require rackunit
          rackunit/text-ui
          racket/file
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          "../runtime/session-index.rkt"
-         "../runtime/session-store.rkt")
+         "../runtime/session/session-store.rkt")
 
 (define (make-temp-dir)
   (make-temporary-file "q-branch-test-~a" 'directory))

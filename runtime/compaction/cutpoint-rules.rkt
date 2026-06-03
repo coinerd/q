@@ -19,9 +19,9 @@
 (require racket/contract
          racket/list
          racket/match
-         (only-in "../../util/content-parts.rkt" make-text-part)
-         (only-in "../../util/message.rkt" make-message message message-role)
-         "../../util/message-helpers.rkt"
+         (only-in "../../util/content/content-parts.rkt" make-text-part)
+         (only-in "../../util/message/message.rkt" make-message message message-role)
+         "../../util/message/message-helpers.rkt"
          (only-in "../../util/ids.rkt" generate-id)
          "compactor.rkt")
 

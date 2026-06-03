@@ -12,7 +12,7 @@
 
 (require rackunit
          rackunit/text-ui
-         "../util/event-payloads.rkt"
+         "../util/event/event-payloads.rkt"
          "../util/hook-types.rkt"
          "../extensions/hooks.rkt")
 

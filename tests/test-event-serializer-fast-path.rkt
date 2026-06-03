@@ -12,7 +12,7 @@
          (only-in "../agent/event-structs/tool-events.rkt"
                   make-tool-execution-start-event
                   tool-execution-start-event?)
-         "../util/event-macro.rkt")
+         "../util/event/event-macro.rkt")
 
 (define fast-path-suite
   (test-suite "Event serializer fast path tests (R-13)"

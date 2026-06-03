@@ -24,7 +24,7 @@
          "../llm/azure-openai.rkt"
          "../llm/provider.rkt"
          "../llm/model.rkt"
-         "../runtime/provider-factory.rkt"
+         "../runtime/provider/provider-factory.rkt"
          ;; #1196
          "../interfaces/sdk.rkt")
 

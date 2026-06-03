@@ -5,7 +5,7 @@
 
 (require rackunit
          racket/string
-         "../runtime/model-registry.rkt")
+         "../runtime/provider/model-registry.rkt")
 
 ;; ============================================================
 ;; Test config helpers — build config hashes for testing

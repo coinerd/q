@@ -6,7 +6,7 @@
 
 (require rackunit
          "../tools/scheduler.rkt"
-         "../util/tool-types.rkt")
+         "../util/tool/tool-types.rkt")
 
 ;; ============================================================
 ;; W-10: preflight-entry struct

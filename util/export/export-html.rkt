@@ -8,7 +8,7 @@
 (require racket/string
          racket/format
          racket/list
-         (only-in "../content-parts.rkt"
+         (only-in "../content/content-parts.rkt"
                   text-part
                   text-part-text
                   text-part?
@@ -20,7 +20,7 @@
                   tool-result-part-content
                   tool-result-part-is-error?
                   tool-result-part?)
-         (only-in "../message.rkt" message message-content message-kind message-role message-timestamp))
+         (only-in "../message/message.rkt" message message-content message-kind message-role message-timestamp))
 
 (provide session->html)
 

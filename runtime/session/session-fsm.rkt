@@ -18,7 +18,7 @@
 ;;   (session-valid-lifecycle? sess) → boolean
 
 (require racket/contract
-         (only-in "../../util/fsm.rkt"
+         (only-in "../../util/fsm/fsm.rkt"
                   define-fsm-machine
                   fsm?
                   fsm-state

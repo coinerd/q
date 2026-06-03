@@ -8,7 +8,7 @@
          "../tui/commands/context.rkt"
          "../tui/state.rkt"
          "../agent/event-bus.rkt"
-         "../util/protocol-types.rkt")
+         "../util/message/protocol-types.rkt")
 
 (define (make-test-cctx [bus #f])
   (cmd-ctx (box (initial-ui-state)) (box #t) bus #f (box #f) #f (box #f) #f (box "") #f #f (box #f) (box #f)))

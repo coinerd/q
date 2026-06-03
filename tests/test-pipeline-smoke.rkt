@@ -16,7 +16,7 @@
          "../llm/model.rkt"
          "../llm/provider.rkt"
          "../agent/event-bus.rkt"
-         (only-in "../util/protocol-types.rkt"
+         (only-in "../util/message/protocol-types.rkt"
                   make-event
                   event?
                   event-event
@@ -52,7 +52,7 @@
                   tool-result-content
                   tool-result-is-error?)
          "../extensions/api.rkt"
-         "../util/jsonl.rkt"
+         "../util/json/jsonl.rkt"
          (prefix-in sdk: "../interfaces/sdk.rkt")
          "helpers/mock-provider.rkt")
 

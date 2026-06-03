@@ -5,7 +5,7 @@
 (require rackunit
          "../tools/builtins/read.rkt"
          "../tools/tool.rkt"
-         "../util/safe-mode-state.rkt"
+         "../util/safe-mode/safe-mode-state.rkt"
          racket/file)
 
 ;; ============================================================

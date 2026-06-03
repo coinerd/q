@@ -4,7 +4,7 @@
          rackunit/text-ui
          "../gui/state-sync.rkt"
          "../gui/gui-types.rkt"
-         "../util/event.rkt")
+         "../util/event/event.rkt")
 
 ;; Helper: create a minimal event
 (define (mk-event tag payload)

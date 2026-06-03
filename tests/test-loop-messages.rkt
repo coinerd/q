@@ -7,7 +7,7 @@
 
 (require rackunit
          "../agent/loop-messages.rkt"
-         "../util/protocol-types.rkt")
+         "../util/message/protocol-types.rkt")
 
 (test-case "usage-empty? returns #t for empty hash"
   (check-true (usage-empty? (hasheq))))

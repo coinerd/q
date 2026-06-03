@@ -14,7 +14,7 @@
          "tui/mock-tui-session.rkt"
          "../tui/state.rkt"
          "../tui/scrollback.rkt"
-         "../util/protocol-types.rkt")
+         "../util/message/protocol-types.rkt")
 
 (define session-resume-tests
   (test-suite "Session Resume & Continuity Tests"

@@ -19,9 +19,9 @@
                   make-error-result
                   exec-context?
                   exec-context-bytes-written)
-         (only-in "../../util/path-helpers.rkt" path-only expand-home-path)
-         (only-in "../../util/errors.rkt" raise-tool-error tool-error?)
-         (only-in "../../util/error-sanitizer.rkt" sanitize-error-message)
+         (only-in "../../util/path/path-helpers.rkt" path-only expand-home-path)
+         (only-in "../../util/error/errors.rkt" raise-tool-error tool-error?)
+         (only-in "../../util/error/error-sanitizer.rkt" sanitize-error-message)
          ;; v0.21.10: planning path resolution hardening (F7)
          (only-in "../../extensions/gsd/session-state.rkt" current-pinned-dir)
          (only-in "builtin-helpers.rkt" require-safe-path!))

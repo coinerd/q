@@ -9,11 +9,11 @@
          racket/string
          racket/system
          "../state.rkt"
-         (only-in "../../util/event.rkt" make-event)
+         (only-in "../../util/event/event.rkt" make-event)
          "../../agent/event-bus.rkt"
-         "../../runtime/oauth.rkt"
-         "../../runtime/oauth-callback.rkt"
-         "../../runtime/auth-store.rkt"
+         "../../runtime/auth/oauth.rkt"
+         "../../runtime/auth/oauth-callback.rkt"
+         "../../runtime/auth/auth-store.rkt"
          "context.rkt")
 
 ;; Handle /compact — request compaction with optional --dry-run

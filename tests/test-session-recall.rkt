@@ -9,14 +9,14 @@
          rackunit/text-ui
          racket/file
          racket/list
-         (only-in "../util/protocol-types.rkt"
+         (only-in "../util/message/protocol-types.rkt"
                   make-message
                   make-text-part
                   message-id
                   message-role
                   message-kind
                   message-content)
-         "../runtime/session-store.rkt"
+         "../runtime/session/session-store.rkt"
          "../runtime/session-index.rkt"
          "../tools/tool.rkt"
          "../tools/builtins/session-recall.rkt")

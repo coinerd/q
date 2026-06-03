@@ -13,7 +13,7 @@
 ;; Scans .q/skills/ and .pi/skills/ directories from the working directory.
 ;; This is a read-only discovery tool — no modification.
 
-(require "../../util/error-helpers.rkt")
+(require "../../util/error/error-helpers.rkt")
 (require racket/contract
          racket/file
          racket/string
@@ -21,7 +21,7 @@
          json
          "../../skills/resource-loader.rkt"
          "../../util/config-paths.rkt"
-         (only-in "../../util/error-sanitizer.rkt" sanitize-error-message)
+         (only-in "../../util/error/error-sanitizer.rkt" sanitize-error-message)
          "../../tools/tool.rkt")
 
 (provide (contract-out [tool-skill-route (->* (hash?) (any/c) any/c)]))

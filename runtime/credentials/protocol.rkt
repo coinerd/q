@@ -7,8 +7,8 @@
          racket/function
          racket/port
          racket/string)
-(require "../../util/error-helpers.rkt"
-         "../../util/errors.rkt")
+(require "../../util/error/error-helpers.rkt"
+         "../../util/error/errors.rkt")
 
 (provide
  ;; Backend struct

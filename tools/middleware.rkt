@@ -16,7 +16,7 @@
 ;;   (pipeline tool-call exec-ctx base-executor)
 
 (require racket/contract
-         (only-in "../util/tool-types.rkt" tool-call? tool-call-name tool-call-arguments)
+         (only-in "../util/tool/tool-types.rkt" tool-call? tool-call-name tool-call-arguments)
          (only-in "tool.rkt" make-error-result tool-result? tool-result-is-error?))
 
 ;; ============================================================

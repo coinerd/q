@@ -21,10 +21,10 @@
          "../llm/provider.rkt"
          (only-in "../tools/tool.rkt" make-tool-registry)
          "../agent/event-bus.rkt"
-         (only-in "../util/content-parts.rkt" text-part text-part-text text-part?)
-         (only-in "../util/event.rkt" event-event event-payload make-event)
+         (only-in "../util/content/content-parts.rkt" text-part text-part-text text-part?)
+         (only-in "../util/event/event.rkt" event-event event-payload make-event)
          (only-in "../util/loop-result.rkt" loop-result loop-result-messages loop-result?)
-         (only-in "../util/message.rkt" message-content message-role)
+         (only-in "../util/message/message.rkt" message-content message-role)
          "../interfaces/sdk.rkt")
 
 (provide run-benchmarks)

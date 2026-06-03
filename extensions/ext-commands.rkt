@@ -7,7 +7,7 @@
 ;; Extensions register commands which appear in the TUI command palette.
 
 (require racket/contract
-         (only-in "../util/errors.rkt" raise-extension-error)
+         (only-in "../util/error/errors.rkt" raise-extension-error)
          racket/list
          "context.rkt"
          "../util/command-types.rkt")

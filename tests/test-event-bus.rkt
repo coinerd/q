@@ -4,7 +4,7 @@
 
 (require rackunit
          racket/match
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          "../agent/event-bus.rkt")
 
 ;; ============================================================

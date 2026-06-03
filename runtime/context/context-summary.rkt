@@ -10,12 +10,12 @@
          racket/match
          racket/string
          racket/list
-         (only-in "../../util/content-parts.rkt" text-part text-part-text text-part?)
-         (only-in "../../util/message.rkt" message message-content message-id message-role message?)
+         (only-in "../../util/content/content-parts.rkt" text-part text-part-text text-part?)
+         (only-in "../../util/message/message.rkt" message message-content message-id message-role message?)
          "../../util/string-helpers.rkt"
          "../../llm/token-budget.rkt"
-         (only-in "../compaction-prompts.rkt" format-messages-for-summary)
-         (only-in "../compactor-llm-bridge.rkt" llm-summarize)
+         (only-in "../compaction/compaction-prompts.rkt" format-messages-for-summary)
+         (only-in "../compaction/compactor-llm-bridge.rkt" llm-summarize)
          (only-in "../../llm/provider.rkt" provider?))
 
 ;; Summary cache

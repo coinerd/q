@@ -11,8 +11,8 @@
 (require rackunit
          rackunit/text-ui
          "../runtime/agent-session.rkt"
-         "../runtime/session-types.rkt"
-         "../util/protocol-types.rkt")
+         "../runtime/session/session-types.rkt"
+         "../util/message/protocol-types.rkt")
 
 ;; Build a minimal message for testing
 (define (test-msg id kind role content-text [parent-id #f])

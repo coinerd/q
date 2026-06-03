@@ -93,10 +93,10 @@
                   runtime-config-max-iterations
                   runtime-config-system-instructions)
          (only-in "../llm/provider.rkt" provider? make-mock-provider)
-         (only-in "../runtime/provider-factory.rkt" build-provider)
+         (only-in "../runtime/provider/provider-factory.rkt" build-provider)
          (only-in "../agent/event-bus.rkt" make-event-bus event-bus? subscribe! publish!)
-         (only-in "../util/event.rkt" event?)
-         (only-in "../util/message.rkt" message?)
+         (only-in "../util/event/event.rkt" event?)
+         (only-in "../util/message/message.rkt" message?)
          (only-in "../extensions/api.rkt"
                   make-extension-registry
                   register-extension!

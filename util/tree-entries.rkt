@@ -7,7 +7,7 @@
 ;; predicates, and accessors.
 
 (require racket/contract
-         "message.rkt")
+         "message/message.rkt")
 
 (provide (contract-out
           [make-branch-entry (-> string? string? string? message?)]

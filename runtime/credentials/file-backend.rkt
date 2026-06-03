@@ -8,8 +8,8 @@
          json
          racket/file
          racket/path
-         "../../util/json-helpers.rkt"
-         "../../util/error-helpers.rkt"
+         "../../util/json/json-helpers.rkt"
+         "../../util/error/error-helpers.rkt"
          (only-in "protocol.rkt"
                   credential-backend
                   credential-backend?))

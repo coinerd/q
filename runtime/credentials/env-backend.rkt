@@ -5,8 +5,8 @@
 
 (require racket/contract
          racket/string
-         "../../util/error-helpers.rkt"
-         "../../util/errors.rkt"
+         "../../util/error/error-helpers.rkt"
+         "../../util/error/errors.rkt"
          (only-in "protocol.rkt"
                   credential-backend
                   credential-backend?))

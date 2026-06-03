@@ -36,8 +36,8 @@
                   loop-counters-iteration
                   loop-counters-consecutive-tool-count
                   loop-counters-recent-tool-names)
-         (only-in "../../util/message.rkt" message-role message-id)
-         (only-in "../../util/tool-types.rkt" tool-call-name tool-call-arguments)
+         (only-in "../../util/message/message.rkt" message-role message-id)
+         (only-in "../../util/tool/tool-types.rkt" tool-call-name tool-call-arguments)
          (only-in "../../runtime/layer-adapters.rkt" permission-config?)
          (only-in "../../runtime/tool-coordinator.rkt"
                   handle-tool-calls-pending
@@ -49,7 +49,7 @@
                   run-step-effects!)
          (only-in "../../util/hook-types.rkt" hook-result-action hook-result?)
          (only-in "../event-emitter.rkt" emit-typed-event!)
-         (only-in "../../util/event-contracts.rkt"
+         (only-in "../../util/event/event-contracts.rkt"
                   error-detail-payload/c
                   iteration-decision-payload/c
                   reason-payload/c
@@ -60,8 +60,8 @@
                   loop-result-metadata
                   loop-result-termination-reason
                   loop-result-messages)
-         (only-in "../../runtime/session-store.rkt" append-entries!)
-         (only-in "../../runtime/session-config.rkt" config-max-context-tokens)
+         (only-in "../../runtime/session/session-store.rkt" append-entries!)
+         (only-in "../../runtime/session/session-config.rkt" config-max-context-tokens)
          (only-in "../../runtime/working-set.rkt"
                   working-set-update!
                   ws-entry-path
@@ -69,8 +69,8 @@
                   working-set-entry-count
                   working-set-token-count)
          (only-in "tool-turn-bridge.rkt" extract-tool-target-path)
-         (only-in "../../runtime/context-policy.rkt" estimate-message-tokens)
-         (only-in "../../runtime/session-compaction.rkt" compact-context-mid-turn)
+         (only-in "../../runtime/context/context-policy.rkt" estimate-message-tokens)
+         (only-in "../../runtime/compaction/session-compaction.rkt" compact-context-mid-turn)
          (only-in "../../runtime/iteration/retry-policy.rkt"
                   estimate-mid-turn-tokens
                   maybe-compact-mid-turn

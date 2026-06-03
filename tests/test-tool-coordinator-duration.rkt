@@ -9,11 +9,11 @@
 (require rackunit
          racket/list
          (only-in "../runtime/tool-coordinator.rkt" handle-tool-calls-pending)
-         (only-in "../runtime/session-config.rkt" hash->session-config)
+         (only-in "../runtime/session/session-config.rkt" hash->session-config)
          (only-in "../tools/tool.rkt" make-tool make-tool-registry register-tool! make-success-result)
-         (only-in "../util/protocol-types.rkt" make-message make-tool-call-part)
+         (only-in "../util/message/protocol-types.rkt" make-message make-tool-call-part)
          (only-in "../util/ids.rkt" generate-id)
-         (only-in "../util/event.rkt" event-event event-payload)
+         (only-in "../util/event/event.rkt" event-event event-payload)
          "../agent/event-bus.rkt")
 
 ;; ============================================================

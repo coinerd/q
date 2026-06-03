@@ -5,8 +5,8 @@
 
 (require rackunit
          racket/contract
-         "../runtime/session-config.rkt"
-         "../runtime/session-types.rkt")
+         "../runtime/session/session-config.rkt"
+         "../runtime/session/session-types.rkt")
 
 (test-case "session-config: hash->session-config creates config"
   (define cfg (hash->session-config (hasheq 'model "test-model")))

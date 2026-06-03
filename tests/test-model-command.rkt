@@ -12,7 +12,7 @@
 (require rackunit
          "../tui/commands.rkt"
          "../tui/state.rkt"
-         "../runtime/model-registry.rkt"
+         "../runtime/provider/model-registry.rkt"
          "../interfaces/cli.rkt")
 
 ;; ============================================================

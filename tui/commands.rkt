@@ -25,8 +25,8 @@
          "../agent/event-bus.rkt"
          "../extensions/hooks.rkt"
          "../extensions/api.rkt"
-         "../runtime/goal-checks.rkt"
-         (only-in "../runtime/goal-state.rkt"
+         "../runtime/goal/goal-checks.rkt"
+         (only-in "../runtime/goal/goal-state.rkt"
                   goal-check-label
                   goal-check-command
                   goal-state-turns-used

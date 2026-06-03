@@ -10,7 +10,7 @@
 ;;   - #692: parent feature integration
 
 (require rackunit
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          "../runtime/split-turn.rkt")
 
 ;; ============================================================

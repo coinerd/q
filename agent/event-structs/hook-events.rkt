@@ -6,7 +6,7 @@
 ;; or when a turn is cancelled.
 
 (require "base.rkt"
-         "../../util/event-macro.rkt")
+         "../../util/event/event-macro.rkt")
 
 ;; Blocked events
 

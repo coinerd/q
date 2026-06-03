@@ -9,7 +9,7 @@
 
 (require rackunit
          rackunit/text-ui
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          "../util/hook-types.rkt"
          "../extensions/hooks.rkt"
          (only-in "../extensions/api.rkt"

@@ -12,7 +12,7 @@
 ;;   - list-quarantined       : list all quarantined extensions with metadata
 ;;   - format-extension-status : human-readable status string
 
-(require "../util/json-helpers.rkt")
+(require "../util/json/json-helpers.rkt")
 (require racket/contract
          racket/file
          racket/format

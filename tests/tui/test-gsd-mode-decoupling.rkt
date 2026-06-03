@@ -11,7 +11,7 @@
          racket/string
          "../../tui/state-events.rkt"
          "../../tui/state-types.rkt"
-         "../../util/protocol-types.rkt")
+         "../../util/message/protocol-types.rkt")
 
 ;; Helper to make a test event
 (define (make-test-event ev-type

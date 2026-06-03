@@ -9,14 +9,14 @@
          racket/file
          racket/path
          "../runtime/working-set.rkt"
-         (only-in "../runtime/session-lifecycle.rkt"
+         (only-in "../runtime/session/session-lifecycle.rkt"
                   run-prompt!
                   build-session-context-for-prompt
                   run-prompt-internal)
-         "../runtime/session-types.rkt"
-         (only-in "../runtime/session-mutation.rkt" guarded-set-config!)
+         "../runtime/session/session-types.rkt"
+         (only-in "../runtime/session/session-mutation.rkt" guarded-set-config!)
          (except-in "../runtime/agent-session.rkt" run-prompt!)
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          "../agent/event-bus.rkt"
          "../util/ids.rkt"
          (only-in "../llm/provider.rkt" make-mock-provider)

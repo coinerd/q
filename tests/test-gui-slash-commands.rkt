@@ -6,7 +6,7 @@
          racket/class
          "../gui/gui-types.rkt"
          "../gui/slash-commands.rkt"
-         "../runtime/session-types.rkt"
+         "../runtime/session/session-types.rkt"
          "../extensions/api.rkt"
          "../extensions/hooks.rkt"
          "../util/hook-types.rkt"

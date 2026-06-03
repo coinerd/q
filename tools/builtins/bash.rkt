@@ -38,9 +38,9 @@
                   sandbox-memory-limit
                   sandbox-max-output
                   sandbox-max-processes)
-         (only-in "../../util/path-helpers.rkt" expand-home-path)
+         (only-in "../../util/path/path-helpers.rkt" expand-home-path)
          (only-in "../../util/truncation.rkt" truncate-output)
-         (only-in "../../util/safe-mode-predicates.rkt" safe-mode?)
+         (only-in "../../util/safe-mode/safe-mode-predicates.rkt" safe-mode?)
          (only-in "../shell-risk.rkt"
                   tokenize-shell-command
                   classify-shell-risks

@@ -22,7 +22,7 @@
          "context.rkt"
          "hooks.rkt"
          "tool-api.rkt"
-         "../util/event.rkt"
+         "../util/event/event.rkt"
          "api.rkt"
          "gsd-planning/command-normalization.rkt"
          "gsd-planning/execution-policy.rkt"

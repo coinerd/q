@@ -26,15 +26,15 @@
          racket/promise
          json
          (only-in racket/string string-contains? string-join)
-         (only-in "../util/errors.rkt" raise-extension-error)
-         (only-in "../util/json-helpers.rkt" ensure-hash-args)
-         (only-in "../util/content-parts.rkt" make-text-part text-part? tool-result-part?)
-         (only-in "../util/event.rkt" make-event event-ev)
+         (only-in "../util/error/errors.rkt" raise-extension-error)
+         (only-in "../util/json/json-helpers.rkt" ensure-hash-args)
+         (only-in "../util/content/content-parts.rkt" make-text-part text-part? tool-result-part?)
+         (only-in "../util/event/event.rkt" make-event event-ev)
          (only-in "../util/loop-result.rkt" make-loop-result loop-result-messages)
-         (only-in "../util/message.rkt" message? message-id message-role message-content make-message)
-         (only-in "../util/tool-types.rkt" tool-call-name tool-call-arguments)
-         (only-in "../util/content-parts.rkt" text-part-text tool-result-part-is-error?)
-         (only-in "../util/event.rkt" event-payload)
+         (only-in "../util/message/message.rkt" message? message-id message-role message-content make-message)
+         (only-in "../util/tool/tool-types.rkt" tool-call-name tool-call-arguments)
+         (only-in "../util/content/content-parts.rkt" text-part-text tool-result-part-is-error?)
+         (only-in "../util/event/event.rkt" event-payload)
          (only-in "../util/loop-result.rkt" loop-result-termination-reason loop-result-metadata)
          "../agent/event-bus.rkt"
          (only-in "../util/loop-result.rkt" loop-result?)
@@ -55,9 +55,9 @@
          (only-in "layer-adapters.rkt" make-extension-ctx)
          ;; GSD session context via adapter
          (only-in "layer-adapters.rkt" current-gsd-ctx gsd-session-ctx?)
-         "../runtime/session-store.rkt"
+         "session/session-store.rkt"
          "../runtime/tool-coordinator.rkt"
-         (only-in "../runtime/context-assembly.rkt"
+         (only-in "context/context-assembly.rkt"
                   build-tiered-context-with-hooks
                   tiered-context->message-list
                   build-tiered-context
@@ -77,7 +77,7 @@
          (only-in "../runtime/tool-coordinator.rkt"
                   handle-tool-calls-pending
                   extract-tool-calls-from-messages)
-         "../runtime/cutpoint-rules.rkt"
+         "compaction/cutpoint-rules.rkt"
          "../util/ids.rkt"
          (only-in "../util/cancellation.rkt" cancellation-token? cancellation-token-cancelled?)
          ;; R2-6: hook-result accessors
@@ -86,26 +86,26 @@
          ;; Token estimation for context assembly event
          (only-in "../llm/token-budget.rkt" estimate-context-tokens)
          ;; Mock provider detection
-         (only-in "provider-factory.rkt" provider-is-mock?)
+         (only-in "provider/provider-factory.rkt" provider-is-mock?)
          ;; Shared helpers
          (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
          ;; G4: typed event emission
          "../agent/event-emitter.rkt"
          "../agent/event-structs/iteration-events.rkt"
          "../agent/event-structs/session-events.rkt"
-         (only-in "../runtime/session-types.rkt"
+         (only-in "session/session-types.rkt"
                   agent-session?
                   agent-session-task-fsm-state
                   agent-session-task-conclusions
                   agent-session-recent-tool-calls)
-         (only-in "../runtime/session-mutation.rkt"
+         (only-in "session/session-mutation.rkt"
                   guarded-set-working-set-evolved!
                   guarded-set-task-conclusions!)
          (only-in "../runtime/context-assembly/ws-evolution.rkt"
                   evolve-working-set-for-state/result
                   evolution-result?)
          (only-in "../runtime/context-assembly/state-aware-builder.rkt" current-ws-evolution-enabled?)
-         (only-in "../runtime/session-config.rkt"
+         (only-in "session/session-config.rkt"
                   session-config?
                   hash->session-config
                   config-tier-b-count
@@ -115,12 +115,12 @@
                   config-settings
                   config-model-name
                   config-task-state-aware?)
-         (only-in "../util/message.rkt" message-kind message-content)
+         (only-in "../util/message/message.rkt" message-kind message-content)
          racket/set
          (only-in "../runtime/context-assembly/auto-distillation.rkt"
                   auto-distill
                   current-auto-distillation-enabled?)
-         (only-in "../runtime/session-config.rkt"
+         (only-in "session/session-config.rkt"
                   config-context-assembly-profile
                   apply-context-assembly-profile!)
          ;; Task-state singletons for symbol->task-state conversion

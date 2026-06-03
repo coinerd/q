@@ -13,15 +13,15 @@
 (require rackunit
          rackunit/text-ui
          racket/list
-         (only-in "../util/protocol-types.rkt"
+         (only-in "../util/message/protocol-types.rkt"
                   make-message
                   make-text-part
                   message-id
                   message-role
                   message-content)
-         "../runtime/session-store.rkt"
+         "../runtime/session/session-store.rkt"
          "../runtime/session-index.rkt"
-         "../runtime/context-assembly.rkt"
+         "../runtime/context/context-assembly.rkt"
          (only-in "../llm/provider.rkt" make-mock-provider provider?)
          (only-in "../llm/model.rkt" make-model-response))
 

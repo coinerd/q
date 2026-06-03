@@ -9,9 +9,9 @@
 
 (require rackunit
          racket/list
-         "../runtime/context-policy.rkt"
-         "../util/protocol-types.rkt"
-         "../util/content-parts.rkt"
+         "../runtime/context/context-policy.rkt"
+         "../util/message/protocol-types.rkt"
+         "../util/content/content-parts.rkt"
          "../llm/token-budget.rkt"
          racket/set
          (only-in "../runtime/context-assembly/serialization.rkt" compute-tier-c-count))

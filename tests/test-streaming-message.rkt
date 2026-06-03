@@ -7,7 +7,7 @@
 (require rackunit
          rackunit/text-ui
          "../agent/streaming-message.rkt"
-         "../util/protocol-types.rkt")
+         "../util/message/protocol-types.rkt")
 
 (define streaming-tests
   (test-suite "streaming-message accumulator"

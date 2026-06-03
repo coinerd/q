@@ -6,7 +6,7 @@
 (require rackunit
          rackunit/text-ui
          racket/tcp
-         "../runtime/oauth-callback.rkt")
+         "../runtime/auth/oauth-callback.rkt")
 
 (define nonblocking-tests
   (test-suite "OAuth callback nonblocking completion (v0.59.12 W0)"

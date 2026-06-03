@@ -7,7 +7,7 @@
          rackunit/text-ui
          racket/string
          "../runtime/iteration/retry-policy.rkt"
-         (only-in "../util/message.rkt" make-message))
+         (only-in "../util/message/message.rkt" make-message))
 
 (define estimate-suite
   (test-suite "compute-mid-turn-estimate"

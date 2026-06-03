@@ -14,15 +14,15 @@
          racket/match
          racket/file
          (only-in racket/path file-name-from-path)
-         (only-in "../util/path-helpers.rkt" path-only)
+         (only-in "../util/path/path-helpers.rkt" path-only)
          racket/list
          racket/port
          racket/string
          json
-         (only-in "../util/event.rkt" make-event)
+         (only-in "../util/event/event.rkt" make-event)
          "../agent/event-bus.rkt"
          "api.rkt"
-         "../util/checksum.rkt"
+         "../util/json/checksum.rkt"
          "../util/version.rkt"
          "api.rkt"
          "manifest.rkt"

@@ -14,7 +14,7 @@
 ;; control and avoids leaking internal exceptions across the wire.
 
 (require racket/list
-         (only-in "../runtime/provider-registry.rkt"
+         (only-in "../runtime/provider/provider-registry.rkt"
                   list-providers
                   list-models-for-provider
                   find-model

@@ -16,7 +16,7 @@
 ;; The public API (provide) is identical to the original monolithic module
 ;; before the refactor into bridge + input + facade.
 
-(require "../util/error-helpers.rkt")
+(require "../util/error/error-helpers.rkt")
 (require racket/port
          racket/string
          racket/list

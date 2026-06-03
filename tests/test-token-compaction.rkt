@@ -11,8 +11,8 @@
 ;;   - #689: Token-based compaction window split
 
 (require rackunit
-         "../util/protocol-types.rkt"
-         "../runtime/token-compaction.rkt"
+         "../util/message/protocol-types.rkt"
+         "../runtime/compaction/token-compaction.rkt"
          "../llm/token-budget.rkt")
 
 ;; ============================================================

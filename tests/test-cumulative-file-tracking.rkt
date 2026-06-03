@@ -8,9 +8,9 @@
 
 (require rackunit
          rackunit/text-ui
-         "../util/protocol-types.rkt"
-         "../runtime/compactor.rkt"
-         "../runtime/token-compaction.rkt")
+         "../util/message/protocol-types.rkt"
+         "../runtime/compaction/compactor.rkt"
+         "../runtime/compaction/token-compaction.rkt")
 
 (test-case "merge-file-trackers combines two trackers"
   (define ft1 (hasheq 'readFiles '("a.rkt" "b.rkt") 'modifiedFiles '("c.rkt")))

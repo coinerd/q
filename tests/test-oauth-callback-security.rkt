@@ -10,7 +10,7 @@
          file/sha1
          racket/string
          racket/tcp
-         "../runtime/oauth-callback.rkt")
+         "../runtime/auth/oauth-callback.rkt")
 
 (define security-tests
   (test-suite "OAuth2 security (v0.59.1)"

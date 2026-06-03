@@ -20,7 +20,7 @@
                   category-breakdown
                   compute-conclusion-coverage
                   measure-context-assembly)
-         (only-in "../util/protocol-types.rkt" make-message make-text-part message-kind message-role)
+         (only-in "../util/message/protocol-types.rkt" make-message make-text-part message-kind message-role)
          (only-in "../runtime/context-assembly/context-floor.rkt"
                   tiered-context?
                   tiered-context-tier-a

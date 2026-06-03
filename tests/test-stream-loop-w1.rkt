@@ -11,7 +11,7 @@
          "../agent/loop-fsm.rkt"
          "../agent/event-bus.rkt"
          "../agent/state.rkt"
-         "../util/message.rkt")
+         "../util/message/message.rkt")
 
 ;; ============================================================
 ;; I-01: Main entry point exists

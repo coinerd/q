@@ -7,8 +7,8 @@
 (require rackunit
          rackunit/text-ui
          racket/file
-         "../util/protocol-types.rkt"
-         "../runtime/session-store.rkt"
+         "../util/message/protocol-types.rkt"
+         "../runtime/session/session-store.rkt"
          "../runtime/session-index.rkt")
 
 ;; ── Helpers ──

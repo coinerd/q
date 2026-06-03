@@ -40,7 +40,7 @@
          ;; Event bus — was re-exported via all-from-out
          (only-in "../agent/event-bus.rkt" event-bus?)
          ;; Session config
-         "../runtime/session-config.rkt"
+         "../runtime/session/session-config.rkt"
          ;; Extensions
          (only-in "../extensions/api.rkt" extension-registry? list-extensions))
 

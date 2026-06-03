@@ -5,8 +5,8 @@
 (require rackunit
          racket/format
          racket/string
-         "../runtime/goal-agent-evaluator.rkt"
-         "../runtime/goal-state.rkt"
+         "../runtime/goal/goal-agent-evaluator.rkt"
+         "../runtime/goal/goal-state.rkt"
          "../llm/model.rkt"
          "../llm/provider.rkt")
 

@@ -9,7 +9,7 @@
 ;; where session-dir defaults to ~/.q/sessions/.
 
 (require racket/contract
-         "../util/error-helpers.rkt")
+         "../util/error/error-helpers.rkt")
 (require racket/match
          racket/string
          racket/format
@@ -17,9 +17,9 @@
          racket/list
          racket/path
          json
-         "../util/jsonl.rkt"
+         "../util/json/jsonl.rkt"
          "../runtime/settings.rkt"
-         "../runtime/session-store.rkt"
+         "../runtime/session/session-store.rkt"
          (only-in "../cli/args.rkt"
                   cli-config?
                   cli-config-sessions-subcommand

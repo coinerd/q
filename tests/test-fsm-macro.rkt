@@ -7,7 +7,7 @@
 ;; guard accessors, and state predicates from a declarative spec.
 
 (require rackunit
-         "../util/fsm.rkt")
+         "../util/fsm/fsm.rkt")
 
 ;; ============================================================
 ;; Basic machine definition

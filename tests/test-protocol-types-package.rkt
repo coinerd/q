@@ -12,16 +12,16 @@
 
 (require rackunit
          rackunit/text-ui
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          ;; Direct sub-module imports
-         "../util/content-parts.rkt"
-         "../util/message.rkt"
-         "../util/event.rkt"
+         "../util/content/content-parts.rkt"
+         "../util/message/message.rkt"
+         "../util/event/event.rkt"
          "../util/entry-predicates.rkt"
          "../util/tree-entries.rkt"
          "../util/loop-result.rkt"
-         "../util/custom-entries.rkt"
-         "../util/tool-types.rkt")
+         "../util/content/custom-entries.rkt"
+         "../util/tool/tool-types.rkt")
 
 (define pt-tests
   (test-suite "Protocol Types Package Decomposition"

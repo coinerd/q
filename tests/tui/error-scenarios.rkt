@@ -14,7 +14,7 @@
 
 (require rackunit
          rackunit/text-ui
-         "../../util/protocol-types.rkt"
+         "../../util/message/protocol-types.rkt"
          "event-simulator.rkt"
          "state-assertions.rkt"
          "../../tui/state.rkt")

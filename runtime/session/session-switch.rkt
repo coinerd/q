@@ -20,7 +20,7 @@
          "../../agent/event-bus.rkt"
          "../../agent/event-emitter.rkt"
          "../../agent/event-structs/session-events.rkt"
-         (only-in "../../util/errors.rkt" raise-extension-error))
+         (only-in "../../util/error/errors.rkt" raise-extension-error))
 
 ;; #704: Teardown
 (provide teardown-session-extensions!

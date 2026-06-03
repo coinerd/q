@@ -19,11 +19,11 @@
 (require racket/contract
          "event-api.rkt"
          "api.rkt"
-         (only-in "../util/event.rkt" make-event)
-         (only-in "../util/message.rkt" make-message message?)
-         (only-in "../util/content-parts.rkt" make-text-part)
+         (only-in "../util/event/event.rkt" make-event)
+         (only-in "../util/message/message.rkt" make-message message?)
+         (only-in "../util/content/content-parts.rkt" make-text-part)
          "../util/ids.rkt"
-         "../util/event.rkt")
+         "../util/event/event.rkt")
 
 (provide (contract-out [inject-system-message! (-> event-bus? string? string? event?)]
                        [inject-user-message! (-> event-bus? string? string? event?)]

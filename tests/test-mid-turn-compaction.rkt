@@ -9,10 +9,10 @@
 (require rackunit
          rackunit/text-ui
          racket/string
-         "../util/message.rkt"
-         "../util/content-parts.rkt"
-         "../runtime/session-compaction.rkt"
-         "../runtime/compactor.rkt"
+         "../util/message/message.rkt"
+         "../util/content/content-parts.rkt"
+         "../runtime/compaction/session-compaction.rkt"
+         "../runtime/compaction/compactor.rkt"
          "../runtime/iteration/retry-policy.rkt"
          "../runtime/runtime-helpers.rkt"
          "../llm/token-budget.rkt"

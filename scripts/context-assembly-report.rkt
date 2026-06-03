@@ -6,7 +6,7 @@
 ;; Usage: racket scripts/context-assembly-report.rkt
 
 (require racket/format
-         (only-in "../runtime/session-config.rkt"
+         (only-in "../runtime/session/session-config.rkt"
                   current-task-state-aware-rollout-rate
                   current-context-assembly-profile
                   context-assembly-profile?)

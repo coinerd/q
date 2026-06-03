@@ -16,10 +16,10 @@
          racket/file
          racket/string
          json
-         "../util/protocol-types.rkt"
-         "../util/export-markdown.rkt"
-         "../util/export-html.rkt"
-         "../util/export-json.rkt"
+         "../util/message/protocol-types.rkt"
+         "../util/export/export-markdown.rkt"
+         "../util/export/export-html.rkt"
+         "../util/export/export-json.rkt"
          "../cli/export.rkt")
 
 ;; ============================================================

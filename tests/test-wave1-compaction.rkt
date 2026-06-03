@@ -11,14 +11,14 @@
 
 (require rackunit
          racket/file
-         "../util/protocol-types.rkt"
-         "../runtime/compactor.rkt"
-         "../runtime/token-compaction.rkt"
+         "../util/message/protocol-types.rkt"
+         "../runtime/compaction/compactor.rkt"
+         "../runtime/compaction/token-compaction.rkt"
          "../runtime/split-turn.rkt"
-         "../runtime/cutpoint-rules.rkt"
+         "../runtime/compaction/cutpoint-rules.rkt"
          "../runtime/auto-retry.rkt"
-         "../runtime/session-store.rkt"
-         "../runtime/compaction-prompts.rkt")
+         "../runtime/session/session-store.rkt"
+         "../runtime/compaction/compaction-prompts.rkt")
 
 ;; ============================================================
 ;; Helpers

@@ -17,7 +17,7 @@
 ;;   - Synchronized output (DEC 2026)
 ;;   - Kitty keyboard protocol (CSI-u)
 
-(require "../util/error-helpers.rkt")
+(require "../util/error/error-helpers.rkt")
 (require racket/port
          racket/string
          racket/list

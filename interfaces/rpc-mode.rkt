@@ -5,7 +5,7 @@
          racket/math
          json
          racket/port
-         (only-in "../util/event.rkt" event->jsexpr event-ev)
+         (only-in "../util/event/event.rkt" event->jsexpr event-ev)
          "../agent/event-bus.rkt")
 
 (define-logger rpc-mode)

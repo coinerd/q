@@ -18,7 +18,7 @@
 (require rackunit
          racket/hash
          json
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          "../runtime/session-index.rkt")
 
 ;; ============================================================

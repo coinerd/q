@@ -8,8 +8,8 @@
 
 (require racket/contract
          (only-in "event.rkt" event event-ev event? make-event)
-         (only-in "../message.rkt" message)
-         (only-in "../tool-types.rkt" tool-call-id))
+         (only-in "../message/message.rkt" message)
+         (only-in "../tool/tool-types.rkt" tool-call-id))
 
 (provide (contract-out
           ;; Predicates

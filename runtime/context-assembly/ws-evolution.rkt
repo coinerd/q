@@ -25,7 +25,7 @@
                   task-verification
                   task-debugging)
          (only-in "task-conclusion.rkt" task-conclusion? task-conclusion-text)
-         (only-in "../../util/fsm.rkt" fsm-state? fsm-state-name)
+         (only-in "../../util/fsm/fsm.rkt" fsm-state? fsm-state-name)
          racket/set
          racket/string)
 

@@ -12,7 +12,7 @@
 ;;;   - file-tracker omission when empty or #f
 
 (require rackunit
-         (only-in "../runtime/compaction-prompts.rkt"
+         (only-in "../runtime/compaction/compaction-prompts.rkt"
                   summary-prompt
                   iterative-update-prompt
                   MAX-TOOL-RESULT-CHARS

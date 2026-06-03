@@ -16,7 +16,7 @@
          "../extensions/api.rkt"
          "../extensions/context.rkt"
          "../agent/event-bus.rkt"
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          "../util/hook-types.rkt")
 
 ;; ============================================================

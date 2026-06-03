@@ -20,7 +20,7 @@
          "../extensions/loader.rkt"
          "../extensions/define-extension.rkt"
          "../agent/event-bus.rkt"
-         "../util/protocol-types.rkt")
+         "../util/message/protocol-types.rkt")
 
 (define-runtime-path here ".")
 (define define-extension-path

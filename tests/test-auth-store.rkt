@@ -11,7 +11,7 @@
          rackunit/text-ui
          racket/file
          json
-         "../runtime/auth-store.rkt")
+         "../runtime/auth/auth-store.rkt")
 
 ;; ── Helpers ──
 

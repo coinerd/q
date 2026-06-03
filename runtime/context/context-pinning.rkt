@@ -10,7 +10,7 @@
 (require racket/contract
          racket/list
          racket/set
-         (only-in "../../util/message.rkt" message-role message-kind message-id))
+         (only-in "../../util/message/message.rkt" message-role message-kind message-id))
 
 (provide (contract-out [partition-messages (-> list? (values list? list?))]
                        [partition-messages/working-set (-> list? list? (values list? list?))]))

@@ -14,7 +14,7 @@
                   transcript-entry-kind
                   transcript-entry-text
                   transcript-entry-meta)
-         (only-in "../util/event.rkt" make-event)
+         (only-in "../util/event/event.rkt" make-event)
          "../tui/state-events.rkt")
 
 ;; ============================================================

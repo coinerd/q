@@ -6,8 +6,8 @@
 
 (require rackunit
          rackunit/text-ui
-         "../util/event-classes.rkt"
-         "../util/protocol-types.rkt")
+         "../util/event/event-classes.rkt"
+         "../util/message/protocol-types.rkt")
 
 (define event-class-tests
   (test-suite "typed event classes"

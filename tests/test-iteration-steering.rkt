@@ -11,8 +11,8 @@
          "../agent/event-bus.rkt"
          "../agent/queue.rkt"
          "../agent/iteration/loop-phases.rkt"
-         "../util/message.rkt"
-         "../util/content-parts.rkt")
+         "../util/message/message.rkt"
+         "../util/content/content-parts.rkt")
 
 (define (message-text msg)
   (define part (car (message-content msg)))

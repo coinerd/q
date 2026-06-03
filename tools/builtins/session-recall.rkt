@@ -19,9 +19,9 @@
          racket/list
          racket/string
          "../tool.rkt"
-         (only-in "../../util/content-parts.rkt" text-part?)
-         (only-in "../../util/message.rkt" message-id message-role message-content)
-         (only-in "../../util/content-parts.rkt" text-part-text)
+         (only-in "../../util/content/content-parts.rkt" text-part?)
+         (only-in "../../util/message/message.rkt" message-id message-role message-content)
+         (only-in "../../util/content/content-parts.rkt" text-part-text)
          "../../util/string-helpers.rkt")
 
 (provide (contract-out [tool-session-recall (->* (hash?) ((or/c exec-context? #f)) tool-result?)]))

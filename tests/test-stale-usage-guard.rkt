@@ -9,11 +9,11 @@
 
 (require rackunit
          rackunit/text-ui
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          "../agent/event-bus.rkt"
          "../runtime/agent-session.rkt"
-         "../runtime/session-types.rkt"
-         (only-in "../runtime/session-mutation.rkt" guarded-set-last-compaction-time!))
+         "../runtime/session/session-types.rkt"
+         (only-in "../runtime/session/session-mutation.rkt" guarded-set-last-compaction-time!))
 
 (define (make-temp-dir)
   (make-temporary-file "q-stale-test-~a" 'directory))

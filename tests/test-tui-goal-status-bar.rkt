@@ -9,7 +9,7 @@
 
 (require rackunit
          racket/string
-         "../util/event.rkt"
+         "../util/event/event.rkt"
          "../util/cost-tracker.rkt"
          "../tui/state.rkt"
          "../tui/state-events.rkt"

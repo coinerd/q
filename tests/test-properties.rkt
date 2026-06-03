@@ -21,9 +21,9 @@
          racket/list
          "../tui/keymap.rkt"
          "../tui/char-width.rkt"
-         "../runtime/session-store.rkt"
-         "../util/protocol-types.rkt"
-         "../util/protocol-types.rkt"
+         "../runtime/session/session-store.rkt"
+         "../util/message/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          "../llm/token-budget.rkt")
 
 ;; Seed for reproducibility

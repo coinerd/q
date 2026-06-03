@@ -13,7 +13,7 @@
 ;;   'off    — disable clipboard entirely
 
 (require racket/contract
-         "../util/error-helpers.rkt")
+         "../util/error/error-helpers.rkt")
 (require racket/port
          racket/string
          net/base64)

@@ -3,7 +3,7 @@
 ;; agent/event-structs/provider-events.rkt — provider/LLM request/response events
 
 (require "base.rkt"
-         "../../util/event-macro.rkt")
+         "../../util/event/event-macro.rkt")
 
 (define-typed-event provider-request-event "model.request.started" (model provider) #:schema-version 1)
 

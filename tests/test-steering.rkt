@@ -8,7 +8,7 @@
 (require rackunit
          rackunit/text-ui
          racket/set
-         "../util/protocol-types.rkt"
+         "../util/message/protocol-types.rkt"
          (only-in "../agent/iteration/tool-turn-bridge.rkt"
                   extract-tool-target-path
                   update-seen-paths))

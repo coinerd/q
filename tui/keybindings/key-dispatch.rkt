@@ -17,7 +17,7 @@
          "binding-resolver.rkt"
          "../selection.rkt"
          "../../agent/event-bus.rkt"
-         "../../util/event.rkt"
+         "../../util/event/event.rkt"
          "../keymap.rkt"
          (only-in "../component.rkt"
                   component-handle-input
