@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.85.3 (2026-06-03)
+
+### God Struct Decomposition
+
+**W0 (#6837): Create lifecycle-state struct**
+- Create runtime/session/lifecycle-state.rkt with 9 mutable lifecycle fields
+- Add lifecycle field to agent-session struct
+- Backward compatible: all existing callers unaffected
+
+**W1 (#6838): Migrate callers, remove old fields**
+- Remove 9 lifecycle fields from agent-session (25→16 fields)
+- Define compatibility accessors that delegate to lifecycle-state
+- agent-session-compacting?, -shutdown-requested?, etc. still work
+- Update all test helpers for new 16-field struct layout
+
+**Acceptance:**
+- `raco make q/main.rkt` — clean compile
+- 90+ session/lifecycle/compaction tests pass
+- `agent-session` struct now 16 fields (was 24)
+
 ## v0.85.2 (2026-06-03)
 
 ### Layer Dependency Cleanup
