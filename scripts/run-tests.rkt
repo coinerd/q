@@ -65,7 +65,9 @@
          arch-file?
          runtime-file?
          extensions-file?
-         workflows-file?)
+         workflows-file?
+         validate-args!
+         known-suites)
 
 ;; ---------------------------------------------------------------------------
 ;; Struct: test-file-result
@@ -738,6 +740,10 @@
        (loop rest jobs sequential? timeout strict? suite extra repeat #t inventory?)]
       [(list "--inventory" rest ...)
        (loop rest jobs sequential? timeout strict? suite extra repeat record-gate? #t)]
+      [(list (regexp #rx"^--") rest ...)
+       (eprintf "run-tests: unknown flag: ~a~n" (car rest))
+       (usage)
+       (exit 2)]
       [(list arg rest ...)
        (loop rest
              jobs
@@ -749,6 +755,27 @@
              repeat
              record-gate?
              inventory?)])))
+
+;; Known suite names accepted by collect-test-files
+(define known-suites '(all fast slow smoke tui security arch runtime extensions workflows))
+
+(define (validate-args! jobs sequential? timeout strict? suite extra repeat record-gate? inventory?)
+  ;; Validate suite name
+  (unless (memq suite known-suites)
+    (raise-user-error 'run-tests
+                      "unknown suite: ~a (valid: ~a)"
+                      suite
+                      (string-join (map symbol->string known-suites) ", ")))
+  ;; Validate jobs
+  (when (or (not jobs) (not (integer? jobs)) (<= jobs 0))
+    (raise-user-error 'run-tests "--jobs must be a positive integer, got: ~a" jobs))
+  ;; Validate repeat
+  (when (or (not repeat) (not (integer? repeat)) (<= repeat 0))
+    (raise-user-error 'run-tests "--repeat must be a positive integer, got: ~a" repeat))
+  ;; Validate timeout
+  (when (and timeout (or (not (number? timeout)) (<= timeout 0)))
+    (raise-user-error 'run-tests "--timeout must be a positive number, got: ~a" timeout))
+  (values jobs sequential? timeout strict? suite extra repeat record-gate? inventory?))
 
 ;; ---------------------------------------------------------------------------
 ;; Pre-flight: stale bytecode cleanup
@@ -1014,6 +1041,9 @@
 (define (main args)
   (define-values (jobs sequential? timeout strict? suite extra-files repeat record-gate? inventory?)
     (parse-args args))
+
+  ;; Validate arguments before any work (exits on error)
+  (validate-args! jobs sequential? timeout strict? suite extra-files repeat record-gate? inventory?)
 
   ;; Pre-flight: clear stale bytecode to avoid linklet mismatches
   (define cleaned-dirs (clean-stale-bytecode! (current-directory)))
