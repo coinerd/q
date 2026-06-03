@@ -17,6 +17,12 @@
 - Bash warning suppression: benign command substitution (e.g., `name=$(basename "$f")`) no longer prints destructive warning or `[CLASSIFIER-DIAG]`
 - Regex-only risky commands (e.g., `source /tmp/...`) still warn/block as before
 
+**F8 (post-milestone):**
+- `inject-system-instructions` always prepends a system message, even when system instructions are empty
+- Empty instructions → `""` content, accepted by OpenAI-compatible providers
+- Prevents provider 500 "System message must be at the beginning" when first message was user role
+- Consecutive system messages already merged by `merge-consecutive-roles` in `build-raw-messages`
+
 ## v0.83.11 (2026-06-03)
 
 ### Audit Closure Hotfix
