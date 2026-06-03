@@ -2,7 +2,8 @@
 
 ;; runtime/session-types.rkt — agent-session struct definition
 
-(require racket/contract)
+(require racket/contract
+         (only-in "lifecycle-state.rkt" lifecycle-state make-lifecycle-state lifecycle-state?))
 ;; STABILITY: internal
 ;;
 ;; Extracted from agent-session.rkt (ARCH-05).
@@ -61,8 +62,10 @@
          agent-session-task-fsm-state
          agent-session-task-conclusions
          agent-session-recent-tool-calls
+         agent-session-lifecycle
          session-log-path
          session-index-path
+         lifecycle-state?
          (contract-out [session-log-path-for (-> agent-session? path?)]
                        [session-provider (-> agent-session? any/c)]
                        [session-tool-registry (-> agent-session? any/c)]
@@ -101,7 +104,8 @@
          [prompt-running? #:mutable]
          [task-fsm-state #:mutable]
          [task-conclusions #:mutable] ; (listof task-conclusion?) — agent task conclusions
-         [recent-tool-calls #:mutable]) ; (listof symbol?) — recent tool call history for inference
+         [recent-tool-calls #:mutable] ; (listof symbol?) — recent tool call history for inference
+         lifecycle) ; lifecycle-state? — extracted lifecycle sub-struct (A1-05)
   #:transparent)
 
 ;; ============================================================
