@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.84.4 (2026-06-03)
+
+### Fixed
+
+- **P0**: `find` tool could hang indefinitely when scanning large directory trees — now early-terminates recursion once `max-results` matches are found (BUG-1, fixes `/goal` hang at 93% CPU)
+- **P1**: `find` tool now rejects scans from filesystem root (`/`) and system directories (`/proc`, `/sys`, `/dev`, `/run`, `/snap`) — returns clear error instead of walking entire filesystem (BUG-2)
+- **P1**: `find` tool now has a hard scan budget of 50,000 entries — prevents unbounded traversal regardless of other parameters (BUG-3)
+- **P2**: Tool execution CWD now falls back to `(current-directory)` instead of session directory when no project-dir is configured (BUG-4, `tool-coordinator.rkt`)
+- `find` result metadata now includes `scanned` count for observability
+
 ## v0.84.3 (2026-06-03)
 
 ### Documentation Reconciliation
@@ -16,11 +26,6 @@
 **W2 (#6807):**
 - Add .github/workflows/nightly.yml
 - Add docs/getting-started/dev-setup.md
-
-## v0.84.2 (2026-06-03)
-
-### Observability & Safety Hardening
-
 **W0 (#6802):**
 - Replace 16 silent `(with-handlers ([exn:fail? void]) ...)` with logging
 - Persistence/state errors → `log-warning` (session-lifecycle, session-persistence, lockfile)

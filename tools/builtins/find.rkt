@@ -3,6 +3,7 @@
 ;; tools/builtins/find.rkt — File/directory search tool
 ;;
 ;; v0.33.2 W0: Converted to define-tool macro.
+;; v0.84.4: BUG-1 early termination, BUG-2 root guard, BUG-3 scan budget.
 
 (require "../../util/error/error-helpers.rkt"
          racket/file
@@ -20,18 +21,52 @@
          (only-in "../../util/path/path-helpers.rkt" expand-home-path))
 
 ;; --------------------------------------------------
+;; BUG-2: Protected system paths
+;; --------------------------------------------------
+
+(define SYSTEM-ROOTS '("/proc" "/sys" "/dev" "/run" "/snap"))
+
+(define (filesystem-root-path? abs-path)
+  ;; Returns #t if abs-path is the filesystem root or a protected system directory.
+  (define s (path->string abs-path))
+  (or (string=? s "/")
+      (ormap (lambda (root) (or (string=? s root) (string-prefix? s (string-append root "/"))))
+             SYSTEM-ROOTS)))
+
+;; --------------------------------------------------
+;; BUG-3: Scan budget hard cap
+;; --------------------------------------------------
+
+(define MAX-SCAN-BUDGET 50000)
+
+;; --------------------------------------------------
 ;; Core recursive walk
 ;; --------------------------------------------------
 
-(define (walk-dir root-path name-re type-filter max-depth max-results root-is-hidden)
-  ;; Returns (values results total-scanned)
+(define (walk-dir root-path
+                  name-re
+                  type-filter
+                  max-depth
+                  max-results
+                  root-is-hidden
+                  #:max-scanned [max-scanned MAX-SCAN-BUDGET])
+  ;; Returns (values results total-scanned entries-scanned)
+  ;; BUG-1: Stops recursing into subdirectories once max-results are found.
+  ;; BUG-3: Hard cap on entries scanned via max-scanned budget.
   (define results (box '()))
   (define total (box 0))
+  (define scanned (box 0))
 
   (define (add-result! rel)
     (set-box! total (add1 (unbox total)))
     (when (< (length (unbox results)) max-results)
       (set-box! results (append (unbox results) (list rel)))))
+
+  (define (results-full?)
+    (>= (length (unbox results)) max-results))
+
+  (define (budget-remaining?)
+    (< (unbox scanned) max-scanned))
 
   (define (matches-name? filename)
     (or (not name-re) (regexp-match? name-re filename)))
@@ -50,25 +85,32 @@
 
   ;; depth-first walk
   (define (walk current-dir depth)
-    (define entries (with-safe-fallback '() (directory-list current-dir #:build? #f)))
-    (for ([entry (in-list entries)])
-      (define entry-str (path->string entry))
-      (define full-path (build-path current-dir entry))
-      (define rel-path (find-relative-path root-path full-path))
+    (when (budget-remaining?)
+      (define entries (with-safe-fallback '() (directory-list current-dir #:build? #f)))
+      (for ([entry (in-list entries)]
+            #:break (not (budget-remaining?)))
+        (set-box! scanned (add1 (unbox scanned)))
+        (define entry-str (path->string entry))
+        (define full-path (build-path current-dir entry))
+        (define rel-path (find-relative-path root-path full-path))
 
-      ;; Skip VCS dirs and hidden entries (unless root is hidden)
-      (unless (should-skip-entry? entry-str)
-        ;; Check type match
-        (when (matches-type? full-path)
-          ;; Check name match
-          (when (matches-name? entry-str)
-            (add-result! (path->string rel-path))))
-        ;; Recurse into subdirectories if depth allows
-        (when (and (directory-exists? full-path) (< depth max-depth))
-          (walk full-path (add1 depth))))))
+        ;; Skip VCS dirs and hidden entries (unless root is hidden)
+        (unless (should-skip-entry? entry-str)
+          ;; Check type match
+          (when (matches-type? full-path)
+            ;; Check name match — always count, only store if not full
+            (when (matches-name? entry-str)
+              (add-result! (path->string rel-path))))
+          ;; BUG-1: Recurse into subdirectories only if results NOT full,
+          ;; depth allows, and budget remains.
+          (when (and (directory-exists? full-path)
+                     (< depth max-depth)
+                     (not (results-full?))
+                     (budget-remaining?))
+            (walk full-path (add1 depth)))))))
 
   (walk root-path 0)
-  (values (unbox results) (unbox total)))
+  (values (unbox results) (unbox total) (unbox scanned)))
 
 ;; --------------------------------------------------
 ;; Handler function
@@ -93,31 +135,48 @@
         (make-error-result (format "Path is not a directory: ~a" path-str))]
 
        [else
-        ;; 4. Parse optional arguments
-        (define name-pattern (hash-ref args 'name #f))
-        (define type-filter (hash-ref args 'type "any"))
-        (define max-depth (max 0 (hash-ref args 'max-depth 10)))
-        (define max-results (max 1 (hash-ref args 'max-results 100)))
-
-        ;; Compile glob pattern if provided (empty string → match all)
-        (define name-re
-          (if (and name-pattern (positive? (string-length name-pattern)))
-              (glob->regexp name-pattern #:allow-slash? #t)
-              #f))
-
-        ;; Check if root path itself is under a hidden directory
+        ;; Resolve to absolute path for checks
         (define root-path (simple-form-path path-str))
-        (define root-is-hidden (path-component-hidden? root-path))
 
-        ;; 5. Walk the tree
-        (define-values (results total-found)
-          (walk-dir root-path name-re type-filter max-depth max-results root-is-hidden))
+        ;; BUG-2: Reject filesystem root and system directories
+        (cond
+          [(filesystem-root-path? root-path)
+           (make-error-result
+            (format
+             "Scanning from filesystem root or protected system directory (~a) is not allowed. Use a project-relative path instead."
+             root-path))]
+          [else
+           ;; 4. Parse optional arguments
+           (define name-pattern (hash-ref args 'name #f))
+           (define type-filter (hash-ref args 'type "any"))
+           (define max-depth (max 0 (hash-ref args 'max-depth 10)))
+           (define max-results (max 1 (hash-ref args 'max-results 100)))
 
-        (define truncated? (> total-found max-results))
+           ;; Compile glob pattern if provided (empty string → match all)
+           (define name-re
+             (if (and name-pattern (positive? (string-length name-pattern)))
+                 (glob->regexp name-pattern #:allow-slash? #t)
+                 #f))
 
-        (make-success-result
-         results
-         (hasheq 'total-found total-found 'truncated? truncated? 'search-root path-str))])]))
+           ;; Check if root path itself is under a hidden directory
+           (define root-is-hidden (path-component-hidden? root-path))
+
+           ;; 5. Walk the tree (BUG-3: with scan budget)
+           (define-values (results total-found entries-scanned)
+             (walk-dir root-path name-re type-filter max-depth max-results root-is-hidden))
+
+           (define budget-exceeded? (>= entries-scanned MAX-SCAN-BUDGET))
+           (define truncated? (or (> total-found max-results) budget-exceeded?))
+
+           (make-success-result results
+                                (hasheq 'total-found
+                                        total-found
+                                        'truncated?
+                                        truncated?
+                                        'search-root
+                                        (path->string root-path)
+                                        'scanned
+                                        entries-scanned))])])]))
 
 ;; --------------------------------------------------
 ;; Tool definition via define-tool macro

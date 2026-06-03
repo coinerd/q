@@ -35,7 +35,12 @@
          (only-in "../util/json/json-helpers.rkt" ensure-hash-args)
          (only-in "../util/content/content-parts.rkt" make-tool-result-part tool-call-part?)
          (only-in "../util/event/event.rkt" make-event)
-         (only-in "../util/message/message.rkt" message? message-id message-role message-content make-message)
+         (only-in "../util/message/message.rkt"
+                  message?
+                  message-id
+                  message-role
+                  message-content
+                  make-message)
          (only-in "../util/tool/tool-types.rkt"
                   make-tool-call
                   tool-call-id
@@ -198,7 +203,8 @@
           #:hook-dispatcher hook-dispatcher-fn
           #:exec-context
           (make-exec-context
-           #:working-directory (or (config-project-dir config) (path-only log-path))
+           #:working-directory
+           (or (config-project-dir config) (current-directory) (path-only log-path))
            #:cancellation-token token
            #:event-publisher
            (lambda (event-type payload)
