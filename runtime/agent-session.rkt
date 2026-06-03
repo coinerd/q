@@ -50,7 +50,7 @@
                   session-start-event
                   session-shutdown-event)
          "session/session-types.rkt"
-         (only-in "session/lifecycle-state.rkt" make-lifecycle-state lifecycle-state?)
+         (only-in "session/lifecycle-state.rkt" make-lifecycle-state lifecycle-state? lifecycle-state)
          (only-in "session/session-events.rkt" wire-session-event-handlers!)
          (only-in "../llm/token-budget.rkt" estimate-context-tokens)
          (only-in "session/session-controls.rkt"
@@ -187,17 +187,8 @@
                              #:config [config #f]
                              #:active? [active? #t]
                              #:start-time [start-time (now-seconds)]
-                             #:compacting? [compacting? #f]
-                             #:last-compaction-time [last-compaction-time #f]
-                             #:persisted? [persisted? #f]
                              #:pending-entries [pending-entries '()]
                              #:thinking-level [thinking-level #f]
-                             #:shutdown-requested? [shutdown-requested? #f]
-                             #:force-shutdown? [force-shutdown? #f]
-                             #:prompt-running? [prompt-running? #f]
-                             #:task-fsm-state [task-fsm-state 'idle]
-                             #:task-conclusions [task-conclusions '()]
-                             #:recent-tool-calls [recent-tool-calls '()]
                              #:lifecycle [lifecycle (make-lifecycle-state)])
   (agent-session id
                  dir
@@ -212,17 +203,8 @@
                  config
                  active?
                  start-time
-                 compacting?
-                 last-compaction-time
-                 persisted?
                  pending-entries
                  thinking-level
-                 shutdown-requested?
-                 force-shutdown?
-                 prompt-running?
-                 task-fsm-state
-                 task-conclusions
-                 recent-tool-calls
                  lifecycle))
 
 ;; session-rollout-enabled? : string? -> boolean?
@@ -345,8 +327,8 @@
                          #:index idx
                          #:queue (make-queue)
                          #:config cfg
-                         #:persisted? #t
-                         #:thinking-level (config-thinking-level cfg)))
+                         #:thinking-level (config-thinking-level cfg)
+                         #:lifecycle (lifecycle-state #f #f #t #f #f #f #f '() '())))
 
   ;; v0.75.6: Load persisted task state and conclusions
   (when (file-exists? log-path)
@@ -420,8 +402,8 @@
                          #:index new-idx
                          #:queue (make-queue)
                          #:config (agent-session-config sess)
-                         #:persisted? #t
-                         #:thinking-level (agent-session-thinking-level sess)))
+                         #:thinking-level (agent-session-thinking-level sess)
+                         #:lifecycle (lifecycle-state #f #f #t #f #f #f #f '() '())))
 
   (emit-session-event! (agent-session-event-bus sess)
                        (agent-session-session-id sess)

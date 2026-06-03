@@ -25,4 +25,4 @@
 
 ;; Constructor: create a lifecycle-state with safe defaults.
 (define (make-lifecycle-state)
-  (lifecycle-state #f #f #f #f #f #f #f '() '()))
+  (lifecycle-state #f #f #f #f #f #f 'idle '() '()))

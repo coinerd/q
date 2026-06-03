@@ -14,7 +14,8 @@
                   task-conclusion?
                   task-conclusion-id)
          "../util/ids.rkt"
-         "../agent/queue.rkt")
+         "../agent/queue.rkt"
+         (only-in "../runtime/session/lifecycle-state.rkt" make-lifecycle-state))
 
 (define (make-test-session)
   (agent-session (generate-id) ; session-id
@@ -30,17 +31,9 @@
                  (make-hash) ; config
                  #t ; active?
                  (current-seconds) ; start-time
-                 #f ; compacting?
-                 #f ; last-compaction-time
-                 #f ; persisted?
                  '() ; pending-entries
                  'medium ; thinking-level
-                 #f ; shutdown-requested?
-                 #f ; force-shutdown?
-                 #f ; prompt-running?
-                 #f ; task-fsm-state
-                 '() ; task-conclusions
-                 '())) ; recent-tool-calls
+                 (make-lifecycle-state))) ; lifecycle
 
 ;; W-04: prompt-running? transition guards
 
