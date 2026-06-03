@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.83.4 (2026-06-03)
+
+### Suite Taxonomy Migration and No-New-Drift Lints
+- **Metadata-backed classification**: `slow-file?`, `tui-file?`, `mutating-file?` now check `@speed`/`@suite`/`@mutates` metadata tags before falling back to heuristics.
+- **Metadata cache**: `get-file-metadata` in `scripts/run-tests.rkt` parses file headers once and caches.
+- **Test architecture lint**: new checks in `scripts/lint-tests.rkt` for missing metadata on high-risk suites, local `with-temp-dir` definitions, and env mutation without `@mutates`/`@isolation` tags.
+- **Tests**: `test-run-tests-metadata-classification.rkt` (9 tests), `test-test-lint.rkt` (7 tests).
+- Report-only mode — no enforcement in this milestone.
+
 ## v0.83.3 (2026-06-03)
 
 ### Canonical Test Sandbox and Isolation Pilot
