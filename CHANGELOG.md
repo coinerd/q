@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.85.0 (2026-06-03)
+
+### Test Quality & Quick Wins
+
+**W0 (#6825): Security Test Gaps (T3-01, T3-08)**
+- Fix weak path-traversal assertion in test-sandbox-security.rkt
+- Add find root guard tests for /run, /snap, symlink-to-/proc
+- Add grep missing-path argument error test
+- Add ls edge-case tests (broken symlink, invalid sort-by, unreadable dir)
+
+**W1 (#6826): Test Quality Improvements (T3-02, T3-05)**
+- Add injectable #:clock parameter to event-bus (default: current-seconds)
+- Replace sleep(1.1) with injectable fake clock in event-bus tests
+- Enhance provider smoke tests with provider? and export checks
+
+**W2 (#6827): Provide Hygiene (A1-07, A1-08)**
+- Replace all-from-out in extensions/gsd/core.rkt with explicit list
+- Replace all-defined-out in extensions/gsd/event-structs.rkt with explicit list
+
 ## v0.84.4 (2026-06-03)
 
 ### Fixed
