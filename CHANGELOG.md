@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.83.5 (2026-06-03)
+
+### Provider and Tool-Turn Scenario Harnesses
+- **Provider scenario DSL**: `tests/helpers/provider-scenarios.rkt` with `scenario-text`, `scenario-tool-call`, `scenario-multi-tool`, `scenario-streaming`, `scenario-error`, `scenario-rate-limit`, `scenario-finish-length`, `make-scenario-provider` with request capture.
+- **Tool-turn scenario harness**: `tests/helpers/tool-turn-scenarios.rkt` with `turn-scenario-text/tool-call/multi-tool/blocked-tool/malformed-tool`, mock tool/registry factories, assertion helpers.
+- **Shell tokenizer progress tests**: `test-shell-tokenizer-progress.rkt` with 6 tests covering 45+ special character payloads, termination, nested bracket handling, mismatched quote resilience.
+- **Tests**: 16 provider scenario tests, 15 tool-turn scenario tests, 6 tokenizer tests.
+
 ## v0.83.4 (2026-06-03)
 
 ### Suite Taxonomy Migration and No-New-Drift Lints
