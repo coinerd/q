@@ -27,6 +27,45 @@
          racket/list
          racket/future)
 
+;; Metadata parser integration (v0.83.4)
+;; Parse @suite/@speed/@mutates etc from test file headers.
+;; Falls back to heuristic classification when no metadata present.
+(define metadata-cache (make-hash))
+
+(define (clear-metadata-cache!)
+  (hash-clear! metadata-cache))
+
+(define (get-file-metadata f)
+  "Parse metadata from file header, cached per file."
+  (hash-ref! metadata-cache f
+    (lambda ()
+      (define full-path (if (absolute-path? f) f (build-path base-dir f)))
+      (if (file-exists? full-path)
+          (let ([speed #f]
+                [suite #f]
+                [mutates #f])
+            (with-handlers ([exn:fail? (lambda (_) (void))])
+              (call-with-input-file full-path
+                (lambda (port)
+                  (for ([_ (in-range 30)]
+                        #:break (eof-object? (peek-byte port)))
+                    (define line (read-line port))
+                    (when (string? line)
+                      (cond
+                        [(regexp-match? #rx";+[ \t]*@speed[ \t]+fast" line)
+                         (set! speed 'fast)]
+                        [(regexp-match? #rx";+[ \t]*@speed[ \t]+slow" line)
+                         (set! speed 'slow)]
+                        [(regexp-match? #rx";+[ \t]*@speed[ \t]+perf" line)
+                         (set! speed 'perf)]
+                        [(regexp-match #rx";+[ \t]*@suite[ \t]+(.+)$" line)
+                         => (lambda (m) (set! suite (string-trim (cadr m))))]
+                        [(regexp-match #rx";+[ \t]*@mutates[ \t]+(.+)$" line)
+                         => (lambda (m) (set! mutates (string-trim (cadr m))))]))))))
+            (hash 'speed speed 'suite suite 'mutates mutates))
+          (hash)))))
+
+
 ;; Safe bytes->string conversion (handles invalid UTF-8)
 (define (bytes->string* bs)
   (with-handlers ([exn:fail? (lambda (e) (bytes->string/latin-1 bs))])
@@ -66,9 +105,14 @@
          runtime-file?
          extensions-file?
          workflows-file?
+         slow-file?
+         tui-file?
+         mutating-file?
          validate-args!
          known-suites
-         record-gate-evidence!)
+         record-gate-evidence!
+         get-file-metadata
+         clear-metadata-cache!)
 
 ;; ---------------------------------------------------------------------------
 ;; Struct: test-file-result
@@ -122,17 +166,32 @@
 (define path-slow-patterns '("/workflows/"))
 
 (define (slow-file? f)
-  (define base (file-name-from-path f))
-  (or (for/or ([p (in-list slow-patterns)])
-        (and base (string-contains? (path->string base) p)))
-      (for/or ([p (in-list path-slow-patterns)])
-        (string-contains? f p))))
+  ;; Metadata override: if file declares @speed, trust it
+  (define meta (get-file-metadata f))
+  (define meta-speed (hash-ref meta 'speed #f))
+  (cond
+    [(eq? meta-speed 'fast) #f]  ; explicitly fast → not slow
+    [(eq? meta-speed 'slow) #t]  ; explicitly slow
+    [(eq? meta-speed 'perf) #t]  ; perf tests are slow
+    [else
+     ;; Fall back to heuristic
+     (define base (file-name-from-path f))
+     (or (for/or ([p (in-list slow-patterns)])
+           (and base (string-contains? (path->string base) p)))
+         (for/or ([p (in-list path-slow-patterns)])
+           (string-contains? f p)))]))
 
 (define (tui-file? f)
-  (define base (file-name-from-path f))
-  (or (string-contains? f "/tui/")
-      (string-contains? f "/interfaces/tui.rkt")
-      (and base (string-prefix? (path->string base) "test-tui-"))))
+  ;; Metadata override: @suite tui
+  (define meta (get-file-metadata f))
+  (define meta-suite (hash-ref meta 'suite #f))
+  (if (equal? meta-suite "tui")
+      #t
+      ;; Fall back to heuristic
+      (let ([base (file-name-from-path f)])
+        (or (string-contains? f "/tui/")
+            (string-contains? f "/interfaces/tui.rkt")
+            (and base (string-prefix? (path->string base) "test-tui-"))))))
 
 ;; Tests that mutate repo files or run self-healing linters should not run in
 ;; parallel with other tests, otherwise clean-tree assumptions can race.
@@ -148,9 +207,15 @@
                "self-hosting"))
 
 (define (mutating-file? f)
-  (define base (file-name-from-path f))
-  (for/or ([p (in-list mutating-patterns)])
-    (and base (string-contains? (path->string base) p))))
+  ;; Metadata override: @mutates none → not mutating
+  (define meta (get-file-metadata f))
+  (define meta-mutates (hash-ref meta 'mutates #f))
+  (if (equal? meta-mutates "none")
+      #f
+      ;; Fall back to heuristic
+      (let ([base (file-name-from-path f)])
+        (for/or ([p (in-list mutating-patterns)])
+          (and base (string-contains? (path->string base) p))))))
 
 (define (security-file? f)
   (define base (path->string (file-name-from-path f)))
