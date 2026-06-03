@@ -60,8 +60,18 @@
 
 ;; Command names for registration (data)
 (provide gsd-commands
-         ;; Re-export command result types
-         (all-from-out "command-types.rkt")
+         ;; Explicit re-exports from command-types.rkt (A1-07: no all-from-out)
+         gsd-command-result
+         gsd-command-result?
+         gsd-command-result-success
+         gsd-command-result-mode
+         gsd-command-result-message
+         gsd-command-result-data
+         gsd-ok
+         gsd-err
+         gsd-result?
+         gsd-success?
+         gsd-failed?
          ;; Functions (contracted)
          (contract-out [gsd-command-dispatch
                         (-> (or/c symbol? string?) (or/c string? #f) (or/c gsd-command-result? #f))]
