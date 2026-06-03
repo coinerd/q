@@ -180,3 +180,23 @@
   (check-equal? (goal-state-max-turns st) 5)
   (check-equal? (goal-state-status st) 'active)
   (check-equal? (goal-state-turns-used st) 0))
+
+;; ---------------------------------------------------------------------------
+;; make-goal-provider-per-turn-cap (F3)
+;; ---------------------------------------------------------------------------
+
+(test-case "per-turn-cap: provider returns responses without converging"
+  (define prov (make-goal-provider-per-turn-cap #:iterations 5))
+  ;; Each send should return a text response
+  (for ([i (in-range 5)])
+    (define resp (provider-send prov (make-model-request '() '() (hash))))
+    (check-true (model-response? resp))))
+
+(test-case "per-turn-cap: provider exhausts after max iterations"
+  (define prov (make-goal-provider-per-turn-cap #:iterations 3))
+  ;; Consume all 3 responses
+  (for ([i (in-range 3)])
+    (provider-send prov (make-model-request '() '() (hash))))
+  ;; 4th call returns last response again (scenario provider wraps around)
+  (define resp (provider-send prov (make-model-request '() '() (hash))))
+  (check-true (model-response? resp)))

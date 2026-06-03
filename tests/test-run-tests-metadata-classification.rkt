@@ -73,8 +73,7 @@
   (clear-metadata-cache!)
   (define dir (make-temporary-file "q-meta-test-~a" 'directory))
   (define f (build-path dir "test-sandbox-foo.rkt"))
-  (call-with-output-file f
-                         (lambda (out) (display "#lang racket\n;; @speed fast\n" out)))
+  (call-with-output-file f (lambda (out) (display "#lang racket\n;; @speed fast\n" out)))
   (check-false (slow-file? (path->string f)))
   (cleanup-temp-test-file dir))
 
@@ -82,8 +81,7 @@
   (clear-metadata-cache!)
   (define dir (make-temporary-file "q-meta-test-~a" 'directory))
   (define f (build-path dir "test-quick-thing.rkt"))
-  (call-with-output-file f
-                         (lambda (out) (display "#lang racket\n;; @speed slow\n" out)))
+  (call-with-output-file f (lambda (out) (display "#lang racket\n;; @speed slow\n" out)))
   (check-true (slow-file? (path->string f)))
   (cleanup-temp-test-file dir))
 
@@ -95,8 +93,7 @@
   (clear-metadata-cache!)
   (define dir (make-temporary-file "q-meta-test-~a" 'directory))
   (define f (build-path dir "test-something.rkt"))
-  (call-with-output-file f
-                         (lambda (out) (display "#lang racket\n;; @suite tui\n" out)))
+  (call-with-output-file f (lambda (out) (display "#lang racket\n;; @suite tui\n" out)))
   (check-true (tui-file? (path->string f)))
   (cleanup-temp-test-file dir))
 
@@ -108,7 +105,58 @@
   (clear-metadata-cache!)
   (define dir (make-temporary-file "q-meta-test-~a" 'directory))
   (define f (build-path dir "test-metrics-readme.rkt"))
-  (call-with-output-file f
-                         (lambda (out) (display "#lang racket\n;; @mutates none\n" out)))
+  (call-with-output-file f (lambda (out) (display "#lang racket\n;; @mutates none\n" out)))
   (check-false (mutating-file? (path->string f)))
+  (cleanup-temp-test-file dir))
+
+;; ---------------------------------------------------------------------------
+;; New metadata tags: boundary, isolation, timeout (F1)
+;; ---------------------------------------------------------------------------
+
+(test-case "get-file-metadata: parses @boundary integration"
+  (clear-metadata-cache!)
+  (define-values (f dir) (make-temp-test-file "#lang racket\n;; @boundary integration\n"))
+  (define meta (get-file-metadata (path->string f)))
+  (check-equal? (hash-ref meta 'boundary #f) "integration")
+  (cleanup-temp-test-file dir))
+
+(test-case "get-file-metadata: parses @isolation process"
+  (clear-metadata-cache!)
+  (define-values (f dir) (make-temp-test-file "#lang racket\n;; @isolation process\n"))
+  (define meta (get-file-metadata (path->string f)))
+  (check-equal? (hash-ref meta 'isolation #f) "process")
+  (cleanup-temp-test-file dir))
+
+(test-case "get-file-metadata: parses @timeout 30"
+  (clear-metadata-cache!)
+  (define-values (f dir) (make-temp-test-file "#lang racket\n;; @timeout 30\n"))
+  (define meta (get-file-metadata (path->string f)))
+  (check-equal? (hash-ref meta 'timeout #f) 30)
+  (cleanup-temp-test-file dir))
+
+(test-case "mutating-file?: @isolation process forces mutating"
+  (clear-metadata-cache!)
+  (define dir (make-temporary-file "q-meta-test-~a" 'directory))
+  (define f (build-path dir "test-clean-thing.rkt"))
+  (call-with-output-file f (lambda (out) (display "#lang racket\n;; @isolation process\n" out)))
+  (check-true (mutating-file? (path->string f)))
+  (cleanup-temp-test-file dir))
+
+(test-case "get-file-metadata: all 6 tags together"
+  (clear-metadata-cache!)
+  (define-values (f dir)
+    (make-temp-test-file (string-append "#lang racket\n"
+                                        ";; @speed slow\n"
+                                        ";; @suite tui\n"
+                                        ";; @mutates env\n"
+                                        ";; @boundary integration\n"
+                                        ";; @isolation process\n"
+                                        ";; @timeout 45\n")))
+  (define meta (get-file-metadata (path->string f)))
+  (check-equal? (hash-ref meta 'speed #f) 'slow)
+  (check-equal? (hash-ref meta 'suite #f) "tui")
+  (check-equal? (hash-ref meta 'mutates #f) "env")
+  (check-equal? (hash-ref meta 'boundary #f) "integration")
+  (check-equal? (hash-ref meta 'isolation #f) "process")
+  (check-equal? (hash-ref meta 'timeout #f) 45)
   (cleanup-temp-test-file dir))

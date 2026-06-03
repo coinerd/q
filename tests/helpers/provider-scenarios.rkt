@@ -21,6 +21,7 @@
          scenario-multi-tool
          scenario-streaming
          scenario-streaming-with-tools
+         scenario-eof
          scenario-error
          scenario-rate-limit
          scenario-finish-length
@@ -110,6 +111,10 @@
 ;; Error scenario constructors
 ;; ---------------------------------------------------------------------------
 
+(define (scenario-eof)
+  "Simulate premature connection drop — empty response with stop reason."
+  (list 'eof))
+
 (define (scenario-error message #:category [category 'server-error] #:status [status 500])
   "Create an error scenario (returns error on send/stream)."
   (list 'error message category status))
@@ -150,6 +155,8 @@
     (define resp (get-next))
     (advance!)
     (cond
+      [(and (list? resp) (eq? (car resp) 'eof))
+       (make-model-response '() (hasheq) "" 'stop)]
       [(and (list? resp) (eq? (car resp) 'error))
        (raise (exn:fail (cadr resp) (current-continuation-marks)))]
       [(and (list? resp) (eq? (car resp) 'rate-limit))
@@ -161,6 +168,9 @@
     (define resp (get-next))
     (advance!)
     (cond
+      [(and (list? resp) (eq? (car resp) 'eof))
+       ;; EOF: return empty stream that closes immediately
+       '()]
       [(and (list? resp) (eq? (car resp) 'error))
        (raise (exn:fail (cadr resp) (current-continuation-marks)))]
       [(and (list? resp) (eq? (car resp) 'rate-limit))

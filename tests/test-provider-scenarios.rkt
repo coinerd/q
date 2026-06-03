@@ -166,3 +166,23 @@
   (check-equal? (length caps) 2)
   (clear-captured! cap)
   (check-equal? (length (captured-requests cap)) 0))
+
+;; ---------------------------------------------------------------------------
+;; scenario-eof (F2)
+;; ---------------------------------------------------------------------------
+
+(test-case "scenario-eof: send returns empty response"
+  (define-values (prov cap)
+    (make-scenario-provider (list (scenario-eof))))
+  (define resp (provider-send prov (make-model-request '() '() (hash))))
+  (check-true (model-response? resp))
+  (check-equal? (model-response-content resp) '())
+  (check-equal? (model-response-stop-reason resp) 'stop))
+
+(test-case "scenario-eof: stream returns empty list"
+  (define-values (prov cap)
+    (make-scenario-provider (list (scenario-eof))))
+  (define gen (provider-stream prov (make-model-request '() '() (hash))))
+  ;; Generator yields #f immediately (no chunks)
+  (define chunks (for/list ([v (in-producer gen #f)]) v))
+  (check-true (null? chunks)))

@@ -43,7 +43,10 @@
       (if (file-exists? full-path)
           (let ([speed #f]
                 [suite #f]
-                [mutates #f])
+                [mutates #f]
+                [boundary #f]
+                [isolation #f]
+                [timeout #f])
             (with-handlers ([exn:fail? (lambda (_) (void))])
               (call-with-input-file full-path
                 (lambda (port)
@@ -61,8 +64,15 @@
                         [(regexp-match #rx";+[ \t]*@suite[ \t]+(.+)$" line)
                          => (lambda (m) (set! suite (string-trim (cadr m))))]
                         [(regexp-match #rx";+[ \t]*@mutates[ \t]+(.+)$" line)
-                         => (lambda (m) (set! mutates (string-trim (cadr m))))]))))))
-            (hash 'speed speed 'suite suite 'mutates mutates))
+                         => (lambda (m) (set! mutates (string-trim (cadr m))))]
+                        [(regexp-match #rx";+[ \t]*@boundary[ \t]+(.+)$" line)
+                         => (lambda (m) (set! boundary (string-trim (cadr m))))]
+                        [(regexp-match #rx";+[ \t]*@isolation[ \t]+(.+)$" line)
+                         => (lambda (m) (set! isolation (string-trim (cadr m))))]
+                        [(regexp-match #rx";+[ \t]*@timeout[ \t]+([0-9]+)" line)
+                         => (lambda (m) (set! timeout (string->number (cadr m))))]))))))
+            (hash 'speed speed 'suite suite 'mutates mutates
+                  'boundary boundary 'isolation isolation 'timeout timeout))
           (hash)))))
 
 
@@ -210,14 +220,18 @@
 
 (define (mutating-file? f)
   ;; Metadata override: @mutates none → not mutating
+  ;; Metadata override: @isolation process → always mutating
   (define meta (get-file-metadata f))
   (define meta-mutates (hash-ref meta 'mutates #f))
-  (if (equal? meta-mutates "none")
-      #f
-      ;; Fall back to heuristic
-      (let ([base (file-name-from-path f)])
-        (for/or ([p (in-list mutating-patterns)])
-          (and base (string-contains? (path->string base) p))))))
+  (define meta-isolation (hash-ref meta 'isolation #f))
+  (cond
+    [(equal? meta-mutates "none") #f]
+    [(equal? meta-isolation "process") #t]
+    [else
+     ;; Fall back to heuristic
+     (let ([base (file-name-from-path f)])
+       (for/or ([p (in-list mutating-patterns)])
+         (and base (string-contains? (path->string base) p))))]))
 
 (define (security-file? f)
   (define base (path->string (file-name-from-path f)))
@@ -525,6 +539,12 @@
     (if (absolute-path? test-path)
         test-path
         (simplify-path (build-path base-dir test-path))))
+  ;; Per-file timeout override from @timeout metadata tag
+  (define file-timeout
+    (let ([meta-timeout (hash-ref (get-file-metadata test-path) 'timeout #f)])
+      (if meta-timeout
+          (* meta-timeout 1000) ; convert seconds → ms
+          (or timeout 120000))))
   (define t0 (current-inexact-milliseconds))
   (define elapsed (lambda () (exact-round (- (current-inexact-milliseconds) t0))))
 
@@ -552,7 +572,7 @@
             (close-output-port out-in))
           ctrl)))
 
-  (build-result-from-process test-path stdout-out stderr-out ctrl timeout elapsed))
+  (build-result-from-process test-path stdout-out stderr-out ctrl file-timeout elapsed))
 
 ;; ---------------------------------------------------------------------------
 ;; run-all-files - parallel dispatcher with progress dots
@@ -663,13 +683,7 @@
 (define (save-failure-logs results)
   (define failures (filter (lambda (r) (not (= (test-file-result-exit-code r) 0))) results))
   (for ([f (in-list failures)])
-    (define safe-name
-      (let* ([base (file-name-from-path (test-file-result-path f))]
-             [s (if base
-                    (path->string base)
-                    "unknown")])
-        (regexp-replace* #rx"[^a-zA-Z0-9._-]" s "_")))
-    (define log-path (build-path "/tmp" (string-append "q-test-fail-" safe-name ".log")))
+    (define log-path (build-path "/tmp" (make-unique-log-name (test-file-result-path f))))
     (call-with-output-file log-path
                            #:exists 'truncate/replace
                            (lambda (out)
