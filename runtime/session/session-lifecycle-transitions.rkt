@@ -52,15 +52,19 @@
             (message-id (last existing))))))
 
 ;; inject-system-instructions : (listof message?) (listof string?) -> (listof message?)
-;; Pure: prepends a system message if instructions are non-empty.
+;; Pure: prepends a system message. Always ensures the first message is a system
+;; message, even when instructions are empty. This prevents provider 500 errors
+;; from strict chat templates that require messages[0].role == 'system'.
 (define (inject-system-instructions context-messages system-instrs)
-  (if (null? system-instrs)
-      context-messages
-      (cons (make-message (generate-id)
-                          #f
-                          'system
-                          'system-instruction
-                          (list (make-text-part (string-join system-instrs "\n\n")))
-                          (now-seconds)
-                          (hasheq))
-            context-messages)))
+  (define system-content
+    (if (null? system-instrs)
+        ""
+        (string-join system-instrs "\n\n")))
+  (cons (make-message (generate-id)
+                      #f
+                      'system
+                      'system-instruction
+                      (list (make-text-part system-content))
+                      (now-seconds)
+                      (hasheq))
+        context-messages))
