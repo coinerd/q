@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.83.8 (2026-06-03)
+
+### Process Cleanup, Output Bounds, and Flake Burn-In
+- **Unique failure log names**: `make-unique-log-name` uses path hash to avoid basename collisions.
+- **Output truncation**: `truncate-test-output` caps test output at 64KB with head+tail+marker.
+- **Timeout cleanup tests**: `test-run-tests-timeout-cleanup.rkt` with 7 tests.
+
 ## v0.83.7 (2026-06-03)
 
 ### Workflow Contract Suite
