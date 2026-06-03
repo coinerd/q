@@ -134,6 +134,25 @@
                [else (cons msg acc)]))))
 
 ;; ============================================================
+;; collect-system-messages-front
+;; ============================================================
+
+;; F8-FIX: Collect all system messages to front and merge into one.
+;; Providers with strict Jinja templates (qwen, GLM) require system
+;; messages ONLY at position 0. Upstream context assembly may interleave
+;; system-instruction messages after user/assistant messages.
+(define (collect-system-messages-front msgs)
+  (define sys-msgs (filter (lambda (m) (equal? (hash-ref m 'role #f) "system")) msgs))
+  (define non-sys-msgs (filter (lambda (m) (not (equal? (hash-ref m 'role #f) "system"))) msgs))
+  (cond
+    [(null? sys-msgs) non-sys-msgs]
+    [(null? (cdr sys-msgs)) (append sys-msgs non-sys-msgs)]
+    [else
+     ;; Merge multiple system messages into one
+     (define merged-content (string-join (map (lambda (m) (hash-ref m 'content "")) sys-msgs) "\n\n"))
+     (cons (hasheq 'role "system" 'content merged-content) non-sys-msgs)]))
+
+;; ============================================================
 ;; build-raw-messages
 ;; ============================================================
 
@@ -198,7 +217,7 @@
           (list (hasheq 'role (message-role->api-role role) 'content (parts->text-string parts)))]))))
   ;; Safety net: merge consecutive user messages.
   ;; Some providers (GLM) reject consecutive same-role messages.
-  (merge-consecutive-roles raw-msgs))
+  (collect-system-messages-front (merge-consecutive-roles raw-msgs)))
 
 ;; ============================================================
 ;; Match-based hook dispatch (v0.29.1: §10 Match Dispatch)
