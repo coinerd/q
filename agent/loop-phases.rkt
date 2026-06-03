@@ -41,7 +41,7 @@
          (only-in "event-bus.rkt" event-bus?)
          (only-in "loop-stream.rkt" stream-from-provider handle-cancellation build-stream-result)
          (only-in "../util/cancellation.rkt" cancellation-token?)
-         (only-in "../util/message.rkt" message?)
+         (only-in "../util/message.rkt" message? message-role message-kind message-content)
          "../util/loop-result.rkt")
 
 (provide (contract-out [phase-emit-start
@@ -113,6 +113,24 @@
 
 ;; Returns (values raw-messages (listof effect?))
 (define (phase-build-context bus session-id turn-id st context)
+  ;; F8-DIAG: Write context and raw message roles to /tmp/f8-diag.txt
+  (with-output-to-file
+   "/tmp/f8-diag.txt"
+   (lambda ()
+     (displayln (format "\n=== phase-build-context turn-id=~a ===" turn-id))
+     (displayln (format "context: ~a msgs" (length context)))
+     (for ([m (in-list context)]
+           [i (in-range (min 5 (length context)))])
+       (displayln (format "  ~a: role=~a kind=~a" i (message-role m) (message-kind m))))
+     (define raw-msgs (build-raw-messages context))
+     (displayln (format "raw-messages: ~a total" (length raw-msgs)))
+     (for ([m (in-list raw-msgs)]
+           [i (in-range (min 5 (length raw-msgs)))])
+       (displayln (format "  ~a: role=~a content_len=~a"
+                          i
+                          (hash-ref m 'role "?")
+                          (string-length (format "~a" (hash-ref m 'content "")))))))
+   #:exists 'append)
   (define raw-messages (build-raw-messages context))
   (define token-count (estimate-context-tokens raw-messages))
   (define ctx-event
