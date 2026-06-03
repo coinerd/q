@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.83.2 (2026-06-03)
+
+### Metadata Parser and Fixture Self-Test Inclusion
+- **Metadata parser**: new `scripts/test-metadata.rkt` parses `@suite`, `@boundary`, `@speed`, `@mutates`, `@isolation`, `@timeout` annotations from test file headers.
+- Report-only: no test selection changes. Validates values, reports warnings.
+- `scan-files-metadata` and `metadata-report` for batch scanning.
+- **Fixture self-tests**: `tests/**/fixtures/test-*.rkt` now selected by runner (2 files, 27 tests).
+- Support modules in `fixtures/` remain excluded.
+- `all` suite: 760→762 files, `workflows` suite: 24→26 files.
+- 10 new metadata parser tests.
+
 ## v0.83.1 (2026-06-03)
 
 ### Runner Safety and Gate Evidence v2
