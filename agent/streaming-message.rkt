@@ -13,8 +13,8 @@
 
 (require racket/contract
          racket/list
-         (only-in "../util/message.rkt" make-message)
-         (only-in "../util/content-parts.rkt" make-text-part make-tool-call-part))
+         (only-in "../util/message/message.rkt" make-message)
+         (only-in "../util/content/content-parts.rkt" make-text-part make-tool-call-part))
 
 ;; ============================================================
 ;; Struct (opaque — not exported via struct-out)
