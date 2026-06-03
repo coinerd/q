@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.83.0 (2026-06-03)
+
+### Test Truth Baseline and Inventory
+- Add `--inventory` report mode to `scripts/run-tests.rkt`.
+- Reports: selected/excluded files per suite, classifier hits, high-risk flags (env/cwd/temp/subprocess/perf/terminal), inventory hash.
+- 9 new runner inventory tests.
+- No suite selection behavior changed.
+
 ## v0.82.6 (2026-06-02)
 
 ### Goal Feature Hotfix
