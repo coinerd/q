@@ -1,4 +1,4 @@
-#lang typed/racket
+#lang racket/base
 
 ;; llm/model.rkt — normalized model request/response types
 ;;
@@ -6,49 +6,38 @@
 ;;   - model-request: messages + tools + settings
 ;;   - model-response: content parts + usage + model + stop-reason
 ;;   - stream-chunk: delta-text/delta-tool-call/usage/done?
+;;   - tool-call-intent: unified AST for provider tool-call data
 ;;
-;; TR BOUNDARY:
-;; Migrated to #lang typed/racket in v0.29.3 W1.
-;; Untyped consumers receive auto-generated contracts from TR boundary
-;; system. Struct constructors enforce field types at call sites.
+;; MIGRATION NOTE (v0.85.1, C2-07):
+;; Reverted from #lang typed/racket to #lang racket/base with explicit contracts.
+;; Previous TR annotations used `Any` for most fields — zero compile-time safety.
+;; Plain contracts provide better runtime guarantees and faster compilation.
 
-(provide (struct-out model-request)
-         make-model-request
-         model-request->jsexpr
-         jsexpr->model-request
+(require racket/contract
+         racket/match)
 
-         (struct-out model-response)
-         make-model-response
-         model-response->jsexpr
-         jsexpr->model-response
+;; ============================================================
+;; Contracts
+;; ============================================================
 
-         (struct-out stream-chunk)
-         make-stream-chunk
-
-         (struct-out tool-call-intent)
-         make-tool-call-intent
-         tool-call-intent->hash
-         hash->tool-call-intent)
+(define message-list/c (listof any/c))
+(define tool-list/c (or/c (listof any/c) #f))
+(define settings/c (or/c hash? #f))
+(define usage/c (or/c hash? #f))
+(define stop-reason/c (or/c symbol? #f))
+(define finish-reason/c (or/c string? symbol? #f))
 
 ;; ============================================================
 ;; model-request
 ;; ============================================================
 
-(struct model-request
-        ([messages : (Listof Any)] [tools : (Option (Listof Any))]
-                                   [settings : (Option (HashTable Symbol Any))])
-  #:transparent)
+(struct model-request (messages tools settings) #:transparent)
 
-(: make-model-request
-   ((Listof Any) (Option (Listof Any)) (Option (HashTable Symbol Any)) -> model-request))
 (define (make-model-request messages tools settings)
   (model-request messages tools settings))
 
-(: model-request->jsexpr (model-request -> (HashTable Symbol Any)))
 (define (model-request->jsexpr req)
   (define h
-    :
-    (HashTable Symbol Any)
     (hasheq 'messages
             (model-request-messages req)
             'settings
@@ -57,7 +46,6 @@
       (hash-set h 'tools (model-request-tools req))
       h))
 
-(: jsexpr->model-request ((HashTable Symbol Any) -> model-request))
 (define (jsexpr->model-request h)
   (define msgs (hash-ref h 'messages))
   (unless (list? msgs)
@@ -65,29 +53,20 @@
   (define tools (hash-ref h 'tools #f))
   (unless (or (list? tools) (not tools))
     (error 'jsexpr->model-request "tools must be a list or #f, got: ~a" tools))
-  (define settings (hash-ref h 'settings))
-  (unless (hash? settings)
-    (error 'jsexpr->model-request "settings must be a hash, got: ~a" settings))
-  (make-model-request (cast msgs (Listof Any))
-                      (cast tools (U (Listof Any) #f))
-                      (cast settings (HashTable Symbol Any))))
+  (define settings (hash-ref h 'settings #f))
+  (unless (or (hash? settings) (not settings))
+    (error 'jsexpr->model-request "settings must be a hash or #f, got: ~a" settings))
+  (make-model-request msgs tools settings))
 
 ;; ============================================================
 ;; model-response
 ;; ============================================================
 
-(struct model-response
-        ([content : (Listof Any)] [usage : (Option (HashTable Symbol Any))]
-                                  [model : String]
-                                  [stop-reason : (U Symbol #f)])
-  #:transparent)
+(struct model-response (content usage model stop-reason) #:transparent)
 
-(: make-model-response
-   ((Listof Any) (Option (HashTable Symbol Any)) String (U Symbol #f) -> model-response))
 (define (make-model-response content usage model stop-reason)
   (model-response content usage model stop-reason))
 
-(: model-response->jsexpr (model-response -> (HashTable Symbol Any)))
 (define (model-response->jsexpr resp)
   (hasheq 'content
           (model-response-content resp)
@@ -101,64 +80,58 @@
                 (symbol->string sr)
                 ""))))
 
-(: jsexpr->model-response ((HashTable Symbol Any) -> model-response))
 (define (jsexpr->model-response h)
   (define content (hash-ref h 'content))
   (unless (list? content)
     (error 'jsexpr->model-response "content must be a list, got: ~a" content))
-  (define model (hash-ref h 'model))
-  (unless (string? model)
-    (error 'jsexpr->model-response "model must be a string, got: ~a" model))
-  (make-model-response (cast content (Listof Any))
+  (define model-val (hash-ref h 'model))
+  (unless (string? model-val)
+    (error 'jsexpr->model-response "model must be a string, got: ~a" model-val))
+  (make-model-response content
                        (let ([u (hash-ref h 'usage #f)])
-                         (if (hash? u) (cast u (HashTable Symbol Any)) (hasheq)))
-                       (cast model String)
+                         (if (hash? u)
+                             u
+                             (hasheq)))
+                       model-val
                        (let ([sr (hash-ref h 'stopReason #f)])
                          (if sr
-                             (string->symbol (cast sr String))
+                             (string->symbol sr)
                              #f))))
 
 ;; ============================================================
 ;; stream-chunk
 ;; ============================================================
 
-(struct stream-chunk
-        ([delta-text : (Option String)] [delta-tool-call : (Option (HashTable Symbol Any))]
-                                        [delta-thinking : (Option String)]
-                                        [usage : (Option (HashTable Symbol Any))]
-                                        [done? : Boolean]
-                                        [finish-reason : (Option (U String Symbol))])
+(struct stream-chunk (delta-text delta-tool-call delta-thinking usage done? finish-reason)
   #:transparent)
 
-(define make-stream-chunk
-  (lambda ([delta-text : (Option String) #f]
-           [delta-tool-call : (Option (HashTable Symbol Any)) #f]
-           [usage : (Option (HashTable Symbol Any)) #f]
-           [done? : Boolean #f]
-           #:delta-thinking [delta-thinking : (Option String) #f]
-           #:finish-reason [finish-reason : (Option (U String Symbol)) #f])
-    (stream-chunk delta-text delta-tool-call delta-thinking usage done? finish-reason)))
+(define (make-stream-chunk delta-text
+                           delta-tool-call
+                           usage
+                           done?
+                           #:delta-thinking [delta-thinking #f]
+                           #:finish-reason [finish-reason #f])
+  (stream-chunk delta-text delta-tool-call delta-thinking usage done? finish-reason))
 
 ;; ============================================================
 ;; tool-call-intent — unified AST for provider tool-call data
 ;; ============================================================
 
-(struct tool-call-intent
-        ([id : String] [name : String] [arguments : (HashTable Symbol Any)])
-  #:transparent)
+(struct tool-call-intent (id name arguments) #:transparent)
 
-(: make-tool-call-intent (String String (HashTable Symbol Any) -> tool-call-intent))
 (define (make-tool-call-intent id name arguments)
   (tool-call-intent id name arguments))
 
-(: tool-call-intent->hash (tool-call-intent -> (HashTable Symbol Any)))
 (define (tool-call-intent->hash tci)
-  (hasheq 'type "tool-call"
-          'id (tool-call-intent-id tci)
-          'name (tool-call-intent-name tci)
-          'arguments (tool-call-intent-arguments tci)))
+  (hasheq 'type
+          "tool-call"
+          'id
+          (tool-call-intent-id tci)
+          'name
+          (tool-call-intent-name tci)
+          'arguments
+          (tool-call-intent-arguments tci)))
 
-(: hash->tool-call-intent ((HashTable Symbol Any) -> tool-call-intent))
 (define (hash->tool-call-intent h)
   (define id0 (hash-ref h 'id #f))
   (define name0 (hash-ref h 'name #f))
@@ -166,5 +139,31 @@
   (tool-call-intent (if (string? id0) id0 "")
                     (if (string? name0) name0 "")
                     (if (hash? args0)
-                        (cast args0 (HashTable Symbol Any))
+                        args0
                         (hasheq))))
+
+;; ============================================================
+;; Provide with contracts
+;; ============================================================
+
+;; Struct types (predicates + accessors)
+(provide (struct-out model-request)
+         (struct-out model-response)
+         (struct-out stream-chunk)
+         (struct-out tool-call-intent)
+
+         ;; Constructors with contracts
+         (contract-out [make-model-request (-> message-list/c tool-list/c settings/c model-request?)]
+                       [model-request->jsexpr (-> model-request? hash?)]
+                       [jsexpr->model-request (-> hash? model-request?)]
+                       [make-model-response
+                        (-> message-list/c usage/c string? stop-reason/c model-response?)]
+                       [model-response->jsexpr (-> model-response? hash?)]
+                       [jsexpr->model-response (-> hash? model-response?)]
+                       [make-stream-chunk
+                        (->* ((or/c string? #f) (or/c hash? #f) (or/c hash? #f) boolean?)
+                             (#:delta-thinking (or/c string? #f) #:finish-reason finish-reason/c)
+                             stream-chunk?)]
+                       [make-tool-call-intent (-> string? string? hash? tool-call-intent?)]
+                       [tool-call-intent->hash (-> tool-call-intent? hash?)]
+                       [hash->tool-call-intent (-> hash? tool-call-intent?)]))
