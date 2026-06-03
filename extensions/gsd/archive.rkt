@@ -260,7 +260,8 @@
     (for ([sub (directory-list planning-dir)])
       (define sub-path (build-path planning-dir sub))
       (when (and (directory-exists? sub-path) (not (string=? (path->string sub) "archive")))
-        (with-handlers ([exn:fail? (lambda (e) (void))])
+        (with-handlers ([exn:fail? (lambda (e)
+                                    (log-debug "gsd: cleanup-empty-subdirs failed: ~a" (exn-message e)))])
           (when (null? (directory-list sub-path))
             (delete-directory sub-path)))))))
 

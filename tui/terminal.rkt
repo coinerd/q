@@ -168,7 +168,9 @@
 ;; defense-in-depth — ensures mouse tracking is always disabled regardless
 ;; of exit path (normal exit, error handler, or unexpected crash).
 (define (tui-term-close term)
-  (with-handlers ([exn:fail? (lambda (e) (void))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-debug "terminal: disable-mouse-tracking failed: ~a"
+                                          (exn-message e)))])
     (disable-mouse-tracking))
   (disable-bracketed-paste)
   (term-show-cursor term)
@@ -185,7 +187,9 @@
                   (lambda ()
                     body ...)
                   (lambda ()
-                    (with-handlers ([exn:fail? (lambda (e) (void))])
+                    (with-handlers ([exn:fail? (lambda (e)
+                                                 (log-debug "terminal: cleanup failed: ~a"
+                                                            (exn-message e)))])
                       (disable-bracketed-paste)
                       (term-show-cursor term)
                       (term-normal-screen term))))))

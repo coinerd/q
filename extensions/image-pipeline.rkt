@@ -43,7 +43,8 @@
 ;; ═══════════════════════════════════════════════════════════════════
 
 (define (delete-file* p)
-  (with-handlers ([exn:fail? void])
+  (with-handlers ([exn:fail? (lambda (e)
+                              (log-debug "image-pipeline: delete-file failed: ~a" (exn-message e)))])
     (when (file-exists? p)
       (delete-file p))))
 
@@ -98,7 +99,8 @@
     (and timeout-secs
          (thread (lambda ()
                    (sleep timeout-secs)
-                   (with-handlers ([exn:fail? void])
+                   (with-handlers ([exn:fail? (lambda (e)
+                                               (log-debug "image-pipeline: subprocess-kill failed: ~a" (exn-message e)))])
                      (subprocess-kill sp #t))))))
   (subprocess-wait sp)
   (when timeout-thread
@@ -210,7 +212,8 @@
      (define timeout-thread
        (thread (lambda ()
                  (sleep (image-metadata-timeout))
-                 (with-handlers ([exn:fail? void])
+                 (with-handlers ([exn:fail? (lambda (e)
+                                             (log-debug "image-pipeline: ffmpeg kill failed: ~a" (exn-message e)))])
                    (subprocess-kill sp #t)))))
      (subprocess-wait sp)
      (kill-thread timeout-thread)

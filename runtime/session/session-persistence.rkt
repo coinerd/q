@@ -25,7 +25,9 @@
 ;; --- Crash logging ---
 
 (define (write-crash-log! sid error-msg phase)
-  (with-handlers ([exn:fail? void])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-warning "session-persistence: crash log write failed: ~a"
+                                            (exn-message e)))])
     (define q-dir (or (current-crash-log-dir) (build-path (find-system-path 'home-dir) ".q")))
     (make-directory* q-dir)
     (define crash-path (build-path q-dir (format "crash-~a.jsonl" (current-seconds))))

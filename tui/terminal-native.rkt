@@ -66,7 +66,8 @@
 (define (make-tty-term #:tty [tty #f])
   ;; Put tty into raw mode so we can read individual keypresses.
   ;; Use system() so stty operates on the inherited terminal fd.
-  (with-handlers ([exn:fail? void])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-debug "terminal-native: stty raw failed: ~a" (exn-message e)))])
     (system "stty raw -echo -icanon < /dev/tty 2>/dev/null"))
   (gensym 'native-term))
 
@@ -88,7 +89,8 @@
 
 (define (term-close term)
   ;; Restore tty to sane mode
-  (with-handlers ([exn:fail? void])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-debug "terminal-native: stty sane failed: ~a" (exn-message e)))])
     (system "stty sane < /dev/tty 2>/dev/null")))
 
 (define (current-term-size)

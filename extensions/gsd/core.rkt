@@ -256,7 +256,8 @@
            ;; Update PLAN.md status marker
            (let ([dir (or base-dir (current-pinned-dir))])
              (when dir
-               (with-handlers ([exn:fail? (lambda (e) (void))])
+               (with-handlers ([exn:fail? (lambda (e)
+                                           (log-debug "gsd: mark-wave-status failed: ~a" (exn-message e)))])
                  (mark-wave-status! dir idx "DONE"))))
            ;; Update STATE.md with wave completion
            (let ([dir (or base-dir (current-pinned-dir))])
