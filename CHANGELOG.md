@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.83.7 (2026-06-03)
+
+### Workflow Contract Suite
+- **Command surface contracts**: `tests/workflows/test-command-surface-contract.rkt` with 12 tests covering cmd-ctx construction, command parsing, state transitions.
+- **Provider/tool workflow contracts**: `tests/workflows/test-provider-tool-workflow-contract.rkt` with 7 tests covering single tool roundtrip, blocked tool, multi-tool ordering, result/response structure, error scenarios.
+
 ## v0.83.6 (2026-06-03)
 
 ### Goal and TUI Scenario Harnesses
