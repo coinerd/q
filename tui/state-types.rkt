@@ -134,7 +134,7 @@
           [ui-state-streaming-text (-> ui-state? (or/c string? #f))]
           [ui-state-streaming-thinking (-> ui-state? (or/c string? #f))]
           [ui-state-streaming-phase (-> ui-state? symbol?)]
-          [ui-state-busy-since (-> ui-state? (or/c exact-integer? #f))]
+          [ui-state-busy-since (-> ui-state? (or/c real? #f))]
           ;; Streaming update helpers
           [update-streaming (-> ui-state? (-> streaming-state? streaming-state?) ui-state?)]
           [set-busy (-> ui-state? boolean? ui-state?)]
@@ -143,7 +143,7 @@
           [set-streaming-text (-> ui-state? (or/c string? #f) ui-state?)]
           [set-streaming-thinking (-> ui-state? (or/c string? #f) ui-state?)]
           [set-streaming-phase (-> ui-state? symbol? ui-state?)]
-          [set-busy-since (-> ui-state? (or/c exact-integer? #f) ui-state?)]
+          [set-busy-since (-> ui-state? (or/c real? #f) ui-state?)]
           [clear-streaming (-> ui-state? ui-state?)]
           ;; String helpers
           [truncate-string (-> string? exact-nonnegative-integer? string?)]
@@ -435,7 +435,23 @@
                 (struct-copy streaming-state (ui-state-streaming state) [streaming-phase phase])]))
 
 (define (set-busy state busy?)
-  (update-streaming state (lambda (s) (struct-copy streaming-state s [busy? busy?]))))
+  (update-streaming
+   state
+   (lambda (s)
+     (struct-copy streaming-state
+                  s
+                  [busy? busy?]
+                  ;; When clearing busy, also clear busy-since to prevent
+                  ;; stale timestamp from re-triggering watchdog when tool
+                  ;; events re-set busy?=#t.
+                  ;; When setting busy, reset busy-since if it was #f or stale
+                  ;; (>30 min old). If it was recently set (e.g. by
+                  ;; handle-turn-started), preserve it.
+                  [busy-since
+                   (cond
+                     [(not busy?) #f]
+                     [(not (streaming-state-busy-since s)) (current-inexact-milliseconds)]
+                     [else (streaming-state-busy-since s)])]))))
 
 (define (set-status-message state msg)
   (update-streaming state (lambda (s) (struct-copy streaming-state s [status-message msg]))))

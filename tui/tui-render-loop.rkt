@@ -389,9 +389,11 @@
            (not (ui-state-streaming-text state))) ;; agent is actively streaming — don't fire
       (let ([since (ui-state-busy-since state)])
         (if (and since (> (- now-ms since) watchdog-ms))
-            (let* ([cleared (set-status-message
-                             (clear-streaming (set-pending-tool-name (set-busy state #f) #f))
-                             "watchdog: busy timeout")]
+            (let* ([cleared (set-busy-since
+                             (set-status-message
+                              (clear-streaming (set-pending-tool-name (set-busy state #f) #f))
+                              "watchdog: busy timeout")
+                             #f)]
                    [watchdog-entry
                     (make-entry 'system
                                 "[Watchdog: busy state timed out — force-cleared after 30 min]"

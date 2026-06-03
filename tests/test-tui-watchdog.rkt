@@ -146,9 +146,9 @@
   (check-equal? (transcript-entry-timestamp watchdog-entry) now)
   ;; Verify busy? is cleared
   (check-false (ui-state-busy? result) "busy? is cleared after watchdog fires")
-  ;; Document: busy-since is intentionally NOT cleared (benign — busy?=#f gates the check)
-  (check-true (number? (ui-state-busy-since result))
-              "busy-since retains old value (not cleared — gated by busy?)"))
+  ;; busy-since is now cleared to #f when watchdog fires (v0.85.x fix:
+  ;; prevents watchdog spam when tool events re-set busy?=#t with stale timestamp)
+  (check-false (ui-state-busy-since result) "busy-since cleared to #f after watchdog fires"))
 
 (test-case "v0.45.13 M2: existing transcript entries preserved after watchdog"
   ;; Add a pre-existing transcript entry, then fire watchdog, verify both exist
@@ -225,3 +225,76 @@
   (define result (apply-event-to-state st evt))
   (check-false (ui-state-busy? result))
   (check-false (ui-state-busy-since result)))
+
+;; ============================================================
+;; v0.85.x: Watchdog spam fix — set-busy clears/resets busy-since
+;; ============================================================
+
+(test-case "v0.85.x: set-busy #f clears busy-since"
+  ;; When busy is cleared, busy-since must also be cleared to prevent
+  ;; watchdog from re-triggering when tool events set busy?=#t again
+  (define now (current-inexact-milliseconds))
+  (define st (set-busy-since (set-busy (initial-ui-state) #t) now))
+  (check-true (ui-state-busy? st))
+  (check-equal? (ui-state-busy-since st) now)
+  ;; Clear busy
+  (define cleared (set-busy st #f))
+  (check-false (ui-state-busy? cleared))
+  (check-false (ui-state-busy-since cleared)))
+
+(test-case "v0.85.x: set-busy #t sets busy-since when currently #f"
+  ;; When setting busy?=#t and busy-since is #f, set-busy must initialize
+  ;; busy-since to the current time (so watchdog can track elapsed duration)
+  (define st (set-busy (initial-ui-state) #t))
+  (check-true (ui-state-busy? st))
+  (check-true (number? (ui-state-busy-since st)))
+  ;; busy-since should be recent (within last 5 seconds)
+  (check-true (< (- (current-inexact-milliseconds) (ui-state-busy-since st)) 5000)))
+
+(test-case "v0.85.x: set-busy #t preserves existing busy-since"
+  ;; When setting busy?=#t and busy-since already has a value, preserve it
+  ;; (e.g. handle-turn-started set it to the event timestamp)
+  (define ts 1234567890)
+  (define st (set-busy (set-busy-since (initial-ui-state) ts) #t))
+  (check-true (ui-state-busy? st))
+  (check-equal? (ui-state-busy-since st) ts))
+
+(test-case "v0.85.x: watchdog spam prevention — cleared busy-since prevents re-fire"
+  ;; This is the core bug scenario: watchdog fires, clears busy? and busy-since,
+  ;; then a tool event re-sets busy?=#t. Since set-busy now sets a FRESH
+  ;; busy-since, the watchdog must NOT fire on the next check.
+  (define now (current-inexact-milliseconds))
+  (define thirty-one-min-ago (- now (* 31 60 1000)))
+  (define st (make-test-state #:busy? #t #:busy-since thirty-one-min-ago))
+  ;; Watchdog fires
+  (define result1 (check-busy-watchdog st now (* 30 60 1000)))
+  (check-not-false result1)
+  (check-false (ui-state-busy? result1))
+  (check-false (ui-state-busy-since result1))
+  ;; Tool event re-sets busy (simulates goal thread still running)
+  (define re-busy (set-busy result1 #t))
+  (check-true (ui-state-busy? re-busy))
+  ;; busy-since should now be fresh, not the 31-min-ago timestamp
+  (check-true (number? (ui-state-busy-since re-busy)))
+  (check-true (> (ui-state-busy-since re-busy) (- now 5000)))
+  ;; Watchdog must NOT fire on the new state (busy-since is recent)
+  (define result2 (check-busy-watchdog re-busy now (* 30 60 1000)))
+  (check-false result2 "watchdog must not re-fire after tool event sets fresh busy-since"))
+
+(test-case "v0.85.x: watchdog fires only once per busy period"
+  ;; After watchdog fires and clears state, calling check-busy-watchdog again
+  ;; on the already-cleared state must return #f (no duplicate entries)
+  (define now (current-inexact-milliseconds))
+  (define thirty-one-min-ago (- now (* 31 60 1000)))
+  (define st (make-test-state #:busy? #t #:busy-since thirty-one-min-ago))
+  ;; First fire
+  (define result1 (check-busy-watchdog st now (* 30 60 1000)))
+  (check-not-false result1)
+  ;; Count watchdog entries in result1
+  (define watchdog-count-1
+    (length (filter (lambda (e) (hash-ref (transcript-entry-meta e) 'watchdog #f))
+                    (ui-state-transcript result1))))
+  (check-equal? watchdog-count-1 1)
+  ;; Second check on cleared state — must NOT add another entry
+  (define result2 (check-busy-watchdog result1 now (* 30 60 1000)))
+  (check-false result2))
