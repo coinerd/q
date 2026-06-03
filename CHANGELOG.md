@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.84.2 (2026-06-03)
+
+### Observability & Safety Hardening
+
+**W0 (#6802):**
+- Replace 16 silent `(with-handlers ([exn:fail? void]) ...)` with logging
+- Persistence/state errors → `log-warning` (session-lifecycle, session-persistence, lockfile)
+- Cleanup/teardown errors → `log-debug` (terminal, clipboard, image-pipeline, streaming-cursor, gsd)
+- OAuth errors → `log-warning` with redacted details (oauth, oauth-callback)
+
+**W1 (#6803):**
+- spawn-subagent.rkt: per-minute spawn rate limit (30/min)
+- safe-mode-state.rkt: `allowed-path?` has `simplify-path` fallback when `resolve-path` fails
+- write.rkt + edit.rkt: `log-warning` on path canonicalization failure
+
 ## v0.84.1 (2026-06-03)
 
 ### Contract Tightening
