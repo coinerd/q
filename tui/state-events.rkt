@@ -291,9 +291,18 @@
 ;; v0.83.10: Handle stream.turn.completed from iteration loop.
 ;; Same cleanup as turn.completed but handles the iteration loop's completion path.
 (define (handle-stream-turn-completed state evt)
-  (set-streaming-phase (clear-streaming (set-pending-tool-name (set-busy-since (set-busy state #f) #f)
-                                                               #f))
-                       'idle))
+  (define cleared
+    (set-streaming-phase
+     (clear-streaming (set-pending-tool-name (set-busy-since (set-busy state #f) #f) #f))
+     'idle))
+  (define goal (ui-state-active-goal cleared))
+  (if (and goal (eq? (goal-display-info-status goal) 'active))
+      (set-busy (set-status-message cleared
+                                    (format "Goal turn ~a/~a: evaluating..."
+                                            (goal-display-info-turns-used goal)
+                                            (goal-display-info-max-turns goal)))
+                #t)
+      cleared))
 
 (define (handle-compaction-warning state evt)
   (define payload (event-payload evt))
@@ -344,7 +353,8 @@
 
 (define (handle-context-built state evt)
   (define payload (event-payload evt))
-  (define tok (hash-ref payload 'tokenCount #f))
+  (define tok
+    (and (hash? payload) (or (hash-ref payload 'tokenCount #f) (hash-ref payload 'token-count #f))))
   (if tok
       (struct-copy ui-state state [context-tokens tok])
       state))
@@ -463,11 +473,15 @@
 
 (define (handle-model-stream-completed state evt)
   (define payload (event-payload evt))
-  (define usage (hash-ref payload 'usage (hasheq)))
+  (define raw-usage (and (hash? payload) (hash-ref payload 'usage (hasheq))))
+  (define usage
+    (if (hash? raw-usage)
+        raw-usage
+        (hasheq)))
   (define in-tok (hash-ref usage 'prompt_tokens (hash-ref usage 'input_tokens 0)))
   (define out-tok (hash-ref usage 'completion_tokens (hash-ref usage 'output_tokens 0)))
   (define ct (ui-state-cost-tracker state))
-  (when ct
+  (when (and ct (or (positive? in-tok) (positive? out-tok)))
     (cost-tracker-update! ct in-tok out-tok (ui-model-label state)))
   (clear-streaming state))
 
@@ -526,12 +540,14 @@
   (define payload (event-payload evt))
   (define turn (hash-ref payload 'turn-number 1))
   (define current (ui-state-active-goal state))
-  (if current
-      (struct-copy ui-state
-                   state
-                   [active-goal
-                    (struct-copy goal-display-info current [turns-used turn] [status 'active])])
-      state))
+  (define updated
+    (if current
+        (struct-copy ui-state
+                     state
+                     [active-goal
+                      (struct-copy goal-display-info current [turns-used turn] [status 'active])])
+        state))
+  (set-busy-since (set-busy updated #t) (event-time evt)))
 
 (define (handle-goal-evaluated state evt)
   ;; Evaluation complete, status stays active but turns updated
@@ -570,8 +586,15 @@
 
 (define (handle-goal-status state evt)
   (define payload (event-payload evt))
-  (define msg (hash-ref payload 'message ""))
-  (append-entry state (make-entry 'system (format "[goal] ~a" msg) (event-time evt) (hash))))
+  (define msg
+    (if (hash? payload)
+        (hash-ref payload 'message "")
+        ""))
+  (define with-entry
+    (append-entry state (make-entry 'system (format "[goal] ~a" msg) (event-time evt) (hash))))
+  (if (string=? msg "")
+      with-entry
+      (set-status-message with-entry msg)))
 
 (register-event-reducer! "goal.started" handle-goal-started)
 (register-event-reducer! "goal.turn.started" handle-goal-turn-started)
