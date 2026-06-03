@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.83.1 (2026-06-03)
+
+### Runner Safety and Gate Evidence v2
+- **Strict argument validation**: reject unknown suite names, `--jobs 0`/negative, `--repeat 0`/negative, `--timeout 0`/negative, unknown `--flags`.
+- **Gate evidence v2**: structured JSON evidence with version, git SHA, suite, args, counts, inventory hash, timestamp.
+- Guards: no evidence on empty results, zero parsed tests, or any failure.
+- `run-suite-once` now returns `(values exit-code results)` for evidence capture.
+- 17 new runner tests (13 arg validation + 4 gate evidence).
+
 ## v0.83.0 (2026-06-03)
 
 ### Test Truth Baseline and Inventory
