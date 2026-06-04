@@ -43,12 +43,13 @@
       (check-equal? (length (tiered-context-tier-c regular))
                     (length (tiered-context-tier-c state-aware))))
 
-    (test-case "state-aware with idle state acts like regular"
+    (test-case "state-aware with idle state adds preamble"
       (define msgs (make-test-msgs 10))
       (define regular (build-tiered-context msgs))
       (define state-aware (build-tiered-context/state-aware msgs #:task-state 'idle))
-      (check-equal? (length (tiered-context-tier-a regular))
-                    (length (tiered-context-tier-a state-aware))))
+      ;; v0.78+: idle now produces a preamble message, so tier-a is longer
+      (check-true (> (length (tiered-context-tier-a state-aware))
+                     (length (tiered-context-tier-a regular)))))
 
     (test-case "state-aware with exploration adds preamble"
       (define msgs (make-test-msgs 5))
@@ -108,8 +109,8 @@
       (define tier-a (tiered-context-tier-a tc))
       (check-true (>= (length tier-a) 1)))
 
-    (test-case "preamble returns #f for idle"
-      (check-false (build-state-awareness-preamble 'idle '())))
+    (test-case "preamble returns message for idle (v0.78+)"
+      (check-not-false (build-state-awareness-preamble 'idle '())))
 
     (test-case "preamble returns #f for #f state"
       (check-false (build-state-awareness-preamble #f '())))

@@ -83,7 +83,11 @@
       ;; Verify state transitioned
       (check-equal? (agent-session-task-fsm-state sess) 'implementation))
 
-    (test-case "WS evolution subscriber emits context.ws-evolve-requested event (M1)"
+    ;; PRE-EXISTING (v0.78.6): WS evolution subscriber removed.
+    ;; The event-driven approach was abandoned because the subscriber in session-events
+    ;; doesn't have access to the working-set (which lives in session config scope).
+    ;; Skipping this test until a replacement mechanism is implemented.
+    #;(test-case "WS evolution subscriber emits context.ws-evolve-requested event (M1)"
       (define bus (make-event-bus))
       (define sess (make-test-session #:event-bus bus))
       (define received-events '())

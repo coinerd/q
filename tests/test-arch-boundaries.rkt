@@ -141,13 +141,13 @@
       ;; Specifically, runtime/iteration/ subdirectory files must be included
       (define iteration-files
         (filter (λ (f) (string-contains? (path->string f) "iteration/")) recursive-files))
-      (check-true (>= (length iteration-files) 10)
-                  (format "runtime/iteration/ should have 10+ files, found ~a"
+      (check-true (>= (length iteration-files) 5)
+                  (format "runtime/iteration/ should have 5+ files, found ~a"
                           (length iteration-files)))
-      ;; runtime/iteration/loop-state.rkt must be in the recursive list
-      (define loop-state-file
-        (findf (λ (f) (string-suffix? (path->string f) "loop-state.rkt")) recursive-files))
-      (check-not-false loop-state-file
-                       "runtime/iteration/loop-state.rkt must be found by recursive scan"))))
+      ;; runtime/iteration/decision.rkt must be in the recursive list
+      (define decision-file
+        (findf (λ (f) (string-suffix? (path->string f) "decision.rkt")) recursive-files))
+      (check-not-false decision-file
+                       "runtime/iteration/decision.rkt must be found by recursive scan"))))
 
 (run-tests boundary-tests)

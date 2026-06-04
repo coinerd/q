@@ -40,11 +40,11 @@
       (agent-session.rkt (rationale . "list-extensions via adapter (re-exports extension listing)")
                          (owner . "runtime")
                          (revisit-by . "2026-07-01"))
-      (session-lifecycle.rkt
+      (session/session-lifecycle.rkt
        (rationale . "injection-event-topic import (extracted from agent-session/iteration)")
        (owner . "runtime")
        (revisit-by . "2026-07-01"))
-      (session-lifecycle-transitions.rkt
+      (session/session-lifecycle-transitions.rkt
        (rationale . "pure FSM transitions extracted from session-lifecycle")
        (owner . "runtime")
        (revisit-by . "2026-09-01"))
@@ -57,7 +57,7 @@
       (turn-orchestrator.rkt (rationale . "context assembly + provider turn (imports via adapter)")
                              (owner . "runtime")
                              (revisit-by . "2026-07-01"))
-      (session-config.rkt (rationale . "central typed config (imports via adapter)")
+      (session/session-config.rkt (rationale . "central typed config (imports via adapter)")
                           (owner . "runtime")
                           (revisit-by . "2026-07-01"))
       (package.rkt (rationale . "package audit reads extension manifests")
@@ -66,10 +66,14 @@
       (extension-catalog.rkt (rationale . "extension loading/discovery")
                              (owner . "extensions")
                              (revisit-by . "2026-08-01"))
-      (session-switch.rkt
+      (session/session-switch.rkt
        (rationale . "dynamic-require to extensions for lazy loading (avoids circular dependency)")
        (owner . "runtime")
-       (revisit-by . "2026-07-01"))))
+       (revisit-by . "2026-07-01"))
+      (goal/goal-checks.rkt
+       (rationale . "imports shell-risk from tools/ for command safety validation")
+       (owner . "runtime")
+       (revisit-by . "2026-08-01"))))
   (agent
    . ((iteration/loop-state.rkt
       (rationale . "typed require from extensions/api.rkt for opaque ExtRegistry")

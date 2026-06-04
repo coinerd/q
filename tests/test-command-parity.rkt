@@ -48,6 +48,8 @@
         "/activate"
         "/a" ;; activate
         "/login" ;; login (#5331)
+        "/goal"
+        "/g" ;; goal
         ))
 
 (define parity-suite

@@ -7,6 +7,7 @@
          "../gui/gui-types.rkt"
          "../gui/slash-commands.rkt"
          "../runtime/session/session-types.rkt"
+         (only-in "../runtime/session/lifecycle-state.rkt" make-lifecycle-state)
          "../extensions/api.rkt"
          "../extensions/hooks.rkt"
          "../util/hook-types.rkt"
@@ -143,12 +144,7 @@
                        0
                        #f
                        #f
-                       #f
-                       '()
-                       '()
-                       #f
-                       #f
-                       #f))
+                       (make-lifecycle-state)))
       (define state-box (box (make-gui-state)))
       (define lock (make-semaphore 1))
       (check-true (try-extension-dispatch mock-sess state-box lock "/test-new-session"))
@@ -180,12 +176,7 @@
                        0
                        #f
                        #f
-                       #f
-                       '()
-                       '()
-                       #f
-                       #f
-                       #f))
+                       (make-lifecycle-state)))
       (define state-box (box (make-gui-state)))
       (define lock (make-semaphore 1))
       (check-true (try-extension-dispatch mock-sess state-box lock "/test-submit")))))

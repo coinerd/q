@@ -26,7 +26,9 @@
            (box #f) ;; session-runner
            input-box ;; input-text-box
            (box #f) ;; extension-registry-box (no extensions)
-           (box #f))) ;; session-factory-runner
+           (box #f) ;; session-factory-runner
+           (box #f) ;; agent-session-box
+           (box #f))) ;; goal-cancel-box
 
 (test-case "process-extension-command is a procedure"
   (check-true (procedure? process-extension-command)))

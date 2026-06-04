@@ -295,11 +295,11 @@
                #:shutdown-check (lambda () #t)))
   (check-equal? (goal-state-status result) 'cancelled)
   (check-not-false (assoc 'goal-failed events) "goal-failed emitted on cancellation (INFO-3)")
-  ;; INFO-4: Verify cancelled state in event data
+  ;; INFO-4: Verify cancelled reason in event data
   (define failed-data (cdr (assoc 'goal-failed events)))
-  (check-equal? (goal-state-status failed-data)
-                'cancelled
-                "failed event carries cancelled state (INFO-4)"))
+  (check-equal? (hash-ref failed-data 'reason)
+                "cancelled"
+                "failed event carries cancelled reason (INFO-4)"))
 
 ;; evaluations field populated after loop-step
 (let ()

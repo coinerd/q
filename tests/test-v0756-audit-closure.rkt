@@ -136,9 +136,10 @@
 
     ;; ── T2: Preamble integration test ──
 
-    (test-case "build-state-awareness-preamble returns #f for idle state"
+    (test-case "build-state-awareness-preamble returns #f for #f state, message for idle"
       (check-false (build-state-awareness-preamble #f '()))
-      (check-false (build-state-awareness-preamble 'idle '())))
+      ;; v0.78+: idle now returns a preamble message (not #f)
+      (check-not-false (build-state-awareness-preamble 'idle '())))
 
     (test-case "build-state-awareness-preamble returns message for implementation"
       (define result (build-state-awareness-preamble 'implementation '()))

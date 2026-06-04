@@ -38,15 +38,15 @@
   (test-suite "handle-user-submit! tests"
 
     ;; ── Branch 1: busy + queue → enqueue followup ──
-    (test-case "busy with queue enqueues followup and shows notification"
+    (test-case "busy with queue enqueues steering and shows notification"
       (define q (make-queue))
       (define busy-state (make-busy-ui-state))
       (define ctx (make-test-ctx busy-state q))
       (set-box! (tui-ctx-ui-state-box ctx) busy-state)
       (handle-user-submit! ctx "hello")
-      ;; Queue should have the followup
-      (define drained (dequeue-all-followups! q))
-      (check-equal? drained '("hello"))
+      ;; Queue should have the steering message
+      (define steering (dequeue-steering! q))
+      (check-equal? steering "hello")
       ;; UI state should have a queued notification entry
       (define new-state (unbox (tui-ctx-ui-state-box ctx)))
       (check-true (> (length (ui-state-transcript new-state)) 0))
