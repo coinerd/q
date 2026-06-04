@@ -1,4 +1,15 @@
 
+## v0.89.3 (2026-06-03)
+
+### Browser Secure Service + Audit + Mock Adapter (Phase 3)
+
+- Add `browser/adapters/mock.rkt`: deterministic mock adapter with configurable responses, call recording, error simulation
+- Add `browser/audit.rkt`: JSONL audit trail for all browser actions
+- Add `browser/service.rkt`: `SecureBrowserService` composing policy+session+adapter+audit with open/observe/act/navigate/screenshot/close
+- Add `current-browser-service` parameter for runtime integration
+- 48 new tests: 16 mock adapter, 6 audit, 26 service
+- **185 total browser tests**
+
 ## v0.88.3 (2026-06-03)
 
 ### Browser Policy Engine + Session Manager (Phase 2)
