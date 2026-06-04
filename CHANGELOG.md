@@ -1,4 +1,16 @@
 
+## v0.87.3 (2026-06-03)
+
+### Browser Domain Model (Phase 1)
+
+- Add `browser/` directory with domain types: `browser-target`, 8 `browser-action` variants, `browser-observation`, `browser-session-info` with JSON roundtrip codecs
+- Add `browser/adapter.rkt` with adapter interface (open/close/navigate/observe/act/screenshot) + contract-out
+- Add `browser/events.rkt` with 10 typed browser events using `define-typed-event` macro
+- Add `browser` layer to `docs/architecture/dependency-policy.rktd` (forbidden from runtime/tui/extensions)
+- Add `q-browser-error` branch to error hierarchy with 7 category predicates
+- Register 10 `browser.*` event types in `agent/event-json.rkt`
+- 63 new tests: 19 types, 13 errors, 11 events, 10 adapter, 10 contracts
+
 ## v0.86.5 (2026-06-04)
 
 ### Audit Closure (Complete Remediation)
