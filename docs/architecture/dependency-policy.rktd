@@ -240,6 +240,9 @@
       ("tools/scheduler.rkt"
        (risk . "Tool scheduler with parallel execution, timeout management, and coordination")
        (owner . "tools"))
+      ("runtime/turn-orchestrator.rkt"
+       (risk . "Turn orchestration with streaming integration; high complexity score 25051")
+       (owner . "runtime"))
       ("llm/stream.rkt"
        (risk . "LLM streaming abstraction with SSE parsing, chunk accumulation, and provider-specific handling")
        (owner . "provider"))

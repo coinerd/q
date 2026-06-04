@@ -44,7 +44,7 @@
                                         #:policy-mode [mode 'strict])
   (permission-config
    (or auto-approved
-       (set "read" "glob" "ls" "find" "grep" "context-files" "date" "session_recall" "skill-route" "save-conclusion" "record-conclusion" "set-task-state"))
+       (set "read" "glob" "ls" "find" "grep" "context-files" "date" "session_recall" "skill-route" "save-conclusion" "record_conclusion" "set-task-state"))
    (or needs-approval
        (set "edit"
             "write"

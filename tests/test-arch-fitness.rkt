@@ -341,7 +341,7 @@
     ;; FM-17d: Config schema drift -- dict-ref keys must have accessors
     (test-case "FM-17d: All dict-ref config keys have session-config accessors"
       (define accessor-pattern #rx"config-([a-z-]+)")
-      (define config-path (build-path q-dir "runtime" "session-config.rkt"))
+      (define config-path (build-path q-dir "runtime" "session" "session-config.rkt"))
       (define config-content (file->string config-path))
       (define accessors
         (for/list ([m (in-list (regexp-match* accessor-pattern config-content #:match-select cadr))])
@@ -675,7 +675,7 @@
       (check-equal? cycles '() "tools layer must have no circular requires"))
 
     (test-case "session-store-tree no longer lazy-requires session-store"
-      (define tree-content (file->string (build-path q-dir "runtime" "session-store-tree.rkt")))
+      (define tree-content (file->string (build-path q-dir "runtime" "session" "session-store-tree.rkt")))
       ;; Strip comment lines before checking
       (define code-lines
         (filter (lambda (l) (not (string-prefix? (string-trim l) ";;")))
