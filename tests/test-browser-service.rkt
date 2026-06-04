@@ -7,6 +7,7 @@
 
 (require rackunit
          racket/file
+         "../browser/adapter.rkt"
          "../browser/service.rkt"
          "../browser/settings.rkt"
          "../browser/adapters/mock.rkt"
@@ -18,10 +19,21 @@
 ;; Helpers
 ;; ---------------------------------------------------------------------------
 
+(define (wrap-mock-adapter mock)
+  ;; Wrap a mock-browser-adapter in the browser-adapter interface
+  (make-browser-adapter
+   #:open (lambda (sid target) (mock-open mock target #f))
+   #:close (lambda (sid) (mock-close mock sid))
+   #:navigate (lambda (sid url) (mock-navigate mock sid url))
+   #:observe (lambda (sid selector) (mock-observe mock sid selector))
+   #:act (lambda (sid action) (mock-act mock sid action))
+   #:screenshot (lambda (sid sel fp) (mock-screenshot mock sid sel "png"))))
+
 (define (make-test-svc #:artifact-dir [dir #f]
                        #:max-actions [max-actions 100]
                        #:max-sessions [max-sessions 3])
-  (define adapter (make-mock-adapter))
+  (define mock (make-mock-adapter))
+  (define adapter (wrap-mock-adapter mock))
   (define settings (browser-settings
                     #t '("https" "http") '() '(3000 8080 5173)
                     #t '("/admin" "/debug" "/internal")

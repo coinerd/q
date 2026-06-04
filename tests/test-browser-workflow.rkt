@@ -5,6 +5,7 @@
 ;; Tests browser-check-local-app composite workflow using mock adapter.
 
 (require rackunit
+         "../browser/adapter.rkt"
          "../browser/workflow.rkt"
          "../browser/service.rkt"
          "../browser/settings.rkt"
@@ -16,7 +17,14 @@
 ;; ---------------------------------------------------------------------------
 
 (define (make-test-service)
-  (define adapter (make-mock-adapter))
+  (define mock (make-mock-adapter))
+  (define adapter
+    (make-browser-adapter #:open (lambda (sid target) (mock-open mock target #f))
+                          #:close (lambda (sid) (mock-close mock sid))
+                          #:navigate (lambda (sid url) (mock-navigate mock sid url))
+                          #:observe (lambda (sid selector) (mock-observe mock sid selector))
+                          #:act (lambda (sid action) (mock-act mock sid action))
+                          #:screenshot (lambda (sid sel fp) (mock-screenshot mock sid sel "png"))))
   (make-secure-browser-service adapter))
 
 ;; ---------------------------------------------------------------------------

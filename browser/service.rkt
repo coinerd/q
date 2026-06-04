@@ -7,44 +7,43 @@
 
 (require racket/match
          "types.rkt"
+         "adapter.rkt"
          "policy.rkt"
          "session.rkt"
          "audit.rkt"
          "settings.rkt"
-         "adapters/mock.rkt"
          "../util/error/errors.rkt")
 
-(provide
- secure-browser-service?
- make-secure-browser-service
- browser-open!
- browser-observe!
- browser-act!
- browser-close!
- browser-navigate!
- browser-screenshot!
- current-browser-service)
+(provide secure-browser-service?
+         make-secure-browser-service
+         browser-open!
+         browser-observe!
+         browser-act!
+         browser-close!
+         browser-navigate!
+         browser-screenshot!
+         current-browser-service)
 
 ;; ---------------------------------------------------------------------------
 ;; Service struct
 ;; ---------------------------------------------------------------------------
 
 (struct secure-browser-service
-  (adapter           ; mock-browser-adapter
-   session-manager   ; browser-session-manager
-   policy-settings   ; browser-policy-settings
-   event-bus         ; (or/c #f any)
-   artifact-dir)     ; (or/c string? #f)
+        (adapter ; browser-adapter?
+         session-manager ; browser-session-manager
+         policy-settings ; browser-policy-settings
+         event-bus ; (or/c #f any)
+         artifact-dir) ; (or/c string? #f)
   #:transparent)
 
 (define (make-secure-browser-service adapter
-                                      #:settings [settings (default-browser-settings)]
-                                      #:event-bus [event-bus #f]
-                                      #:artifact-dir [artifact-dir #f])
+                                     #:settings [settings (default-browser-settings)]
+                                     #:event-bus [event-bus #f]
+                                     #:artifact-dir [artifact-dir #f])
   (define policy (browser-settings->policy-settings settings))
-  (define mgr (make-browser-session-manager
-               #:max-sessions (browser-settings-max-sessions settings)
-               #:max-actions (browser-settings-max-actions-per-session settings)))
+  (define mgr
+    (make-browser-session-manager #:max-sessions (browser-settings-max-sessions settings)
+                                  #:max-actions (browser-settings-max-actions-per-session settings)))
   (secure-browser-service adapter mgr policy event-bus artifact-dir))
 
 ;; ---------------------------------------------------------------------------
@@ -52,12 +51,12 @@
 ;; ---------------------------------------------------------------------------
 
 (define (browser-settings->policy-settings s)
-  (make-browser-policy-settings
-   #:allowed-schemes (browser-settings-allowed-schemes s)
-   #:allowed-domains (browser-settings-allowed-domains s)
-   #:allowed-localhost-ports (browser-settings-allowed-localhost-ports s)
-   #:blocked-private-networks? (browser-settings-blocked-private-networks? s)
-   #:blocked-paths (browser-settings-blocked-paths s)))
+  (make-browser-policy-settings #:allowed-schemes (browser-settings-allowed-schemes s)
+                                #:allowed-domains (browser-settings-allowed-domains s)
+                                #:allowed-localhost-ports (browser-settings-allowed-localhost-ports s)
+                                #:blocked-private-networks?
+                                (browser-settings-blocked-private-networks? s)
+                                #:blocked-paths (browser-settings-blocked-paths s)))
 
 ;; ---------------------------------------------------------------------------
 ;; Open session
@@ -73,22 +72,23 @@
   ;; 1. Policy check
   (define-values (ok? reason) (validate-browser-url url policy))
   (unless ok?
-    (raise-browser-error
-     (format "browser policy blocked: ~a" reason)
-     'url-blocked
-     (hash 'url url 'reason reason)))
+    (raise-browser-error (format "browser policy blocked: ~a" reason)
+                         'url-blocked
+                         (hash 'url url 'reason reason)))
 
   ;; 2. Create session
   (define session-id (format "bs-~a-~a" (current-milliseconds) (random 100000)))
-  (define info (browser-session-info session-id 'active
-                                     (current-milliseconds) (current-milliseconds)
-                                     'ephemeral (or artifact-dir "/tmp")))
+  (define info
+    (browser-session-info session-id
+                          'active
+                          (current-milliseconds)
+                          (current-milliseconds)
+                          'ephemeral
+                          (or artifact-dir "/tmp")))
   (browser-session-manager-create! mgr session-id info #:artifact-dir artifact-dir)
 
   ;; 3. Adapter open
-  (define result
-    (with-browser-error-wrap
-     (mock-open adapter url options)))
+  (define result (with-browser-error-wrap (browser-adapter-open adapter session-id url)))
 
   ;; 4. Audit log
   (log-browser-action! session-id 'open result artifact-dir)
@@ -112,8 +112,7 @@
   (browser-session-manager-record-action! mgr session-id)
 
   (define result
-    (with-browser-error-wrap
-     (mock-observe adapter session-id selector)))
+    (with-browser-error-wrap (browser-adapter-observe adapter session-id #:selector selector)))
 
   (log-browser-action! session-id 'observe result artifact-dir)
   (emit-browser-event! bus 'browser.action-completed session-id (hash 'action "observe"))
@@ -132,9 +131,7 @@
   (check-session! mgr session-id)
   (browser-session-manager-record-action! mgr session-id)
 
-  (define result
-    (with-browser-error-wrap
-     (mock-act adapter session-id action)))
+  (define result (with-browser-error-wrap (browser-adapter-act adapter session-id action)))
 
   (log-browser-action! session-id 'act result artifact-dir)
   (emit-browser-event! bus 'browser.action-completed session-id (hash 'action "act"))
@@ -154,17 +151,14 @@
   ;; Policy check for new URL
   (define-values (ok? reason) (validate-browser-url url policy))
   (unless ok?
-    (raise-browser-error
-     (format "browser policy blocked: ~a" reason)
-     'url-blocked
-     (hash 'url url 'reason reason)))
+    (raise-browser-error (format "browser policy blocked: ~a" reason)
+                         'url-blocked
+                         (hash 'url url 'reason reason)))
 
   (check-session! mgr session-id)
   (browser-session-manager-record-action! mgr session-id)
 
-  (define result
-    (with-browser-error-wrap
-     (mock-navigate adapter session-id url)))
+  (define result (with-browser-error-wrap (browser-adapter-navigate adapter session-id url)))
 
   (log-browser-action! session-id 'navigate result artifact-dir)
   (emit-browser-event! bus 'browser.action-completed session-id (hash 'action "navigate" 'url url))
@@ -184,7 +178,7 @@
 
   (define result
     (with-browser-error-wrap
-     (mock-screenshot adapter session-id selector fmt)))
+     (browser-adapter-screenshot adapter session-id #:selector selector #:full-page? #f)))
 
   (log-browser-action! session-id 'screenshot result artifact-dir)
   result)
@@ -199,8 +193,7 @@
   (define bus (secure-browser-service-event-bus svc))
   (define artifact-dir (secure-browser-service-artifact-dir svc))
 
-  (with-browser-error-wrap
-   (mock-close adapter session-id))
+  (with-browser-error-wrap (browser-adapter-close adapter session-id))
 
   (browser-session-manager-destroy! mgr session-id)
   (log-browser-action! session-id 'close 'ok artifact-dir)
@@ -212,21 +205,17 @@
 
 (define (check-session! mgr session-id)
   (unless (browser-session-manager-get mgr session-id)
-    (raise-browser-error
-     (format "session ~a not found" session-id)
-     'session-expired
-     (hash 'session-id session-id))))
+    (raise-browser-error (format "session ~a not found" session-id)
+                         'session-expired
+                         (hash 'session-id session-id))))
 
 (define-syntax-rule (with-browser-error-wrap expr)
-  (with-handlers
-    ([exn:fail?
-      (lambda (e)
-        (if (q-browser-error? e)
-            (raise e)
-            (raise-browser-error
-             (format "adapter error: ~a" (exn-message e))
-             'adapter-error
-             (hash 'original-message (exn-message e)))))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (if (q-browser-error? e)
+                                   (raise e)
+                                   (raise-browser-error (format "adapter error: ~a" (exn-message e))
+                                                        'adapter-error
+                                                        (hash 'original-message (exn-message e)))))])
     expr))
 
 (define current-browser-service (make-parameter #f))

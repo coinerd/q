@@ -4,6 +4,7 @@
 
 (require rackunit
          json
+         "../browser/adapter.rkt"
          "../tools/builtins/browser-tools.rkt"
          "../browser/service.rkt"
          "../browser/settings.rkt"
@@ -15,7 +16,14 @@
 ;; ---------------------------------------------------------------------------
 
 (define (make-test-svc)
-  (define adapter (make-mock-adapter))
+  (define mock (make-mock-adapter))
+  (define adapter
+    (make-browser-adapter #:open (lambda (sid target) (mock-open mock target #f))
+                          #:close (lambda (sid) (mock-close mock sid))
+                          #:navigate (lambda (sid url) (mock-navigate mock sid url))
+                          #:observe (lambda (sid selector) (mock-observe mock sid selector))
+                          #:act (lambda (sid action) (mock-act mock sid action))
+                          #:screenshot (lambda (sid sel fp) (mock-screenshot mock sid sel "png"))))
   (define settings
     (browser-settings #t
                       '("https" "http")
