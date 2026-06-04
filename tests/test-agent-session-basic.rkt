@@ -498,7 +498,7 @@
    (check-equal? (last names) "session.updated")
    ;; Core loop events in between
    (check-not-false (member "turn.started" names))
-   (check-not-false (member "turn.completed" names))
+   (check-not-false (member "stream.turn.completed" names))
    (check-not-false (member "context.built" names))
    (check-not-false (member "assistant.message.completed" names))
 

@@ -75,7 +75,7 @@
       (check-not-false (member "model.stream.delta" events))
       (check-not-false (member "assistant.message.completed" events))
       (check-not-false (member "tool.call.started" events))
-      (check-not-false (member "turn.completed" events))
+      (check-not-false (member "stream.turn.completed" events))
 
       ;; Specifically verify B1: assistant.message.completed comes before tool.call.started
       (define amc-idx (index-of events "assistant.message.completed"))

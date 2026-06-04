@@ -68,9 +68,9 @@
   (define q (make-queue))
   (check-pred queue-empty? q)
   (define msg-1 (make-message "m-1" #f 'user 'message (list (make-text-part "hi")) 1000 '#hash()))
-  (enqueue-steering! q msg-1)
+  (enqueue-steering! q "steer-text")
   (check-false (queue-empty? q))
-  (check-equal? (dequeue-steering! q) msg-1)
+  (check-equal? (dequeue-steering! q) "steer-text")
   (check-true (queue-empty? q)))
 
 ;; ============================================================

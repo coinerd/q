@@ -61,7 +61,7 @@
       (define evt-names (map event-event evts))
 
       ;; Should complete normally
-      (check-not-false (member "turn.completed" evt-names) "turn.completed emitted")
+      (check-not-false (member "stream.turn.completed" evt-names) "turn.completed emitted")
 
       ;; No text delta was emitted (no message.start because no text)
       (check-false (member "message.start" evt-names) "no message.start for tool-only stream")
@@ -97,7 +97,7 @@
       (define evt-names (map event-event evts))
 
       ;; Should complete normally
-      (check-not-false (member "turn.completed" evt-names) "turn.completed emitted on empty stream")
+      (check-not-false (member "stream.turn.completed" evt-names) "turn.completed emitted on empty stream")
       (check-equal? (loop-result-termination-reason result) 'completed "result status is completed")
       ;; No message events (no text content)
       (check-false (member "message.start" evt-names) "no message.start for empty stream"))
@@ -191,7 +191,7 @@
       ;; message.end must be emitted as cleanup
       (check-not-false (member "message.end" evt-names) "message.end emitted as cleanup after crash")
       ;; turn.completed must be emitted as cleanup
-      (check-not-false (member "turn.completed" evt-names)
+      (check-not-false (member "stream.turn.completed" evt-names)
                        "turn.completed emitted as cleanup after crash"))
 
     ;; ============================================================
@@ -231,7 +231,7 @@
         ;; Should have message.start, message.end, turn.completed
         (check-not-false (member "message.start" evt-names))
         (check-not-false (member "message.end" evt-names))
-        (check-not-false (member "turn.completed" evt-names))
+        (check-not-false (member "stream.turn.completed" evt-names))
         ;; Chunk count should be limited
         (check-true (<= (unbox call-count) 105)
                     (format "chunk count ~a is within limit" (unbox call-count)))))
@@ -264,7 +264,7 @@
       ;; No message.start was emitted
       (check-false (member "message.start" evt-names) "no message.start when crash before text")
       ;; But turn.completed should still be emitted as cleanup
-      (check-not-false (member "turn.completed" evt-names) "turn.completed emitted as cleanup"))))
+      (check-not-false (member "stream.turn.completed" evt-names) "turn.completed emitted as cleanup"))))
 
 (module+ main
   (run-tests edge-case-tests)

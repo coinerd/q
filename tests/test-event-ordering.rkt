@@ -180,7 +180,7 @@
 
       (define events (unbox captured))
       (check-equal? (last events)
-                    "turn.completed"
+                    "stream.turn.completed"
                     "turn.completed must be the last event in the sequence"))))
 
 (module+ test
