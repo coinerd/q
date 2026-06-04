@@ -335,7 +335,17 @@
                    "message.blocked"
                    "turn.cancelled"
     "stream.turn.completed"
-    "assistant.message.completed"))
+    "assistant.message.completed"
+    "browser.session.opened"
+    "browser.session.closed"
+    "browser.action.started"
+    "browser.action.completed"
+    "browser.action.failed"
+    "browser.page.loaded"
+    "browser.policy.blocked"
+    "browser.sidecar.started"
+    "browser.sidecar.stopped"
+    "browser.screenshot.captured"))
 
 (define (event-name->tool-name type)
   (match type
