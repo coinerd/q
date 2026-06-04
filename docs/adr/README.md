@@ -35,3 +35,18 @@ Each ADR describes a decision that was made, the context that led to it, and its
 - **Template**: See [TEMPLATE.md](TEMPLATE.md)
 - **Naming**: `NNNN-kebab-case-title.md`
 - ADRs are not design docs — they record *why*, not *what*. For *what*, see the README and source code.
+
+## ADR Index
+
+| Number | Title | Status |
+|--------|-------|--------|
+| 0011 | GSD State Machine Rewrite | Accepted |
+| 0012 | Context Manager Strategy | Accepted |
+| 0013 | Typed Racket Optional Args | Accepted |
+| 0014 | Typed Racket Migration Strategy | Accepted |
+| 0015 | TR Boundary Callback Pattern | Accepted |
+| 0016 | Native TUI Architecture | Accepted |
+| 0017 | GUI Architecture | Accepted |
+| 0018 | GUI Extension Integration | Accepted |
+| 0019 | Context Assembly Activation | Accepted |
+| 0020 | Browser Feature Architecture | Accepted |
