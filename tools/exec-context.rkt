@@ -19,6 +19,7 @@
          exec-context-progress-callback
          exec-context-permission-config
          exec-context-bytes-written
+         exec-context-browser-service
          (contract-out [make-exec-context
                         (->* ()
                              ;; path-string? covers both path? and string?
@@ -29,7 +30,8 @@
                                                   #:call-id (or/c string? #f)
                                                   #:session-metadata (or/c hash? #f)
                                                   #:progress-callback (or/c procedure? #f)
-                                                  #:permission-config (or/c permission-config? #f))
+                                                  #:permission-config (or/c permission-config? #f)
+                                                  #:browser-service (or/c any/c #f))
                              exec-context?)]))
 
 ;; ============================================================
@@ -44,7 +46,8 @@
                            session-metadata
                            progress-callback
                            permission-config
-                           bytes-written) ; G3.4: permission gate config or #f
+                           bytes-written ; G3.4: permission gate config or #f
+                           browser-service) ; (or/c secure-browser-service? #f) — F7
   #:transparent)
 
 (define (make-exec-context #:working-directory [working-directory (current-directory)]
@@ -54,7 +57,8 @@
                            #:call-id [call-id ""]
                            #:session-metadata [session-metadata #f]
                            #:progress-callback [progress-callback #f]
-                           #:permission-config [permission-config #f])
+                           #:permission-config [permission-config #f]
+                           #:browser-service [browser-service #f])
   (exec-context working-directory
                 cancellation-token
                 event-publisher
@@ -63,4 +67,5 @@
                 session-metadata
                 progress-callback
                 permission-config
-                (box 0)))
+                (box 0)
+                browser-service))
