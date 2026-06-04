@@ -53,12 +53,12 @@
       ;; assistant.message.completed → turn.completed
       (check-not-false (member "turn.started" events)
                        "turn.started must be in event sequence")
-      (check-not-false (member "turn.completed" events)
+      (check-not-false (member "stream.turn.completed" events)
                        "turn.completed must be in event sequence")
 
       ;; Ordering invariant: turn.started before turn.completed
       (check-true (< (index-of events "turn.started")
-                     (index-of events "turn.completed"))
+                     (index-of events "stream.turn.completed"))
                   "turn.started must precede turn.completed"))
 
     ;; ── Phase 2: Tool turn produces correct event sequence ──
@@ -123,7 +123,7 @@
 
       ;; turn.started is always first, turn.completed always last
       (check-equal? (car events) "turn.started")
-      (check-equal? (last events) "turn.completed"))
+      (check-equal? (last events) "stream.turn.completed"))
 
     ;; ── Phase 3: No-duplicate events ──
     (test-case "golden: no duplicate turn boundary events"
@@ -152,7 +152,7 @@
       ;; Exactly one turn.started and one turn.completed
       (check-equal? (count (lambda (e) (equal? e "turn.started")) events) 1
                     "exactly one turn.started")
-      (check-equal? (count (lambda (e) (equal? e "turn.completed")) events) 1
+      (check-equal? (count (lambda (e) (equal? e "stream.turn.completed")) events) 1
                     "exactly one turn.completed"))))
 
 (run-tests golden-suite)

@@ -36,9 +36,11 @@
   (define q (make-queue))
   (define original
     (make-message "mid" #f 'user 'message (list (make-text-part "already a message")) 0 (hasheq)))
-  (enqueue-steering! q original)
+  (enqueue-steering! q (message-text original))
   (define result (prepare-iteration-context '() q #f bus #f "s1"))
-  (check-equal? result (list original)))
+  (check-true (and (= (length result) 1)
+                   (equal? (message-role (car result)) 'user)
+                   (string? (message-id (car result))))))
 
 (test-case "prepared context with raw steering can be consumed by message-id"
   (define bus (make-event-bus))

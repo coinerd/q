@@ -333,8 +333,7 @@
                    "provider.stream.completed"
                    "model.request.blocked"
                    "message.blocked"
-                   "turn.cancelled"
-                   "assistant.message.completed"))
+                   "turn.cancelled"))
 
 (define (event-name->tool-name type)
   (match type
