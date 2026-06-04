@@ -1,4 +1,13 @@
 
+## v0.88.3 (2026-06-03)
+
+### Browser Policy Engine + Session Manager (Phase 2)
+
+- Add `browser/policy.rkt`: default-deny URL policy engine with scheme validation, IP classification (RFC 1918, cloud metadata 169.254.169.254, loopback, link-local), domain allowlist, path blocking, action risk classification
+- Add `browser/settings.rkt`: 13-field `browser-settings` struct with defaults, `current-browser-settings` parameter
+- Add `browser/session.rkt`: session lifecycle manager with create/destroy/get/list, max-sessions (3), max-actions-per-session (100) enforcement
+- 74 new tests: 43 policy, 17 settings, 14 session
+
 ## v0.87.3 (2026-06-03)
 
 ### Browser Domain Model (Phase 1)
