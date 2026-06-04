@@ -75,7 +75,7 @@
 ;; ============================================================
 
 (define (make-mock-infra)
-  (loop-infra '() #f #f (make-event-bus) "test-session" "/tmp/test.log" #f))
+  (loop-infra '() #f #f (make-event-bus) "test-session" (format "/tmp/test-~a-iter.log" (random 1000000)) #f))
 
 (define (make-msg-with-tool-call name args)
   (make-message (generate-id)

@@ -37,7 +37,7 @@
 (define (make-user-message text)
   (make-message (generate-id) #f 'user 'user (list (make-text-part text)) (current-seconds) (hasheq)))
 
-(define temp-log-path "/tmp/test-iteration-transitions.log")
+(define temp-log-path (format "/tmp/test-~a-trans.log" (random 1000000)))
 
 (define (cleanup-temp-log!)
   (when (file-exists? temp-log-path)

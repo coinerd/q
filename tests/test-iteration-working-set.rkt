@@ -58,7 +58,7 @@
                             bus
                             #f
                             #f
-                            "/tmp/test.log"
+                            (format "/tmp/test-~a-ws.log" (random 1000000))
                             "test-session"
                             10
                             #:working-set ws))
@@ -72,7 +72,7 @@
       (define mock-prov
         (make-mock-provider
          (make-model-response (list (hasheq 'type "text" 'text "done")) (hash) "mock" #f)))
-      (define result (run-iteration-loop ctx mock-prov bus #f #f "/tmp/test.log" "test-session" 10))
+      (define result (run-iteration-loop ctx mock-prov bus #f #f (format "/tmp/test-~a-ws.log" (random 1000000)) "test-session" 10))
       (check-pred loop-result? result)
       (check-equal? (loop-result-termination-reason result) 'completed))
 

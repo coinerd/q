@@ -61,7 +61,7 @@
                              reg
                              bus
                              "test-session"
-                             "/tmp/test.log"
+                             (format "/tmp/test-~a-dur.log" (random 1000000))
                              #f
                              (hash->session-config (hash)))
   (define durations (unbox collected-durations))
@@ -86,7 +86,7 @@
                              reg
                              bus
                              "test-session"
-                             "/tmp/test.log"
+                             (format "/tmp/test-~a-dur.log" (random 1000000))
                              #f
                              (hash->session-config (hash)))
   (define durations (unbox collected-durations))

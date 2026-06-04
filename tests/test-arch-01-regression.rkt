@@ -59,7 +59,7 @@
                                    reg
                                    bus
                                    "test-session"
-                                   "/tmp/test.log"
+                                   (format "/tmp/test-~a-arch01.log" (random 1000000))
                                    #f
                                    (hash->session-config (hash))
                                    #:permission-config perm-cfg))
@@ -86,7 +86,7 @@
                                    reg
                                    bus
                                    "test-session"
-                                   "/tmp/test.log"
+                                   (format "/tmp/test-~a-arch01.log" (random 1000000))
                                    #f
                                    (hash->session-config (hash))))
       (check-pred list? result)

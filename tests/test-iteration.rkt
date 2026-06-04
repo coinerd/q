@@ -41,7 +41,7 @@
 
       ;; Run iteration and verify specific return value
       (define result
-        (run-iteration-loop ctx mock-prov bus #f #f "/tmp/test.log" "test-session" 10 #:queue queue))
+        (run-iteration-loop ctx mock-prov bus #f #f (format "/tmp/test-~a-iter.log" (random 1000000)) "test-session" 10 #:queue queue))
       (check-pred loop-result? result)
       (check-equal? (loop-result-termination-reason result) 'completed))
 
@@ -66,7 +66,7 @@
 
       ;; Run iteration with queue - should complete with context injection
       (define result
-        (run-iteration-loop ctx mock-prov bus #f #f "/tmp/test.log" "test-session" 10 #:queue queue))
+        (run-iteration-loop ctx mock-prov bus #f #f (format "/tmp/test-~a-iter.log" (random 1000000)) "test-session" 10 #:queue queue))
       (check-pred loop-result? result)
       (check-equal? (loop-result-termination-reason result) 'completed)
       ;; Verify events were emitted (proving steering was processed)
@@ -99,7 +99,7 @@
 
       ;; Run iteration and verify completion
       (define result
-        (run-iteration-loop ctx mock-prov bus #f #f "/tmp/test.log" "test-session" 10 #:queue queue))
+        (run-iteration-loop ctx mock-prov bus #f #f (format "/tmp/test-~a-iter.log" (random 1000000)) "test-session" 10 #:queue queue))
       (check-pred loop-result? result)
       (check-equal? (loop-result-termination-reason result) 'completed)
       ;; Context should have had 3 messages (1 initial + 2 steering)
@@ -119,7 +119,7 @@
 
       ;; Run with empty queue and verify result is valid
       (define result
-        (run-iteration-loop ctx mock-prov bus #f #f "/tmp/test.log" "test-session" 10 #:queue queue))
+        (run-iteration-loop ctx mock-prov bus #f #f (format "/tmp/test-~a-iter.log" (random 1000000)) "test-session" 10 #:queue queue))
       (check-pred loop-result? result)
       (check-equal? (loop-result-termination-reason result) 'completed)
       (check-true (>= (length (loop-result-messages result)) 0)))
@@ -133,7 +133,7 @@
       (define mock-prov (make-mock-provider (make-model-response content-parts (hash) "mock" #f)))
 
       ;; Should work without queue parameter (backward compatibility)
-      (define result (run-iteration-loop ctx mock-prov bus #f #f "/tmp/test.log" "test-session" 10))
+      (define result (run-iteration-loop ctx mock-prov bus #f #f (format "/tmp/test-~a-iter.log" (random 1000000)) "test-session" 10))
       (check-pred loop-result? result)
       (check-equal? (loop-result-termination-reason result) 'completed)
       ;; Verify the result messages contain the assistant response
