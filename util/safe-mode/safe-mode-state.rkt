@@ -24,8 +24,7 @@
 ;; Per-session config struct
 ;; ============================================================
 
-(struct safe-mode-config (active allowed-tools allowed-paths locked project-root-path)
-  #:transparent)
+(struct safe-mode-config (active allowed-tools allowed-paths locked project-root-path) #:transparent)
 
 (define (make-safe-mode-config #:active [active #t]
                                #:allowed-tools [allowed-tools #f]
@@ -40,6 +39,19 @@
 
 (define blocked-tools '("bash" "edit" "write" "firecrawl"))
 
+;; Browser tools that are blocked in safe-mode.
+;; Also enforced via string-prefix? "browser_" for future-proofing.
+(define blocked-browser-tools
+  '("browser_open" "browser_close"
+                   "browser_observe"
+                   "browser_click"
+                   "browser_type"
+                   "browser_press"
+                   "browser_extract"
+                   "browser_screenshot"
+                   "browser_scroll"
+                   "browser_check_local_app"))
+
 ;; ============================================================
 ;; Predicates
 ;; ============================================================
@@ -48,21 +60,22 @@
   (define cfg (current-safe-mode-config))
   (cond
     [(safe-mode-config? cfg) (safe-mode-config-active cfg)]
-    [else (or (current-safe-mode)
-              (let ([v (getenv "Q_SAFE_MODE")])
-                (and v (string=? v "1"))))]))
+    [else (or (current-safe-mode) (let ([v (getenv "Q_SAFE_MODE")]) (and v (string=? v "1"))))]))
 
 (define (allowed-tool? tool-name)
   (define cfg (current-safe-mode-config))
   (cond
-    [(and (safe-mode-config? cfg)
-          (not (eq? (safe-mode-config-allowed-tools cfg) 'default)))
+    [(and (safe-mode-config? cfg) (not (eq? (safe-mode-config-allowed-tools cfg) 'default)))
      (define allowed (safe-mode-config-allowed-tools cfg))
      (and (not (member tool-name blocked-tools string=?))
+          (not (member tool-name blocked-browser-tools string=?))
+          (not (string-prefix? tool-name "browser_"))
           (not (string-prefix? tool-name "extension:"))
           (or (not (list? allowed)) (member tool-name allowed string=?)))]
     [(safe-mode?)
      (and (not (member tool-name blocked-tools string=?))
+          (not (member tool-name blocked-browser-tools string=?))
+          (not (string-prefix? tool-name "browser_"))
           (not (string-prefix? tool-name "extension:")))]
     [else #t]))
 
@@ -76,8 +89,7 @@
          [(and (safe-mode-config? cfg) (safe-mode-config-project-root-path cfg))
           (safe-mode-config-project-root-path cfg)]
          [else (project-root)]))
-     (define allowed-paths (and (safe-mode-config? cfg)
-                                (safe-mode-config-allowed-paths cfg)))
+     (define allowed-paths (and (safe-mode-config? cfg) (safe-mode-config-allowed-paths cfg)))
      (cond
        [(and (list? allowed-paths) (not (eq? allowed-paths 'default)))
         (for/or ([ap (in-list allowed-paths)])
@@ -93,19 +105,16 @@
                   (simplify-path ap))))
           (and resolved-path
                resolved-ap
-               (let* ([path-str (path->string
-                                 (if (complete-path? resolved-path)
-                                     resolved-path
-                                     (path->complete-path resolved-path)))]
-                      [ap-str (path->string
-                               (if (complete-path? resolved-ap)
-                                   resolved-ap
-                                   (path->complete-path resolved-ap)))]
+               (let* ([path-str (path->string (if (complete-path? resolved-path)
+                                                  resolved-path
+                                                  (path->complete-path resolved-path)))]
+                      [ap-str (path->string (if (complete-path? resolved-ap)
+                                                resolved-ap
+                                                (path->complete-path resolved-ap)))]
                       [ap-prefix (if (string-suffix? ap-str "/")
                                      ap-str
                                      (string-append ap-str "/"))])
-                 (or (string=? path-str ap-str)
-                     (string-prefix? path-str ap-prefix)))))]
+                 (or (string=? path-str ap-str) (string-prefix? path-str ap-prefix)))))]
        [else
         (and (or (with-handlers ([exn:fail? (λ (_) #f)])
                    (resolve-path root-path))
@@ -115,23 +124,18 @@
                    (resolve-path path))
                  (with-handlers ([exn:fail? (λ (_) #f)])
                    (simplify-path path)))
-             (let* ([resolved-root (or (resolve-path root-path)
-                                       (simplify-path root-path))]
-                    [resolved-path (or (resolve-path path)
-                                       (simplify-path path))]
-                    [root-str (path->string
-                               (if (complete-path? resolved-root)
-                                   resolved-root
-                                   (path->complete-path resolved-root)))]
-                    [path-str (path->string
-                               (if (complete-path? resolved-path)
-                                   resolved-path
-                                   (path->complete-path resolved-path)))]
+             (let* ([resolved-root (or (resolve-path root-path) (simplify-path root-path))]
+                    [resolved-path (or (resolve-path path) (simplify-path path))]
+                    [root-str (path->string (if (complete-path? resolved-root)
+                                                resolved-root
+                                                (path->complete-path resolved-root)))]
+                    [path-str (path->string (if (complete-path? resolved-path)
+                                                resolved-path
+                                                (path->complete-path resolved-path)))]
                     [root-prefix (if (string-suffix? root-str "/")
                                      root-str
                                      (string-append root-str "/"))])
-               (or (string=? path-str root-str)
-                   (string-prefix? path-str root-prefix))))])]))
+               (or (string=? path-str root-str) (string-prefix? path-str root-prefix))))])]))
 
 ;; ============================================================
 ;; Introspection helpers
@@ -153,39 +157,39 @@
 ;; Provide
 ;; ============================================================
 
-(provide
- ;; Parameters
- current-safe-mode
- current-safe-mode-config
- project-root
+;; Parameters
+(provide current-safe-mode
+         current-safe-mode-config
+         project-root
 
- ;; Struct type + predicate
- safe-mode-config
- safe-mode-config?
+         ;; Struct type + predicate
+         safe-mode-config
+         safe-mode-config?
 
- ;; Struct accessors (contracted)
- (contract-out
-  [make-safe-mode-config (->* ()
-                               (#:active boolean?
-                                #:allowed-tools (or/c #f (listof string?))
-                                #:allowed-paths (or/c #f (listof (or/c path? string?)))
-                                #:locked boolean?
-                                #:project-root (or/c path? string?))
-                               safe-mode-config?)]
-  [safe-mode-config-active (-> safe-mode-config? boolean?)]
-  [safe-mode-config-allowed-tools (-> safe-mode-config? any/c)]
-  [safe-mode-config-allowed-paths (-> safe-mode-config? any/c)]
-  [safe-mode-config-locked (-> safe-mode-config? boolean?)]
-  [safe-mode-config-project-root-path (-> safe-mode-config? (or/c path? #f))])
+         ;; Struct accessors (contracted)
+         (contract-out [make-safe-mode-config
+                        (->* ()
+                             (#:active boolean?
+                                       #:allowed-tools (or/c #f (listof string?))
+                                       #:allowed-paths (or/c #f (listof (or/c path? string?)))
+                                       #:locked boolean?
+                                       #:project-root (or/c path? string?))
+                             safe-mode-config?)]
+                       [safe-mode-config-active (-> safe-mode-config? boolean?)]
+                       [safe-mode-config-allowed-tools (-> safe-mode-config? any/c)]
+                       [safe-mode-config-allowed-paths (-> safe-mode-config? any/c)]
+                       [safe-mode-config-locked (-> safe-mode-config? boolean?)]
+                       [safe-mode-config-project-root-path (-> safe-mode-config? (or/c path? #f))])
 
- ;; Constants
- blocked-tools
+         ;; Constants
+         blocked-tools
+         blocked-browser-tools
 
- ;; Predicates
- safe-mode?
- allowed-tool?
- allowed-path?
+         ;; Predicates
+         safe-mode?
+         allowed-tool?
+         allowed-path?
 
- ;; Introspection
- safe-mode-project-root
- trust-level)
+         ;; Introspection
+         safe-mode-project-root
+         trust-level)
