@@ -241,6 +241,10 @@
 (provide gsd-session-ctx?
          ;; Internal accessors (for testing)
          gsd-session-ctx-state-box
+         gsd-session-ctx-plan-box
+         gsd-session-ctx-history-box
+         gsd-session-ctx-pinned-dir-box
+         gsd-session-ctx-event-bus-box
          gsd-session-ctx-sem
          ;; Global default context (plain)
          gsd-default-ctx

@@ -288,7 +288,7 @@
 ;; ============================================================
 
 (require "../runtime/context-assembly/session-walk.rkt"
-         "../util/message.rkt")
+         "../util/message/message.rkt")
 
 (let ()
   (define gs-msg

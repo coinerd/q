@@ -12,7 +12,7 @@
   (test-suite "util/ Reclassification (T2-4)"
 
     (test-case "core util modules load and export"
-      (check-equal? q-version "0.80.4")
+      (check-equal? q-version "0.86.3")
       (check-true (procedure? generate-id)))))
 
 (run-tests suite)

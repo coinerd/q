@@ -202,7 +202,7 @@
    . (("runtime/agent-session.rkt"
        (risk . "Central session orchestration; high fan-in, hard to decompose further")
        (owner . "runtime"))
-      ("runtime/session-lifecycle.rkt" (risk . "Session lifecycle FSM; high state complexity")
+      ("runtime/session/session-lifecycle.rkt" (risk . "Session lifecycle FSM; high state complexity")
                                        (owner . "runtime"))
       ("scripts/run-tests.rkt"
        (risk
@@ -215,13 +215,16 @@
       ("tui/tui-render-loop.rkt"
        (risk . "TUI render loop with streaming state, VDOM diffing, and layout; high visual-coupling")
        (owner . "tui"))
-      ("runtime/session-store-tree.rkt"
+      ("runtime/session/session-store-tree.rkt"
        (cycle-resolved . "v0.74.1")
        (risk . "Session store tree operations; formerly circular with session-store.rkt via lazy-require; now uses parameter injection")
        (owner . "runtime"))
       ("extensions/gsd/core.rkt"
        (risk . "GSD planning core with wave execution, state machine dispatch, and high co-change coupling")
        (owner . "extensions"))
+      ("tui/commands.rkt"
+       (risk . "TUI command dispatch with slash command routing and mode-specific handling")
+       (owner . "tui"))
       ("tui/state-events.rkt"
        (risk . "TUI state event dispatch; large enum of UI event types with high change frequency")
        (owner . "tui"))
@@ -237,6 +240,9 @@
       ("tools/scheduler.rkt"
        (risk . "Tool scheduler with parallel execution, timeout management, and coordination")
        (owner . "tools"))
+      ("llm/stream.rkt"
+       (risk . "LLM streaming abstraction with SSE parsing, chunk accumulation, and provider-specific handling")
+       (owner . "provider"))
       ("llm/anthropic.rkt"
        (risk . "Anthropic Claude provider with streaming, tool use, and extended thinking")
        (owner . "provider"))

@@ -28,7 +28,7 @@
                "runtime/compaction/compactor.rkt"
                "skills/types.rkt"
                "runtime/provider/model-registry.rkt"
-               "runtime/auth-store.rkt"
+               "runtime/auth/auth-store.rkt"
                "runtime/settings.rkt"
                ;; tools/
                "tools/tool.rkt"
@@ -60,7 +60,7 @@
                "sandbox/evaluator.rkt"
                "sandbox/limits.rkt"
                ;; util/
-               "util/jsonl.rkt"
+               "util/json/jsonl.rkt"
                "util/ids.rkt"))
 
 ;; The test file is at q/tests/test-skeleton.rkt

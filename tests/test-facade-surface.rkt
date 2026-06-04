@@ -38,11 +38,13 @@
     all-from-count
     explicit-count)))
 
-(test-case "event-structs.rkt re-exports 6 sub-modules (intentional facade)"
+(test-case "event-structs.rkt re-exports sub-modules (intentional facade)"
   (define content (call-with-input-file (q-file "agent" "event-structs.rkt") port->string))
-  (define count (length (regexp-match* #rx"all-from-out" content)))
-  (check-true (>= count 6)
-              (format "expected >= 6 all-from-out in event-structs.rkt, found ~a" count)))
+  (define all-from-count (length (regexp-match* #rx"all-from-out" content)))
+  (define struct-out-count (length (regexp-match* #rx"struct-out" content)))
+  ;; After v0.85.0 W2, all-from-out was replaced with explicit provides (struct-out entries)
+  (check-true (or (>= all-from-count 6) (>= struct-out-count 6))
+              (format "expected >= 6 all-from-out or struct-out in event-structs.rkt, found ~a/~a" all-from-count struct-out-count)))
 
 ;; ============================================================
 ;; 2. Non-facade modules should NOT use all-from-out excessively
