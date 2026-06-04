@@ -26,7 +26,11 @@
               (rationale . "Extensions may import from runtime/core but never TUI"))
   (llm (max-exceptions . 0)
        (forbidden-from . (runtime tools extensions))
-       (rationale . "LLM providers are leaf modules with no upward imports")))
+       (rationale . "LLM providers are leaf modules with no upward imports"))
+  (browser (max-exceptions . 0)
+           (forbidden-from . (runtime tui extensions))
+           (allowed-from . (agent util))
+           (rationale . "Browser subsystem peer of tools — imports only agent/event and util. Never runtime/tui.")))
  ;; Known boundary exceptions (files that violate layer rules for documented reasons)
  ;; Format: ((filename (rationale . "...") (owner . "...") (revisit-by . "YYYY-MM-DD")) ...)
  ;; Owner: responsible module/component. Revisit-by: date to reassess necessity.
