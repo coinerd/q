@@ -42,21 +42,41 @@
                                         #:needs-approval [needs-approval #f]
                                         #:callback [callback #f]
                                         #:policy-mode [mode 'strict])
-  (permission-config
-   (or auto-approved
-       (set "read" "glob" "ls" "find" "grep" "context-files" "date" "session_recall" "skill-route" "save-conclusion" "record_conclusion" "set-task-state"))
-   (or needs-approval
-       (set "edit"
-            "write"
-            "bash"
-            "delete"
-            "move"
-            "delete-lines"
-            "spawn-subagent"
-            "spawn-subagents"
-            "firecrawl"))
-   (or callback (lambda (tool-name args) #t))
-   (if (memq mode '(strict permissive)) mode 'strict)))
+  (permission-config (or auto-approved
+                         (set "read"
+                              "glob"
+                              "ls"
+                              "find"
+                              "grep"
+                              "context-files"
+                              "date"
+                              "session_recall"
+                              "skill-route"
+                              "save-conclusion"
+                              "record_conclusion"
+                              "set-task-state"
+                              "browser_observe"
+                              "browser_extract"
+                              "browser_screenshot"
+                              "browser_scroll"
+                              "browser_close"))
+                     (or needs-approval
+                         (set "edit"
+                              "write"
+                              "bash"
+                              "delete"
+                              "move"
+                              "delete-lines"
+                              "spawn-subagent"
+                              "spawn-subagents"
+                              "firecrawl"
+                              "browser_open"
+                              "browser_click"
+                              "browser_type"
+                              "browser_press"
+                              "browser_check_local_app"))
+                     (or callback (lambda (tool-name args) #t))
+                     (if (memq mode '(strict permissive)) mode 'strict)))
 
 ;; ============================================================
 ;; Predicate — does this tool call require approval?

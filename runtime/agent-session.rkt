@@ -80,8 +80,27 @@
                   config-model-name
                   config-system-instructions
                   config-thinking-level
-                  config-session-dir)
-         (only-in "provider/model-registry.rkt" model-registry?))
+                  config-session-dir
+                  config-settings)
+         (only-in "provider/model-registry.rkt" model-registry?)
+         ;; F8: browser service lifecycle
+         (only-in "../browser/service.rkt"
+                  make-secure-browser-service
+                  current-browser-service
+                  secure-browser-service?)
+         (only-in "../browser/settings.rkt"
+                  load-browser-settings
+                  default-browser-settings
+                  browser-settings-enabled?)
+         (only-in "../browser/adapters/mock.rkt"
+                  make-mock-adapter
+                  mock-open
+                  mock-close
+                  mock-navigate
+                  mock-observe
+                  mock-act
+                  mock-screenshot)
+         (only-in "../browser/adapter.rkt" make-browser-adapter))
 (require "session/session-mutation.rkt")
 
 (provide agent-session?
@@ -279,6 +298,26 @@
                                      (map extension-name (list-extensions ext-reg))
                                      '()))))
 
+  ;; F8: Browser service initialization (feature-flagged)
+  (let ([q-cfg (config-settings cfg-with-rollout)])
+    (when q-cfg
+      (let ([browser-cfg (load-browser-settings q-cfg)])
+        (when (browser-settings-enabled? browser-cfg)
+          (define mock (make-mock-adapter))
+          (define adapter
+            (make-browser-adapter #:open (lambda (sid target) (mock-open mock target #f))
+                                  #:close (lambda (sid) (mock-close mock sid))
+                                  #:navigate (lambda (sid url) (mock-navigate mock sid url))
+                                  #:observe (lambda (sid selector) (mock-observe mock sid selector))
+                                  #:act (lambda (sid action) (mock-act mock sid action))
+                                  #:screenshot (lambda (sid sel fp)
+                                                 (mock-screenshot mock sid sel "png"))))
+          (define browser-svc
+            (make-secure-browser-service adapter
+                                         #:settings browser-cfg
+                                         #:event-bus (agent-session-event-bus sess)))
+          (current-browser-service browser-svc)))))
+
   sess)
 
 ;; ============================================================
@@ -440,6 +479,9 @@
   (agent-session-active? sess))
 
 (define (close-session! sess)
+  ;; F8: Browser service cleanup
+  (when (current-browser-service)
+    (current-browser-service #f))
   (when (session-active? sess)
     (ensure-persisted! sess)
     (emit-typed-event! (agent-session-event-bus sess)
