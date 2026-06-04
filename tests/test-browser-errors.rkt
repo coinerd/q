@@ -85,3 +85,15 @@
 (test-case "predicates reject other q-error types"
   (check-false (browser-adapter-unavailable?
                 (q-error "x" (current-continuation-marks) (hash)))))
+
+(test-case "browser-url-blocked-error? predicate"
+  (check-true (browser-url-blocked-error?
+               (q-browser-error "blocked" (current-continuation-marks) (hash) 'url-blocked)))
+  (check-false (browser-url-blocked-error?
+                (q-browser-error "other" (current-continuation-marks) (hash) 'navigation-blocked))))
+
+(test-case "browser-adapter-error? predicate"
+  (check-true (browser-adapter-error?
+               (q-browser-error "fail" (current-continuation-marks) (hash) 'adapter-error)))
+  (check-false (browser-adapter-error?
+                (q-browser-error "other" (current-continuation-marks) (hash) 'sidecar-crashed))))

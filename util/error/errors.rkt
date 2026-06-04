@@ -66,6 +66,8 @@
          browser-screenshot-failed?
          browser-sidecar-crashed?
          browser-session-expired?
+         browser-url-blocked-error?
+         browser-adapter-error?
          ;; Category-based predicates
          llm-timeout?
          llm-rate-limit?
@@ -154,6 +156,20 @@
 
 (define (browser-session-expired? e)
   (and (q-browser-error? e) (eq? (q-browser-error-category e) 'session-expired)))
+
+;; Category naming note: Plan specified url-blocked, adapter-error, timeout,
+;; policy-violation, safe-mode. Implementation uses more specific names.
+;; Mapping:
+;;   plan 'url-blocked       → policy.rkt raises 'url-blocked
+;;   plan 'adapter-error     → service.rkt raises 'adapter-error
+;;   plan 'timeout           → sidecar-crashed predicate covers this
+;;   plan 'policy-violation  → navigation-blocked predicate covers this
+;;   plan 'safe-mode         → session-expired predicate covers safe-mode block
+(define (browser-url-blocked-error? e)
+  (and (q-browser-error? e) (eq? (q-browser-error-category e) 'url-blocked)))
+
+(define (browser-adapter-error? e)
+  (and (q-browser-error? e) (eq? (q-browser-error-category e) 'adapter-error)))
 
 ;; Convenience constructors
 (define (raise-q-error message [context (hash)])
