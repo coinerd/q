@@ -1,4 +1,34 @@
-# Changelog
+
+## v0.86.4 (2026-06-04)
+
+### Audit Closure
+
+Post-implementation audit closure for v0.86.xx Test Suite Remediation series.
+
+**Test fixes (19 files):**
+- Fixed stale module paths in test-skeleton.rkt (auth-store→auth/auth-store, jsonl→json/jsonl)
+- Fixed hardcoded version in test-util-reclassification.rkt (0.80.4→0.86.3)
+- Updated facade test for explicit provides in event-structs.rkt (test-facade-surface.rkt)
+- Fixed stale require path in test-goal-state.rkt (util/message→util/message/message)
+- Exported internal accessors for test-gsd-production-session-isolation.rkt
+- Updated 5 moved module paths in test-arch-fitness.rkt
+- Added risk notes for llm/stream.rkt and tui/commands.rkt in dependency-policy.rktd
+- Fixed tool classification for save-conclusion/record-conclusion/set-task-state (permission-gate.rkt)
+- Updated 11 docs from version 0.83.9→0.86.3 for lint-doc-freshness
+- Widened make-branch-summary-entry contract for opaque entry-range (tree-entries.rkt)
+- Fixed classify-error test assertions (test-cli.rkt)
+- Fixed loop-state and event-bus args in test-effect-update-fsm-contract.rkt
+- Fixed deep-merge-hash test to expect contract violation (test-settings-config-validation.rkt)
+- Widened directive-recurse contracts to any/c (directive.rkt)
+- Fixed gui-state struct usage in test-gui-subscriber.rkt
+- Removed #:no-serialize event from all-known-event-types (event-json.rkt)
+- Updated turn.completed→stream.turn.completed in test-iteration-event-golden.rkt
+- Fixed enqueue-steering! string contract in test-iteration-steering.rkt
+
+**Source improvements:**
+- Added TODO tracking for any/c widenings in turn-model.rkt
+- Added doc comments for internal settings accessors
+- Updated dependency-policy.rktd with moved paths and new risk notes
 
 ## v0.86.3 (2026-06-03)
 

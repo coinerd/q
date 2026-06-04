@@ -34,8 +34,8 @@
 (provide q-settings
          q-settings?
          q-settings-merged
-         q-settings-global
-         q-settings-project
+         q-settings-global ;; Internal: for diagnostic/testing use only. Use q-settings-merged for access.
+         q-settings-project ;; Internal: for diagnostic/testing use only. Use q-settings-merged for access.
 
          ;; Loading — contracted
          (contract-out [load-settings
