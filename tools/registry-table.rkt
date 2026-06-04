@@ -441,12 +441,7 @@
                       'required
                       '("url")
                       'properties
-                      (hasheq 'url
-                              (hasheq 'type "string" 'description "URL to open")
-                              'viewport_width
-                              (hasheq 'type "integer" 'description "Viewport width in pixels")
-                              'viewport_height
-                              (hasheq 'type "integer" 'description "Viewport height in pixels")))
+                      (hasheq 'url (hasheq 'type "string" 'description "URL to open")))
               handle-browser-open
               "Use browser_open to open web pages. Always close sessions when done.")
    ;; browser_observe (LOW risk)
