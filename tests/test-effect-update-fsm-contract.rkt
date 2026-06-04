@@ -10,7 +10,9 @@
 (require rackunit
          "../agent/loop-phases.rkt"
          "../agent/loop-fsm.rkt"
+         (only-in "../agent/event-bus.rkt" make-event-bus)
          "../agent/effect-types.rkt"
+         (only-in "../agent/state.rkt" make-loop-state loop-state?)
          (only-in "../util/fsm/fsm.rkt" fsm-state? fsm-event?))
 
 ;; ---------------------------------------------------------------------------
@@ -19,7 +21,7 @@
 
 (test-case "phase-emit-start returns effect:update-fsm with FSM struct values"
   (define-values (ctx fx)
-    (phase-emit-start "session-1" 1 #f #f))
+    (phase-emit-start "session-1" "1" (make-loop-state "session-1" "1") (list)))
   (check-equal? (length fx) 2 "should return 2 effects")
   (define update-eff (cadr fx))
   (check-true (effect:update-fsm? update-eff)
@@ -31,7 +33,7 @@
 
 (test-case "phase-build-context returns effect:update-fsm with FSM struct values"
   (define-values (raw-msgs fx)
-    (phase-build-context #f "session-1" 1 #f '()))
+    (phase-build-context (make-event-bus) "session-1" "1" (make-loop-state "session-1" "1") '()))
   (check-equal? (length fx) 2 "should return 2 effects")
   (define update-eff (cadr fx))
   (check-true (effect:update-fsm? update-eff)
@@ -46,3 +48,7 @@
   (check-true (effect:update-fsm? eff))
   (check-true (fsm-state? (effect:update-fsm-from-state eff)))
   (check-true (fsm-event? (effect:update-fsm-event eff))))
+
+(module+ test
+  (require rackunit/text-ui)
+  (run-tests (test-suite "effect-update-fsm-contract")))

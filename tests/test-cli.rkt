@@ -335,53 +335,53 @@
       (define e (exn:fail "hash-ref: contract violation" (current-continuation-marks)))
       (define result (classify-error e))
       (check-not-false result)
-      (check-true (string-contains? (car result) "missing")))
+      (check-true (string-contains? (cadr result) "contract")))
     (test-case "read-json"
       (define e (exn:fail "read-json: expected" (current-continuation-marks)))
       (define result (classify-error e))
       (check-not-false result)
-      (check-true (string-contains? (car result) "JSON")))
+      (check-true (string-contains? (cadr result) "JSON")))
     (test-case "connection refused"
       (define e (exn:fail "connection refused" (current-continuation-marks)))
       (define result (classify-error e))
       (check-not-false result)
-      (check-true (string-contains? (car result) "connect")))
+      (check-true (string-contains? (cadr result) "connect")))
     (test-case "SSL"
       (define e
         (exn:fail "SSL handshake failed: certificate verify failed" (current-continuation-marks)))
       (define result (classify-error e))
       (check-not-false result)
-      (check-true (string-contains? (car result) "SSL")))
+      (check-true (string-contains? (cadr result) "SSL")))
     (test-case "file not found"
       (define e (exn:fail "file not found: /tmp/missing.rkt" (current-continuation-marks)))
       (define result (classify-error e))
       (check-not-false result)
-      (check-true (string-contains? (car result) "file")))
+      (check-true (string-contains? (cadr result) "file")))
     (test-case "permission denied"
       (define e (exn:fail "permission denied: /root/secret" (current-continuation-marks)))
       (define result (classify-error e))
       (check-not-false result)
-      (check-true (string-contains? (car result) "Permission")))
+      (check-true (string-contains? (cadr result) "Permission")))
     (test-case "unauthorized/401"
       (define e (exn:fail "HTTP 401 unauthorized" (current-continuation-marks)))
       (define result (classify-error e))
       (check-not-false result)
-      (check-true (string-contains? (car result) "authentication")))
+      (check-true (string-contains? (cadr result) "authentication")))
     (test-case "API key"
       (define e (exn:fail "API key is invalid" (current-continuation-marks)))
       (define result (classify-error e))
       (check-not-false result)
-      (check-true (string-contains? (car result) "authentication")))
+      (check-true (string-contains? (cadr result) "authentication")))
     (test-case "403"
       (define e (exn:fail "HTTP 403 forbidden" (current-continuation-marks)))
       (define result (classify-error e))
       (check-not-false result)
-      (check-true (string-contains? (car result) "authentication")))
+      (check-true (string-contains? (cadr result) "authentication")))
     (test-case "rate limit"
       (define e (exn:fail "rate.limit exceeded" (current-continuation-marks)))
       (define result (classify-error e))
       (check-not-false result)
-      (check-true (string-contains? (car result) "rate limit")))
+      (check-true (string-contains? (cadr result) "rate limit")))
     (test-case "unknown error"
       (define e (exn:fail "something completely unexpected" (current-continuation-marks)))
       (check-false (classify-error e)))

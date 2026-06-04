@@ -75,11 +75,14 @@
   (check-true (hash? (q-settings-merged settings)))
   (delete-file tmp))
 
-(test-case "F3: deep-merge-hash with non-hash left returns right"
-  (check-equal? (deep-merge-hash "not-a-hash" (hash 'a 1)) (hash 'a 1)))
+(test-case "F3: deep-merge-hash rejects non-hash left (contract enforced)"
+  (check-exn exn:fail:contract?
+             (lambda () (deep-merge-hash "not-a-hash" (hash 'a 1)))))
 
-(test-case "F3: deep-merge-hash with non-hash right returns left"
-  (check-equal? (deep-merge-hash (hash 'a 1) "not-a-hash") (hash 'a 1)))
+(test-case "F3: deep-merge-hash rejects non-hash right (contract enforced)"
+  (check-exn exn:fail:contract?
+             (lambda () (deep-merge-hash (hash 'a 1) "not-a-hash"))))
 
-(test-case "F3: deep-merge-hash with both non-hash returns empty"
-  (check-equal? (deep-merge-hash 42 "string") (hash)))
+(test-case "F3: deep-merge-hash rejects both non-hash (contract enforced)"
+  (check-exn exn:fail:contract?
+             (lambda () (deep-merge-hash 42 "string"))))
