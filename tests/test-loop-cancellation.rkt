@@ -66,7 +66,7 @@
       (check-not-false (member "turn.cancelled" evt-names)
                        "turn.cancelled emitted after cancellation during stream")
       ;; turn.completed should still be emitted
-      (check-not-false (member "turn.completed" evt-names) "turn.completed emitted")
+      (check-not-false (member "stream.turn.completed" evt-names) "turn.completed emitted")
       ;; Result should be cancelled
       (check-equal? (loop-result-termination-reason result) 'cancelled "result status is cancelled"))
 
