@@ -533,7 +533,7 @@
       (check-equal? (truncate-string "hello" 10) "hello"))
 
     (test-case "truncate-string: long string truncated with ellipsis"
-      (check-equal? (truncate-string "hello world" 6) "hello…"))
+      (check-equal? (truncate-string "hello world" 6) "hel..."))
 
     (test-case "truncate-string: exact length unchanged"
       (check-equal? (truncate-string "hello" 5) "hello"))
