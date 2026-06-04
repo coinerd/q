@@ -8,7 +8,7 @@
 (require racket/list
          racket/string
          "component.rkt"
-         "state.rkt"
+         (except-in "state.rkt" truncate-string)
          (only-in "../util/shared.rkt" take-at-most)
          (only-in "../util/string-helpers.rkt" truncate-string))
 

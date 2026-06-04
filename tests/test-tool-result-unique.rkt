@@ -8,7 +8,7 @@
 
 (require rackunit
          "../tools/tool.rkt"
-         (except-in "../util/message/protocol-types.rkt" make-tool-call make-tool-result))
+         (except-in "../util/message/protocol-types.rkt" make-tool-call make-tool-result tool?))
 
 ;; ── The struct constructor from tools/tool should produce values
 ;;    accepted by the predicate imported from agent/types ──
