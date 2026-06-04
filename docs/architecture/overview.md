@@ -2,7 +2,7 @@
 
 ## Version
 
-v0.86.5
+v0.93.2
 
 ## Native TUI Stack
 
@@ -94,6 +94,11 @@ Key optimizations:
 │             TOOLS                             │
 │  tools/ — builtins, registry, scheduler       │
 ├─────────────────────────────────────────────┤
+│            BROWSER                            │
+│  browser/ — types, adapter, policy, service,  │
+│  session, settings, audit, workflow, events   │
+│  sidecars/ — Playwright integration           │
+├─────────────────────────────────────────────┤
 │            FOUNDATION                         │
 │  util/ — types, JSONL, events, errors         │
 ├─────────────────────────────────────────────┤
@@ -110,6 +115,7 @@ Key optimizations:
 | LLM (llm/) | ~10 | `provider.rkt`, `openai-compatible.rkt`, `anthropic.rkt` |
 | Agent Core (agent/) | ~15 | `loop.rkt`, `event-bus.rkt`, `event-structs/` |
 | Tools (tools/) | ~15 | `tool.rkt`, `registry-defaults.rkt`, `builtins/` |
+| Browser (browser/) | ~11 | `types.rkt`, `adapter.rkt`, `policy.rkt`, `service.rkt`, `workflow.rkt` |
 | Runtime (runtime/) | ~45 | `iteration.rkt`, `agent-session.rkt`, `session-lifecycle.rkt` |
 | Extensions (extensions/) | ~30 | `gsd/`, `github/`, `racket-tooling/` |
 | Interfaces (interfaces/, cli/, tui/) | ~45 | `sdk-core.rkt`, `args.rkt`, `renderer.rkt`, `tui/keybindings/` |
@@ -132,7 +138,7 @@ See `docs/architecture/dependency-policy.rktd` for layering rules and known viol
 
 Two tiers:
 1. **Raw events**: `make-event` + `emit-event!` (legacy, stable for interop)
-2. **Typed events**: 27 structs in `agent/event-structs/` + `emit-typed-event!` (introduced v0.33.7, stable)
+2. **Typed events**: 37 structs in `agent/event-structs/` (incl. 10 browser events) + `emit-typed-event!` (introduced v0.33.7, stable)
 
 ## Typed Racket Modules
 
