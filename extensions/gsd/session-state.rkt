@@ -239,6 +239,9 @@
 
 ;; Struct exports (plain)
 (provide gsd-session-ctx?
+         ;; Internal accessors (for testing)
+         gsd-session-ctx-state-box
+         gsd-session-ctx-sem
          ;; Global default context (plain)
          gsd-default-ctx
          current-gsd-ctx

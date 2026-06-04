@@ -34,6 +34,8 @@
 (provide q-settings
          q-settings?
          q-settings-merged
+         q-settings-global
+         q-settings-project
 
          ;; Loading — contracted
          (contract-out [load-settings
