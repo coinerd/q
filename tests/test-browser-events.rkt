@@ -74,3 +74,24 @@
                "browser.sidecar.stopped"
                "browser.screenshot.captured")])
     (check-not-false (member evt known) (format "~a not in registry" evt))))
+
+;; ---------------------------------------------------------------------------
+;; F10: browser events accessible via event-structs facade
+;; ---------------------------------------------------------------------------
+
+(require "../agent/event-structs.rkt")
+
+(test-case "browser events accessible via event-structs facade"
+  (define e (make-browser-session-opened-event #:session-id "s1" #:turn-id "t1"))
+  (check-true (browser-session-opened-event? e))
+  (check-equal? (typed-event-type e) "browser.session.opened"))
+
+(test-case "browser action events via facade"
+  (define e (make-browser-action-started-event #:session-id "s1" #:turn-id "t1" #:action-type "click"))
+  (check-true (browser-action-started-event? e))
+  (check-equal? (browser-action-started-event-action-type e) "click"))
+
+(test-case "browser screenshot event via facade"
+  (define e (make-browser-screenshot-captured-event #:session-id "s1" #:turn-id "t1" #:size-bytes 999))
+  (check-true (browser-screenshot-captured-event? e))
+  (check-equal? (browser-screenshot-captured-event-size-bytes e) 999))
