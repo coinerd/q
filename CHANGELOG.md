@@ -1,4 +1,36 @@
 
+## v0.93.2 — Browser Feature Audit Closure (2026-06-03)
+
+### Security Fixes (Critical)
+- **F1**: All 10 browser tools blocked in safe-mode
+- **F2**: Absolute scheme deny-list (file://, data://, javascript://)
+- **F3**: IPv6 address classification (blocks loopback, link-local, ULA, mapped)
+
+### Architecture Fixes (High)
+- **F4**: Service layer dispatches through adapter interface
+- **F5**: load-browser-settings reads from config
+- **F6**: Explicit browser tool risk tiers in permission gate
+- **F7**: browser-service field on exec-context
+- **F8**: Browser lifecycle wired into agent-session
+
+### Completeness Fixes (Medium)
+- **F9**: emit-browser-event! publishes real events to bus
+- **F10**: Browser events re-exported from event-structs facade
+- **F11**: Heartbeat thread in Playwright adapter (30s ping)
+- **F17**: Removed unused imports from audit.rkt
+
+### Quality Fixes (Low)
+- **F15**: Removed dead viewport schema entries from browser_open
+- **F16**: Added browser-url-blocked-error? and browser-adapter-error? predicates
+
+### Documentation
+- **F13**: Updated overview.md to v0.93.2 with browser/ layer
+- **F14**: Updated README to 27 tools (17 core + 10 browser)
+
+### Tests
+- 49 new tests across 6 new test files + 8 existing files updated
+- Total browser tests: 282+
+
 ## v0.93.1 (2026-06-03)
 
 ### Final Audit Closure (Phase 7)
