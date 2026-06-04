@@ -1,4 +1,14 @@
 
+## v0.90.2 (2026-06-03)
+
+### Browser Tool Registry Integration (Phase 4)
+
+- Add `tools/builtins/browser-tools.rkt`: 9 tool handlers (browser_open, browser_observe, browser_click, browser_type, browser_press, browser_extract, browser_screenshot, browser_scroll, browser_close)
+- Register all 9 browser tools in `tools/registry-table.rkt` with JSON schemas and prompt guidelines
+- Risk classification: click/type/press = HIGH risk (requires approval), open = MEDIUM, observe/extract/screenshot/scroll/close = LOW
+- 16 new tool handler tests
+- **217 total browser tests**
+
 ## v0.89.3 (2026-06-03)
 
 ### Browser Secure Service + Audit + Mock Adapter (Phase 3)
