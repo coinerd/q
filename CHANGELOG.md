@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.86.1 (2026-06-03)
+
+### Contract & Structural Drift Remediation
+
+**W0 (#6864): cli-config arity fix (9 calls)**
+- Updated cli-config calls from 16→17 args (context-profile field) in 2 test files
+
+**W1+W2 (#6865, #6866): Contract drift and event rename fixes**
+- turn-model.rkt: widen payload contracts from hash? to any/c
+- http-helpers.rkt: widen translate-stop-reason contract to any/c
+- context-policy.rkt: fix estimate-message-tokens-cached string estimator
+- retry-policy.rkt: relax dict-ref TR boundary to avoid opaque-value error
+- tool-coordinator.rkt: guard provider string check before make-minimal-settings
+- test-golden-flows.rkt: accept stream.turn.completed alongside turn.completed
+- test-iteration.rkt: fix enqueue-steering! to pass strings not messages
+
+**W3+W4 (#6867, #6868): Structural and stale test fixes**
+- Fixed 10 test files: preamble changes, struct arity, queue API, event types
+- Updated architecture tests: file paths, command list, thresholds
+
 ## v0.86.0 (2026-06-03)
 
 ### Test Foundation: Module Paths, Exports, False Positives
