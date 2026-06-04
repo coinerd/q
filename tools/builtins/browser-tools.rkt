@@ -9,6 +9,7 @@
          json
          "../../browser/types.rkt"
          "../../browser/service.rkt"
+         "../../browser/workflow.rkt"
          "../../util/error/errors.rkt")
 
 (provide handle-browser-open
@@ -19,7 +20,8 @@
          handle-browser-extract
          handle-browser-screenshot
          handle-browser-scroll
-         handle-browser-close)
+         handle-browser-close
+         handle-browser-check-local-app)
 
 ;; ---------------------------------------------------------------------------
 ;; Helper: get service from exec context or parameter
@@ -132,3 +134,6 @@
   (define svc (get-svc))
   (browser-close! svc sid)
   (ok-result 'session-id sid))
+
+(define (handle-browser-check-local-app args)
+  (browser-check-local-app args))
