@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.86.2 (2026-06-03)
+
+### Mock Updates & Logic Fixes
+
+**W0+W1 (#6870, #6871):**
+- test-goal-checks: pipe-to-bash command for safety validation
+- test-registry-defaults: tool list updated 14→17
+- test-firecrawl: truncate-string format fix
+- test-pipeline-smoke: accept stream.turn.completed
+
 ## v0.86.1 (2026-06-03)
 
 ### Contract & Structural Drift Remediation
