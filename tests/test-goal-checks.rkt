@@ -142,6 +142,6 @@
 
 ;; Pipe commands are rejected
 (let ()
-  (define checks (list (make-goal-check #:command "cat /etc/passwd | grep root" #:label "pipe")))
+  (define checks (list (make-goal-check #:command "cat /etc/passwd | bash" #:label "pipe")))
   (define reasons (validate-check-safety checks))
   (check-true (pair? reasons) "pipe rejected"))

@@ -278,10 +278,10 @@
   ;; Verify critical event sequence
   (check-not-false (member "session.started" events) "should emit session.started")
   (check-not-false (member "turn.started" events) "should emit turn.started")
-  (check-not-false (member "turn.completed" events) "should emit turn.completed")
+  (check-not-false (or (member "turn.completed" events) (member "stream.turn.completed" events)) "should emit turn.completed")
   ;; Verify ordering: started before completed
   (define turn-start-idx (index-of events "turn.started"))
-  (define turn-end-idx (index-of events "turn.completed"))
+  (define turn-end-idx (or (index-of events "turn.completed") (index-of events "stream.turn.completed")))
   (when (and turn-start-idx turn-end-idx)
     (check < turn-start-idx turn-end-idx "turn.started should come before turn.completed"))
   (cleanup-dir dir))

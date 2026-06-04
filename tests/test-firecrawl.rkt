@@ -94,12 +94,12 @@
     (test-case "truncate-string shortens long strings"
       (define long-str (make-string 10000 #\x))
       (define result (truncate-string long-str 100))
-      (check-true (string-contains? result "truncated"))
+      (check-true (string-contains? result "..."))
       (check-true (< (string-length result) 200)))
 
     (test-case "truncate-string respects custom threshold"
       (define str (make-string 100 #\x))
-      (check-equal? (truncate-string str 50) (string-append (make-string 50 #\x) "\n...(truncated)"))
+      (check-equal? (truncate-string str 50) (string-append (substring (make-string 100 #\x) 0 47) "..."))
       (check-equal? (truncate-string str 200) str))
 
     (test-case "truncate-string leaves short strings unchanged"

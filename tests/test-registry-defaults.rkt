@@ -11,25 +11,29 @@
 ;; register-default-tools! — registers all tools
 ;; ============================================================
 
-(test-case "register-default-tools! registers all 14 built-in tools"
+(test-case "register-default-tools! registers all 17 built-in tools"
   (define reg (make-tool-registry))
   (register-default-tools! reg)
   (define names (sort (tool-names reg) string<?))
   (check equal?
          names
-         (sort '("read" "write"
-                        "edit"
-                        "bash"
-                        "grep"
-                        "find"
-                        "ls"
+         (sort '("bash"
                         "date"
                         "delete-lines"
+                        "edit"
+                        "find"
                         "firecrawl"
+                        "grep"
+                        "ls"
+                        "read"
+                        "record_conclusion"
+                        "save-conclusion"
+                        "session_recall"
+                        "set-task-state"
+                        "skill-route"
                         "spawn-subagent"
                         "spawn-subagents"
-                        "session_recall"
-                        "skill-route")
+                        "write")
                string<?)))
 
 (test-case "each registered tool has correct name"
