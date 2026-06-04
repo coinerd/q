@@ -57,7 +57,7 @@ q is provider-agnostic: it ships with adapters for **OpenAI**, **Anthropic**, an
 - 🔌 **Provider-agnostic** — swap LLM providers without changing your workflow
 - 🧩 **Extensible** — hook system for custom behavior at every lifecycle point
 - 🖥️ **Multiple interfaces** — CLI, TUI (terminal UI), JSON mode, RPC, SDK
-- 🔧 **17 built-in tools** — read, write, edit, delete-lines, bash, grep, find, ls, date, firecrawl, spawn-subagent, spawn-subagents, session-recall, skill-router, record-conclusion, save-conclusion, set-task-state
+- 🔧 **27 built-in tools** (17 core + 10 browser) — read, write, edit, delete-lines, bash, grep, find, ls, date, firecrawl, spawn-subagent, spawn-subagents, session-recall, skill-router, record-conclusion, save-conclusion, set-task-state, browser_open, browser_close, browser_observe, browser_click, browser_type, browser_press, browser_extract, browser_screenshot, browser_scroll, browser_check_local_app
 - 🌿 **Session branching** — fork conversations, explore alternatives, merge back
 - 🏗️ **5-layer architecture** — clean separation from LLM to interfaces
 
@@ -67,7 +67,7 @@ q is provider-agnostic: it ships with adapters for **OpenAI**, **Anthropic**, an
 ┌─────────────────────────────────┐
 │          Interfaces             │  CLI · TUI · JSON · RPC · SDK
 ├─────────────────────────────────┤
-│       Tools & Extensions        │  17 built-in tools + hook system
+│       Tools & Extensions        │  27 built-in tools + hook system
 ├─────────────────────────────────┤
 │          Runtime                │  Session · Resources · Compaction
 ├─────────────────────────────────┤
@@ -276,9 +276,11 @@ q/
 ├── sandbox/        Subprocess management, execution limits
 ├── skills/         Skill loading, context files, prompt templates
 ├── tests/          Full test suite (782 files)
-├── tools/          Tool registry, scheduler, 17 built-in tools
+├── tools/          Tool registry, scheduler, 27 built-in tools
 ├── tui/            Terminal UI: rendering, input, state, clipboard
 ├── util/           JSONL, ANSI, markdown, IDs, cancellation, paths
+├── browser/        Browser types, adapter, policy, service, audit
+├── sidecars/       Playwright sidecar integration
 └── wiring/         Run modes: interactive, JSON-RPC, mode dispatch
 ```
 

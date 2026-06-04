@@ -192,3 +192,27 @@
               (handle-browser-close (hasheq 'session-id sid))
               (check-exn q-browser-error?
                          (lambda () (handle-browser-observe (hasheq 'session-id sid)))))))
+
+(test-case "browser_open: missing URL raises error"
+  (with-svc (lambda ()
+              (check-exn exn:fail?
+                         (lambda ()
+                           (handle-browser-open (hasheq 'session-id "s1")))))))
+
+(test-case "browser_observe: null session-id raises error"
+  (with-svc (lambda ()
+              (check-exn exn:fail?
+                         (lambda ()
+                           (handle-browser-observe (hasheq 'session-id #f)))))))
+
+(test-case "browser_check_local_app: returns status"
+  (with-svc (lambda ()
+              (define result (handle-browser-check-local-app (hasheq 'url "http://localhost:3000")))
+              (check-true (hash? result)))))
+
+(test-case "browser_screenshot: with full-page option"
+  (with-svc (lambda ()
+              (define sid (hash-ref (open-session) 'session-id))
+              (define result (handle-browser-screenshot
+                              (hasheq 'session-id sid 'full-page #t)))
+              (check-equal? (hash-ref result 'status) "ok"))))
