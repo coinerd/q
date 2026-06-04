@@ -1,4 +1,17 @@
 
+## v0.92.2 (2026-06-03)
+
+### Workflow Tool + Documentation (Phase 6)
+
+- Add `browser/workflow.rkt`: `browser_check_local_app` composite tool
+  - Open URL → observe → screenshot → close → return composite result
+  - Returns: url, title, text, console_errors, loaded_successfully, load_time_ms, screenshot
+- Register `browser_check_local_app` as MEDIUM risk in tool registry
+- Add `docs/browser-guide.md`: feature overview, architecture, tool reference, security model
+- Add `docs/adr/0020-browser-feature-architecture.md`: sidecar rationale, JSONL protocol, adapter contract
+- 15 workflow + integration tests
+- **240 total browser tests**
+
 ## v0.91.3 (2026-06-03)
 
 ### Playwright Sidecar + Real Adapter (Phase 5)
