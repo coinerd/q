@@ -55,6 +55,17 @@
          credential-error?
          credential-error-backend
          credential-error-details
+         ;; Branch 5: Browser
+         q-browser-error
+         q-browser-error?
+         q-browser-error-category
+         browser-adapter-unavailable?
+         browser-page-load-failed?
+         browser-action-failed?
+         browser-navigation-blocked?
+         browser-screenshot-failed?
+         browser-sidecar-crashed?
+         browser-session-expired?
          ;; Category-based predicates
          llm-timeout?
          llm-rate-limit?
@@ -71,7 +82,8 @@
           [raise-extension-error
            (->* (string? (or/c string? symbol?) (or/c string? symbol?)) (hash?) exn:fail?)]
           [raise-policy-error (->* (string? string? string?) (hash?) exn:fail?)]
-          [raise-credential-error (->* (string? string?) (string? hash?) exn:fail?)])
+          [raise-credential-error (->* (string? string?) (string? hash?) exn:fail?)]
+          [raise-browser-error (->* (string? symbol?) (hash?) exn:fail?)])
          ;; Quality macros (Q06/Q07)
          with-logged-catch)
 
@@ -105,6 +117,12 @@
 ;; Legacy session-error (backward-compat).
 (struct session-error q-session-error (session-id) #:transparent)
 
+;; ── Branch 5: Browser errors ────────────────────────────────
+;; Browser subsystem errors (adapter-unavailable, page-load-failed,
+;;   action-failed, navigation-blocked, screenshot-failed,
+;;   sidecar-crashed, session-expired).
+(struct q-browser-error q-error (category) #:transparent)
+
 ;; ── Other error types (flat under q-error) ──────────────────
 ;; TUI rendering/input errors (recoverable, don't crash session)
 (struct ui-error q-error (component) #:transparent)
@@ -114,6 +132,28 @@
 
 ;; Credential/authentication errors (OAuth, API keys, backend auth)
 (struct credential-error q-error (backend details) #:transparent)
+
+;; Browser category predicates
+(define (browser-adapter-unavailable? e)
+  (and (q-browser-error? e) (eq? (q-browser-error-category e) 'adapter-unavailable)))
+
+(define (browser-page-load-failed? e)
+  (and (q-browser-error? e) (eq? (q-browser-error-category e) 'page-load-failed)))
+
+(define (browser-action-failed? e)
+  (and (q-browser-error? e) (eq? (q-browser-error-category e) 'action-failed)))
+
+(define (browser-navigation-blocked? e)
+  (and (q-browser-error? e) (eq? (q-browser-error-category e) 'navigation-blocked)))
+
+(define (browser-screenshot-failed? e)
+  (and (q-browser-error? e) (eq? (q-browser-error-category e) 'screenshot-failed)))
+
+(define (browser-sidecar-crashed? e)
+  (and (q-browser-error? e) (eq? (q-browser-error-category e) 'sidecar-crashed)))
+
+(define (browser-session-expired? e)
+  (and (q-browser-error? e) (eq? (q-browser-error-category e) 'session-expired)))
 
 ;; Convenience constructors
 (define (raise-q-error message [context (hash)])
@@ -141,6 +181,9 @@
 
 (define (raise-credential-error message backend [details #f] [context (hash)])
   (raise (credential-error message (current-continuation-marks) context backend details)))
+
+(define (raise-browser-error message category [context (hash)])
+  (raise (q-browser-error message (current-continuation-marks) context category)))
 
 ;; ============================================================
 ;; Category-based predicates for convenient error matching
