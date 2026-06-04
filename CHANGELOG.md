@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.86.0 (2026-06-03)
+
+### Test Foundation: Module Paths, Exports, False Positives
+
+**W0 (#6859): Module path fixes (12 files)**
+- Updated all stale require paths from v0.83-0.85 restructuring
+- util/protocol-types.rkt → util/message/protocol-types.rkt (6 files)
+- runtime/session-config.rkt → runtime/session/session-config.rkt
+- runtime/iteration/ → agent/iteration/ (2 files)
+- runtime/context-assembly.rkt → runtime/context/context-assembly.rkt
+- util/event.rkt → util/event/event.rkt
+
+**W1 (#6860): Duplicate identifier fixes (3 files)**
+- Fixed tool? import conflicts in test-tool-coordinator-phases, test-tool-result-unique
+- Fixed truncate-string conflict in tui/builtins.rkt
+
+**W2 (#6861): Missing export fixes (2 source files)**
+- Exported gsd-session-ctx-state-box, gsd-session-ctx-sem from session-state.rkt
+- Exported q-settings-global, q-settings-project from settings.rkt
+
+**W3 (#6862): False positive investigation (5 files)**
+- Confirmed: all 5 files pass individually or hang under raco test (no failure)
+
 ## v0.85.3 (2026-06-03)
 
 ### God Struct Decomposition
