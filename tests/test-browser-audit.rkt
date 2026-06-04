@@ -6,7 +6,9 @@
          racket/file
          json
          "../browser/audit.rkt"
-         "../browser/types.rkt")
+         "../browser/types.rkt"
+         "../agent/event-bus.rkt"
+         "../util/event/event.rkt")
 
 (define (make-temp-dir)
   (define dir (build-path (find-system-path 'temp-dir)
@@ -57,3 +59,22 @@
 
 (test-case "emit-browser-event! with #f bus does nothing"
   (check-not-exn (lambda () (emit-browser-event! #f 'test "s1" (hash)))))
+
+(test-case "emit-browser-event! publishes to event bus"
+  (define bus (make-event-bus))
+  (define received (box #f))
+  (subscribe! bus
+               (lambda (evt)
+                 (set-box! received evt)))
+  (emit-browser-event! bus 'test.event "s1" (hasheq 'key 'value))
+  (check-not-false (unbox received)
+                   "event should have been received by subscriber"))
+
+(test-case "emit-browser-event! with symbol event-type converts to string"
+  (define bus (make-event-bus))
+  (define received-topic (box #f))
+  (subscribe! bus
+               (lambda (evt)
+                 (set-box! received-topic (event-ev evt))))
+  (emit-browser-event! bus 'browser.action.started "s1" (hasheq))
+  (check-equal? (unbox received-topic) "browser.action.started"))

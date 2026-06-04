@@ -2,9 +2,10 @@
 
 ;; browser/audit.rkt — JSONL audit trail for all browser actions
 
-(require racket/date
-         json
-         "types.rkt")
+(require json
+         "types.rkt"
+         (only-in "../agent/event-bus.rkt" event-bus?)
+         (only-in "../agent/event-emitter.rkt" emit-session-event!))
 
 (provide
  log-browser-action!
@@ -41,5 +42,10 @@
     [else (format "~a" result)]))
 
 (define (emit-browser-event! bus event-type session-id payload)
-  (when bus
-    (void)))
+  (when (and bus (event-bus? bus))
+    (emit-session-event! bus
+                         session-id
+                         (if (symbol? event-type)
+                             (symbol->string event-type)
+                             event-type)
+                         (if (hash? payload) payload (hasheq)))))

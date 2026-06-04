@@ -39,7 +39,8 @@
          pending-box ; (hash/c string? async-channel?) — pending responses
          [reader-thread #:mutable] ; thread?
          custodian ; custodian?
-         [config #:mutable]) ; sidecar config
+         [config #:mutable] ; sidecar config
+         [heartbeat-thread #:mutable]) ; (or/c thread? #f) — F11 heartbeat
   #:transparent)
 
 ;; ---------------------------------------------------------------------------
@@ -77,7 +78,8 @@
                                 pending
                                 #f
                                 cust
-                                (hasheq 'timeout-ms timeout-ms)))
+                                (hasheq 'timeout-ms timeout-ms)
+                                #f)) ; heartbeat-thread initially #f
 
     ;; Reader thread: reads JSONL lines from stdout, routes to pending channels
     (define reader
@@ -109,9 +111,38 @@
               (loop)])))))
 
     (set-playwright-sidecar-state-reader-thread! state reader)
+
+    ;; F11: Start heartbeat thread
+    (start-heartbeat! state)
+
     state))
 
+;; ---------------------------------------------------------------------------
+;; F11: Heartbeat thread — sends ping every 30s, kills custodian on failure
+;; ---------------------------------------------------------------------------
+
+(define heartbeat-interval-secs 30)
+
+(define (start-heartbeat! state)
+  (define cust (playwright-sidecar-state-custodian state))
+  (define ht
+    (thread (lambda ()
+              (let loop ()
+                (sleep heartbeat-interval-secs)
+                (with-handlers ([exn:fail?
+                                 (lambda (e)
+                                   (log-warning "Browser sidecar heartbeat failed, killing custodian")
+                                   (custodian-shutdown-all cust))])
+                  (send-command! state "ping" (hasheq) #:timeout-ms 5000))
+                (loop)))))
+  (set-playwright-sidecar-state-heartbeat-thread! state ht))
+
 (define (shutdown-sidecar! state #:timeout-ms [timeout-ms 5000])
+  ;; F11: Kill heartbeat thread first
+  (define ht (playwright-sidecar-state-heartbeat-thread state))
+  (when (and ht (thread-running? ht))
+    (kill-thread ht)
+    (set-playwright-sidecar-state-heartbeat-thread! state #f))
   (define proc (playwright-sidecar-state-process state))
   (define cust (playwright-sidecar-state-custodian state))
   (define in (playwright-sidecar-state-stdout-port state))
