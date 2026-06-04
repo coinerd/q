@@ -162,7 +162,7 @@
 ;; (These are provided by other modules and re-exported through state.rkt)
 ;; Forward-declared predicates — actual structs defined in render/message-layout.rkt
 ;; and component.rkt. These are (-> any/c boolean?) predicates compatible with contracts.
-(define styled-line? (lambda (v) (and (list? v) (andmap pair? v))))
+(define styled-line? (lambda (v) (or (and (list? v) (andmap pair? v)) (struct? v))))
 ;; AU-5 (v0.72.8): q-component? is intentionally procedure? here because the real
 ;; q-component struct is in component.rkt which has a circular dependency via
 ;; state.rkt → render.rkt → component.rkt → state-types.rkt.
