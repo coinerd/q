@@ -37,10 +37,10 @@
    (define cfg (parse-cli-args #("--version")))
    (check-equal? (mode-for-config cfg) 'version))
  (test-case "mode-for-config: doctor command → 'doctor"
-   (define cfg (cli-config 'doctor #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f))
+   (define cfg (cli-config 'doctor #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f #f))
    (check-equal? (mode-for-config cfg) 'doctor))
  (test-case "mode-for-config: sessions command → 'sessions"
-   (define cfg (cli-config 'sessions #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f))
+   (define cfg (cli-config 'sessions #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f #f))
    (check-equal? (mode-for-config cfg) 'sessions))
  (test-case "mode-for-config: chat command → interactive mode"
    (define cfg (parse-cli-args #()))
@@ -111,10 +111,10 @@
  ;; ============================================================
  (test-case "mode-for-config: unknown command falls back to mode from config"
    ;; Create a config with an arbitrary command and explicit mode
-   (define cfg (cli-config 'custom #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f))
+   (define cfg (cli-config 'custom #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f #f))
    (check-equal? (mode-for-config cfg) 'interactive))
  (test-case "mode-for-config: custom command with json mode"
-   (define cfg (cli-config 'custom #f #f #f 'json #f #f #f 10 #f '() #f #f '() #f #f))
+   (define cfg (cli-config 'custom #f #f #f 'json #f #f #f 10 #f '() #f #f '() #f #f #f))
    (check-equal? (mode-for-config cfg) 'json))
  ;; ============================================================
  ;; Argument parsing integration: mode-for-config with various CLI args
