@@ -1,4 +1,20 @@
 
+## v0.91.3 (2026-06-03)
+
+### Playwright Sidecar + Real Adapter (Phase 5)
+
+- Add `sidecars/playwright/`: Node.js/Playwright sidecar with JSONL stdin/stdout protocol
+  - 9 command handlers: navigate, click, type, press, scroll, extract, screenshot, ping, close
+  - Page state extraction, screenshot capture with size limits, health check ping/pong
+  - Error mapping: Playwright errors → q-browser-error categories (timeout, adapter-error, sidecar-crash, policy-violation)
+  - Node.js unit tests for command validation
+- Add `browser/adapters/playwright-sidecar.rkt`: Racket adapter for sidecar process lifecycle
+  - JSONL IPC with UUID-based request/response and timeout
+  - Zombie prevention via custodian management
+  - Full browser-adapter interface implementation
+- 4 new Racket unit tests + 3 integration tests (skipped without Node.js)
+- **225 total browser tests**
+
 ## v0.90.2 (2026-06-03)
 
 ### Browser Tool Registry Integration (Phase 4)
