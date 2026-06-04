@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.86.3 (2026-06-03)
+
+### Performance & Parallel Safety
+
+**W0 (#6873): Parallel-safety fixes**
+- Replaced fixed /tmp/test* paths with unique paths using (random 1000000)
+- 6 files fixed: test-iteration, test-iteration-integration, test-iteration-working-set, test-iteration-transitions, test-tool-coordinator-duration, test-arch-01-regression
+
 ## v0.86.2 (2026-06-03)
 
 ### Mock Updates & Logic Fixes
