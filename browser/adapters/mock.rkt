@@ -7,7 +7,6 @@
 
 (require racket/match
          "../types.rkt"
-         "../../agent/event-structs/base.rkt"
          "../../util/error/errors.rkt")
 
 (provide
