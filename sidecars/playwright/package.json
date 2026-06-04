@@ -1,0 +1,16 @@
+{
+  "name": "q-playwright-sidecar",
+  "version": "1.0.0",
+  "description": "Playwright browser automation sidecar for q agent — JSONL over stdin/stdout",
+  "main": "q-playwright-sidecar.js",
+  "scripts": {
+    "start": "node q-playwright-sidecar.js",
+    "test": "node --test test/commands.test.js test/page-state.test.js test/screenshot.test.js"
+  },
+  "dependencies": {
+    "playwright": "^1.50.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
