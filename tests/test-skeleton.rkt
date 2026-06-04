@@ -16,18 +16,18 @@
                "llm/stream.rkt"
                "llm/token-budget.rkt"
                ;; agent/
-               "util/protocol-types.rkt"
+               "util/message/protocol-types.rkt"
                "agent/state.rkt"
                "agent/event-bus.rkt"
                "agent/queue.rkt"
                "agent/loop.rkt"
                ;; runtime/
                "runtime/agent-session.rkt"
-               "runtime/session-store.rkt"
+               "runtime/session/session-store.rkt"
                "runtime/session-index.rkt"
-               "runtime/compactor.rkt"
+               "runtime/compaction/compactor.rkt"
                "skills/types.rkt"
-               "runtime/model-registry.rkt"
+               "runtime/provider/model-registry.rkt"
                "runtime/auth-store.rkt"
                "runtime/settings.rkt"
                ;; tools/

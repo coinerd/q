@@ -245,7 +245,7 @@
 ;; ============================================================
 
 (require racket/file
-         "../runtime/session-store.rkt")
+         "../runtime/session/session-store.rkt")
 
 (define test-goal-dir (make-temporary-file "goal-test-~a" 'directory))
 

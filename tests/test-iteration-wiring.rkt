@@ -32,7 +32,7 @@
 
 (test-case "iteration-ctx struct is used to construct decision context"
   (define content
-    (call-with-input-file (build-path q-root "runtime" "iteration" "main-loop.rkt") port->string))
+    (call-with-input-file (build-path q-root "agent" "iteration" "main-loop.rkt") port->string))
   (define ctx-usage (length (regexp-match* #rx"[(]iteration-ctx " content)))
   ;; At least 1 usage in main-loop body (beyond the struct definition)
   (check-true (>= ctx-usage 1)

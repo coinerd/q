@@ -33,7 +33,7 @@
                   md-format-assistant
                   wrap-styled-line)
          "../../../q/tui/layout.rkt"
-         "../../../q/util/protocol-types.rkt"
+         "../../../q/util/message/protocol-types.rkt"
          "../../../q/agent/event-bus.rkt"
          "../../../q/interfaces/tui.rkt"
          (only-in "../../../q/tui/command-parse.rkt" parsed-command? parsed-command-canonical-name))

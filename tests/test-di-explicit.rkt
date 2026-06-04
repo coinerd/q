@@ -24,13 +24,13 @@
 ;; ============================================================
 
 (test-case "loop-state.rkt has no make-parameter"
-  (define source-file (q-file "runtime" "iteration" "loop-state.rkt"))
+  (define source-file (q-file "agent" "iteration" "loop-state.rkt"))
   (define content (call-with-input-file source-file port->string))
   (check-false (regexp-match? #rx"make-parameter" content)
                "loop-state.rkt should not contain make-parameter"))
 
 (test-case "loop-state.rkt has no lazy-require"
-  (define source-file (q-file "runtime" "iteration" "loop-state.rkt"))
+  (define source-file (q-file "agent" "iteration" "loop-state.rkt"))
   (define content (call-with-input-file source-file port->string))
   (check-false (regexp-match? #rx"[(]lazy-require" content)
                "loop-state.rkt should not contain lazy-require"))
@@ -40,17 +40,17 @@
 ;; ============================================================
 
 (test-case "loop-state.rkt does not export current-compact-proc"
-  (define content (call-with-input-file (q-file "runtime" "iteration" "loop-state.rkt") port->string))
+  (define content (call-with-input-file (q-file "agent" "iteration" "loop-state.rkt") port->string))
   (check-false (regexp-match? #rx"current-compact-proc" content)
                "current-compact-proc should not be in loop-state.rkt"))
 
 (test-case "loop-state.rkt does not export current-estimate-tokens"
-  (define content (call-with-input-file (q-file "runtime" "iteration" "loop-state.rkt") port->string))
+  (define content (call-with-input-file (q-file "agent" "iteration" "loop-state.rkt") port->string))
   (check-false (regexp-match? #rx"current-estimate-tokens" content)
                "current-estimate-tokens should not be in loop-state.rkt"))
 
 (test-case "loop-state.rkt does not export current-inject-topic"
-  (define content (call-with-input-file (q-file "runtime" "iteration" "loop-state.rkt") port->string))
+  (define content (call-with-input-file (q-file "agent" "iteration" "loop-state.rkt") port->string))
   (check-false (regexp-match? #rx"current-inject-topic" content)
                "current-inject-topic should not be in loop-state.rkt"))
 
@@ -59,16 +59,16 @@
 ;; ============================================================
 
 (test-case "loop-state.rkt does not export resolve-compact-proc"
-  (define content (call-with-input-file (q-file "runtime" "iteration" "loop-state.rkt") port->string))
+  (define content (call-with-input-file (q-file "agent" "iteration" "loop-state.rkt") port->string))
   (check-false (regexp-match? #rx"resolve-compact-proc" content)
                "resolve-compact-proc should not be in loop-state.rkt"))
 
 (test-case "loop-state.rkt does not export resolve-estimate-tokens"
-  (define content (call-with-input-file (q-file "runtime" "iteration" "loop-state.rkt") port->string))
+  (define content (call-with-input-file (q-file "agent" "iteration" "loop-state.rkt") port->string))
   (check-false (regexp-match? #rx"resolve-estimate-tokens" content)
                "resolve-estimate-tokens should not be in loop-state.rkt"))
 
 (test-case "loop-state.rkt does not export resolve-inject-topic"
-  (define content (call-with-input-file (q-file "runtime" "iteration" "loop-state.rkt") port->string))
+  (define content (call-with-input-file (q-file "agent" "iteration" "loop-state.rkt") port->string))
   (check-false (regexp-match? #rx"resolve-inject-topic" content)
                "resolve-inject-topic should not be in loop-state.rkt"))

@@ -17,7 +17,7 @@
          rackunit/text-ui
          racket/port
          json
-         "../../q/util/protocol-types.rkt"
+         "../../q/util/message/protocol-types.rkt"
          "../../q/agent/event-bus.rkt"
          "../../q/interfaces/json-mode.rkt")
 

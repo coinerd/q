@@ -367,7 +367,7 @@
 ;; ============================================================
 
 (require "../llm/provider.rkt"
-         "../util/event.rkt"
+         "../util/event/event.rkt"
          "../agent/event-bus.rkt"
          "../agent/state.rkt")
 

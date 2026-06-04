@@ -21,13 +21,13 @@
 ;; ============================================================
 
 (test-case "protocol-types.rkt re-exports 8 sub-modules (intentional facade)"
-  (define content (call-with-input-file (q-file "util" "protocol-types.rkt") port->string))
+  (define content (call-with-input-file (q-file "util" "message" "protocol-types.rkt") port->string))
   (define count (length (regexp-match* #rx"all-from-out" content)))
   (check-true (>= count 8)
               (format "expected >= 8 all-from-out in protocol-types.rkt, found ~a" count)))
 
 (test-case "context-assembly.rkt re-exports 3 sub-modules (intentional facade)"
-  (define content (call-with-input-file (q-file "runtime" "context-assembly.rkt") port->string))
+  (define content (call-with-input-file (q-file "runtime" "context" "context-assembly.rkt") port->string))
   (define all-from-count (length (regexp-match* #rx"all-from-out" content)))
   (define explicit-count (length (regexp-match* #rx"provide" content)))
   ;; Either uses all-from-out or explicit provides (S1-F4 refactor)

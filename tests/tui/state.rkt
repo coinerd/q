@@ -10,7 +10,7 @@
          "../../../q/tui/state.rkt"
          "../../../q/tui/render.rkt"
          "../../../q/tui/scrollback.rkt"
-         "../../../q/util/protocol-types.rkt")
+         "../../../q/util/message/protocol-types.rkt")
 
 ;; Helper to make a simple event
 (define (make-test-event ev-type

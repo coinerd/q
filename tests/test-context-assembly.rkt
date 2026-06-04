@@ -418,7 +418,7 @@
 ;; ============================================================
 
 (require (only-in "../runtime/turn-orchestrator.rkt" (assemble-context/pure ctx-assemble-pure))
-         (only-in "../runtime/session-config.rkt" hash->session-config))
+         (only-in "../runtime/session/session-config.rkt" hash->session-config))
 
 (define ctx-assemble ctx-assemble-pure)
 

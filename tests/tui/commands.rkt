@@ -11,7 +11,7 @@
          "../../../q/tui/commands.rkt"
          "../../../q/tui/state.rkt"
          "../../../q/tui/render.rkt"
-         "../../../q/util/protocol-types.rkt")
+         "../../../q/util/message/protocol-types.rkt")
 
 ;; Helper to make a simple cmd-ctx with a fresh state
 (define (make-test-cctx)
