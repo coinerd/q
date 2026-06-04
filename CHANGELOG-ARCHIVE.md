@@ -1,4 +1,4 @@
-## v0.86.4 — 2026-05-29
+## v0.86.5 — 2026-05-29
 
 ### Audit Followups
 
@@ -7,7 +7,7 @@
 - **W1**: Incremental suffix append tests for `apply-diff-to-text!` with `last-len-box`
 - **W2**: Rename `hex->color-object` → `hex->color-components` for clarity
 
-## v0.86.4 — 2026-05-29
+## v0.86.5 — 2026-05-29
 
 ### GUI Bugfix + Audit Closure
 
@@ -17,7 +17,7 @@
 - **B3 MAJOR**: Fix selection overwritten during streaming — incremental suffix append instead of full delete+reinsert.
 - **W2**: Add thread-safe semaphore guard to `event-reducers` registry in `tui/state-events.rkt`.
 
-## v0.86.4 — 2026-05-25
+## v0.86.5 — 2026-05-25
 
 ### Audit Hotfix
 
@@ -26,7 +26,7 @@
 - **W3**: Remove duplicate `truncate-str` from `tui/builtins.rkt` — use canonical `truncate-string` from `util/string-helpers.rkt`.
 - **W4**: Add `contract-out` to 5 struct accessors and `make-safe-mode-config` in `util/safe-mode-state.rkt`. Remove double-contract from `runtime/safe-mode.rkt` re-export.
 
-## v0.86.4 — 2026-05-25
+## v0.86.5 — 2026-05-25
 
 ### Abstraction Quality: Boundary Tightening
 
@@ -36,7 +36,7 @@ Tighten module boundaries by adding named accessors and contracts.
 - **W0**: Add `gsd-ctx-busy`, `gsd-ctx-set-busy!`, `gsd-ctx-transaction`, `gsd-ctx-set-transaction!`, `gsd-ctx-transaction-update!` named accessors. Update tests to use `gsd-ctx-*` accessors instead of raw box patterns.
 - **W1**: Add `contract-out` to all 14 exports in `runtime/safe-mode.rkt`. Parameters, predicates, actions, and introspection now have type-checked boundaries.
 
-## v0.86.4 — 2026-05-25
+## v0.86.5 — 2026-05-25
 
 ### Abstraction Quality: Representation Discipline
 
@@ -47,7 +47,7 @@ Replace hash-as-struct anti-patterns with proper structs in GUI state and UI eve
 - **W1**: Migrate `gui/state-sync.rkt` from raw hashes to `gui-message`/`gui-state` structs (-11 LOC net).
 - **W2**: Define `ui-event` struct in `ui-core/event-types.rkt`. Migrate `ui-core/dispatch.rkt` to struct-based events with backward-compatible hash conversion.
 
-## v0.86.4 — 2026-05-25
+## v0.86.5 — 2026-05-25
 
 ### Abstraction Quality: Declarative Patterns
 
@@ -57,7 +57,7 @@ Convert imperative cond chains to declarative match; replace apply+map with for/
 - **W0**: Convert cond dispatches to match in `gsd/command-handlers.rkt` (gsd-mode, set-gsd-mode!) and `tui/state-events.rkt` (handle-auto-retry-lifecycle).
 - **W1**: Convert `apply + map` to `for/sum` in `tui/vdom.rkt`. Convert `filter + (lambda (x) (not ...))` to `filter-not` in `selection.rkt`, `keymap.rkt`, `message-layout.rkt`.
 
-## v0.86.4 — 2026-05-25
+## v0.86.5 — 2026-05-25
 
 ### Abstraction Quality: Missing Domain Functions
 
@@ -69,7 +69,7 @@ Extract duplicated patterns into named domain functions, replacing manual ID con
 - **W2**: Extract `emit-mode-change!` helper in GSD `command-handlers.rkt`. Replaces 5 duplicate emit+event patterns.
 - **W3**: Extract `extract-arg-summary` and `format-tool-call-display` to new `util/tool-display.rkt`. Dedup `kept-ids` filter in `selection.rkt` via `partition-kept-excluded`.
 
-## v0.86.4 — 2026-05-25
+## v0.86.5 — 2026-05-25
 
 ### Abstraction Quality: Dead Code, Dedup, Immutability
 
@@ -81,7 +81,7 @@ Focused cleanup of duplicate implementations, dead code, and unsafe patterns acr
 - **W2**: Replace local `drop-right` with `racket/list` native; fix `take-safe` stack overflow (recursive→iterative).
 - **W3**: Extract `emit` helper in `step-interpreter`; reuse `make-next-counters` in `continue` branch.
 
-## v0.86.4 — 2026-05-28
+## v0.86.5 — 2026-05-28
 
 ### GUI Critical Hotfix
 
@@ -93,7 +93,7 @@ Fix two critical functional regressions: Enter key not submitting, and white bac
 - **W3 Fix**: Fix `test-gui-state-sync-w0.rkt` cwd-relative path bug (`"gui/main.rkt"` → `"../gui/main.rkt"`).
 - All 278 GUI tests pass (0 failures).
 
-## v0.86.4 — 2026-05-25
+## v0.86.5 — 2026-05-25
 
 ### GUI Hardening
 
@@ -106,7 +106,7 @@ Bracket-safety, module decomposition, diff-based text% updates, and style-delta 
 - **W3**: Extract `gui/components/scroll-state.rkt` (7 tests) and `gui/components/input-helpers.rkt` (9 tests); wire style-deltas in `insert-message-into-text!`; add `apply-diff-to-text!` for incremental append vs full rebuild (5 diff-text tests)
 
 
-## v0.86.4 — 2026-05-25
+## v0.86.5 — 2026-05-25
 
 ### GUI Critical Fix + text% Render Tree
 
@@ -117,7 +117,7 @@ Wire text% editor into window render tree and extract slash-command handler.
 - **W1**: Replace static "Messages: N" label with `editor-canvas-view` wrapping `transcript-text`
 - **W2**: Extract `gui/slash-commands.rkt` — `make-slash-command-handler`, `add-system-msg!` (5 tests); reduce `gui/main.rkt` from 498 → 388 LOC
 
-## v0.86.4 — 2026-05-25
+## v0.86.5 — 2026-05-25
 
 ### GUI Audit Remediation
 
@@ -132,7 +132,7 @@ Extract missing modules from monolithic rich-transcript-view.rkt and remove dead
 - 82 tests total across all GUI modules
 
 
-## v0.86.4 — 2026-05-28
+## v0.86.5 — 2026-05-28
 
 ### Keyboard Shortcuts + Polish
 
@@ -145,7 +145,7 @@ Final polish of the v0.68.x GUI UX improvement series.
 - `handle-key-action` dispatch wired into gui/main.rkt
 - 60 tests total (9 new keyboard shortcut tests)
 
-## v0.86.4 — 2026-05-28
+## v0.86.5 — 2026-05-28
 
 ### Code Blocks + Multiline Input
 
@@ -162,7 +162,7 @@ Switch input to multiline with Enter=submit, Shift+Enter=newline.
 - Multiline input view (`#:style '(multiple)`)
 - 51 tests total (21 new: 8 code-block + 4 style + 9 input)
 
-## v0.86.4 — 2026-05-28
+## v0.86.5 — 2026-05-28
 
 ### Streaming Performance
 
@@ -177,7 +177,7 @@ Add auto-scroll intelligence with scroll-state management.
 - Remove `kill-thread poll-thread` cleanup
 - 30 tests total (7 new scroll-state tests)
 
-## v0.86.4 — 2026-05-28
+## v0.86.5 — 2026-05-28
 
 ### Rich Transcript Core
 
@@ -194,7 +194,7 @@ Enables text selection, auto-wrap, and rich formatting.
 - Integrate render plan into `gui/main.rkt` — replaces raw on-draw with structured rendering
 - 23 new tests for pure helper functions
 
-## v0.86.4 — 2026-05-28
+## v0.86.5 — 2026-05-28
 
 ### GUI Slash Commands + Event Type Fix
 
@@ -203,29 +203,29 @@ Enables text selection, auto-wrap, and rich formatting.
 - **Feature**: Unknown slash commands (like `/plan`, `/go`) now attempt extension dispatch via `dispatch-hooks` before showing "Unknown command" error.
 - **Added**: `handle-slash-command` function with built-in command handlers and `add-system-msg!` helper for system messages in the transcript.
 
-## v0.86.4 — 2026-05-28
+## v0.86.5 — 2026-05-28
 
 ### Audit Follow-ups + GUI Crash Fix
 
-Post-v0.86.4 audit follow-up addressing 4 non-blocking findings:
+Post-v0.86.5 audit follow-up addressing 4 non-blocking findings:
 - **Bug fix**: `--gui` crashed with "cannot open module file" — `interfaces/gui.rkt` used a bare relative string in `dynamic-require` which resolved incorrectly at runtime. Fixed with `define-runtime-path`.
 - **P1**: Updated stale `STATE.md` and `SUMMARY.md` (were at v0.59.x, now reflect v0.67.x series).
 - **P2**: Closed audit artifact `AUDIT-v0.63.x-v0.67.x-GUI-POST-IMPLEMENTATION.md` with remediation confirmation (F1/F2/F10 resolved, verdict upgraded to APPROVED).
 - **P3**: Added 4 edge-case tests: T4 (non-symbol event-ev rejection), T5 (#f status → idle), T6 (streaming/thinking → processing).
-- **P4**: Replaced hardcoded `"v0.86.4"` strings in `gui/main.rkt` with `q-version` constant.
+- **P4**: Replaced hardcoded `"v0.86.5"` strings in `gui/main.rkt` with `q-version` constant.
 
-## v0.86.4 — 2026-05-28
+## v0.86.5 — 2026-05-28
 
 ### GUI Audit Hotfix
 
-Post-implementation audit remediation for the v0.86.4–v0.86.4 GUI milestone series:
+Post-implementation audit remediation for the v0.86.5–v0.86.5 GUI milestone series:
 - **F1**: Fixed broken event filter in `wire-bridge!` — was checking `(hash? evt)` on `event` structs, silently dropping all events from the agent. Now uses `(event-ev evt)`.
 - **F2**: Fixed `render-app` status always returning `'idle` — both branches of the conditional were identical. Now maps status text to `'processing`, `'error`, or `'idle` based on content.
 - **F10**: Fixed `test-gui-init.rkt` broken relative path — now uses `runtime-path` for `info.rkt` lookup.
 - **+4 new tests**: 1 for event filter (F1), 3 for status mapping (F2).
-- **13 docs synced**: Stale v0.86.4 version references updated to v0.86.4.
+- **13 docs synced**: Stale v0.86.5 version references updated to v0.86.5.
 
-## v0.86.4 — 2026-05-25
+## v0.86.5 — 2026-05-25
 
 ### Stabilization, Polish, Documentation
 
@@ -233,21 +233,21 @@ Fifth and final milestone of the GUI series — stabilization, documentation, an
 - **W0**: Comprehensive smoke tests covering all 18 GUI/ui-core modules (16 tests)
 - **W1**: `gui/views/error-boundary.rkt` — error boundary with fallback rendering (6 tests)
 - **W2**: ADR-0018 GUI Extension Integration Architecture documentation
-- **W3**: Version bump 0.86.4 → 0.86.4 + final tag
+- **W3**: Version bump 0.86.5 → 0.86.5 + final tag
 
 22 new tests. ADR-0018 documents the full GUI extension integration architecture.
 
-### GUI Milestone Series Summary (v0.86.4–v0.86.4)
+### GUI Milestone Series Summary (v0.86.5–v0.86.5)
 
-- **v0.86.4**: Infrastructure + Observable Bridge (6 waves, 36 tests)
-- **v0.86.4**: Core Views — Status, Input, Transcript (5 waves, 44 tests)
-- **v0.86.4**: Extension Integration + Dialogs (5 waves, 30 tests)
-- **v0.86.4**: Advanced Features — Sidebar, Toolbar, Themes (5 waves, 27 tests)
-- **v0.86.4**: Stabilization, Polish, Documentation (4 waves, 22 tests)
+- **v0.86.5**: Infrastructure + Observable Bridge (6 waves, 36 tests)
+- **v0.86.5**: Core Views — Status, Input, Transcript (5 waves, 44 tests)
+- **v0.86.5**: Extension Integration + Dialogs (5 waves, 30 tests)
+- **v0.86.5**: Advanced Features — Sidebar, Toolbar, Themes (5 waves, 27 tests)
+- **v0.86.5**: Stabilization, Polish, Documentation (4 waves, 22 tests)
 
 **Total**: 25 waves, ~159 new tests, 18 new GUI/ui-core modules, 5 ADRs.
 
-## v0.86.4 — 2026-05-25
+## v0.86.5 — 2026-05-25
 
 ### Advanced Features (Sidebar, Toolbar, Themes)
 
@@ -256,11 +256,11 @@ Fourth milestone of the GUI series — advanced GUI views and theme management:
 - **W1**: `gui/views/toolbar.rkt` — toolbar with buttons/separators (6 tests)
 - **W2**: `gui/theme-manager.rkt` — theme switching with light/dark presets + customization (8 tests)
 - **W3**: `gui/views/code-block.rkt` — code blocks with language detection (6 tests)
-- **W4**: Version bump 0.86.4 → 0.86.4
+- **W4**: Version bump 0.86.5 → 0.86.5
 
 27 new tests total. Full sidebar, toolbar, theme management, and code rendering.
 
-## v0.86.4 — 2026-05-25
+## v0.86.5 — 2026-05-25
 
 ### Extension Integration + Dialogs
 
@@ -269,11 +269,11 @@ Third milestone of the GUI series — extension integration and dialog views:
 - **W1**: `gui/extension-slots/custom-renderer.rkt` — custom renderer registry (8 tests)
 - **W2**: `gui/views/overlay.rkt` — alert/confirm/prompt dialogs (6 tests)
 - **W3**: `gui/extension-slots/extension-bridge.rkt` — zone/lifecycle management (7 tests)
-- **W4**: Integration tests + version bump 0.86.4 → 0.86.4 (2 integration tests)
+- **W4**: Integration tests + version bump 0.86.5 → 0.86.5 (2 integration tests)
 
 30 new tests total. Extensions can now register widgets and custom renderers.
 
-## v0.86.4 — 2026-05-25
+## v0.86.5 — 2026-05-25
 
 ### Core Views (Transcript, Input, Status)
 
@@ -282,29 +282,29 @@ Second milestone of the GUI series — core view components:
 - **W1**: `gui/views/status.rkt` — status bar with model/status/turn/tokens (8 tests)
 - **W2**: `gui/views/input.rkt` — input area with text manipulation (15 tests)
 - **W3**: `gui/views/transcript.rkt` + `gui/views/message-entry.rkt` — scroll + role styling (12 tests)
-- **W4**: Wire all views into app.rkt, version bump 0.86.4 → 0.86.4
+- **W4**: Wire all views into app.rkt, version bump 0.86.5 → 0.86.5
 
 44 new tests total. All views produce backend-agnostic view descriptors.
 
-## v0.86.4 — 2026-05-25
+## v0.86.5 — 2026-05-25
 
 ### Infrastructure + Observable Bridge
 
-First milestone of the GUI milestone series (v0.86.4–v0.86.4):
+First milestone of the GUI milestone series (v0.86.5–v0.86.5):
 - **W0**: `--gui` CLI flag, `gui/main.rkt` entry point, `interfaces/gui.rkt` facade
 - **W1**: `ui-core/observable-bridge.rkt` — thread-safe event-bus → GUI state bridge (10 tests)
 - **W2**: `ui-core/dispatch.rkt` — backend-agnostic UI action dispatch (8 tests)
 - **W3**: `ui-core/theme-protocol.rkt` + `ui-core/layout-protocol.rkt` — shared theme/layout (6 tests)
 - **W4**: 8 GUI hook action schemas + ADR-0017 GUI architecture (4 tests)
-- **W5**: Bridge integration in gui/main.rkt, version bump 0.86.4 → 0.86.4 (3 smoke tests)
+- **W5**: Bridge integration in gui/main.rkt, version bump 0.86.5 → 0.86.5 (3 smoke tests)
 
 31 new tests total. Zero changes to existing TUI modules.
 
-## v0.86.4 — 2026-05-28
+## v0.86.5 — 2026-05-28
 
 ### Audit Findings Remediation
 
-Addresses 4 findings from independent audit of v0.86.4 + v0.62.x series:
+Addresses 4 findings from independent audit of v0.86.5 + v0.62.x series:
 
 - **F1**: Wire `cycle-focus` to M-Tab (forward) and S-Tab (backward) keybindings
   in `key-dispatch.rkt`. Focus cycling now works via keyboard.
@@ -312,11 +312,11 @@ Addresses 4 findings from independent audit of v0.86.4 + v0.62.x series:
   via `component-state-set!`, proving state persistence for scroll-relevant data.
 - **F3**: Rename test-tui-terminal.rkt suite from "TUI Terminal Adapter (tui-term)"
   to "TUI Terminal (Native)". Remove stale tui-ubuf comments from test-tui-renderer.rkt.
-- **F4**: Fix architecture overview version drift (v0.86.4 → v0.86.4).
+- **F4**: Fix architecture overview version drift (v0.86.5 → v0.86.5).
 
-Also fixes 13 pre-existing doc version drifts and info.rkt version (0.86.4 → 0.86.4).
+Also fixes 13 pre-existing doc version drifts and info.rkt version (0.86.5 → 0.86.5).
 
-## v0.86.4 — 2026-05-27
+## v0.86.5 — 2026-05-27
 
 ### HTML Render Backend + Architecture Validation
 
@@ -327,7 +327,7 @@ Also fixes 13 pre-existing doc version drifts and info.rkt version (0.86.4 → 0
 - **New tests**: 18 HTML render tests, 7 backend parity tests
 
 
-## v0.86.4 — 2026-05-27
+## v0.86.5 — 2026-05-27
 
 ### Key Dispatch Through Components
 
@@ -337,7 +337,7 @@ Also fixes 13 pre-existing doc version drifts and info.rkt version (0.86.4 → 0
 - **New tests**: 3 new focus tracking tests including end-to-end key dispatch verification.
 
 
-## v0.86.4 — 2026-05-27
+## v0.86.5 — 2026-05-27
 
 ### Component Lifecycle & State in Production
 
@@ -347,7 +347,7 @@ Also fixes 13 pre-existing doc version drifts and info.rkt version (0.86.4 → 0
 - **`render-frame-vdom!` accepts `#:component-registry`**: Optional keyword argument allows tests to inject a component registry and verify persistence across frames.
 - **New tests**: 2 new test cases verifying component identity persistence and state accumulation across frames.
 
-## v0.86.4 — 2026-05-27
+## v0.86.5 — 2026-05-27
 
 ### Native TUI Final Cleanup
 
@@ -361,24 +361,24 @@ Also fixes 13 pre-existing doc version drifts and info.rkt version (0.86.4 → 0
 - **Removed dead test files**: `test-vdom-parity.rkt`, `tui/render-integration.rkt` removed.
 - **Pruned dead test cases**: 27 `render-frame!` tests removed from `test-tui-renderer.rkt`, 3 `make-vdom-frame-component` tests removed from `test-vdom-components.rkt`, 5 `render-components` tests removed from `test-component.rkt`.
 
-## v0.86.4 — 2026-05-27
+## v0.86.5 — 2026-05-27
 
 ### Native TUI Final — Architecture Polish & Documentation
 
 **W0 — Update ADR-0016** (PR #5716)
-- Updated ADR-0016 for v0.86.4: component state bag, full vdom pipeline
+- Updated ADR-0016 for v0.86.5: component state bag, full vdom pipeline
 - Added Layer 7 (component state bag) to architecture description
 - Documented legacy render path retention for parity tests
 
 **W1 — Architecture overview update** (PR #5717)
-- Updated render pipeline diagram to reflect v0.86.4 vdom-mediated path
+- Updated render pipeline diagram to reflect v0.86.5 vdom-mediated path
 - All sections now go through component → vnode → buffer pipeline
 - Updated TUI stack to seven layers
 
 **W2 — Version bump** (this wave)
-- Version bumped to 0.86.4
+- Version bumped to 0.86.5
 
-## v0.86.4 — 2026-05-27
+## v0.86.5 — 2026-05-27
 
 ### Native TUI Final — Component State & Renderer Refactor
 
@@ -396,9 +396,9 @@ Also fixes 13 pre-existing doc version drifts and info.rkt version (0.86.4 → 0
 - Production uses `render-frame-vdom!` exclusively
 
 **W3 — Version bump** (PR #5715)
-- Version bumped to 0.86.4
+- Version bumped to 0.86.5
 
-## v0.86.4 — 2026-05-27
+## v0.86.5 — 2026-05-27
 
 ### Native TUI Final — Full VDOM Production Wiring
 
@@ -421,9 +421,9 @@ Also fixes 13 pre-existing doc version drifts and info.rkt version (0.86.4 → 0
 **W3 — Parity verification + version bump** (PR #5711)
 - Verified parity between legacy and vdom paths
 - Fixed transcript component contract for `#:height` parameter
-- Version bumped to 0.86.4
+- Version bumped to 0.86.5
 
-## v0.86.4 — 2026-05-27
+## v0.86.5 — 2026-05-27
 
 ### Native TUI Final — Dead Code Removal & Naming Cleanup
 
@@ -437,9 +437,9 @@ Also fixes 13 pre-existing doc version drifts and info.rkt version (0.86.4 → 0
 **W2 — Remove legacy render path** (PR #5707)
 - Removed dead `render-ubuf-to-terminal!`
 - Inlined ubuf aliases (`make-ubuf`, `ubuf-clear!`, `ubuf-putstring!`) to direct cell-buffer calls
-- Version bumped to 0.86.4
+- Version bumped to 0.86.5
 
-## v0.86.4 — 2026-05-27
+## v0.86.5 — 2026-05-27
 
 ### Native TUI M4 — Remove Legacy Path + Final Cleanup
 
@@ -461,7 +461,7 @@ Also fixes 13 pre-existing doc version drifts and info.rkt version (0.86.4 → 0
 - Updated ADR-0016 for final architecture
 - Added render pipeline diagram to architecture overview
 
-## v0.86.4 — 2026-05-27
+## v0.86.5 — 2026-05-27
 
 ### Native TUI M3 — Cell-Diff Batch Optimization + Benchmarking
 
@@ -481,9 +481,9 @@ Also fixes 13 pre-existing doc version drifts and info.rkt version (0.86.4 → 0
 
 **W3 — Gate + Version Bump**
 - All 170 TUI tests pass
-- Version 0.86.4 → 0.86.4
+- Version 0.86.5 → 0.86.5
 
-## v0.86.4 — 2026-05-27
+## v0.86.5 — 2026-05-27
 
 ### Native TUI M2 — Production VDOM Components
 
@@ -517,9 +517,9 @@ Upgrade all vdom components from placeholders to production-quality:
 
 **W5 — Gate + Version Bump**
 - All 150 TUI tests pass
-- Version 0.86.4 → 0.86.4
+- Version 0.86.5 → 0.86.5
 
-## v0.86.4 — 2026-05-27
+## v0.86.5 — 2026-05-27
 
 ### Native TUI M1 — VDOM Render Path + Parity Tests
 
@@ -542,9 +542,9 @@ Both paths produce identical cell-by-cell output, verified by 4 parity tests.
 
 **W3 — Gate + Version Bump**
 - All 157 TUI tests pass
-- Version 0.86.4 → 0.86.4
+- Version 0.86.5 → 0.86.5
 
-## v0.86.4 — 2026-05-27
+## v0.86.5 — 2026-05-27
 
 ### Native TUI Bugfix — Snapshot Crash + cmd-ctx Arity + Auto-wrap Glitch
 
@@ -571,10 +571,10 @@ terminal auto-wrap glitch causing last-column line breaks.
 - Prevents last-column character wrapping to next line
 
 **W3 — Version Bump + Gate**
-- Version 0.86.4 → 0.86.4
+- Version 0.86.5 → 0.86.5
 - Fast suite: 571/572 (1 pre-existing doc freshness failure)
 
-## v0.86.4 — 2026-05-27
+## v0.86.5 — 2026-05-27
 
 ### Native TUI Cleanup and Documentation
 
@@ -595,10 +595,10 @@ Remove dead code, clean legacy references, add ADR-0016, update architecture doc
 - Document all key TUI files with cross-reference to ADR-0016
 
 **W3 — Final Gate**
-- Version bump to 0.86.4
+- Version bump to 0.86.5
 - lint-all: 21/23 passed (arch warning non-blocking, release-readiness on branch)
 
-## v0.86.4 — 2026-05-27
+## v0.86.5 — 2026-05-27
 
 ### Component System Extension
 
@@ -622,9 +622,9 @@ Extend `q-component` to support vdom rendering. Create typed vdom components for
 - Component caching, focus management, compose verified with vdom
 
 **W3 — Version Bump**
-- Version bump to 0.86.4
+- Version bump to 0.86.5
 
-## v0.86.4 — 2026-05-26
+## v0.86.5 — 2026-05-26
 
 ### Virtual DOM Abstraction Layer
 
@@ -648,9 +648,9 @@ Pure data vdom layer with layout engine and cell-buffer rendering.
 - use-vdom-render? parameter for path switching
 
 **W4 — Version Bump**
-- Version bump to 0.86.4
+- Version bump to 0.86.5
 
-## v0.86.4 — 2026-05-26
+## v0.86.5 — 2026-05-26
 
 ### Cell-Level Incremental Rendering
 
@@ -669,9 +669,9 @@ Native cell-level diffing and incremental ANSI output.
 - prev-ubuf-box field for snapshot comparison
 
 **W3 — Version Bump and Cleanup**
-- Version bump to 0.86.4
+- Version bump to 0.86.5
 
-## v0.86.4 — 2026-05-26
+## v0.86.5 — 2026-05-26
 
 ### Native Cell Buffer
 
@@ -687,9 +687,9 @@ Replace external tui-ubuf with native Racket cell buffer.
 
 **W2 — Doctor Simplification and Version Bump**
 - Simplified check-tui-packages to single check-result
-- Version bump to 0.86.4
+- Version bump to 0.86.5
 
-## v0.86.4 — 2026-05-26
+## v0.86.5 — 2026-05-26
 
 ### Foundation: Promote Native Terminal I/O
 
@@ -705,9 +705,9 @@ Remove tui-term dynamic loading, promote native fallbacks.
 
 **W2 — Cleanup and Version Bump**
 - Removed dead tmousemsg-tui-term? branch from render loop
-- Version bump to 0.86.4
+- Version bump to 0.86.5
 
-## v0.86.4 — 2026-05-27
+## v0.86.5 — 2026-05-27
 
 ### Security/Workflow Enforcement Closure
 
@@ -742,7 +742,7 @@ workflow runner, and CI release pipeline.
 - Release pipeline records gate evidence for all 4 suites
 - `lint-release-readiness.rkt --strict` gate before release proceeds
 
-## v0.86.4 — 2026-05-26
+## v0.86.5 — 2026-05-26
 
 ### Final Truth Gate Hotfix
 
@@ -766,11 +766,11 @@ Restore final gate truth before security/workflow enforcement continues.
 - Confirmed metrics-sync and metrics-lint pass truthfully
 
 **W4 — Historical Report and Finding Matrix Truth**
-- Restored v0.86.4 historical report version values
+- Restored v0.86.5 historical report version values
 - Corrected v0.59.x finding matrix milestone traceability
 - Added regression coverage proving docs/reports are excluded from global version sync
 
-## v0.86.4 — 2026-05-26
+## v0.86.5 — 2026-05-26
 
 ### Workflow Fixture Integrity + Release Enforcement
 
@@ -794,7 +794,7 @@ Make workflow tests and release readiness enforceable, not merely available.
 - Invokes `lint-release-readiness.rkt --strict` after gate evidence is recorded
 - Add 3 tests for gate evidence enforcement: stale, wrong version, missing suite
 
-## v0.86.4 — 2026-05-26
+## v0.86.5 — 2026-05-26
 
 ### Security Completion
 
@@ -820,7 +820,7 @@ Finish incomplete OAuth and image security remediation from v0.59.x audit.
 - Add contract-out to image-format.rkt for all 5 public APIs
 - Create test-image-format-contracts.rkt with 12 tests (6 positive, 6 negative)
 - Make detected-tools cache thread-safe with semaphore
-## v0.86.4 — 2026-05-26
+## v0.86.5 — 2026-05-26
 
 ### Truthful Closure Hotfix
 
@@ -839,7 +839,7 @@ Restore truthful gate reporting and fix regression tests that drifted during v0.
 - dependency-policy.rktd: added widget-lifecycle.rkt exception, bumped max-exceptions
 
 **W3 — Historical Report Restoration**
-- Fixed v0.86.4 and v0.86.4 report version references corrupted by sync-version
+- Fixed v0.86.5 and v0.86.5 report version references corrupted by sync-version
 - test-registry-snapshot.rkt: sorted hash-keys for deterministic ordering
 
 **W4 — Lint/Metrics/Finding Matrix Truth**
@@ -847,7 +847,7 @@ Restore truthful gate reporting and fix regression tests that drifted during v0.
 - lint-tests.rkt: recognize URL paths and /fixtures/ as non-file-paths
 - test-command-parity.rkt, test-message-helpers.rkt: sorted hash-keys
 - Lint-all: 21/22 pass (only release-readiness on branch fails)
-## v0.86.4 — 2026-05-25
+## v0.86.5 — 2026-05-25
 
 ### Release Process Hardening + Final Audit Closure
 
@@ -870,7 +870,7 @@ Prevent recurrence of false-green releases and close the v0.59.x remediation cam
 - Published `AUDIT-v0.59.x-POST-REMEDIATION.md`
 - Verdict: APPROVED
 
-## v0.86.4 — 2026-05-25
+## v0.86.5 — 2026-05-25
 
 ### Workflow Test Hang/Isolation Remediation
 
@@ -903,7 +903,7 @@ Convert deferred workflow-test problem into a reliable, diagnosable workflow sui
 - Uploads workflow test log as artifact for diagnosis
 - Workflows intentionally excluded from fast suite via `path-slow-patterns`
 
-## v0.86.4 — 2026-05-25
+## v0.86.5 — 2026-05-25
 
 ### Public API Contracts + Widget Lifecycle Safety
 
@@ -924,7 +924,7 @@ Widget lifecycle contracts, thread-safe replacement, and tightened API boundarie
 - `message-meta-safe` now has contract `(-> message? hash?)`
 - All affected tests pass
 
-## v0.86.4 — 2026-05-25
+## v0.86.5 — 2026-05-25
 
 ### Image Pipeline Hardening
 
@@ -948,7 +948,7 @@ Shell injection elimination, subprocess timeouts, and thread-safe image cache.
 - Thread-safe cache via semaphore-protected `cache-ref`/`cache-set!`
 - All 34 image tests pass (21 pipeline + 13 security)
 
-## v0.86.4 — 2026-05-25
+## v0.86.5 — 2026-05-25
 
 ### OAuth Security Rewrite
 
@@ -980,7 +980,7 @@ and mock HTTP transport for deterministic OAuth testing.
 - Fixed 4 stale stub tests, added 6 mock transport tests
 - All 48 OAuth tests green
 
-## v0.86.4 — 2026-05-25
+## v0.86.5 — 2026-05-25
 
 ### Security, Stability & Workflow Remediation
 
@@ -1011,7 +1011,7 @@ release gate.
 - OAuth login rejects placeholder configs without real client IDs
 - Image resize errors when no processing tools available
 
-## v0.86.4 — 2026-05-25
+## v0.86.5 — 2026-05-25
 
 ### Quality & Debt Remediation
 
@@ -1034,7 +1034,7 @@ workflow-test characterization, contract tightening, and release readiness.
 - Tightened high-value GSD, context assembly, session-index, GitHub helper, UI surface, and event contracts
 - Added event-contract and GitHub-helper regression tests
 
-## v0.86.4 — 2026-05-25
+## v0.86.5 — 2026-05-25
 
 ### Image Processing Pipeline
 
@@ -1059,7 +1059,7 @@ provider-specific format adapters.
 - `build-multimodal-content`: complete multi-modal message construction
 - 13 tests covering all formats, aliases, and unknown provider fallback
 
-## v0.86.4 — 2026-05-25
+## v0.86.5 — 2026-05-25
 
 ### Rich TUI Extension Widgets
 
@@ -1088,7 +1088,7 @@ into the TUI with thread-safe registries, widget lifecycle, and layout regions.
 - `clip-to-region` for truncating/padding lines to region height
 - 13 tests covering layout computation, edge cases, and stacking
 
-## v0.86.4 — 2026-05-25
+## v0.86.5 — 2026-05-25
 
 ### OAuth2 Login, OpenRouter Provider & Provider Registry
 
@@ -1124,7 +1124,7 @@ and a declarative provider registry schema.
 - `builtin-provider-config` retrieves provider metadata by name
 - 14 tests covering schema loading, registry population, model registration, placeholder upgrade
 
-## v0.86.4 — 2026-05-25
+## v0.86.5 — 2026-05-25
 
 ### Context Pressure Signaling & `/compact` Command
 
@@ -1151,7 +1151,7 @@ Milestone giving users visibility and control over context compaction.
 - `session.compact.completed` event now includes `keptCount` alongside `removedCount`
 - 3 tests for event emission, dry-run, and busy blocking
 
-## v0.86.4 — 2026-05-25
+## v0.86.5 — 2026-05-25
 
 ### Fuzzy-Match Edit Tool + Tool Robustness
 
@@ -1183,7 +1183,7 @@ Milestone delivering fuzzy normalization for the edit tool and robustness improv
 - Grep: 19 tests (all pass)
 - Find: 19 tests (all pass)
 
-## v0.86.4 — 2026-05-25
+## v0.86.5 — 2026-05-25
 
 ### Remaining Test Failures and Audit Closure
 
@@ -1211,7 +1211,7 @@ Targeted fix milestone addressing 8 remaining fast-suite test failures and P1/P2
 **W5 — P1 Subprocess Documentation**
 - Added `sandbox/subprocess.rkt` risk-note to hotspot-budget in `dependency-policy.rktd`
 
-## v0.86.4 — 2026-05-25
+## v0.86.5 — 2026-05-25
 
 ### Audit Remediation and Release Closure
 
@@ -1219,7 +1219,7 @@ Focused repair milestone addressing findings from `PROJECT_REVIEW-v0.57.x-GSD-AU
 
 **W0 — Baseline Reproduction**
 - reproduced all audit findings: 812 any/c, fast suite exit 4, lint-all exit 1 mutating README
-- created `docs/reports/v0.86.4-audit-remediation-baseline.md`
+- created `docs/reports/v0.86.5-audit-remediation-baseline.md`
 
 **W1 — P0/P1 Contract Fixes**
 - `with-auto-retry` return type corrected (any/c, not retry-policy?)
@@ -1237,7 +1237,7 @@ Focused repair milestone addressing findings from `PROJECT_REVIEW-v0.57.x-GSD-AU
 
 **W3 — Lint Release-Readiness Repair**
 - `lint-all.rkt` no longer mutates README.md (metrics-sync uses `--lint`)
-- `lint-release-readiness.rkt` accepts both `## 0.86.4` and `## v0.86.4` changelog headers
+- `lint-release-readiness.rkt` accepts both `## 0.86.5` and `## v0.86.5` changelog headers
 - test path strings constructed dynamically for lint-tests compliance
 
 **W5 — Workflow Recovery (14 contract fixes)**
@@ -1266,9 +1266,9 @@ Internal hardening milestone adding programmatic enforcement for q development:
 - GitHub Projects workflow: milestone issues, wave issues, PR-per-wave, squash-merge
 - CI: GitHub Actions for release, benchmark, project automation
 
-## v0.86.4 — 2026-05-24
+## v0.86.5 — 2026-05-24
 
-### Architecture Audit Metrics Remediation Series (v0.86.4–v0.86.4)
+### Architecture Audit Metrics Remediation Series (v0.86.5–v0.86.5)
 
 **v0.57.0 — Metric Baseline + Characterization (W0–W5)**
 - event bus unification: two separate event bus mechanisms unified via `ctx-emit-gsd-event!`
@@ -1321,9 +1321,9 @@ Internal hardening milestone adding programmatic enforcement for q development:
 - added 8 GSD session isolation characterization tests documenting `gsd-default-ctx` global singleton leakage
 - added 8 TUI hotspot characterization tests documenting `handle-user-submit!` contract lie (returns thread, claims tui-ctx?)
 - added 8 retry/error classification characterization tests discovering structured 5xx `'server` vs `'server-error` category mismatch bug
-- wrote metric baseline report at `docs/reports/v0.86.4-metric-baseline.md` (882 any/c, top 10 hotspots, 32 new characterization tests)
+- wrote metric baseline report at `docs/reports/v0.86.5-metric-baseline.md` (882 any/c, top 10 hotspots, 32 new characterization tests)
 
-## v0.86.4 — 2026-05-23
+## v0.86.5 — 2026-05-23
 
 ### Parallel Test Isolation Fix
 
@@ -1339,7 +1339,7 @@ Internal hardening milestone adding programmatic enforcement for q development:
 - `racket scripts/lint-all.rkt` → 19/19 pass
 - `info.rkt` verified clean after all runs (post-serial restore guard working)
 
-## v0.86.4 — 2026-05-23
+## v0.86.5 — 2026-05-23
 
 ### Broad-Gate Truthful Closure Remediation
 
@@ -1354,7 +1354,7 @@ Internal hardening milestone adding programmatic enforcement for q development:
 - `racket scripts/lint-all.rkt` → 19/19 pass
 - `racket scripts/run-tests.rkt` → 622/622 files pass
 
-## v0.86.4 — 2026-05-23
+## v0.86.5 — 2026-05-23
 
 ### Broad Suite Closure
 
@@ -1375,7 +1375,7 @@ Internal hardening milestone adding programmatic enforcement for q development:
 - `examples/sdk/06-sessions.rkt`: resolved duplicate `make-in-memory-session-manager` import using `only-in` from `sdk-core.rkt`
 - `extensions/racket-tooling-helpers.rkt`: fixed multi-value return contracts — `run-raco`, `run-command`, `raco-fmt`, `raco-make`, `raco-test`, `raco-expand` now correctly declare `(values any/c any/c any/c)`; `find-form-end` declares `(values any/c any/c)`
 
-## v0.86.4 — 2026-05-23
+## v0.86.5 — 2026-05-23
 
 ### Contract Cluster Recovery
 
@@ -1395,7 +1395,7 @@ Internal hardening milestone adding programmatic enforcement for q development:
 - `raco test tests/test-extension-loader.rkt tests/test-extensions.rkt` → 52/52 pass
 - `raco test tests/test-message-inject.rkt tests/test-provider.rkt` → 43/43 pass
 
-## v0.86.4 — 2026-05-23
+## v0.86.5 — 2026-05-23
 
 ### Full-Suite Recovery
 
@@ -1415,7 +1415,7 @@ Internal hardening milestone adding programmatic enforcement for q development:
 - `raco test tests/test-main-entrypoint.rkt` → 4/4 pass
 - `racket scripts/lint-all.rkt` → 19/19 pass
 
-## v0.86.4 — 2026-05-23
+## v0.86.5 — 2026-05-23
 
 ### Test Runner False-Green Fix
 
@@ -1434,7 +1434,7 @@ Internal hardening milestone adding programmatic enforcement for q development:
 **Performance:** Fast suite unaffected — only ~297/577 files use slow `raco test` path;
   remaining files still use fast `racket` path (~1s per file).
 
-## v0.86.4 — 2026-05-23
+## v0.86.5 — 2026-05-23
 
 ### Hotfix — effect:update-fsm Contract Alignment
 
@@ -1444,7 +1444,7 @@ Internal hardening milestone adding programmatic enforcement for q development:
 
 **Tests:** Updated `tests/test-effect-types.rkt` to construct `effect:update-fsm` with FSM structs. Added `tests/test-effect-update-fsm-contract.rkt` with 3 regression tests covering `phase-emit-start`, `phase-build-context`, and direct struct construction.
 
-## v0.86.4 — 2026-05-23
+## v0.86.5 — 2026-05-23
 
 ### Hotfix — Plan No-op + Append-to-Leaf Contract
 
@@ -1458,7 +1458,7 @@ Internal hardening milestone adding programmatic enforcement for q development:
 
 **Tests:** +1 regression test (append-to-leaf! contract), +1 regression test (no-runner error)
 
-## v0.86.4 — 2026-05-23
+## v0.86.5 — 2026-05-23
 
 ### W10 Keybinding Contract Fixes
 
@@ -1472,11 +1472,11 @@ Fix 4 contract mismatches in `tui/tui-keybindings.rkt` introduced by W10 of the 
 - `process-slash-command`: return `(or/c 'continue 'quit)` — returns status symbols
 - `tui-ctx->cmd-ctx`: return `cmd-ctx?` — returns struct, not `hash?`
 
-## v0.86.4 — 2026-05-23
+## v0.86.5 — 2026-05-23
 
 ### Contract Precision Hotfix
 
-Fix regressions introduced by v0.86.4 contract tightening:
+Fix regressions introduced by v0.86.5 contract tightening:
 
 **P0 fixes:**
 - Revert `install-ui-callbacks!` contract to `hash?` (TUI startup crash)
@@ -1489,7 +1489,7 @@ Fix regressions introduced by v0.86.4 contract tightening:
 - `make-tree-node`: role accepts `(or/c string? symbol?)`
 - `would-abandon-branch?`: 2nd arg `(or/c string? #f)`
 
-## v0.86.4 — 2026-05-22
+## v0.86.5 — 2026-05-22
 
 ### Contract Precision Series
 
@@ -1512,7 +1512,7 @@ Systematic replacement of `any/c` in `contract-out` boundaries with precise doma
 - Contract metrics tool (`scripts/contract-metrics.rkt`)
 - Contract blame test helpers (`tests/helpers/contract-blame.rkt`)
 
-## v0.86.4 — 2026-05-22
+## v0.86.5 — 2026-05-22
 
 ### Transaction Error-Arity Fix + Planning Drift
 
@@ -1524,11 +1524,11 @@ Systematic replacement of `any/c` in `contract-out` boundaries with precise doma
   returns single `gsd-err` captured by `define`. No arity mismatch.
   (`extensions/gsd/command-handlers.rkt`)
 - **W2**: Planning coherence update — STATE.md, PLAN.md, SUMMARY.md
-  reflect v0.86.4 truth. Cleaned `q/.planning/` to redirect stub only.
+  reflect v0.86.5 truth. Cleaned `q/.planning/` to redirect stub only.
 - **W3**: Fixed line-length lint in `tui/commands.rkt:185` (152→92 chars
-  via `string-append`). Version bump 0.86.4→0.86.4.
+  via `string-append`). Version bump 0.86.5→0.86.5.
 
-## v0.86.4 — 2026-05-22
+## v0.86.5 — 2026-05-22
 
 ### GSD Transaction Contract Mismatch Fix
 
@@ -1544,7 +1544,7 @@ Systematic replacement of `any/c` in `contract-out` boundaries with precise doma
   command messages. Includes `hook-result-payload` block reason when
   present for more specific diagnostics (tui/commands.rkt).
 
-## v0.86.4 — 2026-05-22
+## v0.86.5 — 2026-05-22
 
 ### Entrypoint Hardening — /go Unknown Command Fix
 
@@ -1552,7 +1552,7 @@ Systematic replacement of `any/c` in `contract-out` boundaries with precise doma
 - **W1**: Classified `execute-command` as critical hook — timeout/error now returns `hook-block` instead of `hook-pass` (extensions/hooks.rkt)
 - **W2**: UX hardening in TUI — command-dispatch failure now shows specific guidance message instead of generic "Unknown command" (tui/commands.rkt)
 
-## v0.86.4 — 2026-05-22
+## v0.86.5 — 2026-05-22
 
 ### Project Review Remediation
 
@@ -1575,7 +1575,7 @@ Systematic replacement of `any/c` in `contract-out` boundaries with precise doma
   `test-destructive-warning.rkt`). Security suite: 15→18 files.
 
 **Coherence:**
-- MAT-01: Updated planning artifacts (STATE.md, SUMMARY.md, PLAN.md) for v0.86.4.
+- MAT-01: Updated planning artifacts (STATE.md, SUMMARY.md, PLAN.md) for v0.86.5.
 - MAT-02: Verified `q/.planning/` redirect stub enforcement.
 - MAT-03: Added `doc-freshness` to `pre-commit.rkt` fast-lint-checks.
 - DOC-01: Added v0.54.0–v0.54.6 CHANGELOG entries. Removed duplicate header.
@@ -1584,7 +1584,7 @@ Systematic replacement of `any/c` in `contract-out` boundaries with precise doma
 - Contract coverage: 50.0% (221/442 source files)
 - Source modules: 442, Test files: 610+
 
-## v0.86.4 — 2026-05-22
+## v0.86.5 — 2026-05-22
 
 ### GSD Coherence & Documentation Anti-Drift
 
@@ -1592,13 +1592,13 @@ Systematic replacement of `any/c` in `contract-out` boundaries with precise doma
   Project root `.planning/` is canonical; `q/.planning/` is a redirect stub.
   Added CANONICAL.md policy marker.
 - **Planning coherence update** — synchronized PLAN.md, STATE.md, SUMMARY.md
-  with current project state (v0.54.x series through v0.86.4).
+  with current project state (v0.54.x series through v0.86.5).
 - **Documentation freshness/drift checks** — added `scripts/lint-doc-freshness.rkt`
   checking 10 canonical docs for version marker consistency. Handles 3 marker
   patterns: HTML comment (`verified-against`), `## Version` heading, inline
   `Q x.y.z`. Added to CI lint gate (`lint-all.rkt`). 4 unit tests.
 
-## v0.86.4 — 2026-05-22
+## v0.86.5 — 2026-05-22
 
 ### Test Runner Truthfulness + CI Security Gate
 
@@ -1611,7 +1611,7 @@ Systematic replacement of `any/c` in `contract-out` boundaries with precise doma
   explicit 15-file manifest covering sandbox, permission, safe-mode, and tool
   security tests. New Gate 2b security job in CI.
 
-## v0.86.4 — 2026-05-22
+## v0.86.5 — 2026-05-22
 
 ### Safety Policy Hardening
 
@@ -1623,7 +1623,7 @@ Systematic replacement of `any/c` in `contract-out` boundaries with precise doma
 - **Denial-path integration tests** — 5 tests verifying tool denial in strict
   mode, approval flow, and permissive auto-approval.
 
-## v0.86.4 — 2026-05-22
+## v0.86.5 — 2026-05-22
 
 ### Layer Adapter & Iteration Extraction
 
@@ -1636,7 +1636,7 @@ Systematic replacement of `any/c` in `contract-out` boundaries with precise doma
 - **Event-order golden tests** — 6 golden tests verifying event sequence across
   turn start → tool execution → turn end lifecycle.
 
-## v0.86.4 — 2026-05-22
+## v0.86.5 — 2026-05-22
 
 ### Session Mutation & Tool Taxonomy
 
@@ -1650,7 +1650,7 @@ Systematic replacement of `any/c` in `contract-out` boundaries with precise doma
   to 9+9 tool classification covering all 15 built-in tools. Tool names use
   hyphens (`spawn-subagent`) not underscores.
 
-## v0.86.4 — 2026-05-22
+## v0.86.5 — 2026-05-22
 
 ### Contract Facade Tightening
 
@@ -1663,7 +1663,7 @@ Systematic replacement of `any/c` in `contract-out` boundaries with precise doma
 - **Scheduler/tool keyword contract conformance** — changed `any/c` to concrete
   types for `exec-context?`, `scheduler-result?`, and tool-batch contracts.
 
-## v0.86.4 — 2026-05-22
+## v0.86.5 — 2026-05-22
 
 ### Entrypoint Hardening
 
@@ -1675,11 +1675,11 @@ Systematic replacement of `any/c` in `contract-out` boundaries with precise doma
 - **CI entrypoint regression gate** — added `--help` grep check to CI smoke
   gate alongside existing `--version` check.
 
-## v0.86.4 — 2026-05-22
+## v0.86.5 — 2026-05-22
 
 ### Contract Hotfix + Compile Gate (v0.53.11)
 
-Fixed the remaining contract-regression fallout from the v0.86.4 contract coverage sprint.
+Fixed the remaining contract-regression fallout from the v0.86.5 contract coverage sprint.
 
 **Contract arity fixes:**
 - `tui/tree-view.rkt`: `selected-node` contract fixed from 1-arg to 2-arg signature.
@@ -1710,7 +1710,7 @@ Fixed the remaining contract-regression fallout from the v0.86.4 contract covera
 - `--suite smoke`: 525/525 files passed, 0 failed, 0 timeouts
 - `--suite all`: 608/608 files passed, 0 failed, 0 timeouts
 
-## v0.86.4 — 2026-05-22
+## v0.86.5 — 2026-05-22
 
 ### Test Runner Deadlock Fix + Test Failure Fixes
 
@@ -1720,7 +1720,7 @@ Fixed the remaining contract-regression fallout from the v0.86.4 contract covera
 - Batched thread execution with `(collect-garbage 'major)` between batches.
 - Fixed timeout path: non-blocking wait after kill with thread-kill fallback.
 
-**Test Failure Fixes (v0.86.4 cherry-picks):**
+**Test Failure Fixes (v0.86.5 cherry-picks):**
 - `runtime/settings.rkt`: widened `make-minimal-settings` `#:provider` to `any/c`
   to accept provider structs (not just strings).
 - `runtime/session-store.rkt`: fixed `in-memory-fork!` match pattern (`___` was
@@ -1735,7 +1735,7 @@ Fixed the remaining contract-regression fallout from the v0.86.4 contract covera
 
 
 
-## v0.86.4 — 2026-05-21
+## v0.86.5 — 2026-05-21
 
 ### Stream Decomposition & Audit Verification
 
@@ -1750,21 +1750,21 @@ Fixed the remaining contract-regression fallout from the v0.86.4 contract covera
 - Struct-out: 21 files
 - Source modules: 441, Test files: 608
 
-## v0.86.4 — 2026-05-21
+## v0.86.5 — 2026-05-21
 
 ### v0.51.x Series Complete
 
 Completed all 9 sub-milestones of the Racket Concepts Remediation series:
 
-- **v0.86.4** — Agent loop contracts (loop-phases.rkt, agent-session.rkt)
-- **v0.86.4** — TUI contracts (state-events.rkt, state-ui.rkt, renderer.rkt)
-- **v0.86.4** — Terminal decoder encapsulation (decoder-state struct)
-- **v0.86.4** — FS adapter activation (18 raw FS calls → adapter-routed)
-- **v0.86.4** — Settings & session contracts (36 functions contracted)
-- **v0.86.4** — Representation hiding (7 TUI structs made opaque)
-- **v0.86.4** — Pattern matching (10 cond→match across 4 files)
-- **v0.86.4** — Security tests + CHANGELOG precision
-- **v0.86.4** — Deprecation of bump-version.rkt
+- **v0.86.5** — Agent loop contracts (loop-phases.rkt, agent-session.rkt)
+- **v0.86.5** — TUI contracts (state-events.rkt, state-ui.rkt, renderer.rkt)
+- **v0.86.5** — Terminal decoder encapsulation (decoder-state struct)
+- **v0.86.5** — FS adapter activation (18 raw FS calls → adapter-routed)
+- **v0.86.5** — Settings & session contracts (36 functions contracted)
+- **v0.86.5** — Representation hiding (7 TUI structs made opaque)
+- **v0.86.5** — Pattern matching (10 cond→match across 4 files)
+- **v0.86.5** — Security tests + CHANGELOG precision
+- **v0.86.5** — Deprecation of bump-version.rkt
 
 ### Fixed
 - **Test runner critical fix**: `parse-raco-output` silently failed for multi-submodule files
@@ -1777,55 +1777,55 @@ Completed all 9 sub-milestones of the Racket Concepts Remediation series:
 - PRs merged: #4855–#4872 (18 PRs across v0.51.x)
 - Sub-milestones closed: #451–#459 (9 milestones)
 - Test runner: Fixed — now correctly reports pass/fail counts for multi-submodule files
-- Version: 0.86.4 → 0.86.4
+- Version: 0.86.5 → 0.86.5
 
 ## v0.51.x — Racket Concepts Remediation (complete)
 
-### v0.86.4 — Pattern Matching Conversion (§23)
+### v0.86.5 — Pattern Matching Conversion (§23)
 - Converted 10 `cond` forms to `match` across 4 files for readability and exhaustiveness
 - `tools/scheduler.rkt`: 3 conversions (hook result dispatch, preflight dispatch, post-hook dispatch)
 - `runtime/session-store.rkt`: 2 conversions (first-entry type dispatch, list traversal)
 - `cli/args.rkt`: 3 conversions (acc-ref list traversal, command dispatch, mode dispatch)
 - `interfaces/doctor.rkt`: 2 conversions (version>=? list comparison)
 
-### v0.86.4 — Representation Hiding (§24)
+### v0.86.5 — Representation Hiding (§24)
 - Removed `#:transparent` from `tui-ctx` struct (PR #4865)
 - Removed `#:transparent` from 6 additional TUI structs: overlay-config, render-components,
   key-spec, tree-node, parsed-command, settings-entry, select-list-state (PR #4866)
 - State/layout structs intentionally kept transparent for debugging
 
-### v0.86.4 — Settings & Session Contracts (§22)
+### v0.86.5 — Settings & Session Contracts (§22)
 - `runtime/settings.rkt`: 26 functions contracted (was 6)
 - `runtime/session-config.rkt`: 4 helpers contracted, 31 functions total, zero `any/c`
 - `runtime/session-store.rkt`: 6 functions contracted; fixed `ensure-session-version-header!`
   return type (`void?` → `exact-nonnegative-integer?`) and `fork-session!` return type
   (`string?` → `exact-nonnegative-integer?`)
 
-### v0.86.4 — FS Adapter Activation (§21)
+### v0.86.5 — FS Adapter Activation (§21)
 - Activated dead FS adapter in `interfaces/sessions.rkt` with `fs-*` accessor helpers
 - Replaced all 18 raw FS calls with adapter-routed calls
 - 100% FS operation coverage through parameterized adapter
 
-### v0.86.4 — Terminal Decoder Encapsulation (§20)
+### v0.86.5 — Terminal Decoder Encapsulation (§20)
 - Encapsulated `decoder-state` struct with mutable fields + `current-decoder` parameter
 - Factory `make-terminal-input-decoder` for isolated test instances
 - Parameter-based backward compatibility — callers need zero changes
 
-### v0.86.4 — TUI Contracts (§19)
+### v0.86.5 — TUI Contracts (§19)
 - `tui/state-events.rkt`: 5 exported functions contracted (was 0)
 - `tui/state-ui.rkt`: 30+ functions contracted; `has-selection?` fixed to return `boolean?`
 - `tui/renderer.rkt`: 3 `any/c` tightened to `void?`
 
-### v0.86.4 — Agent Loop Contracts (§18)
+### v0.86.5 — Agent Loop Contracts (§18)
 - `agent/loop-phases.rkt`: Added required `tool?` import for contract
 - `runtime/agent-session.rkt`: `resume-agent-session` second arg widened to accept `(or/c session-config? hash?)`
 - `tui/session-lifecycle.rkt`: Skipped (too complex for safe contract tightening)
 
-## v0.86.4 — 2026-05-21
+## v0.86.5 — 2026-05-21
 
 ### Fixed
 - D1: `load-agents-context` contract corrected from `list?` to `string?` (returns joined string, same pattern as A1).
-- M1: Corrected v0.86.4 CHANGELOG PR reference from #4825 to #4823.
+- M1: Corrected v0.86.5 CHANGELOG PR reference from #4825 to #4823.
 - M2a: Isolated 4 `build-provider` tests from global `~/.q/config.json` by adding `#:config-path`.
 - M2b: Isolated `extension-registry` test from CWD `.q/extensions/` by using `--project-dir` with temp dir.
 
@@ -1837,9 +1837,9 @@ Completed all 9 sub-milestones of the Racket Concepts Remediation series:
 
 ### Waves
 - W0: All fixes (D1, M1, M2a, M2b)
-- W1: CHANGELOG + version bump 0.86.4→0.86.4
+- W1: CHANGELOG + version bump 0.86.5→0.86.5
 
-## v0.86.4 — 2026-05-21
+## v0.86.5 — 2026-05-21
 
 ### Fixed
 - A1: `build-system-preamble` contract corrected `list?` → `string?` (returns joined string).
@@ -1860,7 +1860,7 @@ Completed all 9 sub-milestones of the Racket Concepts Remediation series:
 - W0: Contract fixes (PR #4823)
 - W1: CHANGELOG + version bump (this release)
 
-## v0.86.4 — 2026-05-20
+## v0.86.5 — 2026-05-20
 
 ### Changed
 - T3-5: Memoized `load-settings` with file-mtime cache in `runtime/settings.rkt`
@@ -1871,18 +1871,18 @@ Completed all 9 sub-milestones of the Racket Concepts Remediation series:
 ### Added
 - `util/hash-helpers.rkt` — 13 pure hash utility tests
 - `openai-config` struct with `hash->openai-config` converter
-- `streaming-message-fsm-state` introspection accessor (from v0.86.4)
-- `classify-chunk` / `chunk-has-data?` pure streaming helpers (from v0.86.4)
-- `ui-state-streaming-phase` / `set-streaming-phase` TUI accessors (from v0.86.4)
+- `streaming-message-fsm-state` introspection accessor (from v0.86.5)
+- `classify-chunk` / `chunk-has-data?` pure streaming helpers (from v0.86.5)
+- `ui-state-streaming-phase` / `set-streaming-phase` TUI accessors (from v0.86.5)
 
 ### v0.50.x Series Summary
-- v0.86.4: Struct-out reduction (55→31), contract-out expansion (28%→48%)
-- v0.86.4: Typed event predicates, facade surface verification
-- v0.86.4: any/c reduction (93→34, 63%), contract tightening
-- v0.86.4: Opaque structs (5 `#:transparent` removed from mutable structs)
-- v0.86.4: cond→match conversions (10), pattern matching improvement
-- v0.86.4: Streaming FSM (pure chunk classification + FSM state), TUI streaming phase
-- v0.86.4: Utility relocation, settings memoization, sessions adapter, openai config struct
+- v0.86.5: Struct-out reduction (55→31), contract-out expansion (28%→48%)
+- v0.86.5: Typed event predicates, facade surface verification
+- v0.86.5: any/c reduction (93→34, 63%), contract tightening
+- v0.86.5: Opaque structs (5 `#:transparent` removed from mutable structs)
+- v0.86.5: cond→match conversions (10), pattern matching improvement
+- v0.86.5: Streaming FSM (pure chunk classification + FSM state), TUI streaming phase
+- v0.86.5: Utility relocation, settings memoization, sessions adapter, openai config struct
 
 ### Metrics
 - arch-fitness tests: 33/33 ✅
@@ -1897,7 +1897,7 @@ Completed all 9 sub-milestones of the Racket Concepts Remediation series:
 - W1: Sessions adapter + OpenAI config struct (PR #4820)
 - W2: Version bump + final metrics (this release)
 
-## v0.86.4 — 2026-05-20
+## v0.86.5 — 2026-05-20
 
 ### Changed
 - T2-6: Extracted `classify-chunk` and `chunk-has-data?` as pure functions from stream-from-provider
@@ -1923,7 +1923,7 @@ Completed all 9 sub-milestones of the Racket Concepts Remediation series:
 - W1: Streaming Message FSM (PR #4812)
 - W2: TUI streaming FSM + version bump (this release)
 
-## v0.86.4 — 2026-05-20
+## v0.86.5 — 2026-05-20
 
 ### Changed
 - T2-5: 10 `cond`→`match` conversions across 8 files for exhaustiveness and idiomatic Racket:
@@ -1945,7 +1945,7 @@ Completed all 9 sub-milestones of the Racket Concepts Remediation series:
 - W1: Runtime+Extensions cond→match (PR #4805)
 - W2: Interface+Tools cond→match + version bump (this release)
 
-## v0.86.4 — 2026-05-20
+## v0.86.5 — 2026-05-20
 
 ### Changed
 - T2-1: `agent/state.rkt` — `loop-state` struct made opaque (removed `#:transparent`).
@@ -1965,7 +1965,7 @@ Completed all 9 sub-milestones of the Racket Concepts Remediation series:
 - W1: queue opaque (PR #4798)
 - W2: SDK opaque + version bump (this release)
 
-## v0.86.4 — 2026-05-20
+## v0.86.5 — 2026-05-20
 
 ### Changed
 - T1-3: `runtime/context-assembly.rkt` — 76 any/c → 24 (reduced by 52). Struct accessors, builders,
@@ -1984,7 +1984,7 @@ Completed all 9 sub-milestones of the Racket Concepts Remediation series:
 - W1: loop-stream.rkt any/c → specific types (PR #4791)
 - W2: openai-compatible.rkt contracts + version bump (this release)
 
-## v0.86.4 — 2026-05-20
+## v0.86.5 — 2026-05-20
 
 ### Added
 - T1-1: `llm/stream.rkt` — 13 exports contracted (SSE parsing, chunk normalization, timeouts).
@@ -2004,7 +2004,7 @@ Completed all 9 sub-milestones of the Racket Concepts Remediation series:
 - W1: gsd-planning.rkt + loop-fsm.rkt contracts (PR #4784)
 - W2: spawn-subagent.rkt + run-modes.rkt contracts + version bump (this release)
 
-## v0.86.4 — 2026-05-20
+## v0.86.5 — 2026-05-20
 
 ### Fixed
 - P1-1/T1-5: `print-version` contract corrected from `(-> void?)` to `(->* () (output-port?) void?)`.
@@ -2013,7 +2013,7 @@ Completed all 9 sub-milestones of the Racket Concepts Remediation series:
 
 ### Changed
 - Kicked off v0.50.x abstraction remediation series.
-- P0-1 (RETROSPECTIVE missing) and P0-2 (no v0.86.4 tag) confirmed resolved from v0.86.4.
+- P0-1 (RETROSPECTIVE missing) and P0-2 (no v0.86.5 tag) confirmed resolved from v0.86.5.
 
 ### Metrics (verified from source)
 - struct-out forms (KPI-dirs): 31 (KPI gate ≤55 ✅)
@@ -2025,7 +2025,7 @@ Completed all 9 sub-milestones of the Racket Concepts Remediation series:
 - W0: Fix print-version contract + CHANGELOG wording (PR #4777)
 - W1: Version bump + release (this release)
 
-## v0.86.4 — 2026-05-20
+## v0.86.5 — 2026-05-20
 
 ### Fixed
 - R01: `cancel-token!` contract return type corrected from `void?` to `cancellation-token?`
@@ -2035,11 +2035,11 @@ Completed all 9 sub-milestones of the Racket Concepts Remediation series:
 - R04: `write-compaction-entry!` hardened with explicit `(void)` return.
 
 ### Changed
-- Corrected CHANGELOG metrics across v0.86.4/11/12 — removed fabricated baselines and denominators.
-  v0.86.4: struct-out baseline was 78 (not 52), contract-out baseline was 101 (not 113).
-  v0.86.4: KPI-dir count is 344 (not 351), coverage was 43.3% (not 42.5%).
-  v0.86.4: KPI-dir count is 344 (not 350), coverage was 45.9% (not 45.1%).
-- Created RETROSPECTIVE-v0.49.x.md (comprehensive per-milestone assessment v0.86.4–v0.86.4).
+- Corrected CHANGELOG metrics across v0.86.5/11/12 — removed fabricated baselines and denominators.
+  v0.86.5: struct-out baseline was 78 (not 52), contract-out baseline was 101 (not 113).
+  v0.86.5: KPI-dir count is 344 (not 351), coverage was 43.3% (not 42.5%).
+  v0.86.5: KPI-dir count is 344 (not 350), coverage was 45.9% (not 45.1%).
+- Created RETROSPECTIVE-v0.49.x.md (comprehensive per-milestone assessment v0.86.5–v0.86.5).
 
 ### Metrics (verified from source)
 - struct-out forms (KPI-dirs): 31 (KPI gate ≤55 ✅)
@@ -2052,13 +2052,13 @@ Completed all 9 sub-milestones of the Racket Concepts Remediation series:
 - W1: CHANGELOG correction + retrospective (PR #4772)
 - W2: Version bump + release (this release)
 
-## v0.86.4 — 2026-05-20
+## v0.86.5 — 2026-05-20
 
 ### Changed
 - Added contract-out to 9 files: util/version.rkt, llm/model-defaults.rkt, agent/event-json.rkt,
   agent/state.rkt, cli/args.rkt, tools/tool-struct.rkt, util/cancellation.rkt, agent/event-types.rkt,
   agent/queue.rkt.
-- Fixed 47 test regressions from v0.86.4 — explicit `(void)` returns in session event handlers,
+- Fixed 47 test regressions from v0.86.5 — explicit `(void)` returns in session event handlers,
   corrected require paths, parsed-command struct handling, event bus make-event wrapping,
   auto-retry lifecycle key (`maxRetries` camelCase).
 - Reverted util/version.rkt from `#lang typed/racket` to `#lang racket/base` for contract-out support.
@@ -2074,14 +2074,14 @@ shows actual KPI-dir count is 344 files (not 350), coverage is 45.9% (not 45.1%)
 and previous version was 43.3% (not 42.5%). Corrected 2026-05-20.
 
 ### Waves
-- W0: Fix 47 test regressions from v0.86.4 (PR #4763)
+- W0: Fix 47 test regressions from v0.86.5 (PR #4763)
 - W1: Contract-out coverage gap close — +9 files (PR #4765)
 - W2: CHANGELOG, version bump (retrospective was NOT delivered in this release)
 
-## v0.86.4 — 2026-05-20
+## v0.86.5 — 2026-05-20
 
 ### Fixed
-- Fixed 17 test regressions from v0.86.4 contract-out wave (RC-A through RC-J).
+- Fixed 17 test regressions from v0.86.5 contract-out wave (RC-A through RC-J).
 - RC-A: `valid-session-phase?` — wrap `memq` in boolean for contract compliance.
 - RC-B: `vcs-dir?` — wrap `member` in boolean for contract compliance.
 - RC-C: `any-tool-result-entry?` — wrap `memq` in boolean for contract compliance.
@@ -2094,7 +2094,7 @@ and previous version was 43.3% (not 42.5%). Corrected 2026-05-20.
 - RC-D extra: `require-safe-path!` — accept `path?` input.
 
 ### Changed
-- Corrected CHANGELOG v0.86.4 metrics: struct-out baseline was 78 (not 52), contract-out baseline was 101 (not 113).
+- Corrected CHANGELOG v0.86.5 metrics: struct-out baseline was 78 (not 52), contract-out baseline was 101 (not 113).
 - Claimed RETROSPECTIVE-v0.49.x.md was written — this was incorrect (file was never created at this point).
   Retrospective actually written in v0.49.13.
 
@@ -2105,7 +2105,7 @@ and previous version was 43.3% (not 42.5%). Corrected 2026-05-20.
 
 NOTE: Original entry claimed "149/351 = 42.5%". Per-tag verification shows
 actual KPI-dir count is 344 files, not 351. Coverage was 43.3%, not 42.5%.
-Corrected 2026-05-20 during v0.86.4 audit remediation.
+Corrected 2026-05-20 during v0.86.5 audit remediation.
 
 ### Waves
 - W0: Fix all 17 contract regressions (PR #4756)
@@ -2113,7 +2113,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - W2: Version bump + series close (this release)
 
 
-## v0.86.4 — 2026-05-20
+## v0.86.5 — 2026-05-20
 
 ### Changed
 - Closed v0.49.x audit remediation series.
@@ -2132,7 +2132,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 
 NOTE: Original entry claimed "52→31" baseline and "113→149" baseline.
 Per-tag verification shows actual baselines were 78 and 101 respectively.
-Corrected 2026-05-20 during v0.86.4 audit remediation.
+Corrected 2026-05-20 during v0.86.5 audit remediation.
 
 ### Waves
 - W0: Critical regression fixes + KPI gates (PR #4744)
@@ -2141,7 +2141,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - W3: Contract-out wave 2 — tools/util/agent (PR #4750)
 - W4: Process hygiene + version bump (this release)
 
-## v0.86.4 — 2026-05-19
+## v0.86.5 — 2026-05-19
 
 ### Changed
 - Started v0.48.x abstraction remediation series (KPI recovery).
@@ -2149,25 +2149,25 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
   - struct-out count must be <= 130
   - contract-out coverage must be >= 45%
 - Added v0.47.x retrospective wave index in planning artifacts.
-- Synced version surfaces to `0.86.4` (util/version.rkt, info.rkt, README badge/status).
+- Synced version surfaces to `0.86.5` (util/version.rkt, info.rkt, README badge/status).
 
 ### Notes
 - This milestone begins v0.48.x execution and locks KPI regression gates before further remediation waves.
 
-## v0.86.4 — 2026-05-19
+## v0.86.5 — 2026-05-19
 
 ### Changed
 - Finalized v0.47.x release metadata synchronization:
-  - `util/version.rkt` → `0.86.4`
-  - `info.rkt` → `0.86.4`
-  - README version badge/examples updated to `0.86.4`
+  - `util/version.rkt` → `0.86.5`
+  - `info.rkt` → `0.86.5`
+  - README version badge/examples updated to `0.86.5`
 - Added post-implementation GSD audit and remediation tracking in `.planning/`.
 
 ### Audit
 - Post-series audit report: `.planning/AUDIT-v0.47.x-POST-IMPLEMENTATION-GSD.md`
 - Current status: implementation materially complete with remaining process/test debt tracked in remediation items R0–R3.
 
-## v0.86.4 — 2026-05-14
+## v0.86.5 — 2026-05-14
 
 ### Fixed
 - W0: Added #:schema-version 1 to context-assembled-event (46/46 events now covered)
@@ -2181,7 +2181,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - W2: Deprecated emit-turn-start!/build-turn-context, removed from provide (M-3)
 - W2: Migrated test-stream-loop-w1.rkt to use phase functions
 
-## v0.86.4 — 2026-05-14
+## v0.86.5 — 2026-05-14
 
 ### Added
 - Contract-out for 7 `raise-*` functions in `util/errors.rkt`
@@ -2211,7 +2211,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - 10 dead imports removed from `runtime/iteration/step-interpreter.rkt`
 - Misleading header in `agent/loop.rkt` corrected
 
-## v0.86.4 — 2026-05-18
+## v0.86.5 — 2026-05-18
 
 ### Changed
 - **F23**: Extracted pure `select-messages` function from `context-assembly/selection.rkt`
@@ -2226,13 +2226,13 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - 21 `BOUNDARY: pure` tags across test suite (target ≥20)
 - 10 `BOUNDARY: serialization` tags across test suite (target ≥10)
 
-### KPI Results (Post v0.86.4)
+### KPI Results (Post v0.86.5)
 - Error hierarchy: unified (`provider-error` inherits from `q-error`)
 - Pure test count: 21 (target ≥20) ✓
 - Serialization test count: 10 (target ≥10) ✓
 - Schema version coverage: all core events have `#:schema-version` clauses
 
-## v0.86.4 — 2026-05-18
+## v0.86.5 — 2026-05-18
 
 ### Changed
 - **F1**: Created `agent/effect-types.rkt` with effect descriptor struct union (emit-event, update-fsm, dispatch-hook, stream-from-provider, none) and `execute-effects!` executor
@@ -2244,7 +2244,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - `tests/test-loop-phases.rkt` — 4 tests for pure phase functions
 - `tests/test-effect-executor.rkt` — 5 tests for step effect executor
 
-## v0.86.4 — 2026-05-18
+## v0.86.5 — 2026-05-18
 
 ### Changed
 - **F14**: Added `shared-command` and `command-result` structs to `util/command-types.rkt` for cross-subsystem type sharing
@@ -2259,7 +2259,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - `tests/test-trace-sink.rkt` — 4 tests for trace sink protocol
 - `tests/test-registry-snapshot.rkt` — 2 tests for snapshot isolation
 
-## v0.86.4 — 2026-05-18
+## v0.86.5 — 2026-05-18
 
 ### Changed
 - **F6**: Added per-type `#:schema-version` clause to `define-typed-event` macro
@@ -2272,7 +2272,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - `tests/test-schema-versioning.rkt` — 7 tests for per-type schema versioning
 - `tests/test-event-migration.rkt` — 5 tests for migration chaining
 
-## v0.86.4 — 2026-05-18
+## v0.86.5 — 2026-05-18
 
 ### Changed
 - **F16**: Extracted shared `util/fsm.rkt` generic FSM library — `make-fsm`, `fsm-lookup`, `fsm-valid-transition?`, `fsm-find-path`
@@ -2285,7 +2285,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - `turn-machine` export from `loop-fsm.rkt`
 - 2 new turn-reducer validation tests (19 total)
 
-## v0.86.4 — 2026-05-18
+## v0.86.5 — 2026-05-18
 
 ### Changed
 - **F10**: Removed 4 deprecated bash parameters (`current-block-destructive`, `current-warn-on-destructive`, `current-warning-port`, `current-extra-destructive-patterns`) — `bash-execution-config` struct is now the sole config path
@@ -2295,7 +2295,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - `TRANSITIONS-FLAT` — legacy flat transition pairs derived from enriched table
 - 6 new FSM event tests (29 total), 107 tests pass across bash-related files
 
-## v0.86.4 — 2026-05-18
+## v0.86.5 — 2026-05-18
 
 ### Changed
 - **F7**: Replaced if/when migration chain with data-driven migration registry in `session-migration.rkt` — adding a new migration is now a single `register-migration!` call
@@ -2307,7 +2307,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - `test-session-migration.rkt` — 2 new registry tests (10 total)
 - `test-jsonl-format-version.rkt` — 7 format header tests
 
-## v0.86.4 — 2026-05-18
+## v0.86.5 — 2026-05-18
 
 ### Changed
 - **F20**: Added `contract-out` to all public functions in `util/event-codec.rkt` (3) and `util/jsonl.rkt` (9) — serialization boundary now enforced
@@ -2316,7 +2316,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 ### Added
 - `test-jsonl-contracts.rkt` — 5 contract boundary tests
 
-## v0.86.4 — 2026-05-18
+## v0.86.5 — 2026-05-18
 
 ### Changed
 - **F5**: Unified `provider-error` into `q-error` hierarchy — provider-error now inherits from q-error instead of exn:fail, enabling catch-all `q-error?` handlers
@@ -2326,7 +2326,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - HTTP 413 context-overflow classification in `classify-http-status`
 - Provider error hierarchy tests (q-error subtype, context field)
 
-## v0.86.4 — 2026-05-17
+## v0.86.5 — 2026-05-17
 
 ### Fixed
 - **CRITICAL**: Restored CHANGELOG.md, README.md, and 10 docs/ files corrupted
@@ -2350,11 +2350,11 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
   to detect mixed-case markers (since `parse-plan-index` normalizes at parse).
 
 
-## v0.86.4 — 2026-05-14
+## v0.86.5 — 2026-05-14
 
 ### Fixed
 - **AX1-1 (HIGH)**: Widened `sdk-core.rkt` `run-prompt!` contract to accept
-  `(or/c string? message?)`, completing the N4 SDK widening from v0.86.4.
+  `(or/c string? message?)`, completing the N4 SDK widening from v0.86.5.
 - **AX1-4 (MED)**: Fixed `all-waves-complete?` case-insensitive status handling
   — `terminal-status?` now uses case-insensitive comparison, resolving
   pre-existing archive test failure (29/29 now pass).
@@ -2368,7 +2368,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
   for naming precision.
 
 
-## v0.86.4 — 2026-05-14
+## v0.86.5 — 2026-05-14
 
 ### Fixed
 - **H1**: Extracted `tool-registry` struct to `util/tool-registry-types.rkt`, breaking the runtime→tools reverse dependency layer violation
@@ -2380,7 +2380,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - **L2**: Added partial wave docs test — 3 waves with 2 docs must not trigger auto-complete
 
 
-## v0.86.4 — 2026-05-14
+## v0.86.5 — 2026-05-14
 
 ### Fixed
 - **BUG**: GSD `/done` auto-complete guard was too strict — when LLM completed all waves
@@ -2402,7 +2402,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - Regression tests for GSD `/done` bug (positive + negative cases).
 - `F4` test verifying spawn-subagent's 2-arg event-publisher calling convention.
 
-## v0.86.4 — 2026-05-17
+## v0.86.5 — 2026-05-17
 
 ### Fixed
 - **C1 CRITICAL**: spawn-subagent event-publisher arity mismatch — 1-arg lambda crashed
@@ -2419,28 +2419,28 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 ### New Export
 - `scheduler-batch-stats->hash` in `tools/scheduler.rkt`
 
-## v0.86.4 — 2026-05-17
+## v0.86.5 — 2026-05-17
 
 ### Fixed
 - **F1**: `test-session-lifecycle-ws.rkt` — 4 broken tests fixed: use `dict-has-key?`/`dict-ref` instead of `hash-has-key?`/`hash-ref` for `session-config?` compatibility; use `set-agent-session-config!` instead of `hash-set!` on raw hash
-- **F4**: Added missing CHANGELOG entries for v0.86.4 and v0.86.4
+- **F4**: Added missing CHANGELOG entries for v0.86.5 and v0.86.5
 
 ### Testing
-- Added regression test for v0.86.4 `build-session-context` shadowing bug — verifies 1-arg import distinct from 4-arg local function
-- Added regression test for v0.86.4 `emit-session-event!` contract violation — verifies non-hash payloads wrapped in `(hash 'raw payload)`
+- Added regression test for v0.86.5 `build-session-context` shadowing bug — verifies 1-arg import distinct from 4-arg local function
+- Added regression test for v0.86.5 `emit-session-event!` contract violation — verifies non-hash payloads wrapped in `(hash 'raw payload)`
 - test-session-lifecycle-ws.rkt: 5/5 pass (was 1/5)
 
-## v0.86.4 — 2026-05-17
+## v0.86.5 — 2026-05-17
 
 ### Fixed
 - **HIGH**: `emit-session-event!` contract violation — tool-coordinator passed raw `scheduler-batch-stats` struct instead of hash. Wraps non-hash payloads in `(hash 'raw payload)`.
 
-## v0.86.4 — 2026-05-17
+## v0.86.5 — 2026-05-17
 
 ### Fixed
 - **CRITICAL**: `build-session-context` recursive shadowing — local 4-arg definition shadowed imported 1-arg version, causing arity crash on 2nd prompt of any session with an index. Renamed local → `build-session-context-for-prompt`, import → `build-session-context/from-index`.
 
-## v0.86.4 — 2026-05-16
+## v0.86.5 — 2026-05-16
 
 ### Added
 - `bin/q` and `bin/q-tui` launch wrappers using `racket --make` for automatic stale bytecode recompilation after `git pull`
@@ -2453,7 +2453,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - 2 new error visibility tests: error text in transcript, status message for rate-limit errors
 - 8/8 TUI error recovery tests pass
 
-## v0.86.4 — 2026-05-16
+## v0.86.5 — 2026-05-16
 
 ### Fixed
 - **HIGH**: Fixed busy-state stuck bug during rapid GSD iterations — removed `min-busy-ms` anti-flicker guard in `handle-turn-completed` that kept `busy?=#t` when turns completed in <500ms
@@ -2464,10 +2464,10 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 ### Testing
 - 4 new watchdog test cases: turn-completed clears busy, rapid-iteration pattern, streaming guard, turn-cancelled clears busy-since
 
-## v0.86.4 — 2026-05-16
+## v0.86.5 — 2026-05-16
 
 ### Fixed
-- **F2**: Updated stale v0.86.4 watchdog comment in `tui/tui-render-loop.rkt` to reflect v0.86.4 L3+L4 changes
+- **F2**: Updated stale v0.86.5 watchdog comment in `tui/tui-render-loop.rkt` to reflect v0.86.5 L3+L4 changes
 
 ### Testing
 - **M1**: Added NF1 + stream error integration test — verifies `current-loop-state-for-error-recovery` is accessible and consistent during error recovery
@@ -2475,11 +2475,11 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - **L2**: Added wall-clock deadline “immediate second call" test
 - **L3**: Added 2 thinking-only partial message behavior tests (documents that thinking-only content is not persisted)
 
-## v0.86.4 — 2026-05-16
+## v0.86.5 — 2026-05-16
 
 ### Fixed
 - **M2**: Moved `emit-session-event!` from `runtime/runtime-helpers.rkt` to `agent/event-emitter.rkt` — fixes agent→runtime layer violation
-- **M1**: Merged duplicate CHANGELOG v0.86.4 sections
+- **M1**: Merged duplicate CHANGELOG v0.86.5 sections
 - **L1**: SSE stream `max-total-timeout` now derived from model's effective request timeout (2x, floor 600s) instead of hardcoded
 - **L3**: TUI busy-state watchdog threshold is now configurable via `current-busy-watchdog-ms` parameter
 
@@ -2488,7 +2488,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - **L2**: Added 2 tests for consecutive-empty counter reset on valid chunks and comment-line counting
 - **L4**: Extracted `check-busy-watchdog` to pure function; rewrote watchdog tests to use actual implementation; added 5 edge-case tests
 
-## v0.86.4 — 2026-05-16
+## v0.86.5 — 2026-05-16
 
 ### Added
 - **W0**: SSE stream wall-clock deadline (`#:max-total-timeout`) in `read-sse-chunks` — prevents indefinite hangs from keep-alive bypass (default 600s)
@@ -2499,7 +2499,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - **NF1–NF6** (v0.45.10): All audit findings verified already in place from v0.45.9
 
 
-## v0.86.4 — 2026-05-16
+## v0.86.5 — 2026-05-16
 
 ### Fixed
 - **NF1**: Partial messages from stream errors now flushed to session.jsonl via `current-loop-state-for-error-recovery` parameter (was in-memory only)
@@ -2509,7 +2509,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - **NF5**: Added thinking-length and turn ID to empty-response warning for better diagnostics
 - **NF6**: Retry context pollution prevention verified — error path returns original context, not loop-state
 
-## v0.86.4 — 2026-05-16
+## v0.86.5 — 2026-05-16
 
 ### Fixed
 - **AF1+AF2+AF3**: Removed 8 dead imports from session-lifecycle.rkt and selection.rkt
@@ -2517,7 +2517,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - **AF5/RC2**: Stream timeout now persists partial assistant messages to session.jsonl before re-raising errors
 
 
-## v0.86.4 — 2026-05-15
+## v0.86.5 — 2026-05-15
 
 ### Fixed
 - **NF7**: CLI render.rkt — fixed 3 kebab→camelCase key reads (`toolName`, `resultSummary`)
@@ -2530,7 +2530,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - **NF14**: run-tests.rkt — merged stderr+stdout for rackunit text-ui result parsing
 - **NF15**: Documented `cache-hit-p` stub with TODO comment
 
-## v0.86.4 — 2026-05-15
+## v0.86.5 — 2026-05-15
 
 ### Fixed
 - NF6/NF6b/NF6c: Fixed TUI camelCase key reads (toolName, resultSummary, maxRetries) in state-events.rkt
@@ -2542,7 +2542,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - Added OBS metrics test verifying tiered-context structure
 - Added regression test for first-turn context quality via tiered path
 
-## v0.86.4 — 2026-05-15
+## v0.86.5 — 2026-05-15
 
 ### Fixed
 - SAL-02: Added importance annotation support (message-importance, message-elevated-importance?)
@@ -2550,32 +2550,32 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - SAL-03: Dynamic Tier-C sizing (compute-tier-c-count) scales with message count
 - TEST-03: Added 10 edge case tests for fit-messages-pair-preserving and importance rescue
 
-## v0.86.4 — 2026-05-15
+## v0.86.5 — 2026-05-15
 
 ### Fixed
 - OBS-01/02/03: Added context-assembly-detail-event with tier counts, excluded count, WS stats
 - OBS-01: Tiered path now emits detailed assembly metrics per turn via turn-orchestrator
 
-## v0.86.4 — 2026-05-15
+## v0.86.5 — 2026-05-15
 
 ### Fixed
 - SAL-04: Added entity extraction utility (summary-entities.rkt) and quality gate in llm-summarize
 - CA-04: Expanded simple-summary-text from 20×100 to 30×200 with file path extraction
 - TEST-02: Added 9 tests for summary quality gates (test-summary-quality.rkt)
 
-## v0.86.4 — 2026-05-15
+## v0.86.5 — 2026-05-15
 
 ### Fixed
 - ARCH-01: Added optional #:trace callback to build-tiered-context for observability (OBS-01 partial)
 - CA-05: Deprecated build-assembled-context/raw with warn-deprecated! pointing to tiered path
 
-## v0.86.4 — 2026-05-15
+## v0.86.5 — 2026-05-15
 
 ### Fixed
 - CA-05: Extract shared session-walk.rkt, eliminate duplicate build-session-context between selection.rkt and serialization.rkt
 - ARCH-02 (partial): Deduplicate assemble-context, split-at-compaction, entry->context-message into single source
 
-## v0.86.4 — 2026-05-15
+## v0.86.5 — 2026-05-15
 
 ### Fixed
 - SAL-06: Wire gsd-pin flag into GSD wave-done and done command handlers
@@ -2583,29 +2583,29 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - Expanded regex fallback for GSD progress patterns (HANDOFF, milestone, review)
 - Extracted gsd-progress-message? to module level for testability
 
-## v0.86.4 — 2026-05-15
+## v0.86.5 — 2026-05-15
 
 ### Fixed
 - CA-01: Inject summary into result messages when messages are excluded from context
 - CA-02: Replace hash-ref on context-summary struct with context-summary-entry-count accessor
 - New test: summary-injected-into-result-messages-when-excluded
 
-## v0.86.4 — 2026-05-14
+## v0.86.5 — 2026-05-14
 
 ### Fixed
 - NF4: Fix TUI `[TOOL] ?:` ghost entries — widen tool-start dedup window from 1 to 10
   entries so interleaved assistant/turn events don't break dedup between
   `tool.call.started` and `tool.execution.started`
 - NF2: Fix `test-scheduler-safe-mode.rkt` and `test-scheduler-hooks.rkt` to use
-  `scheduler-batch-stats` struct accessors instead of `hash-ref` (broken by v0.86.4)
+  `scheduler-batch-stats` struct accessors instead of `hash-ref` (broken by v0.86.5)
 - NF3: Wire `effective-bash-config` into `tool-bash` execution path so the config
   struct actually controls bash policy/block/warn behavior
 - NF1: Extract 5 nested scheduler Plan API test-cases to top level for discoverability
 
-## v0.86.4 — 2026-05-14
+## v0.86.5 — 2026-05-14
 
 ### Fixed
-- Fixed test-main.rkt broken by v0.86.4 boundary hardening (16+ unbound identifiers)
+- Fixed test-main.rkt broken by v0.86.5 boundary hardening (16+ unbound identifiers)
 - Added 5 event types to all-known-event-types registry
 - Added test coverage for scheduler plan API (6 structs + 2 functions)
 - Wired bash-execution-config into tool-bash execution path
@@ -2617,7 +2617,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - Strengthened deprecation warning test to verify log output content
 - Fixed pre-existing test-event-json.rkt failures (wrong type strings)
 
-## v0.86.4 — 2026-05-14
+## v0.86.5 — 2026-05-14
 
 ### Changed
 - **R2**: Migrated `context.assembled` event from 6-key hasheq to `context-assembled-event` struct
@@ -2631,7 +2631,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - 5 new typed event structs with full codec serialization
 - 5 new codec round-trip tests (32 total in suite)
 
-## v0.86.4 — 2026-05-14
+## v0.86.5 — 2026-05-14
 
 ### Changed
 - **R3**: Added `scheduler-problem` and `scheduler-plan` structs for scheduler observability
@@ -2644,7 +2644,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - `make-bash-execution-config` constructor (reads from deprecated parameters)
 - Backward-compatible `run-tool-batch` entry point preserved
 
-## v0.86.4 — 2026-05-14
+## v0.86.5 — 2026-05-14
 
 ### Changed
 - **R4**: Added `turn-event-msg-hook-block` event and `stream → blocked` transition to turn FSM
@@ -2656,7 +2656,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 ### Fixed
 - 3 broken FSM integration points where state was not updated on early-return paths
 
-## v0.86.4 — 2026-05-14
+## v0.86.5 — 2026-05-14
 
 ### Changed
 - **R1**: Removed 15 `all-from-out` from `main.rkt` (~200 → ~18 exports)
@@ -2669,7 +2669,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 ### Removed
 - `main.rkt` no longer re-exports from 15 interface/runtime/core modules
 
-## v0.86.4 — 2026-05-14
+## v0.86.5 — 2026-05-14
 
 ### Added
 - **CF1**: 6 new typed-event structs (gsd-plan-archived, gsd-transition-failed, 4 future-ready)
@@ -2683,7 +2683,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - `test-gsd-command-normalization.rkt` imports `extract-cmd-args` from `util/command-helpers.rkt`
 - GSD typed event coverage: 12/17 (71%) → 17/17 (100%)
 
-## v0.86.4 — 2026-05-14
+## v0.86.5 — 2026-05-14
 
 ### Added
 - **R13**: 6 generative PBT properties for FSM determinism, closure, and reachability (turn + iteration)
@@ -2693,7 +2693,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 ### Changed
 - `tests/test-fsm-property.rkt` extended with 6 new properties (22 total)
 
-## v0.86.4 — 2026-05-14
+## v0.86.5 — 2026-05-14
 
 ### Added
 - **R10**: `context-assembly-call-options` struct bundling 8 keyword args for `build-assembled-context`
@@ -2704,7 +2704,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - `build-assembled-context` now delegates to v2 via call-options struct (backward-compatible)
 - `extract-cmd-args` deduplicated from `gsd/command-parser.rkt` and `gsd-planning/command-normalization.rkt`
 
-## v0.86.4 — 2026-05-14
+## v0.86.5 — 2026-05-14
 
 ### Added
 - **R8**: 11 GSD typed event structs via `define-typed-event` in `extensions/gsd/event-structs.rkt`
@@ -2718,7 +2718,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
   - `core.rkt`: 3 sites (command-received, command-completed, archive-failed)
   - `tool-handlers.rkt`: 1 site (mode-changed)
 
-## v0.86.4 — 2026-05-14
+## v0.86.5 — 2026-05-14
 
 ### Changed
 - **R2**: Turn-reducer is now the primary decision driver in `agent/loop.rkt`
@@ -2730,7 +2730,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - New integration test: `tests/test-turn-reducer-integration.rkt` (8 tests)
   covering full turn lifecycle via `decide-turn-step`
 
-## v0.86.4 — 2026-05-13
+## v0.86.5 — 2026-05-13
 
 ### Fixed
 - **F1**: Removed dead imports (`hook-result?`, `hook-result-action`, `hook-result-payload`)
@@ -2748,7 +2748,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - **F5**: Removed unused imports (`tool-call-intent?`, `make-stream-chunk`) from
   `test-tool-call-intent.rkt`
 
-## v0.86.4 — 2026-05-13
+## v0.86.5 — 2026-05-13
 
 ### Added
 - **C8-01**: Unified tool-call-intent AST for provider tool-call data
@@ -2757,7 +2757,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
   - Shadow validation in OpenAI, Anthropic, Gemini providers: round-trip check + log-warning on mismatch
   - NEW `tests/test-tool-call-intent.rkt`: 8 tests (5 round-trip, 3 provider shadow)
 
-## v0.86.4 — 2026-05-13
+## v0.86.5 — 2026-05-13
 
 ### Added
 - **A3-01**: Struct-ified turn-reducer hash inputs
@@ -2779,7 +2779,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - **C11-03**: Removed redundant `current-scheduler-strategy` parameter from `scheduler.rkt`
   - `run-tool-batch` now defaults to `(default-scheduler-strategy)` directly
 
-## v0.86.4 — 2026-05-13
+## v0.86.5 — 2026-05-13
 
 ### Fixed
 - **B1 CRITICAL**: Fixed TUI crash on slash commands — `process-slash-command` contract was too
@@ -2787,7 +2787,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
   but the wrapper contract in `tui-keybindings.rkt` only allowed `string?` or `symbol?`.
   Widened to `(or/c string? symbol? parsed-command?)`.
 
-## v0.86.4 — 2026-05-13
+## v0.86.5 — 2026-05-13
 
 ### Fixed
 - **F1 CRITICAL**: Fixed R2 event payload guard -- was inert in production due to symbol/string mismatch
@@ -2805,7 +2805,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - **F7**: Updated R2 wiring tests to use string event names (production path)
   - Tests now verify both symbol and string paths for `event-payload-contract`
 
-## v0.86.4 — 2026-05-13
+## v0.86.5 — 2026-05-13
 
 ### Changed
 - **R4**: Purified `dispatch-gsd-command` -- ZERO cmd-* side effects
@@ -2826,7 +2826,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
   - /done --force flag
   - /plan with no text routes to artifact
 
-## v0.86.4 — 2026-05-13
+## v0.86.5 — 2026-05-13
 
 ### Added
 - **R1-P2**: NEW `agent/turn-reducer.rkt` -- pure turn reducer
@@ -2835,7 +2835,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
   - ZERO side effects: no I/O, no mutation, no event emission
   - NEW `tests/test-turn-reducer.rkt`: 11 pure decision tests
 
-## v0.86.4 — 2026-05-13
+## v0.86.5 — 2026-05-13
 
 ### Added
 - **R1-P1**: NEW `agent/turn-model.rkt` -- turn-level model structs
@@ -2846,7 +2846,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
   - Convenience constructors + tag predicates
   - NEW `tests/test-turn-model.rkt`: 4 struct tests
 
-## v0.86.4 — 2026-05-13
+## v0.86.5 — 2026-05-13
 
 ### Changed
 - **R3**: Added `contract-out` to all 14 exports in `tools/registry.rkt`
@@ -2857,7 +2857,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - **R3**: `test-tool-registry-contracts.rkt` — 8 contract boundary tests
 - **R2**: 5 wiring tests in `test-event-payload-contracts.rkt` for event-payload-contract mapping
 
-## v0.86.4 — 2026-05-13
+## v0.86.5 — 2026-05-13
 
 ### Changed
 - **A7-01**: Migrated last `session-log-path` DRY site in `session-events.rkt`
@@ -2866,7 +2866,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - **A7-02**: 4 wrapping pattern tests + `check-provider-status!` tests in `test-stream-error-wrapping.rkt` (9 total)
 - **A7-03**: 7 stateful GSD dispatch tests in `test-gsd-command-dispatch.rkt` (12 total)
 
-## v0.86.4 — 2026-05-13
+## v0.86.5 — 2026-05-13
 
 ### Changed
 - **A6-01**: Adopted `session-log-path-for` in `session-lifecycle.rkt` and `agent-session.rkt` (7 call sites)
@@ -2879,7 +2879,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - **A6-03**: `test-gsd-command-dispatch.rkt` — 5 tests for dispatch-gsd-command routing
 - **A6-07**: 2 edge case tests for `classify-tool-results` unequal-length inputs
 
-## v0.86.4 — 2026-05-13
+## v0.86.5 — 2026-05-13
 
 ### Fixed
 - **REG-01**: Removed `make-tool` duplicate export from `tool-struct.rkt` (6 test compile failures)
@@ -2891,14 +2891,14 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - **N-01**: Added `register-tool-event-serializer!` auto-injecting `schemaVersion` helper
 - **N-02**: Added `test-tool-coordinator-phases.rkt` with 4 phase unit tests
 
-## v0.86.4 — 2026-05-12
+## v0.86.5 — 2026-05-12
 
 ### Changed
 - **S1-F1**: Added Abstraction Selection Guide to `docs/style-guide.md`
 - **S12-F1**: Added `;; BOUNDARY: <kind>` comment convention to 564 test files
 - **S1-F4**: Replaced `all-from-out` with explicit exports in `runtime/context-assembly.rkt`
 
-## v0.86.4 — 2026-05-12
+## v0.86.5 — 2026-05-12
 
 ### Changed
 - **S3-F2c**: Raw `tool` constructor no longer exported; consumers must use
@@ -2907,28 +2907,28 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
   `validate-plan-for-go`, `launch-wave-executor`, `build-go-prompt`
 - Fixed misleading "sole boundary module" comment in `turn-orchestrator.rkt`
 
-## v0.86.4 — 2026-05-12
+## v0.86.5 — 2026-05-12
 
 ### Changed
 - **S11-F1**: Extract shared `accumulate-stream-chunks` pure helper in loop-stream.rkt
 - **S11-F2**: Merge duplicate `normalize-openai-chunks` / `normalize-openai-chunk` paths
   in llm/stream.rkt; chunks now delegates to singular normalize-openai-chunk
 
-## v0.86.4 — 2026-05-12
+## v0.86.5 — 2026-05-12
 
 ### Changed
 - **S4-F1**: contract-out for 5 SDK session functions in main.rkt
 - **S4-F2b**: Add contract to maybe-compact-context in session-compaction.rkt
 - **S4-F3**: Guard checks before 7 cast calls in llm/model.rkt
 
-## v0.86.4 — 2026-05-12
+## v0.86.5 — 2026-05-12
 
 ### Changed
 - **S8-F1**: Add `schemaVersion` to all serialized events (macro-generated + 7 manual tool events)
 - **S8-F3**: Remove deprecated heuristic decode path from `event-codec.rkt`
 - `current-schema-version` parameter for safe event evolution (default 1)
 
-## v0.86.4 — 2026-05-12
+## v0.86.5 — 2026-05-12
 
 ### Changed
 - **S2-F1**: Extract `compute-parent-id` and `inject-system-instructions` as pure helpers from `session-lifecycle.rkt`
@@ -2938,16 +2938,16 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - Add unit tests for all extracted pure helpers (21 tests total)
 - Architecture score: 9.0 -> 9.2/10
 
-## v0.86.4 — 2026-05-12
+## v0.86.5 — 2026-05-12
 
 ### Added
 - T-01: tests/test-handle-user-submit.rkt — 4 tests for handle-user-submit! branches (busy-queue, duplicate-debounce, normal-submit, no-runner)
 - T-02: test-iteration-fsm.rkt — 2 integration tests for current-iteration-fsm-state parameter wiring
 
 ### Changed
-- C-01: CHANGELOG v0.86.4 entry documenting all 6 fixes/changes
+- C-01: CHANGELOG v0.86.5 entry documenting all 6 fixes/changes
 
-## v0.86.4 — 2026-05-12
+## v0.86.5 — 2026-05-12
 
 ### Changed
 - R-16: Decompose `process-extension-command` into parse→validate→execute phase helpers (tui/commands.rkt)
@@ -2959,13 +2959,13 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - N-04: Wire FSM state parameters (`current-iteration-fsm-state`, `current-turn-fsm-state`) at transitions
 - R-13: Eliminate `struct->vector` from event-json legacy codec path; add warning on event-emitter fallback
 
-## v0.86.4 — 2026-05-12
+## v0.86.5 — 2026-05-12
 
 ### Fixed
 - BUG-01: Fix sink-append-entries! infinite recursion in step-interpreter.rkt
 - R-01c: jsonl-read-all-valid-with-count delegates to jsonl-read-from-port
 
-## v0.86.4 — 2026-05-12
+## v0.86.5 — 2026-05-12
 
 ### Fixed
 - REG-01: Fix deleted runtime/iteration.rkt still imported by agent-session.rkt and session-lifecycle.rkt
@@ -2979,7 +2979,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - tests/test-error-classify-table.rkt: 6 tests for error classification table
 - tests/test-arch-fitness.rkt: 8 new architecture fitness hard gate tests
 
-## v0.86.4 — 2026-05-07
+## v0.86.5 — 2026-05-07
 
 ### Changed
 - DEBT-02: Rename hook event symbols `'tool.execution.start` -> `'started`, `'tool.execution.end` -> `'completed` in hook-types.rkt, tool-coordinator.rkt, streaming-observer.rkt (W0)
@@ -2987,12 +2987,12 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - DEBT-01: Delete `extensions/gsd-planning-state.rkt` shim, migrate 14 callers to direct gsd sub-module imports, add legacy wrappers in gsd-planning.rkt (W1)
 - W-04: Remove deprecated `handle-tool-call-completed`/`handle-tool-call-failed` from tui/state-events.rkt and cli/render.rkt, migrate 20 test files from `"tool.call.completed"`/`"tool.call.failed"` to `"tool.execution.completed"` with backward-compatible payload handling (W2)
 
-## v0.86.4 — 2026-05-12
+## v0.86.5 — 2026-05-12
 
 ### Fixed
 - L-NEW-01: Fix stale `"tool.execution.start"` in `test-rpc-methods.rkt` subscribe filter test
 
-## v0.86.4 — 2026-05-12
+## v0.86.5 — 2026-05-12
 
 ### Fixed
 - R-01: Fix 4 failing tests in `test-soft-iteration.rkt` (raw hash to tightened session-config? contract)
@@ -3001,9 +3001,9 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - W-NEW-03: Align legacy `TOPIC-TOOL-START`/`TOPIC-TOOL-END` constants to match typed event naming
 - W-NEW-01: `lookup-event-fields` returns `#f` for unknown events (was `'()`, masks typos)
 - W-NEW-02: `make-loop-config` default config changed from raw `(hash)` to `(hash->session-config (hash))`
-- LINT: Fix CHANGELOG.md v0.86.4 header formatting
+- LINT: Fix CHANGELOG.md v0.86.5 header formatting
 
-## v0.86.4 — 2026-05-12
+## v0.86.5 — 2026-05-12
 
 - W-02: Harden event-struct->hasheq with typed-event accessors (W0)
 - W-03: Add log-warning for missing event serializers (W0)
@@ -3017,25 +3017,25 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - D-01: Remove dead *-param wrappers from ui-surface.rkt (W0)
 - T-01..T-05: New test coverage for session-config contracts, TR boundary, payloads, macro registry
 
-## v0.86.4 — 2026-05-11
+## v0.86.5 — 2026-05-11
 
 ### Fixed
 - BUG-01: `config-provider` contract `(or/c #f symbol?)` → `(or/c #f provider?)` — crashed `--tui`
 - BUG-02: 5 more wrong contracts in `session-config.rkt` (`hash?` → correct struct predicates)
-- R-01: README v0.86.4 line restored to original description
+- R-01: README v0.86.5 line restored to original description
 - R-02: Added 12 missing keyboard handlers in `handle-key` (backspace, rubout, delete, left, right, home, end, kp-*, pgup, pgdn)
 - R-03: Migrated `tests/test-main.rkt` from `hash?`/`hash-ref` to `session-config?`/`dict-ref`
 
-## v0.86.4 — 2026-05-11
+## v0.86.5 — 2026-05-11
 
 ### Fixed
-- L-F1: CHANGELOG v0.86.4 header format corrected (double-dash → em-dash)
-- L-F2: CHANGELOG v0.86.4 date corrected (2026-05-07 → 2026-05-11)
-- V-01d: README v0.86.4 status line description corrected
-- V-02: 13 doc files version-synced from 0.86.4 → 0.86.4
+- L-F1: CHANGELOG v0.86.5 header format corrected (double-dash → em-dash)
+- L-F2: CHANGELOG v0.86.5 date corrected (2026-05-07 → 2026-05-11)
+- V-01d: README v0.86.5 status line description corrected
+- V-02: 13 doc files version-synced from 0.86.5 → 0.86.5
 - LATENT-01: Fixed 23 unbound ui-state-sel-anchor/ui-state-sel-end in tests/interfaces/tui.rkt
 
-## v0.86.4 — 2026-05-11
+## v0.86.5 — 2026-05-11
 
 ### Fixed
 - R-01–R-05: Re-exported `tool-execute` from `tools/tool.rkt` facade (5 test files fixed)
@@ -3045,14 +3045,14 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 - P-01: Replaced `struct-out summary-cache` with selective exports
 - P-02: Removed `#:transparent` from `model-registry` struct
 - P-03: Added deprecation note to `tool-execute` in `tool-struct.rkt`
-- CHANGELOG dates corrected for v0.86.4/6/7
+- CHANGELOG dates corrected for v0.86.5/6/7
 
 ### Added
 - Test for `build-assembled-context/raw` (T-01 memo injection)
 - Test for `start-trace-logger!` `#:port` parameter (T-02)
 - Test for `parse-wave-doc-from-string` (T-03 pure extraction)
 
-## v0.86.4 — 2026-05-07
+## v0.86.5 — 2026-05-07
 
 ### Goal: Runtime Loop Config Struct & Event DSL Polish (Milestone 8 of v0.38.x)
 
@@ -3077,7 +3077,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 **Verification**: targeted tests all pass (iteration, events, context-assembly)
 
 
-## v0.86.4 — 2026-05-07
+## v0.86.5 — 2026-05-07
 
 ### Goal: TUI State Decomposition Part 2 (Milestone 7 of v0.38.x)
 
@@ -3095,7 +3095,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
   `tui/tui-render-loop.rkt`, `extensions/dialog-api.rkt`, and 12+ test
   files.
 - **Bugfix**: Fixed `tools/scheduler.rkt` import of `tool-execute`
-  (pre-existing regression from v0.86.4 that blocked compilation of
+  (pre-existing regression from v0.86.5 that blocked compilation of
   TUI modules).
 - Added backward-compatible `ui-state-rendered-cache` and
   `ui-state-rendered-cache-width` accessors for `cache-state` sub-struct.
@@ -3103,7 +3103,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 **Verification**: lint 15/18 (3 pre-existing failures), all TUI tests pass
 
 
-## v0.86.4 — 2026-05-07
+## v0.86.5 — 2026-05-07
 
 ### Goal: TUI State Decomposition Part 1 (Milestone 6 of v0.38.x)
 
@@ -3124,7 +3124,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 
 ---
 
-## v0.86.4 — 2026-05-11
+## v0.86.5 — 2026-05-11
 
 ### Goal: Extension & GSD Cleanup (Milestone 5 of v0.38.x)
 
@@ -3152,7 +3152,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 
 ---
 
-## v0.86.4 — 2026-05-11
+## v0.86.5 — 2026-05-11
 
 ### Goal: Pure Core & Idiomatic Patterns (Milestone 4 of v0.38.x)
 
@@ -3175,7 +3175,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 
 ---
 
-## v0.86.4 — 2026-05-11
+## v0.86.5 — 2026-05-11
 
 ### Goal: Tool System Boundary Hardening (Milestone 3 of v0.38.x)
 
@@ -3194,7 +3194,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 
 ---
 
-## v0.86.4 — 2026-05-11
+## v0.86.5 — 2026-05-11
 
 ### Goal: Session-Config & Model-Registry Encapsulation (Milestone 2 of v0.38.x)
 
@@ -3213,7 +3213,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 
 ---
 
-## v0.86.4 — 2026-05-11
+## v0.86.5 — 2026-05-11
 
 ### Goal: Quick-Win Struct Safety (Milestone 1 of v0.38.x)
 
@@ -3235,7 +3235,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 
 ---
 
-## v0.86.4 — 2026-05-11
+## v0.86.5 — 2026-05-11
 
 ### Goal: Audit Remediation — Accessor Migration + Dormant Symbol Cleanup
 
@@ -3268,7 +3268,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 
 ---
 
-## v0.86.4 — 2026-05-11
+## v0.86.5 — 2026-05-11
 
 ### Goal: Architecture Fitness Tests (Milestone 8 of v0.37.x)
 
@@ -3289,7 +3289,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 
 ---
 
-## v0.86.4 — 2026-05-11
+## v0.86.5 — 2026-05-11
 
 ### Goal: FSM Transition Centralization (Milestone 7 of v0.37.x)
 
@@ -3314,7 +3314,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 
 ---
 
-## v0.86.4 — 2026-05-11
+## v0.86.5 — 2026-05-11
 
 ### Goal: Turn Orchestrator Decomposition (Milestone 6 of v0.37.x)
 
@@ -3335,7 +3335,7 @@ Corrected 2026-05-20 during v0.86.4 audit remediation.
 
 ---
 
-## v0.86.4 — 2026-05-11
+## v0.86.5 — 2026-05-11
 
 ### Goal: Iteration Loop Hygiene (Milestone 5 of v0.37.x)
 
@@ -3359,7 +3359,7 @@ test-iteration-integration 16/16, test-iteration-main-loop 3/3
 
 ---
 
-## v0.86.4 — 2026-05-11
+## v0.86.5 — 2026-05-11
 
 ### Goal: Context Assembly Purity (Milestone 4 of v0.37.x)
 
@@ -3380,7 +3380,7 @@ test-context-assembly-perf 4/4
 
 ---
 
-## v0.86.4 — 2026-05-11
+## v0.86.5 — 2026-05-11
 
 ### Goal: Iteration Step-Result Correctness (Milestone 3 of v0.37.x)
 
@@ -3406,7 +3406,7 @@ test-iteration-integration 16/16
 
 ---
 
-## v0.86.4 — 2026-05-11
+## v0.86.5 — 2026-05-11
 
 ### Goal: Registry Encapsulation + Concurrency (Milestone 2 of v0.37.x)
 
@@ -3427,7 +3427,7 @@ test-iteration-integration 16/16
 
 ---
 
-## v0.86.4 — 2026-05-11
+## v0.86.5 — 2026-05-11
 
 ### Goal: Config Accessor Adoption + Correctness (Milestone 1 of v0.37.x Racket Abstraction Remediation)
 
@@ -3467,7 +3467,7 @@ test-iteration-integration 16/16
 
 ---
 
-## v0.86.4 — 2026-05-10
+## v0.86.5 — 2026-05-10
 
 ### Goal: Audit Remediation — Comment Cleanup + Import + Test Optimization
 
@@ -3488,7 +3488,7 @@ test-iteration-integration 16/16
 
 ---
 
-## v0.86.4 — 2026-05-10
+## v0.86.5 — 2026-05-10
 
 ### Goal: Audit Remediation — Test Gaps + Dead Code + Contract Tightening
 
@@ -3512,7 +3512,7 @@ test-iteration-integration 16/16
 
 ---
 
-## v0.86.4 — 2026-05-10
+## v0.86.5 — 2026-05-10
 
 ### Goal: Audit Remediation — Contract Fixes + Dead Code + Test Gaps
 
@@ -3531,7 +3531,7 @@ test-iteration-integration 16/16
   format in `tools/registry-table.rkt`.
 
 ### Deprecation & Cleanup
-- **W-02**: Added deprecation warning to `lookup-event-fields` (target: v0.86.4).
+- **W-02**: Added deprecation warning to `lookup-event-fields` (target: v0.86.5).
 - **W-04**: Renamed `test-event-roundtrip-pbt.rkt` to `test-event-roundtrip.rkt`.
 - **Fix**: Added `assemble-context` to check-deps internal-prefixes (false positive).
 
@@ -3545,7 +3545,7 @@ test-iteration-integration 16/16
 **Verification**: 470/470 test files, lint 18/18
 
 
-## v0.86.4 — 2026-05-10
+## v0.86.5 — 2026-05-10
 
 ### Goal: Error Classification & Exception Hygiene (M-11, L-07, L-09)
 
@@ -3563,7 +3563,7 @@ test-iteration-integration 16/16
 
 **Verification**: All modules compile, lint 18/18
 
-## v0.86.4 — 2026-05-10
+## v0.86.5 — 2026-05-10
 
 ### Goal: Module Boundary Hardening (M-06, M-07, M-14, L-02)
 
@@ -3578,11 +3578,11 @@ test-iteration-integration 16/16
 
 ### Cleanup
 - **M-07** (MOD-01): Added deprecation notice to `runtime/iteration.rkt` facade.
-  New code should import from sub-modules directly. Removal targeted for v0.86.4.
+  New code should import from sub-modules directly. Removal targeted for v0.86.5.
 
 **Verification**: All modules compile, lint 18/18
 
-## v0.86.4 — 2026-05-10
+## v0.86.5 — 2026-05-10
 
 ### Goal: TUI State Decomposition (H-06, M-08, M-09, L-01, L-05)
 
@@ -3601,7 +3601,7 @@ test-iteration-integration 16/16
 
 **Verification**: All modules compile, lint 18/18
 
-## v0.86.4 — 2026-05-10
+## v0.86.5 — 2026-05-10
 
 ### Goal: Tool System Data Representation (M-03, M-04, M-13)
 
@@ -3618,7 +3618,7 @@ test-iteration-integration 16/16
 
 **Verification**: All modules compile, lint 18/18
 
-## v0.86.4 — 2026-05-10
+## v0.86.5 — 2026-05-10
 
 ### Goal: Context Assembly Purity (H-04, M-02, M-05, L-03, L-04)
 
@@ -3642,7 +3642,7 @@ test-iteration-integration 16/16
 
 **Verification**: All modules compile, lint 18/18
 
-## v0.86.4 — 2026-05-10
+## v0.86.5 — 2026-05-10
 
 ### Goal: GSD Concurrency & State Safety (H-03, H-05)
 
@@ -3661,7 +3661,7 @@ test-iteration-integration 16/16
 
 **Verification**: All GSD tests pass (43 tests), lint 18/18
 
-## v0.86.4 — 2026-05-10
+## v0.86.5 — 2026-05-10
 
 ### Goal: Security & Runtime Contracts (H-02, L-08, L-10)
 
@@ -3678,7 +3678,7 @@ test-iteration-integration 16/16
 
 **Verification**: All modules compile, lint 18/18
 
-## v0.86.4 — 2026-05-10
+## v0.86.5 — 2026-05-10
 
 ### Goal: Event Serialization Auto-Generation (H-01, M-10, M-12, L-06)
 
@@ -3704,7 +3704,7 @@ test-iteration-integration 16/16
 
 **Verification**: 111 event tests pass, lint 18/18
 
-## v0.86.4 — 2026-05-10
+## v0.86.5 — 2026-05-10
 
 ### Goal: Hotfix — Deadlock + Arity Crash + Dead Code Cleanup
 
@@ -3721,7 +3721,7 @@ test-iteration-integration 16/16
 
 **Verification**: lint 18/18, 0 GSD timeouts, all event round-trips pass
 
-## v0.86.4 — 2026-05-10
+## v0.86.5 — 2026-05-10
 
 ### Goal: Deep Audit Remediation (N-01–N-13, I-07)
 
@@ -3742,16 +3742,16 @@ test-iteration-integration 16/16
 - **N-10**: Added `test-process-extension-command.rkt` (4 tests)
 - **N-11**: Removed dead keymap actions (`tui.editor.cut`, `tui.editor.select-all`)
 - **N-12**: Replaced `error` with `raise-session-error` in `session-mutation.rkt`
-- **N-13**: Updated 11 docs files from v0.86.4 → v0.86.4
+- **N-13**: Updated 11 docs files from v0.86.5 → v0.86.5
 
 ### Carried Over
 - **I-07**: Fixed O(n) `(append old (list msg))` → O(1) `(cons msg old)` in `tool-turn-bridge.rkt` CAS retry
 
 **Verification**: lint 18/18, all targeted tests green
 
-## v0.86.4 — 2026-05-07
+## v0.86.5 — 2026-05-07
 
-### Goal: Extension & GSD Cleanup (v0.86.4 milestone — FINAL)
+### Goal: Extension & GSD Cleanup (v0.86.5 milestone — FINAL)
 
 ### W0 — Extension Loader & Remaining Fixes (W-12, I-10, I-17, I-21, I-22)
 - **W-12**: Added `filesystem-error` and `contract-error` categories to `classify-exception`
@@ -3767,21 +3767,21 @@ test-iteration-integration 16/16
 
 ## v0.35.x Architecture Abstraction Remediation — COMPLETE
 
-All 8 milestones delivered (v0.86.4 through v0.86.4):
-- **v0.86.4**: Event System Integrity (4 waves)
-- **v0.86.4**: Global State Isolation (2 waves)
-- **v0.86.4**: Runtime Config Struct & Scheduler Types (2 waves)
-- **v0.86.4**: Iteration Loop Decomposition (2 waves)
-- **v0.86.4**: TUI Dispatcher Refactoring (3 waves)
-- **v0.86.4**: Tool System Contracts & DSL (2 waves)
-- **v0.86.4**: Agent Session Invariants (2 waves)
-- **v0.86.4**: Extension & GSD Cleanup (1 wave)
+All 8 milestones delivered (v0.86.5 through v0.86.5):
+- **v0.86.5**: Event System Integrity (4 waves)
+- **v0.86.5**: Global State Isolation (2 waves)
+- **v0.86.5**: Runtime Config Struct & Scheduler Types (2 waves)
+- **v0.86.5**: Iteration Loop Decomposition (2 waves)
+- **v0.86.5**: TUI Dispatcher Refactoring (3 waves)
+- **v0.86.5**: Tool System Contracts & DSL (2 waves)
+- **v0.86.5**: Agent Session Invariants (2 waves)
+- **v0.86.5**: Extension & GSD Cleanup (1 wave)
 
 Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
-## v0.86.4 — 2026-05-07
+## v0.86.5 — 2026-05-07
 
-### Goal: Agent Session Invariants (v0.86.4 milestone)
+### Goal: Agent Session Invariants (v0.86.5 milestone)
 
 ### W0 — Session Mutation Guards (W-04, I-14, I-15)
 - **W-04**: `session-mutation.rkt` with guarded transition functions
@@ -3803,9 +3803,9 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 **Verification**: lint 16/18 (2 pre-existing version-sync), all tests green
 
-## v0.86.4 — 2026-05-07
+## v0.86.5 — 2026-05-07
 
-### Goal: Tool System Contracts & DSL (v0.86.4 milestone)
+### Goal: Tool System Contracts & DSL (v0.86.5 milestone)
 
 ### W0 — Tool DSL Improvements (W-16, W-20, I-09)
 - **W-16**: Arity wrapper in make-tool validates handler accepts 1 or 2 args
@@ -3822,9 +3822,9 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 **Verification**: lint 16/18 (2 pre-existing version-sync), all tool/bash tests green
 
-## v0.86.4 — 2026-05-07
+## v0.86.5 — 2026-05-07
 
-### Goal: TUI Dispatcher Refactoring (v0.86.4 milestone)
+### Goal: TUI Dispatcher Refactoring (v0.86.5 milestone)
 
 ### W0 — Event Reducer Registry (W-07, I-20)
 - **W-07**: Registry-based event reducers replace monolithic 25+ clause `case` dispatch
@@ -3849,9 +3849,9 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 **Verification**: lint 16/18 (2 pre-existing version-sync), 2010 tests green
 
-## v0.86.4 — 2026-05-07
+## v0.86.5 — 2026-05-07
 
-### Goal: Iteration Loop Decomposition (v0.86.4 milestone)
+### Goal: Iteration Loop Decomposition (v0.86.5 milestone)
 
 ### W0 — Step Directive Type & Phase Extraction (W-02, I-05)
 - **W-02**: Defined `step-directive?` union type: `directive-recurse`, `directive-stop`, `directive-yield`
@@ -3868,9 +3868,9 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 **Verification**: lint-all 18/18, smoke 2010/2010 green
 
-## v0.86.4 — 2026-05-07
+## v0.86.5 — 2026-05-07
 
-### Goal: Runtime Config Struct & Scheduler Types (v0.86.4 milestone)
+### Goal: Runtime Config Struct & Scheduler Types (v0.86.5 milestone)
 
 ### W0 — Runtime Config Struct (W-03)
 - **W-03**: `build-runtime-from-cli` returns `session-config?` instead of mutable hash
@@ -3887,15 +3887,15 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 **Verification**: lint-all 18/18, smoke 2010/2010 green
 
-## v0.86.4 — 2026-05-07
+## v0.86.5 — 2026-05-07
 
-### Goal: Global State Isolation (v0.86.4 milestone)
+### Goal: Global State Isolation (v0.86.5 milestone)
 
 ### W0 — Per-Session GSD Context (C-01)
 - **C-01**: Added 15 per-session accessors (`gsd-ctx-*`) with explicit ctx argument
 - **C-01**: Added `gsd-ctx` field to `extension-ctx` struct (backward-compat, defaults #f)
 - Fixed semaphore deadlock in `gsd-ctx-state-update!` and `gsd-ctx-history-update!` (direct box access inside locked section)
-- Deprecated backward-compat global accessors (removal v0.86.4)
+- Deprecated backward-compat global accessors (removal v0.86.5)
 - 13 new tests for context isolation and extension-ctx integration
 
 ### W1 — GSD Facade Public/Private Split & State Machine Assertion (W-17, I-16, I-18, I-24)
@@ -3907,9 +3907,9 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 **Verification**: lint-all 18/18, smoke 2031/2031 green
 
-## v0.86.4 — 2026-05-07
+## v0.86.5 — 2026-05-07
 
-### Goal: Event System Integrity (v0.86.4 milestone)
+### Goal: Event System Integrity (v0.86.5 milestone)
 
 ### W0 — Circuit Breaker Isolation (C-02, I-03)
 - **C-02**: Refactored `circuit-broken?`, `record-failure!`, `record-success!` to take explicit `breaker-state` hash arg
@@ -3934,26 +3934,26 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 **Verification**: lint-all 18/18, smoke 2031/2031 green
 
-## v0.86.4 — 2026-05-09
+## v0.86.5 — 2026-05-09
 
-### Goal: Documentation integrity fixes (v0.86.4 findings)
+### Goal: Documentation integrity fixes (v0.86.5 findings)
 
 ### W0 — Stale File Cleanup + Documentation Accuracy
 - **N-02**: Removed stale `FUNCTION-QUALITY-AUDIT.md` (was already absent, confirmed)
-- **N-01**: Removed stale inner `q/.planning/` directory (464 files, frozen at v0.86.4; canonical is outer `.planning/`)
-- **N-03**: Merged duplicate CHANGELOG v0.86.4 sections
-- **N-04**: Fixed README v0.86.4 description ("Architecture Decomposition" → "Deep Audit Remediation")
-- **N-05**: Added README v0.86.4 description ("Deep Audit Remediation Round 2")
+- **N-01**: Removed stale inner `q/.planning/` directory (464 files, frozen at v0.86.5; canonical is outer `.planning/`)
+- **N-03**: Merged duplicate CHANGELOG v0.86.5 sections
+- **N-04**: Fixed README v0.86.5 description ("Architecture Decomposition" → "Deep Audit Remediation")
+- **N-05**: Added README v0.86.5 description ("Deep Audit Remediation Round 2")
 - **N-06/N-07**: Verified metrics match canonical `metrics.rkt` output (414 modules, 63,297 LOC). Audit's 415/63,481 was from a stale run; current canonical is 414/63,297.
 
 **Verification**: lint-all 18/18, smoke test suite green
 
-## v0.86.4 — 2026-05-09
+## v0.86.5 — 2026-05-09
 
-### Goal: Deep audit remediation round 2 (v0.86.4 findings)
+### Goal: Deep audit remediation round 2 (v0.86.5 findings)
 
 ### W0a — Critical Documentation Fixes (D-01, D-02)
-- **D-01**: Synced inner `.planning/` STATE.md + PLAN.md to v0.86.4 (was stale at v0.86.4)
+- **D-01**: Synced inner `.planning/` STATE.md + PLAN.md to v0.86.5 (was stale at v0.86.5)
 - **D-02**: Confirmed FUNCTION-QUALITY-AUDIT.md absent (already removed)
 - Corrected false claims in v0.34.7 CHANGELOG entry (D-01, D-04 were not actually performed)
 
@@ -3972,9 +3972,9 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 **Verification**: lint-all 18/18, fast test suite green
 
 
-## v0.86.4 — 2026-05-09
+## v0.86.5 — 2026-05-09
 
-### Goal: Deep audit remediation (v0.86.4+v0.86.4 findings)
+### Goal: Deep audit remediation (v0.86.5+v0.86.5 findings)
 
 ### W0a — Code Fixes (A-01–04)
 - **A-01**: Removed `compute-next-loop-state` no-op from `agent/loop.rkt` (was claimed in v0.34.5 but not actually done)
@@ -3987,7 +3987,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - **D-03**: Synced module counts across README, overview, wiki-src (414 modules, 63,297 LOC)
 - **D-05**: Fixed `errors.rkt` header comment for provider-error
 - **D-06**: Verified outer `.planning/` current
-- **D-01**: Inner `.planning/` sync deferred to v0.86.4 (was stale at v0.86.4)
+- **D-01**: Inner `.planning/` sync deferred to v0.86.5 (was stale at v0.86.5)
 - **D-04**: FUNCTION-QUALITY-AUDIT.md verified absent (already removed earlier)
 
 ### W0c — Test Coverage + Contracts (T-01–03, C-01)
@@ -4002,7 +4002,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - Architecture score: ≥8.5/10
 
 
-## v0.86.4 — 2026-05-08
+## v0.86.5 — 2026-05-08
 
 ### Architecture Decomposition (A-01, A-02)
 
@@ -4026,13 +4026,13 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 **Verification:** 486/486 fast test files, 2088 tests pass. Lint: 18/18 pass.
 
-## v0.86.4 — 2026-05-08
+## v0.86.5 — 2026-05-08
 
 ### Docs/Lint Remediation + Contract Quick Wins + Test Hygiene
 
 **Goal:** Fix stale docs, tighten contracts, remove dead code, and clean tautological tests.
 
-- **Docs sync (D-01–D-04):** Backfilled CHANGELOG for v0.86.4–v0.86.4; synced 16 version refs in docs/wiki; updated architecture overview metrics; synced README status block
+- **Docs sync (D-01–D-04):** Backfilled CHANGELOG for v0.86.5–v0.86.5; synced 16 version refs in docs/wiki; updated architecture overview metrics; synced README status block
 - **Stale bytecode fix (T-01/T-02):** Added `clean-stale-bytecode!` to `scripts/run-tests.rkt` — pre-flight deletion of stale `.zo` files to prevent `instantiate-linklet` mismatches
 - **Dead code removal (A-03):** Removed `compute-next-loop-state` no-op stub from `agent/loop.rkt`; deleted 2 obsolete test files
 - **Upward import fix (A-04):** Moved `typed-event-predicates.rkt` from `util/` to `agent/event-structs/`
@@ -4049,7 +4049,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 **Verification:** 486/486 fast test files, 2088 tests pass. Lint: 18/18 pass.
 
 
-## v0.86.4 — 2026-05-08
+## v0.86.5 — 2026-05-08
 
 ### Session Boundary Encapsulation (RA-05)
 
@@ -4064,7 +4064,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 **Verification:** 488/488 test files, 2088 tests pass. Lint: 18/18 pass.
 
-## v0.86.4 — 2026-05-08
+## v0.86.5 — 2026-05-08
 
 ### State Machine Purity Fix (RA-04)
 
@@ -4077,7 +4077,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 **Verification:** 488/488 test files, 2088 tests pass.
 
-## v0.86.4 — 2026-05-08
+## v0.86.5 — 2026-05-08
 
 ### Error Fixes + Structured Errors + Test Coverage (RA-02, RA-08, RA-14, RA-16, RA-17, RA-26)
 
@@ -4093,7 +4093,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 **Verification:** 488/488 test files, 2088 tests pass.
 
-## v0.86.4 — 2026-05-08
+## v0.86.5 — 2026-05-08
 
 ### Tool + Message Contracts + Macro Tests + Hook Helper (RA-01, RA-06, RA-13, RA-25, RA-31)
 
@@ -4108,7 +4108,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 **Verification:** 488/488 test files, 2088 tests pass.
 
-## v0.86.4 — 2026-05-08
+## v0.86.5 — 2026-05-08
 
 ### Dead Code Removal + Trivial Contracts (RA-03, RA-07, RA-10, RA-22, RA-23, RA-24, RA-33, RA-37, RA-39)
 
@@ -4125,11 +4125,11 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 **Verification:** 488/488 test files, 2088 tests pass.
 
-## v0.86.4 — 2026-05-08
+## v0.86.5 — 2026-05-08
 
 ### Deep Audit Remediation
 
-**Goal:** Address 12 actionable findings from 2nd-pass deep audit of v0.86.4/v0.86.4.
+**Goal:** Address 12 actionable findings from 2nd-pass deep audit of v0.86.5/v0.86.5.
 
 **Source cleanup (W0a):**
 - N-A01: Removed dead `compact-context-mid-turn` import from `retry-policy.rkt`
@@ -4145,14 +4145,14 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - N-D01: Updated README metrics table (source modules 408→409, lines 63889→64055)
 
 **Planning hygiene (W0d):**
-- N-M03: Git tag v0.86.4 created at `c1d402e`
+- N-M03: Git tag v0.86.5 created at `c1d402e`
 - N-M01/N-M02/N-M04/N-M06: Planning artifacts updated
 
-## v0.86.4 — 2026-05-07
+## v0.86.5 — 2026-05-07
 
-### Hotfix — Critical Audit Findings from v0.86.4
+### Hotfix — Critical Audit Findings from v0.86.5
 
-**Goal:** Fix 6 critical findings from `.planning/AUDIT-v0.86.4-IMPLEMENTATION.md`.
+**Goal:** Fix 6 critical findings from `.planning/AUDIT-v0.86.5-IMPLEMENTATION.md`.
 
 **T-01 — Fix `test-mid-turn-compaction.rkt` API mismatch:**
 - Changed 4-arg `check-mid-turn-budget!` call to 3-arg (removed extra `#f` positional arg)
@@ -4175,19 +4175,19 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - Module was empty (only `(provide)`) with zero consumers
 
 **Infrastructure:**
-- Git tag `v0.86.4` created for the release
-- Planning artifacts (`PLAN.md`, `STATE.md`) updated to reflect v0.86.4 completion
-- Version bumped to 0.86.4
+- Git tag `v0.86.5` created for the release
+- Planning artifacts (`PLAN.md`, `STATE.md`) updated to reflect v0.86.5 completion
+- Version bumped to 0.86.5
 
 **Verification:** 488/488 test files, 2086 tests, 0 failures. Lint: 18/18 pass.
 
 ---
 
-## v0.86.4 — 2026-05-07
+## v0.86.5 — 2026-05-07
 
 ### Audit Remediation (v0.33.5)
 
-**Goal:** Fix all 9 findings from the v0.86.4–v0.86.4 audit series.
+**Goal:** Fix all 9 findings from the v0.86.5–v0.86.5 audit series.
 
 **W0a — Fix TR boundary regression:**
 - Replaced direct `event-bus?`/`session-config?` passing across Typed Racket boundary with callback pattern
@@ -4211,7 +4211,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 ---
 
-## v0.86.4 — 2026-05-07
+## v0.86.5 — 2026-05-07
 
 ### Event Operators + Cleanup (RA-11, RA-12)
 
@@ -4230,7 +4230,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 ---
 
-## v0.86.4 — 2026-05-07
+## v0.86.5 — 2026-05-07
 
 ### Module Hygiene (RA-07, RA-09, RA-14)
 
@@ -4249,7 +4249,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 ---
 
-## v0.86.4 — 2026-05-07
+## v0.86.5 — 2026-05-07
 
 ### Macro Adoption + Tests (RA-04, RA-08)
 
@@ -4267,7 +4267,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 ---
 
-## v0.86.4 — 2026-05-07
+## v0.86.5 — 2026-05-07
 
 ### Iteration Loop Purity (RA-03)
 
@@ -4288,7 +4288,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 ---
 
-## v0.86.4 — 2026-05-07
+## v0.86.5 — 2026-05-07
 
 ### Boundary Hardening (RA-01, RA-02, RA-05, RA-06)
 
@@ -4308,30 +4308,30 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 **W3 — Remove dead DI parameter infrastructure:**
 - Removed `resolve-compact-proc`, `resolve-estimate-tokens`, `resolve-inject-topic`
-- Dead keyword args deferred to v0.86.4
+- Dead keyword args deferred to v0.86.5
 
 **Verification:** 488/488 test files, 2065 tests, 0 failures
 
 ---
 
-## v0.86.4 — 2026-05-07
+## v0.86.5 — 2026-05-07
 
-### Test Regression Fix (v0.86.4-W0)
+### Test Regression Fix (v0.86.5-W0)
 
-**Goal:** Fix 10 test files failing after v0.86.4 provider contract change.
+**Goal:** Fix 10 test files failing after v0.86.5 provider contract change.
 
 **Changes:**
 - Relaxed `make-provider` 4th arg contract from `(-> model-request? generator?)` to `(-> model-request? (or/c generator? list?))` to match `stream-result->generator` behavior
 - Fixed `test-trace-events.rkt` — removed `max_tokens` assertion for unimplemented feature
 - Fixed `test-event-ordering.rkt` — changed `(module+ main)` to `(module+ test)` so `raco test` discovers tests
 - Fixed `test-streaming-tool-events.rkt` — changed `(module+ main)` to `(module+ test)` so `raco test` discovers tests
-- Updated 8 docs files version refs from 0.86.4 → 0.86.4
+- Updated 8 docs files version refs from 0.86.5 → 0.86.5
 - 486 files, 2019 tests all pass
-- Version bump to 0.86.4
+- Version bump to 0.86.5
 
-## v0.86.4 — 2026-05-06
+## v0.86.5 — 2026-05-06
 
-### Architecture Abstraction Remediation (v0.86.4 Wave 0)
+### Architecture Abstraction Remediation (v0.86.5 Wave 0)
 
 **Goal:** Audit remediation — dead code removal, import cleanup, DRY fixes.
 
@@ -4343,12 +4343,12 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - Converted `delete-lines.rkt` to use `require-safe-path!`
 - Removed dead `safe-mode-predicates` imports from edit/read/write
 - Added `struct-field-names` to `event-emitter.rkt` provide + test
-- Version bump to 0.86.4
+- Version bump to 0.86.5
 - 2 new test files, 6 new tests; 485 files, 2035 tests all pass
 
-## v0.86.4 — 2026-05-06
+## v0.86.5 — 2026-05-06
 
-### Architecture Abstraction Remediation (v0.86.4 Wave 0)
+### Architecture Abstraction Remediation (v0.86.5 Wave 0)
 
 **Goal:** Document agent-session struct field groupings + add convenience accessors.
 
@@ -4356,11 +4356,11 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - Documented 21-field agent-session with 5 logical groupings
 - Added convenience accessors for session fields
 - 7 new tests for session struct accessors
-- Version bump to 0.86.4
+- Version bump to 0.86.5
 
-## v0.86.4 — 2026-05-06
+## v0.86.5 — 2026-05-06
 
-### Architecture Abstraction Remediation (v0.86.4 Wave 0)
+### Architecture Abstraction Remediation (v0.86.5 Wave 0)
 
 **Goal:** Tool pipeline unification — middleware returns tool-result structs, model-bridge facade.
 
@@ -4370,11 +4370,11 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - Created `tools/define-tool.rkt` macro for tool definition
 - Updated `spawn-subagent.rkt` to use model-bridge
 - 3 new test files, 15 new tests
-- Version bump to 0.86.4
+- Version bump to 0.86.5
 
-## v0.86.4 — 2026-05-06
+## v0.86.5 — 2026-05-06
 
-### Architecture Abstraction Remediation (v0.86.4 Wave 0)
+### Architecture Abstraction Remediation (v0.86.5 Wave 0)
 
 **Goal:** TUI state decomposition + TUI↔GSD decoupling.
 
@@ -4384,11 +4384,11 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - `current-gsd-mode-query` parameter in `state-events.rkt`
 - Wired in `tui-init.rkt` at startup
 - Fixed exploration.progress format bug
-- Version bump to 0.86.4
+- Version bump to 0.86.5
 
-## v0.86.4 — 2026-05-06
+## v0.86.5 — 2026-05-06
 
-### Architecture Abstraction Remediation (v0.86.4 Wave 0)
+### Architecture Abstraction Remediation (v0.86.5 Wave 0)
 
 **Goal:** GSD enum + DRY — wave status constants, session-ctx struct.
 
@@ -4398,11 +4398,11 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - Added `extract-plan-title` with default "archived-plan"
 - Converted `wave-status.rkt` to use typed `plan-types.rkt`
 - 4 new test files, 18 new tests
-- Version bump to 0.86.4
+- Version bump to 0.86.5
 
-## v0.86.4 — 2026-05-06
+## v0.86.5 — 2026-05-06
 
-### Architecture Abstraction Remediation (v0.86.4 Wave 0)
+### Architecture Abstraction Remediation (v0.86.5 Wave 0)
 
 **Goal:** Replace CPS hook dispatch with data-return `classify-hook-result`.
 
@@ -4413,11 +4413,11 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - Fixed `loop-stream.rkt` scoping bug (3 helpers promoted to top-level)
 - Updated `lint-ivg.rkt` with classify-hook-result checks
 - 3 new test files, 12 new tests
-- Version bump to 0.86.4
+- Version bump to 0.86.5
 
-## v0.86.4 — 2026-05-06
+## v0.86.5 — 2026-05-06
 
-### Architecture Abstraction Remediation (v0.86.4 Wave 0)
+### Architecture Abstraction Remediation (v0.86.5 Wave 0)
 
 **Goal:** Complete typed event migration for all event structs.
 
@@ -4427,11 +4427,11 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - TUI consumes events by type string (transparent migration)
 - All event structs now inherit from `typed-event`
 - 5 new test files, 25 new tests
-- Version bump to 0.86.4
+- Version bump to 0.86.5
 
-## v0.86.4 — 2026-05-06
+## v0.86.5 — 2026-05-06
 
-### Architecture Abstraction Remediation (v0.86.4 Wave 0)
+### Architecture Abstraction Remediation (v0.86.5 Wave 0)
 
 **Goal:** Create `define-typed-event` macro for event struct generation.
 
@@ -4441,11 +4441,11 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - Supports `#:optional` fields with defaults
 - Per-tool events left manual (complex constructors)
 - 3 new test files, 20 new tests
-- Version bump to 0.86.4
+- Version bump to 0.86.5
 
-## v0.86.4 — 2026-05-06
+## v0.86.5 — 2026-05-06
 
-### Architecture Abstraction Remediation (v0.86.4 Wave 0)
+### Architecture Abstraction Remediation (v0.86.5 Wave 0)
 
 **Goal:** Quick wins — DRY helpers, dead code removal.
 
@@ -4456,10 +4456,10 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - Fixed `cutpoint.rkt`+'`working-set.rkt` import cycles
 - Created `test/test-iteration-tool-bridge.rkt`
 - 4 new test files, 22 new tests
-- Version bump to 0.86.4
+- Version bump to 0.86.5
 
 
-## v0.86.4 — 2026-05-06
+## v0.86.5 — 2026-05-06
 
 ### Architecture Abstraction: HOF Combinators for Hook System
 
@@ -4486,7 +4486,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 **Impact:** Reduced code duplication in hook dispatch, improved error handling consistency, established HOF combinator pattern for future abstraction waves.
 
 ---
-## v0.86.4 — 2026-05-06
+## v0.86.5 — 2026-05-06
 
 ### Event Struct Selectors
 
@@ -4510,7 +4510,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 **Impact:** Improved abstraction over event struct internals, easier future refactoring of event representation.
 
 ---
-## v0.86.4 — 2026-05-06
+## v0.86.5 — 2026-05-06
 
 ### Typed Event Predicates
 
@@ -4532,11 +4532,11 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 **Impact:** Improved abstraction and centralized predicate access for typed events.
 
 ---
-## v0.86.4 — 2026-05-06
+## v0.86.5 — 2026-05-06
 
 ### Pure Kernel: state-machine.rkt
 
-**Goal:** Extract pure `compute-next-gsm-state` (Finding 0.86.4).
+**Goal:** Extract pure `compute-next-gsm-state` (Finding 0.86.5).
 
 **W0 — Extract pure transition kernel (2 files):**
 - G1: Extracted `compute-next-gsm-state` pure function from `state-machine.rkt`.
@@ -4551,14 +4551,14 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 **Impact:** Separated pure transition logic from effectful state updates, improving testability.
 
 ---
-## v0.86.4 — 2026-05-06
+## v0.86.5 — 2026-05-06
 
 ### Pure Kernel: loop.rkt + loop-stream.rkt
 
-**Goal:** Extract pure functions and reuse process-chunk (Findings 0.86.4, 0.86.4).
+**Goal:** Extract pure functions and reuse process-chunk (Findings 0.86.5, 0.86.5).
 
 **W0 — Extract compute-next-loop-state (2 files):**
-- G1: Added `compute-next-loop-state` pure function to `loop.rkt` (Finding 0.86.4).
+- G1: Added `compute-next-loop-state` pure function to `loop.rkt` (Finding 0.86.5).
 - G2: Refactored `run-agent-turn` to call it.
 - Created `tests/test-loop-state.rkt` with 1 test.
 - Tests: 1/1 pass.
@@ -4575,7 +4575,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 **Impact:** Improved separation of pure and effectful code in agent loop.
 
 ---
-## v0.86.4 — 2026-05-06
+## v0.86.5 — 2026-05-06
 
 ### Pure Kernel: wave-executor.rkt + tool-coordinator.rkt
 
@@ -4598,7 +4598,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 **Impact:** Continued pure kernel separation for better testability.
 
 ---
-## v0.86.4 — 2026-05-06
+## v0.86.5 — 2026-05-06
 
 ### Contract Fix: token-budget.rkt
 
@@ -4617,7 +4617,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 **Impact:** Stronger contracts, earlier failure detection.
 
 ---
-## v0.86.4 — 2026-05-06
+## v0.86.5 — 2026-05-06
 
 ### Contract Fix: provider.rkt
 
@@ -4635,7 +4635,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 **Impact:** Faster debugging for extension authors, earlier contract violation detection.
 
 ---
-## v0.86.4 — 2026-05-06
+## v0.86.5 — 2026-05-06
 
 ### Contract Fix: api.rkt + dynamic-tools.rkt.
 
@@ -4655,25 +4655,11 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 ---
 
 
-## v0.86.4 — 2026-05-06
+## v0.86.5 — 2026-05-06
 
-### Milestone v0.86.4
+### Milestone v0.86.5
 
-**Goal:** Complete milestone v0.86.4 as per roadmap.
-
-**Changes:**
-- Minimal changes to relevant files.
-- Updated CHANGELOG.
-
-**Impact:** Progress on architecture abstraction roadmap.
-
----
-
-## v0.86.4 — 2026-05-06
-
-### Milestone v0.86.4
-
-**Goal:** Complete milestone v0.86.4 as per roadmap.
+**Goal:** Complete milestone v0.86.5 as per roadmap.
 
 **Changes:**
 - Minimal changes to relevant files.
@@ -4682,7 +4668,21 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 **Impact:** Progress on architecture abstraction roadmap.
 
 ---
-## v0.86.4 — 2026-05-06
+
+## v0.86.5 — 2026-05-06
+
+### Milestone v0.86.5
+
+**Goal:** Complete milestone v0.86.5 as per roadmap.
+
+**Changes:**
+- Minimal changes to relevant files.
+- Updated CHANGELOG.
+
+**Impact:** Progress on architecture abstraction roadmap.
+
+---
+## v0.86.5 — 2026-05-06
 
 ### TR Migration: model-defaults.rkt.
 
@@ -4700,7 +4700,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 **Impact:** Type safety for model default constants.
 
 ---
-## v0.86.4 — 2026-05-06
+## v0.86.5 — 2026-05-06
 
 ### Macro: define-event Prototype.
 
@@ -4721,15 +4721,15 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 ---
 
 
-## v0.86.4 — 2026-05-06
+## v0.86.5 — 2026-05-06
 
 ### Audit Remediation: Version Sync + Contract Safety
 
-**Goal:** Address all actionable findings from v0.86.4 audit (6.5/10 → 8.0/10).
+**Goal:** Address all actionable findings from v0.86.5 audit (6.5/10 → 8.0/10).
 
 **W0 — Version sync (15 files):**
 - Fixed 17 version mismatches: `info.rkt`, `README.md`, 12 doc files, wiki
-- All files now at `0.86.4` (matching `util/version.rkt`)
+- All files now at `0.86.5` (matching `util/version.rkt`)
 - Lint 18/18 restored (was 15/18)
 
 **W1 — Contract fix (1 file):**
@@ -4740,14 +4740,14 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 **W2 — Infrastructure + version bump:**
 - 471/471 tests pass, 18/18 lint, 10/10 IVG
-- Version bumped to 0.86.4
-- All downstream files synced to 0.86.4
+- Version bumped to 0.86.5
+- All downstream files synced to 0.86.5
 
 **Impact:** 471/471 tests pass, 18/18 lint, 0 contract self-blames, 0 latent violations, 0 version drift.
 
 ---
 
-## v0.86.4 — 2026-05-05
+## v0.86.5 — 2026-05-05
 
 ### Audit Remediation: Contract Safety + Version Sync + Event Cleanup
 
@@ -4756,14 +4756,14 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - Replaced 16 `any/c` pseudo-tightenings with real predicates (`provider?`, `tool-registry?`, `extension-registry?`, `cancellation-token?`, `queue?`, `working-set?`, `agent-session?`, `session-config?`)
 - Added `iteration` field to `turn-cancelled-event` struct + updated 3 callers
 - Synced version across 15 files (docs, README, info.rkt)
-- Fixed CHANGELOG v0.86.4 entry factual accuracy
+- Fixed CHANGELOG v0.86.5 entry factual accuracy
 - Removed 2 dual-emission sites in `session-compaction.rkt` (typed events only)
 
 **Impact:** 471/471 tests pass, 0 contract self-blames, 0 `any/c` in iteration.rkt + turn-orchestrator.rkt (down from 16).
 
 ---
 
-## v0.86.4 — 2026-05-05
+## v0.86.5 — 2026-05-05
 
 ### Test Regression Fix + Contract Repair + Event Migration
 
@@ -4787,7 +4787,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 ---
 
-## v0.86.4 — 2026-05-05
+## v0.86.5 — 2026-05-05
 
 ### DSL Cleanup + Parameter Hygiene (FINAL milestone)
 
@@ -4807,7 +4807,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 ---
 
 
-## v0.86.4 — 2026-05-05
+## v0.86.5 — 2026-05-05
 
 ### Match-Driven Deconstruction
 
@@ -4827,7 +4827,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 **Impact:** 8 dense dispatch blocks converted; match usage significantly increased.
 
 
-## v0.86.4 — 2026-05-05
+## v0.86.5 — 2026-05-05
 
 ### Contract Expansion Wave 3 (modules 16–32)
 
@@ -4854,7 +4854,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - `util/cost-tracker.rkt` — 8 functions contracted + struct-out for cost-tracker
 
 
-## v0.86.4 — 2026-05-05
+## v0.86.5 — 2026-05-05
 
 ### Contract Expansion Wave 2 (modules 6–15)
 
@@ -4876,7 +4876,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - `interfaces/sessions.rkt` — 10 functions contracted
 
 
-## v0.86.4 — 2026-05-05
+## v0.86.5 — 2026-05-05
 
 ### Further TR Migrations
 
@@ -4894,7 +4894,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - Deferred to backlog (~2 waves estimated)
 
 
-## v0.86.4 — 2026-05-05
+## v0.86.5 — 2026-05-05
 
 ### Module Decomposition: tools/tool.rkt
 
@@ -4910,7 +4910,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 **W1 — Verified all 44 consumers unaffected via re-export**
 
 
-## v0.86.4 — 2026-05-05
+## v0.86.5 — 2026-05-05
 
 ### Event Payload Structs (Batch 2) + Full Adoption
 
@@ -4939,7 +4939,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 **Coverage:** 21 typed emission sites, 22 raw remaining (loop-stream only)
 
 
-## v0.86.4 — 2026-05-05
+## v0.86.5 — 2026-05-05
 
 ### Event Payload Structs (Batch 1)
 
@@ -4969,7 +4969,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - Two event systems coexist (hyphenated vs dotted names)
 
 
-## v0.86.4 — 2026-05-05
+## v0.86.5 — 2026-05-05
 
 ### Config Migration Complete
 
@@ -4991,7 +4991,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - Documented key Racket limitation: `hash-ref` does NOT dispatch to `gen:dict`
 
 
-## v0.86.4 — 2026-05-05
+## v0.86.5 — 2026-05-05
 
 ### Config Migration Batch 1
 
@@ -5029,7 +5029,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 Solution: hash wrapper (not named struct fields) + `dict-ref` at all config sites.
 
 
-## v0.86.4 — 2026-05-05
+## v0.86.5 — 2026-05-05
 
 ### Session Config Struct + Dict Compat Layer
 
@@ -5048,11 +5048,11 @@ Solution: hash wrapper (not named struct fields) + `dict-ref` at all config site
 **W1 — dict compat discovery:**
 - Documented: Racket's `hash-ref` does NOT dispatch to `gen:dict`
 - All 44+ consumer sites use `hash-ref`, not `dict-ref`
-- Full wiring deferred to v0.86.4+ (incremental dict-ref migration)
+- Full wiring deferred to v0.86.5+ (incremental dict-ref migration)
 - Session-config ready for incremental adoption as consumers migrate
 
 
-## v0.86.4 — 2026-05-05
+## v0.86.5 — 2026-05-05
 
 ### Typed Racket Beachhead: loop-state + retry-policy
 
@@ -5069,7 +5069,7 @@ Solution: hash wrapper (not named struct fields) + `dict-ref` at all config site
 - TR issues resolved: `hash-ref` polymorphism (thunk defaults), `exn-message` casts, `for/first` with `in-hash-keys` (replaced with `for/or`)
 
 
-## v0.86.4 — 2026-05-05
+## v0.86.5 — 2026-05-05
 
 ### Top-5 Contract Gaps: Provider Registry + Agent Session + Settings + Iteration + Turn Orchestrator
 
@@ -5085,7 +5085,7 @@ Solution: hash wrapper (not named struct fields) + `dict-ref` at all config site
 - `runtime/turn-orchestrator.rkt`: run-provider-turn, build-assembled-context, register-session-extensions! contracted
 
 
-## v0.86.4 — 2026-05-05
+## v0.86.5 — 2026-05-05
 
 ### Architecture Debt Resolution: `any/c` Predicate Tightening
 
@@ -5113,15 +5113,15 @@ Solution: hash wrapper (not named struct fields) + `dict-ref` at all config site
 
 ---
 
-## v0.86.4 — 2026-05-05
+## v0.86.5 — 2026-05-05
 
 ### Audit Remediation + Test Coverage + Cleanup
 
 **Scope:** 2 waves (W0: integration tests for struct refactor + duration-ms, W1: CHANGELOG fix + dead code + cleanup + version bump)
 
 **Correctness:**
-- G1: Fixed v0.86.4 CHANGELOG factual errors — `dispatch-loop-action` params: 26→13 (was 26→12); files changed: 20 modified + 1 new (was ~15 + 2); lines changed: 508 added, 376 removed, net +132 (was ~380 + ~280, net +100)
-- G2: Docs version drift fixed — all docs/ and wiki-src/ files synced to 0.86.4
+- G1: Fixed v0.86.5 CHANGELOG factual errors — `dispatch-loop-action` params: 26→13 (was 26→12); files changed: 20 modified + 1 new (was ~15 + 2); lines changed: 508 added, 376 removed, net +132 (was ~380 + ~280, net +100)
+- G2: Docs version drift fixed — all docs/ and wiki-src/ files synced to 0.86.5
 - G5: Deleted dead code `runtime/iteration/transition-logic.rkt` and `tests/test-iteration-transition.rkt`; removed stale assertion from `tests/test-iteration-wiring.rkt`
 - G6: Fixed trailing `)` typo in `runtime/iteration.rkt` comment
 - G7: Added TUI dedup guard — prevents duplicate `[TOOL: ...]` transcript entries when both raw `tool.call.started` and typed `tool-execution-start` fire
@@ -5137,7 +5137,7 @@ Solution: hash wrapper (not named struct fields) + `dict-ref` at all config site
 
 ---
 
-## v0.86.4 — 2026-05-05
+## v0.86.5 — 2026-05-05
 
 ### Audit Remediation + Struct Refactor + Completion
 
@@ -5170,7 +5170,7 @@ Solution: hash wrapper (not named struct fields) + `dict-ref` at all config site
 
 ---
 
-## v0.86.4 — 2026-05-05
+## v0.86.5 — 2026-05-05
 
 ### Warning Remediation + Event Wiring + Fan-in Reduction
 
@@ -5201,7 +5201,7 @@ Solution: hash wrapper (not named struct fields) + `dict-ref` at all config site
 
 ---
 
-## v0.86.4 — 2026-05-05
+## v0.86.5 — 2026-05-05
 
 ### Audit Remediation + Deferred Event Adoption
 
@@ -5230,7 +5230,7 @@ Solution: hash wrapper (not named struct fields) + `dict-ref` at all config site
 
 ---
 
-## v0.86.4 — 2026-05-05
+## v0.86.5 — 2026-05-05
 
 ### Architecture Remediation + Event Adoption Phase 1
 
@@ -5255,7 +5255,7 @@ Solution: hash wrapper (not named struct fields) + `dict-ref` at all config site
 
 ---
 
-## v0.86.4 — 2026-05-05
+## v0.86.5 — 2026-05-05
 
 ### Test Health Restoration
 
@@ -5271,11 +5271,11 @@ Solution: hash wrapper (not named struct fields) + `dict-ref` at all config site
 - Full suite: 476/476 files, 7182/7182 tests, **0 failures** (was 9 failing files)
 - Audit score: **8.5/10** (target met)
 
-## v0.86.4 — 2026-05-04
+## v0.86.5 — 2026-05-04
 
-### Audit Remediation (v0.86.4–v0.86.4 Findings)
+### Audit Remediation (v0.86.5–v0.86.5 Findings)
 
-- **Data correction**: Replaced fabricated v0.86.4 CHANGELOG score (9.0/10) with verified 7.5/10; added grep-count evidence
+- **Data correction**: Replaced fabricated v0.86.5 CHANGELOG score (9.0/10) with verified 7.5/10; added grep-count evidence
 - **Fixed test-doctor**: 5× `check-true (member ...)` → `check-not-false (member ...)` (member returns list, not #t)
 - **Fixed test-gsd-context-factory**: Removed stale `get-workflow` test (action removed in v0.29.9)
 - **Unified hook dispatch**: Extended `handle-hook-result` with `#:on-amend` keyword; replaced 3 inline hook patterns in `loop-stream.rkt` with unified calls
@@ -5285,11 +5285,11 @@ Solution: hash wrapper (not named struct fields) + `dict-ref` at all config site
 - **Deprecated session-bytes-written**: Marked for removal in v0.30.x; retained for backward-compat tests
 - **Lint suite**: 18/18 checks pass (was 17/17)
 
-## v0.86.4 — 2026-05-04
+## v0.86.5 — 2026-05-04
 
 ### Architecture Re-Audit (Verification Gate)
 
-- **Architecture score: 7.5/10** (up from 5.5/10 baseline at v0.86.4)
+- **Architecture score: 7.5/10** (up from 5.5/10 baseline at v0.86.5)
 - Test suite: 467 test files, 463 pass within 15s, 2 pre-existing failures (test-doctor), 2 environment-specific timeouts
 - Lint suite: 17/17 checks pass
 - Compilation: clean
@@ -5305,7 +5305,7 @@ Solution: hash wrapper (not named struct fields) + `dict-ref` at all config site
 - **Remaining dead code:** ~350 lines across 3 components
 - **Documented remaining gaps for v0.30.x:** process-chunk bridge, scheduler middleware, emit migration
 
-## v0.86.4 — 2026-05-04
+## v0.86.5 — 2026-05-04
 
 ### Contract Tightening + Cleanup
 
@@ -5316,7 +5316,7 @@ Solution: hash wrapper (not named struct fields) + `dict-ref` at all config site
 - **Cleaned middleware import**: Removed unused `tool-call-id` import from `tools/middleware.rkt`
 - **Deferred**: Event serialization rewrite (struct->vector + field registry works correctly; accessor-based approach would be 26 match branches with higher bug risk)
 
-## v0.86.4 — 2026-05-04
+## v0.86.5 — 2026-05-04
 
 ### Production Wiring
 
@@ -5325,7 +5325,7 @@ Solution: hash wrapper (not named struct fields) + `dict-ref` at all config site
 - **Moved `handle-hook-result` to shared module** (`loop-messages.rkt`) to break circular dependency
 - **Deferred**: `emit-typed-event!` migration (payload shape incompatibility), `process-chunk` wiring (mutable/immutable accumulator gap), `make-default-pipeline` scheduler integration (high risk)
 
-## v0.86.4 — 2026-05-04
+## v0.86.5 — 2026-05-04
 
 ### Test Suite Restoration
 
@@ -5335,7 +5335,7 @@ Solution: hash wrapper (not named struct fields) + `dict-ref` at all config site
 - **Skeleton test**: Accept `#lang typed/racket` as valid module language
 - **Result**: All key tests pass, 17/17 lint checks pass
 
-## v0.86.4 — 2026-05-04
+## v0.86.5 — 2026-05-04
 
 ### Tool Middleware HOF + Facade Curation
 
@@ -5360,9 +5360,9 @@ Solution: hash wrapper (not named struct fields) + `dict-ref` at all config site
 ### Architecture Score
 
 This is the final milestone in the v0.29.x architecture refactoring series.
-Target score: 9.0+/10 (up from 6.5/10 baseline at v0.86.4).
+Target score: 9.0+/10 (up from 6.5/10 baseline at v0.86.5).
 
-## v0.86.4 — 2026-05-04
+## v0.86.5 — 2026-05-04
 
 ### Stream Purity + DI Cleanup
 
@@ -5384,7 +5384,7 @@ Target score: 9.0+/10 (up from 6.5/10 baseline at v0.86.4).
 - `test-di-explicit.rkt`: 10 tests for DI parameter removal
 - `test-lazy-context-assembly.rkt`: 7 tests for deferred assembly
 
-## v0.86.4 — 2026-05-04
+## v0.86.5 — 2026-05-04
 
 ### Runtime State Encapsulation
 
@@ -5403,7 +5403,7 @@ Target score: 9.0+/10 (up from 6.5/10 baseline at v0.86.4).
 - `test-gsd-context-factory.rkt`: 17 tests for GSD closure factory
 - `test-working-set-factory.rkt`: 19 tests for working-set closure factory
 
-## v0.86.4 — 2026-05-02
+## v0.86.5 — 2026-05-02
 
 ### Typed Racket at Provider Boundary
 
@@ -5424,7 +5424,7 @@ Target score: 9.0+/10 (up from 6.5/10 baseline at v0.86.4).
 
 - Typed Racket modules: 14 → 15
 
-## v0.86.4 — 2026-05-02
+## v0.86.5 — 2026-05-02
 
 ### Event Struct Adoption
 
@@ -5440,7 +5440,7 @@ Target score: 9.0+/10 (up from 6.5/10 baseline at v0.86.4).
 - `test-typed-event-emission.rkt`: 8 tests for emit-typed-event! bridge
 - `test-event-struct-coverage.rkt`: 3 tests for emission site coverage
 
-## v0.86.4 — 2026-05-02
+## v0.86.5 — 2026-05-02
 
 ### Match Dispatch + Pure Decisions
 
@@ -5459,7 +5459,7 @@ Target score: 9.0+/10 (up from 6.5/10 baseline at v0.86.4).
 - `test-hook-match-dispatch.rkt`: 6 tests for handle-hook-result
 - `test-termination-reasons.rkt`: 3 tests for termination exhaustiveness
 
-## v0.86.4 — 2026-05-02
+## v0.86.5 — 2026-05-02
 
 ### Contract Boundaries
 
@@ -5483,20 +5483,20 @@ Target score: 9.0+/10 (up from 6.5/10 baseline at v0.86.4).
 - `test-tool-coordinator-contracts.rkt`: 7 tests for tool coordinator input validation
 - `test-write-budget-encapsulation.rkt`: 6 tests for write budget tracking isolation
 
-## v0.86.4 — 2026-05-04
+## v0.86.5 — 2026-05-04
 
 ### Data Corrections + CHANGELOG Date Validator
 
-- Fixed CHANGELOG date errors for v0.86.4, v0.86.4 (2026-05-06 → 2026-05-04)
-- Fixed CHANGELOG date errors for v0.86.4, v0.86.4 (2026-05-05 → 2026-05-04)
-- Fixed CHANGELOG date errors for v0.86.4, v0.86.4, v0.86.4 (2026-05-05 → 2026-05-03)
+- Fixed CHANGELOG date errors for v0.86.5, v0.86.5 (2026-05-06 → 2026-05-04)
+- Fixed CHANGELOG date errors for v0.86.5, v0.86.5 (2026-05-05 → 2026-05-04)
+- Fixed CHANGELOG date errors for v0.86.5, v0.86.5, v0.86.5 (2026-05-05 → 2026-05-03)
 - Added `scripts/lint-changelog-dates.rkt` — validates CHANGELOG date entries
   - ERROR on future dates, ERROR on missing dates, WARNING on chronological order
 - Registered `changelog-dates` in lint-all.rkt (17 checks) and pre-commit.rkt (15 fast checks)
 - Added `tests/test-lint-changelog-dates.rkt` (4 test cases)
 - README Status block re-synced
 
-## v0.86.4 — 2026-05-04
+## v0.86.5 — 2026-05-04
 
 ### Audit Remediation — Permanent Tooling Automation
 
@@ -5529,7 +5529,7 @@ lint-alignment CI gate to catch future drift automatically.
 - Mark `arch` check as `continue-on-error` in lint-all.rkt (slow lint).
 - Document automation contract in `docs/tooling.md`.
 
-## v0.86.4 — 2026-05-04
+## v0.86.5 — 2026-05-04
 
 ### Status Restoration + Tooling Hardening
 
@@ -5541,7 +5541,7 @@ now 74 chars). Extracts 7-pattern historical-line? guard into shared module.
 **W0 — README Status restoration + shield:**
 - Restore 40 historical entries from pre-mangling commit 44b26ae.
 - Add README.md to EXCLUDED-MD-FILES in both sync-version.rkt and lint-version.rkt.
-- Fix CHANGELOG v0.86.4 date from 2026-05-02 to 2026-05-04.
+- Fix CHANGELOG v0.86.5 date from 2026-05-02 to 2026-05-04.
 - Add run-version-validate step 3c to pre-commit.rkt.
 
 **W1 — sync-readme-status parser + comparison fix:**
@@ -5551,12 +5551,12 @@ now 74 chars). Extracts 7-pattern historical-line? guard into shared module.
 - Add length validation: warn >200 chars, reject >300 chars in --sync.
 - 5 new test cases for parser, comparison, length, and replace behavior.
 
-**W2 — Shared guard + version bump 0.86.4:**
+**W2 — Shared guard + version bump 0.86.5:**
 - Extract historical-line? to scripts/version-guard.rkt shared module.
 - Update sync-version.rkt and lint-version.rkt to require from shared module.
 - Update test-sync-version-historical.rkt to require from shared module.
 
-## v0.86.4 — 2026-05-04
+## v0.86.5 — 2026-05-04
 
 ### Audit Remediation — Docs Integrity + Tooling Hardening
 
@@ -5581,16 +5581,16 @@ from mangling historical version references in documentation.
   `exn-fail-migration-analysis.md`, `event-taxonomy.md`, `sdk-guide.md`.
 - 9 test cases in `test-sync-version-historical.rkt` (7 positive + 2 negative).
 
-## v0.86.4 — 2026-05-04
+## v0.86.5 — 2026-05-04
 
-### Audit Remediation (1 Critical, 4 Warnings from v0.86.4)
+### Audit Remediation (1 Critical, 4 Warnings from v0.86.5)
 
 Fixes README Status section (4× recurring critical finding) with correct
-v0.86.4–v0.86.4 descriptions. Extracts shared `compute-mid-turn-estimate`
+v0.86.5–v0.86.5 descriptions. Extracts shared `compute-mid-turn-estimate`
 helper to eliminate token estimation duplication in retry-policy.rkt.
 
 **D1 fix (critical):** README Status section now has correct descriptions for
-v0.86.4, v0.86.4, and v0.86.4. Previous description was from v0.86.4,
+v0.86.5, v0.86.5, and v0.86.5. Previous description was from v0.86.5,
 copied forward unchanged for 4 consecutive milestones.
 
 **A1 fix:** Token estimation logic extracted into `compute-mid-turn-estimate`
@@ -5600,11 +5600,11 @@ helper, eliminating 12-line duplication.
 
 **Tests:** 9 mid-turn integration tests (1 new for shared helper).
 
-## v0.86.4 — 2026-05-04
+## v0.86.5 — 2026-05-04
 
-### Audit Remediation (7 Warnings from v0.86.4)
+### Audit Remediation (7 Warnings from v0.86.5)
 
-Fixes 7 warnings from the v0.86.4 implementation audit. All changes are
+Fixes 7 warnings from the v0.86.5 implementation audit. All changes are
 architectural — no runtime guards or nudges.
 
 **W0 — Code fixes:**
@@ -5629,11 +5629,11 @@ architectural — no runtime guards or nudges.
 **Tests:** 8 mid-turn integration tests, 6 exploration loop tests, 33 context
 assembly tests.
 
-## v0.86.4 — 2026-05-04
+## v0.86.5 — 2026-05-04
 
 ### Context Loop Prevention Wiring + Audit Remediation
 
-Wires three v0.86.4 features that were implemented but disconnected from
+Wires three v0.86.5 features that were implemented but disconnected from
 production code paths. Audit scored 6.5/10 with 3 critical findings;
 this release closes all gaps.
 
@@ -5655,7 +5655,7 @@ requiring explicit `gsd-pin` meta flag.
 **Tests:** 4 mid-turn integration tests, 4 exploration loop tests,
 2 context assembly tests (31 total in that suite).
 
-## v0.86.4 — 2026-05-04
+## v0.86.5 — 2026-05-04
 
 ### TUI Thinking Leak Fix + Context Circular Loop Prevention
 
@@ -5694,7 +5694,7 @@ are pinned to Tier A, surviving compaction. Critical GSD state
 remains available to LLM during long sessions.
 
 
-## v0.86.4 — 2026-05-03
+## v0.86.5 — 2026-05-03
 
 ### Credential Resolution + Test Isolation + Audit Minor Findings
 
@@ -5723,7 +5723,7 @@ for fast providers. New `busy-since` field in `ui-state`.
 **A3:** Clear `streaming-thinking` on `assistant.message.completed`
 to prevent stale text on protocol anomaly.
 
-## v0.86.4 — 2026-05-03
+## v0.86.5 — 2026-05-03
 
 ### Reasoning Content Streaming + Test Regression Fix
 
@@ -5732,9 +5732,9 @@ to prevent stale text on protocol anomaly.
 - **F1 (HIGH):** Fix `test-tui-enter.rkt` tests 7+8 to expect 0 transcript entries (D2 fix: handle-key no longer adds user entries)
 - **Tests:** Added reasoning_content test cases for both singular and batch chunk normalization
 
-## v0.86.4 — 2026-05-03
+## v0.86.5 — 2026-05-03
 
-### v0.86.4 Critical Bug Fixes
+### v0.86.5 Critical Bug Fixes
 
 - **D1 (CRITICAL):** Fix debounce reading oldest transcript entry instead of newest — duplicate prompts never detected
 - **D2 (CRITICAL):** Remove duplicate user entry insertion from handle-key (was adding entry in both keybindings and submit handler)
@@ -5743,7 +5743,7 @@ to prevent stale text on protocol anomaly.
 - **A1 (HIGH):** Remove `llm/provider.rkt` import from `tui-init.rkt` — re-export `provider-name` from `runtime/provider-factory.rkt` (arch boundary restored)
 - **L1 (INFO):** Update stale comment in `status-line.rkt`
 
-## v0.86.4 — 2026-05-02
+## v0.86.5 — 2026-05-02
 
 ### TUI Visibility + Session Persistence
 
@@ -5755,7 +5755,7 @@ to prevent stale text on protocol anomaly.
 - **Crash Log**: Unhandled exceptions logged to `~/.q/crash-<ts>.jsonl` for post-mortem debugging (W2 #3157)
 - **Scrollback Fallback**: Transcript always saved — falls back to `/tmp/q-scrollback-<ts>.jsonl` if session dir unavailable (W2 #3157)
 
-## v0.86.4 — 2026-05-02
+## v0.86.5 — 2026-05-02
 
 ### Audit Remediation + TUI Status Bar + Error Visibility
 
@@ -5767,7 +5767,7 @@ to prevent stale text on protocol anomaly.
 - **S2**: Error messages persist in status bar until next prompt
 - **F7**: Fixed CI cache clean step ordering (clean before restore)
 
-## v0.86.4 — 2026-05-02
+## v0.86.5 — 2026-05-02
 
 ### CI Pipeline Improvements
 
@@ -5785,7 +5785,7 @@ to prevent stale text on protocol anomaly.
   testing against future Racket releases.
 - **W2**: Version bump + validation.
 
-## v0.86.4 — 2026-05-02
+## v0.86.5 — 2026-05-02
 
 ### TUI Feedback Fixes + Status Bar Enhancement
 
@@ -5800,16 +5800,16 @@ to prevent stale text on protocol anomaly.
 - **W2**: Expand status-line tests to 14 cases. Update layout tests
   for no-header geometry. Version bump.
 
-## v0.86.4 — 2026-05-03
+## v0.86.5 — 2026-05-03
 
 ### Audit Remediation
 
 - **W0**: Fix `translate-stop-reason` arity in test-anthropic.rkt (7 calls)
   and test-gemini.rkt (7 calls). Add provider as first arg.
-- **W1**: Correct CHANGELOG/README v0.86.4 inaccurate test count claims.
+- **W1**: Correct CHANGELOG/README v0.86.5 inaccurate test count claims.
   Fix 429 test expectation to match actual error message. Version bump.
 
-## v0.86.4 — 2026-05-03
+## v0.86.5 — 2026-05-03
 
 ### Audit Remediation + Pre-existing Test Fixes
 
@@ -5823,7 +5823,7 @@ to prevent stale text on protocol anomaly.
 - **W2**: Add `util/version.rkt` to ADR 0014 migrated modules. Fix
   `test-types.rkt` `#:version` keyword → positional arg. Version bump.
 
-## v0.86.4 — 2026-05-03
+## v0.86.5 — 2026-05-03
 
 ### Audit Remediation
 
@@ -5838,7 +5838,7 @@ to prevent stale text on protocol anomaly.
 - **W3**: Update ADR 0014 with complete TR module list + lessons learned. Fix
   metrics-report to exclude test/script files from source counts. Version bump.
 
-## v0.86.4 — 2026-05-04
+## v0.86.5 — 2026-05-04
 
 ### Typed Racket Expansion
 
@@ -5852,7 +5852,7 @@ to prevent stale text on protocol anomaly.
 - **W3**: Version bump + release.
 
 
-## v0.86.4 — 2026-05-04
+## v0.86.5 — 2026-05-04
 
 ### Extension Hardening & Hook Schema Versioning
 
@@ -5865,7 +5865,7 @@ to prevent stale text on protocol anomaly.
 - **W3**: Version bump + release.
 
 
-## v0.86.4 — 2026-05-04
+## v0.86.5 — 2026-05-04
 
 ### Event Algebra & Boundary Contracts
 
@@ -5878,7 +5878,7 @@ to prevent stale text on protocol anomaly.
 - **W3**: Version bump + release.
 
 
-## v0.86.4 — 2026-05-04
+## v0.86.5 — 2026-05-04
 
 ### Error Taxonomy & Effect Policy Completion
 
@@ -5891,7 +5891,7 @@ to prevent stale text on protocol anomaly.
   (`with-logged-error`, `with-safe-fallback`). LLM port-close and TUI cleanup left as-is.
 
 
-## v0.86.4 — 2026-05-03
+## v0.86.5 — 2026-05-03
 
 ### Cross-Cutting: Contracts, Boundaries, Polish
 
@@ -5904,7 +5904,7 @@ to prevent stale text on protocol anomaly.
 - **W3**: Final regression + architecture fitness verification — all pass.
 
 
-## v0.86.4 — 2026-05-03
+## v0.86.5 — 2026-05-03
 
 ### Runtime Core Abstraction
 
@@ -5917,7 +5917,7 @@ to prevent stale text on protocol anomaly.
   cond→match (12→5). Type dispatch, null checks, file-exists? guards. 10 safe conversions.
 
 
-## v0.86.4 — 2026-05-03
+## v0.86.5 — 2026-05-03
 
 ### TUI Rendering Abstraction
 
@@ -5931,7 +5931,7 @@ to prevent stale text on protocol anomaly.
   All TUI modules use explicit named provides, no `all-defined-out`.
 
 
-## v0.86.4 — 2026-05-02
+## v0.86.5 — 2026-05-02
 
 ### Tool System & GSD Abstraction Cleanup
 
@@ -5944,7 +5944,7 @@ to prevent stale text on protocol anomaly.
 - **W2**: Audit confirms Findings A18/A19 already addressed. Events use
   struct envelope (util/event.rkt), tool results use constructors.
 
-## v0.86.4 — 2026-05-02
+## v0.86.5 — 2026-05-02
 
 ### LLM Provider Protocol Unification
 
@@ -5953,10 +5953,10 @@ to prevent stale text on protocol anomaly.
   providers (anthropic, gemini, openai-compatible, azure-openai). 16 new tests.
 - **W2**: Provider adoption + cleanup. Removed duplicated provider-specific
   check/translate functions. Net reduction: 107 lines.
-- **W3**: Version bump to 0.86.4 + CI fix (apt-get for Linux, test reference
+- **W3**: Version bump to 0.86.5 + CI fix (apt-get for Linux, test reference
   updates for removed provider functions) + release.
 
-## v0.86.4 — 2026-05-02
+## v0.86.5 — 2026-05-02
 
 ### Foundation Abstractions
 
@@ -5966,12 +5966,12 @@ to prevent stale text on protocol anomaly.
   in `util/error-helpers.rkt`, 58 replacements.
 - **W2**: Semaphore Guard HOFs — `with-registry-lock`, `with-event-bus-lock`,
   `with-gsd-lock` in source modules.
-- **W3**: Version bump to 0.86.4 + CI + release.
+- **W3**: Version bump to 0.86.5 + CI + release.
 
 
-## v0.86.4 — 2026-05-02
+## v0.86.5 — 2026-05-02
 
-### Audit Remediation + CI Release (v0.86.4 findings)
+### Audit Remediation + CI Release (v0.86.5 findings)
 
 - **W0**: README version history restoration (43 entries de-corrupted from d9432b2),
   streaming text test fix (correct style expectation `'()` not `'(bright-black)`),
@@ -5980,9 +5980,9 @@ to prevent stale text on protocol anomaly.
 - **W1**: styled-line->ansi O(n²)→O(n) performance fix
   (list-ref replaced with for/fold loop accumulator). No behavior change.
 
-## v0.86.4 — 2026-05-01
+## v0.86.5 — 2026-05-01
 
-### Audit Remediation (v0.86.4 findings)
+### Audit Remediation (v0.86.5 findings)
 
 - **W0**: TUI Core Rendering Fixes. Fix highlight-line-range arity error
   (define→define-values for for/fold), wrap-styled-line actual segment
@@ -5993,7 +5993,7 @@ to prevent stale text on protocol anomaly.
   memo-hit tracking in context-assembly selection, replace local
   overflow-message? with canonical context-overflow-error? in retry-policy.
 
-## v0.86.4 — 2026-05-01
+## v0.86.5 — 2026-05-01
 
 ### Test Regression Remediation
 
@@ -6008,11 +6008,11 @@ to prevent stale text on protocol anomaly.
   topic, phase4-catalog trace emission, audit script version check fix.
 
 
-## v0.86.4 — 2026-04-29
+## v0.86.5 — 2026-04-29
 
-### Deep Module Refactoring + v0.86.4 Remediation
+### Deep Module Refactoring + v0.86.5 Remediation
 
-- **W0**: v0.86.4 remediation quick fixes. Fix pre-commit version drift,
+- **W0**: v0.86.5 remediation quick fixes. Fix pre-commit version drift,
   bash sandbox quote handling, delete-lines off-by-one, edit unique-match
   enforcement, write no-clobber guard, tool registry cleanup, shell-quote
   hardening, and contract fixes.
@@ -6044,7 +6044,7 @@ to prevent stale text on protocol anomaly.
   9 directories. 60+ new tests added.
 
 
-## v0.86.4 — 2026-04-29
+## v0.86.5 — 2026-04-29
 
 ### Working Set Memory for Context Assembly
 
@@ -6069,7 +6069,7 @@ to prevent stale text on protocol anomaly.
   is re-read. Add `working-set-entries` and `working-set-tokens` to
   `context.assembled` event payload.
 
-## v0.86.4 — 2026-04-29
+## v0.86.5 — 2026-04-29
 
 ### Audit Tooling Quality & Test Coverage
 
@@ -6096,7 +6096,7 @@ to prevent stale text on protocol anomaly.
 - **F9 (MEDIUM)**: Add 6 RA-5 decomposition fitness tests for key modules
   (loop.rkt, gsd/core.rkt, context-policy.rkt, tool.rkt, event-types.rkt).
 
-## v0.86.4 — 2026-04-30
+## v0.86.5 — 2026-04-30
 
 ### Critical & Security Remediation
 
@@ -6114,10 +6114,10 @@ to prevent stale text on protocol anomaly.
   args to prevent `=`/newline injection.
 - **F18 (LOW)**: Document `tool-handlers.rkt` as future decomposition
   candidate.
-- Fix CHANGELOG version header corruption (v0.86.4+ entries restored).
+- Fix CHANGELOG version header corruption (v0.86.5+ entries restored).
 - Add `security.md`, `docs/adr/` to version-lint skip lists.
 
-## v0.86.4 — 2026-04-30
+## v0.86.5 — 2026-04-30
 
 ### Audit CI Discoverability + Enhanced Scanners
 
@@ -6126,7 +6126,7 @@ to prevent stale text on protocol anomaly.
 - Expand risky API patterns: `system*`, `eval-syntax`, `open-input-file`, `call-with-input-file`
 - Lower module size threshold from 900 to 800 lines
 
-## v0.86.4 — 2026-04-29
+## v0.86.5 — 2026-04-29
 
 ### Module Decomposition & Breaking Change Cleanup (F1–F6)
 
@@ -6143,7 +6143,7 @@ to prevent stale text on protocol anomaly.
 - Add deprecation deadline linter (`scripts/lint-deprecation-deadlines.rkt`)
 - Remove `known-large` exceptions from dependency policy
 
-## v0.86.4 — 2026-04-30
+## v0.86.5 — 2026-04-30
 
 ### Audit Automation & Deprecation Cleanup (RA-4 + RA-5)
 
@@ -6151,7 +6151,7 @@ to prevent stale text on protocol anomaly.
 - Deprecation TODO annotation in `runtime/context-assembly.rkt`
 - CI audit wiring + CHANGELOG
 
-## v0.86.4 — 2026-04-29
+## v0.86.5 — 2026-04-29
 
 ### Module Decomposition (RA-3)
 
@@ -6160,7 +6160,7 @@ to prevent stale text on protocol anomaly.
 - Extract `context-summary.rkt` (272 lines)
 - Arch fitness test for module sizes
 
-## v0.86.4 — 2026-04-29
+## v0.86.5 — 2026-04-29
 
 ### Security Hardening
 
@@ -6169,27 +6169,27 @@ to prevent stale text on protocol anomaly.
 - **RA-2**: Configurable secret scrubbing
 - Security docs update
 
-## v0.86.4 — 2026-04-29
+## v0.86.5 — 2026-04-29
 
 ### SDK Regression Fix + Audit Sweep
 
 - Fixed `gsd-status` crash + refactor `/go` transaction
 - Version sync fixes
 
-## v0.86.4 — 2026-04-29
+## v0.86.5 — 2026-04-29
 
 ### Audit Remediation
 
 - Shim cleanup + doc fitness gate + TR version regex
 
-## v0.86.4 — 2026-04-29
+## v0.86.5 — 2026-04-29
 
 ### Production Integration Wiring
 
 - Unified event system, normalized `/go` pipeline, transaction coverage
 - Write guard policy migration, event taxonomy expansion
 
-## v0.86.4 — 2026-04-29
+## v0.86.5 — 2026-04-29
 
 ### Documentation & Fitness Gates
 
@@ -6201,7 +6201,7 @@ to prevent stale text on protocol anomaly.
   event telemetry, normalized plan IR, and full lifecycle integration.
 - Exported `with-gsd-transaction` from core.rkt for testing reuse.
 
-## v0.86.4 — 2026-04-29
+## v0.86.5 — 2026-04-29
 
 ### Pipeline Refactor & Observability
 
@@ -6215,7 +6215,7 @@ to prevent stale text on protocol anomaly.
   transitions emit events. Event collector for testing.
 - 8 new event telemetry tests, backward-compatible.
 
-## v0.86.4 — 2026-04-29
+## v0.86.5 — 2026-04-29
 
 ### Policy Engine & Transaction Wrappers
 
@@ -6227,7 +6227,7 @@ to prevent stale text on protocol anomaly.
   transaction wrapper for failure atomicity.
 - 3 new transaction tests (39 core total), 18 new policy tests.
 
-## v0.86.4 — 2026-04-29
+## v0.86.5 — 2026-04-29
 
 ### GSD Extension Architecture Remediation
 
@@ -6240,15 +6240,15 @@ to prevent stale text on protocol anomaly.
   ad-hoc hasheq. New `command-types.rkt` module.
 - **F3: Shim Purification** — Removed behavioral logic from `gsd-planning-state.rkt`
   shim. PLAN.md side effects moved to `core.rkt`. Shim is now pure delegation
-  (deprecated, removal planned for v0.86.4).
+  (deprecated, removal planned for v0.86.5).
 - **F4: State Invariants** — Added `gsd-invariants-hold?` to validate runtime
   state structural invariants at any point.
 
-## v0.86.4 — 2026-04-29
+## v0.86.5 — 2026-04-29
 
 ### CI Resilience & Push Safety Net
 
-**Goal**: Make CI green whenever local pre-commit passes. Addresses v0.86.4
+**Goal**: Make CI green whenever local pre-commit passes. Addresses v0.86.5
 incident requiring 4 CI runs and ~2 hours of debugging.
 
 - **ci_preflight parity**: Added `check-deps.rkt` to `ci_preflight()` in
@@ -6263,7 +6263,7 @@ incident requiring 4 CI runs and ~2 hours of debugging.
 - **Maintenance comment**: Added version-awareness comment to
   `check-deps.rkt` base-packages set.
 
-## v0.86.4 — 2026-04-29
+## v0.86.5 — 2026-04-29
 
 ### Performance Fix & Code Hygiene
 
@@ -6289,7 +6289,7 @@ incident requiring 4 CI runs and ~2 hours of debugging.
 
 **Tests:** 101 context+compactor tests, 67 assembly+policy tests pass
 
-## v0.86.4 — 2026-04-29
+## v0.86.5 — 2026-04-29
 
 ### Combined Audit Remediation & Hardening
 
@@ -6313,7 +6313,7 @@ incident requiring 4 CI runs and ~2 hours of debugging.
 
 **Tests:** All context + lifecycle tests pass
 
-## v0.86.4 — 2026-04-30
+## v0.86.5 — 2026-04-30
 
 ### Audit Remediation
 
@@ -6332,7 +6332,7 @@ incident requiring 4 CI runs and ~2 hours of debugging.
 
 **Tests:** All 149 context+TR tests pass
 
-## v0.86.4 — 2026-04-19 to 2026-04-29
+## v0.86.5 — 2026-04-19 to 2026-04-29
 
 ### Context Performance + Observability
 
@@ -6416,7 +6416,7 @@ and session-store-tree.rkt (129 LOC), converted session-store.rkt to façade (34
 **W3** — sdk.rkt decomposition: extracted sdk-core.rkt (439 LOC) and
 sdk-compat.rkt (237 LOC), converted sdk.rkt to thin façade (15 LOC).
 
-**W4** — arch-report.rkt script (CI gate), version bump 0.86.4 → 0.86.4.
+**W4** — arch-report.rkt script (CI gate), version bump 0.86.5 → 0.86.5.
 
 
 ---
@@ -6451,7 +6451,7 @@ sdk-compat.rkt (237 LOC), converted sdk.rkt to thin façade (15 LOC).
 **W4 — Hook Golden Tests + Stability Tiers + Version Bump**
 - 20 hook golden payload shape tests (regression canaries)
 - Stability tier annotations (stable/evolving/internal) on 25+ modules
-- Version bump 0.86.4 → 0.86.4
+- Version bump 0.86.5 → 0.86.5
 
 
 ---
@@ -6496,7 +6496,7 @@ sdk-compat.rkt (237 LOC), converted sdk.rkt to thin façade (15 LOC).
 
 ### 2026-04-29
 
-### Audit Remediation (v0.86.4 Post-Merge Fixes)
+### Audit Remediation (v0.86.5 Post-Merge Fixes)
 - **FIT-01**: Replaced line-based `extract-requires` with read-based S-expression parser in arch test files
 - **FIT-02**: Module size threshold 900 lines with known-large tracking (tui/state.rkt, extensions/racket-tooling.rkt)
 - **FIT-03**: Updated stale known-exceptions list for runtime layer boundary tests
@@ -6595,7 +6595,7 @@ sdk-compat.rkt (237 LOC), converted sdk.rkt to thin façade (15 LOC).
 - **ARCH-04**: Added extensions/api.rkt event bus re-exports for extensions
 - **ARCH-05**: Extracted runtime/session-context.rkt for path settings
 - **QUAL-01–04**: Code quality improvements (shell quoting, shadowing, type narrowing)
-- **DOC-02**: Updated releasing.md verified-against to v0.86.4
+- **DOC-02**: Updated releasing.md verified-against to v0.86.5
 - **DOC-03**: Sorted CHANGELOG entries monotonically
 - **DOC-06**: Added ADR-0011 (GSD state machine) and ADR-0012 (context manager)
 - **DOC-08**: Added docstrings to ext-package-manager.rkt and compact-context.rkt
@@ -6748,7 +6748,7 @@ with structured plan types, validation, and error recovery.
 - These would have caught the C2 parameter→box and C3 invisible warning bugs
 
 **Wave 5 — Version Bump**
-- Bump 0.86.4 → 0.86.4
+- Bump 0.86.5 → 0.86.5
 
 **Total**: 176 GSD tests across 7 files. 0 failures.
 
@@ -6835,7 +6835,7 @@ with structured plan types, validation, and error recovery.
 - Prevents LLM from merging old+new plan content
 
 **W3 — Version Bump**
-- Version 0.86.4 → 0.86.4
+- Version 0.86.5 → 0.86.5
 
 
 ---
@@ -6879,7 +6879,7 @@ with structured plan types, validation, and error recovery.
 - 3 new iteration tests: spiral event structure, multi-tool paths, seen-path dedup
 
 **W3 — Version Bump**
-- Version 0.86.4 → 0.86.4
+- Version 0.86.5 → 0.86.5
 
 
 ---
@@ -6903,7 +6903,7 @@ with structured plan types, validation, and error recovery.
 - 2 new registry tests: prompt-guidelines set, description contains "verbatim"
 
 **W3 — Version Bump**
-- Version 0.86.4 → 0.86.4
+- Version 0.86.5 → 0.86.5
 
 
 ---
@@ -6989,7 +6989,7 @@ with structured plan types, validation, and error recovery.
 
 **W5 — Documentation Refresh**
 - **Fixed**: README metrics updated to current values
-- **Updated**: All verified-against markers to v0.86.4
+- **Updated**: All verified-against markers to v0.86.5
 
 
 ---
@@ -7122,7 +7122,7 @@ with structured plan types, validation, and error recovery.
 - `docs/self-hosting.md`: GSD planning, dogfood infrastructure, extension loading
 - `docs/workflow-testing.md`: test structure, mock provider patterns, conventions
 
-**Wave 3 — Version bump 0.86.4 → 0.86.4** (PR #1663)
+**Wave 3 — Version bump 0.86.5 → 0.86.5** (PR #1663)
 - Version bump and CHANGELOG update
 
 
@@ -7146,7 +7146,7 @@ with structured plan types, validation, and error recovery.
 - Multi-task comparison
 - 6 tests
 
-**Wave 3 — Version bump 0.86.4 → 0.86.4** (PR #1660)
+**Wave 3 — Version bump 0.86.5 → 0.86.5** (PR #1660)
 - Version bump and CHANGELOG update
 
 
@@ -7178,7 +7178,7 @@ with structured plan types, validation, and error recovery.
 
 ### GSD Planning Workflow + Review Cleanup
 
-Milestone #92 — Post-v0.86.4 review follow-ups and planning prompt augmentation.
+Milestone #92 — Post-v0.86.5 review follow-ups and planning prompt augmentation.
 
 **Wave 1 — Review cleanup + test coverage (#1596)**
 - Removed all `/tmp/q-cmd-dispatch.log` diagnostic tracing from 4 files.
@@ -7196,7 +7196,7 @@ Milestone #92 — Post-v0.86.4 review follow-ups and planning prompt augmentatio
 - Added test verifying augmented submit text contains `[gsd-planning]` preamble.
 
 **Wave 4 — Fix pre-existing test failures (#1605)**
-- Synced all version surfaces: info.rkt, README.md, docs/*.md, wiki-src/ to 0.86.4.
+- Synced all version surfaces: info.rkt, README.md, docs/*.md, wiki-src/ to 0.86.5.
 - Added `.planning/` and `.pi/` to `lint-version.rkt` skip list (historical version refs).
 - Synced README metrics (source line counts).
 - Fixed `test-tui-enter.rkt`: updated expected command return format
@@ -7243,7 +7243,7 @@ and gsd-planning execute-command handler for end-to-end `/activate` → command 
 ### Review Remediation
 
 Milestone #90 — Security hardening, extension system integrity, and broken
-registration fixes from v0.86.4 review.
+registration fixes from v0.86.5 review.
 
 **Wave 1 — Fix broken extension registrations (#1573)**
 - `remote-collab/remote-collab.rkt`: Fixed `ext-register-tool!` from 2-arg
@@ -7319,7 +7319,7 @@ registration fixes from v0.86.4 review.
 
 ### Audit Remediation
 
-Security and robustness fixes from comprehensive audit of v0.86.4–v0.86.4
+Security and robustness fixes from comprehensive audit of v0.86.5–v0.86.5
 (remote pi implementation). 25 findings addressed: 5 CRITICAL, 7 MAJOR, 13 MINOR.
 
 **CRITICAL fixes:**
@@ -7469,7 +7469,7 @@ No new Racket code — skills are pure markdown discovered by existing skill sys
 
 ### 2026-04-22
 
-### Critical Fixes (from PROJECT_REVIEW_v0.86.4)
+### Critical Fixes (from PROJECT_REVIEW_v0.86.5)
 
 - **SEC-07**: Fix `subprocess-result` arity bug — error handler had `#f` nested inside
   `inexact->exact` call instead of being the 6th field (`truncated?`). Any subprocess
@@ -7486,7 +7486,7 @@ No new Racket code — skills are pure markdown discovered by existing skill sys
 
 ### Housekeeping
 
-- Bump version references across all docs to 0.86.4
+- Bump version references across all docs to 0.86.5
 
 
 ---
@@ -7496,7 +7496,7 @@ No new Racket code — skills are pure markdown discovered by existing skill sys
 ### Architecture Hardening & Documentation Refresh
 
 Milestone #81 — 17 issues, 11 PRs merged. Full review findings in
-`.planning/REVIEW-v0.86.4.md` (73 findings: 6 CRITICAL, 23 MAJOR, 32 MINOR, 12 NIT).
+`.planning/REVIEW-v0.86.5.md` (73 findings: 6 CRITICAL, 23 MAJOR, 32 MINOR, 12 NIT).
 
 #### Wave 0 — Housekeeping (#1475, #1477, #1488)
 - Version drift sync, STATE.md + SUMMARY.md reconciliation
@@ -7747,7 +7747,7 @@ per-model timeout overrides. Config schema:
 ### Post-Review Fixes (Waves 10–13)
 
 - **Wave 10**: Removed dead code in `classify-error` (R1) — no-op `when` block. Fixed `rate-limit-error?` pattern — replaced `"too many"` with `"too many requests"` to prevent context-overflow misclassification (R2)
-- **Wave 11**: Fixed README v0.86.4 status block — replaced v0.13.x description with accurate v0.86.4 features (D1). Synced metrics (D2)
+- **Wave 11**: Fixed README v0.86.5 status block — replaced v0.13.x description with accurate v0.86.5 features (D1). Synced metrics (D2)
 - **Wave 12**: Added 12 TUI event handler tests covering `iteration.soft-warning`, `exploration.progress`, `context.mid-turn-over-budget`, and `auto-retry.start` with `errorType` (TC1)
 - **Wave 13**: Added `session-rebind` to `hook-action-schemas` (H1). Wrapped `dynamic-require` with descriptive error messages in `session-switch.rkt` (SW1). Added argument validation in `resource-discovery.rkt` (RD1)
 
@@ -7812,7 +7812,7 @@ Replaces mechanical context truncation with a strategy-driven context assembly e
 ### Performance
 - **TUI transcript O(n²) → O(1)**: Transcript append now uses `cons` instead of `append`, eliminating quadratic slowdown on long sessions. Added `transcript-entries` accessor that reverses on read for backward-compatible oldest-first ordering. (#1386, PR #1387)
 
-### Bug Fixes (from v0.86.4)
+### Bug Fixes (from v0.86.5)
 - **Settings contract**: Fixed `make-settings` field contracts that rejected valid values. (#1376)
 - **Context reducer pair-awareness**: Context reduction now correctly handles paired tool-start/tool-end entries. (#1377)
 - **`/retry` + iteration limit**: `/retry` command now correctly updates `last-prompt-box`. Max iterations raised from 10 to 20. (#1378, PR #1383)
@@ -7872,7 +7872,7 @@ Replaces mechanical context truncation with a strategy-driven context assembly e
 ### Infrastructure
 - CI local lint suite (8 checks)
 - Security lint for hardcoded secrets
-- Compatibility matrix documentation## v0.86.4 — 2026-05-29
+- Compatibility matrix documentation## v0.86.5 — 2026-05-29
 
 ### Audit Baselines & Risk Harnesses
 
@@ -7888,7 +7888,7 @@ Replaces mechanical context truncation with a strategy-driven context assembly e
 - **W2**: Updated compatibility matrix with credential backend platform support
 - **W2**: Updated install docs with Windows instructions and security notes
 
-## v0.86.4 — 2026-05-29
+## v0.86.5 — 2026-05-29
 
 ### Credential Policy & Plaintext Fallback Warnings
 

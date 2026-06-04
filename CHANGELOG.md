@@ -1,4 +1,21 @@
 
+## v0.86.5 (2026-06-04)
+
+### Audit Closure (Complete Remediation)
+
+- Fix `turn.completed` → `stream.turn.completed` in 5 test files (F1)
+- Fix `enqueue-steering!` to accept string instead of message struct (F4)
+- Widen `branch-summary-entry-entry-range` contract in tree-entries.rkt (F3)
+- Fix `cli-config` arity 16→17 for context-profile field (F2)
+- Update version markers from 0.86.3→0.86.4 across 653 references (F5)
+- Add `turn-orchestrator.rkt` risk note to dependency-policy.rktd (F5)
+- Fix `record_conclusion` tool name in permission-gate.rkt (F5)
+- Fix stale file paths in test-arch-fitness.rkt (F5)
+- Fix truncate-string ellipsis mismatch in tui/state test (F6)
+- Widen `styled-line?` placeholder to accept struct instances (F9)
+- Fix runner `file-has-rackunit-tests?` for self-running rackunit/text-ui files (F10)
+- Add `assistant.message.completed` + `stream.turn.completed` to event registry (F11)
+
 ## v0.86.4 (2026-06-04)
 
 ### Audit Closure
