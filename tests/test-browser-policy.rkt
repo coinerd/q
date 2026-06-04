@@ -76,8 +76,29 @@
 (test-case "scheme: strict settings only allow https"
   (check-false (url-ok? "http://example.com" strict-settings)))
 
-(test-case "scheme: permissive allows file://"
-  (check-true (url-ok? "file:///tmp/test.html" permissive-settings)))
+(test-case "scheme: permissive STILL blocks file:// (absolute deny)"
+  (check-false (url-ok? "file:///tmp/test.html" permissive-settings)))
+
+(test-case "absolute deny: data: blocked even when data in allowed-schemes"
+  (define data-allowed-settings
+    (make-browser-policy-settings #:allowed-schemes '("https" "http" "data")))
+  (check-false (url-ok? "data:text/html,<h1>hi</h1>" data-allowed-settings)))
+
+(test-case "absolute deny: javascript: blocked even when javascript in allowed-schemes"
+  (define js-allowed-settings
+    (make-browser-policy-settings #:allowed-schemes '("https" "http" "javascript")))
+  (check-false (url-ok? "javascript:alert(1)" js-allowed-settings)))
+
+(test-case "absolute-denied-scheme? predicate"
+  (check-not-false (absolute-denied-scheme? "file"))
+  (check-not-false (absolute-denied-scheme? "FILE"))
+  (check-not-false (absolute-denied-scheme? "data"))
+  (check-not-false (absolute-denied-scheme? "javascript"))
+  (check-false (absolute-denied-scheme? "https"))
+  (check-false (absolute-denied-scheme? "http")))
+
+(test-case "absolute-denied-schemes constant has 3 entries"
+  (check-equal? (length absolute-denied-schemes) 3))
 
 (test-case "scheme: empty URL rejected"
   (check-false (url-ok? "" test-settings)))
