@@ -222,7 +222,8 @@
                                     #:tool-call-id tcid))]
                [else (emit-session-event! bus session-id event-type payload)]))
            #:runtime-settings (or (config-settings config)
-                                  (make-minimal-settings #:provider (config-provider config)
+                                  (make-minimal-settings #:provider (let ([p (config-provider config)])
+                                                                       (if (string? p) p #f))
                                                          #:model (config-model-name config)))
            #:call-id (generate-id)
            #:session-metadata

@@ -78,7 +78,7 @@
 ;; Cached version of estimate-message-tokens.
 ;; Delegates to util/token-estimate-cache.rkt for content-addressed memoization.
 (define (estimate-message-tokens-cached msg)
-  (cached-estimate-text-tokens estimate-message-tokens
+  (cached-estimate-text-tokens estimate-text-tokens
                                (string-join (for/list ([part (in-list (message-content msg))]
                                                        #:when (text-part? part))
                                               (text-part-text part))

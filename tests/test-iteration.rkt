@@ -48,10 +48,8 @@
     (test-case "steering queue messages are injected into context"
       (define bus (make-event-bus))
       (define queue (make-queue))
-      (define steering-msg (make-user-message "Steering input"))
-
-      ;; Enqueue a steering message
-      (enqueue-steering! queue steering-msg)
+      ;; Enqueue a steering message (queue accepts strings; main-loop converts to messages)
+      (enqueue-steering! queue "Steering input")
 
       ;; Track what context was passed to provider via event bus
       (define collected-events (box '()))
@@ -90,8 +88,8 @@
                                 (append (unbox ctx-sizes)
                                         (list (hash-ref payload 'totalMessages 0)))))))
 
-      (enqueue-steering! queue (make-user-message "First steering"))
-      (enqueue-steering! queue (make-user-message "Second steering"))
+      (enqueue-steering! queue "First steering")
+      (enqueue-steering! queue "Second steering")
 
       ;; Mock provider
       (define content-parts (list (hasheq 'type "text" 'text "Response")))

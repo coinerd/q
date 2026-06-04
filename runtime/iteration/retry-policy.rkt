@@ -23,7 +23,7 @@
 
 ;; ── Typed imports from untyped modules ──────────────────────────
 
-(require/typed racket/dict [dict-ref (->* ((HashTable Symbol Any) Symbol) (Any) Any)])
+(require/typed racket/dict [dict-ref (->* (Any Any) (Any) Any)])
 (require/typed "../auto-retry.rkt" [context-overflow-error? (-> Any Boolean)])
 
 (require/typed "../compaction/compactor.rkt"

@@ -28,7 +28,7 @@
                 jsexpr?)]
           [check-provider-status! (-> string? (or/c bytes? string?) (or/c bytes? string?) void?)]
           [extract-error-message (-> jsexpr? (or/c string? #f))]
-          [translate-stop-reason (-> (or/c symbol? #f) (or/c string? symbol? #f) symbol?)]))
+          [translate-stop-reason (-> (or/c symbol? #f) any/c symbol?)]))
 
 ;; ============================================================
 ;; Contracts

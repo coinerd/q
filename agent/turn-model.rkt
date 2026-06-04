@@ -128,9 +128,9 @@
                                                      [budget-ctx hash?]
                                                      [extension-registry
                                                       (or/c extension-registry? #f)])))
-         (contract-out (struct turn-command ([tag turn-command-tag/c] [payload hash?])))
+         (contract-out (struct turn-command ([tag turn-command-tag/c] [payload any/c])))
          (contract-out (struct turn-decision
-                               ([tag turn-decision-tag/c] [payload hash?] [metadata hash?])))
+                               ([tag turn-decision-tag/c] [payload any/c] [metadata hash?])))
          make-turn-start
          make-turn-hook-result
          make-turn-stream-complete
@@ -165,4 +165,4 @@
                                                       [all-chunks list?])))
          make-stream-completion
          ;; Hook stage payload
-         (contract-out (struct hook-stage-payload ([stage symbol?] [result hash?]))))
+         (contract-out (struct hook-stage-payload ([stage symbol?] [result any/c]))))
