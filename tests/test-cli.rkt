@@ -157,7 +157,7 @@
                    #f
                    '()
                    #f
-                   #f))
+                   #f #f))
      (define rt (cli-config->runtime-config cfg))
      (check-equal? (hash-ref rt 'model) "gpt-4")
      (check-equal? (hash-ref rt 'max-iterations) 5)
@@ -167,7 +167,7 @@
      (check-equal? (hash-ref rt 'tools) '()))
 
    (test-case "defaults filled in"
-     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f #f))
      (define rt (cli-config->runtime-config cfg))
      (check-equal? (hash-ref rt 'max-iterations) 10)
      (check-false (hash-ref rt 'no-tools?))
@@ -175,7 +175,7 @@
 
    (test-case "session-id present for resume"
      (define cfg
-       (cli-config 'resume "sess-123" #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f))
+       (cli-config 'resume "sess-123" #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f #f))
      (define rt (cli-config->runtime-config cfg))
      (check-equal? (hash-ref rt 'session-id) "sess-123")))
  ;; ═══════════════════════════════════════════
@@ -231,7 +231,7 @@
  (test-suite "run-cli-single"
 
    (test-case "returns void regardless of session-fn return value"
-     (define cfg (cli-config 'prompt #f "test" #f 'single #f #f #f 10 #f '() #f #f '() #f #f))
+     (define cfg (cli-config 'prompt #f "test" #f 'single #f #f #f 10 #f '() #f #f '() #f #f #f))
      (define result
        (run-cli-single cfg
                        #:session-fn (lambda (prompt) (values 'session-struct 'loop-result-struct))
@@ -419,7 +419,7 @@
 (define suite-166
   (test-suite "Issue #166: --verbose flag"
     (test-case "verbose error in interactive mode shows classified error"
-      (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #t 10 #f '() #f #f '() #f #f))
+      (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #t 10 #f '() #f #f '() #f #f #f))
       (define in (open-input-string "bad\n/quit\n"))
       (define out (open-output-string))
       (run-cli-interactive cfg
@@ -433,7 +433,7 @@
       (check-true (string-contains? output "missing"))
       (check-true (string-contains? output "Stack trace:")))
     (test-case "non-verbose error in interactive mode omits stack trace"
-      (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f))
+      (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f #f))
       (define in (open-input-string "bad\n/quit\n"))
       (define out (open-output-string))
       (run-cli-interactive cfg
@@ -447,7 +447,7 @@
       (check-true (string-contains? output "missing"))
       (check-false (string-contains? output "Stack trace:")))
     (test-case "verbose error in single-shot mode outputs to stderr"
-      (define cfg (cli-config 'prompt #f "test" #f 'single #f #f #t 10 #f '() #f #f '() #f #f))
+      (define cfg (cli-config 'prompt #f "test" #f 'single #f #f #t 10 #f '() #f #f '() #f #f #f))
       (define err (open-output-string))
       (parameterize ([current-error-port err])
         (run-cli-single cfg #:session-fn (lambda (prompt) (error "hash-ref: missing key"))))

@@ -21,7 +21,7 @@
           [make-branch-summary-entry
            (-> string? (or/c string? #f) string? (or/c string? (listof string?) hash? #f) exact-nonnegative-integer? message?)]
           [branch-summary-entry-summary (-> message? (or/c string? #f))]
-          [branch-summary-entry-entry-range (-> message? (or/c string? #f))]
+          [branch-summary-entry-entry-range (-> message? (or/c string? (listof string?) hash? #f))]
           [branch-summary-entry-token-count (-> message? (or/c exact-nonnegative-integer? #f))]
           [tree-entry? (-> any/c boolean?)]))
 
