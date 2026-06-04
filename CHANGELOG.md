@@ -1,4 +1,15 @@
 
+## v0.93.1 (2026-06-03)
+
+### Final Audit Closure (Phase 7)
+
+- Post-implementation audit: APPROVED — 0 blocking findings
+- Architecture: layer boundaries clean (browser/ imports only agent/event + util)
+- Security: default-deny URL policy, dangerous tool classification, safe mode integration
+- Tests: 240 browser tests across 14 test files
+- Documentation: browser-guide.md + ADR 0020
+- **Browser Feature Complete**: 11 source modules, 10 registered tools, Playwright sidecar
+
 ## v0.92.2 (2026-06-03)
 
 ### Workflow Tool + Documentation (Phase 6)
