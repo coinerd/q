@@ -474,8 +474,11 @@
               [has-rackunit-forms? (or (regexp-match? #rx"\\(test-case" content)
                                        (regexp-match? #rx"\\(check-" content))]
               [module-plus-test? (regexp-match? #px"\\(module\\+\\s+test\\b" content)]
-              [self-running? (regexp-match? #rx"\\(run-tests" content)])
-         (and has-rackunit-forms? (or module-plus-test? (not self-running?))))))
+              ;; rackunit/text-ui files that call (run-tests ...) produce
+              ;; rackunit/text-ui output format — must use slow path for parsing.
+              [uses-rackunit-text-ui? (and has-rackunit-forms?
+                                           (regexp-match? #rx"\\(run-tests" content))])
+         (or module-plus-test? uses-rackunit-text-ui?))))
 
 ;; Common result extraction from a running process.
 ;; Handles timeout logic and stdout/stderr parsing uniformly.
