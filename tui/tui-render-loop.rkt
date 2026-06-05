@@ -67,6 +67,12 @@
          decode-mouse-x10
          decode-mouse-message
          current-busy-watchdog-ms
+         current-resize-poll-interval-ms
+         resize-poll-due?
+         reset-idle-render-state!
+         apply-cursor-blink-timer!
+         cursor-blink-redraw-needed?
+         render-cursor-blink-frame!
          (contract-out [check-busy-watchdog (-> any/c number? number? (or/c any/c #f))]
                        [apply-busy-watchdog! (-> tui-ctx? number? number? boolean?)]
                        [tui-ctx-init-terminal! (-> tui-ctx? void?)]
@@ -107,6 +113,53 @@
 (define last-blink-toggle-ms (box 0.0))
 (define blink-phase (box #t))
 
+;; Idle resize fallback polling. Resize events remain immediate, but fallback
+;; polling must be coarse enough to avoid repeated stty subprocess churn.
+(define current-resize-poll-interval-ms (make-parameter 1000.0))
+(define last-resize-poll-ms (box #f))
+
+;; Cursor-only redraw state. A blink tick should not force component cache
+;; invalidation or full VDOM rendering.
+(define cursor-blink-redraw-needed-box (box #f))
+(define last-cursor-col-box (box #f))
+(define last-cursor-row-box (box #f))
+(define last-cursor-base-cell-box (box #f))
+
+(define (reset-idle-render-state!)
+  (set-box! last-render-ms 0.0)
+  (set-box! last-blink-toggle-ms 0.0)
+  (set-box! blink-phase #t)
+  (set-box! last-resize-poll-ms #f)
+  (set-box! cursor-blink-redraw-needed-box #f)
+  (set-box! last-cursor-col-box #f)
+  (set-box! last-cursor-row-box #f)
+  (set-box! last-cursor-base-cell-box #f))
+
+(define (resize-poll-due? now-ms last-ms interval-ms)
+  (or (not last-ms) (>= (- now-ms last-ms) interval-ms)))
+
+(define (apply-resize-poll! ctx now-ms)
+  (cond
+    [(resize-poll-due? now-ms (unbox last-resize-poll-ms) (current-resize-poll-interval-ms))
+     (set-box! last-resize-poll-ms now-ms)
+     (when (tui-screen-size-changed?)
+       (tui-ctx-resize-ubuf! ctx)
+       (mark-dirty! ctx)
+       #t)]
+    [else #f]))
+
+(define (apply-cursor-blink-timer! now-ms)
+  (cond
+    [(> (- now-ms (unbox last-blink-toggle-ms)) BLINK-INTERVAL-MS)
+     (set-box! blink-phase (not (unbox blink-phase)))
+     (set-box! last-blink-toggle-ms now-ms)
+     (set-box! cursor-blink-redraw-needed-box #t)
+     #t]
+    [else #f]))
+
+(define (cursor-blink-redraw-needed?)
+  (unbox cursor-blink-redraw-needed-box))
+
 ;; Native cell-buffer operations (no dynamic-require)
 
 ;; ============================================================
@@ -128,6 +181,11 @@
   (enable-mouse-tracking)
   ;; Detect synchronized output support
   (detect-sync-mode-support!)
+  ;; Start idle timers from terminal initialization so an idle TUI does not
+  ;; immediately blink/poll as if the last tick occurred at process start.
+  (reset-idle-render-state!)
+  (set-box! last-blink-toggle-ms (current-inexact-milliseconds))
+  (set-box! last-resize-poll-ms (current-inexact-milliseconds))
   (void))
 
 ;; Resize ubuf when terminal size changes
@@ -327,12 +385,18 @@
   (define-values (cursor-col cursor-row state* frame-lines)
     (render-frame-vdom! ubuf state inp layout #:component-registry comp-registry))
 
+  ;; Remember base cursor cell before applying software-cursor inversion.
+  ;; Cursor blink can then update only this one cell without rebuilding VDOM.
+  (define cursor-cell (cell-buffer-ref ubuf cursor-col cursor-row))
+  (set-box! last-cursor-col-box cursor-col)
+  (set-box! last-cursor-row-box cursor-row)
+  (set-box! last-cursor-base-cell-box cursor-cell)
+
   ;; Draw software cursor (inverse video) when blink phase is on.
   ;; Hardware cursor is hidden for the entire session; this provides
   ;; a stable, self-controlled cursor that never resets the terminal's
   ;; hardware blink timer.
   (when (unbox blink-phase)
-    (define cursor-cell (cell-buffer-ref ubuf cursor-col cursor-row))
     (cell-buffer-set! ubuf
                       cursor-col
                       cursor-row
@@ -367,7 +431,51 @@
   (terminal-sync-end!)
   (tui-flush)
   (set-box! last-render-ms (current-inexact-milliseconds))
+  (set-box! cursor-blink-redraw-needed-box #f)
   (set-box! (tui-ctx-needs-redraw-box ctx) #f))
+
+(define (write-cell! ubuf col row c #:inverse? [inverse? #f])
+  (cell-buffer-set! ubuf
+                    col
+                    row
+                    #:char (cell-char c)
+                    #:fg (if inverse?
+                             (cell-bg c)
+                             (cell-fg c))
+                    #:bg (if inverse?
+                             (cell-fg c)
+                             (cell-bg c))
+                    #:bold (cell-bold? c)
+                    #:underline (cell-underline? c)
+                    #:italic (cell-italic? c)
+                    #:blink (cell-blink? c)))
+
+(define (render-cursor-blink-frame! ctx)
+  (define col (unbox last-cursor-col-box))
+  (define row (unbox last-cursor-row-box))
+  (define base-cell (unbox last-cursor-base-cell-box))
+  (cond
+    [(and col row base-cell (tui-ctx-ubuf ctx))
+     (define ubuf (tui-ctx-ubuf ctx))
+     (write-cell! ubuf col row base-cell #:inverse? (unbox blink-phase))
+     (define prev-ubuf (unbox (tui-ctx-prev-ubuf-box ctx)))
+     (define out (tui-output-port))
+     (terminal-sync-begin!)
+     (render-smart! prev-ubuf ubuf out #:sync? #f)
+     (tui-cursor (+ col 1) (+ row 1) #f)
+     (display CURSOR-MARKER out)
+     (terminal-sync-end!)
+     (tui-flush)
+     (set-box! (tui-ctx-prev-ubuf-box ctx) (cell-buffer-snapshot ubuf))
+     (set-box! cursor-blink-redraw-needed-box #f)
+     (set-box! last-render-ms (current-inexact-milliseconds))
+     #t]
+    [else
+     ;; No previous full frame exists yet; leave a full redraw request for the
+     ;; normal path and consume the cursor-only request.
+     (set-box! cursor-blink-redraw-needed-box #f)
+     (mark-dirty! ctx)
+     #f]))
 
 ;; Deprecated: Old draw-frame is now an alias for render-frame!
 ;; Use render-frame! for new code.
@@ -463,33 +571,32 @@
     ;; and cancel any active goal thread so work does not continue behind an idle UI.
     (apply-busy-watchdog! ctx (current-inexact-milliseconds) (current-busy-watchdog-ms))
 
-    ;; Poll for terminal resize (fallback for stub path where SIGWINCH
-    ;; doesn't produce tsizemsg events).
-    (when (tui-screen-size-changed?)
-      (tui-ctx-resize-ubuf! ctx)
-      (mark-dirty! ctx))
-
-    ;; Cursor blink phase toggle. When the interval elapses, flip the
-    ;; phase and mark dirty so the software cursor is re-rendered.
+    ;; Poll for terminal resize only on a coarse fallback interval. Resize
+    ;; messages remain immediate; this path exists for terminals/test stubs
+    ;; that do not deliver tsizemsg/SIGWINCH events.
     (define now-ms (current-inexact-milliseconds))
-    (when (> (- now-ms (unbox last-blink-toggle-ms)) BLINK-INTERVAL-MS)
-      (set-box! blink-phase (not (unbox blink-phase)))
-      (set-box! last-blink-toggle-ms now-ms)
-      (mark-dirty! ctx))
+    (apply-resize-poll! ctx now-ms)
 
-    ;; Draw the frame only when state changed (with debouncing)
-    (when (unbox (tui-ctx-needs-redraw-box ctx))
-      (define now (current-inexact-milliseconds))
-      (define elapsed (- now (unbox last-render-ms)))
-      (cond
-        [(< elapsed MIN-RENDER-INTERVAL-MS)
-         ;; Too soon — sleep the remainder, then render
-         (sleep (/ (- MIN-RENDER-INTERVAL-MS elapsed) 1000.0))
-         ;; Re-check in case resize happened during sleep
-         (when (unbox (tui-ctx-needs-redraw-box ctx))
-           (render-frame! ctx))]
-        ;; Enough time elapsed — render immediately
-        [else (render-frame! ctx)]))
+    ;; Cursor blink phase toggle. A blink only needs a cursor-cell redraw, not
+    ;; full component invalidation and VDOM rendering.
+    (apply-cursor-blink-timer! now-ms)
+
+    ;; Draw full frames only when state changed. Cursor-only blink frames use
+    ;; the stored cursor cell and avoid rebuilding the full VDOM tree.
+    (cond
+      [(unbox (tui-ctx-needs-redraw-box ctx))
+       (define now (current-inexact-milliseconds))
+       (define elapsed (- now (unbox last-render-ms)))
+       (cond
+         [(< elapsed MIN-RENDER-INTERVAL-MS)
+          ;; Too soon — sleep the remainder, then render
+          (sleep (/ (- MIN-RENDER-INTERVAL-MS elapsed) 1000.0))
+          ;; Re-check in case resize happened during sleep
+          (when (unbox (tui-ctx-needs-redraw-box ctx))
+            (render-frame! ctx))]
+         ;; Enough time elapsed — render immediately
+         [else (render-frame! ctx)])]
+      [(cursor-blink-redraw-needed?) (render-cursor-blink-frame! ctx)])
 
     (when (unbox (tui-ctx-running-box ctx))
       ;; Get next message from terminal (adapter pattern)
@@ -498,8 +605,10 @@
       (when msg
         (define result (process-tui-message! ctx msg))
         (when (eq? result 'resize)
-          (tui-ctx-resize-ubuf! ctx)
+          ;; Reset before querying dimensions so resize events are immediate
+          ;; even though idle fallback size polling is coarsely cached.
           (tui-screen-size-cache-reset!)
+          (tui-ctx-resize-ubuf! ctx)
           (mark-dirty! ctx)))
 
       (when (unbox (tui-ctx-running-box ctx))

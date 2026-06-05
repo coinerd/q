@@ -540,7 +540,12 @@
          #f ;; timeout
          (let ([n (read-bytes-avail! buf in)])
            (match n
-             [(? eof-object?) #f]
+             [(? eof-object?)
+              ;; EOF-ready ports can otherwise return immediately forever and
+              ;; make an idle TUI loop busy-spin in noninteractive contexts.
+              (when (and (number? timeout) (> timeout 0))
+                (sleep timeout))
+              #f]
              [(? (lambda (v) (and (integer? v) (> v 0))))
               (set-decoder-state-input-buf-data! (ds) (cons 0 n))
               (buffered-read-byte in 0)]

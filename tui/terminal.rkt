@@ -33,6 +33,8 @@
          tui-screen-size
          tui-screen-size-cache-reset!
          tui-screen-size-changed?
+         current-screen-size-provider
+         current-screen-size-cache-ttl-ms
 
          ;; Drawing (compatibility - delegated to current term)
          tui-clear-screen
@@ -202,7 +204,10 @@
 (define screen-size-cache-cols #f)
 (define screen-size-cache-rows #f)
 (define screen-size-cache-time 0)
-(define screen-size-cache-ttl 0.1) ;; re-query every 100ms for responsive resize
+;; Idle fallback resize polling must not reach current-term-size/stty at 10Hz.
+;; Resize events still reset this cache for responsive updates.
+(define current-screen-size-cache-ttl-ms (make-parameter 1000.0))
+(define current-screen-size-provider (make-parameter current-term-size))
 (define screen-size-last-cols #f) ;; for resize detection
 (define screen-size-last-rows #f)
 
@@ -214,14 +219,14 @@
   (set! screen-size-last-rows #f))
 
 ;; Query screen size → (values cols rows)
-;; Caches result for screen-size-cache-ttl seconds.
+;; Caches result for current-screen-size-cache-ttl-ms milliseconds.
 (define (tui-screen-size)
   (define now (current-inexact-milliseconds))
   (if (and screen-size-cache-cols
            screen-size-cache-rows
-           (< (- now screen-size-cache-time) (* screen-size-cache-ttl 1000.0)))
+           (< (- now screen-size-cache-time) (current-screen-size-cache-ttl-ms)))
       (values screen-size-cache-cols screen-size-cache-rows)
-      (let-values ([(cols rows) (current-term-size)])
+      (let-values ([(cols rows) ((current-screen-size-provider))])
         (set! screen-size-cache-cols cols)
         (set! screen-size-cache-rows rows)
         (set! screen-size-cache-time now)
