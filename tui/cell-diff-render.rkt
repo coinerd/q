@@ -91,6 +91,11 @@
               [(null? rest)
                ;; Emit batch — last batch in entire delta list
                (display (list->string (reverse acc)) out)
+               ;; Reset SGR before clearing to end of line so the cursor's
+               ;; style (e.g., inverse video) is not applied to the cleared
+               ;; area, which would visually span the rest of the row.
+               (display "\x1b[0m" out)
+               (set! prev-sgr #f)
                ;; Clear to end of line to erase any old trailing characters
                (display "\x1b[K" out)
                (loop rest)]
@@ -108,14 +113,13 @@
                   ;; Batch ends — emit accumulated chars
                   (display (list->string (reverse acc)) out)
                   ;; Clear to end of line ONLY when switching to a different row.
-                  ;; Never clear between batches in the same row — gaps may
-                  ;; contain unchanged content (e.g., after a width-2 char
-                  ;; base cell whose continuation delta was filtered out).
+                  ;; Reset SGR first so the last batch's style doesn't bleed
+                  ;; into the cleared area.
                   (when (not (= (cell-delta-row (car rest)) row))
+                    (display "\x1b[0m" out)
+                    (set! prev-sgr #f)
                     (display "\x1b[K" out))
-                  (loop rest)])]))]))
-     ;; Reset SGR at end
-     (display "\x1b[0m" out))))
+                  (loop rest)])]))])))))
 
 ;; ============================================================
 ;; Full buffer render (for first frame or resize)
@@ -147,9 +151,13 @@
               (display sgr out)
               (set! prev-sgr sgr))
             (display (string (cell-char cell)) out)]))
+       ;; Reset SGR before clearing to end of line so the last cell's style
+       ;; (e.g., an inverse-video software cursor) doesn't bleed into the
+       ;; cleared area and visually span the rest of the row.
+       (display "\x1b[0m" out)
+       (set! prev-sgr #f)
        ;; Clear to end of line — ensures old trailing characters are erased
-       (display "\x1b[K" out))
-     (display "\x1b[0m" out))))
+       (display "\x1b[K" out)))))
 
 ;; ============================================================
 ;; Smart render: auto-select full vs incremental

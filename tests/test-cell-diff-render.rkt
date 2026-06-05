@@ -465,3 +465,89 @@
   (check-equal? esc-k-count
                 2
                 (format "expected 2 ESC[K (one per row), got ~a in: ~a" esc-k-count result)))
+
+;; ============================================================
+;; Inverse cursor ESC[K spanning regression tests
+;; ============================================================
+
+(test-case "inverse cursor cell at end of row: ESC[K emitted with default SGR"
+  ;; RED gate for software cursor spanning bug.
+  ;; When the software cursor draws an inverse-video cell as the last
+  ;; changed cell in a row, ESC[K must NOT be emitted with inverse SGR
+  ;; active — otherwise it clears the rest of the line with inverse colors,
+  ;; making the cursor appear to span the entire row.
+  (define a (make-cell-buffer 20 1))
+  (define b (make-cell-buffer 20 1))
+  ;; "hello" at cols 0-4, then inverse cursor at col 5
+  (cell-buffer-putstring! b 0 0 "hello" #:fg 7)
+  ;; Inverse cursor: swap fg/bg (normally fg=7 bg=0 → fg=0 bg=7)
+  (cell-buffer-set! b 5 0 #:char #\space #:fg 0 #:bg 7)
+  (define deltas (diff-cell-buffers a b))
+  (define out (open-output-string))
+  (render-deltas-to-port! deltas b out #:sync? #f)
+  (define result (get-output-string out))
+  ;; The ESC[0m (SGR reset) must appear BEFORE ESC[K, not after.
+  ;; If ESC[K appears before ESC[0m, the inverse SGR would bleed.
+  (define reset-pos (string-index-of result "\x1b[0m"))
+  (define esc-k-pos (string-index-of result "\x1b[K"))
+  (check-not-false reset-pos "expected ESC[0m reset in output")
+  (check-not-false esc-k-pos "expected ESC[K in output")
+  (check-true (< reset-pos esc-k-pos)
+              (format "ESC[0m must precede ESC[K; got reset at ~a, ESC[K at ~a in: ~a"
+                      reset-pos
+                      esc-k-pos
+                      result)))
+
+(test-case "inverse cursor in middle of row: ESC[K does not erase text after cursor"
+  ;; When cursor is in the middle of the line (e.g., after Ctrl+left),
+  ;; ESC[K must not erase text to the right of the cursor.
+  (define a (make-cell-buffer 20 1))
+  (define b (make-cell-buffer 20 1))
+  ;; "hello" at cols 0-4, inverse cursor at col 2 (between 'h' and 'l')
+  (cell-buffer-set! b 0 0 #:char #\h #:fg 7)
+  (cell-buffer-set! b 1 0 #:char #\e #:fg 7)
+  ;; Inverse cursor at col 2
+  (cell-buffer-set! b 2 0 #:char #\l #:fg 0 #:bg 7)
+  (cell-buffer-set! b 3 0 #:char #\l #:fg 7)
+  (cell-buffer-set! b 4 0 #:char #\o #:fg 7)
+  ;; Old frame has same text but no inverse cursor
+  (cell-buffer-set! a 0 0 #:char #\h #:fg 7)
+  (cell-buffer-set! a 1 0 #:char #\e #:fg 7)
+  (cell-buffer-set! a 2 0 #:char #\l #:fg 7)
+  (cell-buffer-set! a 3 0 #:char #\l #:fg 7)
+  (cell-buffer-set! a 4 0 #:char #\o #:fg 7)
+  (define deltas (diff-cell-buffers a b))
+  (define out (open-output-string))
+  (render-deltas-to-port! deltas b out #:sync? #f)
+  (define result (get-output-string out))
+  ;; The delta should only be col 2 (inverse cursor). ESC[0m must precede ESC[K.
+  (define reset-pos (string-index-of result "\x1b[0m"))
+  (define esc-k-pos (string-index-of result "\x1b[K"))
+  (check-not-false reset-pos "expected ESC[0m reset in output")
+  (check-not-false esc-k-pos "expected ESC[K in output")
+  (check-true (< reset-pos esc-k-pos)
+              (format "ESC[0m must precede ESC[K; got reset at ~a, ESC[K at ~a in: ~a"
+                      reset-pos
+                      esc-k-pos
+                      result)))
+
+(test-case "full render with inverse cursor: ESC[K emitted with default SGR"
+  ;; Full buffer render path also needs the fix — the last cell in a row
+  ;; could be an inverse cursor cell.
+  (define buf (make-cell-buffer 10 1))
+  (cell-buffer-putstring! buf 0 0 "hello" #:fg 7)
+  ;; Inverse cursor at col 5
+  (cell-buffer-set! buf 5 0 #:char #\space #:fg 0 #:bg 7)
+  (define out (open-output-string))
+  (render-buffer-to-port! buf out #:sync? #f)
+  (define result (get-output-string out))
+  ;; ESC[0m must precede ESC[K
+  (define reset-pos (string-index-of result "\x1b[0m"))
+  (define esc-k-pos (string-index-of result "\x1b[K"))
+  (check-not-false reset-pos "expected ESC[0m reset in output")
+  (check-not-false esc-k-pos "expected ESC[K in output")
+  (check-true (< reset-pos esc-k-pos)
+              (format "ESC[0m must precede ESC[K in full render; reset at ~a, ESC[K at ~a in: ~a"
+                      reset-pos
+                      esc-k-pos
+                      result)))
