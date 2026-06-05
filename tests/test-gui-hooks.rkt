@@ -1,14 +1,12 @@
 #lang racket
 
 ;; q/tests/test-gui-hooks.rkt — Tests for GUI hook schemas
+;;
+;; W3.1 (v0.94.3): Verify GUI lifecycle hooks are registered with valid schemas.
 
 (require rackunit
-         rackunit/text-ui)
-
-;; Use dynamic-require since hook-types is Typed Racket
-(define hook-action-schemas
-  (dynamic-require (string->path "../util/hook-types.rkt") 'hook-action-schemas))
-(define valid-hook-name? (dynamic-require (string->path "../util/hook-types.rkt") 'valid-hook-name?))
+         rackunit/text-ui
+         (only-in "../util/hook-types.rkt" hook-action-schemas valid-hook-name?))
 
 (define gui-hook-names
   '(gui.window.opened gui.window.closed

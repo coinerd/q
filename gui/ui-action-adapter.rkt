@@ -36,7 +36,12 @@
                          #:clear-footer (lambda (payload state) state)
                          ;; Widget registration in GUI is handled via extension slots
                          #:register-widget (lambda (payload state) state)
-                         #:unregister-widget (lambda (payload state) state)))
+                         #:unregister-widget (lambda (payload state) state)
+                         #:set-theme (lambda (payload state)
+                                       ;; GUI theme is handled via theme-manager.rkt
+                                       state)
+                         #:set-layout (lambda (payload state) state)
+                         #:set-focus (lambda (payload state) state)))
 
 ;; ── Convenience wrappers ───────────────────────────────────
 

@@ -36,6 +36,13 @@
    #:set-status (lambda (payload state)
                   ;; TUI ui-state doesn't have a direct status field — skip for now
                   state)
+   #:set-theme (lambda (payload state)
+                 ;; TUI theme is handled via tui/theme.rkt parameter, not ui-state.
+                 state)
+   #:set-layout (lambda (payload state)
+                  ;; TUI layout is handled via terminal resize, not ui-state.
+                  state)
+   #:set-focus (lambda (payload state) state)
    #:register-widget
    (lambda (payload state)
      (match-define (list ext-name key descriptor) payload)
