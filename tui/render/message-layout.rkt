@@ -236,44 +236,53 @@
   (define w (string-visible-width text))
   (if (<= w width)
       (list sl)
-      ;; Segment-level wrapping: emit accumulated line when next segment would exceed
+      ;; Segment-level wrapping: emit accumulated line when next segment would exceed.
+      ;; Uses forward-ordered accumulator: all results appended in left-to-right order.
       (let loop ([segs (styled-line-segments sl)]
                  [col 0]
                  [acc-segs '()]
-                 [lines '()])
+                 [result-lines '()])
         (cond
           [(null? segs)
+           ;; Emit final accumulated line (if non-empty)
            (define last-line (styled-line (reverse acc-segs)))
            (define last-text (styled-line->text last-line))
-           (cond
-             [(string=? last-text "")
-              (if (null? lines)
-                  (quote ())
-                  (reverse lines))]
-             [(null? lines) (list last-line)]
-             [else (reverse (cons last-line lines))])]
+           (if (string=? last-text "")
+               result-lines
+               (append result-lines (list last-line)))]
           [else
            (define seg (car segs))
-           (define seg-text (styled-segment-text seg))
+           (define raw-text (styled-segment-text seg))
+           ;; Strip leading whitespace from segments starting a new line (col=0, no accumulated segments)
+           (define seg-text
+             (if (and (null? acc-segs) (= col 0))
+                 (string-trim raw-text #:left? #t #:right? #f)
+                 raw-text))
            (define seg-width (string-visible-width seg-text))
            (define new-col (+ col seg-width))
            (cond
              [(> new-col width)
               (cond
                 [(null? acc-segs)
-                 ;; Single segment wider than width: split into width-sized sub-segments
+                 ;; Single segment wider than width: split into width-sized sub-lines
                  (define sub-lines (wrap-single-line seg-text width))
                  (define seg-style (styled-segment-style seg))
-                 (define sub-segs
+                 (define sub-styled
                    (for/list ([l (in-list sub-lines)])
                      (styled-line (list (styled-segment l seg-style)))))
-                 (define remaining-lines (loop (cdr segs) 0 '() lines))
-                 (append sub-segs remaining-lines)]
+                 ;; Emit sub-lines in order, then continue with remaining segments
+                 (loop (cdr segs) 0 '() (append result-lines sub-styled))]
                 [else
-                 ;; Emit current line, put overflowing segment on new line
+                 ;; Emit accumulated line, retry overflowing segment on new line
                  (define current-line (styled-line (reverse acc-segs)))
-                 (loop (cons seg (cdr segs)) 0 '() (cons current-line lines))])]
-             [else (loop (cdr segs) new-col (cons seg acc-segs) lines)])]))))
+                 (loop (cons seg (cdr segs)) 0 '() (append result-lines (list current-line)))])]
+             [else
+              ;; Strip leading whitespace only on first pass; use original segment for accumulation
+              (define clean-seg
+                (if (and (null? acc-segs) (= col 0) (not (string=? seg-text raw-text)))
+                    (styled-segment seg-text (styled-segment-style seg))
+                    seg))
+              (loop (cdr segs) new-col (cons clean-seg acc-segs) result-lines)])]))))
 
 ;; Format assistant text with markdown rendering.
 ;; Preserves per-token styles instead of flattening.

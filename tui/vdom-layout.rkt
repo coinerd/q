@@ -17,7 +17,8 @@
          racket/list
          racket/string
          "vdom.rkt"
-         "render/message-layout.rkt")
+         "render/message-layout.rkt"
+         "char-width.rkt")
 
 ;; ============================================================
 ;; Layout engine
@@ -39,8 +40,8 @@
   (define text (vtext-text v))
   (define style (vtext-style v))
   (define truncated
-    (if (> (string-length text) width)
-        (substring text 0 width)
+    (if (> (string-visible-width text) width)
+        (truncate-to-visible-width text width)
         text))
   (list (styled-line (list (styled-segment truncated style)))))
 
@@ -71,8 +72,8 @@
     [(vtext? v)
      (define text (vtext-text v))
      (define truncated
-       (if (> (string-length text) width)
-           (substring text 0 width)
+       (if (> (string-visible-width text) width)
+           (truncate-to-visible-width text width)
            text))
      (list (styled-segment truncated (vtext-style v)))]
     [(vfill? v)
@@ -83,14 +84,14 @@
      ;; For complex children, flatten to text
      (define text (vnode->flat-text v))
      (define truncated
-       (if (> (string-length text) width)
-           (substring text 0 width)
+       (if (> (string-visible-width text) width)
+           (truncate-to-visible-width text width)
            text))
      (list (styled-segment truncated '()))]))
 
 ;; Compute total width of segments
 (define (segments-width segs)
-  (apply + (map (lambda (s) (string-length (styled-segment-text s))) segs)))
+  (apply + (map (lambda (s) (string-visible-width (styled-segment-text s))) segs)))
 
 ;; Flatten vnode to plain text (fallback for complex nesting in hbox)
 (define (vnode->flat-text v)
