@@ -245,27 +245,43 @@
      #t]))
 
 ;; ============================================================
+;; Cursor visibility state tracking
+;; ============================================================
+
+;; Terminal default: cursor is visible.
+;; All cursor visibility changes go through tui-cursor-hide/show
+;; or term-hide-cursor/show-cursor, which keep this state in sync.
+(define current-cursor-visible? (box #t))
+
+;; ============================================================
 ;; Drawing primitives
 ;; ============================================================
 
 ;; These use direct ANSI escape sequences for compatibility.
 
-(define (tui-cursor-hide)
-  (display "\x1b[?25l")
-  (flush-output))
+(define (tui-cursor-hide [flush? #t])
+  (when (unbox current-cursor-visible?)
+    (set-box! current-cursor-visible? #f)
+    (display "\x1b[?25l")
+    (when flush?
+      (flush-output))))
 
-(define (tui-cursor-show)
-  (display "\x1b[?25h")
-  (flush-output))
+(define (tui-cursor-show [flush? #t])
+  (unless (unbox current-cursor-visible?)
+    (set-box! current-cursor-visible? #t)
+    (display "\x1b[?25h")
+    (when flush?
+      (flush-output))))
 
 (define (tui-clear-screen)
   (display "\x1b[2J")
   (display "\x1b[H")
   (flush-output))
 
-(define (tui-cursor col row)
+(define (tui-cursor col row [flush? #t])
   (display (format "\x1b[~a;~aH" row col))
-  (flush-output))
+  (when flush?
+    (flush-output)))
 
 (define (tui-display text)
   (display text)

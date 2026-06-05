@@ -256,15 +256,14 @@
       (check-equal? output "\x1b[?25h" "cursor show emits ESC[?25h"))
 
     (test-case "cursor hide/show are idempotent"
-      ;; Multiple hide calls don't error
+      ;; Multiple hide calls emit only once (state tracking)
       (define output1
         (with-output-to-string (lambda ()
                                  (tui-cursor-hide)
                                  (tui-cursor-hide)
+                                 (tui-cursor-show)
                                  (tui-cursor-show))))
-      (check-equal? output1
-                    "\x1b[?25l\x1b[?25l\x1b[?25h"
-                    "multiple hide/show produces correct sequence"))))
+      (check-equal? output1 "\x1b[?25l\x1b[?25h" "multiple hide/show are idempotent"))))
 
 ;; ============================================================
 ;; BUG-41: real-stdin-read-msg UTF-8 integration tests
@@ -369,3 +368,43 @@
       (check-false (tmousemsg? (vector 'tsizemsg 80 24)))
       (check-false (tmousemsg? 'hi))
       (check-false (tmousemsg? 42)))))
+
+;; ============================================================
+;; Cursor visibility idempotency tests (v0.94.x cursor blink fix)
+;; ============================================================
+
+(define cursor-idempotency-tests
+  (test-suite "Cursor Visibility Idempotency"
+
+    (test-case "tui-cursor-hide emits only once when already hidden"
+      ;; Ensure hidden state before capturing output
+      (tui-cursor-hide)
+      (define out (open-output-string))
+      (parameterize ([current-output-port out])
+        (tui-cursor-hide)
+        (tui-cursor-hide)
+        (tui-cursor-hide))
+      (check-equal? (get-output-string out) ""))
+
+    (test-case "tui-cursor-show emits only once when already visible"
+      ;; Ensure visible state before capturing output
+      (tui-cursor-show)
+      (define out (open-output-string))
+      (parameterize ([current-output-port out])
+        (tui-cursor-show)
+        (tui-cursor-show)
+        (tui-cursor-show))
+      (check-equal? (get-output-string out) ""))
+
+    (test-case "interleaved hide/show toggles correctly"
+      (define out (open-output-string))
+      (parameterize ([current-output-port out])
+        (tui-cursor-hide) ; emit
+        (tui-cursor-show) ; emit
+        (tui-cursor-show) ; no-op
+        (tui-cursor-hide) ; emit
+        (tui-cursor-hide) ; no-op
+        (tui-cursor-show)) ; emit
+      (check-equal? (get-output-string out) "\x1b[?25l\x1b[?25h\x1b[?25l\x1b[?25h"))))
+
+(run-tests cursor-idempotency-tests)

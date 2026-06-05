@@ -320,20 +320,25 @@
   ;; Write back state with updated render cache
   (set-box! (tui-ctx-ui-state-box ctx) state*)
 
-  ;; Cell-level incremental diff (always)
-  (tui-cursor-hide)
+  ;; Cell-level incremental diff with synchronized output.
+  ;; Wrap hide + render + cursor position + show in a single DEC 2026 bracket
+  ;; so the terminal applies everything atomically. This prevents the cursor
+  ;; from appearing to blink rapidly during 60fps streaming output.
   (define prev-ubuf (unbox (tui-ctx-prev-ubuf-box ctx)))
   (define out (tui-output-port))
-  (render-smart! prev-ubuf ubuf out #:sync? #t)
+  (terminal-sync-begin!)
+  (tui-cursor-hide #f)
+  (render-smart! prev-ubuf ubuf out #:sync? #f)
   ;; Store snapshot for next diff
   (set-box! (tui-ctx-prev-ubuf-box ctx) (cell-buffer-snapshot ubuf))
 
   ;; Position cursor at input location (renderer returns 0-indexed, ANSI is 1-indexed)
-  (tui-cursor (+ cursor-col 1) (+ cursor-row 1))
+  (tui-cursor (+ cursor-col 1) (+ cursor-row 1) #f)
   ;; Emit IME cursor marker for CJK input support
   ;; Uses APC protocol — silently ignored by terminals that don't understand it
-  (display CURSOR-MARKER (tui-output-port))
-  (tui-cursor-show)
+  (display CURSOR-MARKER out)
+  (tui-cursor-show #f)
+  (terminal-sync-end!)
   (tui-flush)
   (set-box! last-render-ms (current-inexact-milliseconds))
   (set-box! (tui-ctx-needs-redraw-box ctx) #f))
