@@ -91,13 +91,10 @@
               [(null? rest)
                ;; Emit batch — last batch in entire delta list
                (display (list->string (reverse acc)) out)
-               ;; Reset SGR before clearing to end of line so the cursor's
-               ;; style (e.g., inverse video) is not applied to the cleared
-               ;; area, which would visually span the rest of the row.
-               (display "\x1b[0m" out)
-               (set! prev-sgr #f)
-               ;; Clear to end of line to erase any old trailing characters
-               (display "\x1b[K" out)
+               ;; NOTE: No ESC[K here. The delta list includes all changed
+               ;; cells (including trailing spaces), so unchanged content to
+               ;; the right of the last delta must NOT be erased. ESC[K would
+               ;; destroy on-screen content that hasn't changed.
                (loop rest)]
               [else
                (define nd (car rest))
@@ -112,13 +109,8 @@
                  [else
                   ;; Batch ends — emit accumulated chars
                   (display (list->string (reverse acc)) out)
-                  ;; Clear to end of line ONLY when switching to a different row.
-                  ;; Reset SGR first so the last batch's style doesn't bleed
-                  ;; into the cleared area.
-                  (when (not (= (cell-delta-row (car rest)) row))
-                    (display "\x1b[0m" out)
-                    (set! prev-sgr #f)
-                    (display "\x1b[K" out))
+                  ;; NOTE: No ESC[K between batches. The delta list includes
+                  ;; all changed cells; unchanged content must not be erased.
                   (loop rest)])]))])))))
 
 ;; ============================================================
@@ -151,13 +143,20 @@
               (display sgr out)
               (set! prev-sgr sgr))
             (display (string (cell-char cell)) out)]))
-       ;; Reset SGR before clearing to end of line so the last cell's style
-       ;; (e.g., an inverse-video software cursor) doesn't bleed into the
-       ;; cleared area and visually span the rest of the row.
-       (display "\x1b[0m" out)
-       (set! prev-sgr #f)
-       ;; Clear to end of line — ensures old trailing characters are erased
-       (display "\x1b[K" out)))))
+       ;; Reset SGR to prevent inverse/bold bleed, then re-apply the
+       ;; row's ambient background so ESC[K clears with the correct color.
+       ;; The ambient bg is taken from the first non-continuation cell.
+       (let ambient-bg ([c 0])
+         (if (and (< c cols) (continuation-cell? (cell-buffer-ref buf c row)))
+             (ambient-bg (add1 c))
+             (let ([row-bg (if (< c cols)
+                               (cell-bg (cell-buffer-ref buf c row))
+                               0)])
+               (display "\x1b[0m" out)
+               (set! prev-sgr #f)
+               ;; Re-apply row's ambient background after reset
+               (display (format "\x1b[48;5;~am" (if (= row-bg 0) 16 row-bg)) out)
+               (display "\x1b[K" out))))))))
 
 ;; ============================================================
 ;; Smart render: auto-select full vs incremental

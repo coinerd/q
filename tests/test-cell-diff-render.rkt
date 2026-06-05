@@ -240,7 +240,7 @@
 ;; Line clearing (ESC[K) tests — RED gate for trailing-char bug
 ;; ============================================================
 
-(test-case "full render: emits ESC[K after each row"
+(test-case "full render: emits ESC[K with ambient bg after each row"
   (define buf (make-cell-buffer 10 3))
   ;; Row 0: 5 chars
   (cell-buffer-putstring! buf 0 0 "Hello")
@@ -255,7 +255,10 @@
   (define esc-k-count (length (regexp-match* (regexp (regexp-quote esc-k)) result)))
   (check-equal? esc-k-count 3 (format "expected 3 ESC[K, got ~a in: ~a" esc-k-count result)))
 
-(test-case "delta render: emits ESC[K after last batch when switching rows"
+(test-case "delta render: does NOT emit ESC[K — unchanged content preserved"
+  ;; After Fix A, the delta path no longer emits ESC[K at all.
+  ;; The delta list includes all changed cells (including trailing spaces),
+  ;; so unchanged content to the right must NOT be erased.
   (define a (make-cell-buffer 20 2))
   (define b (make-cell-buffer 20 2))
   ;; Row 0: short text
@@ -266,11 +269,11 @@
   (define out (open-output-string))
   (render-deltas-to-port! deltas b out #:sync? #f)
   (define result (get-output-string out))
-  ;; Should contain ESC[K after row 0's batch (before row 1)
-  (check-true (string-contains? result "\x1b[K")
-              (format "expected ESC[K in delta output, got: ~a" result)))
+  ;; Should NOT contain ESC[K — unchanged content is preserved
+  (check-false (string-contains? result "\x1b[K")
+               (format "expected NO ESC[K in delta output, got: ~a" result)))
 
-(test-case "delta render: emits ESC[K for single-row last batch"
+(test-case "delta render: single-row also has no ESC[K"
   (define a (make-cell-buffer 20 1))
   (define b (make-cell-buffer 20 1))
   (cell-buffer-putstring! b 0 0 "XY")
@@ -278,11 +281,11 @@
   (define out (open-output-string))
   (render-deltas-to-port! deltas b out #:sync? #f)
   (define result (get-output-string out))
-  ;; Last batch in delta list should have ESC[K after it
-  (check-true (string-contains? result "\x1b[K")
-              (format "expected ESC[K after last batch, got: ~a" result)))
+  ;; No ESC[K — delta list includes all changed cells
+  (check-false (string-contains? result "\x1b[K")
+               (format "expected NO ESC[K after last batch, got: ~a" result)))
 
-(test-case "delta render: does NOT emit ESC[K between batches in same row"
+(test-case "delta render: no ESC[K between batches in same row"
   (define a (make-cell-buffer 20 1))
   (define b (make-cell-buffer 20 1))
   ;; Two separate batches in same row (gap between them)
@@ -292,16 +295,12 @@
   (define out (open-output-string))
   (render-deltas-to-port! deltas b out #:sync? #f)
   (define result (get-output-string out))
-  ;; After first batch (col 0), next delta is col 5 in same row.
-  ;; With the fix, ESC[K is NOT emitted between batches in the same row.
-  ;; It is only emitted after the LAST batch in the row (after col 5).
   (define esc-k-count (length (regexp-match* (regexp (regexp-quote "\x1b[K")) result)))
-  (check-equal?
-   esc-k-count
-   1
-   (format "expected exactly 1 ESC[K (after last batch), got ~a in: ~a" esc-k-count result)))
+  (check-equal? esc-k-count
+                0
+                (format "expected 0 ESC[K (delta path removed), got ~a in: ~a" esc-k-count result)))
 
-(test-case "smart render delta path: emits ESC[K after row changes"
+(test-case "smart render delta path: no ESC[K — content preserved"
   (define a (make-cell-buffer 20 2))
   (define b (make-cell-buffer 20 2))
   ;; Long text in row 0, short text in row 1
@@ -310,11 +309,11 @@
   (define out (open-output-string))
   (render-smart! a b out #:sync? #f)
   (define result (get-output-string out))
-  ;; Delta path should contain ESC[K
-  (check-true (string-contains? result "\x1b[K")
-              (format "expected ESC[K in smart delta path, got: ~a" result)))
+  ;; Delta path should NOT contain ESC[K
+  (check-false (string-contains? result "\x1b[K")
+               (format "expected NO ESC[K in smart delta path, got: ~a" result)))
 
-(test-case "smart render full path: emits ESC[K after each row"
+(test-case "smart render full path: emits ESC[K with ambient bg after each row"
   (define a (make-cell-buffer 5 2))
   (define b (make-cell-buffer 5 2))
   ;; Change all 10 cells (>50% threshold triggers full render)
@@ -347,8 +346,8 @@
   ;; Count SGR sequences (\x1b[...m)
   (define sgr-re (format "~a\\[[0-9;]+m" (integer->char 27)))
   (define sgrs (regexp-match* (regexp sgr-re) result))
-  ;; Should have exactly 2 SGRs: one style set + one reset at end
-  (check-equal? (length sgrs) 2))
+  ;; Should have exactly 1 SGR: one style set (no reset — delta path no longer emits ESC[0m)
+  (check-equal? (length sgrs) 1))
 
 (test-case "sgr dedup: style change emits new SGR"
   (define a (make-cell-buffer 10 1))
@@ -364,8 +363,8 @@
   ;; Count SGR sequences
   (define sgr-re (format "~a\\[[0-9;]+m" (integer->char 27)))
   (define sgrs (regexp-match* (regexp sgr-re) result))
-  ;; Should have 4 SGRs: fg7, fg31, fg7, reset
-  (check-equal? (length sgrs) 4))
+  ;; Should have 3 SGRs: fg7, fg31, fg7 (no reset — delta path no longer emits ESC[0m)
+  (check-equal? (length sgrs) 3))
 
 (test-case "sgr dedup: full buffer render deduplicates SGR"
   (define buf (make-cell-buffer 10 1))
@@ -374,10 +373,10 @@
   (define out (open-output-string))
   (render-buffer-to-port! buf out #:sync? #f)
   (define result (get-output-string out))
-  ;; Count SGR sequences — should be 2 (one set + one reset)
+  ;; Count SGR sequences — should be 3 (one set + one reset + one ambient bg)
   (define sgr-re (format "~a\\[[0-9;]+m" (integer->char 27)))
   (define sgrs (regexp-match* (regexp sgr-re) result))
-  (check-equal? (length sgrs) 2))
+  (check-equal? (length sgrs) 3))
 
 ;; ============================================================
 ;; ESC[K gap bug regression tests
@@ -408,7 +407,7 @@
   ;; There is only one real delta (col 5), so it's the last batch in the row.
   ;; ESC[K is emitted once at the end.
   (define esc-k-count (length (regexp-match* (regexp (regexp-quote "\x1b[K")) result)))
-  (check-equal? esc-k-count 1 (format "expected 1 ESC[K, got ~a in: ~a" esc-k-count result)))
+  (check-equal? esc-k-count 0 (format "expected 0 ESC[K, got ~a in: ~a" esc-k-count result)))
 
 (test-case "style-change gap does not clear unchanged content between batches"
   ;; Old frame: "ABCDE" all plain
@@ -443,10 +442,9 @@
   (define result (get-output-string out))
   ;; Should have exactly 1 ESC[K after the last batch in the row
   (define esc-k-count (length (regexp-match* (regexp (regexp-quote "\x1b[K")) result)))
-  (check-equal?
-   esc-k-count
-   1
-   (format "expected 1 ESC[K (after last batch only), got ~a in: ~a" esc-k-count result)))
+  (check-equal? esc-k-count
+                0
+                (format "expected 0 ESC[K (delta path removed), got ~a in: ~a" esc-k-count result)))
 
 (test-case "multiple rows: ESC[K only after last batch per row"
   (define a (make-cell-buffer 10 2))
@@ -463,19 +461,16 @@
   ;; Should have 2 ESC[K: one after row 0's last batch, one after row 1's last batch
   (define esc-k-count (length (regexp-match* (regexp (regexp-quote "\x1b[K")) result)))
   (check-equal? esc-k-count
-                2
-                (format "expected 2 ESC[K (one per row), got ~a in: ~a" esc-k-count result)))
+                0
+                (format "expected 0 ESC[K (delta path removed), got ~a in: ~a" esc-k-count result)))
 
 ;; ============================================================
-;; Inverse cursor ESC[K spanning regression tests
+;; Inverse cursor regression tests (Fix A + Fix B)
 ;; ============================================================
 
-(test-case "inverse cursor cell at end of row: ESC[K emitted with default SGR"
-  ;; RED gate for software cursor spanning bug.
-  ;; When the software cursor draws an inverse-video cell as the last
-  ;; changed cell in a row, ESC[K must NOT be emitted with inverse SGR
-  ;; active — otherwise it clears the rest of the line with inverse colors,
-  ;; making the cursor appear to span the entire row.
+(test-case "inverse cursor cell at end of row: no ESC[K in delta path"
+  ;; After Fix A, delta path does not emit ESC[K. The inverse cursor
+  ;; is rendered correctly without any line clearing.
   (define a (make-cell-buffer 20 1))
   (define b (make-cell-buffer 20 1))
   ;; "hello" at cols 0-4, then inverse cursor at col 5
@@ -486,21 +481,13 @@
   (define out (open-output-string))
   (render-deltas-to-port! deltas b out #:sync? #f)
   (define result (get-output-string out))
-  ;; The ESC[0m (SGR reset) must appear BEFORE ESC[K, not after.
-  ;; If ESC[K appears before ESC[0m, the inverse SGR would bleed.
-  (define reset-pos (string-index-of result "\x1b[0m"))
-  (define esc-k-pos (string-index-of result "\x1b[K"))
-  (check-not-false reset-pos "expected ESC[0m reset in output")
-  (check-not-false esc-k-pos "expected ESC[K in output")
-  (check-true (< reset-pos esc-k-pos)
-              (format "ESC[0m must precede ESC[K; got reset at ~a, ESC[K at ~a in: ~a"
-                      reset-pos
-                      esc-k-pos
-                      result)))
+  ;; Delta path should NOT contain ESC[K — content is preserved
+  (check-false (string-contains? result "\x1b[K")
+               (format "expected NO ESC[K in delta output, got: ~a" result)))
 
-(test-case "inverse cursor in middle of row: ESC[K does not erase text after cursor"
-  ;; When cursor is in the middle of the line (e.g., after Ctrl+left),
-  ;; ESC[K must not erase text to the right of the cursor.
+(test-case "inverse cursor in middle of row: no ESC[K — text preserved"
+  ;; After Fix A, delta path does not emit ESC[K. Text to the right
+  ;; of the cursor is preserved on screen.
   (define a (make-cell-buffer 20 1))
   (define b (make-cell-buffer 20 1))
   ;; "hello" at cols 0-4, inverse cursor at col 2 (between 'h' and 'l')
@@ -520,20 +507,13 @@
   (define out (open-output-string))
   (render-deltas-to-port! deltas b out #:sync? #f)
   (define result (get-output-string out))
-  ;; The delta should only be col 2 (inverse cursor). ESC[0m must precede ESC[K.
-  (define reset-pos (string-index-of result "\x1b[0m"))
-  (define esc-k-pos (string-index-of result "\x1b[K"))
-  (check-not-false reset-pos "expected ESC[0m reset in output")
-  (check-not-false esc-k-pos "expected ESC[K in output")
-  (check-true (< reset-pos esc-k-pos)
-              (format "ESC[0m must precede ESC[K; got reset at ~a, ESC[K at ~a in: ~a"
-                      reset-pos
-                      esc-k-pos
-                      result)))
+  ;; Delta path should NOT contain ESC[K — text "lo" at cols 3-4 is preserved
+  (check-false (string-contains? result "\x1b[K")
+               (format "expected NO ESC[K in delta output, got: ~a" result)))
 
-(test-case "full render with inverse cursor: ESC[K emitted with default SGR"
-  ;; Full buffer render path also needs the fix — the last cell in a row
-  ;; could be an inverse cursor cell.
+(test-case "full render with inverse cursor: ESC[K with ambient bg after reset"
+  ;; Full buffer render path: ESC[0m resets SGR, then ambient bg is re-applied
+  ;; before ESC[K so the cleared area matches the row's background.
   (define buf (make-cell-buffer 10 1))
   (cell-buffer-putstring! buf 0 0 "hello" #:fg 7)
   ;; Inverse cursor at col 5
@@ -550,4 +530,29 @@
               (format "ESC[0m must precede ESC[K in full render; reset at ~a, ESC[K at ~a in: ~a"
                       reset-pos
                       esc-k-pos
-                      result)))
+                      result))
+  ;; Between ESC[0m and ESC[K, the ambient bg (48;5;16 for default cells)
+  ;; should be re-applied
+  (define between (substring result reset-pos esc-k-pos))
+  (check-true (string-contains? between "48;5;16")
+              (format "ambient bg SGR should appear between ESC[0m and ESC[K; got: ~a" between)))
+
+(test-case "full render with inverse status bar: ESC[K uses row ambient bg"
+  ;; Status bar row has all cells with bg=7 (inverse white).
+  ;; ESC[0m resets SGR, then ambient bg=7 is re-applied before ESC[K.
+  (define buf (make-cell-buffer 10 1))
+  ;; All cells inverse: fg=0, bg=7
+  (for ([i (in-range 10)])
+    (cell-buffer-set! buf i 0 #:char #\space #:fg 0 #:bg 7))
+  (define out (open-output-string))
+  (render-buffer-to-port! buf out #:sync? #f)
+  (define result (get-output-string out))
+  ;; Between ESC[0m and ESC[K, the ambient bg (48;5;7 for inverse cells)
+  ;; should be re-applied
+  (define reset-pos (string-index-of result "\x1b[0m"))
+  (define esc-k-pos (string-index-of result "\x1b[K"))
+  (check-not-false reset-pos "expected ESC[0m reset in output")
+  (check-not-false esc-k-pos "expected ESC[K in output")
+  (define between (substring result reset-pos esc-k-pos))
+  (check-true (string-contains? between "48;5;7")
+              (format "ambient bg=7 should appear between ESC[0m and ESC[K; got: ~a" between)))
