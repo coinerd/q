@@ -20,18 +20,24 @@
          "../../util/ids.rkt"
          (only-in "../../util/content/content-parts.rkt"
                   tool-call-part?
+                  tool-call-part-id
+                  tool-call-part-name
+                  tool-call-part-arguments
                   make-tool-call-part
-                  make-tool-result-part)
+                  make-tool-result-part
+                  tool-result-part-tool-call-id
+                  tool-result-part-content
+                  tool-result-part-is-error?
+                  tool-result-part?
+                  text-part?
+                  text-part-text
+                  content-part?)
          (only-in "../../util/message/message.rkt"
                   make-message
                   message-role
                   message-content
                   message-id)
          (only-in "../../util/tool/tool-types.rkt" make-tool-call tool-call-id tool-result-content)
-         (only-in "../../util/content/content-parts.rkt"
-                  tool-call-part-id
-                  tool-call-part-name
-                  tool-call-part-arguments)
          (only-in "../../util/tool/tool-types.rkt" tool-result-is-error?)
          (only-in "../../util/json/json-helpers.rkt" ensure-hash-args)
          (only-in "../../util/error/error-sanitizer.rkt" sanitize-error-message)
@@ -307,6 +313,67 @@
      (list (hasheq 'type "text" 'text result-text))
      (hasheq 'turns-used max-turns 'status (symbol->string final-status) 'session-id session-id))))
 
+;; ============================================================
+;; Message-to-provider conversion
+;; ============================================================
+
+;; Convert internal message struct to a provider-facing JSON hash.
+;; Providers expect simple {role, content} hashes, not q internal structs.
+;; Handles both string content (initial messages) and content-part lists
+;; (assistant messages with tool calls, tool-result messages).
+(define (message->provider-hash msg)
+  (define role-sym (message-role msg))
+  (define role-str
+    (if (symbol? role-sym)
+        (symbol->string role-sym)
+        (format "~a" role-sym)))
+  (define content (message-content msg))
+  (define content-val
+    (cond
+      [(string? content) content]
+      [(null? content) ""]
+      [(and (list? content) (andmap string? content)) (string-join content "\n")]
+      [(and (list? content) (andmap content-part? content))
+       (for/list ([cp (in-list content)])
+         (content-part->provider-hash cp))]
+      [(list? content)
+       (for/list ([c (in-list content)])
+         (cond
+           [(string? c) c]
+           [(content-part? c) (content-part->provider-hash c)]
+           [(hash? c) c]
+           [else (format "~a" c)]))]
+      [else (format "~a" content)]))
+  (hasheq 'role role-str 'content content-val))
+
+;; Convert content-part to provider-facing hash for JSON serialization.
+(define (content-part->provider-hash cp)
+  (cond
+    [(text-part? cp) (hasheq 'type "text" 'text (text-part-text cp))]
+    [(tool-call-part? cp)
+     (hasheq 'type
+             "tool_call"
+             'id
+             (or (tool-call-part-id cp) "")
+             'name
+             (or (tool-call-part-name cp) "")
+             'arguments
+             (tool-call-part-arguments cp))]
+    [(tool-result-part? cp)
+     (hasheq 'type
+             "tool_result"
+             'tool_call_id
+             (or (tool-result-part-tool-call-id cp) "")
+             'content
+             (tool-result-part-content cp)
+             'is_error
+             (tool-result-part-is-error? cp))]
+    [else (hasheq 'type "text" 'text (format "~a" cp))]))
+
+;; Convert a list of message structs to provider-facing JSON hashes.
+(define (messages->provider-hashes msgs)
+  (map message->provider-hash msgs))
+
 ;; Run a simple agent loop for the subagent
 ;; v0.19.4 GAP-1 fix: actually dispatch tool_calls instead of returning 'stopped
 (define (run-subagent-loop provider registry messages ctx max-turns)
@@ -316,7 +383,11 @@
     (cond
       [(<= turns-remaining 0) (values all-results 'max-turns-reached)]
       [else
-       (define req (make-model-request msgs (list-active-tools-jsexpr registry) (hasheq)))
+       ;; #SERIALIZE-FIX: Convert internal message structs to provider-facing
+       ;; JSON hashes before building the model request. Real providers call
+       ;; jsexpr->bytes on the request body, which rejects Racket structs.
+       (define provider-msgs (messages->provider-hashes msgs))
+       (define req (make-model-request provider-msgs (list-active-tools-jsexpr registry) (hasheq)))
        (define resp (provider-send provider req))
        (define content (model-response-content resp))
        ;; Build assistant message from response content parts
