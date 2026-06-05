@@ -49,6 +49,10 @@ doc/
 # Release tarballs
 dist/
 
+# Node/Playwright dependencies (install locally; do not commit vendor tree)
+node_modules/
+sidecars/playwright/node_modules/
+
 # Internal planning — never push
 .planning/
 ../.planning/
