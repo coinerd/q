@@ -1819,3 +1819,37 @@ First milestone of the `/goal` autonomous goal-driven loop feature.
 
 ### Cross-Platform Credential Backends + Windows Install
 
+
+## v0.94.8 — Audit remediation, UX hardening, release closure
+
+### Fixed
+- **W1 Null-safety**: Guard all callback invocations in `ui-surface.rkt` with `when cb`; fix `ui-callbacks-installed?` to check all 10 fields
+- **W2 Overlay + Timeout**: Add `DELTA-SHOW-OVERLAY`/`DELTA-DISMISS-OVERLAY` delta types; enforce render hook timeout via `racket/engine`
+- **W3 Lifecycle + Contracts**: Export `current-gui-event-runtime`; add error isolation in `dispatch-gui-hook!`; use action name constants in `ui-delta.rkt`; add contracts on `ui-action->deltas`
+- **W4 Schema + Widget**: Consume `ui-action-schema` for payload validation; validate `zone`/`kind` against enumerations in `widget-descriptor-valid?`; add `widget-descriptor-matches-lifecycle?`
+- **W5 Layering + Nits**: Remove `tui/state.rkt` import from `ui-surface.rkt` (ARCH-02); add logging to `apply-render-hook-safe`; make `classify-layout-breakpoint` composable; fix `/` query in command filter
+- **W6 Test Quality**: Replace manual save/restore with `parameterize`; strengthen parity assertions; add GUI adapter coverage for 7 delta types
+- **W7 Integration Gates**: G0-G3 verification — 8 gate tests all pass
+- **W9 Regression**: 381+ tests across 44 UI/GUI test files, zero failures
+
+### Changed
+- Version bumped to 0.94.8
+
+### Audit Findings Addressed
+- C-1: Overlay delta types (W2)
+- C-2: Render hook timeout enforcement (W2)
+- C-3: Null-safety guards (W1)
+- H-1: Export `current-gui-event-runtime` (W3)
+- H-2: `ui-make-styled-*` return sensible defaults (W1)
+- H-3: Error isolation in `dispatch-gui-hook!` (W3)
+- M-1: Contract on `ui-action->deltas` (W3)
+- M-2: Consume `ui-action-schema` (W4)
+- M-3: Action name constants (W3)
+- M-5: Widget zone/kind validation (W4)
+- m-1: Hook name validation (W3)
+- m-2: `ui-callbacks-installed?` 10-field check (W1)
+- m-3: Remove ARCH-02 layering violation (W5)
+- m-6: Render hook error logging (W5)
+- m-8: Lifecycle token consumer (W4)
+- N-1..N-6: Schema comment, member idiom, filter fixes, composable breakpoints
+- T-1..T-4: Test isolation, assertion quality, GUI adapter coverage
