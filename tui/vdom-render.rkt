@@ -47,7 +47,7 @@
     (when (and (> (string-length visible-text) 0) (< col cols))
       ;; Apply styles to cell-buffer via putstring with style keywords
       (define-values (kws vals) (style->ubuf-kws styles))
-      (keyword-apply cell-buffer-putstring! kws vals (list buf col row visible-text)))
+      (keyword-apply cell-buffer-width-aware-putstring! kws vals (list buf col row visible-text)))
     (set! col (+ col (string-visible-width visible-text)))
     (set! remaining-width (- remaining-width (string-visible-width visible-text))))
   ;; Pad remaining width with spaces (clear rest of line)

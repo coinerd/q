@@ -63,8 +63,11 @@
    sync?
    (lambda ()
      (define prev-sgr #f)
+     ;; Filter out continuation cells — they are rendered as part of their base char
+     (define real-deltas
+       (filter (lambda (d) (not (continuation-cell? (cell-delta-new-cell d)))) deltas))
      ;; Batch consecutive deltas in same row with same SGR into one cursor move + string
-     (let loop ([remaining deltas])
+     (let loop ([remaining real-deltas])
        (cond
          [(null? remaining) (void)]
          [else
@@ -127,11 +130,15 @@
          (display (format "\x1b[~a;1H" (add1 row)) out))
        (for ([col (in-range cols)])
          (define cell (cell-buffer-ref buf col row))
-         (define sgr (cell->sgr cell))
-         (unless (equal? sgr prev-sgr)
-           (display sgr out)
-           (set! prev-sgr sgr))
-         (display (string (cell-char cell)) out)))
+         (cond
+           ;; Skip continuation cells — they are part of the base char's display width
+           [(continuation-cell? cell) (void)]
+           [else
+            (define sgr (cell->sgr cell))
+            (unless (equal? sgr prev-sgr)
+              (display sgr out)
+              (set! prev-sgr sgr))
+            (display (string (cell-char cell)) out)])))
      (display "\x1b[0m" out))))
 
 ;; ============================================================

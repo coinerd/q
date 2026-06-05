@@ -8,7 +8,8 @@
 ;; Uses flat vectors for performance: cell at (col, row) is at index (+ (* row cols) col).
 ;; Thread-safe for single-writer (render loop) usage.
 
-(require racket/contract)
+(require racket/contract
+         "char-width.rkt")
 
 ;; ============================================================
 ;; Cell representation
@@ -112,17 +113,42 @@
   (vector-ref cell CELL-BLINK-IDX))
 
 ;; ============================================================
+;; Continuation cell support
+;; ============================================================
+
+;; Continuation cell marker: cells that are the 2nd+ column of a wide character.
+;; These cells should be skipped during delta rendering.
+(define CONTINUATION-CHAR #\nul)
+
+;; Check if a cell is a continuation cell (2nd+ column of a wide char).
+(define (continuation-cell? cell)
+  (eq? (cell-char cell) CONTINUATION-CHAR))
+
+;; ============================================================
 ;; Cell comparison (for diffing)
 ;; ============================================================
 
 (define (cell-equal? a b)
-  (and (eq? (cell-char a) (cell-char b))
-       (= (cell-fg a) (cell-fg b))
-       (= (cell-bg a) (cell-bg b))
-       (eq? (cell-bold? a) (cell-bold? b))
-       (eq? (cell-underline? a) (cell-underline? b))
-       (eq? (cell-italic? a) (cell-italic? b))
-       (eq? (cell-blink? a) (cell-blink? b))))
+  (cond
+    ;; Both continuation cells with same style → equal
+    [(and (continuation-cell? a) (continuation-cell? b))
+     (and (= (cell-fg a) (cell-fg b))
+          (= (cell-bg a) (cell-bg b))
+          (eq? (cell-bold? a) (cell-bold? b))
+          (eq? (cell-underline? a) (cell-underline? b))
+          (eq? (cell-italic? a) (cell-italic? b))
+          (eq? (cell-blink? a) (cell-blink? b)))]
+    ;; Both regular cells with same char and style → equal
+    [(and (not (continuation-cell? a)) (not (continuation-cell? b)))
+     (and (eq? (cell-char a) (cell-char b))
+          (= (cell-fg a) (cell-fg b))
+          (= (cell-bg a) (cell-bg b))
+          (eq? (cell-bold? a) (cell-bold? b))
+          (eq? (cell-underline? a) (cell-underline? b))
+          (eq? (cell-italic? a) (cell-italic? b))
+          (eq? (cell-blink? a) (cell-blink? b)))]
+    ;; Mixed (one continuation, one not) → not equal
+    [else #f]))
 
 ;; ============================================================
 ;; Snapshot — deep-copy all cells into a new buffer
@@ -196,6 +222,67 @@
                         #:blink blink))))
 
 ;; ============================================================
+;; Width-aware putstring — aligns cells with terminal display columns
+;; ============================================================
+
+;; Write a string to the cell buffer, advancing column by display width.
+;; Width-2+ characters (emoji, CJK) occupy consecutive cells:
+;;   - Base cell at col N stores the actual character
+;;   - Continuation cells at col N+1 .. N+W-1 store CONTINUATION-CHAR
+;; Width-0 characters (combining marks) are absorbed into the previous cell.
+(define (cell-buffer-width-aware-putstring! buf
+                                            col
+                                            row
+                                            str
+                                            #:fg [fg 7]
+                                            #:bg [bg 0]
+                                            #:bold [bold #f]
+                                            #:underline [underline #f]
+                                            #:italic [italic #f]
+                                            #:blink [blink #f])
+  (define cols (cell-buffer-cols buf))
+  (define rows (cell-buffer-rows buf))
+  (define len (string-length str))
+  (define display-col col)
+  (for ([i (in-range len)])
+    (define ch (string-ref str i))
+    (define w (char-width ch))
+    (cond
+      ;; Width-0: combining mark / variation selector — skip cell position
+      ;; (base char already written to current display-col)
+      [(= w 0) (void)]
+      ;; Buffer overflow protection
+      [(>= display-col cols) (void)]
+      [else
+       ;; Write the character to the base cell
+       (when (and (< display-col cols) (< row rows) (>= display-col 0) (>= row 0))
+         (cell-buffer-set! buf
+                           display-col
+                           row
+                           #:char ch
+                           #:fg fg
+                           #:bg bg
+                           #:bold bold
+                           #:underline underline
+                           #:italic italic
+                           #:blink blink))
+       ;; Mark subsequent cells as continuation
+       (for ([j (in-range 1 w)])
+         (define cont-col (+ display-col j))
+         (when (and (< cont-col cols) (< row rows))
+           (cell-buffer-set! buf
+                             cont-col
+                             row
+                             #:char CONTINUATION-CHAR
+                             #:fg fg
+                             #:bg bg
+                             #:bold bold
+                             #:underline underline
+                             #:italic italic
+                             #:blink blink)))
+       (set! display-col (+ display-col w))])))
+
+;; ============================================================
 ;; Contracts and exports
 ;; ============================================================
 
@@ -229,6 +316,11 @@
 
          ;; putstring (tui-ubuf compatible)
          cell-buffer-putstring!
+
+         ;; Width-aware putstring (emoji/CJK safe)
+         cell-buffer-width-aware-putstring!
+         continuation-cell?
+         CONTINUATION-CHAR
 
          ;; Constants
          CELL-SIZE)
