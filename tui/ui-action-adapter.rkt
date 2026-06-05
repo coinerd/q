@@ -3,54 +3,47 @@
 ;; q/tui/ui-action-adapter.rkt — TUI adapter for UI action events
 ;;
 ;; Subscribes to ui.* action events and converts ui-delta values
-;; into TUI ui-state mutations.
+;; into TUI ui-state mutations via the shared reducer.
 ;;
-;; W1.3 (v0.94.1): Initial skeleton handling header, footer, status,
-;; and widget register/unregister.
+;; W2.2 (v0.94.2): Refactored to use ui-core/ui-reducer.rkt handler table.
 
 (require racket/contract
-         (only-in "../ui-core/ui-delta.rkt"
-                  ui-delta
-                  ui-delta-type
-                  ui-delta-payload
-                  ui-delta?
-                  ui-action->deltas
-                  DELTA-SET-HEADER
-                  DELTA-CLEAR-HEADER
-                  DELTA-SET-FOOTER
-                  DELTA-CLEAR-FOOTER
-                  DELTA-SET-STATUS
-                  DELTA-REGISTER-WIDGET
-                  DELTA-UNREGISTER-WIDGET)
-         (only-in "../tui/state-types.rkt"
-                  ui-state
-                  ui-state?
-                  ui-state-custom-header
-                  ui-state-custom-footer
-                  ui-state-extension-widgets))
+         (only-in "../ui-core/ui-delta.rkt" ui-delta? ui-action->deltas)
+         (only-in "../ui-core/ui-reducer.rkt"
+                  delta-handler-table?
+                  apply-delta-with
+                  apply-deltas-with
+                  apply-action-with
+                  delta-handlers->table)
+         (only-in "../tui/state-types.rkt" ui-state ui-state? ui-state-extension-widgets))
 
-(provide (contract-out [tui-apply-delta (-> ui-delta? ui-state? ui-state?)]
+;; Shared handler table for TUI
+(provide tui-delta-handlers
+
+         ;; Convenience functions using the shared reducer
+         (contract-out [tui-apply-delta (-> ui-delta? ui-state? ui-state?)]
                        [tui-apply-deltas (-> (listof ui-delta?) ui-state? ui-state?)]
                        [make-tui-action-handler (-> box? (-> hash? void?))]))
 
-;; ── Pure delta application ─────────────────────────────────
+;; ── TUI handler table ──────────────────────────────────────
 
-(define (tui-apply-delta delta state)
-  (define type (ui-delta-type delta))
-  (define payload (ui-delta-payload delta))
-  (cond
-    [(eq? type DELTA-SET-HEADER) (struct-copy ui-state state [custom-header payload])]
-    [(eq? type DELTA-CLEAR-HEADER) (struct-copy ui-state state [custom-header #f])]
-    [(eq? type DELTA-SET-FOOTER) (struct-copy ui-state state [custom-footer payload])]
-    [(eq? type DELTA-CLEAR-FOOTER) (struct-copy ui-state state [custom-footer #f])]
-    ;; TUI ui-state doesn't have a direct status field — skip for now
-    [(eq? type DELTA-SET-STATUS) state]
-    [(eq? type DELTA-REGISTER-WIDGET)
+(define tui-delta-handlers
+  (delta-handlers->table
+   #:set-header (lambda (payload state) (struct-copy ui-state state [custom-header payload]))
+   #:clear-header (lambda (payload state) (struct-copy ui-state state [custom-header #f]))
+   #:set-footer (lambda (payload state) (struct-copy ui-state state [custom-footer payload]))
+   #:clear-footer (lambda (payload state) (struct-copy ui-state state [custom-footer #f]))
+   #:set-status (lambda (payload state)
+                  ;; TUI ui-state doesn't have a direct status field — skip for now
+                  state)
+   #:register-widget
+   (lambda (payload state)
      (match-define (list ext-name key descriptor) payload)
      (define widgets (ui-state-extension-widgets state))
      (define content (hash-ref descriptor 'content #f))
-     (struct-copy ui-state state [extension-widgets (hash-set widgets (cons ext-name key) content)])]
-    [(eq? type DELTA-UNREGISTER-WIDGET)
+     (struct-copy ui-state state [extension-widgets (hash-set widgets (cons ext-name key) content)]))
+   #:unregister-widget
+   (lambda (payload state)
      (define ext-name (car payload))
      (define key (cdr payload))
      (define widgets (ui-state-extension-widgets state))
@@ -58,20 +51,21 @@
        [key
         (struct-copy ui-state state [extension-widgets (hash-remove widgets (cons ext-name key))])]
        [else
-        ;; Remove all widgets for this extension
         (define new-widgets
           (for/hash ([(k v) (in-hash widgets)]
                      #:when (not (equal? (car k) ext-name)))
             (values k v)))
-        (struct-copy ui-state state [extension-widgets new-widgets])])]
-    [else state]))
+        (struct-copy ui-state state [extension-widgets new-widgets])]))))
+
+;; ── Convenience wrappers ───────────────────────────────────
+
+(define (tui-apply-delta delta state)
+  (apply-delta-with tui-delta-handlers delta state))
 
 (define (tui-apply-deltas deltas state)
-  (foldl (lambda (delta st) (tui-apply-delta delta st)) state deltas))
+  (apply-deltas-with tui-delta-handlers deltas state))
 
 ;; ── Event handler factory ──────────────────────────────────
-;; Creates a function that can be subscribed to the event bus.
-;; When a ui.* event arrives, it converts to deltas and applies them.
 
 (define (make-tui-action-handler state-box)
   (lambda (event-hash)

@@ -3,55 +3,48 @@
 ;; q/gui/ui-action-adapter.rkt — GUI adapter for UI action events
 ;;
 ;; Subscribes to ui.* action events and converts ui-delta values
-;; into GUI gui-state mutations.
+;; into GUI gui-state mutations via the shared reducer.
 ;;
-;; W1.3 (v0.94.1): Initial skeleton handling header, footer, status,
-;; and widget register/unregister.
+;; W2.3 (v0.94.2): Refactored to use ui-core/ui-reducer.rkt handler table.
 
 (require racket/contract
-         (only-in "../ui-core/ui-delta.rkt"
-                  ui-delta
-                  ui-delta-type
-                  ui-delta-payload
-                  ui-delta?
-                  ui-action->deltas
-                  DELTA-SET-HEADER
-                  DELTA-CLEAR-HEADER
-                  DELTA-SET-FOOTER
-                  DELTA-CLEAR-FOOTER
-                  DELTA-SET-STATUS
-                  DELTA-REGISTER-WIDGET
-                  DELTA-UNREGISTER-WIDGET)
-         (only-in "../gui/gui-types.rkt"
-                  gui-state
-                  gui-state?
-                  gui-state-messages
-                  gui-state-status
-                  make-gui-message))
+         (only-in "../ui-core/ui-delta.rkt" ui-delta? ui-action->deltas)
+         (only-in "../ui-core/ui-reducer.rkt"
+                  delta-handler-table?
+                  apply-delta-with
+                  apply-deltas-with
+                  delta-handlers->table)
+         (only-in "../gui/gui-types.rkt" gui-state gui-state? gui-state-status))
 
-(provide (contract-out [gui-apply-delta (-> ui-delta? gui-state? gui-state?)]
+;; Shared handler table for GUI
+(provide gui-delta-handlers
+
+         ;; Convenience functions using the shared reducer
+         (contract-out [gui-apply-delta (-> ui-delta? gui-state? gui-state?)]
                        [gui-apply-deltas (-> (listof ui-delta?) gui-state? gui-state?)]
                        [make-gui-action-handler (-> box? (-> hash? void?))]))
 
-;; ── Pure delta application ─────────────────────────────────
+;; ── GUI handler table ──────────────────────────────────────
+
+(define gui-delta-handlers
+  (delta-handlers->table #:set-status (lambda (payload state)
+                                        (struct-copy gui-state state [status payload]))
+                         ;; GUI doesn't have custom-header/custom-footer fields yet — skip
+                         #:set-header (lambda (payload state) state)
+                         #:clear-header (lambda (payload state) state)
+                         #:set-footer (lambda (payload state) state)
+                         #:clear-footer (lambda (payload state) state)
+                         ;; Widget registration in GUI is handled via extension slots
+                         #:register-widget (lambda (payload state) state)
+                         #:unregister-widget (lambda (payload state) state)))
+
+;; ── Convenience wrappers ───────────────────────────────────
 
 (define (gui-apply-delta delta state)
-  (define type (ui-delta-type delta))
-  (define payload (ui-delta-payload delta))
-  (cond
-    [(eq? type DELTA-SET-STATUS) (struct-copy gui-state state [status payload])]
-    ;; GUI doesn't have a direct custom-header field — skip for now
-    [(eq? type DELTA-SET-HEADER) state]
-    [(eq? type DELTA-CLEAR-HEADER) state]
-    [(eq? type DELTA-SET-FOOTER) state]
-    [(eq? type DELTA-CLEAR-FOOTER) state]
-    ;; Widget registration in GUI is handled via extension slots
-    [(eq? type DELTA-REGISTER-WIDGET) state]
-    [(eq? type DELTA-UNREGISTER-WIDGET) state]
-    [else state]))
+  (apply-delta-with gui-delta-handlers delta state))
 
 (define (gui-apply-deltas deltas state)
-  (foldl (lambda (delta st) (gui-apply-delta delta st)) state deltas))
+  (apply-deltas-with gui-delta-handlers deltas state))
 
 ;; ── Event handler factory ──────────────────────────────────
 
