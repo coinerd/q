@@ -5,7 +5,8 @@
 ;; Tests for browser/settings.rkt: construction, defaults, parameter.
 
 (require rackunit
-         "../browser/settings.rkt")
+         "../browser/settings.rkt"
+         "../runtime/settings.rkt")
 
 ;; ---------------------------------------------------------------------------
 ;; Default settings
@@ -67,12 +68,38 @@
 ;; ---------------------------------------------------------------------------
 
 (test-case "custom settings construction"
-  (define s (browser-settings
-             #t '("https") '("example.com") '(443)
-             #t '() 5 200 60000 1048576 "/usr/local/bin/node" 120000 'persistent))
+  (define s
+    (browser-settings #t
+                      '("https")
+                      '("example.com")
+                      '(443)
+                      #t
+                      '()
+                      5
+                      200
+                      60000
+                      1048576
+                      "/usr/local/bin/node"
+                      120000
+                      'persistent
+                      #f))
   (check-true (browser-settings-enabled? s))
   (check-equal? (browser-settings-max-sessions s) 5)
-  (check-equal? (browser-settings-profile-kind s) 'persistent))
+  (check-equal? (browser-settings-profile-kind s) 'persistent)
+  (check-false (browser-settings-headless? s)))
+
+(test-case "load-browser-settings treats JSON null sidecar-path as auto-discover #f"
+  (define settings
+    (make-minimal-settings #:overrides (hasheq 'browser (hasheq 'enabled? #t 'sidecar-path 'null))))
+  (define browser-cfg (load-browser-settings settings))
+  (check-true (browser-settings-enabled? browser-cfg))
+  (check-false (browser-settings-sidecar-path browser-cfg)))
+
+(test-case "load-browser-settings reads headless? with default #t and override #f"
+  (check-true (browser-settings-headless? (load-browser-settings (make-minimal-settings))))
+  (define settings
+    (make-minimal-settings #:overrides (hasheq 'browser (hasheq 'enabled? #t 'headless? #f))))
+  (check-false (browser-settings-headless? (load-browser-settings settings))))
 
 ;; ---------------------------------------------------------------------------
 ;; current-browser-settings parameter
@@ -83,7 +110,8 @@
   (check-false (browser-settings-enabled? (current-browser-settings))))
 
 (test-case "current-browser-settings parameterize"
-  (parameterize ([current-browser-settings
-                  (browser-settings #t '("https") '() '() #t '() 1 10 5000 1024 #f 30000 'ephemeral)])
+  (parameterize
+      ([current-browser-settings
+        (browser-settings #t '("https") '() '() #t '() 1 10 5000 1024 #f 30000 'ephemeral #t)])
     (check-true (browser-settings-enabled? (current-browser-settings)))
     (check-equal? (browser-settings-max-sessions (current-browser-settings)) 1)))

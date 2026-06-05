@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inside the GSD State Machine — q Agent Blog</title>
+  <meta name="description" content="A deep-dive into the finite-state machine that powers q's goal-directed loop — from exploration through implementation to verification.">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --bg-card: #161b22; --bg-code: #1c2128; --border: #30363d;
+      --text: #e6edf3; --text-dim: #8b949e; --accent: #58a6ff; --accent2: #7ee787;
+      --accent3: #d2a8ff; --warn: #f0883e; --radius: 12px; --max-w: 760px;
+    }
+    html { scroll-behavior: smooth; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; -webkit-font-smoothing: antialiased; }
+    a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+    code { background: var(--bg-code); border: 1px solid var(--border); border-radius: 6px; padding: 2px 7px; font-size: 0.88em; font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; }
+    pre { background: var(--bg-code); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.2em 1.5em; overflow-x: auto; font-size: 0.88em; line-height: 1.6; }
+    pre code { background: none; border: none; padding: 0; }
+    .container { max-width: var(--max-w); margin: 0 auto; padding: 0 24px; }
+    nav { position: sticky; top: 0; z-index: 100; background: rgba(13,17,23,0.85); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+    nav .container { display: flex; align-items: center; justify-content: space-between; height: 56px; }
+    nav .logo { font-weight: 800; font-size: 1.25em; letter-spacing: -0.5px; }
+    nav .logo span { color: var(--accent); }
+    nav ul { display: flex; gap: 28px; list-style: none; }
+    nav a { color: var(--text-dim); font-size: 0.92em; font-weight: 500; } nav a:hover { color: var(--text); text-decoration: none; } nav a.active { color: var(--accent); }
+    .post-header { padding: 64px 0 24px; }
+    .post-header .breadcrumb { color: var(--text-dim); font-size: 0.88em; margin-bottom: 16px; }
+    .post-header .breadcrumb a { color: var(--text-dim); } .post-header .breadcrumb a:hover { color: var(--accent); }
+    .post-header .meta { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+    .post-header .date { color: var(--text-dim); font-size: 0.9em; }
+    .post-header .tag { background: var(--bg-code); border: 1px solid var(--border); border-radius: 100px; padding: 4px 14px; font-size: 0.8em; color: var(--accent); font-weight: 500; }
+    .post-header h1 { font-size: clamp(1.6rem, 4vw, 2.2rem); font-weight: 800; letter-spacing: -0.5px; line-height: 1.3; margin-bottom: 16px; }
+    .post-header .subtitle { color: var(--text-dim); font-size: 1.1em; line-height: 1.6; }
+    .content { padding: 24px 0 80px; }
+    .content h2 { font-size: 1.4em; font-weight: 700; margin: 40px 0 16px; }
+    .content h3 { font-size: 1.15em; font-weight: 600; margin: 28px 0 12px; }
+    .content p { margin-bottom: 16px; }
+    .content ul, .content ol { margin: 0 0 16px 24px; }
+    .content li { margin-bottom: 8px; }
+    .content pre { margin: 16px 0; }
+    .content blockquote { border-left: 4px solid var(--accent); padding-left: 20px; margin: 20px 0; color: var(--text-dim); font-style: italic; }
+    .post-nav { display: flex; justify-content: space-between; padding: 32px 0; border-top: 1px solid var(--border); margin-top: 48px; }
+    .post-nav a { color: var(--text-dim); font-size: 0.92em; }
+    .post-nav a:hover { color: var(--accent); }
+    footer { border-top: 1px solid var(--border); padding: 40px 0; text-align: center; color: var(--text-dim); font-size: 0.9em; }
+    footer .links { display: flex; gap: 24px; justify-content: center; margin-bottom: 16px; }
+    @media (max-width: 768px) { nav ul { gap: 16px; } .container { padding: 0 16px; } }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="container">
+    <a href="../index.html" class="logo"><span>q</span> agent</a>
+    <ul>
+      <li><a href="../index.html">Home</a></li>
+      <li><a href="../docs.html">Docs</a></li>
+      <li><a href="../blog.html" class="active">Blog</a></li>
+      <li><a href="https://github.com/coinerd/q" target="_blank">GitHub ↗</a></li>
+    </ul>
+  </div>
+</nav>
+
+<div class="post-header">
+  <div class="container">
+    <div class="breadcrumb"><a href="../blog.html">Blog</a></div>
+    <div class="meta">
+      <span class="date">June 2, 2026</span>
+      <span class="tag">Architecture</span>
+    </div>
+    <h1>Inside the GSD State Machine: How q Executes Goals</h1>
+    <p class="subtitle">A deep-dive into the finite-state machine that powers q's goal-directed loop — from exploration through implementation to verification.</p>
+  </div>
+</div>
+
+<div class="content">
+  <div class="container">
+
+    <p>The most ambitious feature in q is <strong>Goal Mode</strong> — give the agent a high-level objective and it autonomously plans, executes, and verifies the work. Under the hood, this is powered by the <strong>GSD (Getting Stuff Done) State Machine</strong>, an explicit finite-state machine that replaced the ad-hoc imperative logic of earlier versions.</p>
+
+    <h2>The Problem: Ad-Hoc State Management</h2>
+    <p>Before v0.25, the GSD planning system managed state through scattered flag checks and hash-table mutations. Want to know if a wave was executing? Check <code>hash-ref(state 'executing? #f)</code>. Want to transition to verification? Set three flags and hope nothing else was reading them.</p>
+    <p>This worked — until it didn't. We found that:</p>
+    <ul>
+      <li>Invalid state transitions happened silently (e.g., jumping from idle to verifying)</li>
+      <li>Debugging wave failures required tracing imperative code across 6 modules</li>
+      <li>Adding new features risked regressions in unrelated paths</li>
+    </ul>
+
+    <h2>The Solution: Explicit State Machine</h2>
+    <p>We rewrote the executor as an explicit FSM with five states and validated transitions:</p>
+    <pre><code>idle → exploring → plan-written → executing → verifying → idle
+                                      ↑                         │
+                                      └─────────────────────────┘
+                                  (re-plan if verification fails)</code></pre>
+    <p>Every transition goes through a single function (<code>transition-state</code>) that validates the current state, applies the transition, and emits an event. Invalid transitions raise clear errors immediately.</p>
+
+    <h2>Canonical Runtime State</h2>
+    <p>The old hash-table state was replaced with <code>gsd-runtime-state</code>, a struct with named fields:</p>
+    <pre><code>(struct gsd-runtime-state
+  (mode          ; 'idle | 'exploring | 'executing | 'verifying
+   current-wave  ; #f or wave index
+   completed     ; set of completed wave indices
+   plan          ; #f or validated plan
+   plan-id       ; unique plan identifier
+   max-waves     ; maximum allowed waves
+   created-at))  ; timestamp</code></pre>
+    <p>All consumers use struct accessors. No more <code>hash-ref</code> with string keys and default values that mask bugs.</p>
+
+    <h2>Transaction Semantics</h2>
+    <p>Multi-step operations like completing a wave involve several state changes. If any step fails, we need to roll back. The <code>with-gsd-transaction</code> wrapper provides snapshot-and-rollback:</p>
+    <pre><code>(with-gsd-transaction state
+  (λ (s)
+    (let* ([s1 (mark-wave-completed s wave-idx)]
+           [s2 (update-progress s1)]
+           [s3 (check-all-done s2)])
+      s3)))</code></pre>
+    <p>If any step throws, the state reverts to the snapshot. No partial mutations.</p>
+
+    <h2>Event Telemetry</h2>
+    <p>Every state transition emits an event following the <code>gsd.&lt;category&gt;.&lt;action&gt;</code> naming convention:</p>
+    <pre><code>gsd.state.changed     ; state transition with from/to
+gsd.plan.parsed       ; raw plan parsed from markdown
+gsd.plan.normalized   ; plan converted to normalized IR
+gsd.plan.validated    ; plan validated for execution
+gsd.wave.started      ; wave execution begins
+gsd.wave.completed    ; wave finished successfully
+gsd.mode.changed      ; GSD mode switched</code></pre>
+    <p>These events flow through the session event bus, giving the TUI, logger, and extensions real-time visibility into goal progress.</p>
+
+    <h2>Normalized Plan IR</h2>
+    <p>Plans go through a three-stage pipeline before execution:</p>
+    <ol>
+      <li><strong>Parse</strong> — raw markdown → <code>gsd-normalized-plan</code></li>
+      <li><strong>Validate</strong> — check structure, dependencies, uniqueness</li>
+      <li><strong>Execute</strong> — create wave executor from validated plan</li>
+    </ol>
+    <p>The normalized plan is immutable — once created, it never changes. This prevents subtle bugs where the plan is modified during execution.</p>
+
+    <h2>Results</h2>
+    <p>The rewrite delivered measurable improvements:</p>
+    <ul>
+      <li><strong>221 GSD tests</strong> covering policy, state-machine, core, planning, events, and fitness</li>
+      <li><strong>Zero silent state corruption</strong> — all invalid transitions are caught immediately</li>
+      <li><strong>Full observability</strong> — every transition is visible via events</li>
+      <li><strong>Clean extension points</strong> — new behaviors hook into the FSM without touching core logic</li>
+    </ul>
+
+    <div class="post-nav">
+      <a href="announcing-v082.html">← Announcing q v0.82</a>
+      <a href="goal-mode-deep-dive.html">Getting Started with Goal Mode →</a>
+    </div>
+
+  </div>
+</div>
+
+<footer>
+  <div class="container">
+    <div class="links">
+      <a href="https://github.com/coinerd/q" target="_blank">GitHub</a>
+      <a href="https://github.com/coinerd/q/blob/main/LICENSE" target="_blank">MIT License</a>
+      <a href="https://github.com/coinerd/q/blob/main/CONTRIBUTING.md" target="_blank">Contributing</a>
+    </div>
+    <p>© 2026 q contributors. Built with Racket 🎾</p>
+  </div>
+</footer>
+
+</body>
+</html>

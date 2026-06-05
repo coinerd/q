@@ -54,7 +54,7 @@
 ;; Base64-encode binary data for JSON transport.
 (define (bytes->base64-string bs)
   (if (bytes? bs)
-      (bytes->string/utf-8 (base64-encode bs #f))
+      (bytes->string/utf-8 (base64-encode bs #""))
       bs))
 
 ;; Sanitize a hash so all byte-string values are base64-encoded.

@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Roadmap to v1.0: What's Next for q — q Agent Blog</title>
+  <meta name="description" content="From v0.82 to v1.0: the roadmap for q's journey to a stable release, including GUI, multi-agent collaboration, and the Typed Racket migration.">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --bg-card: #161b22; --bg-code: #1c2128; --border: #30363d;
+      --text: #e6edf3; --text-dim: #8b949e; --accent: #58a6ff; --accent2: #7ee787;
+      --accent3: #d2a8ff; --warn: #f0883e; --radius: 12px; --max-w: 760px;
+    }
+    html { scroll-behavior: smooth; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; -webkit-font-smoothing: antialiased; }
+    a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+    code { background: var(--bg-code); border: 1px solid var(--border); border-radius: 6px; padding: 2px 7px; font-size: 0.88em; font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; }
+    pre { background: var(--bg-code); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.2em 1.5em; overflow-x: auto; font-size: 0.88em; line-height: 1.6; }
+    pre code { background: none; border: none; padding: 0; }
+    .container { max-width: var(--max-w); margin: 0 auto; padding: 0 24px; }
+    nav { position: sticky; top: 0; z-index: 100; background: rgba(13,17,23,0.85); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+    nav .container { display: flex; align-items: center; justify-content: space-between; height: 56px; }
+    nav .logo { font-weight: 800; font-size: 1.25em; letter-spacing: -0.5px; }
+    nav .logo span { color: var(--accent); }
+    nav ul { display: flex; gap: 28px; list-style: none; }
+    nav a { color: var(--text-dim); font-size: 0.92em; font-weight: 500; } nav a:hover { color: var(--text); text-decoration: none; } nav a.active { color: var(--accent); }
+    .post-header { padding: 64px 0 24px; }
+    .post-header .breadcrumb { color: var(--text-dim); font-size: 0.88em; margin-bottom: 16px; }
+    .post-header .breadcrumb a { color: var(--text-dim); } .post-header .breadcrumb a:hover { color: var(--accent); }
+    .post-header .meta { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+    .post-header .date { color: var(--text-dim); font-size: 0.9em; }
+    .post-header .tag { background: var(--bg-code); border: 1px solid var(--border); border-radius: 100px; padding: 4px 14px; font-size: 0.8em; color: var(--accent); font-weight: 500; }
+    .post-header h1 { font-size: clamp(1.6rem, 4vw, 2.2rem); font-weight: 800; letter-spacing: -0.5px; line-height: 1.3; margin-bottom: 16px; }
+    .post-header .subtitle { color: var(--text-dim); font-size: 1.1em; line-height: 1.6; }
+    .content { padding: 24px 0 80px; }
+    .content h2 { font-size: 1.4em; font-weight: 700; margin: 40px 0 16px; }
+    .content h3 { font-size: 1.15em; font-weight: 600; margin: 28px 0 12px; }
+    .content p { margin-bottom: 16px; }
+    .content ul, .content ol { margin: 0 0 16px 24px; }
+    .content li { margin-bottom: 8px; }
+    .content pre { margin: 16px 0; }
+    .content blockquote { border-left: 4px solid var(--accent); padding-left: 20px; margin: 20px 0; color: var(--text-dim); font-style: italic; }
+    .post-nav { display: flex; justify-content: space-between; padding: 32px 0; border-top: 1px solid var(--border); margin-top: 48px; }
+    .post-nav a { color: var(--text-dim); font-size: 0.92em; }
+    .post-nav a:hover { color: var(--accent); }
+    footer { border-top: 1px solid var(--border); padding: 40px 0; text-align: center; color: var(--text-dim); font-size: 0.9em; }
+    footer .links { display: flex; gap: 24px; justify-content: center; margin-bottom: 16px; }
+    @media (max-width: 768px) { nav ul { gap: 16px; } .container { padding: 0 16px; } }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="container">
+    <a href="../index.html" class="logo"><span>q</span> agent</a>
+    <ul>
+      <li><a href="../index.html">Home</a></li>
+      <li><a href="../docs.html">Docs</a></li>
+      <li><a href="../blog.html" class="active">Blog</a></li>
+      <li><a href="https://github.com/coinerd/q" target="_blank">GitHub ↗</a></li>
+    </ul>
+  </div>
+</nav>
+
+<div class="post-header">
+  <div class="container">
+    <div class="breadcrumb"><a href="../blog.html">Blog</a></div>
+    <div class="meta">
+      <span class="date">February 8, 2026</span>
+      <span class="tag">Community</span>
+    </div>
+    <h1>Roadmap to v1.0: What's Next for q</h1>
+    <p class="subtitle">From v0.82 to v1.0: the roadmap for q's journey to a stable release, including GUI, multi-agent collaboration, and the Typed Racket migration.</p>
+  </div>
+</div>
+
+<div class="content">
+  <div class="container">
+
+    <p>q v0.82 introduced the goal-directed autonomous loop — our biggest feature yet. But the journey to v1.0 is just beginning. Here's a transparent look at what's coming next, what we're unsure about, and how you can help shape the future of q.</p>
+
+    <h2>v0.85 — Stability and Polish (Q2 2026)</h2>
+    <p>The next release focuses on making existing features rock-solid:</p>
+    <ul>
+      <li><strong>Typed Racket migration continues</strong> — more modules get type annotations (see our migration strategy post)</li>
+      <li><strong>Error recovery improvements</strong> — better handling of provider failures, network issues, and malformed responses</li>
+      <li><strong>Session branching</strong> — fork a session at any point and explore different paths</li>
+      <li><strong>Configuration validation</strong> — catch misconfigurations before they cause runtime errors</li>
+      <li><strong>Performance profiling</strong> — built-in metrics for identifying bottlenecks in agent loops</li>
+    </ul>
+
+    <h2>v0.90 — GUI (Q3 2026)</h2>
+    <p>The most requested feature: a graphical interface. We're building a native GUI using Racket's built-in GUI toolkit (ADR-17):</p>
+    <ul>
+      <li><strong>Code viewer</strong> — syntax-highlighted file browser with diff visualization</li>
+      <li><strong>Goal progress dashboard</strong> — visual state machine, turn timeline, evidence gallery</li>
+      <li><strong>Extension marketplace</strong> — browse and install community extensions</li>
+      <li><strong>Settings GUI</strong> — visual configuration instead of editing JSON</li>
+    </ul>
+    <p>The GUI is an extension of the interface separation principle (ADR-5) — it's a new interface that connects to the same agent core. The TUI and CLI aren't going anywhere.</p>
+
+    <h2>v0.95 — Multi-Agent Collaboration (Q4 2026)</h2>
+    <p>Multiple q instances working together on complex tasks:</p>
+    <ul>
+      <li><strong>Task delegation</strong> — a coordinator agent breaks work into sub-tasks and delegates to specialist agents</li>
+      <li><strong>Shared context</strong> — agents share a common understanding of the codebase</li>
+      <li><strong>Conflict resolution</strong> — when two agents modify the same file, a merge strategy resolves conflicts</li>
+      <li><strong>Role specialization</strong> — "reviewer", "implementer", "tester" agents with different capabilities</li>
+    </ul>
+    <p>This is the most uncertain part of the roadmap. Multi-agent coordination is a hard problem, and we may revise the approach based on research and prototyping.</p>
+
+    <h2>v1.0 — API Stability (Q1 2027)</h2>
+    <p>v1.0 means <strong>API stability guarantees</strong>:</p>
+    <ul>
+      <li><strong>Stable extension API</strong> — extensions written for v1.0 will work in v1.x without modification</li>
+      <li><strong>Stable event schema</strong> — event types and their fields won't change incompatibly</li>
+      <li><strong>Stable configuration format</strong> — existing config.json files will continue to work</li>
+      <li><strong>Comprehensive documentation</strong> — every public API documented with examples</li>
+      <li><strong>Migration guides</strong> — clear upgrade path from any 0.x version</li>
+    </ul>
+
+    <h2>What's Not on the Roadmap</h2>
+    <p>Equally important — things we're <strong>not</strong> planning:</p>
+    <ul>
+      <li><strong>Cloud hosting</strong> — q will remain local-first. Cloud features may come as opt-in additions</li>
+      <li><strong>Proprietary extensions</strong> — all core features remain open source</li>
+      <li><strong>Electron UI</strong> — we're committed to native rendering</li>
+      <li><strong>Model training</strong> — q is a tool for using models, not training them</li>
+    </ul>
+
+    <h2>How You Can Help</h2>
+    <p>The roadmap isn't set in stone. We prioritize based on community feedback:</p>
+    <ul>
+      <li><strong>File issues</strong> — bugs, feature requests, documentation gaps</li>
+      <li><strong>Submit PRs</strong> — especially for the Typed Racket migration and test coverage</li>
+      <li><strong>Write extensions</strong> — test the extension API and tell us what's missing</li>
+      <li><strong>Share use cases</strong> — tell us how you use q and what would make it better</li>
+    </ul>
+
+    <h2>Release Cadence</h2>
+    <p>We aim for:</p>
+    <ul>
+      <li><strong>Patch releases</strong> (0.82.x) — bug fixes, weekly or as needed</li>
+      <li><strong>Minor releases</strong> (0.83, 0.84, ...) — new features, monthly</li>
+      <li><strong>Major milestone releases</strong> (0.85, 0.90, 0.95) — significant new capabilities, quarterly</li>
+    </ul>
+
+    <blockquote>"A roadmap is a plan, not a promise. We adapt based on what we learn and what the community needs. Transparency about our direction matters more than hitting every date." — q contributors</blockquote>
+
+    <div class="post-nav">
+      <a href="effect-system.html">← The Effect System</a>
+      <a href="announcing-v082.html">Announcing q v0.82 →</a>
+    </div>
+
+  </div>
+</div>
+
+<footer>
+  <div class="container">
+    <div class="links">
+      <a href="https://github.com/coinerd/q" target="_blank">GitHub</a>
+      <a href="https://github.com/coinerd/q/blob/main/LICENSE" target="_blank">MIT License</a>
+      <a href="https://github.com/coinerd/q/blob/main/CONTRIBUTING.md" target="_blank">Contributing</a>
+    </div>
+    <p>© 2026 q contributors. Built with Racket 🎾</p>
+  </div>
+</footer>
+
+</body>
+</html>

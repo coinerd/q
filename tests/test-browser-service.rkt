@@ -21,28 +21,38 @@
 
 (define (wrap-mock-adapter mock)
   ;; Wrap a mock-browser-adapter in the browser-adapter interface
-  (make-browser-adapter
-   #:open (lambda (sid target) (mock-open mock target #f))
-   #:close (lambda (sid) (mock-close mock sid))
-   #:navigate (lambda (sid url) (mock-navigate mock sid url))
-   #:observe (lambda (sid selector) (mock-observe mock sid selector))
-   #:act (lambda (sid action) (mock-act mock sid action))
-   #:screenshot (lambda (sid sel fp) (mock-screenshot mock sid sel "png"))))
+  (make-browser-adapter #:open (lambda (sid target) (mock-open mock target #f))
+                        #:close (lambda (sid) (mock-close mock sid))
+                        #:navigate (lambda (sid url) (mock-navigate mock sid url))
+                        #:observe (lambda (sid selector) (mock-observe mock sid selector))
+                        #:act (lambda (sid action) (mock-act mock sid action))
+                        #:screenshot (lambda (sid sel fp) (mock-screenshot mock sid sel "png"))))
 
 (define (make-test-svc #:artifact-dir [dir #f]
                        #:max-actions [max-actions 100]
                        #:max-sessions [max-sessions 3])
   (define mock (make-mock-adapter))
   (define adapter (wrap-mock-adapter mock))
-  (define settings (browser-settings
-                    #t '("https" "http") '() '(3000 8080 5173)
-                    #t '("/admin" "/debug" "/internal")
-                    max-sessions max-actions 30000 524288 #f 60000 'ephemeral))
+  (define settings
+    (browser-settings #t
+                      '("https" "http")
+                      '()
+                      '(3000 8080 5173)
+                      #t
+                      '("/admin" "/debug" "/internal")
+                      max-sessions
+                      max-actions
+                      30000
+                      524288
+                      #f
+                      60000
+                      'ephemeral
+                      #t))
   (make-secure-browser-service adapter #:settings settings #:artifact-dir dir))
 
 (define (make-temp-dir)
-  (define dir (build-path (find-system-path 'temp-dir)
-                          (format "q-browser-svc-test-~a" (current-milliseconds))))
+  (define dir
+    (build-path (find-system-path 'temp-dir) (format "q-browser-svc-test-~a" (current-milliseconds))))
   (make-directory* dir)
   dir)
 
@@ -86,24 +96,20 @@
 
 (test-case "policy: blocked scheme raises error"
   (define svc (make-test-svc))
-  (check-exn q-browser-error?
-             (lambda () (browser-open! svc "file:///etc/passwd"))))
+  (check-exn q-browser-error? (lambda () (browser-open! svc "file:///etc/passwd"))))
 
 (test-case "policy: blocked path raises error"
   (define svc (make-test-svc))
-  (check-exn q-browser-error?
-             (lambda () (browser-open! svc "https://example.com/admin"))))
+  (check-exn q-browser-error? (lambda () (browser-open! svc "https://example.com/admin"))))
 
 (test-case "policy: private IP raises error"
   (define svc (make-test-svc))
-  (check-exn q-browser-error?
-             (lambda () (browser-open! svc "http://10.0.0.1/page"))))
+  (check-exn q-browser-error? (lambda () (browser-open! svc "http://10.0.0.1/page"))))
 
 (test-case "policy: navigate to blocked URL raises error"
   (define svc (make-test-svc))
   (define-values (sid _) (browser-open! svc "https://example.com"))
-  (check-exn q-browser-error?
-             (lambda () (browser-navigate! svc sid "http://192.168.1.1/secret"))))
+  (check-exn q-browser-error? (lambda () (browser-navigate! svc sid "http://192.168.1.1/secret"))))
 
 (test-case "policy: localhost with allowed port works"
   (define svc (make-test-svc))
@@ -118,8 +124,7 @@
   (define svc (make-test-svc))
   (define-values (sid _) (browser-open! svc "https://example.com"))
   (browser-close! svc sid)
-  (check-exn q-browser-error?
-             (lambda () (browser-observe! svc sid))))
+  (check-exn q-browser-error? (lambda () (browser-observe! svc sid))))
 
 (test-case "session: act on non-existent session raises error"
   (define svc (make-test-svc))
@@ -129,16 +134,14 @@
 (test-case "session: max-sessions enforced"
   (define svc (make-test-svc #:max-sessions 1))
   (browser-open! svc "https://a.com")
-  (check-exn q-browser-error?
-             (lambda () (browser-open! svc "https://b.com"))))
+  (check-exn q-browser-error? (lambda () (browser-open! svc "https://b.com"))))
 
 (test-case "session: max-actions enforced"
   (define svc (make-test-svc #:max-actions 2))
   (define-values (sid _) (browser-open! svc "https://example.com"))
   (browser-observe! svc sid)
   (browser-observe! svc sid)
-  (check-exn q-browser-error?
-             (lambda () (browser-observe! svc sid))))
+  (check-exn q-browser-error? (lambda () (browser-observe! svc sid))))
 
 ;; ---------------------------------------------------------------------------
 ;; Error wrapping (2 tests)
@@ -146,16 +149,14 @@
 
 (test-case "error: adapter error wrapped as q-browser-error"
   (define adapter (make-mock-adapter #:error-mode 'timeout))
-  (define settings (browser-settings
-                    #t '("https") '() '() #t '() 3 100 30000 524288 #f 60000 'ephemeral))
+  (define settings
+    (browser-settings #t '("https") '() '() #t '() 3 100 30000 524288 #f 60000 'ephemeral #t))
   (define svc (make-secure-browser-service adapter #:settings settings))
-  (check-exn q-browser-error?
-             (lambda () (browser-open! svc "https://example.com"))))
+  (check-exn q-browser-error? (lambda () (browser-open! svc "https://example.com"))))
 
 (test-case "error: screenshot on missing session"
   (define svc (make-test-svc))
-  (check-exn q-browser-error?
-             (lambda () (browser-screenshot! svc "no-such"))))
+  (check-exn q-browser-error? (lambda () (browser-screenshot! svc "no-such"))))
 
 ;; ---------------------------------------------------------------------------
 ;; Audit log completeness (3 tests)
@@ -231,8 +232,7 @@
   (define svc (make-test-svc))
   (define-values (sid _) (browser-open! svc "https://example.com"))
   (browser-close! svc sid)
-  (check-exn q-browser-error?
-             (lambda () (browser-close! svc sid))))
+  (check-exn q-browser-error? (lambda () (browser-close! svc sid))))
 
 (test-case "service: navigate to allowed URL succeeds"
   (define svc (make-test-svc))

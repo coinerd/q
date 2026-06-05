@@ -15,7 +15,7 @@
          (only-in "../../util/path/path-filters.rkt" hidden-name? should-skip-entry? skip-dirs))
 
 (require racket/contract)
-(provide (contract-out [tool-grep (-> hash? tool-result?)]))
+(provide (contract-out [tool-grep (->* (hash?) (any/c) tool-result?)]))
 
 ;; ============================================================
 ;; Defaults

@@ -270,6 +270,15 @@
 ;; Run
 ;; ============================================================
 
+;; Scheduler dispatch calls built-in handlers with args plus exec-ctx.
+(test-case "scheduler-style two-argument call works"
+  (with-temp-dir (λ (dir)
+                   (define f (build-path dir "scheduler.txt"))
+                   (write-string-to-file f "needle\nhaystack\n")
+                   (define r (tool-grep (hasheq 'pattern "needle" 'path (path->string f)) #f))
+                   (check-false (result-is-error? r))
+                   (check-equal? (hash-ref (result-details r) 'total-matches) 1))))
+
 ;; Robustness: invalid regex pattern returns error, not crash
 (test-case "invalid regex pattern returns error"
   (with-temp-dir (λ (dir)

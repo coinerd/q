@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Extension Guide — q Agent</title>
+  <meta name="description" content="Build custom tools, hooks, and integrations for q using the extension hook system.">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --bg-card: #161b22; --bg-code: #1c2128; --border: #30363d;
+      --text: #e6edf3; --text-dim: #8b949e; --accent: #58a6ff; --accent2: #7ee787;
+      --accent3: #d2a8ff; --warn: #f0883e; --radius: 12px; --max-w: 820px;
+    }
+    html { scroll-behavior: smooth; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; -webkit-font-smoothing: antialiased; }
+    a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+    code { background: var(--bg-code); border: 1px solid var(--border); border-radius: 6px; padding: 2px 7px; font-size: 0.88em; font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; }
+    pre { background: var(--bg-code); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.2em 1.5em; overflow-x: auto; font-size: 0.88em; line-height: 1.6; }
+    pre code { background: none; border: none; padding: 0; }
+    .container { max-width: var(--max-w); margin: 0 auto; padding: 0 24px; }
+    nav { position: sticky; top: 0; z-index: 100; background: rgba(13,17,23,0.85); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+    nav .container { display: flex; align-items: center; justify-content: space-between; height: 56px; }
+    nav .logo { font-weight: 800; font-size: 1.25em; letter-spacing: -0.5px; }
+    nav .logo span { color: var(--accent); }
+    nav ul { display: flex; gap: 28px; list-style: none; }
+    nav a { color: var(--text-dim); font-size: 0.92em; font-weight: 500; } nav a:hover { color: var(--text); text-decoration: none; } nav a.active { color: var(--accent); }
+    .page-header { padding: 64px 0 32px; }
+    .page-header .breadcrumb { color: var(--text-dim); font-size: 0.88em; margin-bottom: 16px; }
+    .page-header .breadcrumb a { color: var(--text-dim); } .page-header .breadcrumb a:hover { color: var(--accent); }
+    .page-header h1 { font-size: clamp(1.8rem, 4vw, 2.5rem); font-weight: 800; letter-spacing: -1px; margin-bottom: 12px; }
+    .page-header p { color: var(--text-dim); font-size: 1.1em; max-width: 600px; }
+    .content { padding: 32px 0 80px; }
+    .content h2 { font-size: 1.5em; font-weight: 700; margin: 48px 0 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+    .content h3 { font-size: 1.2em; font-weight: 600; margin: 32px 0 12px; }
+    .content p { margin-bottom: 16px; }
+    .content ul, .content ol { margin: 0 0 16px 24px; }
+    .content li { margin-bottom: 8px; }
+    .content pre { margin: 16px 0; }
+    .callout { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 24px; margin: 20px 0; }
+    .callout.tip { border-left: 4px solid var(--accent2); }
+    .callout.warn { border-left: 4px solid var(--warn); }
+    .callout strong { display: block; margin-bottom: 4px; }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.9em; }
+    th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+    th { color: var(--text-dim); font-weight: 600; font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.5px; }
+    footer { border-top: 1px solid var(--border); padding: 40px 0; text-align: center; color: var(--text-dim); font-size: 0.9em; }
+    footer .links { display: flex; gap: 24px; justify-content: center; margin-bottom: 16px; }
+    @media (max-width: 768px) { nav ul { gap: 16px; } .container { padding: 0 16px; } }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="container">
+    <a href="../index.html" class="logo"><span>q</span> agent</a>
+    <ul>
+      <li><a href="../index.html">Home</a></li>
+      <li><a href="../docs.html" class="active">Docs</a></li>
+      <li><a href="../blog.html">Blog</a></li>
+      <li><a href="https://github.com/coinerd/q" target="_blank">GitHub ↗</a></li>
+    </ul>
+  </div>
+</nav>
+
+<div class="page-header">
+  <div class="container">
+    <div class="breadcrumb"><a href="../docs.html">Docs</a> / Extensions</div>
+    <h1>🧩 Extension Guide</h1>
+    <p>Build custom tools, hooks, and integrations using q's extension system.</p>
+  </div>
+</div>
+
+<div class="content">
+  <div class="container">
+
+    <h2 id="hook-system">Hook System Overview</h2>
+    <p>q exposes a hook system with named dispatch points (ADR-6). Extensions register handler functions for specific hooks. Each handler returns one of:</p>
+    <ul>
+      <li><strong>pass</strong> — continue without modification</li>
+      <li><strong>block</strong> — abort the action with an optional error message</li>
+      <li><strong>modify</strong> — transform the data and continue</li>
+    </ul>
+    <p>Hooks execute in registration order. The core invokes hooks at clearly documented points in the agent loop.</p>
+
+    <h2 id="available-hooks">Available Hooks</h2>
+    <table>
+      <thead>
+        <tr><th>Hook Name</th><th>When Fired</th><th>Can Modify</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>session-start</code></td><td>When a new session begins</td><td>Session config</td></tr>
+        <tr><td><code>pre-tool-call</code></td><td>Before a tool is executed</td><td>Tool arguments</td></tr>
+        <tr><td><code>post-tool-call</code></td><td>After a tool returns</td><td>Tool result</td></tr>
+        <tr><td><code>pre-prompt</code></td><td>Before sending to the LLM</td><td>Prompt content</td></tr>
+        <tr><td><code>post-response</code></td><td>After receiving LLM response</td><td>Response content</td></tr>
+        <tr><td><code>context-assembly</code></td><td>When building context for a turn</td><td>Context structure</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="creating-extension">Creating an Extension</h2>
+    <p>Extensions live in <code>extensions/&lt;name&gt;/</code> and follow a standard structure:</p>
+    <pre><code>extensions/
+  my-extension/
+    manifest.json       # Extension metadata
+    main.rkt            # Entry point - registers hooks
+    hooks/
+      pre-tool.rkt      # Hook handlers</code></pre>
+
+    <h3 id="manifest">Extension Manifest</h3>
+    <pre><code>{
+  "name": "my-extension",
+  "version": "1.0.0",
+  "description": "Custom extension for my workflow",
+  "hooks": ["pre-tool-call", "post-response"],
+  "dependencies": []
+}</code></pre>
+
+    <h3 id="handler">Hook Handler Example</h3>
+    <pre><code>#lang racket
+
+(provide register-hooks)
+
+(define (register-hooks hook-dispatcher)
+  (hook-dispatcher 'register
+    "pre-tool-call"
+    (λ (tool-name args)
+      (cond
+        [(equal? tool-name "shell")
+         (define cmd (hash-ref args 'command ""))
+         (when (dangerous-command? cmd)
+           (values 'block (format "Blocked dangerous command: ~a" cmd)))]
+        [else (values 'pass #f)]))))
+
+(define (dangerous-command? cmd)
+  (regexp-match? #rx"(rm -rf /|format |del /)" cmd))</code></pre>
+
+    <h2 id="built-in-extensions">Built-in Extensions</h2>
+    <p>q ships with several built-in extensions in <code>extensions/</code>:</p>
+    <ul>
+      <li><strong>gsd/</strong> — Goal-directed planning system (GSD state machine)</li>
+      <li><strong>github/</strong> — GitHub integration (PRs, issues, reviews)</li>
+      <li><strong>git/</strong> — Git operations with safety checks</li>
+      <li><strong>hooks/</strong> — Core hook infrastructure</li>
+    </ul>
+
+    <div class="callout tip">
+      <strong>💡 Extension isolation</strong>
+      <p>Extensions run in the same Racket process but are isolated through the hook system. A crashing extension cannot bring down the agent — errors are caught and logged.</p>
+    </div>
+
+    <h2 id="sdk-integration">SDK &amp; RPC Integration</h2>
+    <p>For deeper integration, use the SDK (interfaces/sdk-core.rkt):</p>
+    <pre><code>#lang racket
+
+(require q/interfaces/sdk-core)
+
+;; Create a programmatic session
+(define session (make-session
+  #:provider "openai"
+  #:model "gpt-5.4"))
+
+;; Send a prompt and get streaming results
+(define result (session-send session "analyze this code"))
+
+;; Subscribe to events
+(session-on-event session
+  (λ (event)
+    (printf "Event: ~a~n" (event-type event))))</code></pre>
+
+    <h2 id="related-adrs">Related ADRs</h2>
+    <ul>
+      <li><a href="https://github.com/coinerd/q/blob/main/docs/adr/0006-extension-hook-model.md" target="_blank">ADR-6: Extension Hook Model</a></li>
+      <li><a href="https://github.com/coinerd/q/blob/main/docs/adr/0005-interface-separation.md" target="_blank">ADR-5: Interface Separation</a></li>
+      <li><a href="https://github.com/coinerd/q/blob/main/docs/adr/0004-provider-abstraction.md" target="_blank">ADR-4: Provider Abstraction</a></li>
+    </ul>
+
+  </div>
+</div>
+
+<footer>
+  <div class="container">
+    <div class="links">
+      <a href="https://github.com/coinerd/q" target="_blank">GitHub</a>
+      <a href="https://github.com/coinerd/q/blob/main/LICENSE" target="_blank">MIT License</a>
+      <a href="https://github.com/coinerd/q/blob/main/CONTRIBUTING.md" target="_blank">Contributing</a>
+    </div>
+    <p>© 2026 q contributors. Built with Racket 🎾</p>
+  </div>
+</footer>
+
+</body>
+</html>

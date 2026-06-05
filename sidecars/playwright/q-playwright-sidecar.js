@@ -19,11 +19,20 @@ const screenshot = require('./lib/screenshot');
 let browser = null;
 const pages = new Map(); // sessionId -> { page, url }
 
+function parseHeadlessArg(argv) {
+  const arg = argv.find(a => a.startsWith('--headless='));
+  if (!arg) return true;
+  const value = arg.slice('--headless='.length).toLowerCase();
+  return !(value === 'false' || value === '0' || value === 'no');
+}
+
+const headless = parseHeadlessArg(process.argv.slice(2));
+
 // ── Lifecycle ────────────────────────────────────────────────
 
 async function ensureBrowser() {
   if (!browser || !browser.isConnected()) {
-    browser = await chromium.launch({ headless: true });
+    browser = await chromium.launch({ headless });
   }
   return browser;
 }
@@ -41,6 +50,7 @@ async function shutdown() {
 const HANDLERS = {
   ping: async (params) => ({
     browsersOpen: pages.size,
+    headless,
     status: 'ok'
   }),
 

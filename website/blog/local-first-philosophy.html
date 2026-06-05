@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Why Local-First Matters for AI Coding Agents — q Agent Blog</title>
+  <meta name="description" content="Your code stays on your machine. Your API keys stay on your machine. Here's why we designed q to be local-first and what that means in practice.">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --bg-card: #161b22; --bg-code: #1c2128; --border: #30363d;
+      --text: #e6edf3; --text-dim: #8b949e; --accent: #58a6ff; --accent2: #7ee787;
+      --accent3: #d2a8ff; --warn: #f0883e; --radius: 12px; --max-w: 760px;
+    }
+    html { scroll-behavior: smooth; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; -webkit-font-smoothing: antialiased; }
+    a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+    code { background: var(--bg-code); border: 1px solid var(--border); border-radius: 6px; padding: 2px 7px; font-size: 0.88em; font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; }
+    pre { background: var(--bg-code); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.2em 1.5em; overflow-x: auto; font-size: 0.88em; line-height: 1.6; }
+    pre code { background: none; border: none; padding: 0; }
+    .container { max-width: var(--max-w); margin: 0 auto; padding: 0 24px; }
+    nav { position: sticky; top: 0; z-index: 100; background: rgba(13,17,23,0.85); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+    nav .container { display: flex; align-items: center; justify-content: space-between; height: 56px; }
+    nav .logo { font-weight: 800; font-size: 1.25em; letter-spacing: -0.5px; }
+    nav .logo span { color: var(--accent); }
+    nav ul { display: flex; gap: 28px; list-style: none; }
+    nav a { color: var(--text-dim); font-size: 0.92em; font-weight: 500; } nav a:hover { color: var(--text); text-decoration: none; } nav a.active { color: var(--accent); }
+    .post-header { padding: 64px 0 24px; }
+    .post-header .breadcrumb { color: var(--text-dim); font-size: 0.88em; margin-bottom: 16px; }
+    .post-header .breadcrumb a { color: var(--text-dim); } .post-header .breadcrumb a:hover { color: var(--accent); }
+    .post-header .meta { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+    .post-header .date { color: var(--text-dim); font-size: 0.9em; }
+    .post-header .tag { background: var(--bg-code); border: 1px solid var(--border); border-radius: 100px; padding: 4px 14px; font-size: 0.8em; color: var(--accent); font-weight: 500; }
+    .post-header h1 { font-size: clamp(1.6rem, 4vw, 2.2rem); font-weight: 800; letter-spacing: -0.5px; line-height: 1.3; margin-bottom: 16px; }
+    .post-header .subtitle { color: var(--text-dim); font-size: 1.1em; line-height: 1.6; }
+    .content { padding: 24px 0 80px; }
+    .content h2 { font-size: 1.4em; font-weight: 700; margin: 40px 0 16px; }
+    .content h3 { font-size: 1.15em; font-weight: 600; margin: 28px 0 12px; }
+    .content p { margin-bottom: 16px; }
+    .content ul, .content ol { margin: 0 0 16px 24px; }
+    .content li { margin-bottom: 8px; }
+    .content pre { margin: 16px 0; }
+    .content blockquote { border-left: 4px solid var(--accent); padding-left: 20px; margin: 20px 0; color: var(--text-dim); font-style: italic; }
+    .post-nav { display: flex; justify-content: space-between; padding: 32px 0; border-top: 1px solid var(--border); margin-top: 48px; }
+    .post-nav a { color: var(--text-dim); font-size: 0.92em; }
+    .post-nav a:hover { color: var(--accent); }
+    footer { border-top: 1px solid var(--border); padding: 40px 0; text-align: center; color: var(--text-dim); font-size: 0.9em; }
+    footer .links { display: flex; gap: 24px; justify-content: center; margin-bottom: 16px; }
+    @media (max-width: 768px) { nav ul { gap: 16px; } .container { padding: 0 16px; } }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="container">
+    <a href="../index.html" class="logo"><span>q</span> agent</a>
+    <ul>
+      <li><a href="../index.html">Home</a></li>
+      <li><a href="../docs.html">Docs</a></li>
+      <li><a href="../blog.html" class="active">Blog</a></li>
+      <li><a href="https://github.com/coinerd/q" target="_blank">GitHub ↗</a></li>
+    </ul>
+  </div>
+</nav>
+
+<div class="post-header">
+  <div class="container">
+    <div class="breadcrumb"><a href="../blog.html">Blog</a></div>
+    <div class="meta">
+      <span class="date">February 22, 2026</span>
+      <span class="tag">Community</span>
+    </div>
+    <h1>Why Local-First Matters for AI Coding Agents</h1>
+    <p class="subtitle">Your code stays on your machine. Your API keys stay on your machine. Here's why we designed q to be local-first and what that means in practice.</p>
+  </div>
+</div>
+
+<div class="content">
+  <div class="container">
+
+    <p>Many AI coding tools require uploading your codebase to a cloud service. Your source code, configuration files, and sometimes even credentials travel to a server you don't control. q was designed differently — it runs on <strong>your machine</strong>, and your code never leaves it.</p>
+
+    <h2>What Local-First Means</h2>
+    <p>Local-first doesn't mean "no internet." q still calls LLM APIs (OpenAI, Anthropic, etc.) for inference. Local-first means:</p>
+    <ul>
+      <li><strong>Code never leaves your machine</strong> — file reads happen locally, not through a cloud proxy</li>
+      <li><strong>API keys stay on your device</strong> — stored in your local config, not uploaded to a service</li>
+      <li><strong>Session logs are local files</strong> — not uploaded to anyone's cloud</li>
+      <li><strong>Commands execute locally</strong> — shell commands run on your machine, not a remote VM</li>
+      <li><strong>No account required</strong> — install, configure your API key, and go</li>
+    </ul>
+
+    <h2>The Privacy Argument</h2>
+    <p>Your source code is intellectual property. It contains business logic, algorithms, and trade secrets. Uploading it to a third-party service creates risk:</p>
+    <ul>
+      <li>Data breaches at the service provider</li>
+      <li>Terms of service that grant training rights on your code</li>
+      <li>Government subpoenas accessing your code</li>
+      <li>Employee access at the service provider</li>
+    </ul>
+    <p>With q, only the LLM API calls leave your machine — and those contain only the prompts and context you choose to send, with credential redaction applied.</p>
+
+    <h2>The Offline Capability</h2>
+    <p>While q needs network for LLM inference, many features work offline:</p>
+    <pre><code># These work without internet
+q replay list          # Browse session history
+q replay session abc   # Replay a past session
+q inspect              # Inspect local config and state
+
+# These need network
+q chat                 # Needs LLM API
+q goal "..."           # Needs LLM API</code></pre>
+    <p>For full offline capability, pair q with a local model via Ollama or llama.cpp. The provider abstraction makes this seamless.</p>
+
+    <h2>The Trust Model</h2>
+    <p>Local-first creates a clear trust boundary:</p>
+    <ul>
+      <li><strong>You trust</strong>: your machine, your LLM provider (for inference only)</li>
+      <li><strong>You don't need to trust</strong>: q's servers (there are none), a cloud hosting service, a SaaS provider</li>
+    </ul>
+    <p>The only network calls q makes are to the LLM provider you configure. We publish a <strong>dependency policy</strong> that documents every network dependency.</p>
+
+    <h2>No Telemetry</h2>
+    <p>q does not collect telemetry. No usage metrics, no crash reports, no feature usage tracking. The only data that leaves your machine is what you explicitly send to the LLM provider.</p>
+    <p>We considered optional telemetry for understanding usage patterns, but decided against it. Even anonymized telemetry can leak information about what tools you use and when.</p>
+
+    <h2>Open Source as a Guarantee</h2>
+    <p>Local-first claims are only credible when you can verify them. q is open source under the MIT license:</p>
+    <pre><code># Verify q's network behavior yourself
+grep -r "http-request" src/
+grep -r "websocket" src/
+grep -r "telemetry" src/</code></pre>
+    <p>Every network call is visible in the source code. No hidden phone-home, no analytics SDK, no third-party tracking.</p>
+
+    <h2>What About Cloud Features?</h2>
+    <p>Some features benefit from cloud infrastructure — shared sessions, team knowledge bases, model fine-tuning on your code patterns. These are possible future additions, but they will always be <strong>opt-in</strong>. The local-first experience will never require them.</p>
+
+    <h2>The Trade-off</h2>
+    <p>Local-first means you manage your own API keys and configuration. There's no dashboard, no team management portal, no central billing. For individual developers and small teams, this is a feature, not a limitation. For large organizations, we're exploring enterprise deployment options that keep code on-premises while providing centralized management.</p>
+
+    <blockquote>"The best way to keep secrets is to not share them. Local-first isn't just a technical choice — it's a values choice." — q contributor</blockquote>
+
+    <div class="post-nav">
+      <a href="testing-philosophy.html">← Testing Philosophy</a>
+      <a href="small-trusted-core.html">The Small Trusted Core Principle →</a>
+    </div>
+
+  </div>
+</div>
+
+<footer>
+  <div class="container">
+    <div class="links">
+      <a href="https://github.com/coinerd/q" target="_blank">GitHub</a>
+      <a href="https://github.com/coinerd/q/blob/main/LICENSE" target="_blank">MIT License</a>
+      <a href="https://github.com/coinerd/q/blob/main/CONTRIBUTING.md" target="_blank">Contributing</a>
+    </div>
+    <p>© 2026 q contributors. Built with Racket 🎾</p>
+  </div>
+</footer>
+
+</body>
+</html>

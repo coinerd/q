@@ -141,6 +141,15 @@
   (check-true (string-contains? text "b"))
   (delete-file tmp))
 
+;; Regression: scheduler dispatch calls with (args exec-ctx)
+(test-case "delete-lines: scheduler-style two-argument call works"
+  (define tmp (make-temporary-file "q-test-dl-~a.txt"))
+  (display-to-file "a\nb\nc" tmp #:exists 'replace)
+  (define result (tool-delete-lines (hasheq 'path tmp 'start-line 2 'end-line 2) #f))
+  (check-false (tool-result-is-error? result))
+  (check-equal? (file->string tmp) "a\nc")
+  (delete-file tmp))
+
 (test-case "delete-lines: file content unchanged after error"
   (define tmp (make-temporary-file "q-test-dl-~a.txt"))
   (define original "a\nb\nc")

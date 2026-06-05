@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blog — q Agent</title>
+  <meta name="description" content="News, deep-dives, and release notes for q — the local-first AI coding agent.">
+  <style>
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0d1117;
+      --bg-card:  #161b22;
+      --bg-code:  #1c2128;
+      --border:   #30363d;
+      --text:     #e6edf3;
+      --text-dim: #8b949e;
+      --accent:   #58a6ff;
+      --accent2:  #7ee787;
+      --accent3:  #d2a8ff;
+      --warn:     #f0883e;
+      --radius:   12px;
+      --max-w:    1120px;
+    }
+
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    code {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 2px 7px;
+      font-size: 0.88em;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    }
+
+    pre {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.2em 1.5em;
+      overflow-x: auto;
+      font-size: 0.88em;
+      line-height: 1.6;
+    }
+    pre code { background: none; border: none; padding: 0; }
+
+    /* ── Layout ── */
+    .container { max-width: var(--max-w); margin: 0 auto; padding: 0 24px; }
+    section { padding: 80px 0; }
+    section:nth-child(even) { background: var(--bg-card); }
+
+    /* ── Nav ── */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(13,17,23,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    nav .container {
+      display: flex; align-items: center; justify-content: space-between;
+      height: 56px;
+    }
+    nav .logo { font-weight: 800; font-size: 1.25em; letter-spacing: -0.5px; }
+    nav .logo span { color: var(--accent); }
+    nav ul { display: flex; gap: 28px; list-style: none; }
+    nav a { color: var(--text-dim); font-size: 0.92em; font-weight: 500; }
+    nav a:hover { color: var(--text); text-decoration: none; }
+    nav a.active { color: var(--accent); }
+
+    /* ── Page Header ── */
+    .page-header {
+      padding: 80px 0 48px;
+      text-align: center;
+      background: linear-gradient(180deg, var(--bg) 0%, var(--bg-card) 100%);
+    }
+    .page-header h1 {
+      font-size: clamp(2rem, 5vw, 3rem);
+      font-weight: 800;
+      letter-spacing: -1px;
+      margin-bottom: 16px;
+    }
+    .page-header p {
+      color: var(--text-dim);
+      font-size: 1.15em;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    /* ── Blog Categories ── */
+    .category-bar {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 48px;
+    }
+    .category-tag {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      padding: 8px 20px;
+      font-size: 0.88em;
+      font-weight: 500;
+      color: var(--text-dim);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .category-tag:hover, .category-tag.active {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* ── Blog Posts Grid ── */
+    .blog-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 24px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .blog-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0;
+      overflow: hidden;
+      transition: border-color 0.2s, transform 0.2s;
+      display: flex;
+      flex-direction: column;
+    }
+    .blog-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+
+    .blog-card .card-banner {
+      height: 6px;
+      width: 100%;
+    }
+    .blog-card .card-banner.blue { background: linear-gradient(90deg, #58a6ff, #1f6feb); }
+    .blog-card .card-banner.green { background: linear-gradient(90deg, #7ee787, #238636); }
+    .blog-card .card-banner.purple { background: linear-gradient(90deg, #d2a8ff, #8957e5); }
+    .blog-card .card-banner.orange { background: linear-gradient(90deg, #f0883e, #da3633); }
+    .blog-card .card-banner.teal { background: linear-gradient(90deg, #56d4dd, #1b9aaa); }
+
+    .blog-card .card-body {
+      padding: 28px 28px 24px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .blog-card .card-meta {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .blog-card .card-date {
+      color: var(--text-dim);
+      font-size: 0.82em;
+    }
+    .blog-card .card-category {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      padding: 2px 10px;
+      font-size: 0.78em;
+      color: var(--accent);
+      font-weight: 500;
+    }
+
+    .blog-card h3 {
+      font-size: 1.2em;
+      font-weight: 700;
+      margin-bottom: 10px;
+      line-height: 1.3;
+    }
+    .blog-card p {
+      color: var(--text-dim);
+      font-size: 0.92em;
+      line-height: 1.6;
+      flex: 1;
+    }
+    .blog-card .read-more {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 16px;
+      font-weight: 600;
+      font-size: 0.9em;
+    }
+
+    /* ── Featured Post ── */
+    .featured-post {
+      max-width: 900px;
+      margin: 0 auto 48px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+    .featured-post .featured-content {
+      padding: 40px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .featured-post .featured-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(88,166,255,0.1);
+      border: 1px solid rgba(88,166,255,0.3);
+      border-radius: 100px;
+      padding: 4px 14px;
+      font-size: 0.8em;
+      color: var(--accent);
+      font-weight: 600;
+      margin-bottom: 16px;
+      width: fit-content;
+    }
+    .featured-post h2 {
+      font-size: 1.6em;
+      font-weight: 800;
+      margin-bottom: 12px;
+      line-height: 1.3;
+    }
+    .featured-post p {
+      color: var(--text-dim);
+      margin-bottom: 20px;
+      line-height: 1.6;
+    }
+    .featured-post .featured-visual {
+      background: linear-gradient(135deg, #1a1e3a 0%, #161b22 50%, #1a2e1a 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+      position: relative;
+      overflow: hidden;
+    }
+    .featured-post .featured-visual .visual-diagram {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.75em;
+      line-height: 1.8;
+      color: var(--text-dim);
+      white-space: pre;
+    }
+    .featured-post .featured-visual .visual-diagram .hl { color: var(--accent); }
+    .featured-post .featured-visual .visual-diagram .hl2 { color: var(--accent2); }
+    .featured-post .featured-visual .visual-diagram .hl3 { color: var(--accent3); }
+
+    /* ── Newsletter ── */
+    .newsletter {
+      max-width: 600px;
+      margin: 0 auto;
+      text-align: center;
+    }
+    .newsletter h3 {
+      font-size: 1.3em;
+      margin-bottom: 8px;
+    }
+    .newsletter p {
+      color: var(--text-dim);
+      margin-bottom: 24px;
+    }
+    .newsletter-form {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .newsletter-form input {
+      flex: 1;
+      min-width: 240px;
+      padding: 12px 20px;
+      border-radius: 100px;
+      border: 1px solid var(--border);
+      background: var(--bg-code);
+      color: var(--text);
+      font-size: 0.95em;
+      outline: none;
+    }
+    .newsletter-form input::placeholder { color: var(--text-dim); }
+    .newsletter-form input:focus { border-color: var(--accent); }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 14px 32px;
+      border-radius: 100px;
+      font-weight: 600;
+      font-size: 1em;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #0d1117;
+    }
+    .btn-primary:hover { background: #79b8ff; text-decoration: none; }
+
+    /* ── Footer ── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 40px 0;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 0.9em;
+    }
+    footer .links { display: flex; gap: 24px; justify-content: center; margin-bottom: 16px; }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      nav ul { gap: 16px; }
+      section { padding: 56px 0; }
+      .page-header { padding: 56px 0 32px; }
+      .blog-grid { grid-template-columns: 1fr; }
+      .featured-post { grid-template-columns: 1fr; }
+      .featured-post .featured-visual { padding: 24px; min-height: 200px; }
+    }
+    /* ── Category hidden state ── */
+    .blog-card.hidden { display: none; }
+
+  </style>
+</head>
+<body>
+
+<!-- ════════════════ Nav ════════════════ -->
+<nav>
+  <div class="container">
+    <a href="index.html" class="logo"><span>q</span> agent</a>
+    <ul>
+      <li><a href="index.html">Home</a></li>
+      <li><a href="docs.html">Docs</a></li>
+      <li><a href="blog.html" class="active">Blog</a></li>
+      <li><a href="https://github.com/coinerd/q" target="_blank">GitHub ↗</a></li>
+    </ul>
+  </div>
+</nav>
+
+<!-- ════════════════ Page Header ════════════════ -->
+<div class="page-header">
+  <div class="container">
+    <h1>Blog</h1>
+    <p>Release notes, architecture deep-dives, and the latest from the q project.</p>
+  </div>
+</div>
+
+<!-- ════════════════ Featured Post ════════════════ -->
+<section style="padding-top: 48px;">
+  <div class="container">
+    <div class="featured-post">
+      <div class="featured-content">
+        <div class="featured-badge">⭐ Featured</div>
+        <h2>Announcing q v0.82 — Goal-Directed Autonomous Loops</h2>
+        <p>
+          The latest release introduces the goal loop: give q an objective and it autonomously
+          plans, executes, and verifies until done. With full TUI integration, evidence-driven
+          behavior, and configurable evaluators, this is the biggest feature since session branching.
+        </p>
+        <a href="blog/announcing-v082.html" class="btn btn-primary" style="width: fit-content;">Read the announcement →</a>
+      </div>
+      <div class="featured-visual">
+        <div class="visual-diagram"><span class="hl">┌──────────────────────┐</span>
+<span class="hl">│</span>   <span class="hl3">goal: "fix all bugs"</span>   <span class="hl">│</span>
+<span class="hl">├──────────────────────┤</span>
+<span class="hl2">  explore → plan → impl</span>
+<span class="hl2">      ↕  verify  ↕</span>
+<span class="hl2">    debug ←  ✗ fail</span>
+<span class="hl">├──────────────────────┤</span>
+<span class="hl3">  ✓ evidence collected </span>
+<span class="hl3">  ✓ goal achieved!     </span>
+<span class="hl">└──────────────────────┘</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════ Blog Posts ════════════════ -->
+<section>
+  <div class="container">
+    <div class="category-bar">
+      <span class="category-tag active">All</span>
+      <span class="category-tag">Releases</span>
+      <span class="category-tag">Architecture</span>
+      <span class="category-tag">Guides</span>
+      <span class="category-tag">Engineering</span>
+      <span class="category-tag">Security</span>
+      <span class="category-tag">Community</span>
+    </div>
+
+    <div class="blog-grid">
+
+      <!-- Post 1 -->
+      <a href="blog/gsd-state-machine-rewrite.html" class="blog-card">
+        <div class="card-banner purple"></div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span class="card-date">Jun 2, 2026</span>
+            <span class="card-category">Architecture</span>
+          </div>
+          <h3>Inside the GSD State Machine: How q Executes Goals</h3>
+          <p>A deep-dive into the finite-state machine that powers q's goal-directed loop — from exploration through implementation to verification.</p>
+          <span class="read-more">Read more →</span>
+        </div>
+      </a>
+
+      <!-- Post 2 -->
+      <a href="blog/event-bus-architecture.html" class="blog-card">
+        <div class="card-banner blue"></div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span class="card-date">May 28, 2026</span>
+            <span class="card-category">Architecture</span>
+          </div>
+          <h3>Why We Built an Event Bus for an AI Agent</h3>
+          <p>How a deterministic event bus decouples q's agent loop from its interfaces, enabling real-time streaming, metrics, and audit logging without tight coupling.</p>
+          <span class="read-more">Read more →</span>
+        </div>
+      </a>
+
+      <!-- Post 3 -->
+      <a href="blog/sandboxing-boundary.html" class="blog-card">
+        <div class="card-banner green"></div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span class="card-date">May 22, 2026</span>
+            <span class="card-category">Architecture</span>
+          </div>
+          <h3>Sandboxing LLM-Generated Shell Commands</h3>
+          <p>Security is not optional. Here's how q uses shell quoting, resource limits, and timeout-based sandboxing to safely execute AI-generated commands.</p>
+          <span class="read-more">Read more →</span>
+        </div>
+      </a>
+
+      <!-- Post 4 -->
+      <a href="blog/goal-mode-deep-dive.html" class="blog-card">
+        <div class="card-banner orange"></div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span class="card-date">Jun 2, 2026</span>
+            <span class="card-category">Guides</span>
+          </div>
+          <h3>Getting Started with Goal Mode</h3>
+          <p>Step-by-step guide to using q's autonomous goal loop. Set objectives, watch q plan and execute, and review the evidence trail.</p>
+          <span class="read-more">Read more →</span>
+        </div>
+      </a>
+
+      <!-- Post 5 -->
+      <a href="blog/small-trusted-core.html" class="blog-card">
+        <div class="card-banner teal"></div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span class="card-date">May 15, 2026</span>
+            <span class="card-category">Architecture</span>
+          </div>
+          <h3>The Small Trusted Core Principle</h3>
+          <p>ADR #1: Why q's core agent loop has minimal dependencies, no TUI or CLI coupling, and how security boundaries are enforced at the architecture level.</p>
+          <span class="read-more">Read more →</span>
+        </div>
+      </a>
+
+      <!-- Post 6 -->
+      <a href="blog/context-manager-strategy.html" class="blog-card">
+        <div class="card-banner purple"></div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span class="card-date">May 10, 2026</span>
+            <span class="card-category">Architecture</span>
+          </div>
+          <h3>Context Assembly: Building the Right Prompt at the Right Time</h3>
+          <p>How q dynamically assembles context for each turn — combining system prompts, conversation history, tool results, and extension hooks.</p>
+          <span class="read-more">Read more →</span>
+        </div>
+      </a>
+
+      <!-- Post 7 -->
+      <a href="blog/interface-separation.html" class="blog-card">
+        <div class="card-banner blue"></div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span class="card-date">May 5, 2026</span>
+            <span class="card-category">Architecture</span>
+          </div>
+          <h3>One Agent, Five Interfaces: Why Separation Matters</h3>
+          <p>CLI, TUI, JSON, RPC, and SDK — five ways to interact with the same agent core. How interface separation keeps q flexible without feature bloat.</p>
+          <span class="read-more">Read more →</span>
+        </div>
+      </a>
+
+      <!-- Post 8 -->
+      <a href="blog/contributing-to-q.html" class="blog-card">
+        <div class="card-banner green"></div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span class="card-date">Apr 28, 2026</span>
+            <span class="card-category">Community</span>
+          </div>
+          <h3>Contributing to q: A Practical Guide</h3>
+          <p>How to set up a development environment, run the test suite, submit PRs, and work with q's Racket codebase. Plus pre-commit hooks and code review tips.</p>
+          <span class="read-more">Read more →</span>
+        </div>
+      </a>
+
+      <!-- Post 9 -->
+      <a href="blog/provider-abstraction.html" class="blog-card">
+        <div class="card-banner purple"></div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span class="card-date">Apr 20, 2026</span>
+            <span class="card-category">Architecture</span>
+          </div>
+          <h3>The Provider Abstraction: One Agent, Many LLMs</h3>
+          <p>How q's provider interface lets you swap between OpenAI, Anthropic, Gemini, and local models without changing a line of agent logic.</p>
+          <span class="read-more">Read more →</span>
+        </div>
+      </a>
+
+      <!-- Post 10 -->
+      <a href="blog/extension-hook-model.html" class="blog-card">
+        <div class="card-banner blue"></div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span class="card-date">Apr 15, 2026</span>
+            <span class="card-category">Architecture</span>
+          </div>
+          <h3>The Extension Hook Model: Pre, Post, and Error</h3>
+          <p>How q's hook system lets extensions intercept and modify agent behavior at critical points — without touching core code.</p>
+          <span class="read-more">Read more →</span>
+        </div>
+      </a>
+
+      <!-- Post 11 -->
+      <a href="blog/typed-racket-migration.html" class="blog-card">
+        <div class="card-banner teal"></div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span class="card-date">Apr 10, 2026</span>
+            <span class="card-category">Engineering</span>
+          </div>
+          <h3>Migrating to Typed Racket: Lessons Learned</h3>
+          <p>A practical look at incrementally adding type annotations to a growing Racket codebase — what worked, what broke, and what we'd do differently.</p>
+          <span class="read-more">Read more →</span>
+        </div>
+      </a>
+
+      <!-- Post 12 -->
+      <a href="blog/session-replay-debugging.html" class="blog-card">
+        <div class="card-banner orange"></div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span class="card-date">Apr 5, 2026</span>
+            <span class="card-category">Guides</span>
+          </div>
+          <h3>Session Replay: Debugging AI Agents After the Fact</h3>
+          <p>How q's append-only JSONL session logs enable faithful replay, post-hoc debugging, and reproducible test cases from real usage.</p>
+          <span class="read-more">Read more →</span>
+        </div>
+      </a>
+
+      <!-- Post 13 -->
+      <a href="blog/streaming-architecture.html" class="blog-card">
+        <div class="card-banner green"></div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span class="card-date">Mar 28, 2026</span>
+            <span class="card-category">Architecture</span>
+          </div>
+          <h3>Streaming Architecture: Token-by-Token to Screen</h3>
+          <p>The journey of a single token: from the provider's SSE stream through q's event bus to the TUI renderer — with backpressure and error handling.</p>
+          <span class="read-more">Read more →</span>
+        </div>
+      </a>
+
+      <!-- Post 14 -->
+      <a href="blog/credential-redaction.html" class="blog-card">
+        <div class="card-banner purple"></div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span class="card-date">Mar 22, 2026</span>
+            <span class="card-category">Security</span>
+          </div>
+          <h3>Credential Redaction: Keeping Secrets Out of Logs</h3>
+          <p>API keys, tokens, and passwords inevitably appear in agent conversations. Here's how q detects and redacts them before they hit disk.</p>
+          <span class="read-more">Read more →</span>
+        </div>
+      </a>
+
+      <!-- Post 15 -->
+      <a href="blog/building-the-tui.html" class="blog-card">
+        <div class="card-banner blue"></div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span class="card-date">Mar 15, 2026</span>
+            <span class="card-category">Engineering</span>
+          </div>
+          <h3>Building a Native TUI Without Electron</h3>
+          <p>Why we chose Racket's built-in text rendering over Electron, and how the TUI subscribes to events for real-time display of streaming and goal progress.</p>
+          <span class="read-more">Read more →</span>
+        </div>
+      </a>
+
+      <!-- Post 16 -->
+      <a href="blog/context-compaction.html" class="blog-card">
+        <div class="card-banner teal"></div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span class="card-date">Mar 8, 2026</span>
+            <span class="card-category">Architecture</span>
+          </div>
+          <h3>Context Compaction: When Conversations Get Too Long</h3>
+          <p>Long sessions blow past token budgets. Here's how q detects context pressure, summarizes old messages with LLM assistance, and keeps conversations coherent.</p>
+          <span class="read-more">Read more →</span>
+        </div>
+      </a>
+
+      <!-- Post 17 -->
+      <a href="blog/testing-philosophy.html" class="blog-card">
+        <div class="card-banner orange"></div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span class="card-date">Mar 1, 2026</span>
+            <span class="card-category">Engineering</span>
+          </div>
+          <h3>Testing Philosophy: 221 Tests and Counting</h3>
+          <p>How q achieved comprehensive test coverage for event bus, state machines, and provider integrations — with strategies for testing non-deterministic LLM outputs.</p>
+          <span class="read-more">Read more →</span>
+        </div>
+      </a>
+
+      <!-- Post 18 -->
+      <a href="blog/local-first-philosophy.html" class="blog-card">
+        <div class="card-banner green"></div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span class="card-date">Feb 22, 2026</span>
+            <span class="card-category">Community</span>
+          </div>
+          <h3>Why Local-First Matters for AI Coding Agents</h3>
+          <p>Your code stays on your machine. Your API keys stay on your machine. Here's why we designed q to be local-first and what that means in practice.</p>
+          <span class="read-more">Read more →</span>
+        </div>
+      </a>
+
+      <!-- Post 19 -->
+      <a href="blog/effect-system.html" class="blog-card">
+        <div class="card-banner blue"></div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span class="card-date">Feb 14, 2026</span>
+            <span class="card-category">Architecture</span>
+          </div>
+          <h3>The Effect System: Typed Side Effects for Agent Operations</h3>
+          <p>How q's effect system gives type-safe control over side effects — shell execution, file I/O, and network calls — without monads or async/await.</p>
+          <span class="read-more">Read more →</span>
+        </div>
+      </a>
+
+      <!-- Post 20 -->
+      <a href="blog/roadmap-to-v1.html" class="blog-card">
+        <div class="card-banner orange"></div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span class="card-date">Feb 8, 2026</span>
+            <span class="card-category">Community</span>
+          </div>
+          <h3>Roadmap to v1.0: What's Next for q</h3>
+          <p>From v0.82 to v1.0: the roadmap for q's journey to a stable release, including GUI, multi-agent collaboration, and the Typed Racket migration.</p>
+          <span class="read-more">Read more →</span>
+        </div>
+      </a>
+
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════ Newsletter ════════════════ -->
+<section>
+  <div class="container">
+    <div class="newsletter">
+      <h3>📬 Stay in the loop</h3>
+      <p>Get notified about new releases, blog posts, and community updates. No spam, ever.</p>
+      <form class="newsletter-form" onsubmit="event.preventDefault();">
+        <input type="email" placeholder="you@example.com" aria-label="Email address" />
+        <button type="submit" class="btn btn-primary">Subscribe</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════ Footer ════════════════ -->
+<footer>
+  <div class="container">
+    <div class="links">
+      <a href="https://github.com/coinerd/q" target="_blank">GitHub</a>
+      <a href="https://github.com/coinerd/q/blob/main/LICENSE" target="_blank">MIT License</a>
+      <a href="https://github.com/coinerd/q/blob/main/CONTRIBUTING.md" target="_blank">Contributing</a>
+      <a href="https://github.com/coinerd/q/blob/main/CHANGELOG.md" target="_blank">Changelog</a>
+    </div>
+    <p>© 2026 q contributors. Built with Racket 🎾</p>
+  </div>
+</footer>
+
+<script>
+// Category filter
+(function() {
+  const tags = document.querySelectorAll('.category-tag');
+  const cards = document.querySelectorAll('.blog-card');
+
+  tags.forEach(tag => {
+    tag.addEventListener('click', () => {
+      // Update active state
+      tags.forEach(t => t.classList.remove('active'));
+      tag.classList.add('active');
+
+      const category = tag.textContent.trim();
+
+      cards.forEach(card => {
+        if (category === 'All') {
+          card.classList.remove('hidden');
+        } else {
+          const cardCat = card.querySelector('.card-category');
+          if (cardCat && cardCat.textContent.trim() === category) {
+            card.classList.remove('hidden');
+          } else {
+            card.classList.add('hidden');
+          }
+        }
+      });
+    });
+  });
+})();
+</script>
+
+</body>
+</html>

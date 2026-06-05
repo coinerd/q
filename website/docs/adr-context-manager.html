@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ADR-12: Context Assembly Architecture — q Agent</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --bg-card: #161b22; --bg-code: #1c2128;
+      --border: #30363d; --text: #e6edf3; --text-dim: #8b949e;
+      --accent: #58a6ff; --accent2: #7ee787; --accent3: #d2a8ff;
+      --warn: #f0883e; --radius: 12px; --max-w: 1120px;
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code { background: var(--bg-code); border: 1px solid var(--border); border-radius: 6px; padding: 2px 7px; font-size: 0.88em; font-family: 'SF Mono', 'Fira Code', monospace; }
+    pre { background: var(--bg-code); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; overflow-x: auto; margin: 16px 0; }
+    pre code { background: none; border: none; padding: 0; font-size: 0.9em; }
+    .container { max-width: var(--max-w); margin: 0 auto; padding: 0 24px; }
+    nav { border-bottom: 1px solid var(--border); padding: 14px 0; position: sticky; top: 0; background: var(--bg); z-index: 100; }
+    nav .container { display: flex; justify-content: space-between; align-items: center; }
+    .logo { font-size: 1.3em; font-weight: 700; color: var(--text); }
+    .logo span { color: var(--accent); }
+    nav ul { list-style: none; display: flex; gap: 28px; }
+    nav a { color: var(--text-dim); font-size: 0.95em; }
+    nav a:hover, nav a.active { color: var(--text); text-decoration: none; }
+    .page-header { padding: 72px 0 32px; border-bottom: 1px solid var(--border); }
+    .page-header h1 { font-size: 2.4em; margin-bottom: 8px; }
+    .page-header p { color: var(--text-dim); font-size: 1.1em; max-width: 600px; }
+    .breadcrumb { margin-bottom: 16px; }
+    .breadcrumb a { color: var(--text-dim); font-size: 0.9em; }
+    .breadcrumb span { color: var(--text-dim); margin: 0 6px; }
+    article { padding: 48px 0; }
+    article h2 { font-size: 1.6em; margin: 32px 0 16px; color: var(--accent2); }
+    article h3 { font-size: 1.25em; margin: 24px 0 12px; color: var(--accent3); }
+    article p { margin: 12px 0; max-width: 720px; }
+    article ul, article ol { margin: 12px 0 12px 24px; max-width: 720px; }
+    article li { margin: 6px 0; }
+    article blockquote { border-left: 3px solid var(--accent); padding: 8px 16px; margin: 16px 0; color: var(--text-dim); max-width: 720px; }
+    .status-badge { display: inline-block; background: rgba(126,231,135,0.15); color: var(--accent2); border-radius: 20px; padding: 4px 12px; font-size: 0.85em; margin-bottom: 16px; }
+    .meta { color: var(--text-dim); font-size: 0.9em; margin-bottom: 24px; display: flex; gap: 16px; flex-wrap: wrap; }
+    .meta-item { background: var(--bg-code); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; }
+    footer { border-top: 1px solid var(--border); padding: 32px 0; text-align: center; color: var(--text-dim); font-size: 0.9em; }
+    footer .links { display: flex; gap: 24px; justify-content: center; margin-bottom: 16px; }
+    @media (max-width: 768px) { nav ul { gap: 16px; } .page-header { padding: 48px 0 24px; } .page-header h1 { font-size: 1.8em; } }
+    /* Blog styles */
+    .blog-post { border-bottom: 1px solid var(--border); padding: 40px 0; }
+    .blog-post:last-child { border-bottom: none; }
+    .blog-date { color: var(--text-dim); font-size: 0.85em; margin-bottom: 8px; }
+    .blog-excerpt { color: var(--text-dim); font-size: 1em; max-width: 600px; }
+    .blog-tag { display: inline-block; background: rgba(88,166,255,0.15); color: var(--accent); border-radius: 20px; padding: 2px 10px; font-size: 0.8em; margin-right: 6px; }
+  </style>
+</head>
+<body>
+<nav>
+  <div class="container">
+    <a href="../index.html" class="logo"><span>q</span> agent</a>
+    <ul>
+      <li><a href="../index.html">Home</a></li>
+      <li><a href="../docs.html">Docs</a></li>
+      <li><a href="../blog.html">Blog</a></li>
+      <li><a href="https://github.com/coinerd/q" target="_blank">GitHub ↗</a></li>
+    </ul>
+  </div>
+</nav>
+<div class="page-header">
+  <div class="container">
+    <div class="breadcrumb"><a href="../docs.html">Docs</a><span>›</span><a href="architecture.html">Architecture</a><span>›</span>ADR-12</div>
+    <h1>🧠 ADR-12: Context Assembly Architecture</h1>
+    <p>How q dynamically builds context for each turn — system prompts, history, tools, and extension hooks.</p>
+  </div>
+</div>
+
+<article>
+  <div class="container">
+    <div class="meta">
+      <span class="status-badge">✅ Accepted</span>
+      <span class="meta-item">v0.25.3</span>
+    </div>
+
+    <h2>Context</h2>
+    <p>The context assembly pipeline was split across two modules: <code>context-builder.rkt</code> (production tree-walk) and <code>context-manager.rkt</code> (dead code, never called outside tests). Logic was duplicated: token estimation, first-user pinning, and pair-preserving budget fitting existed in both modules with divergent implementations. LLM summarization in context-manager was a stub that always concatenated.</p>
+
+    <h2>Decision</h2>
+    <p>Unified the context assembly into a three-module architecture:</p>
+    <ol>
+      <li><strong><code>runtime/context-policy.rkt</code></strong> — Shared policy functions: token estimation, first-user pinning, pair-preserving budget fitting.</li>
+      <li><strong><code>runtime/context-manager.rkt</code></strong> — Production pipeline: tree-walk → pin → budget → summarize → catalog → reassemble. LLM summarization via compactor's <code>llm-summarize</code>.</li>
+      <li><strong><code>runtime/context-builder.rkt</code></strong> — Legacy tree-walk fallback (no summarization).</li>
+    </ol>
+
+    <h3>Production Pipeline</h3>
+    <pre><code>assemble-context:
+  1. Tree-walk: enumerate all context entries
+  2. Pin: ensure first user message is always included
+  3. Budget: fit messages within token budget (pair-preserving)
+  4. Summarize: LLM-summarize excluded entries (when provider available)
+  5. Catalog: generate observability metadata
+  6. Reassemble: build final message list for the LLM</code></pre>
+
+    <h2>Consequences</h2>
+    <ul>
+      <li>Single source of truth for token estimation, pinning, and budget fitting</li>
+      <li>LLM summarization integrated into the production pipeline</li>
+      <li>context-manager is the primary production pipeline (no longer dead code)</li>
+      <li>New strategies (e.g., relevance-based inclusion) can be added without touching shared policy</li>
+    </ul>
+
+    <div style="margin-top: 48px; padding: 24px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);">
+      <h3 style="margin-top: 0;">Related</h3>
+      <ul>
+        <li><a href="adr-gsd-state-machine.html">ADR-11: GSD State Machine</a></li>
+        <li><a href="adr-event-bus.html">ADR-3: Event Bus Architecture</a></li>
+        <li><a href="architecture.html">Architecture Overview</a></li>
+      </ul>
+    </div>
+  </div>
+</article>
+
+<footer>
+  <div class="container">
+    <div class="links">
+      <a href="https://github.com/coinerd/q" target="_blank">GitHub</a>
+      <a href="https://github.com/coinerd/q/blob/main/LICENSE" target="_blank">MIT License</a>
+      <a href="https://github.com/coinerd/q/blob/main/CONTRIBUTING.md" target="_blank">Contributing</a>
+      <a href="https://github.com/coinerd/q/blob/main/CHANGELOG.md" target="_blank">Changelog</a>
+    </div>
+    <p>© 2026 q Agent Project · Built with ❤️ and Racket</p>
+  </div>
+</footer>
+</body>
+</html>

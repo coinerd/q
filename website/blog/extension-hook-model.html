@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Extension Hook Model: Pre, Post, and Error — q Agent Blog</title>
+  <meta name="description" content="How q's hook system lets extensions intercept and modify agent behavior at critical points — without touching core code.">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --bg-card: #161b22; --bg-code: #1c2128; --border: #30363d;
+      --text: #e6edf3; --text-dim: #8b949e; --accent: #58a6ff; --accent2: #7ee787;
+      --accent3: #d2a8ff; --warn: #f0883e; --radius: 12px; --max-w: 760px;
+    }
+    html { scroll-behavior: smooth; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; -webkit-font-smoothing: antialiased; }
+    a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+    code { background: var(--bg-code); border: 1px solid var(--border); border-radius: 6px; padding: 2px 7px; font-size: 0.88em; font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; }
+    pre { background: var(--bg-code); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.2em 1.5em; overflow-x: auto; font-size: 0.88em; line-height: 1.6; }
+    pre code { background: none; border: none; padding: 0; }
+    .container { max-width: var(--max-w); margin: 0 auto; padding: 0 24px; }
+    nav { position: sticky; top: 0; z-index: 100; background: rgba(13,17,23,0.85); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+    nav .container { display: flex; align-items: center; justify-content: space-between; height: 56px; }
+    nav .logo { font-weight: 800; font-size: 1.25em; letter-spacing: -0.5px; }
+    nav .logo span { color: var(--accent); }
+    nav ul { display: flex; gap: 28px; list-style: none; }
+    nav a { color: var(--text-dim); font-size: 0.92em; font-weight: 500; } nav a:hover { color: var(--text); text-decoration: none; } nav a.active { color: var(--accent); }
+    .post-header { padding: 64px 0 24px; }
+    .post-header .breadcrumb { color: var(--text-dim); font-size: 0.88em; margin-bottom: 16px; }
+    .post-header .breadcrumb a { color: var(--text-dim); } .post-header .breadcrumb a:hover { color: var(--accent); }
+    .post-header .meta { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+    .post-header .date { color: var(--text-dim); font-size: 0.9em; }
+    .post-header .tag { background: var(--bg-code); border: 1px solid var(--border); border-radius: 100px; padding: 4px 14px; font-size: 0.8em; color: var(--accent); font-weight: 500; }
+    .post-header h1 { font-size: clamp(1.6rem, 4vw, 2.2rem); font-weight: 800; letter-spacing: -0.5px; line-height: 1.3; margin-bottom: 16px; }
+    .post-header .subtitle { color: var(--text-dim); font-size: 1.1em; line-height: 1.6; }
+    .content { padding: 24px 0 80px; }
+    .content h2 { font-size: 1.4em; font-weight: 700; margin: 40px 0 16px; }
+    .content h3 { font-size: 1.15em; font-weight: 600; margin: 28px 0 12px; }
+    .content p { margin-bottom: 16px; }
+    .content ul, .content ol { margin: 0 0 16px 24px; }
+    .content li { margin-bottom: 8px; }
+    .content pre { margin: 16px 0; }
+    .content blockquote { border-left: 4px solid var(--accent); padding-left: 20px; margin: 20px 0; color: var(--text-dim); font-style: italic; }
+    .post-nav { display: flex; justify-content: space-between; padding: 32px 0; border-top: 1px solid var(--border); margin-top: 48px; }
+    .post-nav a { color: var(--text-dim); font-size: 0.92em; }
+    .post-nav a:hover { color: var(--accent); }
+    footer { border-top: 1px solid var(--border); padding: 40px 0; text-align: center; color: var(--text-dim); font-size: 0.9em; }
+    footer .links { display: flex; gap: 24px; justify-content: center; margin-bottom: 16px; }
+    @media (max-width: 768px) { nav ul { gap: 16px; } .container { padding: 0 16px; } }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="container">
+    <a href="../index.html" class="logo"><span>q</span> agent</a>
+    <ul>
+      <li><a href="../index.html">Home</a></li>
+      <li><a href="../docs.html">Docs</a></li>
+      <li><a href="../blog.html" class="active">Blog</a></li>
+      <li><a href="https://github.com/coinerd/q" target="_blank">GitHub ↗</a></li>
+    </ul>
+  </div>
+</nav>
+
+<div class="post-header">
+  <div class="container">
+    <div class="breadcrumb"><a href="../blog.html">Blog</a></div>
+    <div class="meta">
+      <span class="date">April 15, 2026</span>
+      <span class="tag">Architecture</span>
+    </div>
+    <h1>The Extension Hook Model: Pre, Post, and Error</h1>
+    <p class="subtitle">How q's hook system lets extensions intercept and modify agent behavior at critical points — without touching core code.</p>
+  </div>
+</div>
+
+<div class="content">
+  <div class="container">
+
+    <p>Extensions are how q grows without becoming a monolith. But for extensions to be useful, they need to intercept agent behavior at the right moments. That's where hooks come in — a three-phase interception model that gives extensions control without compromising the core.</p>
+
+    <h2>Why Hooks?</h2>
+    <p>Without hooks, extending an agent means either:</p>
+    <ul>
+      <li>Modifying core code (fragile, risky)</li>
+      <li>Wrapping the entire agent (too coarse-grained)</li>
+      <li>Using callbacks everywhere (callback hell)</li>
+    </ul>
+    <p>Hooks provide structured interception points. Extensions register functions at specific lifecycle moments. The core calls them automatically.</p>
+
+    <h2>The Three Hook Types</h2>
+
+    <h3>Pre-hooks: Before It Happens</h3>
+    <p>Pre-hooks run before an action. They can inspect, modify, or cancel the action:</p>
+    <pre><code>; Register a pre-hook for shell commands
+(define-hook 'pre-shell-exec
+  (λ (cmd args)
+    (when (member (car args) '("rm" "rmdir" "format"))
+      (log-warning "Blocked destructive command: ~a" cmd)
+      (hook-cancel "Destructive command blocked"))))</code></pre>
+    <p>Pre-hooks receive the action's arguments and can return:</p>
+    <ul>
+      <li><strong>Modified arguments</strong> — change what the action sees</li>
+      <li><strong>Cancel</strong> — prevent the action entirely</li>
+      <li><strong>Pass-through</strong> — let the action proceed unchanged</li>
+    </ul>
+
+    <h3>Post-hooks: After It Happens</h3>
+    <p>Post-hooks run after an action completes. They receive the result and can transform it:</p>
+    <pre><code>; Log all file writes for audit
+(define-hook 'post-file-write
+  (λ (path content result)
+    (audit-log! "file-write" path)
+    result))  ; return the original result</code></pre>
+    <p>Post-hooks are perfect for observability — logging, metrics, and notifications.</p>
+
+    <h3>Error-hooks: When Things Go Wrong</h3>
+    <p>Error hooks fire when an action fails. They can retry, fallback, or transform the error:</p>
+    <pre><code>; Retry failed provider calls with exponential backoff
+(define-hook 'error-provider-call
+  (λ (error context)
+    (if (rate-limit-error? error)
+        (begin
+          (sleep (expt 2 (context-retry-count context)))
+          (hook-retry))
+        (hook-propagate error))))</code></pre>
+
+    <h2>Hook Registration</h2>
+    <p>Hooks are registered in extension initialization:</p>
+    <pre><code>#lang racket
+(provide (all-defined-out))
+(require q/extension)
+
+(define-extension audit-extension
+  #:name "audit-logger"
+  #:hooks
+  (list (pre-hook 'file-read #'audit-file-read)
+        (pre-hook 'file-write #'audit-file-write)
+        (post-hook 'shell-exec #'log-command-result)
+        (error-hook 'provider-call #'handle-provider-error)))</code></pre>
+    <p>Extensions declare their hooks upfront. The core validates them at load time — invalid hook points are caught immediately, not at runtime.</p>
+
+    <h2>Execution Order</h2>
+    <p>Multiple extensions can register hooks at the same point. Execution order is deterministic:</p>
+    <ol>
+      <li>Pre-hooks run in registration order</li>
+      <li>The core action executes</li>
+      <li>Post-hooks run in registration order</li>
+      <li>If any step fails, error hooks run in reverse order</li>
+    </ol>
+    <p>This predictability makes debugging extensions straightforward.</p>
+
+    <h2>Available Hook Points</h2>
+    <p>q exposes hook points across the agent lifecycle:</p>
+    <ul>
+      <li><code>turn-start</code> / <code>turn-end</code> — agent turn boundaries</li>
+      <li><code>file-read</code> / <code>file-write</code> — file operations</li>
+      <li><code>shell-exec</code> — shell command execution</li>
+      <li><code>provider-call</code> — LLM provider calls</li>
+      <li><code>goal-transition</code> — GSD state machine transitions</li>
+      <li><code>context-assembly</code> — prompt construction</li>
+    </ul>
+
+    <blockquote>"Hooks let us add audit logging, rate limiting, and custom guard policies without touching a single line of core agent code." — q contributor</blockquote>
+
+    <div class="post-nav">
+      <a href="provider-abstraction.html">← The Provider Abstraction</a>
+      <a href="typed-racket-migration.html">Migrating to Typed Racket →</a>
+    </div>
+
+  </div>
+</div>
+
+<footer>
+  <div class="container">
+    <div class="links">
+      <a href="https://github.com/coinerd/q" target="_blank">GitHub</a>
+      <a href="https://github.com/coinerd/q/blob/main/LICENSE" target="_blank">MIT License</a>
+      <a href="https://github.com/coinerd/q/blob/main/CONTRIBUTING.md" target="_blank">Contributing</a>
+    </div>
+    <p>© 2026 q contributors. Built with Racket 🎾</p>
+  </div>
+</footer>
+
+</body>
+</html>

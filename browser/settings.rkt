@@ -29,7 +29,8 @@
          screenshot-max-bytes ; exact-nonnegative-integer?
          sidecar-path ; (or/c string? #f)
          sidecar-timeout-ms ; exact-nonnegative-integer?
-         profile-kind) ; symbol? — 'ephemeral | 'persistent
+         profile-kind ; symbol? — 'ephemeral | 'persistent
+         headless?) ; boolean? — launch browser without visible GUI
   #:transparent)
 
 ;; ---------------------------------------------------------------------------
@@ -49,7 +50,8 @@
                     524288 ; screenshot-max-bytes (512KB)
                     #f ; sidecar-path (auto-discover)
                     60000 ; sidecar-timeout-ms (60s)
-                    'ephemeral)) ; profile-kind
+                    'ephemeral ; profile-kind
+                    #t)) ; headless? — safe default
 
 ;; ---------------------------------------------------------------------------
 ;; Parameter for current session
@@ -60,6 +62,9 @@
 ;; ---------------------------------------------------------------------------
 ;; Load from q runtime settings
 ;; ---------------------------------------------------------------------------
+
+(define (json-null->false v)
+  (if (eq? v 'null) #f v))
 
 (define (load-browser-settings q-settings)
   (define bs (setting-ref q-settings 'browser (hash)))
@@ -73,6 +78,7 @@
                     (hash-ref bs 'max-actions-per-session 100)
                     (hash-ref bs 'default-timeout-ms 30000)
                     (hash-ref bs 'screenshot-max-bytes 524288)
-                    (hash-ref bs 'sidecar-path #f)
+                    (json-null->false (hash-ref bs 'sidecar-path #f))
                     (hash-ref bs 'sidecar-timeout-ms 60000)
-                    (hash-ref bs 'profile-kind 'ephemeral)))
+                    (hash-ref bs 'profile-kind 'ephemeral)
+                    (hash-ref bs 'headless? #t)))

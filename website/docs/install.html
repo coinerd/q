@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Installation Guide — q Agent</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --bg-card: #161b22; --bg-code: #1c2128;
+      --border: #30363d; --text: #e6edf3; --text-dim: #8b949e;
+      --accent: #58a6ff; --accent2: #7ee787; --accent3: #d2a8ff;
+      --warn: #f0883e; --radius: 12px; --max-w: 1120px;
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code { background: var(--bg-code); border: 1px solid var(--border); border-radius: 6px; padding: 2px 7px; font-size: 0.88em; font-family: 'SF Mono', 'Fira Code', monospace; }
+    pre { background: var(--bg-code); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; overflow-x: auto; margin: 16px 0; }
+    pre code { background: none; border: none; padding: 0; font-size: 0.9em; }
+    .container { max-width: var(--max-w); margin: 0 auto; padding: 0 24px; }
+    nav { border-bottom: 1px solid var(--border); padding: 14px 0; position: sticky; top: 0; background: var(--bg); z-index: 100; }
+    nav .container { display: flex; justify-content: space-between; align-items: center; }
+    .logo { font-size: 1.3em; font-weight: 700; color: var(--text); }
+    .logo span { color: var(--accent); }
+    nav ul { list-style: none; display: flex; gap: 28px; }
+    nav a { color: var(--text-dim); font-size: 0.95em; }
+    nav a:hover, nav a.active { color: var(--text); text-decoration: none; }
+    .page-header { padding: 72px 0 32px; border-bottom: 1px solid var(--border); }
+    .page-header h1 { font-size: 2.4em; margin-bottom: 8px; }
+    .page-header p { color: var(--text-dim); font-size: 1.1em; max-width: 600px; }
+    .breadcrumb { margin-bottom: 16px; }
+    .breadcrumb a { color: var(--text-dim); font-size: 0.9em; }
+    .breadcrumb span { color: var(--text-dim); margin: 0 6px; }
+    article { padding: 48px 0; }
+    article h2 { font-size: 1.6em; margin: 32px 0 16px; color: var(--accent2); }
+    article h3 { font-size: 1.25em; margin: 24px 0 12px; color: var(--accent3); }
+    article p { margin: 12px 0; max-width: 720px; }
+    article ul, article ol { margin: 12px 0 12px 24px; max-width: 720px; }
+    article li { margin: 6px 0; }
+    article blockquote { border-left: 3px solid var(--accent); padding: 8px 16px; margin: 16px 0; color: var(--text-dim); max-width: 720px; }
+    .status-badge { display: inline-block; background: rgba(126,231,135,0.15); color: var(--accent2); border-radius: 20px; padding: 4px 12px; font-size: 0.85em; margin-bottom: 16px; }
+    .nav-back { display: inline-flex; align-items: center; gap: 6px; color: var(--text-dim); margin-bottom: 24px; font-size: 0.95em; }
+    footer { border-top: 1px solid var(--border); padding: 32px 0; text-align: center; color: var(--text-dim); font-size: 0.9em; }
+    footer .links { display: flex; gap: 24px; justify-content: center; margin-bottom: 16px; }
+    @media (max-width: 768px) { nav ul { gap: 16px; } .page-header { padding: 48px 0 24px; } .page-header h1 { font-size: 1.8em; } }
+  </style>
+</head>
+<body>
+<nav>
+  <div class="container">
+    <a href="../index.html" class="logo"><span>q</span> agent</a>
+    <ul>
+      <li><a href="../index.html">Home</a></li>
+      <li><a href="../docs.html">Docs</a></li>
+      <li><a href="../blog.html">Blog</a></li>
+      <li><a href="https://github.com/coinerd/q" target="_blank">GitHub ↗</a></li>
+    </ul>
+  </div>
+</nav>
+<div class="page-header">
+  <div class="container">
+    <div class="breadcrumb"><a href="../docs.html">Docs</a><span>›</span>Installation Guide</div>
+    <h1>📥 Installation Guide</h1>
+    <p>Get q installed and running on macOS or Linux in minutes.</p>
+  </div>
+</div>
+
+<article>
+  <div class="container">
+
+    <h2>Prerequisites</h2>
+    <ul>
+      <li><strong>Racket 8.10+</strong> — q is built on Racket. Install from <a href="https://racket-lang.org/" target="_blank">racket-lang.org</a> or your package manager.</li>
+      <li><strong>An LLM provider API key</strong> — OpenAI, Anthropic, or Google Gemini.</li>
+      <li><strong>Git</strong> — for cloning the repository.</li>
+    </ul>
+
+    <h2>One-Command Install</h2>
+    <p>The fastest way to get started:</p>
+    <pre><code>bash &lt;(curl -sL https://raw.githubusercontent.com/coinerd/q/main/install.sh)</code></pre>
+    <p>This script clones the repo, installs Racket dependencies, and sets up the <code>q</code> command on your PATH.</p>
+
+    <h2>Manual Install</h2>
+    <pre><code># Clone the repository
+git clone https://github.com/coinerd/q.git
+cd q
+
+# Install Racket dependencies
+raco pkg install
+
+# Link the q command
+raco exe -o /usr/local/bin/q main.rkt</code></pre>
+
+    <h2>Configure Your Provider</h2>
+    <p>Run the init wizard to set up your first provider:</p>
+    <pre><code>q init</code></pre>
+    <p>This walks you through selecting a provider, entering your API key, and choosing defaults.</p>
+
+    <h3>Environment Variables</h3>
+    <p>Alternatively, set your API key via environment variable:</p>
+    <pre><code># OpenAI
+export OPENAI_API_KEY="sk-..."
+
+# Anthropic
+export ANTHROPIC_API_KEY="sk-ant-..."
+
+# Google Gemini
+export GEMINI_API_KEY="..."</code></pre>
+
+    <h2>Troubleshooting</h2>
+
+    <h3>Racket Not Found</h3>
+    <p>Make sure Racket is on your PATH: <code>racket --version</code>. If not, add it:</p>
+    <pre><code>export PATH="$PATH:/Applications/Racket v8.10/bin"</code></pre>
+
+    <h3>Permission Denied on Install</h3>
+    <p>If the one-command installer fails, try manual install and use <code>sudo</code> for the <code>raco exe</code> step, or install to a user-writable directory.</p>
+
+    <h3>API Key Issues</h3>
+    <p>Verify your key works with <code>q config test</code>. Check that the key has the right model access for your chosen provider.</p>
+
+    <div style="margin-top: 48px; padding: 24px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);">
+      <h3 style="margin-top: 0;">Next Steps</h3>
+      <p>Now that q is installed, learn how to use it:</p>
+      <ul>
+        <li><a href="goal-mode.html">🎯 Goal Mode Guide</a> — autonomous task execution</li>
+        <li><a href="providers.html">🔌 Provider Setup</a> — configure your LLM provider</li>
+        <li><a href="configuration.html">🔧 Configuration Reference</a> — customize q's behavior</li>
+      </ul>
+    </div>
+
+  </div>
+</article>
+
+<footer>
+  <div class="container">
+    <div class="links">
+      <a href="https://github.com/coinerd/q" target="_blank">GitHub</a>
+      <a href="https://github.com/coinerd/q/blob/main/LICENSE" target="_blank">MIT License</a>
+      <a href="https://github.com/coinerd/q/blob/main/CONTRIBUTING.md" target="_blank">Contributing</a>
+      <a href="https://github.com/coinerd/q/blob/main/CHANGELOG.md" target="_blank">Changelog</a>
+    </div>
+    <p>© 2026 q Agent Project · Built with ❤️ and Racket</p>
+  </div>
+</footer>
+</body>
+</html>

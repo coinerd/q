@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sandboxing LLM-Generated Shell Commands — q Agent Blog</title>
+  <meta name="description" content="Security is not optional. Here's how q uses shell quoting, resource limits, and timeout-based sandboxing to safely execute AI-generated commands.">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --bg-card: #161b22; --bg-code: #1c2128; --border: #30363d;
+      --text: #e6edf3; --text-dim: #8b949e; --accent: #58a6ff; --accent2: #7ee787;
+      --accent3: #d2a8ff; --warn: #f0883e; --radius: 12px; --max-w: 760px;
+    }
+    html { scroll-behavior: smooth; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; -webkit-font-smoothing: antialiased; }
+    a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+    code { background: var(--bg-code); border: 1px solid var(--border); border-radius: 6px; padding: 2px 7px; font-size: 0.88em; font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; }
+    pre { background: var(--bg-code); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.2em 1.5em; overflow-x: auto; font-size: 0.88em; line-height: 1.6; }
+    pre code { background: none; border: none; padding: 0; }
+    .container { max-width: var(--max-w); margin: 0 auto; padding: 0 24px; }
+    nav { position: sticky; top: 0; z-index: 100; background: rgba(13,17,23,0.85); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+    nav .container { display: flex; align-items: center; justify-content: space-between; height: 56px; }
+    nav .logo { font-weight: 800; font-size: 1.25em; letter-spacing: -0.5px; }
+    nav .logo span { color: var(--accent); }
+    nav ul { display: flex; gap: 28px; list-style: none; }
+    nav a { color: var(--text-dim); font-size: 0.92em; font-weight: 500; } nav a:hover { color: var(--text); text-decoration: none; } nav a.active { color: var(--accent); }
+    .post-header { padding: 64px 0 24px; }
+    .post-header .breadcrumb { color: var(--text-dim); font-size: 0.88em; margin-bottom: 16px; }
+    .post-header .breadcrumb a { color: var(--text-dim); } .post-header .breadcrumb a:hover { color: var(--accent); }
+    .post-header .meta { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+    .post-header .date { color: var(--text-dim); font-size: 0.9em; }
+    .post-header .tag { background: var(--bg-code); border: 1px solid var(--border); border-radius: 100px; padding: 4px 14px; font-size: 0.8em; color: var(--accent); font-weight: 500; }
+    .post-header h1 { font-size: clamp(1.6rem, 4vw, 2.2rem); font-weight: 800; letter-spacing: -0.5px; line-height: 1.3; margin-bottom: 16px; }
+    .post-header .subtitle { color: var(--text-dim); font-size: 1.1em; line-height: 1.6; }
+    .content { padding: 24px 0 80px; }
+    .content h2 { font-size: 1.4em; font-weight: 700; margin: 40px 0 16px; }
+    .content h3 { font-size: 1.15em; font-weight: 600; margin: 28px 0 12px; }
+    .content p { margin-bottom: 16px; }
+    .content ul, .content ol { margin: 0 0 16px 24px; }
+    .content li { margin-bottom: 8px; }
+    .content pre { margin: 16px 0; }
+    .content blockquote { border-left: 4px solid var(--accent); padding-left: 20px; margin: 20px 0; color: var(--text-dim); font-style: italic; }
+    .post-nav { display: flex; justify-content: space-between; padding: 32px 0; border-top: 1px solid var(--border); margin-top: 48px; }
+    .post-nav a { color: var(--text-dim); font-size: 0.92em; }
+    .post-nav a:hover { color: var(--accent); }
+    footer { border-top: 1px solid var(--border); padding: 40px 0; text-align: center; color: var(--text-dim); font-size: 0.9em; }
+    footer .links { display: flex; gap: 24px; justify-content: center; margin-bottom: 16px; }
+    @media (max-width: 768px) { nav ul { gap: 16px; } .container { padding: 0 16px; } }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="container">
+    <a href="../index.html" class="logo"><span>q</span> agent</a>
+    <ul>
+      <li><a href="../index.html">Home</a></li>
+      <li><a href="../docs.html">Docs</a></li>
+      <li><a href="../blog.html" class="active">Blog</a></li>
+      <li><a href="https://github.com/coinerd/q" target="_blank">GitHub ↗</a></li>
+    </ul>
+  </div>
+</nav>
+
+<div class="post-header">
+  <div class="container">
+    <div class="breadcrumb"><a href="../blog.html">Blog</a></div>
+    <div class="meta">
+      <span class="date">May 22, 2026</span>
+      <span class="tag">Architecture</span>
+    </div>
+    <h1>Sandboxing LLM-Generated Shell Commands</h1>
+    <p class="subtitle">Security is not optional. Here's how q uses shell quoting, resource limits, and timeout-based sandboxing to safely execute AI-generated commands.</p>
+  </div>
+</div>
+
+<div class="content">
+  <div class="container">
+
+    <p>AI coding agents can execute shell commands. That's what makes them powerful — and what makes them dangerous. A misinterpreted prompt or a confused model could run <code>rm -rf /</code> or exfiltrate environment variables. Security isn't optional; it's foundational.</p>
+
+    <h2>The Threat Model</h2>
+    <p>We design against three threat categories:</p>
+    <ol>
+      <li><strong>Prompt injection</strong> — malicious instructions hidden in files the agent reads</li>
+      <li><strong>Model confusion</strong> — the LLM generates destructive commands by mistake</li>
+      <li><strong>Tool escape</strong> — a compromised tool tries to access the host system</li>
+    </ol>
+    <p>We can't prevent all of these — but we can <strong>reduce the blast radius</strong>.</p>
+
+    <h2>Layer 1: Shell Quoting</h2>
+    <p>All shell commands pass through strict quoting before execution:</p>
+    <pre><code>; Commands are constructed with explicit argument lists
+(shell-exec "git" '("commit" "-m" "fix: resolve timeout issue"))
+
+; Never: (shell-exec (format "git commit -m ~a" user-input))</code></pre>
+    <p>Arguments are individually quoted, preventing shell expansion and injection.</p>
+
+    <h2>Layer 2: Subprocess Limits</h2>
+    <p>Shell commands run through a managed subprocess with configurable restrictions:</p>
+    <ul>
+      <li><strong>Timeouts</strong> — commands that take too long are killed</li>
+      <li><strong>Working directory</strong> — commands run in the project root, not <code>/</code></li>
+      <li><strong>Allow/deny lists</strong> — optionally restrict which commands can run</li>
+      <li><strong>Resource limits</strong> — CPU and memory caps on subprocesses</li>
+    </ul>
+
+    <h2>Layer 3: File Scope</h2>
+    <p>File tools operate within a configurable project root:</p>
+    <pre><code>; File reads are scoped to the project directory
+(file-read "src/main.rkt")  ; ✅ within project
+(file-read "/etc/passwd")   ; ❌ path traversal blocked</code></pre>
+    <p>Path traversal attacks (<code>../../etc/passwd</code>) are caught and rejected.</p>
+
+    <h2>Layer 4: Racket Sandbox</h2>
+    <p>For code evaluation, q uses Racket's built-in sandbox:</p>
+    <ul>
+      <li>Restricted module imports</li>
+      <li>Memory and CPU limits</li>
+      <li>No filesystem access from evaluated code</li>
+      <li>No network access</li>
+    </ul>
+
+    <h2>Layer 5: Safe Mode</h2>
+    <p>For maximum protection, enable safe mode:</p>
+    <pre><code>q --safe-mode chat</code></pre>
+    <p>Safe mode adds confirmation prompts for all destructive operations. Every file write, shell command, and network request requires explicit user approval.</p>
+
+    <h2>The Honest Assessment</h2>
+    <blockquote>
+      <p>Sandbox escape is still possible with sufficient effort — this is a mitigation, not a guarantee.</p>
+    </blockquote>
+    <p>We're honest about the limits. These layers reduce risk significantly, but a determined attacker with prompt injection could potentially bypass them. That's why we also emphasize:</p>
+    <ul>
+      <li><strong>Audit logs</strong> — every command is recorded in the session log</li>
+      <li><strong>Replay</strong> — you can replay sessions to see exactly what ran</li>
+      <li><strong>Safe mode by default</strong> — for new users, safe mode is on</li>
+    </ul>
+
+    <div class="post-nav">
+      <a href="event-bus-architecture.html">← Why We Built an Event Bus</a>
+      <a href="small-trusted-core.html">The Small Trusted Core Principle →</a>
+    </div>
+
+  </div>
+</div>
+
+<footer>
+  <div class="container">
+    <div class="links">
+      <a href="https://github.com/coinerd/q" target="_blank">GitHub</a>
+      <a href="https://github.com/coinerd/q/blob/main/LICENSE" target="_blank">MIT License</a>
+      <a href="https://github.com/coinerd/q/blob/main/CONTRIBUTING.md" target="_blank">Contributing</a>
+    </div>
+    <p>© 2026 q contributors. Built with Racket 🎾</p>
+  </div>
+</footer>
+
+</body>
+</html>

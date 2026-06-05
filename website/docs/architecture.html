@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Architecture Overview — q Agent</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --bg-card: #161b22; --bg-code: #1c2128;
+      --border: #30363d; --text: #e6edf3; --text-dim: #8b949e;
+      --accent: #58a6ff; --accent2: #7ee787; --accent3: #d2a8ff;
+      --warn: #f0883e; --radius: 12px; --max-w: 1120px;
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code { background: var(--bg-code); border: 1px solid var(--border); border-radius: 6px; padding: 2px 7px; font-size: 0.88em; font-family: 'SF Mono', 'Fira Code', monospace; }
+    pre { background: var(--bg-code); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; overflow-x: auto; margin: 16px 0; }
+    pre code { background: none; border: none; padding: 0; font-size: 0.9em; }
+    .container { max-width: var(--max-w); margin: 0 auto; padding: 0 24px; }
+    nav { border-bottom: 1px solid var(--border); padding: 14px 0; position: sticky; top: 0; background: var(--bg); z-index: 100; }
+    nav .container { display: flex; justify-content: space-between; align-items: center; }
+    .logo { font-size: 1.3em; font-weight: 700; color: var(--text); }
+    .logo span { color: var(--accent); }
+    nav ul { list-style: none; display: flex; gap: 28px; }
+    nav a { color: var(--text-dim); font-size: 0.95em; }
+    nav a:hover, nav a.active { color: var(--text); text-decoration: none; }
+    .page-header { padding: 72px 0 32px; border-bottom: 1px solid var(--border); }
+    .page-header h1 { font-size: 2.4em; margin-bottom: 8px; }
+    .page-header p { color: var(--text-dim); font-size: 1.1em; max-width: 600px; }
+    .breadcrumb { margin-bottom: 16px; }
+    .breadcrumb a { color: var(--text-dim); font-size: 0.9em; }
+    .breadcrumb span { color: var(--text-dim); margin: 0 6px; }
+    article { padding: 48px 0; }
+    article h2 { font-size: 1.6em; margin: 32px 0 16px; color: var(--accent2); }
+    article h3 { font-size: 1.25em; margin: 24px 0 12px; color: var(--accent3); }
+    article p { margin: 12px 0; max-width: 720px; }
+    article ul, article ol { margin: 12px 0 12px 24px; max-width: 720px; }
+    article li { margin: 6px 0; }
+    article blockquote { border-left: 3px solid var(--accent); padding: 8px 16px; margin: 16px 0; color: var(--text-dim); max-width: 720px; }
+    .status-badge { display: inline-block; background: rgba(126,231,135,0.15); color: var(--accent2); border-radius: 20px; padding: 4px 12px; font-size: 0.85em; margin-bottom: 16px; }
+    .nav-back { display: inline-flex; align-items: center; gap: 6px; color: var(--text-dim); margin-bottom: 24px; font-size: 0.95em; }
+    footer { border-top: 1px solid var(--border); padding: 32px 0; text-align: center; color: var(--text-dim); font-size: 0.9em; }
+    footer .links { display: flex; gap: 24px; justify-content: center; margin-bottom: 16px; }
+    @media (max-width: 768px) { nav ul { gap: 16px; } .page-header { padding: 48px 0 24px; } .page-header h1 { font-size: 1.8em; } }
+  </style>
+</head>
+<body>
+<nav>
+  <div class="container">
+    <a href="../index.html" class="logo"><span>q</span> agent</a>
+    <ul>
+      <li><a href="../index.html">Home</a></li>
+      <li><a href="../docs.html">Docs</a></li>
+      <li><a href="../blog.html">Blog</a></li>
+      <li><a href="https://github.com/coinerd/q" target="_blank">GitHub ↗</a></li>
+    </ul>
+  </div>
+</nav>
+<div class="page-header">
+  <div class="container">
+    <div class="breadcrumb"><a href="../docs.html">Docs</a><span>›</span>Architecture</div>
+    <h1>🏛️ Architecture Overview</h1>
+    <p>Understand how q works under the hood — the event bus, the agent loop, and the state machine.</p>
+  </div>
+</div>
+
+<article>
+  <div class="container">
+
+    <h2>Core Design Principles</h2>
+    <p>q is built on a <strong>Small Trusted Core</strong> (<a href="adr-small-trusted-core.html">ADR-1</a>) — a minimal runtime responsible for exactly three things:</p>
+    <ol>
+      <li><strong>Message routing</strong> — dispatching between user, LLM, and tools</li>
+      <li><strong>Event dispatch</strong> — emitting typed events to all subscribers</li>
+      <li><strong>Session lifecycle</strong> — creating, persisting, and closing sessions</li>
+    </ol>
+    <p>Everything else — tools, LLM providers, UI frontends — is pluggable outside the core.</p>
+
+    <h2>Event Bus</h2>
+    <p>The central nervous system of q. Every significant action emits a typed event:</p>
+    <pre><code>UserMessage → MessageSent → ToolInvoked → ToolResult → AssistantResponse</code></pre>
+    <p>Multiple consumers subscribe independently — the TUI, session logger, extensions, and JSON interface all react to the same events without coupling.</p>
+    <p>See <a href="adr-event-bus.html">ADR-3: Event Bus Architecture</a> for the full design.</p>
+
+    <h2>Agent Loop</h2>
+    <p>The main loop follows a turn-based architecture:</p>
+    <ol>
+      <li><strong>Context assembly</strong> — build the prompt with system instructions, history, tools, and extension hooks</li>
+      <li><strong>LLM call</strong> — send the context to the provider, stream the response</li>
+      <li><strong>Tool execution</strong> — if the LLM requests tool calls, execute them</li>
+      <li><strong>Event emission</strong> — emit results to all subscribers</li>
+      <li><strong>State update</strong> — record conclusions, update session state</li>
+    </ol>
+    <p>See <a href="adr-context-manager.html">ADR-12: Context Assembly</a> for how context is built dynamically.</p>
+
+    <h2>GSD State Machine</h2>
+    <p>When running in Goal Mode, the agent loop is governed by the GSD FSM:</p>
+    <pre><code>idle → exploration → planning → implementation → verification → debugging
+                                    ↑                                  │
+                                    └──────────────────────────────────┘</code></pre>
+    <p>Each state transition requires evidence. See <a href="adr-gsd-state-machine.html">ADR-11</a> for details.</p>
+
+    <h2>Session Storage</h2>
+    <p>Sessions are stored as append-only JSONL files (<a href="adr-session-log.html">ADR-2</a>). This makes them:</p>
+    <ul>
+      <li><strong>Crash-safe</strong> — just read up to the last valid line</li>
+      <li><strong>Auditable</strong> — <code>grep</code> or <code>jq</code> work directly</li>
+      <li><strong>Replayable</strong> — replay events to reconstruct any state</li>
+    </ul>
+
+    <h2>Extension System</h2>
+    <p>Extensions hook into the event bus to add custom behavior:</p>
+    <ul>
+      <li><strong>Pre/post hooks</strong> — intercept messages, tool calls, and responses</li>
+      <li><strong>Custom tools</strong> — add new capabilities to the agent</li>
+      <li><strong>Event handlers</strong> — react to any event type</li>
+    </ul>
+    <p>See <a href="adr-extension-hook-model.html">ADR-6: Extension Hook Model</a> for the full extension API.</p>
+
+    <h2>Security Model</h2>
+    <p>Security is enforced at the architecture level:</p>
+    <ul>
+      <li><strong>Sandboxing</strong> — shell commands run in restricted environments (<a href="adr-sandboxing-boundary.html">ADR-7</a>)</li>
+      <li><strong>Credential redaction</strong> — API keys are never logged (<a href="adr-credential-redaction.html">ADR-9</a>)</li>
+      <li><strong>Interface separation</strong> — untrusted code never touches the core (<a href="adr-interface-separation.html">ADR-5</a>)</li>
+    </ul>
+
+  </div>
+</article>
+
+<footer>
+  <div class="container">
+    <div class="links">
+      <a href="https://github.com/coinerd/q" target="_blank">GitHub</a>
+      <a href="https://github.com/coinerd/q/blob/main/LICENSE" target="_blank">MIT License</a>
+      <a href="https://github.com/coinerd/q/blob/main/CONTRIBUTING.md" target="_blank">Contributing</a>
+      <a href="https://github.com/coinerd/q/blob/main/CHANGELOG.md" target="_blank">Changelog</a>
+    </div>
+    <p>© 2026 q Agent Project · Built with ❤️ and Racket</p>
+  </div>
+</footer>
+</body>
+</html>

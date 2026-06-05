@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Building a Native TUI Without Electron — q Agent Blog</title>
+  <meta name="description" content="Why we chose Racket's built-in text rendering over Electron, and how the TUI subscribes to events for real-time display of streaming and goal progress.">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --bg-card: #161b22; --bg-code: #1c2128; --border: #30363d;
+      --text: #e6edf3; --text-dim: #8b949e; --accent: #58a6ff; --accent2: #7ee787;
+      --accent3: #d2a8ff; --warn: #f0883e; --radius: 12px; --max-w: 760px;
+    }
+    html { scroll-behavior: smooth; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; -webkit-font-smoothing: antialiased; }
+    a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+    code { background: var(--bg-code); border: 1px solid var(--border); border-radius: 6px; padding: 2px 7px; font-size: 0.88em; font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; }
+    pre { background: var(--bg-code); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.2em 1.5em; overflow-x: auto; font-size: 0.88em; line-height: 1.6; }
+    pre code { background: none; border: none; padding: 0; }
+    .container { max-width: var(--max-w); margin: 0 auto; padding: 0 24px; }
+    nav { position: sticky; top: 0; z-index: 100; background: rgba(13,17,23,0.85); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+    nav .container { display: flex; align-items: center; justify-content: space-between; height: 56px; }
+    nav .logo { font-weight: 800; font-size: 1.25em; letter-spacing: -0.5px; }
+    nav .logo span { color: var(--accent); }
+    nav ul { display: flex; gap: 28px; list-style: none; }
+    nav a { color: var(--text-dim); font-size: 0.92em; font-weight: 500; } nav a:hover { color: var(--text); text-decoration: none; } nav a.active { color: var(--accent); }
+    .post-header { padding: 64px 0 24px; }
+    .post-header .breadcrumb { color: var(--text-dim); font-size: 0.88em; margin-bottom: 16px; }
+    .post-header .breadcrumb a { color: var(--text-dim); } .post-header .breadcrumb a:hover { color: var(--accent); }
+    .post-header .meta { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+    .post-header .date { color: var(--text-dim); font-size: 0.9em; }
+    .post-header .tag { background: var(--bg-code); border: 1px solid var(--border); border-radius: 100px; padding: 4px 14px; font-size: 0.8em; color: var(--accent); font-weight: 500; }
+    .post-header h1 { font-size: clamp(1.6rem, 4vw, 2.2rem); font-weight: 800; letter-spacing: -0.5px; line-height: 1.3; margin-bottom: 16px; }
+    .post-header .subtitle { color: var(--text-dim); font-size: 1.1em; line-height: 1.6; }
+    .content { padding: 24px 0 80px; }
+    .content h2 { font-size: 1.4em; font-weight: 700; margin: 40px 0 16px; }
+    .content h3 { font-size: 1.15em; font-weight: 600; margin: 28px 0 12px; }
+    .content p { margin-bottom: 16px; }
+    .content ul, .content ol { margin: 0 0 16px 24px; }
+    .content li { margin-bottom: 8px; }
+    .content pre { margin: 16px 0; }
+    .content blockquote { border-left: 4px solid var(--accent); padding-left: 20px; margin: 20px 0; color: var(--text-dim); font-style: italic; }
+    .post-nav { display: flex; justify-content: space-between; padding: 32px 0; border-top: 1px solid var(--border); margin-top: 48px; }
+    .post-nav a { color: var(--text-dim); font-size: 0.92em; }
+    .post-nav a:hover { color: var(--accent); }
+    footer { border-top: 1px solid var(--border); padding: 40px 0; text-align: center; color: var(--text-dim); font-size: 0.9em; }
+    footer .links { display: flex; gap: 24px; justify-content: center; margin-bottom: 16px; }
+    @media (max-width: 768px) { nav ul { gap: 16px; } .container { padding: 0 16px; } }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="container">
+    <a href="../index.html" class="logo"><span>q</span> agent</a>
+    <ul>
+      <li><a href="../index.html">Home</a></li>
+      <li><a href="../docs.html">Docs</a></li>
+      <li><a href="../blog.html" class="active">Blog</a></li>
+      <li><a href="https://github.com/coinerd/q" target="_blank">GitHub ↗</a></li>
+    </ul>
+  </div>
+</nav>
+
+<div class="post-header">
+  <div class="container">
+    <div class="breadcrumb"><a href="../blog.html">Blog</a></div>
+    <div class="meta">
+      <span class="date">March 15, 2026</span>
+      <span class="tag">Engineering</span>
+    </div>
+    <h1>Building a Native TUI Without Electron</h1>
+    <p class="subtitle">Why we chose Racket's built-in text rendering over Electron, and how the TUI subscribes to events for real-time display of streaming and goal progress.</p>
+  </div>
+</div>
+
+<div class="content">
+  <div class="container">
+
+    <p>Most AI coding tools use Electron for their UI — a web browser in disguise. We chose a different path: a native terminal user interface built directly on Racket's text rendering capabilities. Here's why, and how it works.</p>
+
+    <h2>Why Not Electron?</h2>
+    <p>Electron is the easy choice. Everyone knows HTML/CSS/JS, and the rendering is polished. But for q, it has three fundamental problems:</p>
+    <ul>
+      <li><strong>Resource overhead</strong> — 200MB+ RAM just for the UI framework. On a developer's machine already running an IDE, browser, and containers, that's significant.</li>
+      <li><strong>Startup time</strong> — 2-3 seconds to boot Chromium before anything renders. q starts in under 200ms.</li>
+      <li><strong>Distribution complexity</strong> — platform-specific builds, auto-update mechanisms, code signing. A Racket TUI is a single binary.</li>
+    </ul>
+    <p>For an agent that runs in the terminal anyway, a native TUI is the natural fit.</p>
+
+    <h2>Racket's Text Rendering</h2>
+    <p>Racket provides a capable text rendering stack:</p>
+    <pre><code>; The TUI is built on Racket's racket/text and terminal capabilities
+(require racket/port
+         (prefix-in term: "terminal.rkt"))
+
+; Basic rendering
+(define (render-message msg)
+  (term:move-cursor row col)
+  (term:write-styled msg
+    #:fg (message-color msg)
+    #:bold? (important? msg)))</code></pre>
+    <p>Racket handles ANSI escape codes, cursor positioning, color, and Unicode. The TUI uses these primitives to build a rich interface.</p>
+
+    <h2>The Event Subscription Model</h2>
+    <p>The TUI doesn't poll or request data — it subscribes to the event bus:</p>
+    <pre><code>; TUI subscribes to relevant events
+(event-subscribe! bus 'stream-chunk
+  (λ (event)
+    (render-token (stream-chunk-delta event))))
+
+(event-subscribe! bus 'tool-call
+  (λ (event)
+    (render-tool-indicator
+      (tool-call-name event)
+      (tool-call-args event))))
+
+(event-subscribe! bus 'goal-transition
+  (λ (event)
+    (update-status-bar
+      (goal-transition-from event)
+      (goal-transition-to event))))</code></pre>
+    <p>Each event type triggers a specific rendering action. The TUI is a pure consumer of events — it never modifies agent state.</p>
+
+    <h2>The Rendering Pipeline</h2>
+    <p>The TUI maintains a virtual screen buffer. When events arrive, they update the buffer. A separate render loop draws the buffer to the terminal at 60fps (or whatever the terminal supports):</p>
+    <pre><code>; Simplified render loop
+(define (render-loop)
+  (sync/handle-evt
+    (alarm-evt (+ (current-inexact-milliseconds) 16))  ; ~60fps
+    (λ (_)
+      (render-buffer-to-terminal!)
+      (render-loop))))</code></pre>
+    <p>This decoupling means events can arrive faster than the terminal can render — the buffer absorbs the difference.</p>
+
+    <h2>Keyboard Handling</h2>
+    <p>User input is handled through a dedicated input thread:</p>
+    <pre><code>(define (input-loop)
+  (define key (read-key))
+  (case key
+    [(enter) (handle-submit)]
+    [(ctrl-c) (handle-interrupt)]
+    [(ctrl-g) (handle-goal-command)]
+    [(up) (history-prev)]
+    [(down) (history-next)]
+    [else (insert-char key)])
+  (input-loop))</code></pre>
+    <p>The input thread and render loop run concurrently. Typing doesn't block rendering, and streaming output doesn't block input.</p>
+
+    <h2>Streaming Display</h2>
+    <p>Token-by-token streaming display is the most visible feature. Each <code>stream-chunk</code> event appends to the current message's text, and the render loop redraws the message area:</p>
+    <ul>
+      <li>Markdown is rendered in real-time (bold, code blocks, lists)</li>
+      <li>Syntax highlighting in code blocks</li>
+      <li>Word wrapping at terminal width</li>
+      <li>Scrolling when content exceeds the visible area</li>
+    </ul>
+
+    <h2>Goal Mode Visualization</h2>
+    <p>When goal mode is active, the TUI shows the GSD state machine in the status bar:</p>
+    <pre><code>┌─────────────────────────────────────────────┐
+│ q agent │ Goal: exploring (3/10 turns)       │
+├─────────────────────────────────────────────┤
+│ ... agent output ...                        │
+└─────────────────────────────────────────────┘</code></pre>
+    <p>State transitions animate in real-time. You see the agent move from exploring to planning to implementing — it's mesmerizing.</p>
+
+    <blockquote>"The TUI is q's killer feature. Watching the agent think, plan, and execute in real-time creates a fundamentally different interaction model than waiting for a response to complete." — early user</blockquote>
+
+    <div class="post-nav">
+      <a href="credential-redaction.html">← Credential Redaction</a>
+      <a href="context-compaction.html">Context Compaction →</a>
+    </div>
+
+  </div>
+</div>
+
+<footer>
+  <div class="container">
+    <div class="links">
+      <a href="https://github.com/coinerd/q" target="_blank">GitHub</a>
+      <a href="https://github.com/coinerd/q/blob/main/LICENSE" target="_blank">MIT License</a>
+      <a href="https://github.com/coinerd/q/blob/main/CONTRIBUTING.md" target="_blank">Contributing</a>
+    </div>
+    <p>© 2026 q contributors. Built with Racket 🎾</p>
+  </div>
+</footer>
+
+</body>
+</html>

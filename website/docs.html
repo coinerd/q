@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Documentation — q Agent</title>
+  <meta name="description" content="Comprehensive documentation for q — the local-first AI coding agent. Installation, configuration, architecture, guides, and API reference.">
+  <style>
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0d1117;
+      --bg-card:  #161b22;
+      --bg-code:  #1c2128;
+      --border:   #30363d;
+      --text:     #e6edf3;
+      --text-dim: #8b949e;
+      --accent:   #58a6ff;
+      --accent2:  #7ee787;
+      --accent3:  #d2a8ff;
+      --warn:     #f0883e;
+      --radius:   12px;
+      --max-w:    1120px;
+    }
+
+    html { scroll-beavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    code {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 2px 7px;
+      font-size: 0.88em;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    }
+
+    /* ── Layout ── */
+    .container { max-width: var(--max-w); margin: 0 auto; padding: 0 24px; }
+    section { padding: 80px 0; }
+    section:nth-child(even) { background: var(--bg-card); }
+
+    /* ── Nav ── */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(13,17,23,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    nav .container {
+      display: flex; align-items: center; justify-content: space-between;
+      height: 56px;
+    }
+    nav .logo { font-weight: 800; font-size: 1.25em; letter-spacing: -0.5px; }
+    nav .logo span { color: var(--accent); }
+    nav ul { display: flex; gap: 28px; list-style: none; }
+    nav a { color: var(--text-dim); font-size: 0.92em; font-weight: 500; }
+    nav a:hover { color: var(--text); text-decoration: none; }
+    nav a.active { color: var(--accent); }
+
+    /* ── Page Header ── */
+    .page-header {
+      padding: 80px 0 48px;
+      text-align: center;
+      background: linear-gradient(180deg, var(--bg) 0%, var(--bg-card) 100%);
+    }
+    .page-header h1 {
+      font-size: clamp(2rem, 5vw, 3rem);
+      font-weight: 800;
+      letter-spacing: -1px;
+      margin-bottom: 16px;
+    }
+    .page-header p {
+      color: var(--text-dim);
+      font-size: 1.15em;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    /* ── Quick Search Bar ── */
+    .search-bar {
+      max-width: 560px;
+      margin: 32px auto 0;
+      position: relative;
+    }
+    .search-bar input {
+      width: 100%;
+      padding: 16px 20px 16px 48px;
+      border-radius: 100px;
+      border: 1px solid var(--border);
+      background: var(--bg-code);
+      color: var(--text);
+      font-size: 1em;
+      outline: none;
+    }
+    .search-bar input::placeholder { color: var(--text-dim); }
+    .search-bar input:focus { border-color: var(--accent); }
+    .search-bar .search-icon {
+      position: absolute;
+      left: 18px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-dim);
+      font-size: 1.1em;
+    }
+
+    /* ── Section Headers ── */
+    .section-header {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+    .section-header h2 {
+      font-size: 1.8em;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 8px;
+    }
+    .section-header p {
+      color: var(--text-dim);
+      font-size: 1.05em;
+      max-width: 540px;
+      margin: 0 auto;
+    }
+
+    /* ── Doc Cards ── */
+    .doc-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 20px;
+    }
+
+    .doc-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+      transition: border-color 0.2s, transform 0.2s;
+      display: flex;
+      flex-direction: column;
+    }
+    .doc-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+      text-decoration: none;
+    }
+
+    .doc-card .card-icon {
+      font-size: 2em;
+      margin-bottom: 12px;
+    }
+    .doc-card h3 {
+      font-size: 1.1em;
+      font-weight: 700;
+      margin-bottom: 6px;
+      color: var(--text);
+    }
+    .doc-card p {
+      color: var(--text-dim);
+      font-size: 0.9em;
+      flex: 1;
+    }
+    .doc-card .card-links {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .doc-card .card-links a {
+      font-size: 0.88em;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .doc-card .card-links a:hover { color: var(--accent); text-decoration: none; }
+    .doc-card .card-links a .arrow { opacity: 0; transition: opacity 0.2s; }
+    .doc-card .card-links a:hover .arrow { opacity: 1; }
+
+    /* ── Version Badge ── */
+    .version-info {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 32px;
+    }
+    .version-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      padding: 8px 18px;
+      font-size: 0.85em;
+      color: var(--text-dim);
+    }
+    .version-badge strong { color: var(--text); }
+
+    /* ── Quick Reference ── */
+    .quick-ref {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .quick-ref-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+      gap: 16px;
+    }
+    .quick-ref-item {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .quick-ref-item .ref-header {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      font-weight: 700;
+      font-size: 0.95em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .quick-ref-item .ref-header .ref-icon { font-size: 1.1em; }
+    .quick-ref-item pre {
+      margin: 0;
+      border: none;
+      border-radius: 0;
+      font-size: 0.82em;
+      padding: 16px 20px;
+    }
+    .quick-ref-item pre code { background: none; border: none; padding: 0; }
+
+    /* ── Help CTA ── */
+    .help-cta {
+      max-width: 600px;
+      margin: 0 auto;
+      text-align: center;
+    }
+    .help-cta h3 { font-size: 1.3em; margin-bottom: 8px; }
+    .help-cta p { color: var(--text-dim); margin-bottom: 24px; }
+    .help-cta .btn-group { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 14px 32px;
+      border-radius: 100px;
+      font-weight: 600;
+      font-size: 1em;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+    }
+    .btn-primary { background: var(--accent); color: #0d1117; }
+    .btn-primary:hover { background: #79b8ff; text-decoration: none; }
+    .btn-secondary {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { border-color: var(--text-dim); text-decoration: none; }
+
+    /* ── Footer ── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 40px 0;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 0.9em;
+    }
+    footer .links { display: flex; gap: 24px; justify-content: center; margin-bottom: 16px; }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      nav ul { gap: 16px; }
+      section { padding: 56px 0; }
+      .page-header { padding: 56px 0 32px; }
+      .doc-grid { grid-template-columns: 1fr; }
+      .quick-ref-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ════════════════ Nav ════════════════ -->
+<nav>
+  <div class="container">
+    <a href="index.html" class="logo"><span>q</span> agent</a>
+    <ul>
+      <li><a href="index.html">Home</a></li>
+      <li><a href="docs.html" class="active">Docs</a></li>
+      <li><a href="blog.html">Blog</a></li>
+      <li><a href="https://github.com/coinerd/q" target="_blank">GitHub ↗</a></li>
+    </ul>
+  </div>
+</nav>
+
+<!-- ════════════════ Page Header ════════════════ -->
+<div class="page-header">
+  <div class="container">
+    <h1>Documentation</h1>
+    <p>Everything you need to install, configure, extend, and master q.</p>
+    <div class="search-bar">
+      <span class="search-icon">🔍</span>
+      <input type="text" placeholder="Search documentation…" aria-label="Search documentation" />
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════ Version Info ════════════════ -->
+<section style="padding-top: 48px; padding-bottom: 32px;">
+  <div class="container">
+    <div class="version-info">
+      <span class="version-badge">📦 Latest: <strong>v0.82.6</strong></span>
+      <span class="version-badge">🎾 Racket: <strong>8.10+</strong></span>
+      <span class="version-badge">📄 License: <strong>MIT</strong></span>
+      <span class="version-badge">🧪 Tests: <strong>5,835+ passing</strong></span>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════ Getting Started ════════════════ -->
+<section id="getting-started">
+  <div class="container">
+    <div class="section-header">
+      <h2>🚀 Getting Started</h2>
+      <p>From zero to your first AI-assisted coding session.</p>
+    </div>
+    <div class="doc-grid">
+
+      <a href="docs/install.html" class="doc-card">
+        <div class="card-icon">📥</div>
+        <h3>Installation Guide</h3>
+        <p>One-command install, manual setup, prerequisites, and troubleshooting. Works on macOS and Linux.</p>
+        <div class="card-links">
+          <span>Quick install <span class="arrow">→</span></span>
+          <span>Manual install <span class="arrow">→</span></span>
+          <span>Troubleshooting <span class="arrow">→</span></span>
+        </div>
+      </a>
+
+      <a href="docs/install.html" class="doc-card">
+        <div class="card-icon">⚡</div>
+        <h3>Quick Start</h3>
+        <p>Get up and running in under two minutes with the one-command installer.</p>
+        <div class="card-links">
+          <span>Install &amp; run <span class="arrow">→</span></span>
+          <span>First prompt <span class="arrow">→</span></span>
+        </div>
+      </a>
+
+      <a href="docs/goal-mode.html" class="doc-card">
+        <div class="card-icon">🎯</div>
+        <h3>Goal Mode Guide</h3>
+        <p>Use q's autonomous goal loop to plan, execute, and verify complex tasks end-to-end.</p>
+        <div class="card-links">
+          <span>Setting goals <span class="arrow">→</span></span>
+          <span>Evidence collection <span class="arrow">→</span></span>
+          <span>Evaluators <span class="arrow">→</span></span>
+        </div>
+      </a>
+
+      <a href="docs/architecture.html" class="doc-card">
+        <div class="card-icon">🎓</div>
+        <h3>Tutorials</h3>
+        <p>Hands-on walkthroughs: team setup, provider configuration, extension building, and more.</p>
+        <div class="card-links">
+          <span>Team setup guide <span class="arrow">→</span></span>
+          <span>Builder cookbook <span class="arrow">→</span></span>
+        </div>
+      </a>
+
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════ Configuration ════════════════ -->
+<section id="configuration">
+  <div class="container">
+    <div class="section-header">
+      <h2>⚙️ Configuration &amp; Providers</h2>
+      <p>Set up providers, credentials, and customize q's behavior.</p>
+    </div>
+    <div class="doc-grid">
+
+      <a href="docs/providers.html" class="doc-card">
+        <div class="card-icon">🔌</div>
+        <h3>Provider Setup</h3>
+        <p>Configure OpenAI, Anthropic, Google Gemini, or local LLMs. Swap providers without changing your workflow.</p>
+        <div class="card-links">
+          <span>OpenAI setup <span class="arrow">→</span></span>
+          <span>Anthropic setup <span class="arrow">→</span></span>
+          <span>Gemini setup <span class="arrow">→</span></span>
+          <span>Local LLM setup <span class="arrow">→</span></span>
+        </div>
+      </a>
+
+      <a href="docs/configuration.html" class="doc-card">
+        <div class="card-icon">🔧</div>
+        <h3>Configuration Reference</h3>
+        <p>Complete reference for config.json, environment variables, and credential management.</p>
+        <div class="card-links">
+          <span>config.json schema <span class="arrow">→</span></span>
+          <span>Environment variables <span class="arrow">→</span></span>
+          <span>Credential backends <span class="arrow">→</span></span>
+        </div>
+      </a>
+
+      <a href="docs/tutorials.html" class="doc-card">
+        <div class="card-icon">🖥️</div>
+        <h3>Interface Modes</h3>
+        <p>Use q via CLI for scripts, TUI for interactive work, JSON for machines, RPC for integration.</p>
+        <div class="card-links">
+          <span>CLI reference <span class="arrow">→</span></span>
+          <span>TUI guide <span class="arrow">→</span></span>
+          <span>JSON protocol <span class="arrow">→</span></span>
+          <span>RPC &amp; SDK <span class="arrow">→</span></span>
+        </div>
+      </a>
+
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════ Architecture ════════════════ -->
+<section id="architecture">
+  <div class="container">
+    <div class="section-header">
+      <h2>🏛️ Architecture &amp; Design</h2>
+      <p>Understand how q works under the hood — 19 Architecture Decision Records.</p>
+    </div>
+    <div class="doc-grid">
+
+      <a href="docs/adr-small-trusted-core.html" class="doc-card">
+        <div class="card-icon">🏗️</div>
+        <h3>Small Trusted Core (ADR-1)</h3>
+        <p>The foundational principle: minimal dependencies, no interface coupling, security at the architecture level.</p>
+        <div class="card-links">
+          <span>Read ADR-1 <span class="arrow">→</span></span>
+        </div>
+      </a>
+
+      <a href="docs/adr-event-bus.html" class="doc-card">
+        <div class="card-icon">📡</div>
+        <h3>Event Bus Architecture (ADR-3)</h3>
+        <p>Deterministic event bus that decouples the agent loop from interfaces, enabling streaming and audit logging.</p>
+        <div class="card-links">
+          <span>Read ADR-3 <span class="arrow">→</span></span>
+        </div>
+      </a>
+
+      <a href="docs/adr-gsd-state-machine.html" class="doc-card">
+        <div class="card-icon">🔄</div>
+        <h3>GSD State Machine (ADR-11)</h3>
+        <p>The finite-state machine powering goal-directed execution: explore → plan → implement → verify → debug.</p>
+        <div class="card-links">
+          <span>Read ADR-11 <span class="arrow">→</span></span>
+        </div>
+      </a>
+
+      <a href="docs/adr-context-manager.html" class="doc-card">
+        <div class="card-icon">🧠</div>
+        <h3>Context Assembly (ADR-12)</h3>
+        <p>How q dynamically builds context for each turn — system prompts, history, tools, and extension hooks.</p>
+        <div class="card-links">
+          <span>Read ADR-12 <span class="arrow">→</span></span>
+        </div>
+      </a>
+
+      <a href="docs/adr-index.html" class="doc-card">
+        <div class="card-icon">📚</div>
+        <h3>All 19 ADRs</h3>
+        <p>Complete list of Architecture Decision Records covering every major design choice in q.</p>
+        <div class="card-links">
+          <span>Browse all ADRs <span class="arrow">→</span></span>
+        </div>
+      </a>
+
+      <a href="docs/adr-interface-separation.html" class="doc-card">
+        <div class="card-icon">🔀</div>
+        <h3>Interface Separation (ADR-5)</h3>
+        <p>Five interfaces, one core: how separation keeps q flexible and testable without feature bloat.</p>
+        <div class="card-links">
+          <span>Read ADR-5 <span class="arrow">→</span></span>
+        </div>
+      </a>
+
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════ Extending ════════════════ -->
+<section id="extending">
+  <div class="container">
+    <div class="section-header">
+      <h2>🧩 Extending q</h2>
+      <p>Build custom tools, hooks, and integrations.</p>
+    </div>
+    <div class="doc-grid">
+
+      <a href="docs/extension-guide.html" class="doc-card">
+        <div class="card-icon">🔌</div>
+        <h3>Extension Guide</h3>
+        <p>Build custom extensions using the hook system. Inject behavior at every lifecycle point.</p>
+        <div class="card-links">
+          <span>Hook system overview <span class="arrow">→</span></span>
+          <span>Creating an extension <span class="arrow">→</span></span>
+          <span>Hook event reference <span class="arrow">→</span></span>
+        </div>
+      </a>
+
+      <a href="docs/sdk-guide.html" class="doc-card">
+        <div class="card-icon">🛠️</div>
+        <h3>SDK Guide</h3>
+        <p>Embed q in your own applications via the RPC interface or SDK. Programmatic access to the full agent loop.</p>
+        <div class="card-links">
+          <span>SDK quickstart <span class="arrow">→</span></span>
+          <span>RPC protocol <span class="arrow">→</span></span>
+          <span>Session management <span class="arrow">→</span></span>
+        </div>
+      </a>
+
+      <a href="docs/adr-extension-hook-model.html" class="doc-card">
+        <div class="card-icon">🪝</div>
+        <h3>Hook Model (ADR-6)</h3>
+        <p>Design of the extension hook system — lifecycle events, registration, and execution order.</p>
+        <div class="card-links">
+          <span>Read ADR-6 <span class="arrow">→</span></span>
+        </div>
+      </a>
+
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════ Security ════════════════ -->
+<section id="security">
+  <div class="container">
+    <div class="section-header">
+      <h2>🔐 Security</h2>
+      <p>Security-first design with defense-in-depth.</p>
+    </div>
+    <div class="doc-grid">
+
+      <a href="docs/security-trust-model.html" class="doc-card">
+        <div class="card-icon">🛡️</div>
+        <h3>Security &amp; Trust Model</h3>
+        <p>Complete security documentation: threat model, trust boundaries, and defense-in-depth strategy.</p>
+        <div class="card-links">
+          <span>Trust boundaries <span class="arrow">→</span></span>
+          <span>Threat model <span class="arrow">→</span></span>
+        </div>
+      </a>
+
+      <a href="docs/adr-sandboxing-boundary.html" class="doc-card">
+        <div class="card-icon">🛡️</div>
+        <h3>Sandboxing (ADR-7)</h3>
+        <p>Shell command sandboxing with resource limits, timeouts, and shell quoting for LLM-generated commands.</p>
+        <div class="card-links">
+          <span>Read ADR-7 <span class="arrow">→</span></span>
+        </div>
+      </a>
+
+      <a href="docs/adr-credential-redaction.html" class="doc-card">
+        <div class="card-icon">🔑</div>
+        <h3>Credential Redaction (ADR-9)</h3>
+        <p>How API keys are resolved, stored, and protected — env vars, OS keychain, file permissions.</p>
+        <div class="card-links">
+          <span>Read ADR-9 <span class="arrow">→</span></span>
+        </div>
+      </a>
+
+      <a href="docs/adr-session-log.html" class="doc-card">
+        <div class="card-icon">📝</div>
+        <h3>Append-Only Logs (ADR-2)</h3>
+        <p>Every action recorded in JSONL. The agent loop only appends — never rewrites history. Tamper-detectable.</p>
+        <div class="card-links">
+          <span>Read ADR-2 <span class="arrow">→</span></span>
+        </div>
+      </a>
+
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════ Quick Reference ════════════════ -->
+<section id="quick-ref">
+  <div class="container">
+    <div class="section-header">
+      <h2>📋 Quick Reference</h2>
+      <p>Copy-paste commands for common tasks.</p>
+    </div>
+    <div class="quick-ref-grid">
+
+      <div class="quick-ref-item">
+        <div class="ref-header"><span class="ref-icon">⚡</span> Install &amp; Run</div>
+        <pre><code># One-command install
+curl -fsSL https://raw.githubusercontent.com/coinerd/q/main/scripts/install.sh | bash
+
+# Interactive TUI
+bin/q-tui
+
+# Single-shot prompt
+bin/q "explain this codebase"</code></pre>
+      </div>
+
+      <div class="quick-ref-item">
+        <div class="ref-header"><span class="ref-icon">🎯</span> Goal Mode</div>
+        <pre><code># Set a goal in TUI
+/goal fix all failing tests in the auth module
+
+# Clear a goal
+/goal clear
+
+# With custom evaluator
+/goal --evaluator strict make it pass</code></pre>
+      </div>
+
+      <div class="quick-ref-item">
+        <div class="ref-header"><span class="ref-icon">🔌</span> Provider Config</div>
+        <pre><code># ~/.q/config.json
+{
+  "default-provider": "openai",
+  "default-model": "gpt-5.4",
+  "providers": {
+    "openai": {
+      "api-key-env": "OPENAI_API_KEY"
+    }
+  }
+}</code></pre>
+      </div>
+
+      <div class="quick-ref-item">
+        <div class="ref-header"><span class="ref-icon">🧪</span> Testing</div>
+        <pre><code># Full test suite (parallel)
+racket scripts/run-tests.rkt
+
+# Fast suite (skip slow tests)
+racket scripts/run-tests.rkt --suite fast
+
+# Quick smoke test (~40s)
+racket scripts/run-tests.rkt --suite smoke</code></pre>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════ Help CTA ════════════════ -->
+<section>
+  <div class="container">
+    <div class="help-cta">
+      <h3>Still have questions?</h3>
+      <p>Check the GitHub discussions, open an issue, or read through the ADRs.</p>
+      <div class="btn-group">
+        <a href="https://github.com/coinerd/q/issues" class="btn btn-primary" target="_blank">Open an Issue</a>
+        <a href="https://github.com/coinerd/q/discussions" class="btn btn-secondary" target="_blank">GitHub Discussions</a>
+        <a href="docs/adr-index.html" class="btn btn-secondary">Browse ADRs</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════ Footer ════════════════ -->
+<footer>
+  <div class="container">
+    <div class="links">
+      <a href="https://github.com/coinerd/q" target="_blank">GitHub</a>
+      <a href="https://github.com/coinerd/q/blob/main/LICENSE" target="_blank">MIT License</a>
+      <a href="https://github.com/coinerd/q/blob/main/CONTRIBUTING.md" target="_blank">Contributing</a>
+      <a href="https://github.com/coinerd/q/blob/main/CHANGELOG.md" target="_blank">Changelog</a>
+    </div>
+    <p>© 2026 q contributors. Built with Racket 🎾</p>
+  </div>
+</footer>
+
+</body>
+</html>

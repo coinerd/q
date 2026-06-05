@@ -64,11 +64,27 @@
 ;; Sidecar launch/shutdown
 ;; ---------------------------------------------------------------------------
 
-(define (launch-sidecar! sidecar-path #:node-path [node-path "node"] #:timeout-ms [timeout-ms 10000])
+(define (launch-sidecar! sidecar-path
+                         #:node-path [node-path "node"]
+                         #:timeout-ms [timeout-ms 10000]
+                         #:headless? [headless? #t])
   (define cust (make-custodian))
   (parameterize ([current-custodian cust])
-    (define-values (sp stdout-in stdin-out)
-      (subprocess stdout-in stdin-out #f node-path sidecar-path))
+    (define node-exe (or (find-executable-path node-path) node-path))
+    ;; Sidecar logs (for example "q-playwright-sidecar ready") must not leak
+    ;; to the TUI prompt. Keep stderr as a pipe and drain it in this custodian.
+    (define-values (sp stdout-in stdin-out stderr-in)
+      (subprocess #f
+                  #f
+                  #f
+                  node-exe
+                  sidecar-path
+                  (format "--headless=~a" (if headless? "true" "false"))))
+    (thread (lambda ()
+              (let loop ()
+                (define line (read-line stderr-in 'any))
+                (unless (eof-object? line)
+                  (loop)))))
     (define pending (make-hash))
     (define ready-ch (make-async-channel))
     (define state
@@ -177,18 +193,18 @@
   (hash-remove! (playwright-sidecar-state-pending-box state) id)
   (cond
     [(not result)
-     (raise-browser-error 'timeout (format "Sidecar command '~a' timed out after ~ams" type tmout))]
+     (raise-browser-error (format "Sidecar command '~a' timed out after ~ams" type tmout) 'timeout)]
     [(not (hash-ref result 'success #f))
      (define err (hash-ref result 'error (hasheq 'code 'unknown 'message "Unknown error")))
      (define code (hash-ref err 'code 'adapter-error))
-     (raise-browser-error (match code
+     (raise-browser-error (hash-ref err 'message "Adapter error")
+                          (match code
                             ["timeout" 'timeout]
                             ["sidecar-crash" 'sidecar-crash]
                             ["selector-not-found" 'adapter-error]
                             ["session-not-found" 'session-expired]
                             ["policy-violation" 'policy-violation]
-                            [_ 'adapter-error])
-                          (hash-ref err 'message "Adapter error"))]
+                            [_ 'adapter-error]))]
     [else (hash-ref result 'data)]))
 
 ;; ---------------------------------------------------------------------------
@@ -197,12 +213,16 @@
 
 (define (make-playwright-adapter sidecar-path
                                  #:node-path [node-path "node"]
-                                 #:timeout-ms [timeout-ms 10000])
+                                 #:timeout-ms [timeout-ms 10000]
+                                 #:headless? [headless? #t])
   (define state-box (box #f))
 
   (define (ensure-state)
     (or (unbox state-box)
-        (let ([s (launch-sidecar! sidecar-path #:node-path node-path #:timeout-ms timeout-ms)])
+        (let ([s (launch-sidecar! sidecar-path
+                                  #:node-path node-path
+                                  #:timeout-ms timeout-ms
+                                  #:headless? headless?)])
           (set-box! state-box s)
           s)))
 

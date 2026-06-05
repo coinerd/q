@@ -38,7 +38,8 @@
                       524288
                       #f
                       60000
-                      'ephemeral))
+                      'ephemeral
+                      #t))
   (make-secure-browser-service adapter #:settings settings))
 
 (define (with-svc thunk)
@@ -177,7 +178,9 @@
               (define sid (hash-ref (open-session) 'session-id))
               (define result (content-of (handle-browser-screenshot (hasheq 'session-id sid))))
               (check-equal? (hash-ref result 'status) "ok")
-              (check-true (hash-has-key? result 'mime-type)))))
+              (check-true (hash-has-key? result 'mime-type))
+              (check-true (hash-has-key? result 'data))
+              (check-false (regexp-match? #rx"#f$" (hash-ref result 'data))))))
 
 ;; ---------------------------------------------------------------------------
 ;; browser_scroll (1 test)

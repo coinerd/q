@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Security &amp; Trust Model — q Agent</title>
+  <meta name="description" content="Security-first design with defense-in-depth: sandboxing, credential redaction, append-only logs, and trust boundaries.">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --bg-card: #161b22; --bg-code: #1c2128; --border: #30363d;
+      --text: #e6edf3; --text-dim: #8b949e; --accent: #58a6ff; --accent2: #7ee787;
+      --accent3: #d2a8ff; --warn: #f0883e; --radius: 12px; --max-w: 820px;
+    }
+    html { scroll-behavior: smooth; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; -webkit-font-smoothing: antialiased; }
+    a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+    code { background: var(--bg-code); border: 1px solid var(--border); border-radius: 6px; padding: 2px 7px; font-size: 0.88em; font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; }
+    pre { background: var(--bg-code); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.2em 1.5em; overflow-x: auto; font-size: 0.88em; line-height: 1.6; }
+    pre code { background: none; border: none; padding: 0; }
+    .container { max-width: var(--max-w); margin: 0 auto; padding: 0 24px; }
+    nav { position: sticky; top: 0; z-index: 100; background: rgba(13,17,23,0.85); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+    nav .container { display: flex; align-items: center; justify-content: space-between; height: 56px; }
+    nav .logo { font-weight: 800; font-size: 1.25em; letter-spacing: -0.5px; }
+    nav .logo span { color: var(--accent); }
+    nav ul { display: flex; gap: 28px; list-style: none; }
+    nav a { color: var(--text-dim); font-size: 0.92em; font-weight: 500; } nav a:hover { color: var(--text); text-decoration: none; } nav a.active { color: var(--accent); }
+    .page-header { padding: 64px 0 32px; }
+    .page-header .breadcrumb { color: var(--text-dim); font-size: 0.88em; margin-bottom: 16px; }
+    .page-header .breadcrumb a { color: var(--text-dim); } .page-header .breadcrumb a:hover { color: var(--accent); }
+    .page-header h1 { font-size: clamp(1.8rem, 4vw, 2.5rem); font-weight: 800; letter-spacing: -1px; margin-bottom: 12px; }
+    .page-header p { color: var(--text-dim); font-size: 1.1em; max-width: 600px; }
+    .content { padding: 32px 0 80px; }
+    .content h2 { font-size: 1.5em; font-weight: 700; margin: 48px 0 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+    .content h3 { font-size: 1.2em; font-weight: 600; margin: 32px 0 12px; }
+    .content p { margin-bottom: 16px; }
+    .content ul, .content ol { margin: 0 0 16px 24px; }
+    .content li { margin-bottom: 8px; }
+    .content pre { margin: 16px 0; }
+    .callout { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 24px; margin: 20px 0; }
+    .callout.tip { border-left: 4px solid var(--accent2); }
+    .callout.warn { border-left: 4px solid var(--warn); }
+    .callout strong { display: block; margin-bottom: 4px; }
+    footer { border-top: 1px solid var(--border); padding: 40px 0; text-align: center; color: var(--text-dim); font-size: 0.9em; }
+    footer .links { display: flex; gap: 24px; justify-content: center; margin-bottom: 16px; }
+    @media (max-width: 768px) { nav ul { gap: 16px; } .container { padding: 0 16px; } }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="container">
+    <a href="../index.html" class="logo"><span>q</span> agent</a>
+    <ul>
+      <li><a href="../index.html">Home</a></li>
+      <li><a href="../docs.html" class="active">Docs</a></li>
+      <li><a href="../blog.html">Blog</a></li>
+      <li><a href="https://github.com/coinerd/q" target="_blank">GitHub ↗</a></li>
+    </ul>
+  </div>
+</nav>
+
+<div class="page-header">
+  <div class="container">
+    <div class="breadcrumb"><a href="../docs.html">Docs</a> / Security</div>
+    <h1>🔐 Security &amp; Trust Model</h1>
+    <p>Security-first design with defense-in-depth: sandboxing, credential redaction, append-only logs, and clear trust boundaries.</p>
+  </div>
+</div>
+
+<div class="content">
+  <div class="container">
+
+    <h2 id="overview">Security Overview</h2>
+    <p>q executes LLM-generated code and shell commands on your machine. This creates inherent risk. q's security architecture (spanning ADR-1, ADR-2, ADR-7, ADR-8, ADR-9) addresses this through defense-in-depth: multiple independent layers that each reduce the attack surface.</p>
+
+    <h2 id="trust-boundaries">Trust Boundaries</h2>
+    <p>q defines explicit trust boundaries:</p>
+    <ul>
+      <li><strong>Core ↔ Tools</strong> — tool execution is sandboxed; tools cannot access session state directly</li>
+      <li><strong>Core ↔ Extensions</strong> — extensions run in a constrained hook system; they can pass/block/modify, not execute arbitrary code</li>
+      <li><strong>Core ↔ Interfaces</strong> — interfaces are pure event consumers; they receive events but cannot influence the agent loop</li>
+      <li><strong>Core ↔ Providers</strong> — API keys are resolved at the boundary and never passed to tool execution</li>
+    </ul>
+
+    <h2 id="sandboxing">Command Sandboxing</h2>
+    <p>Shell commands generated by the LLM are executed in a sandboxed subprocess (ADR-7):</p>
+    <ul>
+      <li><strong>Shell quoting</strong> — all arguments are properly quoted to prevent injection</li>
+      <li><strong>Resource limits</strong> — configurable memory and CPU limits</li>
+      <li><strong>Timeouts</strong> — commands are killed after a configurable timeout (default: 30s)</li>
+      <li><strong>Output truncation</strong> — output is capped at <code>max-output-bytes</code> to prevent memory exhaustion</li>
+      <li><strong>Working directory scoping</strong> — commands run within the project directory</li>
+    </ul>
+
+    <pre><code># Tool configuration in config.json
+"tools": {
+  "shell-timeout": 30,
+  "max-output-bytes": 65536,
+  "file-scope": "."
+}</code></pre>
+
+    <h2 id="credential-redaction">Credential Redaction</h2>
+    <p>API keys are never stored in plaintext in session logs (ADR-9):</p>
+    <ul>
+      <li><strong>Resolution chain</strong> — env var → OS keychain → file (in order of preference)</li>
+      <li><strong>Log redaction</strong> — keys are replaced with <code>[REDACTED]</code> before writing to JSONL</li>
+      <li><strong>Event scrubbing</strong> — all events emitted to the bus have keys stripped</li>
+      <li><strong>File permissions</strong> — credential files must have restricted permissions (<code>chmod 600</code>)</li>
+    </ul>
+
+    <h2 id="append-only-logs">Append-Only Session Logs</h2>
+    <p>Every action is recorded in JSONL format (ADR-2):</p>
+    <ul>
+      <li>The agent loop only <strong>appends</strong> — never rewrites or deletes log entries</li>
+      <li>Each event includes a timestamp, session ID, and event type</li>
+      <li>Logs are tamper-detectable via sequential event numbering</li>
+      <li>Logs provide a complete audit trail for forensic analysis</li>
+    </ul>
+
+    <h2 id="safe-mode">Safe Mode</h2>
+    <p>q supports a safe mode (ADR-8) that restricts available tools:</p>
+    <ul>
+      <li>Disables shell command execution</li>
+      <li>Disables file write operations</li>
+      <li>Limits to read-only tools (file read, search, code analysis)</li>
+      <li>Useful for code review and analysis workflows</li>
+    </ul>
+
+    <h2 id="extension-security">Extension Security</h2>
+    <p>The extension hook system (ADR-6) provides security boundaries:</p>
+    <ul>
+      <li>Extensions register for named hooks — they cannot intercept arbitrary code paths</li>
+      <li>Hook handlers run in registration order with clear return semantics</li>
+      <li>A crashing extension doesn't bring down the agent (defensive error handling)</li>
+      <li>Extensions can <strong>block</strong> actions (e.g., prevent a dangerous command from executing)</li>
+    </ul>
+
+    <h2 id="related-adrs">Related ADRs</h2>
+    <ul>
+      <li><a href="https://github.com/coinerd/q/blob/main/docs/adr/0001-small-trusted-core.md" target="_blank">ADR-1: Small Trusted Core</a></li>
+      <li><a href="https://github.com/coinerd/q/blob/main/docs/adr/0002-append-only-jsonl-session-log.md" target="_blank">ADR-2: Append-Only Session Logs</a></li>
+      <li><a href="https://github.com/coinerd/q/blob/main/docs/adr/0007-sandboxing-boundary.md" target="_blank">ADR-7: Sandboxing Boundary</a></li>
+      <li><a href="https://github.com/coinerd/q/blob/main/docs/adr/0008-safe-mode-enforcement.md" target="_blank">ADR-8: Safe Mode Enforcement</a></li>
+      <li><a href="https://github.com/coinerd/q/blob/main/docs/adr/0009-credential-redaction.md" target="_blank">ADR-9: Credential Redaction</a></li>
+    </ul>
+
+  </div>
+</div>
+
+<footer>
+  <div class="container">
+    <div class="links">
+      <a href="https://github.com/coinerd/q" target="_blank">GitHub</a>
+      <a href="https://github.com/coinerd/q/blob/main/LICENSE" target="_blank">MIT License</a>
+      <a href="https://github.com/coinerd/q/blob/main/CONTRIBUTING.md" target="_blank">Contributing</a>
+    </div>
+    <p>© 2026 q contributors. Built with Racket 🎾</p>
+  </div>
+</footer>
+
+</body>
+</html>

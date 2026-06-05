@@ -26,7 +26,7 @@
          (only-in "../../util/error/error-sanitizer.rkt" sanitize-error-message))
 
 (require racket/contract)
-(provide (contract-out [tool-delete-lines (-> hash? any/c)]))
+(provide (contract-out [tool-delete-lines (->* (hash?) (any/c) any/c)]))
 
 ;; --------------------------------------------------
 ;; Constants

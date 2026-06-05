@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Contributing to q: A Practical Guide — q Agent Blog</title>
+  <meta name="description" content="How to set up your development environment, write tests, follow our code style, and submit your first PR to the q agent project.">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --bg-card: #161b22; --bg-code: #1c2128; --border: #30363d;
+      --text: #e6edf3; --text-dim: #8b949e; --accent: #58a6ff; --accent2: #7ee787;
+      --accent3: #d2a8ff; --warn: #f0883e; --radius: 12px; --max-w: 760px;
+    }
+    html { scroll-behavior: smooth; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; -webkit-font-smoothing: antialiased; }
+    a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+    code { background: var(--bg-code); border: 1px solid var(--border); border-radius: 6px; padding: 2px 7px; font-size: 0.88em; font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; }
+    pre { background: var(--bg-code); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.2em 1.5em; overflow-x: auto; font-size: 0.88em; line-height: 1.6; }
+    pre code { background: none; border: none; padding: 0; }
+    .container { max-width: var(--max-w); margin: 0 auto; padding: 0 24px; }
+    nav { position: sticky; top: 0; z-index: 100; background: rgba(13,17,23,0.85); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+    nav .container { display: flex; align-items: center; justify-content: space-between; height: 56px; }
+    nav .logo { font-weight: 800; font-size: 1.25em; letter-spacing: -0.5px; }
+    nav .logo span { color: var(--accent); }
+    nav ul { display: flex; gap: 28px; list-style: none; }
+    nav a { color: var(--text-dim); font-size: 0.92em; font-weight: 500; } nav a:hover { color: var(--text); text-decoration: none; } nav a.active { color: var(--accent); }
+    .post-header { padding: 64px 0 24px; }
+    .post-header .breadcrumb { color: var(--text-dim); font-size: 0.88em; margin-bottom: 16px; }
+    .post-header .breadcrumb a { color: var(--text-dim); } .post-header .breadcrumb a:hover { color: var(--accent); }
+    .post-header .meta { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+    .post-header .date { color: var(--text-dim); font-size: 0.9em; }
+    .post-header .tag { background: var(--bg-code); border: 1px solid var(--border); border-radius: 100px; padding: 4px 14px; font-size: 0.8em; color: var(--accent); font-weight: 500; }
+    .post-header h1 { font-size: clamp(1.6rem, 4vw, 2.2rem); font-weight: 800; letter-spacing: -0.5px; line-height: 1.3; margin-bottom: 16px; }
+    .post-header .subtitle { color: var(--text-dim); font-size: 1.1em; line-height: 1.6; }
+    .content { padding: 24px 0 80px; }
+    .content h2 { font-size: 1.4em; font-weight: 700; margin: 40px 0 16px; }
+    .content h3 { font-size: 1.15em; font-weight: 600; margin: 28px 0 12px; }
+    .content p { margin-bottom: 16px; }
+    .content ul, .content ol { margin: 0 0 16px 24px; }
+    .content li { margin-bottom: 8px; }
+    .content pre { margin: 16px 0; }
+    .content blockquote { border-left: 4px solid var(--accent); padding-left: 20px; margin: 20px 0; color: var(--text-dim); font-style: italic; }
+    .post-nav { display: flex; justify-content: space-between; padding: 32px 0; border-top: 1px solid var(--border); margin-top: 48px; }
+    .post-nav a { color: var(--text-dim); font-size: 0.92em; }
+    .post-nav a:hover { color: var(--accent); }
+    footer { border-top: 1px solid var(--border); padding: 40px 0; text-align: center; color: var(--text-dim); font-size: 0.9em; }
+    footer .links { display: flex; gap: 24px; justify-content: center; margin-bottom: 16px; }
+    @media (max-width: 768px) { nav ul { gap: 16px; } .container { padding: 0 16px; } }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="container">
+    <a href="../index.html" class="logo"><span>q</span> agent</a>
+    <ul>
+      <li><a href="../index.html">Home</a></li>
+      <li><a href="../docs.html">Docs</a></li>
+      <li><a href="../blog.html" class="active">Blog</a></li>
+      <li><a href="https://github.com/coinerd/q" target="_blank">GitHub ↗</a></li>
+    </ul>
+  </div>
+</nav>
+
+<div class="post-header">
+  <div class="container">
+    <div class="breadcrumb"><a href="../blog.html">Blog</a></div>
+    <div class="meta">
+      <span class="date">April 28, 2026</span>
+      <span class="tag">Community</span>
+    </div>
+    <h1>Contributing to q: A Practical Guide</h1>
+    <p class="subtitle">Everything you need to set up your dev environment, write tests, and submit your first PR to the q agent project.</p>
+  </div>
+</div>
+
+<div class="content">
+  <div class="container">
+
+    <p>q is open source and we love contributions. Whether you're fixing a bug, adding a feature, improving documentation, or writing tests, here's everything you need to get started.</p>
+
+    <h2>Setting Up Your Development Environment</h2>
+    <pre><code># Clone the repository
+git clone https://github.com/coinerd/q.git
+cd q
+
+# Install Racket (if you don't have it)
+# macOS:
+brew install --cask racket
+# Linux:
+sudo apt install racket  # or your package manager
+
+# Install dependencies
+raco pkg install
+
+# Verify everything works
+raco test .</code></pre>
+
+    <h2>Project Structure</h2>
+    <pre><code>q/
+├── main.rkt              # Entry point
+├── core/
+│   ├── event-bus.rkt     # Central event bus
+│   ├── event-structs.rkt # Event type definitions
+│   ├── loop.rkt          # Main agent loop
+│   ├── state.rkt         # Session state management
+│   └── ...
+├── runtime/
+│   ├── context-policy.rkt  # Shared context policy
+│   ├── context-manager.rkt # Production context pipeline
+│   ├── loop-config.rkt     # Agent loop configuration
+│   └── ...
+├── extensions/
+│   ├── gsd/              # Goal mode state machine
+│   └── ...
+├── tui/                  # Terminal UI
+├── cli/                  # CLI interface
+├── json/                 # JSON streaming mode
+├── tools/                # Built-in tools
+├── providers/            # LLM provider implementations
+├── docs/                 # Documentation & ADRs
+├── website/              # This website!
+└── tests/                # Test suite</code></pre>
+
+    <h2>Running Tests</h2>
+    <pre><code># Run all tests
+raco test .
+
+# Run a specific test file
+raco test tests/event-bus-test.rkt
+
+# Run only GSD tests
+raco test extensions/gsd/
+
+# Run with verbose output
+raco test -v .</code></pre>
+
+    <h2>Code Style</h2>
+    <ul>
+      <li>Follow Racket conventions: <code>kebab-case</code> for identifiers</li>
+      <li>Use <code>provide</code> and <code>require</code> explicitly — no implicit imports</li>
+      <li>Document public functions with docstrings</li>
+      <li>Keep functions short — if it's over 30 lines, consider splitting</li>
+      <li>Add type annotations in Typed Racket modules</li>
+    </ul>
+
+    <h2>The PR Process</h2>
+    <ol>
+      <li><strong>Fork</strong> the repository</li>
+      <li><strong>Create a branch</strong>: <code>git checkout -b my-feature</code></li>
+      <li><strong>Write code and tests</strong></li>
+      <li><strong>Run the test suite</strong>: <code>raco test .</code></li>
+      <li><strong>Commit</strong> with a clear message</li>
+      <li><strong>Open a PR</strong> against <code>main</code></li>
+    </ol>
+
+    <h2>Writing Good Tests</h2>
+    <p>q uses RackUnit. Here's a pattern for event bus tests:</p>
+    <pre><code>(require rackunit
+     "../../core/event-bus.rkt")
+
+(define bus (make-event-bus))
+(define received '())
+
+(event-bus-subscribe bus 'test-event
+  (λ (data) (set! received (cons data received))))
+
+(event-bus-emit! bus 'test-event "hello")
+
+(check-equal? received '("hello"))</code></pre>
+
+    <h2>Architecture Decision Records</h2>
+    <p>For significant changes, we write ADRs (Architecture Decision Records). These live in <code>docs/adr/</code>. An ADR has three sections:</p>
+    <ol>
+      <li><strong>Context</strong> — what's the situation?</li>
+      <li><strong>Decision</strong> — what did we choose?</li>
+      <li><strong>Consequences</strong> — what are the trade-offs?</li>
+    </ol>
+    <p>Even if you're not writing a formal ADR, thinking in these terms helps write better PR descriptions.</p>
+
+    <h2>Getting Help</h2>
+    <ul>
+      <li><strong>GitHub Issues</strong> — for bugs and feature requests</li>
+      <li><strong>GitHub Discussions</strong> — for questions and design ideas</li>
+      <li><strong>CODEOWNERS</strong> — check who to tag for review</li>
+    </ul>
+
+    <p>We're friendly and responsive. Don't hesitate to open a draft PR early for feedback!</p>
+
+    <div class="post-nav">
+      <a href="#">← Previous</a>
+      <a href="interface-separation.html">One Agent, Five Interfaces →</a>
+    </div>
+
+  </div>
+</div>
+
+<footer>
+  <div class="container">
+    <div class="links">
+      <a href="https://github.com/coinerd/q" target="_blank">GitHub</a>
+      <a href="https://github.com/coinerd/q/blob/main/LICENSE" target="_blank">MIT License</a>
+      <a href="https://github.com/coinerd/q/blob/main/CONTRIBUTING.md" target="_blank">Contributing</a>
+    </div>
+    <p>© 2026 q contributors. Built with Racket 🎾</p>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Security & Trust Model — q Agent</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --bg-card: #161b22; --bg-code: #1c2128;
+      --border: #30363d; --text: #e6edf3; --text-dim: #8b949e;
+      --accent: #58a6ff; --accent2: #7ee787; --accent3: #d2a8ff;
+      --warn: #f0883e; --radius: 12px; --max-w: 1120px;
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code { background: var(--bg-code); border: 1px solid var(--border); border-radius: 6px; padding: 2px 7px; font-size: 0.88em; font-family: 'SF Mono', 'Fira Code', monospace; }
+    pre { background: var(--bg-code); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; overflow-x: auto; margin: 16px 0; }
+    pre code { background: none; border: none; padding: 0; font-size: 0.9em; }
+    .container { max-width: var(--max-w); margin: 0 auto; padding: 0 24px; }
+    nav { border-bottom: 1px solid var(--border); padding: 14px 0; position: sticky; top: 0; background: var(--bg); z-index: 100; }
+    nav .container { display: flex; justify-content: space-between; align-items: center; }
+    .logo { font-size: 1.3em; font-weight: 700; color: var(--text); }
+    .logo span { color: var(--accent); }
+    nav ul { list-style: none; display: flex; gap: 28px; }
+    nav a { color: var(--text-dim); font-size: 0.95em; }
+    nav a:hover, nav a.active { color: var(--text); text-decoration: none; }
+    .page-header { padding: 72px 0 32px; border-bottom: 1px solid var(--border); }
+    .page-header h1 { font-size: 2.4em; margin-bottom: 8px; }
+    .page-header p { color: var(--text-dim); font-size: 1.1em; max-width: 600px; }
+    .breadcrumb { margin-bottom: 16px; }
+    .breadcrumb a { color: var(--text-dim); font-size: 0.9em; }
+    .breadcrumb span { color: var(--text-dim); margin: 0 6px; }
+    article { padding: 48px 0; }
+    article h2 { font-size: 1.6em; margin: 32px 0 16px; color: var(--accent2); }
+    article h3 { font-size: 1.25em; margin: 24px 0 12px; color: var(--accent3); }
+    article p { margin: 12px 0; max-width: 720px; }
+    article ul, article ol { margin: 12px 0 12px 24px; max-width: 720px; }
+    article li { margin: 6px 0; }
+    article blockquote { border-left: 3px solid var(--accent); padding: 8px 16px; margin: 16px 0; color: var(--text-dim); max-width: 720px; }
+    .status-badge { display: inline-block; background: rgba(126,231,135,0.15); color: var(--accent2); border-radius: 20px; padding: 4px 12px; font-size: 0.85em; margin-bottom: 16px; }
+    .nav-back { display: inline-flex; align-items: center; gap: 6px; color: var(--text-dim); margin-bottom: 24px; font-size: 0.95em; }
+    footer { border-top: 1px solid var(--border); padding: 32px 0; text-align: center; color: var(--text-dim); font-size: 0.9em; }
+    footer .links { display: flex; gap: 24px; justify-content: center; margin-bottom: 16px; }
+    @media (max-width: 768px) { nav ul { gap: 16px; } .page-header { padding: 48px 0 24px; } .page-header h1 { font-size: 1.8em; } }
+  </style>
+</head>
+<body>
+<nav>
+  <div class="container">
+    <a href="../index.html" class="logo"><span>q</span> agent</a>
+    <ul>
+      <li><a href="../index.html">Home</a></li>
+      <li><a href="../docs.html">Docs</a></li>
+      <li><a href="../blog.html">Blog</a></li>
+      <li><a href="https://github.com/coinerd/q" target="_blank">GitHub ↗</a></li>
+    </ul>
+  </div>
+</nav>
+<div class="page-header">
+  <div class="container">
+    <div class="breadcrumb"><a href="../docs.html">Docs</a><span>›</span>Security &amp; Trust Model</div>
+    <h1>🔒 Security &amp; Trust Model</h1>
+    <p>How q keeps your code, credentials, and system safe.</p>
+  </div>
+</div>
+
+<article>
+  <div class="container">
+
+    <h2>Small Trusted Core</h2>
+    <p>Security starts with the architecture. The q core is minimal — only message routing, event dispatch, and session lifecycle. Everything else runs outside the trusted boundary.</p>
+    <p>See <a href="adr-small-trusted-core.html">ADR-1: Small Trusted Core</a>.</p>
+
+    <h2>Sandboxing</h2>
+    <p>Tool execution is sandboxed by default:</p>
+    <ul>
+      <li><strong>Shell commands</strong> run in a restricted environment with configurable allowlists</li>
+      <li><strong>File access</strong> is scoped to the project directory by default</li>
+      <li><strong>Network access</strong> from tools is disabled unless explicitly enabled</li>
+      <li><strong>Resource limits</strong> prevent runaway processes</li>
+    </ul>
+    <p>See <a href="adr-sandboxing-boundary.html">ADR-7: Sandboxing Boundary</a>.</p>
+
+    <h2>Credential Protection</h2>
+    <p>API keys and secrets are protected at every level:</p>
+    <ul>
+      <li><strong>Never logged</strong> — credentials are redacted from all log output and events</li>
+      <li><strong>Never stored in config</strong> — keys are referenced by environment variable name, not value</li>
+      <li><strong>Encrypted at rest</strong> — when using the encrypted credential backend</li>
+      <li><strong>Session-safe</strong> — keys never appear in session JSONL files</li>
+    </ul>
+    <p>See <a href="adr-credential-redaction.html">ADR-9: Credential Redaction</a>.</p>
+
+    <h2>Interface Separation</h2>
+    <p>The core never trusts data from extensions, tools, or UI frontends without validation:</p>
+    <ul>
+      <li>All inter-component communication goes through typed interfaces</li>
+      <li>Extensions cannot modify core state directly</li>
+      <li>The event bus validates event shapes before dispatch</li>
+    </ul>
+    <p>See <a href="adr-interface-separation.html">ADR-5: Interface Separation</a>.</p>
+
+    <h2>Safe Mode</h2>
+    <p>Enable safe mode for maximum protection:</p>
+    <pre><code>q --safe-mode chat</code></pre>
+    <p>Safe mode adds confirmation prompts for all destructive operations: file writes, shell commands, and network requests.</p>
+
+    <h2>Session Integrity</h2>
+    <p>Sessions use an append-only JSONL format that is:</p>
+    <ul>
+      <li><strong>Crash-safe</strong> — partially written lines are discarded on recovery</li>
+      <li><strong>Tamper-evident</strong> — each event includes a sequence number</li>
+      <li><strong>Replayable</strong> — sessions can be replayed to verify exactly what happened</li>
+    </ul>
+
+  </div>
+</article>
+
+<footer>
+  <div class="container">
+    <div class="links">
+      <a href="https://github.com/coinerd/q" target="_blank">GitHub</a>
+      <a href="https://github.com/coinerd/q/blob/main/LICENSE" target="_blank">MIT License</a>
+      <a href="https://github.com/coinerd/q/blob/main/CONTRIBUTING.md" target="_blank">Contributing</a>
+      <a href="https://github.com/coinerd/q/blob/main/CHANGELOG.md" target="_blank">Changelog</a>
+    </div>
+    <p>© 2026 q Agent Project · Built with ❤️ and Racket</p>
+  </div>
+</footer>
+</body>
+</html>

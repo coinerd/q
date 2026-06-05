@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Architecture Decision Records — q Agent</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --bg-card: #161b22; --bg-code: #1c2128;
+      --border: #30363d; --text: #e6edf3; --text-dim: #8b949e;
+      --accent: #58a6ff; --accent2: #7ee787; --accent3: #d2a8ff;
+      --warn: #f0883e; --radius: 12px; --max-w: 1120px;
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .container { max-width: var(--max-w); margin: 0 auto; padding: 0 24px; }
+    nav { border-bottom: 1px solid var(--border); padding: 14px 0; position: sticky; top: 0; background: var(--bg); z-index: 100; }
+    nav .container { display: flex; justify-content: space-between; align-items: center; }
+    .logo { font-size: 1.3em; font-weight: 700; color: var(--text); }
+    .logo span { color: var(--accent); }
+    nav ul { list-style: none; display: flex; gap: 28px; }
+    nav a { color: var(--text-dim); font-size: 0.95em; }
+    nav a:hover, nav a.active { color: var(--text); text-decoration: none; }
+    .page-header { padding: 64px 0 32px; border-bottom: 1px solid var(--border); }
+    .page-header h1 { font-size: 2.2em; margin-bottom: 8px; }
+    .page-header p { color: var(--text-dim); font-size: 1.05em; max-width: 600px; }
+    .breadcrumb { margin-bottom: 16px; }
+    .breadcrumb a { color: var(--text-dim); font-size: 0.9em; }
+    .breadcrumb span { color: var(--text-dim); margin: 0 6px; }
+    .adr-list { padding: 48px 0; }
+    .adr-item {
+      display: flex; gap: 20px; align-items: flex-start;
+      border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 20px 24px; margin-bottom: 12px;
+      transition: border-color 0.2s;
+      text-decoration: none;
+    }
+    .adr-item:hover { border-color: var(--accent); text-decoration: none; }
+    .adr-number {
+      font-size: 1.4em; font-weight: 800; color: var(--accent);
+      min-width: 60px; text-align: center; padding-top: 2px;
+    }
+    .adr-info h3 { font-size: 1.1em; margin-bottom: 4px; color: var(--text); }
+    .adr-info p { color: var(--text-dim); font-size: 0.9em; margin: 0; }
+    .adr-status { display: inline-block; background: rgba(126,231,135,0.15); color: var(--accent2); border-radius: 20px; padding: 2px 10px; font-size: 0.8em; margin-left: 8px; }
+    .adr-category {
+      display: inline-block; background: var(--bg-code); border: 1px solid var(--border);
+      border-radius: 20px; padding: 2px 10px; font-size: 0.78em; color: var(--accent); margin-left: 8px;
+    }
+    footer { border-top: 1px solid var(--border); padding: 32px 0; text-align: center; color: var(--text-dim); font-size: 0.9em; }
+    footer .links { display: flex; gap: 24px; justify-content: center; margin-bottom: 16px; }
+    @media (max-width: 768px) { nav ul { gap: 16px; } .page-header { padding: 48px 0 24px; } .adr-item { flex-direction: column; gap: 8px; } }
+  </style>
+</head>
+<body>
+<nav>
+  <div class="container">
+    <a href="../index.html" class="logo"><span>q</span> agent</a>
+    <ul>
+      <li><a href="../index.html">Home</a></li>
+      <li><a href="../docs.html" class="active">Docs</a></li>
+      <li><a href="../blog.html">Blog</a></li>
+      <li><a href="https://github.com/coinerd/q" target="_blank">GitHub ↗</a></li>
+    </ul>
+  </div>
+</nav>
+
+<div class="page-header">
+  <div class="container">
+    <div class="breadcrumb"><a href="../docs.html">Docs</a><span>›</span>ADR Index</div>
+    <h1>Architecture Decision Records</h1>
+    <p>Every major design choice in q, documented with context, decision, and consequences.</p>
+  </div>
+</div>
+
+<div class="adr-list">
+  <div class="container">
+
+    <a href="adr-small-trusted-core.html" class="adr-item">
+      <div class="adr-number">001</div>
+      <div class="adr-info">
+        <h3>Small Trusted Core <span class="adr-status">✅ Accepted</span> <span class="adr-category">Foundation</span></h3>
+        <p>Minimal dependencies, no interface coupling, security at the architecture level. The foundational principle.</p>
+      </div>
+    </a>
+
+    <a href="adr-session-log.html" class="adr-item">
+      <div class="adr-number">002</div>
+      <div class="adr-info">
+        <h3>Append-Only JSONL Session Log <span class="adr-status">✅ Accepted</span> <span class="adr-category">Storage</span></h3>
+        <p>Crash-safe, auditable session storage using append-only JSON lines.</p>
+      </div>
+    </a>
+
+    <a href="adr-event-bus.html" class="adr-item">
+      <div class="adr-number">003</div>
+      <div class="adr-info">
+        <h3>Event Bus Architecture <span class="adr-status">✅ Accepted</span> <span class="adr-category">Core</span></h3>
+        <p>Deterministic event bus that decouples the agent loop from interfaces, enabling streaming and audit logging.</p>
+      </div>
+    </a>
+
+    <a href="adr-small-trusted-core.html" class="adr-item">
+      <div class="adr-number">004</div>
+      <div class="adr-info">
+        <h3>Provider Abstraction <span class="adr-status">✅ Accepted</span> <span class="adr-category">Providers</span></h3>
+        <p>Swappable LLM providers (OpenAI, Anthropic, Gemini, local) behind a common interface.</p>
+      </div>
+    </a>
+
+    <a href="adr-interface-separation.html" class="adr-item">
+      <div class="adr-number">005</div>
+      <div class="adr-info">
+        <h3>Interface Separation <span class="adr-status">✅ Accepted</span> <span class="adr-category">Core</span></h3>
+        <p>Five interfaces (CLI, TUI, JSON, RPC, SDK), one core. Interfaces are pure event consumers.</p>
+      </div>
+    </a>
+
+    <a href="adr-extension-hook-model.html" class="adr-item">
+      <div class="adr-number">006</div>
+      <div class="adr-info">
+        <h3>Extension Hook Model <span class="adr-status">✅ Accepted</span> <span class="adr-category">Extensibility</span></h3>
+        <p>Named dispatch points (pre-tool-call, post-response, etc.) for powerful extensibility without forking core.</p>
+      </div>
+    </a>
+
+    <a href="adr-sandboxing-boundary.html" class="adr-item">
+      <div class="adr-number">007</div>
+      <div class="adr-info">
+        <h3>Sandboxing Boundary <span class="adr-status">✅ Accepted</span> <span class="adr-category">Security</span></h3>
+        <p>Defense in depth: Racket sandbox, subprocess limits, file scope restrictions for safe tool execution.</p>
+      </div>
+    </a>
+
+    <a href="adr-sandboxing-boundary.html" class="adr-item">
+      <div class="adr-number">008</div>
+      <div class="adr-info">
+        <h3>Safe Mode Enforcement <span class="adr-status">✅ Accepted</span> <span class="adr-category">Security</span></h3>
+        <p>Confirmation prompts for destructive operations, protecting new users by default.</p>
+      </div>
+    </a>
+
+    <a href="adr-credential-redaction.html" class="adr-item">
+      <div class="adr-number">009</div>
+      <div class="adr-info">
+        <h3>Credential Redaction <span class="adr-status">✅ Accepted</span> <span class="adr-category">Security</span></h3>
+        <p>API keys are never exposed in logs, error messages, or debug output. Opaque structs with custom printing.</p>
+      </div>
+    </a>
+
+    <a href="adr-session-log.html" class="adr-item">
+      <div class="adr-number">010</div>
+      <div class="adr-info">
+        <h3>Streaming Port Lifecycle <span class="adr-status">✅ Accepted</span> <span class="adr-category">Core</span></h3>
+        <p>Managed lifecycle for streaming ports between the agent loop and interfaces.</p>
+      </div>
+    </a>
+
+    <a href="adr-gsd-state-machine.html" class="adr-item">
+      <div class="adr-number">011</div>
+      <div class="adr-info">
+        <h3>GSD State Machine <span class="adr-status">✅ Accepted</span> <span class="adr-category">GSD</span></h3>
+        <p>The finite-state machine powering goal-directed execution: explore → plan → implement → verify → debug.</p>
+      </div>
+    </a>
+
+    <a href="adr-context-manager.html" class="adr-item">
+      <div class="adr-number">012</div>
+      <div class="adr-info">
+        <h3>Context Assembly Architecture <span class="adr-status">✅ Accepted</span> <span class="adr-category">Runtime</span></h3>
+        <p>Three-module architecture for building the right prompt at the right time with budget-aware context assembly.</p>
+      </div>
+    </a>
+
+    <a href="adr-small-trusted-core.html" class="adr-item">
+      <div class="adr-number">013</div>
+      <div class="adr-info">
+        <h3>Typed Racket Optional Args <span class="adr-status">✅ Accepted</span> <span class="adr-category">Type System</span></h3>
+        <p>Strategy for handling optional arguments in Typed Racket modules.</p>
+      </div>
+    </a>
+
+    <a href="adr-small-trusted-core.html" class="adr-item">
+      <div class="adr-number">014</div>
+      <div class="adr-info">
+        <h3>Typed Racket Migration Strategy <span class="adr-status">✅ Accepted</span> <span class="adr-category">Type System</span></h3>
+        <p>Incremental migration strategy from untyped to Typed Racket with boundary modules.</p>
+      </div>
+    </a>
+
+    <a href="adr-small-trusted-core.html" class="adr-item">
+      <div class="adr-number">015</div>
+      <div class="adr-info">
+        <h3>TR Boundary Callback Pattern <span class="adr-status">✅ Accepted</span> <span class="adr-category">Type System</span></h3>
+        <p>Handling callbacks across Typed/Untyped boundaries in Racket.</p>
+      </div>
+    </a>
+
+    <a href="adr-small-trusted-core.html" class="adr-item">
+      <div class="adr-number">016</div>
+      <div class="adr-info">
+        <h3>Native TUI Architecture <span class="adr-status">✅ Accepted</span> <span class="adr-category">Interface</span></h3>
+        <p>Design of the native terminal UI with syntax highlighting, streaming, and goal visualization.</p>
+      </div>
+    </a>
+
+    <a href="adr-small-trusted-core.html" class="adr-item">
+      <div class="adr-number">017</div>
+      <div class="adr-info">
+        <h3>GUI Architecture <span class="adr-status">✅ Accepted</span> <span class="adr-category">Interface</span></h3>
+        <p>Planned graphical user interface architecture for q.</p>
+      </div>
+    </a>
+
+    <a href="adr-small-trusted-core.html" class="adr-item">
+      <div class="adr-number">018</div>
+      <div class="adr-info">
+        <h3>GUI Extension Integration <span class="adr-status">✅ Accepted</span> <span class="adr-category">Interface</span></h3>
+        <p>How GUI extensions integrate with the core agent loop.</p>
+      </div>
+    </a>
+
+    <a href="adr-small-trusted-core.html" class="adr-item">
+      <div class="adr-number">019</div>
+      <div class="adr-info">
+        <h3>Context Assembly &amp; Activation <span class="adr-status">✅ Accepted</span> <span class="adr-category">Runtime</span></h3>
+        <p>How context is assembled, activated, and managed during agent execution.</p>
+      </div>
+    </a>
+
+  </div>
+</div>
+
+<footer>
+  <div class="container">
+    <div class="links">
+      <a href="https://github.com/coinerd/q" target="_blank">GitHub</a>
+      <a href="https://github.com/coinerd/q/blob/main/LICENSE" target="_blank">MIT License</a>
+      <a href="https://github.com/coinerd/q/blob/main/CONTRIBUTING.md" target="_blank">Contributing</a>
+    </div>
+    <p>© 2026 q contributors. Built with Racket 🎾</p>
+  </div>
+</footer>
+</body>
+</html>

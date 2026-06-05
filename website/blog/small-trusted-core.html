@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Small Trusted Core Principle — q Agent Blog</title>
+  <meta name="description" content="ADR #1: Why q's core agent loop has minimal dependencies, no TUI or CLI coupling, and how security boundaries are enforced at the architecture level.">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --bg-card: #161b22; --bg-code: #1c2128; --border: #30363d;
+      --text: #e6edf3; --text-dim: #8b949e; --accent: #58a6ff; --accent2: #7ee787;
+      --accent3: #d2a8ff; --warn: #f0883e; --radius: 12px; --max-w: 760px;
+    }
+    html { scroll-behavior: smooth; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; -webkit-font-smoothing: antialiased; }
+    a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+    code { background: var(--bg-code); border: 1px solid var(--border); border-radius: 6px; padding: 2px 7px; font-size: 0.88em; font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; }
+    pre { background: var(--bg-code); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.2em 1.5em; overflow-x: auto; font-size: 0.88em; line-height: 1.6; }
+    pre code { background: none; border: none; padding: 0; }
+    .container { max-width: var(--max-w); margin: 0 auto; padding: 0 24px; }
+    nav { position: sticky; top: 0; z-index: 100; background: rgba(13,17,23,0.85); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+    nav .container { display: flex; align-items: center; justify-content: space-between; height: 56px; }
+    nav .logo { font-weight: 800; font-size: 1.25em; letter-spacing: -0.5px; }
+    nav .logo span { color: var(--accent); }
+    nav ul { display: flex; gap: 28px; list-style: none; }
+    nav a { color: var(--text-dim); font-size: 0.92em; font-weight: 500; } nav a:hover { color: var(--text); text-decoration: none; } nav a.active { color: var(--accent); }
+    .post-header { padding: 64px 0 24px; }
+    .post-header .breadcrumb { color: var(--text-dim); font-size: 0.88em; margin-bottom: 16px; }
+    .post-header .breadcrumb a { color: var(--text-dim); } .post-header .breadcrumb a:hover { color: var(--accent); }
+    .post-header .meta { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+    .post-header .date { color: var(--text-dim); font-size: 0.9em; }
+    .post-header .tag { background: var(--bg-code); border: 1px solid var(--border); border-radius: 100px; padding: 4px 14px; font-size: 0.8em; color: var(--accent); font-weight: 500; }
+    .post-header h1 { font-size: clamp(1.6rem, 4vw, 2.2rem); font-weight: 800; letter-spacing: -0.5px; line-height: 1.3; margin-bottom: 16px; }
+    .post-header .subtitle { color: var(--text-dim); font-size: 1.1em; line-height: 1.6; }
+    .content { padding: 24px 0 80px; }
+    .content h2 { font-size: 1.4em; font-weight: 700; margin: 40px 0 16px; }
+    .content h3 { font-size: 1.15em; font-weight: 600; margin: 28px 0 12px; }
+    .content p { margin-bottom: 16px; }
+    .content ul, .content ol { margin: 0 0 16px 24px; }
+    .content li { margin-bottom: 8px; }
+    .content pre { margin: 16px 0; }
+    .content blockquote { border-left: 4px solid var(--accent); padding-left: 20px; margin: 20px 0; color: var(--text-dim); font-style: italic; }
+    .post-nav { display: flex; justify-content: space-between; padding: 32px 0; border-top: 1px solid var(--border); margin-top: 48px; }
+    .post-nav a { color: var(--text-dim); font-size: 0.92em; }
+    .post-nav a:hover { color: var(--accent); }
+    footer { border-top: 1px solid var(--border); padding: 40px 0; text-align: center; color: var(--text-dim); font-size: 0.9em; }
+    footer .links { display: flex; gap: 24px; justify-content: center; margin-bottom: 16px; }
+    @media (max-width: 768px) { nav ul { gap: 16px; } .container { padding: 0 16px; } }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="container">
+    <a href="../index.html" class="logo"><span>q</span> agent</a>
+    <ul>
+      <li><a href="../index.html">Home</a></li>
+      <li><a href="../docs.html">Docs</a></li>
+      <li><a href="../blog.html" class="active">Blog</a></li>
+      <li><a href="https://github.com/coinerd/q" target="_blank">GitHub ↗</a></li>
+    </ul>
+  </div>
+</nav>
+
+<div class="post-header">
+  <div class="container">
+    <div class="breadcrumb"><a href="../blog.html">Blog</a></div>
+    <div class="meta">
+      <span class="date">May 15, 2026</span>
+      <span class="tag">Architecture</span>
+    </div>
+    <h1>The Small Trusted Core Principle</h1>
+    <p class="subtitle">ADR #1: Why q's core agent loop has minimal dependencies, no TUI or CLI coupling, and how security boundaries are enforced at the architecture level.</p>
+  </div>
+</div>
+
+<div class="content">
+  <div class="container">
+
+    <p>Our first Architecture Decision Record (ADR) established the principle that defines q's entire architecture: <strong>the agent core must be as small and dependency-free as possible</strong>. Everything else — the TUI, CLI, JSON interface, extensions — lives outside this boundary.</p>
+
+    <h2>Why This Matters</h2>
+    <p>AI coding agents have a unique threat model. They execute shell commands, read and write files, and make network requests to LLM providers. Every dependency in the core expands the attack surface and makes security auditing harder.</p>
+    <p>By keeping the core small, we achieve three things:</p>
+    <ol>
+      <li><strong>Auditability</strong> — fewer lines of code to review for security issues</li>
+      <li><strong>Portability</strong> — the core can run anywhere without UI dependencies</li>
+      <li><strong>Stability</strong> — changes to the TUI or CLI can't break the agent loop</li>
+    </ol>
+
+    <h2>The Boundary</h2>
+    <p>The trusted core consists of:</p>
+    <ul>
+      <li>Event bus (core messaging infrastructure)</li>
+      <li>Event structs (typed event definitions)</li>
+      <li>State management (session state, turn state)</li>
+      <li>The main loop (iteration control, phase dispatch)</li>
+      <li>Tool execution (shell commands, file operations)</li>
+      <li>Provider abstraction (LLM interface)</li>
+    </ul>
+    <p>Everything else — rendering, input handling, configuration, extensions — is outside this boundary.</p>
+
+    <h2>No UI Coupling</h2>
+    <p>The core has zero knowledge of the TUI. It doesn't call any rendering functions, doesn't know about terminals, and doesn't format output for display. It emits events. The TUI subscribes to those events and renders them however it wants.</p>
+    <p>This means the core can run headless, in a container, or in a test harness without any display infrastructure.</p>
+
+    <h2>Security by Separation</h2>
+    <p>Security-critical operations (shell execution, file writes) are isolated from non-critical ones (CLI argument parsing, TUI rendering). If the TUI has a vulnerability, it doesn't compromise the core.</p>
+    <blockquote>
+      <p>Security is not a feature — it's the foundation. Every boundary in q's architecture is a security boundary.</p>
+    </blockquote>
+
+    <h2>Extension Points</h2>
+    <p>The extension hook model (pre, post, error) allows third-party code to modify behavior without touching the core. Extensions run in their own namespace with controlled access to the event bus.</p>
+
+    <div class="post-nav">
+      <a href="interface-separation.html">← One Agent, Five Interfaces</a>
+      <a href="context-manager-strategy.html">Context Assembly →</a>
+    </div>
+
+  </div>
+</div>
+
+<footer>
+  <div class="container">
+    <div class="links">
+      <a href="https://github.com/coinerd/q" target="_blank">GitHub</a>
+      <a href="https://github.com/coinerd/q/blob/main/LICENSE" target="_blank">MIT License</a>
+      <a href="https://github.com/coinerd/q/blob/main/CONTRIBUTING.md" target="_blank">Contributing</a>
+    </div>
+    <p>© 2026 q contributors. Built with Racket 🎾</p>
+  </div>
+</footer>
+
+</body>
+</html>

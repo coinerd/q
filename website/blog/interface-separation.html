@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>One Agent, Five Interfaces — q Agent Blog</title>
+  <meta name="description" content="CLI, TUI, JSON, RPC, and SDK — five ways to interact with the same agent core. How interface separation keeps q flexible without feature bloat.">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --bg-card: #161b22; --bg-code: #1c2128; --border: #30363d;
+      --text: #e6edf3; --text-dim: #8b949e; --accent: #58a6ff; --accent2: #7ee787;
+      --accent3: #d2a8ff; --warn: #f0883e; --radius: 12px; --max-w: 760px;
+    }
+    html { scroll-behavior: smooth; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; -webkit-font-smoothing: antialiased; }
+    a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+    code { background: var(--bg-code); border: 1px solid var(--border); border-radius: 6px; padding: 2px 7px; font-size: 0.88em; font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; }
+    pre { background: var(--bg-code); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.2em 1.5em; overflow-x: auto; font-size: 0.88em; line-height: 1.6; }
+    pre code { background: none; border: none; padding: 0; }
+    .container { max-width: var(--max-w); margin: 0 auto; padding: 0 24px; }
+    nav { position: sticky; top: 0; z-index: 100; background: rgba(13,17,23,0.85); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+    nav .container { display: flex; align-items: center; justify-content: space-between; height: 56px; }
+    nav .logo { font-weight: 800; font-size: 1.25em; letter-spacing: -0.5px; }
+    nav .logo span { color: var(--accent); }
+    nav ul { display: flex; gap: 28px; list-style: none; }
+    nav a { color: var(--text-dim); font-size: 0.92em; font-weight: 500; } nav a:hover { color: var(--text); text-decoration: none; } nav a.active { color: var(--accent); }
+    .post-header { padding: 64px 0 24px; }
+    .post-header .breadcrumb { color: var(--text-dim); font-size: 0.88em; margin-bottom: 16px; }
+    .post-header .breadcrumb a { color: var(--text-dim); } .post-header .breadcrumb a:hover { color: var(--accent); }
+    .post-header .meta { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+    .post-header .date { color: var(--text-dim); font-size: 0.9em; }
+    .post-header .tag { background: var(--bg-code); border: 1px solid var(--border); border-radius: 100px; padding: 4px 14px; font-size: 0.8em; color: var(--accent); font-weight: 500; }
+    .post-header h1 { font-size: clamp(1.6rem, 4vw, 2.2rem); font-weight: 800; letter-spacing: -0.5px; line-height: 1.3; margin-bottom: 16px; }
+    .post-header .subtitle { color: var(--text-dim); font-size: 1.1em; line-height: 1.6; }
+    .content { padding: 24px 0 80px; }
+    .content h2 { font-size: 1.4em; font-weight: 700; margin: 40px 0 16px; }
+    .content h3 { font-size: 1.15em; font-weight: 600; margin: 28px 0 12px; }
+    .content p { margin-bottom: 16px; }
+    .content ul, .content ol { margin: 0 0 16px 24px; }
+    .content li { margin-bottom: 8px; }
+    .content pre { margin: 16px 0; }
+    .content blockquote { border-left: 4px solid var(--accent); padding-left: 20px; margin: 20px 0; color: var(--text-dim); font-style: italic; }
+    .post-nav { display: flex; justify-content: space-between; padding: 32px 0; border-top: 1px solid var(--border); margin-top: 48px; }
+    .post-nav a { color: var(--text-dim); font-size: 0.92em; }
+    .post-nav a:hover { color: var(--accent); }
+    footer { border-top: 1px solid var(--border); padding: 40px 0; text-align: center; color: var(--text-dim); font-size: 0.9em; }
+    footer .links { display: flex; gap: 24px; justify-content: center; margin-bottom: 16px; }
+    @media (max-width: 768px) { nav ul { gap: 16px; } .container { padding: 0 16px; } }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="container">
+    <a href="../index.html" class="logo"><span>q</span> agent</a>
+    <ul>
+      <li><a href="../index.html">Home</a></li>
+      <li><a href="../docs.html">Docs</a></li>
+      <li><a href="../blog.html" class="active">Blog</a></li>
+      <li><a href="https://github.com/coinerd/q" target="_blank">GitHub ↗</a></li>
+    </ul>
+  </div>
+</nav>
+
+<div class="post-header">
+  <div class="container">
+    <div class="breadcrumb"><a href="../blog.html">Blog</a></div>
+    <div class="meta">
+      <span class="date">May 5, 2026</span>
+      <span class="tag">Architecture</span>
+    </div>
+    <h1>One Agent, Five Interfaces: Why Separation Matters</h1>
+    <p class="subtitle">CLI, TUI, JSON, RPC, and SDK — five ways to interact with the same agent core. How interface separation keeps q flexible without feature bloat.</p>
+  </div>
+</div>
+
+<div class="content">
+  <div class="container">
+
+    <p>q can be used from the command line, in a rich terminal UI, as a JSON-streaming service, through an RPC interface, or embedded as an SDK. Five interfaces, one agent core. Here's why that separation matters and how it works.</p>
+
+    <h2>The Five Interfaces</h2>
+
+    <h3>CLI</h3>
+    <p>The simplest interface. Text in, text out. Perfect for scripts, CI pipelines, and quick one-shot prompts:</p>
+    <pre><code>q prompt "Explain this function"
+echo "What does this code do?" | q chat
+q goal "Fix the timeout issue"</code></pre>
+
+    <h3>TUI</h3>
+    <p>The terminal user interface provides a rich, interactive experience with syntax highlighting, streaming display, and goal mode visualization:</p>
+    <pre><code>q tui</code></pre>
+    <p>Features include file diff previews, session history browsing, and real-time state machine visualization during goal execution.</p>
+
+    <h3>JSON Mode</h3>
+    <p>For machines. Structured JSON output with the response, tool calls, and events:</p>
+    <pre><code>echo '{"prompt": "List all TODOs"}' | q json</code></pre>
+    <p>Ideal for IDE extensions, CI pipelines, and other agents that consume q's output.</p>
+
+    <h3>RPC</h3>
+    <p>For long-running services. q can be started as an RPC server that other processes connect to:</p>
+    <pre><code>q serve --port 9876
+# Then from another process:
+curl http://localhost:9876/ask -d '{"prompt": "..."}'</code></pre>
+
+    <h3>SDK</h3>
+    <p>Embed q in your own Racket applications:</p>
+    <pre><code>#lang racket
+(require q/sdk)
+(define agent (make-agent))
+(define response (agent-ask agent "What does this project do?"))</code></pre>
+
+    <h2>How Separation Works</h2>
+    <p>All five interfaces are <strong>pure event consumers</strong>. The core agent loop emits events to the bus, and each interface subscribes to the events it cares about:</p>
+    <ul>
+      <li><strong>CLI</strong> subscribes to text output events</li>
+      <li><strong>TUI</strong> subscribes to all events for rich display</li>
+      <li><strong>JSON</strong> subscribes to structured events</li>
+      <li><strong>RPC</strong> subscribes to response events</li>
+      <li><strong>SDK</strong> provides callbacks for specific event types</li>
+    </ul>
+
+    <h2>The Contract</h2>
+    <p>The event contract between core and interfaces is stable and documented:</p>
+    <ul>
+      <li>Event types never change their shape (only additive changes)</li>
+      <li>All events include a timestamp and correlation ID</li>
+      <li>Interfaces must handle unknown event types gracefully</li>
+    </ul>
+    <p>This stability means new interfaces can be added without modifying the core — just subscribe to events.</p>
+
+    <h2>Adding a New Interface</h2>
+    <p>Want to build a web UI for q? You only need to:</p>
+    <ol>
+      <li>Subscribe to the events you want to display</li>
+      <li>Render them as HTML/WebSocket messages</li>
+      <li>Send user input back through the agent API</li>
+    </ol>
+    <p>No core modifications needed. That's the power of separation.</p>
+
+    <div class="post-nav">
+      <a href="small-trusted-core.html">← The Small Trusted Core Principle</a>
+      <a href="event-bus-architecture.html">Why We Built an Event Bus →</a>
+    </div>
+
+  </div>
+</div>
+
+<footer>
+  <div class="container">
+    <div class="links">
+      <a href="https://github.com/coinerd/q" target="_blank">GitHub</a>
+      <a href="https://github.com/coinerd/q/blob/main/LICENSE" target="_blank">MIT License</a>
+      <a href="https://github.com/coinerd/q/blob/main/CONTRIBUTING.md" target="_blank">Contributing</a>
+    </div>
+    <p>© 2026 q contributors. Built with Racket 🎾</p>
+  </div>
+</footer>
+
+</body>
+</html>

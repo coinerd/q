@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Context Assembly: Building the Right Prompt at the Right Time — q Agent Blog</title>
+  <meta name="description" content="How q dynamically assembles context for each turn — combining system prompts, conversation history, tool results, and extension hooks.">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --bg-card: #161b22; --bg-code: #1c2128; --border: #30363d;
+      --text: #e6edf3; --text-dim: #8b949e; --accent: #58a6ff; --accent2: #7ee787;
+      --accent3: #d2a8ff; --warn: #f0883e; --radius: 12px; --max-w: 760px;
+    }
+    html { scroll-behavior: smooth; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; -webkit-font-smoothing: antialiased; }
+    a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+    code { background: var(--bg-code); border: 1px solid var(--border); border-radius: 6px; padding: 2px 7px; font-size: 0.88em; font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; }
+    pre { background: var(--bg-code); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.2em 1.5em; overflow-x: auto; font-size: 0.88em; line-height: 1.6; }
+    pre code { background: none; border: none; padding: 0; }
+    .container { max-width: var(--max-w); margin: 0 auto; padding: 0 24px; }
+    nav { position: sticky; top: 0; z-index: 100; background: rgba(13,17,23,0.85); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+    nav .container { display: flex; align-items: center; justify-content: space-between; height: 56px; }
+    nav .logo { font-weight: 800; font-size: 1.25em; letter-spacing: -0.5px; }
+    nav .logo span { color: var(--accent); }
+    nav ul { display: flex; gap: 28px; list-style: none; }
+    nav a { color: var(--text-dim); font-size: 0.92em; font-weight: 500; } nav a:hover { color: var(--text); text-decoration: none; } nav a.active { color: var(--accent); }
+    .post-header { padding: 64px 0 24px; }
+    .post-header .breadcrumb { color: var(--text-dim); font-size: 0.88em; margin-bottom: 16px; }
+    .post-header .breadcrumb a { color: var(--text-dim); } .post-header .breadcrumb a:hover { color: var(--accent); }
+    .post-header .meta { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+    .post-header .date { color: var(--text-dim); font-size: 0.9em; }
+    .post-header .tag { background: var(--bg-code); border: 1px solid var(--border); border-radius: 100px; padding: 4px 14px; font-size: 0.8em; color: var(--accent); font-weight: 500; }
+    .post-header h1 { font-size: clamp(1.6rem, 4vw, 2.2rem); font-weight: 800; letter-spacing: -0.5px; line-height: 1.3; margin-bottom: 16px; }
+    .post-header .subtitle { color: var(--text-dim); font-size: 1.1em; line-height: 1.6; }
+    .content { padding: 24px 0 80px; }
+    .content h2 { font-size: 1.4em; font-weight: 700; margin: 40px 0 16px; }
+    .content h3 { font-size: 1.15em; font-weight: 600; margin: 28px 0 12px; }
+    .content p { margin-bottom: 16px; }
+    .content ul, .content ol { margin: 0 0 16px 24px; }
+    .content li { margin-bottom: 8px; }
+    .content pre { margin: 16px 0; }
+    .content blockquote { border-left: 4px solid var(--accent); padding-left: 20px; margin: 20px 0; color: var(--text-dim); font-style: italic; }
+    .post-nav { display: flex; justify-content: space-between; padding: 32px 0; border-top: 1px solid var(--border); margin-top: 48px; }
+    .post-nav a { color: var(--text-dim); font-size: 0.92em; }
+    .post-nav a:hover { color: var(--accent); }
+    footer { border-top: 1px solid var(--border); padding: 40px 0; text-align: center; color: var(--text-dim); font-size: 0.9em; }
+    footer .links { display: flex; gap: 24px; justify-content: center; margin-bottom: 16px; }
+    @media (max-width: 768px) { nav ul { gap: 16px; } .container { padding: 0 16px; } }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="container">
+    <a href="../index.html" class="logo"><span>q</span> agent</a>
+    <ul>
+      <li><a href="../index.html">Home</a></li>
+      <li><a href="../docs.html">Docs</a></li>
+      <li><a href="../blog.html" class="active">Blog</a></li>
+      <li><a href="https://github.com/coinerd/q" target="_blank">GitHub ↗</a></li>
+    </ul>
+  </div>
+</nav>
+
+<div class="post-header">
+  <div class="container">
+    <div class="breadcrumb"><a href="../blog.html">Blog</a></div>
+    <div class="meta">
+      <span class="date">May 10, 2026</span>
+      <span class="tag">Architecture</span>
+    </div>
+    <h1>Context Assembly: Building the Right Prompt at the Right Time</h1>
+    <p class="subtitle">How q dynamically assembles context for each turn — combining system prompts, conversation history, tool results, and extension hooks.</p>
+  </div>
+</div>
+
+<div class="content">
+  <div class="container">
+
+    <p>Every turn, q sends a prompt to the LLM. That prompt isn't just the user's message — it's a carefully assembled context that includes system instructions, conversation history, tool definitions, extension hooks, and budget constraints. Getting this right is critical for both quality and cost.</p>
+
+    <h2>The Context Assembly Problem</h2>
+    <p>LLMs have context windows — maximum token limits per request. GPT-4o supports 128K tokens, Claude supports 200K. But fitting a long conversation with tool calls, file contents, and extension outputs into that budget requires strategy.</p>
+    <p>The naive approach — just concatenate everything — fails because:</p>
+    <ul>
+      <li>Long conversations exceed the budget</li>
+      <li>Old messages may be less relevant than recent ones</li>
+      <li>Tool results can be very large (e.g., file contents)</li>
+      <li>Extension hooks add unpredictable context</li>
+    </ul>
+
+    <h2>The Three-Module Architecture</h2>
+    <p>We unified context assembly into three modules with clear responsibilities:</p>
+
+    <h3>1. context-policy.rkt — Shared Policy</h3>
+    <p>The source of truth for:</p>
+    <ul>
+      <li><code>estimate-message-tokens</code> — canonical token estimation</li>
+      <li><code>ensure-first-user-pinned</code> — first user message always included</li>
+      <li><code>fit-messages-pair-preserving</code> — budget fitting that keeps user/assistant pairs together</li>
+    </ul>
+    <p>Both the production pipeline and the fallback import from this single source. No more divergent implementations.</p>
+
+    <h3>2. context-manager.rkt — Production Pipeline</h3>
+    <p>The primary context assembly pipeline with six stages:</p>
+    <pre><code>assemble-context:
+  1. Tree-walk     → enumerate all context entries
+  2. Pin           → ensure first user message is included
+  3. Budget        → fit messages within token budget
+  4. Summarize     → LLM-summarize excluded entries
+  5. Catalog       → generate observability metadata
+  6. Reassemble    → build final message list</code></pre>
+    <p>When a provider is available, excluded entries are LLM-summarized instead of dropped. This preserves context quality while staying within budget.</p>
+
+    <h3>3. context-builder.rkt — Legacy Fallback</h3>
+    <p>Used when no provider is configured (e.g., offline mode). Does the tree-walk and budget fitting without summarization.</p>
+
+    <h2>Pair-Preserving Budget Fitting</h2>
+    <p>A key insight: user messages and assistant responses form pairs. Dropping one without the other creates confusing context. Our <code>fit-messages-pair-preserving</code> algorithm:</p>
+    <ol>
+      <li>Starts with the most recent messages</li>
+      <li>Adds messages backward, keeping user/assistant pairs together</li>
+      <li>Always includes the first user message (pinned)</li>
+      <li>Stops when the budget is reached</li>
+    </ol>
+
+    <h2>Summary Caching</h2>
+    <p>LLM summarization is expensive — it requires an API call. We cache summaries for excluded entries so that subsequent turns don't re-summarize the same content. The cache is invalidated when the conversation structure changes.</p>
+
+    <h2>Observability</h2>
+    <p>The catalog stage generates metadata about what was included, excluded, and summarized. This is emitted as an event, giving the TUI and extensions visibility into context assembly decisions.</p>
+
+    <div class="post-nav">
+      <a href="small-trusted-core.html">← The Small Trusted Core Principle</a>
+      <a href="event-bus-architecture.html">Why We Built an Event Bus →</a>
+    </div>
+
+  </div>
+</div>
+
+<footer>
+  <div class="container">
+    <div class="links">
+      <a href="https://github.com/coinerd/q" target="_blank">GitHub</a>
+      <a href="https://github.com/coinerd/q/blob/main/LICENSE" target="_blank">MIT License</a>
+      <a href="https://github.com/coinerd/q/blob/main/CONTRIBUTING.md" target="_blank">Contributing</a>
+    </div>
+    <p>© 2026 q contributors. Built with Racket 🎾</p>
+  </div>
+</footer>
+
+</body>
+</html>

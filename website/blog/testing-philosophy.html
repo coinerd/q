@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Testing Philosophy: 221 Tests and Counting — q Agent Blog</title>
+  <meta name="description" content="How q achieved comprehensive test coverage for event bus, state machines, and provider integrations — with strategies for testing non-deterministic LLM outputs.">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --bg-card: #161b22; --bg-code: #1c2128; --border: #30363d;
+      --text: #e6edf3; --text-dim: #8b949e; --accent: #58a6ff; --accent2: #7ee787;
+      --accent3: #d2a8ff; --warn: #f0883e; --radius: 12px; --max-w: 760px;
+    }
+    html { scroll-behavior: smooth; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; -webkit-font-smoothing: antialiased; }
+    a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+    code { background: var(--bg-code); border: 1px solid var(--border); border-radius: 6px; padding: 2px 7px; font-size: 0.88em; font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; }
+    pre { background: var(--bg-code); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.2em 1.5em; overflow-x: auto; font-size: 0.88em; line-height: 1.6; }
+    pre code { background: none; border: none; padding: 0; }
+    .container { max-width: var(--max-w); margin: 0 auto; padding: 0 24px; }
+    nav { position: sticky; top: 0; z-index: 100; background: rgba(13,17,23,0.85); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+    nav .container { display: flex; align-items: center; justify-content: space-between; height: 56px; }
+    nav .logo { font-weight: 800; font-size: 1.25em; letter-spacing: -0.5px; }
+    nav .logo span { color: var(--accent); }
+    nav ul { display: flex; gap: 28px; list-style: none; }
+    nav a { color: var(--text-dim); font-size: 0.92em; font-weight: 500; } nav a:hover { color: var(--text); text-decoration: none; } nav a.active { color: var(--accent); }
+    .post-header { padding: 64px 0 24px; }
+    .post-header .breadcrumb { color: var(--text-dim); font-size: 0.88em; margin-bottom: 16px; }
+    .post-header .breadcrumb a { color: var(--text-dim); } .post-header .breadcrumb a:hover { color: var(--accent); }
+    .post-header .meta { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+    .post-header .date { color: var(--text-dim); font-size: 0.9em; }
+    .post-header .tag { background: var(--bg-code); border: 1px solid var(--border); border-radius: 100px; padding: 4px 14px; font-size: 0.8em; color: var(--accent); font-weight: 500; }
+    .post-header h1 { font-size: clamp(1.6rem, 4vw, 2.2rem); font-weight: 800; letter-spacing: -0.5px; line-height: 1.3; margin-bottom: 16px; }
+    .post-header .subtitle { color: var(--text-dim); font-size: 1.1em; line-height: 1.6; }
+    .content { padding: 24px 0 80px; }
+    .content h2 { font-size: 1.4em; font-weight: 700; margin: 40px 0 16px; }
+    .content h3 { font-size: 1.15em; font-weight: 600; margin: 28px 0 12px; }
+    .content p { margin-bottom: 16px; }
+    .content ul, .content ol { margin: 0 0 16px 24px; }
+    .content li { margin-bottom: 8px; }
+    .content pre { margin: 16px 0; }
+    .content blockquote { border-left: 4px solid var(--accent); padding-left: 20px; margin: 20px 0; color: var(--text-dim); font-style: italic; }
+    .post-nav { display: flex; justify-content: space-between; padding: 32px 0; border-top: 1px solid var(--border); margin-top: 48px; }
+    .post-nav a { color: var(--text-dim); font-size: 0.92em; }
+    .post-nav a:hover { color: var(--accent); }
+    footer { border-top: 1px solid var(--border); padding: 40px 0; text-align: center; color: var(--text-dim); font-size: 0.9em; }
+    footer .links { display: flex; gap: 24px; justify-content: center; margin-bottom: 16px; }
+    @media (max-width: 768px) { nav ul { gap: 16px; } .container { padding: 0 16px; } }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="container">
+    <a href="../index.html" class="logo"><span>q</span> agent</a>
+    <ul>
+      <li><a href="../index.html">Home</a></li>
+      <li><a href="../docs.html">Docs</a></li>
+      <li><a href="../blog.html" class="active">Blog</a></li>
+      <li><a href="https://github.com/coinerd/q" target="_blank">GitHub ↗</a></li>
+    </ul>
+  </div>
+</nav>
+
+<div class="post-header">
+  <div class="container">
+    <div class="breadcrumb"><a href="../blog.html">Blog</a></div>
+    <div class="meta">
+      <span class="date">March 1, 2026</span>
+      <span class="tag">Engineering</span>
+    </div>
+    <h1>Testing Philosophy: 221 Tests and Counting</h1>
+    <p class="subtitle">How q achieved comprehensive test coverage for event bus, state machines, and provider integrations — with strategies for testing non-deterministic LLM outputs.</p>
+  </div>
+</div>
+
+<div class="content">
+  <div class="container">
+
+    <p>Testing an AI coding agent is fundamentally different from testing regular software. The core of the system — the LLM — is non-deterministic. The same prompt can produce different responses. Tool calls depend on model reasoning. State machine transitions depend on model interpretation of results. Here's how we built 221 tests (and counting) for a fundamentally non-deterministic system.</p>
+
+    <h2>Test Categories</h2>
+    <p>q's tests fall into four categories:</p>
+
+    <h3>Unit Tests (140+)</h3>
+    <p>Pure function tests with no external dependencies. These cover:</p>
+    <ul>
+      <li>Event struct construction and predicates</li>
+      <li>JSON serialization/deserialization</li>
+      <li>Credential redaction regex patterns</li>
+      <li>Configuration parsing and validation</li>
+      <li>Queue and stream data structures</li>
+    </ul>
+    <pre><code>; Example: Event predicate test
+(test-case "turn-start-event predicate"
+  (define evt (turn-start-event "t1" 12345))
+  (check-true (turn-start-event? evt))
+  (check-equal? (turn-start-event-turn-id evt) "t1")
+  (check-false (turn-end-event? evt)))</code></pre>
+
+    <h3>Integration Tests (50+)</h3>
+    <p>Tests that exercise multiple components together:</p>
+    <ul>
+      <li>Event bus publish/subscribe cycles</li>
+      <li>Stream runner lifecycle (start, pause, resume, cancel)</li>
+      <li>Tool turn bridge (tool call → execution → result)</li>
+      <li>JSONL serialization round-trip</li>
+    </ul>
+
+    <h3>State Machine Tests (20+)</h3>
+    <p>The GSD state machine is the most complex component. We test every valid and invalid transition:</p>
+    <pre><code>(test-case "GSD: valid exploration → planning transition"
+  (define fsm (make-gsd-fsm))
+  (gsd-transition! fsm 'begin-plan)
+  (check-equal? (gsd-current-state fsm) 'planning))
+
+(test-case "GSD: invalid exploration → completed transition"
+  (define fsm (make-gsd-fsm))
+  (check-exn exn:fail?
+    (λ () (gsd-transition! fsm 'task-complete))))</code></pre>
+
+    <h3>Provider Mock Tests (11+)</h3>
+    <p>Provider tests use mock HTTP responses to avoid actual API calls:</p>
+    <pre><code>; Mock provider for testing
+(define mock-provider
+  (make-mock-provider
+    #:responses
+    (list (mock-response
+            #:text "I'll read the file for you."
+            #:tool-calls (list (mock-tool-call "file-read" '(("path" . "src/main.rkt"))))))))</code></pre>
+
+    <h2>Testing Non-Deterministic LLM Outputs</h2>
+    <p>You can't assert exact text from an LLM. Instead, we test <strong>structural properties</strong>:</p>
+    <ul>
+      <li><strong>Response parsing</strong> — does the parser handle valid JSON responses?</li>
+      <li><strong>Tool call extraction</strong> — can we extract tool calls from a model response?</li>
+      <li><strong>Streaming assembly</strong> — do chunks assemble into a complete response?</li>
+      <li><strong>Error handling</strong> — does the agent recover from malformed responses?</li>
+    </ul>
+
+    <h2>The Mock Provider</h2>
+    <p>Our mock provider is the key to deterministic testing:</p>
+    <pre><code>(define (make-mock-provider #:responses responses)
+  (λ (prompt)
+    (define resp (car responses))
+    (set! responses (cdr responses))
+    (values (mock-response-text resp)
+            (mock-response-tool-calls resp))))</code></pre>
+    <p>It returns pre-defined responses in sequence. Tests become deterministic and repeatable.</p>
+
+    <h2>Test Conventions</h2>
+    <p>We follow a few conventions documented in <code>TEST_CONVENTIONS.md</code>:</p>
+    <ul>
+      <li>Tests run in CI with <code>raco test</code></li>
+      <li>Fast tests (< 30s total) are separated from slow integration tests</li>
+      <li>Architecture tests verify ADR compliance</li>
+      <li>TUI tests use a virtual terminal (no real terminal needed)</li>
+    </ul>
+
+    <h2>Coverage Gaps</h2>
+    <p>We're honest about what's not tested:</p>
+    <ul>
+      <li><strong>Multi-turn agent behavior</strong> — hard to mock the full reasoning chain</li>
+      <li><strong>Error recovery in production</strong> — requires real network conditions</li>
+      <li><strong>TUI visual correctness</strong> — we test logic, not pixel-perfect rendering</li>
+    </ul>
+    <p>These gaps are covered by manual testing and the session replay system.</p>
+
+    <blockquote>"Testing an AI agent is like testing a co-pilot. You can't predict what they'll say, but you can verify they follow the right procedures." — q contributor</blockquote>
+
+    <div class="post-nav">
+      <a href="context-compaction.html">← Context Compaction</a>
+      <a href="local-first-philosophy.html">Why Local-First Matters →</a>
+    </div>
+
+  </div>
+</div>
+
+<footer>
+  <div class="container">
+    <div class="links">
+      <a href="https://github.com/coinerd/q" target="_blank">GitHub</a>
+      <a href="https://github.com/coinerd/q/blob/main/LICENSE" target="_blank">MIT License</a>
+      <a href="https://github.com/coinerd/q/blob/main/CONTRIBUTING.md" target="_blank">Contributing</a>
+    </div>
+    <p>© 2026 q contributors. Built with Racket 🎾</p>
+  </div>
+</footer>
+
+</body>
+</html>
