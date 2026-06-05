@@ -29,7 +29,12 @@
          gui-layout-status-height
          gui-layout-input-height
          gui-layout-min-width
-         gui-layout-min-height)
+         gui-layout-min-height
+         ;; Layout breakpoint (W5.1)
+         layout-breakpoints
+         classify-layout-breakpoint
+         layout-breakpoint?
+         apply-layout-policy)
 
 ;; ──────────────────────────────
 ;; Struct
@@ -64,3 +69,28 @@
   (define content-w (- w (gui-layout-sidebar-width layout)))
   (define content-h (- h (gui-layout-status-height layout) (gui-layout-input-height layout)))
   (values (max 0 content-w) (max 0 content-h)))
+
+;; ──────────────────────────────
+;; Layout breakpoint classification (W5.1)
+;; ──────────────────────────────
+(define layout-breakpoints '(narrow standard wide tall))
+
+(define (classify-layout-breakpoint layout)
+  (define w (or (gui-layout-width layout) 120))
+  (define h (or (gui-layout-height layout) 40))
+  (cond
+    [(< w 60) 'narrow]
+    [(< w 100) 'standard]
+    [(>= h 60) 'tall]
+    [else 'wide]))
+
+(define (layout-breakpoint? sym)
+  (and (symbol? sym) (member sym layout-breakpoints) #t))
+
+(define (apply-layout-policy layout breakpoint)
+  (case breakpoint
+    [(narrow) (struct-copy gui-layout layout [sidebar-width 0] [status-height 1] [input-height 2])]
+    [(standard) (struct-copy gui-layout layout [sidebar-width 0] [status-height 1] [input-height 3])]
+    [(wide) (struct-copy gui-layout layout [sidebar-width 24] [status-height 1] [input-height 3])]
+    [(tall) (struct-copy gui-layout layout [sidebar-width 24] [status-height 2] [input-height 3])]
+    [else layout]))
