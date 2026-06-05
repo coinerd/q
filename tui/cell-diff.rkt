@@ -20,11 +20,13 @@
 ;; Row hashing — fast change detection
 ;; ============================================================
 
-;; Hash a single row by XOR-ing cell data.
+;; Hash a single row by mixing cell data with a non-commutative function.
 ;; Not cryptographically secure — just needs to detect any change.
+;; Uses h = h * 31 + v to avoid XOR-cancellation with even-width rows
+;; of identical cells (a real bug observed with 4-column buffers).
 (define (row-hash buf row)
   (define cols (cell-buffer-cols buf))
-  (define h (box 0))
+  (define h 0)
   (for ([c (in-range cols)])
     (define cell (cell-buffer-ref buf c row))
     ;; Combine char code + fg + bg + flags into a fixnum hash
@@ -37,8 +39,10 @@
                    (if (cell-underline? cell) 2 0)
                    (if (cell-italic? cell) 4 0)
                    (if (cell-blink? cell) 8 0)))
-    (set-box! h (bitwise-xor (unbox h) v)))
-  (unbox h))
+    ;; Non-commutative mix: prime multiplication + addition.
+    ;; Pure XOR fails when an even number of identical values cancel to 0.
+    (set! h (+ (* 31 h) v)))
+  h)
 
 ;; ============================================================
 ;; Cell diff — main algorithm

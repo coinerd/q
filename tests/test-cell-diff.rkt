@@ -30,6 +30,31 @@
   (define b (make-cell-buffer 10 5))
   (check-equal? (row-hash a 0) (row-hash b 0)))
 
+(test-case "row-hash: even-width uniform row does NOT cancel to 0"
+  ;; XOR-cancellation bug: an even number of identical values XOR'd together = 0.
+  ;; This caused diff to skip rows when all cells were identical (common case).
+  (define a (make-cell-buffer 4 1))
+  (define b (make-cell-buffer 4 1))
+  ;; Buffer A: all spaces (default). Buffer B: all 'X's (completely different!).
+  (for ([c (in-range 4)])
+    (cell-buffer-set! b c 0 #:char #\X))
+  (define h-a (row-hash a 0))
+  (define h-b (row-hash b 0))
+  ;; Must detect the difference — hashes must differ
+  (check-not-equal? h-a h-b (format "row-hash collision: both rows hash to ~a" h-a)))
+
+(test-case "diff: even-width uniform row change is detected"
+  ;; Regression: row-hash collision caused diff to miss entire row changes
+  (define a (make-cell-buffer 4 1))
+  (define b (make-cell-buffer 4 1))
+  (for ([c (in-range 4)])
+    (cell-buffer-set! b c 0 #:char #\X))
+  (define deltas (diff-cell-buffers a b))
+  ;; All 4 cells changed — diff MUST detect them
+  (check-equal? (length deltas)
+                4
+                (format "expected 4 deltas, got ~a (row-hash collision?)" (length deltas))))
+
 ;; ============================================================
 ;; Diff — identical buffers
 ;; ============================================================
