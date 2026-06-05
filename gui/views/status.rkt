@@ -8,6 +8,7 @@
 
 (require racket/contract
          racket/format
+         racket/string
          "../../ui-core/theme-protocol.rkt")
 
 (provide (contract-out [render-status-bar
@@ -16,9 +17,19 @@
                                       #:status (or/c symbol? string? #f)
                                       #:turn exact-nonnegative-integer?
                                       #:tokens (or/c exact-nonnegative-integer? #f)
+                                      #:context-percent (or/c exact-nonnegative-integer? #f)
+                                      #:cost (or/c string? #f)
+                                      #:active-goal (or/c string? #f)
                                       #:width exact-nonnegative-integer?)
                              hash?)]
-                       [status-text (-> (or/c symbol? string?) string?)]))
+                       [status-text (-> (or/c symbol? string?) string?)]
+                       [format-status-string
+                        (->* (any/c any/c)
+                             (#:model (or/c string? #f)
+                                      #:context-percent (or/c exact-nonnegative-integer? #f)
+                                      #:cost (or/c string? #f)
+                                      #:active-goal (or/c string? #f))
+                             string?)]))
 
 ;; ──────────────────────────────
 ;; Status symbol → display text
@@ -35,14 +46,41 @@
 ;; ──────────────────────────────
 ;; Render status bar
 ;; ──────────────────────────────
+(define (format-status-string model
+                              status-sym
+                              #:model [model-name #f]
+                              #:context-percent [ctx-pct #f]
+                              #:cost [cost-str #f]
+                              #:active-goal [goal #f])
+  (define parts
+    (filter string?
+            (list (or model-name (if (string? model) model "q"))
+                  (status-text status-sym)
+                  (and ctx-pct (format "ctx:~a%" ctx-pct))
+                  cost-str
+                  (and goal
+                       (if (> (string-length goal) 30)
+                           (format "Goal: ~a..." (substring goal 0 27))
+                           (format "Goal: ~a" goal))))))
+  (string-join parts " | "))
+
 (define (render-status-bar theme
                            #:model [model #f]
                            #:status [status 'idle]
                            #:turn [turn 0]
                            #:tokens [tokens #f]
+                           #:context-percent [ctx-pct #f]
+                           #:cost [cost-str #f]
+                           #:active-goal [goal #f]
                            #:width [width 120])
+  (define status-sym (if (symbol? status) status 'idle))
   (define left-section
-    (format "~a | ~a" (or model "q") (status-text (if (symbol? status) status 'idle))))
+    (format-status-string model
+                          status-sym
+                          #:model model
+                          #:context-percent ctx-pct
+                          #:cost cost-str
+                          #:active-goal goal))
   (define right-section
     (format "Turn: ~a~a"
             turn
@@ -56,7 +94,7 @@
         'right
         right-section
         'status
-        (if (symbol? status) status 'idle)
+        status-sym
         'model
         model
         'width
