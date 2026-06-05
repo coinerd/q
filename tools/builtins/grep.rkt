@@ -34,7 +34,8 @@
 ;; Check if any component of the path is hidden or a VCS dir
 (define (should-skip-path? p)
   (define parts (explode-path p))
-  (for/or ([part (in-list parts)])
+  (for/or ([part (in-list parts)]
+           #:when (path? part))
     (define s (path->string part))
     (or (hidden-name? s) (member s skip-dirs))))
 

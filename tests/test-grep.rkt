@@ -279,6 +279,18 @@
                    (check-false (result-is-error? r))
                    (check-equal? (hash-ref (result-details r) 'total-matches) 1))))
 
+;; Directory path "." should be searchable without path component contract errors.
+(test-case "relative current directory search works"
+  (with-temp-dir
+   (λ (dir)
+     (write-string-to-file (build-path dir "README.md") "README\nneedle\n")
+     (parameterize ([current-directory dir])
+       (define r (tool-grep (hasheq 'pattern "README" 'path "." 'glob "README.md" 'context-lines 0)))
+       (check-false (result-is-error? r))
+       (check-true (positive? (hash-ref (result-details r) 'total-matches)))
+       (check-true (for/or ([line (in-list (result-content r))])
+                     (regexp-match? #rx"README[.]md" line)))))))
+
 ;; Robustness: invalid regex pattern returns error, not crash
 (test-case "invalid regex pattern returns error"
   (with-temp-dir (λ (dir)
