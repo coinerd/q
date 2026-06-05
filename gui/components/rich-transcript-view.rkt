@@ -100,35 +100,63 @@
           (string-append label ": ")
           'style
           (make-role-label-delta label role-color)))
-  ;; Use code-block-aware parsing when code blocks detected
+  ;; Use markdown-aware parsing for rich content
   (define content-segs
-    (if (contains-code-blocks? text)
-        (let ()
-          (define parsed (parse-code-blocks text))
-          (for/list ([seg (in-list parsed)])
-            (cond
-              [(equal? (hash-ref seg 'type #f) 'code-block)
-               (hash 'type
-                     'code-block
-                     'text
-                     (hash-ref seg 'text "")
-                     'lang
-                     (hash-ref seg 'lang "")
-                     'style
-                     (code-block-style theme))]
-              [else
-               (hash 'type
-                     'content
-                     'text
-                     (hash-ref seg 'text "")
-                     'style
-                     (make-content-delta content-color))])))
-        (list (hash 'type
-                    'content
-                    'text
-                    (string-append text "\n\n")
-                    'style
-                    (make-content-delta content-color)))))
+    (cond
+      [(contains-code-blocks? text)
+       (define parsed (parse-code-blocks text))
+       (for/list ([seg (in-list parsed)])
+         (cond
+           [(equal? (hash-ref seg 'type #f) 'code-block)
+            (hash 'type
+                  'code-block
+                  'text
+                  (hash-ref seg 'text "")
+                  'lang
+                  (hash-ref seg 'lang "")
+                  'style
+                  (code-block-style theme))]
+           [else
+            (hash 'type
+                  'content
+                  'text
+                  (hash-ref seg 'text "")
+                  'style
+                  (make-content-delta content-color))]))]
+      [(contains-markdown? text)
+       (define parsed (parse-markdown-elements text))
+       (for/list ([seg (in-list parsed)])
+         (case (hash-ref seg 'type #f)
+           [(header)
+            (hash 'type
+                  'header
+                  'text
+                  (hash-ref seg 'text "")
+                  'level
+                  (hash-ref seg 'level 1)
+                  'style
+                  (hash 'type 'header 'bold #t 'size 14 'color content-color))]
+           [(list-item)
+            (hash 'type
+                  'list-item
+                  'text
+                  (hash-ref seg 'text "")
+                  'style
+                  (make-content-delta content-color))]
+           [else
+            (hash 'type
+                  'content
+                  'text
+                  (string-append (hash-ref seg 'text "") "\n")
+                  'style
+                  (make-content-delta content-color))]))]
+      [else
+       (list (hash 'type
+                   'content
+                   'text
+                   (string-append text "\n\n")
+                   'style
+                   (make-content-delta content-color)))]))
   (hash 'role role 'text text 'segments (cons role-seg content-segs)))
 
 (define (messages->render-plan msgs theme)
