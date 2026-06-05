@@ -1,3 +1,22 @@
+## v0.94.9 — GUI-TUI Output Parity (2026-06-03)
+
+### GUI Enhancements
+- **W1**: Typed GUI messages — `kind` field on `gui-message` (message, tool-start, tool-end, tool-fail, thinking, system, error)
+- **W1**: Extended `gui-state` with `context-info`, `cost`, `model` fields
+- **W2**: Tool argument + result display with separate entries and per-kind coloring
+- **W3**: Event coverage — thinking, retry, compaction, exploration, goal, session events
+- **W4**: Rich status bar — context %, cost, active goal in GUI status
+- **W5**: Markdown rendering — headers, lists, numbered lists, inline code parsing
+
+### Tests
+- test-gui-typed-messages.rkt: 15 tests
+- test-gui-tool-display.rkt: 11 tests
+- test-gui-event-coverage.rkt: 18 tests
+- test-gui-status-bar.rkt: 8 tests
+- test-gui-markdown-render.rkt: 11 tests
+
+### PRs
+- #7109 (W1), #7110 (W2), #7111 (W3), #7112 (W4), #7113 (W5)
 
 ## v0.93.2 — Browser Feature Audit Closure (2026-06-03)
 
