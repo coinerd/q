@@ -131,7 +131,44 @@
    (define result1 (gui-apply-delta (ui-delta DELTA-SET-HEADER '("h")) state))
    (define result2 (gui-apply-delta (ui-delta DELTA-SET-FOOTER '("f")) state))
    (check-eq? result1 state)
-   (check-eq? result2 state)))
+   (check-eq? result2 state))
+
+ ;; ── T-4: Additional GUI adapter coverage ───
+
+ (test-case "gui-apply-delta: set-theme is no-op (skeleton)"
+   (define state (make-gui-state))
+   (define result (gui-apply-delta (ui-delta DELTA-SET-THEME 'dark) state))
+   (check-eq? result state))
+
+ (test-case "gui-apply-delta: set-layout is no-op (skeleton)"
+   (define state (make-gui-state))
+   (define result (gui-apply-delta (ui-delta DELTA-SET-LAYOUT 'wide) state))
+   (check-eq? result state))
+
+ (test-case "gui-apply-delta: set-focus is no-op (skeleton)"
+   (define state (make-gui-state))
+   (define result (gui-apply-delta (ui-delta DELTA-SET-FOCUS 'input) state))
+   (check-eq? result state))
+
+ (test-case "gui-apply-delta: register-widget is no-op (skeleton)"
+   (define state (make-gui-state))
+   (define result (gui-apply-delta (ui-delta DELTA-REGISTER-WIDGET '("ext" "key" ())) state))
+   (check-eq? result state))
+
+ (test-case "gui-apply-delta: unregister-widget is no-op (skeleton)"
+   (define state (make-gui-state))
+   (define result (gui-apply-delta (ui-delta DELTA-UNREGISTER-WIDGET '("ext" . "key")) state))
+   (check-eq? result state))
+
+ (test-case "gui-apply-delta: add-message is no-op (skeleton)"
+   (define state (make-gui-state))
+   (define result (gui-apply-delta (ui-delta DELTA-ADD-MESSAGE '("msg")) state))
+   (check-eq? result state))
+
+ (test-case "gui-apply-delta: update-message is no-op (skeleton)"
+   (define state (make-gui-state))
+   (define result (gui-apply-delta (ui-delta DELTA-UPDATE-MESSAGE '("id" "msg")) state))
+   (check-eq? result state)))
 
 (run-tests test-tui-action-adapter)
 (run-tests test-gui-action-adapter)
