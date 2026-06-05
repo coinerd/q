@@ -63,11 +63,20 @@
 
 (define (make-gui-event-subscriber state-box [notify-callback-box #f])
   (define current-response-text (box ""))
+  (define current-thinking-text (box ""))
   ;; notify-callback-box: (boxof (or/c (-> void?) #f)) — set by launch-gui-window
   (define (notify!)
     (define cb (and notify-callback-box (unbox notify-callback-box)))
     (when cb
       (cb)))
+  (define (add-system-msg! text [meta (hasheq)])
+    (call-with-semaphore
+     gui-state-lock
+     (lambda ()
+       (define old (unbox state-box))
+       (set-box! state-box
+                 (gui-state-add-message old (make-gui-message "system" text meta #:kind 'system)))
+       (notify!))))
   (lambda (evt)
     (define ev (event-ev evt))
     (define payload (event-payload evt))
@@ -107,21 +116,36 @@
                                                                   (unbox current-response-text))))])
             (notify!))))]
 
-      ;; Thinking delta → show in transcript (dimmed)
+      ;; Thinking delta → accumulate thinking text
       [(equal? ev "model.stream.thinking")
        (define delta (hash-ref payload 'delta ""))
        (when (> (string-length delta) 0)
+         (set-box! current-thinking-text (string-append (unbox current-thinking-text) delta))
          (call-with-semaphore gui-state-lock
                               (lambda ()
                                 (define old (unbox state-box))
-                                (define msgs (gui-state-messages old))
-                                (when (not (equal? (and (pair? msgs) (gui-message-role (last msgs)))
-                                                   "assistant"))
-                                  (set-box! state-box (gui-state-set-status old 'processing)))
+                                (set-box! state-box (gui-state-set-status old 'processing))
                                 (notify!))))]
 
-      ;; Stream completed → finalize message
+      ;; Stream completed → finalize message, flush thinking if any
       [(equal? ev "model.stream.completed")
+       ;; Flush accumulated thinking as a kind='thinking entry
+       (define thinking-content (unbox current-thinking-text))
+       (when (> (string-length thinking-content) 0)
+         (set-box! current-thinking-text "")
+         (define summary
+           (if (> (string-length thinking-content) 200)
+               (string-append (substring thinking-content 0 197) "...")
+               thinking-content))
+         (call-with-semaphore
+          gui-state-lock
+          (lambda ()
+            (define old (unbox state-box))
+            (set-box! state-box
+                      (gui-state-add-message
+                       old
+                       (make-gui-message "assistant" summary (hasheq) #:kind 'thinking)))
+            (notify!))))
        (set-box! current-response-text "")
        (call-with-semaphore gui-state-lock
                             (lambda ()
@@ -140,6 +164,7 @@
       ;; Turn completed → set idle
       [(equal? ev "turn.completed")
        (set-box! current-response-text "")
+       (set-box! current-thinking-text "")
        (call-with-semaphore gui-state-lock
                             (lambda ()
                               (define old (unbox state-box))
@@ -187,6 +212,91 @@
                                                            #:kind
                                                            (if is-error 'tool-fail 'tool-end))))
                               (notify!)))]
+
+      ;; ─── Compaction events ───
+      [(equal? ev "compaction.warning")
+       (define tokens (hash-ref payload 'tokenCount 0))
+       (add-system-msg! (format "[compaction warning: ~a tokens]" tokens))]
+
+      [(equal? ev "compaction.started")
+       (add-system-msg! "[compacting context...]" (hasheq 'compaction #t))]
+
+      [(equal? ev "compaction.completed")
+       (define reduction (hash-ref payload 'reduction "context compressed"))
+       (add-system-msg! (format "[compaction done: ~a]" reduction) (hasheq 'compaction #t))]
+
+      ;; ─── Retry events ───
+      [(equal? ev "auto-retry.start")
+       (define reason (hash-ref payload 'reason "rate limited"))
+       (define attempt (hash-ref payload 'attempt 1))
+       (define max-attempts (hash-ref payload 'maxAttempts 3))
+       (add-system-msg! (format "[retry: ~a, ~a/~a...]" reason attempt max-attempts))]
+
+      ;; ─── Iteration / exploration events ───
+      [(equal? ev "iteration.soft-warning")
+       (define iter (hash-ref payload 'iteration 0))
+       (define remaining (hash-ref payload 'remaining "?"))
+       (add-system-msg! (format "[exploring... iteration ~a, ~a remaining]" iter remaining))]
+
+      ;; ─── Context pressure events ───
+      [(equal? ev "context.pressure")
+       (define level (hash-ref payload 'level "low"))
+       (define pct (hash-ref payload 'usagePercent 0))
+       (call-with-semaphore gui-state-lock
+                            (lambda ()
+                              (define old (unbox state-box))
+                              (define info
+                                (hasheq 'level
+                                        (if (string? level)
+                                            (string->symbol level)
+                                            level)
+                                        'percent
+                                        pct))
+                              (set-box! state-box (gui-state-set-context-info old info))
+                              (notify!)))]
+
+      [(equal? ev "context.mid-turn-over-budget")
+       (define used (hash-ref payload 'tokensUsed 0))
+       (define budget (hash-ref payload 'tokenBudget 0))
+       (add-system-msg! (format "[context growing: ~a/~a tokens]" used budget))]
+
+      ;; ─── Session events ───
+      [(equal? ev "session.started") (add-system-msg! "[session started]")]
+
+      [(equal? ev "session.forked")
+       (define sid (hash-ref payload 'sessionId "?"))
+       (add-system-msg! (format "[session forked: ~a]" sid))]
+
+      ;; ─── Goal events ───
+      [(equal? ev "goal.started")
+       (define desc (hash-ref payload 'description ""))
+       (when (> (string-length desc) 0)
+         (call-with-semaphore gui-state-lock
+                              (lambda ()
+                                (define old (unbox state-box))
+                                (set-box! state-box (struct-copy gui-state old [active-goal desc]))
+                                (notify!))))]
+
+      [(equal? ev "goal.achieved")
+       (call-with-semaphore gui-state-lock
+                            (lambda ()
+                              (define old (unbox state-box))
+                              (set-box! state-box (struct-copy gui-state old [active-goal #f]))
+                              (notify!)))]
+
+      [(equal? ev "goal.failed")
+       (call-with-semaphore gui-state-lock
+                            (lambda ()
+                              (define old (unbox state-box))
+                              (set-box! state-box (struct-copy gui-state old [active-goal #f]))
+                              (notify!)))]
+
+      ;; ─── Tool blocked ───
+      [(equal? ev "tool.call.blocked")
+       (define name (hash-ref payload 'name "unknown"))
+       (define reason (hash-ref payload 'reason "blocked"))
+       (add-system-msg! (format "[tool blocked: ~a — ~a]" name reason))]
+
       ;; Error events
       [(and (string? ev) (regexp-match? #rx"(?i:error)" ev))
        (call-with-semaphore gui-state-lock

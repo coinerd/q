@@ -70,13 +70,13 @@
       (sub (mk-event "model.stream.thinking" (hash 'delta "Thinking...")))
       (check-equal? (gui-state-status (unbox sb)) 'processing))
 
-    (test-case "does not change status when assistant msg exists"
+    (test-case "sets processing status for thinking delta"
       (define sb (fresh-box))
       (define sub (make-gui-event-subscriber sb))
       (sub (mk-event "model.stream.delta" (hash 'delta "x")))
       (sub (mk-event "model.stream.thinking" (hash 'delta "y")))
-      ;; status should remain idle (not overwritten to processing)
-      (check-equal? (gui-state-status (unbox sb)) 'idle))))
+      ;; status should be processing
+      (check-equal? (gui-state-status (unbox sb)) 'processing))))
 
 (define test-stream-completed
   (test-suite "model.stream.completed"
