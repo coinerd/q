@@ -106,7 +106,7 @@
 (provide session-config?
          current-task-state-aware-rollout-rate
          current-context-assembly-profile
-          current-goal-loop-enabled?
+         current-goal-loop-enabled?
          context-assembly-profile?
          apply-context-assembly-profile!
          ;; Smart accessors with defaults
@@ -144,7 +144,9 @@
           [config-token-budget-threshold (-> session-config? (or/c #f exact-nonnegative-integer?))]
           [config-session-index (-> session-config? (or/c #f session-index?))]
           [config-task-state-aware? (-> session-config? boolean?)]
-          [config-context-assembly-profile (-> session-config? symbol?)]))
+          [config-context-assembly-profile (-> session-config? symbol?)]
+          [config-memory-backend (-> session-config? any/c)]
+          [config-memory-enabled? (-> session-config? boolean?)]))
 
 ;; ── session-config struct ────────────────────────────────────────
 
@@ -243,6 +245,14 @@
 (define (config-context-assembly-profile c)
   (hash-ref (session-config-data c) 'context-assembly-profile 'off))
 
+;; v0.95.3: Memory backend config — disabled by default (#f)
+;; When set to a valid memory-backend, memory features become available.
+(define (config-memory-backend c)
+  (hash-ref (session-config-data c) 'memory-backend #f))
+
+(define (config-memory-enabled? c)
+  (and (hash-ref (session-config-data c) 'memory-backend #f) #t))
+
 ;; ── Dynamic default resolution ─────────────────────────────────
 
 (define (resolve-max-iterations-hard config max-iterations)
@@ -279,7 +289,8 @@
                token-budget-threshold
                session-index
                task-state-aware?
-               context-assembly-profile))
+               context-assembly-profile
+               memory-backend))
   (define base
     (if (hash? h)
         (make-immutable-hash (hash->list h))
