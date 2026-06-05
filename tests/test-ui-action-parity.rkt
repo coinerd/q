@@ -19,12 +19,6 @@
                   ui-state-extension-widgets)
          (only-in "../gui/gui-types.rkt" make-gui-state gui-state-status))
 
-;; Helper: apply action to both backends and return results
-(define (apply-both action-type payload)
-  (define tui-result (apply-action-with tui-delta-handlers action-type payload (initial-ui-state)))
-  (define gui-result (apply-action-with gui-delta-handlers action-type payload (make-gui-state)))
-  (values tui-result gui-result))
-
 ;; Helper: apply action to TUI only
 (define (tui-apply-action action-type payload)
   (apply-action-with tui-delta-handlers action-type payload (initial-ui-state)))
@@ -88,8 +82,8 @@
    ;; GUI doesn't have custom-header field yet — state unchanged
    (check-equal? result state))
  ;; ─── Parity: both adapters consume same delta set ───
- (test-case "both adapters handle same action without error"
-   ;; Apply several actions to both backends — just verify no errors
+ (test-case "both adapters handle same action and return state"
+   ;; Apply several actions to both backends — verify they return non-#f state
    (for ([action-type (in-list '("ui.header.set" "ui.header.clear"
                                                  "ui.footer.set"
                                                  "ui.footer.clear"
@@ -105,9 +99,10 @@
                                  (hash 'theme 'dark)
                                  (hash 'breakpoint 'wide)
                                  (hash 'component 'input)))])
-     (apply-action-with tui-delta-handlers action-type payload (initial-ui-state))
-     (apply-action-with gui-delta-handlers action-type payload (make-gui-state)))
-   (check-true #t))
+     (define tui-result (apply-action-with tui-delta-handlers action-type payload (initial-ui-state)))
+     (define gui-result (apply-action-with gui-delta-handlers action-type payload (make-gui-state)))
+     (check-not-false tui-result (format "TUI ~a returned #f" action-type))
+     (check-not-false gui-result (format "GUI ~a returned #f" action-type))))
  ;; ─── Handler table identity ───
  (test-case "TUI handler table is a delta-handler-table"
    (check-true (delta-handler-table? tui-delta-handlers)))
