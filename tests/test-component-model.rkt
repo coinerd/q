@@ -132,6 +132,27 @@
    (component-render comp (initial-ui-state) 80)
    (component-render comp (initial-ui-state) 80)
    (check-equal? (unbox call-count) 1))
+ (test-case "component-render returns stale output when state changes (cache bug)"
+   ;; RED gate for status-line stale bug: cache key is width only, not state.
+   ;; When state changes but width stays same, component returns cached stale output.
+   (define render-fn-call-count (box 0))
+   (define comp
+     (make-q-component (lambda (state width)
+                         (set-box! render-fn-call-count (add1 (unbox render-fn-call-count)))
+                         (define busy (ui-state-busy? state))
+                         (list (vtext (if busy "BUSY" "IDLE") '())))
+                       #:vdom? #t))
+   (define s-idle (initial-ui-state))
+   (define s-busy (set-busy s-idle #t))
+   ;; First render with idle state
+   (define r1 (component-render comp s-idle 80))
+   (check-equal? (vtext-text (car r1)) "IDLE")
+   ;; State changed to busy, same width — should NOT return stale idle output
+   (component-invalidate! comp)
+   (define r2 (component-render comp s-busy 80))
+   (check-equal? (vtext-text (car r2)) "BUSY")
+   ;; Without invalidation, cache would return "IDLE" — this proves invalidation is required
+   )
  (test-case "component-compose mixes vdom and styled-line components"
    (define vdom-comp (make-q-component (lambda (s w) (list (vtext "vdom" '()))) #:vdom? #t))
    (define classic-comp (make-q-component (lambda (s w) (list (list (cons 'text "classic"))))))

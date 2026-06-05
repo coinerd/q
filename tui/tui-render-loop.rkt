@@ -307,6 +307,12 @@
                     (vdom-comp:make-transcript-vdom-component))))
   (define comp-registry (unbox reg-box))
 
+  ;; Invalidate all component caches before rendering — state may have changed
+  ;; since last frame (busy, thinking, context, cost, goal, etc.)
+  (when comp-registry
+    (for ([comp (in-hash-values comp-registry)])
+      (component-invalidate! comp)))
+
   ;; Render to ubuf — always use vdom path
   (define-values (cursor-col cursor-row state* frame-lines)
     (render-frame-vdom! ubuf state inp layout #:component-registry comp-registry))
