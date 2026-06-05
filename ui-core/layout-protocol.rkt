@@ -78,18 +78,22 @@
 (define (classify-layout-breakpoint layout)
   (define w (or (gui-layout-width layout) 120))
   (define h (or (gui-layout-height layout) 40))
-  (cond
-    [(< w 60) 'narrow]
-    [(< w 100) 'standard]
-    [(>= h 60) 'tall]
-    [else 'wide]))
+  ;; Returns a set of applicable breakpoints (composable)
+  (define base
+    (cond
+      [(< w 60) '(narrow)]
+      [(< w 100) '(standard)]
+      [else '(wide)]))
+  (if (>= h 60)
+      (cons 'tall base)
+      base))
 
 (define (layout-breakpoint? sym)
   (and (symbol? sym) (member sym layout-breakpoints) #t))
 
 (define (apply-layout-policy layout breakpoint)
   (case breakpoint
-    [(narrow) (struct-copy gui-layout layout [sidebar-width 0] [status-height 1] [input-height 2])]
+    [(narrow) (struct-copy gui-layout layout [sidebar-width 0] [status-height 1] [input-height 3])]
     [(standard) (struct-copy gui-layout layout [sidebar-width 0] [status-height 1] [input-height 3])]
     [(wide) (struct-copy gui-layout layout [sidebar-width 24] [status-height 1] [input-height 3])]
     [(tall) (struct-copy gui-layout layout [sidebar-width 24] [status-height 2] [input-height 3])]

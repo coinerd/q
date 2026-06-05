@@ -86,7 +86,7 @@
   (and (string? name) (member name all-ui-action-names) #t))
 
 ;; ── Payload schema per action ──────────────────────────────
-;; Each schema entry is: (list required-keys optional-keys)
+;; Each schema entry is: (listof symbol?) — required keys for the payload.
 ;; where keys are symbols.
 
 (define ui-action-schema
