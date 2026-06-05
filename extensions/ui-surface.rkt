@@ -88,25 +88,39 @@
 
 (define (ui-set-footer! ui-state-box lines)
   (maybe-emit-action! UI-ACTION-FOOTER-SET 'lines lines)
-  ((ui-callback-registry-set-footer (current-ui-registry)) ui-state-box lines))
+  (define cb (ui-callback-registry-set-footer (current-ui-registry)))
+  (when cb
+    (cb ui-state-box lines)))
 
 (define (ui-set-header! ui-state-box lines)
   (maybe-emit-action! UI-ACTION-HEADER-SET 'lines lines)
-  ((ui-callback-registry-set-header (current-ui-registry)) ui-state-box lines))
+  (define cb (ui-callback-registry-set-header (current-ui-registry)))
+  (when cb
+    (cb ui-state-box lines)))
 
 (define (ui-clear-footer! ui-state-box)
   (maybe-emit-action! UI-ACTION-FOOTER-CLEAR)
-  ((ui-callback-registry-clear-footer (current-ui-registry)) ui-state-box))
+  (define cb (ui-callback-registry-clear-footer (current-ui-registry)))
+  (when cb
+    (cb ui-state-box)))
 
 (define (ui-clear-header! ui-state-box)
   (maybe-emit-action! UI-ACTION-HEADER-CLEAR)
-  ((ui-callback-registry-clear-header (current-ui-registry)) ui-state-box))
+  (define cb (ui-callback-registry-clear-header (current-ui-registry)))
+  (when cb
+    (cb ui-state-box)))
 
 (define (ui-make-styled-line segments)
-  ((ui-callback-registry-make-styled-line (current-ui-registry)) segments))
+  (define cb (ui-callback-registry-make-styled-line (current-ui-registry)))
+  (if cb
+      (cb segments)
+      segments))
 
 (define (ui-make-styled-segment text style)
-  ((ui-callback-registry-make-styled-segment (current-ui-registry)) text style))
+  (define cb (ui-callback-registry-make-styled-segment (current-ui-registry)))
+  (if cb
+      (cb text style)
+      text))
 
 ;; Set status message in the ui-state box (dialog-api notification integration)
 (define (ui-set-status-message! ui-state-box message)
@@ -162,7 +176,12 @@
        (ui-callback-registry-clear-footer r)
        (ui-callback-registry-clear-header r)
        (ui-callback-registry-make-styled-line r)
-       (ui-callback-registry-make-styled-segment r)))
+       (ui-callback-registry-make-styled-segment r)
+       (ui-callback-registry-set-status-message r)
+       (ui-callback-registry-set-extension-widget r)
+       (ui-callback-registry-remove-extension-widget r)
+       (ui-callback-registry-remove-all-extension-widgets r)
+       #t))
 
 ;; install-ui-callbacks! : hash? -> void?
 (define (install-ui-callbacks! callbacks)
