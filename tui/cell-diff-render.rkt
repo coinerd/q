@@ -31,59 +31,80 @@
                  "m"))
 
 ;; ============================================================
+;; Terminal render guards
+;; ============================================================
+
+(define AUTOWRAP-OFF "\x1b[?7l")
+(define AUTOWRAP-ON "\x1b[?7h")
+
+(define (call-with-terminal-render-guards out sync? thunk)
+  (dynamic-wind (lambda ()
+                  (when sync?
+                    (terminal-sync-begin!))
+                  ;; Disable auto-wrap to prevent pending-wrap corruption when output reaches
+                  ;; the terminal's last column.
+                  (display AUTOWRAP-OFF out))
+                thunk
+                (lambda ()
+                  ;; Always restore auto-wrap, even if rendering raises.
+                  (display AUTOWRAP-ON out)
+                  (when sync?
+                    (terminal-sync-end!)))))
+
+;; ============================================================
 ;; Render deltas to output port
 ;; ============================================================
 
 ;; Render cell deltas to an output port as minimal ANSI sequences.
 ;; Deltas should be sorted by position (row-major order) for optimal grouping.
 (define (render-deltas-to-port! deltas buf out #:sync? [sync? #t])
-  (when sync?
-    (terminal-sync-begin!))
-  (define prev-sgr #f)
-  ;; Batch consecutive deltas in same row with same SGR into one cursor move + string
-  (let loop ([remaining deltas])
-    (cond
-      [(null? remaining) (void)]
-      [else
-       (define d (car remaining))
-       (define col (cell-delta-col d))
-       (define row (cell-delta-row d))
-       (define new-cell (cell-delta-new-cell d))
-       (define sgr (cell->sgr new-cell))
-       ;; Position cursor: CSI row+1 ; col+1 H
-       (display (format "\x1b[~a;~aH" (add1 row) (add1 col)) out)
-       ;; Apply SGR only if changed
-       (unless (equal? sgr prev-sgr)
-         (display sgr out)
-         (set! prev-sgr sgr))
-       ;; Collect consecutive cells in same row with same SGR
-       (define chars (list (cell-char new-cell)))
-       (let gather ([rest (cdr remaining)]
-                    [acc chars]
-                    [next-col (add1 col)])
-         (cond
-           [(null? rest)
-            ;; Emit batch
-            (display (list->string (reverse acc)) out)
-            (loop rest)]
-           [else
-            (define nd (car rest))
-            (define nd-col (cell-delta-col nd))
-            (define nd-row (cell-delta-row nd))
-            (define nd-cell (cell-delta-new-cell nd))
-            (define nd-sgr (cell->sgr nd-cell))
+  (call-with-terminal-render-guards
+   out
+   sync?
+   (lambda ()
+     (define prev-sgr #f)
+     ;; Batch consecutive deltas in same row with same SGR into one cursor move + string
+     (let loop ([remaining deltas])
+       (cond
+         [(null? remaining) (void)]
+         [else
+          (define d (car remaining))
+          (define col (cell-delta-col d))
+          (define row (cell-delta-row d))
+          (define new-cell (cell-delta-new-cell d))
+          (define sgr (cell->sgr new-cell))
+          ;; Position cursor: CSI row+1 ; col+1 H
+          (display (format "\x1b[~a;~aH" (add1 row) (add1 col)) out)
+          ;; Apply SGR only if changed
+          (unless (equal? sgr prev-sgr)
+            (display sgr out)
+            (set! prev-sgr sgr))
+          ;; Collect consecutive cells in same row with same SGR
+          (define chars (list (cell-char new-cell)))
+          (let gather ([rest (cdr remaining)]
+                       [acc chars]
+                       [next-col (add1 col)])
             (cond
-              [(and (= nd-row row) (= nd-col next-col) (equal? nd-sgr sgr))
-               ;; Same row, consecutive column, same style — batch
-               (gather (cdr rest) (cons (cell-char nd-cell) acc) (add1 next-col))]
-              [else
-               ;; Batch ends — emit accumulated chars
+              [(null? rest)
+               ;; Emit batch
                (display (list->string (reverse acc)) out)
-               (loop rest)])]))]))
-  ;; Reset SGR at end
-  (display "\x1b[0m" out)
-  (when sync?
-    (terminal-sync-end!)))
+               (loop rest)]
+              [else
+               (define nd (car rest))
+               (define nd-col (cell-delta-col nd))
+               (define nd-row (cell-delta-row nd))
+               (define nd-cell (cell-delta-new-cell nd))
+               (define nd-sgr (cell->sgr nd-cell))
+               (cond
+                 [(and (= nd-row row) (= nd-col next-col) (equal? nd-sgr sgr))
+                  ;; Same row, consecutive column, same style — batch
+                  (gather (cdr rest) (cons (cell-char nd-cell) acc) (add1 next-col))]
+                 [else
+                  ;; Batch ends — emit accumulated chars
+                  (display (list->string (reverse acc)) out)
+                  (loop rest)])]))]))
+     ;; Reset SGR at end
+     (display "\x1b[0m" out))))
 
 ;; ============================================================
 ;; Full buffer render (for first frame or resize)
@@ -93,29 +114,25 @@
 (define (render-buffer-to-port! buf out #:sync? [sync? #t])
   (define cols (cell-buffer-cols buf))
   (define rows (cell-buffer-rows buf))
-  (when sync?
-    (terminal-sync-begin!))
-  ;; Disable auto-wrap to prevent last-column wrap glitch
-  (display "\x1b[?7l" out)
-  ;; Home cursor
-  (display "\x1b[H" out)
-  (define prev-sgr #f)
-  (for ([row (in-range rows)])
-    (when (> row 0)
-      ;; Use cursor positioning instead of newline to avoid wrap issues
-      (display (format "\x1b[~a;1H" (add1 row)) out))
-    (for ([col (in-range cols)])
-      (define cell (cell-buffer-ref buf col row))
-      (define sgr (cell->sgr cell))
-      (unless (equal? sgr prev-sgr)
-        (display sgr out)
-        (set! prev-sgr sgr))
-      (display (string (cell-char cell)) out)))
-  (display "\x1b[0m" out)
-  ;; Re-enable auto-wrap
-  (display "\x1b[?7h" out)
-  (when sync?
-    (terminal-sync-end!)))
+  (call-with-terminal-render-guards
+   out
+   sync?
+   (lambda ()
+     ;; Home cursor
+     (display "\x1b[H" out)
+     (define prev-sgr #f)
+     (for ([row (in-range rows)])
+       (when (> row 0)
+         ;; Use cursor positioning instead of newline to avoid wrap issues
+         (display (format "\x1b[~a;1H" (add1 row)) out))
+       (for ([col (in-range cols)])
+         (define cell (cell-buffer-ref buf col row))
+         (define sgr (cell->sgr cell))
+         (unless (equal? sgr prev-sgr)
+           (display sgr out)
+           (set! prev-sgr sgr))
+         (display (string (cell-char cell)) out)))
+     (display "\x1b[0m" out))))
 
 ;; ============================================================
 ;; Smart render: auto-select full vs incremental

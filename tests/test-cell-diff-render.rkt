@@ -7,6 +7,13 @@
          "../tui/cell-diff.rkt"
          "../tui/cell-diff-render.rkt")
 
+(define AUTOWRAP-OFF "\x1b[?7l")
+(define AUTOWRAP-ON "\x1b[?7h")
+
+(define (string-index-of haystack needle)
+  (define matches (regexp-match-positions (regexp (regexp-quote needle)) haystack))
+  (and matches (caar matches)))
+
 ;; ============================================================
 ;; SGR generation
 ;; ============================================================
@@ -58,6 +65,33 @@
   (define result (get-output-string out))
   (check-true (string-contains? result "A"))
   (check-true (string-contains? result "B")))
+
+(test-case "render-deltas-to-port! disables auto-wrap around last-column batch"
+  (define a (make-cell-buffer 10 2))
+  (define b (make-cell-buffer 10 2))
+  (cell-buffer-putstring! b 0 0 "ABCDEFGHIJ")
+  (define deltas (diff-cell-buffers a b))
+  (define out (open-output-string))
+  (render-deltas-to-port! deltas b out #:sync? #f)
+  (define result (get-output-string out))
+  (define off-pos (string-index-of result AUTOWRAP-OFF))
+  (define text-pos (string-index-of result "ABCDEFGHIJ"))
+  (define on-pos (string-index-of result AUTOWRAP-ON))
+  (check-not-false off-pos)
+  (check-not-false on-pos)
+  (check-true (< off-pos text-pos on-pos)))
+
+(test-case "render-smart! delta path disables auto-wrap at final column"
+  (define a (make-cell-buffer 10 5))
+  (define b (make-cell-buffer 10 5))
+  (cell-buffer-set! b 9 0 #:char #\Z)
+  (define out (open-output-string))
+  (render-smart! a b out #:sync? #f)
+  (define result (get-output-string out))
+  (check-true (string-contains? result "\x1b[1;10H"))
+  (check-false (string-contains? result "\x1b[H"))
+  (check-true (string-contains? result AUTOWRAP-OFF))
+  (check-true (string-contains? result AUTOWRAP-ON)))
 
 ;; ============================================================
 ;; Full buffer render
