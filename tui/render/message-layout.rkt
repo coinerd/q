@@ -273,9 +273,29 @@
                  ;; Emit sub-lines in order, then continue with remaining segments
                  (loop (cdr segs) 0 '() (append result-lines sub-styled))]
                 [else
-                 ;; Emit accumulated line, retry overflowing segment on new line
-                 (define current-line (styled-line (reverse acc-segs)))
-                 (loop (cons seg (cdr segs)) 0 '() (append result-lines (list current-line)))])]
+                 ;; Fill the remaining columns with as much of the overflowing
+                 ;; segment as fits. Moving the whole segment to the next row
+                 ;; underfills lines at markdown style boundaries.
+                 (define remaining-width (max 0 (- width col)))
+                 (define break-pos
+                   (and (> remaining-width 0)
+                        (find-boundary-fill-break-pos seg-text remaining-width)))
+                 (cond
+                   [(and break-pos (> break-pos 0))
+                    (define prefix (substring seg-text 0 break-pos))
+                    (define suffix (substring seg-text break-pos))
+                    (define seg-style (styled-segment-style seg))
+                    (define current-line
+                      (styled-line (reverse (cons (styled-segment prefix seg-style) acc-segs))))
+                    (define remaining-segs
+                      (if (string=? suffix "")
+                          (cdr segs)
+                          (cons (styled-segment suffix seg-style) (cdr segs))))
+                    (loop remaining-segs 0 '() (append result-lines (list current-line)))]
+                   [else
+                    ;; No part of the segment can fit; retry it on a new line.
+                    (define current-line (styled-line (reverse acc-segs)))
+                    (loop (cons seg (cdr segs)) 0 '() (append result-lines (list current-line)))])])]
              [else
               ;; Strip leading whitespace only on first pass; use original segment for accumulation
               (define clean-seg
@@ -384,3 +404,29 @@
               i)]
          [(char-whitespace? c) (loop (add1 i) next-col i col)]
          [else (loop (add1 i) next-col last-space-pos last-space-col)])])))
+
+;; Like find-break-pos for filling the remainder of a partially accumulated
+;; row, but do not treat leading whitespace as the preferred break. This keeps
+;; short words such as " in" attached when they fit exactly at a segment
+;; boundary.
+(define (find-boundary-fill-break-pos text max-width)
+  (define len (string-length text))
+  (define starts-with-space? (and (> len 0) (char-whitespace? (string-ref text 0))))
+  (let loop ([i 0]
+             [col 0]
+             [last-space-pos #f]
+             [seen-nonspace? #f])
+    (cond
+      [(>= i len) len]
+      [else
+       (define c (string-ref text i))
+       (define w (char-width c))
+       (define next-col (+ col w))
+       (cond
+         [(> next-col max-width)
+          (cond
+            [(and starts-with-space? (char-whitespace? c) seen-nonspace?) i]
+            [last-space-pos (add1 last-space-pos)]
+            [else #f])]
+         [(char-whitespace? c) (loop (add1 i) next-col (and seen-nonspace? i) seen-nonspace?)]
+         [else (loop (add1 i) next-col last-space-pos #t)])])))

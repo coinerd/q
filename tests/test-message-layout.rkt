@@ -13,10 +13,10 @@
 ;; ============================================================
 
 (test-case "wrap-styled-line: correct line order for multi-segment overflow"
-  (define line (styled-line (list
-                             (styled-segment "First segment " '())
-                             (styled-segment "second" '(bold))
-                             (styled-segment " overflow content here" '()))))
+  (define line
+    (styled-line (list (styled-segment "First segment " '())
+                       (styled-segment "second" '(bold))
+                       (styled-segment " overflow content here" '()))))
   (define result (wrap-styled-line line 20))
   (check >= (length result) 2)
   ;; First line should contain "First segment" — not overflow content
@@ -25,41 +25,41 @@
               (format "Expected 'First segment' in first line, got: ~v" first-text)))
 
 (test-case "wrap-styled-line: single long segment preserves order"
-  (define line (styled-line (list
-                             (styled-segment "Alpha beta gamma delta epsilon zeta eta theta" '()))))
+  (define line
+    (styled-line (list (styled-segment "Alpha beta gamma delta epsilon zeta eta theta" '()))))
   (define result (wrap-styled-line line 20))
   ;; Lines should be in reading order: first line starts with "Alpha"
   (define texts (map styled-line->text result))
-  (check-true (string-prefix? (car texts) "Alpha")
-              (format "Lines out of order: ~v" texts))
+  (check-true (string-prefix? (car texts) "Alpha") (format "Lines out of order: ~v" texts))
   ;; Joined text should preserve all words
   (define joined (string-join texts))
-  (check-true (string-contains? joined "Alpha")
-              (format "Missing word in joined: ~v" joined)))
+  (check-true (string-contains? joined "Alpha") (format "Missing word in joined: ~v" joined)))
 
 ;; ============================================================
 ;; wrap-styled-line: leading space stripping
 ;; ============================================================
 
 (test-case "wrap-styled-line: no leading space on overflow lines"
-  (define line (styled-line (list
-                             (styled-segment "Short" '())
-                             (styled-segment " text that overflows the width limit" '()))))
+  (define line
+    (styled-line (list (styled-segment "Short" '())
+                       (styled-segment " text that overflows the width limit" '()))))
   (define result (wrap-styled-line line 15))
   ;; No line should start with whitespace
-  (for ([l result] [i (in-naturals)])
+  (for ([l result]
+        [i (in-naturals)])
     (define text (styled-line->text l))
     (when (> (string-length text) 0)
       (check-false (char-whitespace? (string-ref text 0))
                    (format "Line ~a starts with whitespace: ~v" i text)))))
 
 (test-case "wrap-styled-line: bold segment overflow strips leading space"
-  (define line (styled-line (list
-                             (styled-segment "This is " '())
-                             (styled-segment "bold" '(bold))
-                             (styled-segment " text that wraps to the next line" '()))))
+  (define line
+    (styled-line (list (styled-segment "This is " '())
+                       (styled-segment "bold" '(bold))
+                       (styled-segment " text that wraps to the next line" '()))))
   (define result (wrap-styled-line line 20))
-  (for ([l result] [i (in-naturals)])
+  (for ([l result]
+        [i (in-naturals)])
     (define text (styled-line->text l))
     (when (> (string-length text) 0)
       (check-false (char-whitespace? (string-ref text 0))
@@ -70,9 +70,11 @@
 ;; ============================================================
 
 (test-case "md-format-assistant: no leading whitespace on any wrapped line"
-  (define text "The CHANGELOG shows dozens of versions in rapid succession (v0.76 → v0.94). A lot of it is audit remediation — fixing drift, tightening contracts, updating stale references.")
+  (define text
+    "The CHANGELOG shows dozens of versions in rapid succession (v0.76 → v0.94). A lot of it is audit remediation — fixing drift, tightening contracts, updating stale references.")
   (define result (md-format-assistant text 80))
-  (for ([l result] [i (in-naturals)])
+  (for ([l result]
+        [i (in-naturals)])
     (define l-text (styled-line->text l))
     (when (> (string-length l-text) 0)
       (check-false (char-whitespace? (string-ref l-text 0))
@@ -80,16 +82,55 @@
 
 (test-case "md-format-assistant: text with bold wrapping"
   ;; Simulate markdown with bold that gets wrapped
-  (define text "Here is some **bold text** and more content that follows to cause wrapping at narrow widths.")
+  (define text
+    "Here is some **bold text** and more content that follows to cause wrapping at narrow widths.")
   (define result (md-format-assistant text 40))
   ;; Check ordering: first line should start with "Here"
   (check-true (string-prefix? (styled-line->text (car result)) "Here"))
   ;; No leading whitespace
-  (for ([l result] [i (in-naturals)])
+  (for ([l result]
+        [i (in-naturals)])
     (define l-text (styled-line->text l))
     (when (> (string-length l-text) 0)
       (check-false (char-whitespace? (string-ref l-text 0))
                    (format "Line ~a starts with whitespace: ~v" i l-text)))))
+
+(test-case "md-format-assistant: wrapping fills line across styled segment boundaries"
+  (define text
+    "existing coding agents and decided to do it **right.** That comes through in every layer of the design.")
+  (define result (md-format-assistant text 80))
+  (define texts (map styled-line->text result))
+  (check >= (length texts) 2)
+  (check-true (string-contains? (car texts) "That comes")
+              (format "First wrapped line was underfilled at styled boundary: ~v" texts)))
+
+(test-case "wrap-styled-line: boundary fill keeps short word after leading space"
+  (define line
+    (styled-line (list (styled-segment "12345678901234567" '())
+                       (styled-segment " in more words" '(bold)))))
+  (define result (wrap-styled-line line 20))
+  (define texts (map styled-line->text result))
+  (check-equal? (car texts)
+                "12345678901234567 in"
+                (format "Expected short word to fill boundary: ~v" texts)))
+
+(test-case "wrap-styled-line: boundary fill keeps short word after parenthesized phrase"
+  (define line
+    (styled-line (list (styled-segment "12345678901234567" '())
+                       (styled-segment " (ADRs) in more words" '(bold)))))
+  (define result (wrap-styled-line line 27))
+  (define texts (map styled-line->text result))
+  (check-equal? (car texts)
+                "12345678901234567 (ADRs) in"
+                (format "Expected parenthesized phrase plus short word to fill boundary: ~v" texts)))
+
+(test-case "wrap-styled-line: boundary fill does not split normal word"
+  (define line
+    (styled-line (list (styled-segment "hello " '()) (styled-segment "world test" '(bold)))))
+  (define result (wrap-styled-line line 8))
+  (define texts (map styled-line->text result))
+  (check-false (member "hello wo" texts)
+               (format "Should not hard-split word just to fill boundary: ~v" texts)))
 
 (test-case "md-format-assistant: preserves line breaks from source"
   (define text "Line one.\nLine two.\n\nParagraph two.")
