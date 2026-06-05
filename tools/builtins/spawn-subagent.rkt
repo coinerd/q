@@ -148,9 +148,13 @@
   (define prov
     (or (and rt (rt-settings-ref rt 'provider #f))
         (and rt (rt-settings-ref rt 'default-provider #f))))
-  (if prov
-      prov
-      (build-mock-provider-for-subagent)))
+  (cond
+    [(provider? prov) prov]
+    ;; Settings loaded from config.json store provider names as strings.
+    ;; Never pass those names directly to provider-send; if the parent runtime
+    ;; did not inject a provider struct, fall back safely to the mock provider.
+    [(string? prov) (build-mock-provider-for-subagent)]
+    [else (build-mock-provider-for-subagent)]))
 
 ;; Resolve model name from exec-context or fall back to "mock-model".
 ;; BUG: make-minimal-settings stores model under 'default-model, not 'model.

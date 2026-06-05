@@ -80,7 +80,9 @@ const HANDLERS = {
     const entry = pages.get(sessionId);
     if (!entry) throw commandError('session-not-found', `Session ${sessionId} not found`);
     const page = entry.page;
-    await page.click(selector, { button: button || 'left', timeout: 10000 });
+    const el = await page.$(selector);
+    if (!el) throw commandError('selector-not-found', `No element found matching selector "${selector}" for click.`);
+    await el.click({ button: button || 'left', timeout: 10000 });
     const state = await pageState.extract(page);
     return state;
   },
@@ -90,8 +92,10 @@ const HANDLERS = {
     const entry = pages.get(sessionId);
     if (!entry) throw commandError('session-not-found', `Session ${sessionId} not found`);
     const page = entry.page;
-    if (clearFirst) await page.fill(selector, '');
-    await page.type(selector, text, { timeout: 10000 });
+    const el = await page.$(selector);
+    if (!el) throw commandError('selector-not-found', `No element found matching selector "${selector}" for type.`);
+    if (clearFirst) await el.fill('');
+    await el.type(text, { timeout: 10000 });
     const state = await pageState.extract(page);
     return state;
   },
@@ -194,7 +198,7 @@ function mapErrorCode(err) {
   const msg = (err.message || '').toLowerCase();
   if (msg.includes('timeout') || err.name === 'TimeoutError') return 'timeout';
   if (msg.includes('net::err') || msg.includes('navigation')) return 'adapter-error';
-  if (msg.includes('waiting for selector') || msg.includes('no element')) return 'selector-error';
+  if (msg.includes('waiting for selector') || msg.includes('waiting for element') || msg.includes('no element')) return 'selector-not-found';
   if (msg.includes('connection') || msg.includes('disconnected')) return 'sidecar-crash';
   if (msg.includes('permission')) return 'policy-violation';
   return 'adapter-error';

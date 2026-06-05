@@ -201,7 +201,7 @@
                           (match code
                             ["timeout" 'timeout]
                             ["sidecar-crash" 'sidecar-crash]
-                            ["selector-not-found" 'adapter-error]
+                            ["selector-not-found" 'selector-not-found]
                             ["session-not-found" 'session-expired]
                             ["policy-violation" 'policy-violation]
                             [_ 'adapter-error]))]

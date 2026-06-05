@@ -4,6 +4,7 @@
 
 (require rackunit
          json
+         "../browser/types.rkt"
          "../browser/adapter.rkt"
          "../tools/builtins/browser-tools.rkt"
          "../browser/service.rkt"
@@ -41,6 +42,21 @@
                       'ephemeral
                       #t))
   (make-secure-browser-service adapter #:settings settings))
+
+(define (make-empty-observation [url "https://example.com"])
+  (browser-observation url "Example" "" "" (hasheq) #f #f #f '() '() (hasheq) (hasheq)))
+
+(define (make-error-act-svc)
+  (define adapter
+    (make-browser-adapter #:open (lambda (sid target) (make-empty-observation))
+                          #:close (lambda (sid) (void))
+                          #:navigate (lambda (sid url) (make-empty-observation url))
+                          #:observe (lambda (sid selector) (make-empty-observation))
+                          #:act (lambda (sid action)
+                                  (raise-browser-error "simulated browser action failure"
+                                                       'adapter-error))
+                          #:screenshot (lambda (sid sel fp) #"png")))
+  (make-secure-browser-service adapter))
 
 (define (with-svc thunk)
   (parameterize ([current-browser-service (make-test-svc)])
@@ -116,6 +132,16 @@
        (content-of (handle-browser-click (hasheq 'session-id sid 'selector "#btn" 'button "right"))))
      (check-equal? (hash-ref result 'status) "ok"))))
 
+(test-case "browser_click: browser errors return tool-result instead of escaping"
+  (parameterize ([current-browser-service (make-error-act-svc)])
+    (define sid
+      (hash-ref (content-of (handle-browser-open (hasheq 'url "https://example.com"))) 'session-id))
+    (define result (handle-browser-click (hasheq 'session-id sid 'selector "#missing")))
+    (check-true (tool-result? result))
+    (check-true (tool-result-is-error? result))
+    (check-true (string-contains? (hash-ref (car (tool-result-content result)) 'text)
+                                  "browser_click failed"))))
+
 ;; ---------------------------------------------------------------------------
 ;; browser_type (2 tests)
 ;; ---------------------------------------------------------------------------
@@ -136,6 +162,16 @@
        (content-of (handle-browser-type
                     (hasheq 'session-id sid 'selector "#input" 'text "world" 'clear-first? #t))))
      (check-equal? (hash-ref result 'status) "ok"))))
+
+(test-case "browser_type: browser errors return tool-result instead of escaping"
+  (parameterize ([current-browser-service (make-error-act-svc)])
+    (define sid
+      (hash-ref (content-of (handle-browser-open (hasheq 'url "https://example.com"))) 'session-id))
+    (define result (handle-browser-type (hasheq 'session-id sid 'selector "#missing" 'text "x")))
+    (check-true (tool-result? result))
+    (check-true (tool-result-is-error? result))
+    (check-true (string-contains? (hash-ref (car (tool-result-content result)) 'text)
+                                  "browser_type failed"))))
 
 ;; ---------------------------------------------------------------------------
 ;; browser_press (1 test)

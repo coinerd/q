@@ -64,7 +64,14 @@
                           (format "Expected diagnostic message, got: ~a" text))
       (check-regexp-match "try a different approach"
                           text
-                          (format "Expected 'try a different approach', got: ~a" text)))))
+                          (format "Expected 'try a different approach', got: ~a" text)))
+
+    (test-case "scheduler-style two-argument call accepts #f exec context"
+      (define r (tool-bash (hasheq 'command "echo scheduler-ok") #f))
+      (check-pred tool-result? r)
+      (check-false (tool-result-is-error? r))
+      (define text (hash-ref (car (tool-result-content r)) 'text))
+      (check-regexp-match "scheduler-ok" text))))
 
 ;; ============================================================
 ;; Token-aware destructive command filtering (#426)

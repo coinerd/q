@@ -62,7 +62,13 @@
          (only-in "layer-adapters.rkt" dispatch-hooks extension-registry?)
          (only-in "../agent/event-bus.rkt" event-bus?)
          (only-in "session/session-store.rkt" append-entries!)
-         (only-in "../runtime/settings.rkt" make-minimal-settings setting-ref setting-ref*)
+         (only-in "../runtime/settings.rkt"
+                  q-settings
+                  q-settings?
+                  q-settings-global
+                  q-settings-project
+                  q-settings-merged)
+         (only-in "../llm/provider.rkt" provider?)
          (only-in "../util/content/content-helpers.rkt" tool-result-content->string)
          (only-in "../util/ids.rkt" generate-id now-seconds)
          (only-in "../util/cancellation.rkt" cancellation-token?)
@@ -100,6 +106,31 @@
          tool-call-actions-calls-to-run
          tool-call-actions-blocked?
          tool-call-actions-final-calls)
+
+;; ============================================================
+;; Tool runtime settings
+;; ============================================================
+
+(define (settings-for-tool-execution config)
+  (define settings (config-settings config))
+  (define provider (config-provider config))
+  (define model (config-model-name config))
+  (define merged
+    (cond
+      [(q-settings? settings) (q-settings-merged settings)]
+      [(hash? settings) settings]
+      [else (hash)]))
+  (define with-provider
+    (if (provider? provider)
+        (hash-set merged 'provider provider)
+        merged))
+  (define with-model
+    (if model
+        (hash-set (hash-set with-provider 'model model) 'default-model model)
+        with-provider))
+  (if (q-settings? settings)
+      (q-settings (q-settings-global settings) (q-settings-project settings) with-model)
+      with-model))
 
 ;; ============================================================
 ;; Helpers (QUAL-01: emit-session-event! and maybe-dispatch-hooks
@@ -197,39 +228,36 @@
        (let ([hook-dispatcher-fn (and ext-reg
                                       (lambda (hook-point payload)
                                         (dispatch-hooks hook-point payload ext-reg)))])
-         (run-tool-batch
-          tool-calls-to-run
-          reg
-          #:hook-dispatcher hook-dispatcher-fn
-          #:exec-context
-          (make-exec-context
-           #:working-directory
-           (or (config-project-dir config) (current-directory) (path-only log-path))
-           #:cancellation-token token
-           #:event-publisher
-           (lambda (event-type payload)
-             (cond
-               [(equal? event-type "tool.execution.started")
-                (define tcid (hash-ref payload 'tool-call-id))
-                (define start-ms (hash-ref payload 'start-ms (current-inexact-milliseconds)))
-                (hash-set! per-tool-start-ms tcid start-ms)
-                (emit-typed-event! bus
-                                   (make-tool-execution-start-event
-                                    #:session-id session-id
-                                    #:turn-id #f
-                                    #:timestamp (current-inexact-milliseconds)
-                                    #:tool-name (hash-ref payload 'tool-name)
-                                    #:tool-call-id tcid))]
-               [else (emit-session-event! bus session-id event-type payload)]))
-           #:runtime-settings (or (config-settings config)
-                                  (make-minimal-settings #:provider (let ([p (config-provider config)])
-                                                                       (if (string? p) p #f))
-                                                         #:model (config-model-name config)))
-           #:call-id (generate-id)
-           #:session-metadata
-           (hasheq 'session-id session-id 'session-index (config-session-index config))
-           #:permission-config (or perm-cfg (make-default-permission-config)))
-          #:parallel? (config-parallel-tools config)))]))
+         (run-tool-batch tool-calls-to-run
+                         reg
+                         #:hook-dispatcher hook-dispatcher-fn
+                         #:exec-context
+                         (make-exec-context
+                          #:working-directory
+                          (or (config-project-dir config) (current-directory) (path-only log-path))
+                          #:cancellation-token token
+                          #:event-publisher
+                          (lambda (event-type payload)
+                            (cond
+                              [(equal? event-type "tool.execution.started")
+                               (define tcid (hash-ref payload 'tool-call-id))
+                               (define start-ms
+                                 (hash-ref payload 'start-ms (current-inexact-milliseconds)))
+                               (hash-set! per-tool-start-ms tcid start-ms)
+                               (emit-typed-event! bus
+                                                  (make-tool-execution-start-event
+                                                   #:session-id session-id
+                                                   #:turn-id #f
+                                                   #:timestamp (current-inexact-milliseconds)
+                                                   #:tool-name (hash-ref payload 'tool-name)
+                                                   #:tool-call-id tcid))]
+                              [else (emit-session-event! bus session-id event-type payload)]))
+                          #:runtime-settings (settings-for-tool-execution config)
+                          #:call-id (generate-id)
+                          #:session-metadata
+                          (hasheq 'session-id session-id 'session-index (config-session-index config))
+                          #:permission-config (or perm-cfg (make-default-permission-config)))
+                         #:parallel? (config-parallel-tools config)))]))
   ;; Dispatch 'tool.execution.completed hook after tool batch
   (when (and ext-reg (not (null? tool-calls-to-run)))
     (maybe-dispatch-hooks ext-reg

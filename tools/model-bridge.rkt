@@ -13,6 +13,7 @@
          "../llm/model.rkt")
 
 (provide (contract-out [make-model-request (-> list? list? hash? model-request?)])
+         provider?
          model-request?
          (contract-out
           [provider-send (-> provider? model-request? model-response?)]

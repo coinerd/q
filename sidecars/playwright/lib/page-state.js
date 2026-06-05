@@ -9,7 +9,9 @@ async function extract(page) {
     page.title(),
     page.evaluate(() => document.body?.textContent || ''),
     page.evaluate(() => {
-      // Get visible text only
+      // Get visible text only. The body can be null during navigation or for
+      // unusual documents; return an empty observation instead of throwing.
+      if (!document.body) return '';
       const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
         acceptNode(node) {
           const el = node.parentElement;
@@ -28,6 +30,7 @@ async function extract(page) {
     }),
     page.evaluate(() => {
       // Simplified DOM summary: tag counts
+      if (!document.body) return { tagCounts: {}, childCount: 0 };
       const tags = {};
       document.querySelectorAll('*').forEach(el => {
         const t = el.tagName.toLowerCase();

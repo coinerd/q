@@ -69,7 +69,7 @@
                        [destructive-command? (-> string? boolean?)]
                        [execution-policy-allows? (-> string? boolean?)]
                        [high-risk-command? (-> string? boolean?)]
-                       [tool-bash (->* (hash?) (exec-context?) tool-result?)])
+                       [tool-bash (->* (hash?) ((or/c exec-context? #f)) tool-result?)])
          shell-risk-classifier-diagnostic)
 
 ;; Default timeout in seconds (used when no settings available)

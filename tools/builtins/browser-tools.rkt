@@ -65,6 +65,9 @@
 (define (ok-result . pairs)
   (make-success-result (apply hasheq 'status "ok" pairs)))
 
+(define (browser-error-result tool-name e)
+  (make-error-result (format "~a failed: ~a" tool-name (exn-message e))))
+
 (define (observation->hash obs)
   (hasheq 'url
           (browser-observation-url obs)
@@ -112,8 +115,9 @@
      (define selector (hash-ref args 'selector))
      (define button (hash-ref args 'button "left"))
      (define action (browser-action-click selector button))
-     (define obs (browser-act! svc sid action))
-     (ok-result 'observation (observation->hash obs))]))
+     (with-handlers ([q-browser-error? (lambda (e) (browser-error-result "browser_click" e))])
+       (define obs (browser-act! svc sid action))
+       (ok-result 'observation (observation->hash obs)))]))
 
 (define (handle-browser-type args [exec-ctx #f])
   (define svc (get-svc))
@@ -125,8 +129,9 @@
      (define text (hash-ref args 'text))
      (define clear-first? (hash-ref args 'clear-first? #f))
      (define action (browser-action-type selector text clear-first?))
-     (define obs (browser-act! svc sid action))
-     (ok-result 'observation (observation->hash obs))]))
+     (with-handlers ([q-browser-error? (lambda (e) (browser-error-result "browser_type" e))])
+       (define obs (browser-act! svc sid action))
+       (ok-result 'observation (observation->hash obs)))]))
 
 (define (handle-browser-press args [exec-ctx #f])
   (define svc (get-svc))
