@@ -26,7 +26,7 @@
    (define gs3
      (gui-state-update-last-message
       gs2
-      (lambda (m) (gui-message "assistant" (string-append (gui-message-text m) " world") (hasheq)))))
+      (lambda (m) (make-gui-message "assistant" (string-append (gui-message-text m) " world")))))
    (check-equal? (gui-message-text (car (gui-state-messages gs3))) "hello world"))
  (test-case "gui-state-set-status"
    (define gs (gui-state-set-status (make-gui-state) 'processing))

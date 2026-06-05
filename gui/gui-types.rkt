@@ -10,13 +10,15 @@
 
 (provide (struct-out gui-message)
          (struct-out gui-state)
-         (contract-out [make-gui-message (->* (string? string?) (any/c) gui-message?)]
+         (contract-out [make-gui-message (->* (string? string?) (any/c #:kind symbol?) gui-message?)]
                        [make-gui-state
                         (->* ()
                              (#:model (or/c string? #f)
                                       #:messages list?
                                       #:status symbol?
-                                      #:active-goal (or/c hash? #f))
+                                      #:active-goal (or/c hash? #f)
+                                      #:context-info (or/c hash? #f)
+                                      #:cost any/c)
                              gui-state?)]
                        [gui-state-add-message (-> gui-state? gui-message? gui-state?)]
                        [gui-state-update-last-message
@@ -25,27 +27,33 @@
                         (-> gui-state? string? (-> gui-message? gui-message?) gui-state?)]
                        [gui-state-set-status (-> gui-state? symbol? gui-state?)]
                        [gui-state-set-active-goal (-> gui-state? (or/c hash? #f) gui-state?)]
+                       [gui-state-set-context-info (-> gui-state? (or/c hash? #f) gui-state?)]
+                       [gui-state-set-cost (-> gui-state? any/c gui-state?)]
+                       [gui-state-set-model (-> gui-state? string? gui-state?)]
                        [gui-state->hash (-> gui-state? hash?)]
                        [hash->gui-state (-> hash? gui-state?)]
                        [gui-message->hash (-> gui-message? hash?)]
                        [hash->gui-message (-> hash? gui-message?)]))
 
 ;; A single chat message in the GUI transcript.
-(struct gui-message (role text meta) #:transparent)
+;; kind: symbol — 'message | 'tool-start | 'tool-end | 'tool-fail | 'thinking | 'system | 'error | 'assistant | 'user
+(struct gui-message (role text kind meta) #:transparent)
 
-;; The full GUI state: messages, status, model name.
-(struct gui-state (messages status model active-goal) #:transparent)
+;; The full GUI state: messages, status, model name, context info, cost.
+(struct gui-state (messages status model active-goal context-info cost) #:transparent)
 
 ;; --- Constructors with defaults ---
 
-(define (make-gui-message role text [meta (hasheq)])
-  (gui-message role text meta))
+(define (make-gui-message role text [meta (hasheq)] #:kind [kind 'message])
+  (gui-message role text kind meta))
 
 (define (make-gui-state #:model [model #f]
                         #:messages [messages '()]
                         #:status [status 'idle]
-                        #:active-goal [active-goal #f])
-  (gui-state messages status model active-goal))
+                        #:active-goal [active-goal #f]
+                        #:context-info [context-info #f]
+                        #:cost [cost #f])
+  (gui-state messages status model active-goal context-info cost))
 
 ;; --- Immutable update helpers ---
 
@@ -84,13 +92,32 @@
 (define (gui-state-set-active-goal gs goal-info)
   (struct-copy gui-state gs [active-goal goal-info]))
 
+(define (gui-state-set-context-info gs info)
+  (struct-copy gui-state gs [context-info info]))
+
+(define (gui-state-set-cost gs cost)
+  (struct-copy gui-state gs [cost cost]))
+
+(define (gui-state-set-model gs model)
+  (struct-copy gui-state gs [model model]))
+
 ;; --- Hash conversion (backward compatibility) ---
 
 (define (gui-message->hash msg)
-  (hash 'role (gui-message-role msg) 'text (gui-message-text msg) 'meta (gui-message-meta msg)))
+  (hash 'role
+        (gui-message-role msg)
+        'text
+        (gui-message-text msg)
+        'kind
+        (gui-message-kind msg)
+        'meta
+        (gui-message-meta msg)))
 
 (define (hash->gui-message h)
-  (gui-message (hash-ref h 'role "") (hash-ref h 'text "") (hash-ref h 'meta (hasheq))))
+  (gui-message (hash-ref h 'role "")
+               (hash-ref h 'text "")
+               (hash-ref h 'kind 'message)
+               (hash-ref h 'meta (hasheq))))
 
 (define (gui-state->hash gs)
   (hash 'messages
@@ -100,10 +127,16 @@
         'model
         (gui-state-model gs)
         'active-goal
-        (gui-state-active-goal gs)))
+        (gui-state-active-goal gs)
+        'context-info
+        (gui-state-context-info gs)
+        'cost
+        (gui-state-cost gs)))
 
 (define (hash->gui-state h)
   (gui-state (map hash->gui-message (hash-ref h 'messages '()))
              (hash-ref h 'status 'idle)
              (hash-ref h 'model #f)
-             (hash-ref h 'active-goal #f)))
+             (hash-ref h 'active-goal #f)
+             (hash-ref h 'context-info #f)
+             (hash-ref h 'cost #f)))

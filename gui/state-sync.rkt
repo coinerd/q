@@ -95,7 +95,7 @@
             (define last-msg (and (pair? msgs) (last msgs)))
             (cond
               [(and last-msg (equal? (gui-message-role last-msg) "assistant"))
-               (define updated-last (gui-message "assistant" (unbox current-response-text) (hasheq)))
+               (define updated-last (make-gui-message "assistant" (unbox current-response-text)))
                (define all-but-last (drop-right msgs 1))
                (set-box!
                 state-box
@@ -173,10 +173,12 @@
           (define old (unbox state-box))
           (set-box! state-box
                     (gui-state-update-tool-message-by-name
-                     old name
+                     old
+                     name
                      (lambda (msg)
                        (gui-message "tool"
                                     (string-append (gui-message-text msg) " \u2192 " result-text)
+                                    (gui-message-kind msg)
                                     (hash-set (gui-message-meta msg) 'completed #t)))))
           (notify!)))]
       ;; Error events
