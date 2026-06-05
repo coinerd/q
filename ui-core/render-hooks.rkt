@@ -68,7 +68,10 @@
         data)))
 
 (define (apply-render-hook-safe hook data)
-  (with-handlers ([exn:fail? (lambda (e) (values data #f))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-warning (format "apply-render-hook-safe: caught error: ~a"
+                                                    (exn-message e)))
+                               (values data #f))])
     (define result (apply-render-hook hook data))
     (define validator (render-hook-validator hook))
     (cond

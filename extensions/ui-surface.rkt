@@ -12,7 +12,6 @@
 ;; v0.94.1 (W1.2): Added event-publishing dual-path behind feature flag.
 
 (require racket/contract
-         (only-in "../tui/state.rkt" ui-state ui-state? ui-state-extension-widgets)
          (only-in "../ui-core/ui-actions.rkt"
                   current-ui-event-actions-enabled?
                   emit-ui-action!
@@ -52,9 +51,9 @@
                        ;; Status message callback (dialog-api)
                        [ui-set-status-message! (-> box? string? void?)]
                        ;; Widget callbacks (widget-api)
-                       [ui-set-extension-widget! (-> ui-state? symbol? any/c any/c ui-state?)]
-                       [ui-remove-extension-widget! (-> ui-state? symbol? any/c ui-state?)]
-                       [ui-remove-all-extension-widgets! (-> ui-state? symbol? ui-state?)]
+                       [ui-set-extension-widget! (-> any/c symbol? any/c any/c any/c)]
+                       [ui-remove-extension-widget! (-> any/c symbol? any/c any/c)]
+                       [ui-remove-all-extension-widgets! (-> any/c symbol? any/c)]
                        ;; Installation (called by TUI during init)
                        [install-ui-callbacks! (-> hash? void?)]
                        ;; Check if callbacks are installed
@@ -142,10 +141,9 @@
   (define cb (ui-callback-registry-set-extension-widget (current-ui-registry)))
   (if cb
       (cb state ext-name key lines)
-      ;; Fallback: directly update the extension-widgets hash
-      (let* ([widgets (ui-state-extension-widgets state)]
-             [new-widgets (hash-set widgets (cons ext-name key) lines)])
-        (struct-copy ui-state state [extension-widgets new-widgets]))))
+      (begin
+        (log-warning (format "ui-set-extension-widget!: no callback installed for ~a" ext-name))
+        state)))
 
 ;; Remove a specific widget
 (define (ui-remove-extension-widget! state ext-name key)
@@ -153,9 +151,9 @@
   (define cb (ui-callback-registry-remove-extension-widget (current-ui-registry)))
   (if cb
       (cb state ext-name key)
-      (let* ([widgets (ui-state-extension-widgets state)]
-             [new-widgets (hash-remove widgets (cons ext-name key))])
-        (struct-copy ui-state state [extension-widgets new-widgets]))))
+      (begin
+        (log-warning (format "ui-remove-extension-widget!: no callback installed for ~a" ext-name))
+        state)))
 
 ;; Remove all widgets for an extension
 (define (ui-remove-all-extension-widgets! state ext-name)
@@ -163,11 +161,10 @@
   (define cb (ui-callback-registry-remove-all-extension-widgets (current-ui-registry)))
   (if cb
       (cb state ext-name)
-      (let* ([widgets (ui-state-extension-widgets state)]
-             [new-widgets (for/hash ([(k v) (in-hash widgets)]
-                                     #:when (not (equal? (car k) ext-name)))
-                            (values k v))])
-        (struct-copy ui-state state [extension-widgets new-widgets]))))
+      (begin
+        (log-warning (format "ui-remove-all-extension-widgets!: no callback installed for ~a"
+                             ext-name))
+        state)))
 
 (define (ui-callbacks-installed?)
   (define r (current-ui-registry))
