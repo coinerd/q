@@ -100,6 +100,13 @@
 ;; Track last render timestamp for debouncing.
 (define last-render-ms (box 0.0))
 
+;; Cursor blink interval (milliseconds). Standard terminal blink is ~530ms.
+(define BLINK-INTERVAL-MS 530)
+
+;; Track last blink toggle and current phase (#t = cursor visible).
+(define last-blink-toggle-ms (box 0.0))
+(define blink-phase (box #t))
+
 ;; Native cell-buffer operations (no dynamic-require)
 
 ;; ============================================================
@@ -110,6 +117,9 @@
 (define (tui-ctx-init-terminal! ctx)
   (define term (tui-term-open))
   (set-box! (tui-ctx-term-box ctx) term)
+  ;; Sync cursor visibility tracking: hardware cursor is hidden for the
+  ;; entire TUI session; we draw a software cursor in the cell buffer.
+  (tui-cursor-hide)
   (define-values (cols rows) (tui-screen-size))
   (define ubuf (make-cell-buffer cols rows))
   (set-box! (tui-ctx-ubuf-box ctx) ubuf)
@@ -317,27 +327,43 @@
   (define-values (cursor-col cursor-row state* frame-lines)
     (render-frame-vdom! ubuf state inp layout #:component-registry comp-registry))
 
+  ;; Draw software cursor (inverse video) when blink phase is on.
+  ;; Hardware cursor is hidden for the entire session; this provides
+  ;; a stable, self-controlled cursor that never resets the terminal's
+  ;; hardware blink timer.
+  (when (unbox blink-phase)
+    (define cursor-cell (cell-buffer-ref ubuf cursor-col cursor-row))
+    (cell-buffer-set! ubuf
+                      cursor-col
+                      cursor-row
+                      #:char (cell-char cursor-cell)
+                      #:fg (cell-bg cursor-cell)
+                      #:bg (cell-fg cursor-cell)
+                      #:bold (cell-bold? cursor-cell)
+                      #:underline (cell-underline? cursor-cell)
+                      #:italic (cell-italic? cursor-cell)
+                      #:blink (cell-blink? cursor-cell)))
+
   ;; Write back state with updated render cache
   (set-box! (tui-ctx-ui-state-box ctx) state*)
 
   ;; Cell-level incremental diff with synchronized output.
-  ;; Wrap hide + render + cursor position + show in a single DEC 2026 bracket
-  ;; so the terminal applies everything atomically. This prevents the cursor
-  ;; from appearing to blink rapidly during 60fps streaming output.
+  ;; Hardware cursor remains hidden; we draw the cursor in the cell buffer.
+  ;; Sync bracket prevents frame tearing on capable terminals.
   (define prev-ubuf (unbox (tui-ctx-prev-ubuf-box ctx)))
   (define out (tui-output-port))
   (terminal-sync-begin!)
-  (tui-cursor-hide #f)
   (render-smart! prev-ubuf ubuf out #:sync? #f)
   ;; Store snapshot for next diff
   (set-box! (tui-ctx-prev-ubuf-box ctx) (cell-buffer-snapshot ubuf))
 
-  ;; Position cursor at input location (renderer returns 0-indexed, ANSI is 1-indexed)
+  ;; Position hardware cursor at input location for IME tracking.
+  ;; Hardware cursor is hidden (ESC[?25l at startup), so this is invisible
+  ;; but tells the terminal/IME where composition should occur.
   (tui-cursor (+ cursor-col 1) (+ cursor-row 1) #f)
   ;; Emit IME cursor marker for CJK input support
   ;; Uses APC protocol — silently ignored by terminals that don't understand it
   (display CURSOR-MARKER out)
-  (tui-cursor-show #f)
   (terminal-sync-end!)
   (tui-flush)
   (set-box! last-render-ms (current-inexact-milliseconds))
@@ -441,6 +467,14 @@
     ;; doesn't produce tsizemsg events).
     (when (tui-screen-size-changed?)
       (tui-ctx-resize-ubuf! ctx)
+      (mark-dirty! ctx))
+
+    ;; Cursor blink phase toggle. When the interval elapses, flip the
+    ;; phase and mark dirty so the software cursor is re-rendered.
+    (define now-ms (current-inexact-milliseconds))
+    (when (> (- now-ms (unbox last-blink-toggle-ms)) BLINK-INTERVAL-MS)
+      (set-box! blink-phase (not (unbox blink-phase)))
+      (set-box! last-blink-toggle-ms now-ms)
       (mark-dirty! ctx))
 
     ;; Draw the frame only when state changed (with debouncing)
