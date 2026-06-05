@@ -282,7 +282,7 @@
   (check-true (string-contains? result "\x1b[K")
               (format "expected ESC[K after last batch, got: ~a" result)))
 
-(test-case "delta render: emits ESC[K after batch with gap in same row"
+(test-case "delta render: does NOT emit ESC[K between batches in same row"
   (define a (make-cell-buffer 20 1))
   (define b (make-cell-buffer 20 1))
   ;; Two separate batches in same row (gap between them)
@@ -292,10 +292,14 @@
   (define out (open-output-string))
   (render-deltas-to-port! deltas b out #:sync? #f)
   (define result (get-output-string out))
-  ;; After first batch (col 0), next delta is col 5 in same row
-  ;; Should emit ESC[K after first batch since it's not consecutive
-  (check-true (string-contains? result "\x1b[K")
-              (format "expected ESC[K after non-consecutive batch, got: ~a" result)))
+  ;; After first batch (col 0), next delta is col 5 in same row.
+  ;; With the fix, ESC[K is NOT emitted between batches in the same row.
+  ;; It is only emitted after the LAST batch in the row (after col 5).
+  (define esc-k-count (length (regexp-match* (regexp (regexp-quote "\x1b[K")) result)))
+  (check-equal?
+   esc-k-count
+   1
+   (format "expected exactly 1 ESC[K (after last batch), got ~a in: ~a" esc-k-count result)))
 
 (test-case "smart render delta path: emits ESC[K after row changes"
   (define a (make-cell-buffer 20 2))
@@ -374,3 +378,90 @@
   (define sgr-re (format "~a\\[[0-9;]+m" (integer->char 27)))
   (define sgrs (regexp-match* (regexp sgr-re) result))
   (check-equal? (length sgrs) 2))
+
+;; ============================================================
+;; ESC[K gap bug regression tests
+;; ============================================================
+
+(test-case "width-2 char does not clear unchanged trailing content"
+  ;; RED gate for delta ESC[K gap bug.
+  ;; Old frame: ABXYC — X at col 5, Y at col 6, C at col 7 (UNCHANGED)
+  ;; New frame: AB🙂C — 🙂 at col 5-6, C at col 7 (UNCHANGED)
+  ;; The continuation cell at col 6 is filtered out of real-deltas.
+  ;; Without the fix, ESC[K after 🙂 clears C at col 7.
+  (define a (make-cell-buffer 20 1))
+  (define b (make-cell-buffer 20 1))
+  (cell-buffer-set! a 0 0 #:char #\A #:fg 7)
+  (cell-buffer-set! a 1 0 #:char #\B #:fg 7)
+  (cell-buffer-set! a 5 0 #:char #\X #:fg 7)
+  (cell-buffer-set! a 6 0 #:char #\Y #:fg 7)
+  (cell-buffer-set! a 7 0 #:char #\C #:fg 7)
+  (cell-buffer-set! b 0 0 #:char #\A #:fg 7)
+  (cell-buffer-set! b 1 0 #:char #\B #:fg 7)
+  (cell-buffer-width-aware-putstring! b 5 0 "🙂" #:fg 7)
+  (cell-buffer-set! b 7 0 #:char #\C #:fg 7)
+  (define deltas (diff-cell-buffers a b))
+  (define out (open-output-string))
+  (render-deltas-to-port! deltas b out #:sync? #f)
+  (define result (get-output-string out))
+  ;; The output should NOT contain ESC[K between batches in the same row.
+  ;; There is only one real delta (col 5), so it's the last batch in the row.
+  ;; ESC[K is emitted once at the end.
+  (define esc-k-count (length (regexp-match* (regexp (regexp-quote "\x1b[K")) result)))
+  (check-equal? esc-k-count 1 (format "expected 1 ESC[K, got ~a in: ~a" esc-k-count result)))
+
+(test-case "style-change gap does not clear unchanged content between batches"
+  ;; Old frame: "ABCDE" all plain
+  ;; New frame: "AXYDE" with bold "XY" at cols 2-3
+  ;; Deltas: col 2 (C→X, bold), col 3 (D→Y, bold), col 4 (E→E, plain)
+  ;; Wait, E is unchanged. So deltas are cols 2-3 only.
+  ;; Single batch (same row, consecutive, same SGR). Not a great test.
+  ;; Let's make it: old "ABCDE", new "AXCDE" with bold X at col 2.
+  ;; Deltas: col 2 (C→X, bold), col 3 (D→D, plain), col 4 (E→E, plain)
+  ;; Actually consecutive same-style cells batch together.
+  ;; Better test: two style segments with an unchanged gap.
+  ;; Old: A B C D E (all plain)
+  ;; New: A X C Y E (X bold at 1, Y bold at 3)
+  ;; Deltas: col 1 (B→X, bold), col 3 (D→Y, bold)
+  ;; Two batches in same row with gap at col 2 (C, unchanged).
+  ;; With fix: no ESC[K between batch 1 and batch 2.
+  (define a (make-cell-buffer 20 1))
+  (define b (make-cell-buffer 20 1))
+  (cell-buffer-set! a 0 0 #:char #\A #:fg 7)
+  (cell-buffer-set! a 1 0 #:char #\B #:fg 7)
+  (cell-buffer-set! a 2 0 #:char #\C #:fg 7)
+  (cell-buffer-set! a 3 0 #:char #\D #:fg 7)
+  (cell-buffer-set! a 4 0 #:char #\E #:fg 7)
+  (cell-buffer-set! b 0 0 #:char #\A #:fg 7)
+  (cell-buffer-set! b 1 0 #:char #\X #:fg 7 #:bold #t)
+  (cell-buffer-set! b 2 0 #:char #\C #:fg 7)
+  (cell-buffer-set! b 3 0 #:char #\Y #:fg 7 #:bold #t)
+  (cell-buffer-set! b 4 0 #:char #\E #:fg 7)
+  (define deltas (diff-cell-buffers a b))
+  (define out (open-output-string))
+  (render-deltas-to-port! deltas b out #:sync? #f)
+  (define result (get-output-string out))
+  ;; Should have exactly 1 ESC[K after the last batch in the row
+  (define esc-k-count (length (regexp-match* (regexp (regexp-quote "\x1b[K")) result)))
+  (check-equal?
+   esc-k-count
+   1
+   (format "expected 1 ESC[K (after last batch only), got ~a in: ~a" esc-k-count result)))
+
+(test-case "multiple rows: ESC[K only after last batch per row"
+  (define a (make-cell-buffer 10 2))
+  (define b (make-cell-buffer 10 2))
+  ;; Row 0: two batches with gap
+  (cell-buffer-set! b 0 0 #:char #\A #:fg 7)
+  (cell-buffer-set! b 5 0 #:char #\B #:fg 7)
+  ;; Row 1: one batch
+  (cell-buffer-set! b 0 1 #:char #\C #:fg 7)
+  (define deltas (diff-cell-buffers a b))
+  (define out (open-output-string))
+  (render-deltas-to-port! deltas b out #:sync? #f)
+  (define result (get-output-string out))
+  ;; Should have 2 ESC[K: one after row 0's last batch, one after row 1's last batch
+  (define esc-k-count (length (regexp-match* (regexp (regexp-quote "\x1b[K")) result)))
+  (check-equal? esc-k-count
+                2
+                (format "expected 2 ESC[K (one per row), got ~a in: ~a" esc-k-count result)))

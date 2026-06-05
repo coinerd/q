@@ -107,12 +107,12 @@
                  [else
                   ;; Batch ends — emit accumulated chars
                   (display (list->string (reverse acc)) out)
-                  ;; Clear to end of line to erase old trailing characters
-                  ;; This applies when:
-                  ;;  - switching to a different row
-                  ;;  - gap in same row (non-consecutive column)
-                  ;;  - same row, consecutive column, but different SGR
-                  (display "\x1b[K" out)
+                  ;; Clear to end of line ONLY when switching to a different row.
+                  ;; Never clear between batches in the same row — gaps may
+                  ;; contain unchanged content (e.g., after a width-2 char
+                  ;; base cell whose continuation delta was filtered out).
+                  (when (not (= (cell-delta-row (car rest)) row))
+                    (display "\x1b[K" out))
                   (loop rest)])]))]))
      ;; Reset SGR at end
      (display "\x1b[0m" out))))
