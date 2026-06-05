@@ -19,28 +19,38 @@
 
 (require racket/contract
          (only-in "ui-delta.rkt"
-                  ui-delta ui-delta? ui-delta-type ui-delta-payload
+                  ui-delta
+                  ui-delta?
+                  ui-delta-type
+                  ui-delta-payload
                   ui-action->deltas
                   all-delta-types
-                  DELTA-SET-HEADER DELTA-CLEAR-HEADER
-                  DELTA-SET-FOOTER DELTA-CLEAR-FOOTER
-                  DELTA-SET-STATUS DELTA-ADD-MESSAGE DELTA-UPDATE-MESSAGE
-                  DELTA-SET-THEME DELTA-SET-LAYOUT DELTA-SET-FOCUS
-                  DELTA-REGISTER-WIDGET DELTA-UNREGISTER-WIDGET))
+                  DELTA-SET-HEADER
+                  DELTA-CLEAR-HEADER
+                  DELTA-SET-FOOTER
+                  DELTA-CLEAR-FOOTER
+                  DELTA-SET-STATUS
+                  DELTA-ADD-MESSAGE
+                  DELTA-UPDATE-MESSAGE
+                  DELTA-SET-THEME
+                  DELTA-SET-LAYOUT
+                  DELTA-SET-FOCUS
+                  DELTA-REGISTER-WIDGET
+                  DELTA-UNREGISTER-WIDGET
+                  DELTA-SHOW-OVERLAY
+                  DELTA-DISMISS-OVERLAY))
 
-(provide
- ;; Handler table type
- (struct-out delta-handler-table)
- make-delta-handler-table
+;; Handler table type
+(provide (struct-out delta-handler-table)
+         make-delta-handler-table
 
- ;; Shared apply functions
- (contract-out
-  [apply-delta-with (-> delta-handler-table? ui-delta? any/c any/c)]
-  [apply-deltas-with (-> delta-handler-table? (listof ui-delta?) any/c any/c)]
-  [apply-action-with (-> delta-handler-table? string? hash? any/c any/c)])
+         ;; Shared apply functions
+         (contract-out [apply-delta-with (-> delta-handler-table? ui-delta? any/c any/c)]
+                       [apply-deltas-with (-> delta-handler-table? (listof ui-delta?) any/c any/c)]
+                       [apply-action-with (-> delta-handler-table? string? hash? any/c any/c)])
 
- ;; Handler composition
- delta-handlers->table)
+         ;; Handler composition
+         delta-handlers->table)
 
 ;; ── Handler table ──────────────────────────────────────────
 ;; Maps delta types to handler functions.
@@ -73,19 +83,20 @@
 ;;   (delta-handlers->table #:set-header (lambda (payload state) ...)
 ;;                          #:clear-header (lambda (payload state) ...))
 
-(define (delta-handlers->table
-         #:set-header [set-header #f]
-         #:clear-header [clear-header #f]
-         #:set-footer [set-footer #f]
-         #:clear-footer [clear-footer #f]
-         #:set-status [set-status #f]
-         #:add-message [add-message #f]
-         #:update-message [update-message #f]
-         #:set-theme [set-theme #f]
-         #:set-layout [set-layout #f]
-         #:set-focus [set-focus #f]
-         #:register-widget [register-widget #f]
-         #:unregister-widget [unregister-widget #f])
+(define (delta-handlers->table #:set-header [set-header #f]
+                               #:clear-header [clear-header #f]
+                               #:set-footer [set-footer #f]
+                               #:clear-footer [clear-footer #f]
+                               #:set-status [set-status #f]
+                               #:add-message [add-message #f]
+                               #:update-message [update-message #f]
+                               #:set-theme [set-theme #f]
+                               #:set-layout [set-layout #f]
+                               #:set-focus [set-focus #f]
+                               #:register-widget [register-widget #f]
+                               #:unregister-widget [unregister-widget #f]
+                               #:show-overlay [show-overlay #f]
+                               #:dismiss-overlay [dismiss-overlay #f])
   (define pairs
     (filter cdr
             (list (cons 'set-header set-header)
@@ -99,7 +110,8 @@
                   (cons 'set-layout set-layout)
                   (cons 'set-focus set-focus)
                   (cons 'register-widget register-widget)
-                  (cons 'unregister-widget unregister-widget))))
-  (delta-handler-table
-   (for/hasheq ([p (in-list pairs)])
-     (values (car p) (cdr p)))))
+                  (cons 'unregister-widget unregister-widget)
+                  (cons 'show-overlay show-overlay)
+                  (cons 'dismiss-overlay dismiss-overlay))))
+  (delta-handler-table (for/hasheq ([p (in-list pairs)])
+                         (values (car p) (cdr p)))))
