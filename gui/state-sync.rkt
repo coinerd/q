@@ -326,11 +326,24 @@
     (unless (equal? msgs (peek-obs messages-obs))
       (set-obs! messages-obs msgs))
     (define st (gui-state-status state))
+    (define ctx-info (gui-state-context-info state))
+    (define goal (gui-state-active-goal state))
+    (define ctx-pct (and (hash? ctx-info) (hash-ref ctx-info 'percent #f)))
     (define status-str
       (cond
-        [(eq? st 'processing) "Processing..."]
         [(eq? st 'error) "Error"]
-        [else "Ready"]))
+        [else
+         (string-join (filter string?
+                              (list (or (gui-state-model state) "q")
+                                    (cond
+                                      [(eq? st 'processing) "Processing..."]
+                                      [else "Ready"])
+                                    (and ctx-pct (format "ctx:~a%" ctx-pct))
+                                    (and goal
+                                         (if (> (string-length goal) 30)
+                                             (format "Goal: ~a..." (substring goal 0 27))
+                                             (format "Goal: ~a" goal)))))
+                      " | ")]))
     (unless (equal? status-str (peek-obs status-obs))
       (set-obs! status-obs status-str)))
 
