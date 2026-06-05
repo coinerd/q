@@ -237,6 +237,95 @@
   (check-equal? (length cursor-moves) 1))
 
 ;; ============================================================
+;; Line clearing (ESC[K) tests — RED gate for trailing-char bug
+;; ============================================================
+
+(test-case "full render: emits ESC[K after each row"
+  (define buf (make-cell-buffer 10 3))
+  ;; Row 0: 5 chars
+  (cell-buffer-putstring! buf 0 0 "Hello")
+  ;; Row 1: 3 chars
+  (cell-buffer-putstring! buf 0 1 "Hi!")
+  ;; Row 2: empty
+  (define out (open-output-string))
+  (render-buffer-to-port! buf out #:sync? #f)
+  (define result (get-output-string out))
+  ;; Should contain ESC[K after each row (3 rows = 3 ESC[K)
+  (define esc-k "\x1b[K")
+  (define esc-k-count (length (regexp-match* (regexp (regexp-quote esc-k)) result)))
+  (check-equal? esc-k-count 3 (format "expected 3 ESC[K, got ~a in: ~a" esc-k-count result)))
+
+(test-case "delta render: emits ESC[K after last batch when switching rows"
+  (define a (make-cell-buffer 20 2))
+  (define b (make-cell-buffer 20 2))
+  ;; Row 0: short text
+  (cell-buffer-putstring! b 0 0 "AB")
+  ;; Row 1: different text
+  (cell-buffer-putstring! b 0 1 "CD")
+  (define deltas (diff-cell-buffers a b))
+  (define out (open-output-string))
+  (render-deltas-to-port! deltas b out #:sync? #f)
+  (define result (get-output-string out))
+  ;; Should contain ESC[K after row 0's batch (before row 1)
+  (check-true (string-contains? result "\x1b[K")
+              (format "expected ESC[K in delta output, got: ~a" result)))
+
+(test-case "delta render: emits ESC[K for single-row last batch"
+  (define a (make-cell-buffer 20 1))
+  (define b (make-cell-buffer 20 1))
+  (cell-buffer-putstring! b 0 0 "XY")
+  (define deltas (diff-cell-buffers a b))
+  (define out (open-output-string))
+  (render-deltas-to-port! deltas b out #:sync? #f)
+  (define result (get-output-string out))
+  ;; Last batch in delta list should have ESC[K after it
+  (check-true (string-contains? result "\x1b[K")
+              (format "expected ESC[K after last batch, got: ~a" result)))
+
+(test-case "delta render: emits ESC[K after batch with gap in same row"
+  (define a (make-cell-buffer 20 1))
+  (define b (make-cell-buffer 20 1))
+  ;; Two separate batches in same row (gap between them)
+  (cell-buffer-set! b 0 0 #:char #\A #:fg 7)
+  (cell-buffer-set! b 5 0 #:char #\B #:fg 7)
+  (define deltas (diff-cell-buffers a b))
+  (define out (open-output-string))
+  (render-deltas-to-port! deltas b out #:sync? #f)
+  (define result (get-output-string out))
+  ;; After first batch (col 0), next delta is col 5 in same row
+  ;; Should emit ESC[K after first batch since it's not consecutive
+  (check-true (string-contains? result "\x1b[K")
+              (format "expected ESC[K after non-consecutive batch, got: ~a" result)))
+
+(test-case "smart render delta path: emits ESC[K after row changes"
+  (define a (make-cell-buffer 20 2))
+  (define b (make-cell-buffer 20 2))
+  ;; Long text in row 0, short text in row 1
+  (cell-buffer-putstring! b 0 0 "Long text here")
+  (cell-buffer-putstring! b 0 1 "OK")
+  (define out (open-output-string))
+  (render-smart! a b out #:sync? #f)
+  (define result (get-output-string out))
+  ;; Delta path should contain ESC[K
+  (check-true (string-contains? result "\x1b[K")
+              (format "expected ESC[K in smart delta path, got: ~a" result)))
+
+(test-case "smart render full path: emits ESC[K after each row"
+  (define a (make-cell-buffer 5 2))
+  (define b (make-cell-buffer 5 2))
+  ;; Change all 10 cells (>50% threshold triggers full render)
+  ;; Use odd width (5) to avoid row-hash XOR-cancellation with even counts
+  (for* ([r (in-range 2)]
+         [c (in-range 5)])
+    (cell-buffer-set! b c r #:char #\X #:fg 7))
+  (define out (open-output-string))
+  (render-smart! a b out #:sync? #f)
+  (define result (get-output-string out))
+  ;; Full render should contain ESC[K after each row
+  (define esc-k-count (length (regexp-match* (regexp (regexp-quote "\x1b[K")) result)))
+  (check-equal? esc-k-count 2 (format "expected 2 ESC[K in full render, got ~a" esc-k-count)))
+
+;; ============================================================
 ;; SGR deduplication tests
 ;; ============================================================
 

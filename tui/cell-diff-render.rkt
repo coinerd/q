@@ -89,8 +89,10 @@
                        [next-col (add1 col)])
             (cond
               [(null? rest)
-               ;; Emit batch
+               ;; Emit batch — last batch in entire delta list
                (display (list->string (reverse acc)) out)
+               ;; Clear to end of line to erase any old trailing characters
+               (display "\x1b[K" out)
                (loop rest)]
               [else
                (define nd (car rest))
@@ -100,11 +102,17 @@
                (define nd-sgr (cell->sgr nd-cell))
                (cond
                  [(and (= nd-row row) (= nd-col next-col) (equal? nd-sgr sgr))
-                  ;; Same row, consecutive column, same style — batch
+                  ;; Same row, consecutive column, same style — batch continues
                   (gather (cdr rest) (cons (cell-char nd-cell) acc) (add1 next-col))]
                  [else
                   ;; Batch ends — emit accumulated chars
                   (display (list->string (reverse acc)) out)
+                  ;; Clear to end of line to erase old trailing characters
+                  ;; This applies when:
+                  ;;  - switching to a different row
+                  ;;  - gap in same row (non-consecutive column)
+                  ;;  - same row, consecutive column, but different SGR
+                  (display "\x1b[K" out)
                   (loop rest)])]))]))
      ;; Reset SGR at end
      (display "\x1b[0m" out))))
@@ -138,7 +146,9 @@
             (unless (equal? sgr prev-sgr)
               (display sgr out)
               (set! prev-sgr sgr))
-            (display (string (cell-char cell)) out)])))
+            (display (string (cell-char cell)) out)]))
+       ;; Clear to end of line — ensures old trailing characters are erased
+       (display "\x1b[K" out))
      (display "\x1b[0m" out))))
 
 ;; ============================================================
