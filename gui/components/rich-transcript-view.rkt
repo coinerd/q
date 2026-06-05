@@ -19,6 +19,7 @@
 
 (provide role->label
          role->color
+         kind->color
          hex->color-components
          (contract-out
           [make-role-label-delta (-> string? (or/c string? #f) hash?)]
@@ -58,6 +59,16 @@
     [(tool tool-result) (theme-ref theme 'warning)]
     [else (theme-ref theme 'muted)]))
 
+;; Per-kind color override. Returns #f if no override (use role color).
+(define (kind->color kind theme)
+  (case kind
+    [(tool-start) (theme-ref theme 'accent)] ; cyan for tool start
+    [(tool-end) "#a6e3a1"] ; green for success
+    [(tool-fail) "#f38ba8"] ; red for failure
+    [(thinking) (theme-ref theme 'muted)] ; dimmed for thinking
+    [(system) (theme-ref theme 'muted)] ; dimmed for system
+    [else #f]))
+
 (define (hex->color-components hex-str)
   (define cleaned (string-trim (or hex-str "#000000") "#" #:left? #t))
   (define r (string->number (substring cleaned 0 2) 16))
@@ -78,9 +89,10 @@
 (define (render-message-descriptor msg theme)
   (define role (hash-ref msg 'role "system"))
   (define text (hash-ref msg 'text ""))
+  (define kind (hash-ref msg 'kind 'message))
   (define label (role->label role))
-  (define role-color (role->color role theme))
-  (define content-color (theme-ref theme 'foreground))
+  (define role-color (or (kind->color kind theme) (role->color role theme)))
+  (define content-color (or (kind->color kind theme) (theme-ref theme 'foreground)))
   (define role-seg
     (hash 'type
           'role-label
@@ -181,6 +193,7 @@
 (define (insert-message-into-text! text-obj msg theme)
   (define role (hash-ref msg 'role "system"))
   (define text (hash-ref msg 'text ""))
+  (define kind (hash-ref msg 'kind 'message))
   (define label (role->label role))
   (cond
     [(or (getenv "DISPLAY") (getenv "WAYLAND_DISPLAY"))
@@ -194,8 +207,9 @@
                     (string->number (substring cleaned 0 2) 16)
                     (string->number (substring cleaned 2 4) 16)
                     (string->number (substring cleaned 4 6) 16)))
-     (define role-color (hex->color-obj (role->color role theme)))
-     (define content-color (hex->color-obj (theme-ref theme 'foreground)))
+     (define role-color (hex->color-obj (or (kind->color kind theme) (role->color role theme))))
+     (define content-color
+       (hex->color-obj (or (kind->color kind theme) (theme-ref theme 'foreground))))
      ;; Apply bold role label with role color
      (define role-delta (make-object style-delta% 'change-bold))
      (send role-delta set-delta-foreground role-color)

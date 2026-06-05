@@ -146,7 +146,7 @@
                               (set-box! state-box (gui-state-set-status old 'idle))
                               (notify!)))]
 
-      ;; Tool call started → show in transcript with args
+      ;; Tool call started → show in transcript with args as tool-start
       [(equal? ev "tool.call.started")
        (define name (hash-ref payload 'name "unknown"))
        (define args (hash-ref payload 'arguments #f))
@@ -159,28 +159,34 @@
                     (gui-state-add-message old
                                            (make-gui-message "tool"
                                                              (format "[~a]~a" name arg-summary)
-                                                             (hasheq 'name name 'arguments args))))
+                                                             (hasheq 'name name 'arguments args)
+                                                             #:kind 'tool-start)))
           (notify!)))]
 
-      ;; Tool execution completed → update matching tool message with result
+      ;; Tool execution completed → add new tool-end/tool-fail entry with result
       [(equal? ev "tool.execution.completed")
        (define name (hash-ref payload 'toolName "unknown"))
        (define result-summary (hash-ref payload 'resultSummary 'completed))
-       (define result-text (if (eq? result-summary 'error) "FAIL" "OK"))
-       (call-with-semaphore
-        gui-state-lock
-        (lambda ()
-          (define old (unbox state-box))
-          (set-box! state-box
-                    (gui-state-update-tool-message-by-name
-                     old
-                     name
-                     (lambda (msg)
-                       (gui-message "tool"
-                                    (string-append (gui-message-text msg) " \u2192 " result-text)
-                                    (gui-message-kind msg)
-                                    (hash-set (gui-message-meta msg) 'completed #t)))))
-          (notify!)))]
+       (define is-error (eq? result-summary 'error))
+       (define result-text
+         (let ([raw (if (string? result-summary)
+                        result-summary
+                        (format "~a" result-summary))])
+           (if (> (string-length raw) 80)
+               (string-append (substring raw 0 77) "...")
+               raw)))
+       (call-with-semaphore gui-state-lock
+                            (lambda ()
+                              (define old (unbox state-box))
+                              (set-box! state-box
+                                        (gui-state-add-message
+                                         old
+                                         (make-gui-message "tool"
+                                                           (format "[~a] → ~a" name result-text)
+                                                           (hasheq 'name name 'result result-summary)
+                                                           #:kind
+                                                           (if is-error 'tool-fail 'tool-end))))
+                              (notify!)))]
       ;; Error events
       [(and (string? ev) (regexp-match? #rx"(?i:error)" ev))
        (call-with-semaphore gui-state-lock
