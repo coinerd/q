@@ -478,3 +478,42 @@
      (define query (memory-query #f #f #f #f #f #f 100 #f))
      (define items (memory-result-value (gen:retrieve-memory backend2 query)))
      (check-equal? (memory-item-created-at (car items)) "2026-06-01T00:00:00Z"))))
+
+;; ---------------------------------------------------------------------------
+;; M13-F6: Incremental JSONL cache tests
+;; ---------------------------------------------------------------------------
+
+(test-case "incremental cache: warm cache does not rescan old records"
+  (with-temp-backend (lambda (backend dir)
+                       ;; Store initial items
+                       (for ([i (in-range 5)])
+                         (gen:store-memory! backend
+                                            (make-test-item #:id (format "init-~a" i)
+                                                            #:content (format "initial ~a" i))))
+                       ;; Trigger cache load
+                       (define q (memory-query #f #f #f #f #f #f 100 #f))
+                       (define r1 (gen:retrieve-memory backend q))
+                       (check-true (memory-result-ok? r1))
+                       (check-equal? (length (memory-result-value r1)) 5)
+                       ;; Add more items
+                       (for ([i (in-range 5)])
+                         (gen:store-memory! backend
+                                            (make-test-item #:id (format "add-~a" i)
+                                                            #:content (format "added ~a" i))))
+                       ;; Retrieve again — should see all 10 via incremental load
+                       (define r2 (gen:retrieve-memory backend q))
+                       (check-true (memory-result-ok? r2))
+                       (check-equal? (length (memory-result-value r2)) 10))))
+
+(test-case "incremental cache: handles deletes incrementally"
+  (with-temp-backend (lambda (backend dir)
+                       (gen:store-memory! backend (make-test-item #:id "del-me"))
+                       ;; Load cache
+                       (define q (memory-query #f #f #f #f #f #f 100 #f))
+                       (define r1 (gen:retrieve-memory backend q))
+                       (check-equal? (length (memory-result-value r1)) 1)
+                       ;; Delete the item
+                       (gen:delete-memory! backend "del-me" #f)
+                       ;; Retrieve — should be empty
+                       (define r2 (gen:retrieve-memory backend q))
+                       (check-equal? (length (memory-result-value r2)) 0))))

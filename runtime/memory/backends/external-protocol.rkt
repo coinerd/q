@@ -53,6 +53,30 @@
 (define (ensure-memory-result v #:default-value [default-value #f])
   (cond
     [(memory-result? v) v]
+    ;; M13-F7: Validate protocol-shaped hash responses from external backends
+    [(hash? v)
+     (let ([has-ok? (hash-has-key? v 'ok?)]
+           [has-value? (or (hash-has-key? v 'value) (hash-has-key? v 'data))]
+           [has-error? (hash-has-key? v 'error)])
+       (cond
+         [(and has-ok? has-value?)
+          ;; Valid protocol-shaped hash — convert to memory-result
+          (memory-result (hash-ref v 'ok? #t)
+                         (hash-ref v 'value (hash-ref v 'data default-value))
+                         (hash-ref v 'error #f)
+                         (hash-ref v 'metadata (hasheq)))]
+         [(and has-ok? has-error?)
+          (memory-result (hash-ref v 'ok? #f)
+                         default-value
+                         (hash-ref v 'error #f)
+                         (hash-ref v 'metadata (hasheq)))]
+         [else
+          ;; Malformed hash — fail closed
+          (memory-result #f
+                         #f
+                         (make-memory-error 'invalid-response
+                                            "External backend returned malformed response")
+                         (hasheq))]))]
     [else (memory-result #t (or v default-value) #f (hasheq))]))
 
 (define (external-call method payload transport-fn timeout-ms #:default-value [default-value #f])
