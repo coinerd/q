@@ -2,7 +2,7 @@
 
 ;; tools/registry-table.rkt — Declarative tool spec table
 ;;
-;; Encodes all 14 built-in tools as tool-spec structs.
+;; Encodes all 21 built-in tools (14 core + 7 memory) as tool-spec structs.
 ;;
 ;; register-tools-from-specs! converts specs → make-tool calls.
 
@@ -24,6 +24,7 @@
          "builtins/set-task-state.rkt"
          "builtins/record-conclusion.rkt"
          "builtins/browser-tools.rkt"
+         "builtins/memory-tools.rkt"
          "../browser/workflow.rkt")
 
 ;; M-03: Named struct replacing raw list access.
@@ -591,7 +592,47 @@
                               'screenshot
                               (hasheq 'type "boolean" 'description "Capture screenshot")))
               handle-browser-check-local-app
-              "Quick local app health check.")))
+              "Quick local app health check.")
+   ;; ============================================================
+   ;; Memory tools (7) — v0.95.15 activation
+   ;; ============================================================
+   ;; Each tool's handler already gates on (current-memory-backend) —
+   ;; if no backend, returns "memory not enabled" error. Safe to register always.
+   (tool-spec "store-memory"
+              (tool-description store-memory)
+              (tool-schema store-memory)
+              (tool-execute store-memory)
+              #f)
+   (tool-spec "search-memory"
+              (tool-description search-memory)
+              (tool-schema search-memory)
+              (tool-execute search-memory)
+              #f)
+   (tool-spec "delete-memory"
+              (tool-description delete-memory)
+              (tool-schema delete-memory)
+              (tool-execute delete-memory)
+              #f)
+   (tool-spec "list-memory"
+              (tool-description list-memory)
+              (tool-schema list-memory)
+              (tool-execute list-memory)
+              #f)
+   (tool-spec "clear-memory"
+              (tool-description clear-memory)
+              (tool-schema clear-memory)
+              (tool-execute clear-memory)
+              #f)
+   (tool-spec "update-memory"
+              (tool-description update-memory)
+              (tool-schema update-memory)
+              (tool-execute update-memory)
+              #f)
+   (tool-spec "cleanup-expired-memory"
+              (tool-description cleanup-expired-memory)
+              (tool-schema cleanup-expired-memory)
+              (tool-execute cleanup-expired-memory)
+              #f)))
 
 ;; ============================================================
 ;; Registration from specs

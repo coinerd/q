@@ -18,7 +18,9 @@
          racket/runtime-path
          "../tools/tool.rkt"
          "../tools/tool-struct.rkt"
-         "../tools/registry-defaults.rkt")
+         "../tools/registry-defaults.rkt"
+         "../tools/registry-table.rkt"
+         "../tools/builtins/memory-tools.rkt")
 
 (define-runtime-path here ".")
 (define q-root (simplify-path (build-path here "..")))
@@ -436,3 +438,60 @@
       (check-false (lookup-tool reg "firecrawl")))))
 
 (run-tests registry-defaults-tests)
+
+;; ============================================================
+;; v0.95.15 W1: Memory tool registration tests
+;; ============================================================
+
+(define memory-registration-tests
+  (test-suite "Memory Tool Registration"
+
+    (test-case "all 7 memory tools appear in tool-specs"
+      (define memory-names
+        '("store-memory" "search-memory"
+                         "delete-memory"
+                         "list-memory"
+                         "clear-memory"
+                         "update-memory"
+                         "cleanup-expired-memory"))
+      (define spec-names (map tool-spec-name tool-specs))
+      (for ([name memory-names])
+        (check-not-false (member name spec-names) (format "~a should be in tool-specs" name))))
+
+    (test-case "registering default tools includes memory tools"
+      (define reg (make-tool-registry))
+      (register-default-tools! reg)
+      (for ([name '("store-memory" "search-memory"
+                                   "delete-memory"
+                                   "list-memory"
+                                   "clear-memory"
+                                   "update-memory"
+                                   "cleanup-expired-memory")])
+        (check-not-false (lookup-tool reg name) (format "~a should be registered" name))))
+
+    (test-case "memory tool specs have correct schemas"
+      (for ([t (list store-memory
+                     search-memory
+                     delete-memory
+                     list-memory
+                     clear-memory
+                     update-memory
+                     cleanup-expired-memory)])
+        (define name (tool-name t))
+        (define specs (filter (lambda (s) (equal? (tool-spec-name s) name)) tool-specs))
+        (check-equal? (length specs) 1 (format "exactly 1 spec for ~a" name))
+        (define spec (car specs))
+        (check-equal? (tool-spec-schema spec) (tool-schema t))
+        (check-equal? (tool-spec-description spec) (tool-description t))))
+
+    (test-case "tool-specs count includes memory tools"
+      ;; 27 existing + 7 memory = 34
+      (check-equal? (length tool-specs) 34))
+
+    (test-case "existing tools still work after memory addition"
+      (define reg (make-tool-registry))
+      (register-default-tools! reg)
+      (for ([name '("read" "write" "edit" "bash" "grep" "find" "ls")])
+        (check-not-false (lookup-tool reg name) (format "~a still registered" name))))))
+
+(run-tests memory-registration-tests)
