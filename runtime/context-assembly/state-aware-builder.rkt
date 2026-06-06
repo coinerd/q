@@ -2,6 +2,10 @@
 
 ;; runtime/context-assembly/state-aware-builder.rkt — State-aware context assembly
 ;; v0.76.0 W2: Extracted from serialization.rkt
+;;
+;; F34 TODO: Wire memory-builder into context assembly when the memory integration
+;; milestone is active. See memory-builder.rkt observe-memory-for-context and
+;; inject-memory-for-context. Gate behind config-memory-enabled?.
 
 (require racket/list
          racket/string

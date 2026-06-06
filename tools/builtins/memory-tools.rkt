@@ -12,6 +12,7 @@
                   memory-item-type
                   memory-item-scope
                   memory-item-metadata
+                  memory-item-created-at
                   memory-item-updated-at
                   memory-query
                   memory-result-ok?
@@ -32,7 +33,8 @@
                   policy-allows-delete?
                   policy-allows-scope?
                   memory-persistent-write-allowed?
-                  redacted-memory-snippet))
+                  redacted-memory-snippet)
+         (only-in "../../runtime/memory/backends/helpers.rkt" current-iso-8601))
 
 (define current-memory-backend (make-parameter #f))
 (define current-memory-policy (make-parameter default-memory-policy))
@@ -42,20 +44,9 @@
           (current-seconds)
           (modulo (inexact->exact (round (* 1000 (current-inexact-milliseconds)))) 1000000)))
 
+;; F32: format-iso-now/pad2 removed — using current-iso-8601 from helpers.rkt
 (define (format-iso-now)
-  (define d (seconds->date (current-seconds) #f))
-  (format "~a-~a-~aT~a:~a:~aZ"
-          (date-year d)
-          (pad2 (date-month d))
-          (pad2 (date-day d))
-          (pad2 (date-hour d))
-          (pad2 (date-minute d))
-          (pad2 (date-second d))))
-
-(define (pad2 n)
-  (if (< n 10)
-      (format "0~a" n)
-      (format "~a" n)))
+  (current-iso-8601))
 
 (define (memory-item-summary item)
   (hasheq
@@ -147,9 +138,16 @@
       (memory-backend-name backend)
       "none"))
 
+;; F29: Tools emit plain-hash events via the session event bus (not typed-event
+;; structs). Typed events are used by auto-extraction for its separate callback.
+;; This is by design — the session event bus expects jsexpr-safe plain hashes.
 (define (publish-memory-event! exec-ctx event)
   (when (and (exec-context? exec-ctx) (exec-context-event-publisher exec-ctx))
-    (with-handlers ([exn:fail? (lambda (_) (void))])
+    (with-handlers ([exn:fail? (lambda (e)
+                                 ;; F31: Log instead of silently swallowing
+                                 (fprintf (current-error-port)
+                                          "memory event emission failed: ~a\n"
+                                          (exn-message e)))])
       ((exec-context-event-publisher exec-ctx) event))))
 
 (define (event-hash type fields)
@@ -225,6 +223,8 @@
   (define scope-sym (effective-memory-scope (parse-symbol-arg args 'scope #f) project-root))
   (define tags (hash-ref args 'tags '()))
   (define sensitivity (parse-symbol-arg args 'sensitivity 'public))
+  ;; F4: Emit store.requested BEFORE any validation (SPEC §6)
+  (emit-store-requested! exec-ctx (make-memory-id) type-sym scope-sym 'tool)
   (cond
     [(not backend)
      (emit-backend-unavailable! exec-ctx backend 'store)
@@ -253,7 +253,6 @@
     [else
      (define id (make-memory-id))
      (define now (format-iso-now))
-     (emit-store-requested! exec-ctx id type-sym scope-sym 'tool)
      ;; Extract origin-message-id from exec-context if available (P2-2)
      (define origin-message-id
        (and (exec-context? exec-ctx)
@@ -410,6 +409,8 @@
                           (memory-item-type item)
                           'scope
                           (memory-item-scope item)
+                          'created-at ; F30: include both timestamps
+                          (memory-item-created-at item)
                           'updated-at
                           (memory-item-updated-at item)
                           'snippet
@@ -447,7 +448,7 @@
     [(not (policy-allows-retrieve? policy 20))
      (make-error-result "clear_memory preflight exceeds retrieve policy maximum.")]
     [else
-     ;; Loop until no items remain (P2-9)
+     ;; Loop until no items remain (P2-9), emit deleted events (F3)
      (define (clear-loop total-deleted)
        (define q (make-scoped-query #f scope project-root session-id #f #f 20 #t))
        (define result (gen:retrieve-memory backend q))
@@ -455,6 +456,7 @@
            (let* ([items (memory-result-value result)]
                   [ids (for/list ([item (in-list items)])
                          (gen:delete-memory! backend (memory-item-id item) scope)
+                         (emit-deleted! exec-ctx (memory-item-id item) scope backend) ; F3
                          (memory-item-id item))])
              (clear-loop (+ total-deleted (length ids))))
            total-deleted))

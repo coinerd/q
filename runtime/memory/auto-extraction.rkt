@@ -14,10 +14,17 @@
 (require racket/string
          "types.rkt"
          "protocol.rkt"
-         "policy.rkt"
+         (only-in "policy.rkt"
+                  policy-allows-store?
+                  redact-memory-content
+                  default-blocked-content-patterns
+                  effective-memory-scope
+                  memory-persistent-write-allowed?)
+         (only-in "backends/helpers.rkt" current-iso-8601) ; F32
          (only-in "../../agent/event-structs/memory-events.rkt"
                   make-mem-item-stored-event
-                  make-mem-policy-blocked-event))
+                  make-mem-policy-blocked-event
+                  make-mem-store-requested-event)) ; F13
 
 ;; ---------------------------------------------------------------------------
 ;; Configuration
@@ -25,6 +32,15 @@
 
 ;; Master switch — disabled by default
 (define current-auto-extraction-enabled (make-parameter #f))
+
+;; F10: Simple confidence estimator based on content quality
+(define (estimate-confidence content)
+  (define len (string-length content))
+  (cond
+    [(< len 30) 0.3] ; very short, likely incomplete
+    [(< len 100) 0.6] ; good fact size
+    [(< len 300) 0.7] ; detailed fact
+    [else 0.4])) ; long, may be paragraph not fact
 
 ;; Minimum confidence threshold for auto-extracted items (P2-8)
 (define current-auto-extraction-min-confidence (make-parameter 0.5))
@@ -48,12 +64,13 @@
         #px"(?i:token.*[=:].{15,})"
         #px"(?:DATABASE_URL|MONGO_URI|REDIS_URL|SECRET_KEY).*[=:].{5,}"))
 
+;; F22: Use shared redact-memory-content from policy for broader pattern coverage
 (define (redact-snippet content)
   (define safe
     (if (> (string-length content) 80)
         (substring content 0 80)
         content))
-  (regexp-replace* #px"(?i:api[_-]?key|password|token|secret).{0,20}" safe "[REDACTED]"))
+  (redact-memory-content safe))
 
 ;; Content too long to be a fact (likely raw output)
 (define max-fact-length 500)
@@ -138,14 +155,15 @@
            (format "auto_~a_~a"
                    (current-seconds)
                    (modulo (inexact->exact (round (* 1000 (current-inexact-milliseconds)))) 1000000)))
-         (define now (format-iso-now))
+         (define now (current-iso-8601)) ; F32: use shared helper
          (define sensitivity (classify-sensitivity content))
-         (define confidence 0.5)
+         (define confidence (estimate-confidence content)) ; F10: variable confidence
+         (define scope (effective-memory-scope #f project-root)) ; F14: respect default scope
          (define item
            (memory-item
             id
             'semantic
-            'project
+            scope ; F14
             content
             (hasheq 'source
                     'auto-extraction
@@ -154,10 +172,19 @@
                     'project-root
                     project-root
                     'tags
-                    '())
+                    '()
+                    'origin-tool-call-id
+                    "auto-extraction")
             (hasheq 'sensitivity sensitivity 'confidence confidence 'expires-at #f 'supersedes '())
             now
             now))
+         ;; F13: Emit store.requested for every candidate (SPEC §6)
+         (on-typed-event (make-mem-store-requested-event #:candidate-id id
+                                                         #:mem-type 'semantic
+                                                         #:scope scope
+                                                         #:source 'auto-extraction
+                                                         #:session-id session-id
+                                                         #:turn-id "auto"))
          (cond
            [(< confidence (current-auto-extraction-min-confidence))
             (extraction-result 'skipped #f "Below minimum confidence threshold")]
@@ -172,26 +199,32 @@
                                                            (redact-snippet content)))
             (extraction-result 'blocked #f "Contains secret pattern")]
            [(not (policy-allows-store? policy item))
-            (on-event 'blocked item "Blocked by policy")
+            (define reason ; F12: specific reason
+              (cond
+                [(not (memory-persistent-write-allowed?)) "Safe mode prevents persistent storage"]
+                [else "Store blocked by memory policy"]))
+            (on-event 'blocked item reason)
             (on-typed-event (make-mem-policy-blocked-event #:action 'store
-                                                           #:reason "Blocked by policy"
+                                                           #:reason reason
                                                            #:source 'auto-extraction
                                                            #:session-id session-id
                                                            #:turn-id "auto"
-                                                           #:redacted-snippet ""))
-            (extraction-result 'blocked item "Blocked by policy")]
+                                                           #:redacted-snippet
+                                                           (redact-snippet content)))
+            (extraction-result 'blocked item reason)]
            [else
             (define result (gen:store-memory! backend item))
             (cond
               [(memory-result-ok? result)
                (on-event 'stored item #f)
-               (on-typed-event (make-mem-item-stored-event #:memory-id (memory-item-id item)
-                                                           #:mem-type (memory-item-type item)
-                                                           #:scope (memory-item-scope item)
-                                                           #:source 'auto-extraction
-                                                           #:session-id session-id
-                                                           #:turn-id "auto"
-                                                           #:redacted-snippet ""))
+               (on-typed-event (make-mem-item-stored-event
+                                #:memory-id (memory-item-id item)
+                                #:mem-type (memory-item-type item)
+                                #:scope (memory-item-scope item)
+                                #:source 'auto-extraction
+                                #:session-id session-id
+                                #:turn-id "auto"
+                                #:redacted-snippet (redact-snippet content))) ; F11: non-empty snippet
                (extraction-result 'stored item #f)]
               [else
                (extraction-result
@@ -201,24 +234,7 @@
                         (hash-ref (memory-result-error result) 'message "unknown")))])])))]))
 
 ;; ---------------------------------------------------------------------------
-;; ISO timestamp helper
-;; ---------------------------------------------------------------------------
-
-(define (format-iso-now)
-  (define ts (current-seconds))
-  (define d (seconds->date ts #f))
-  (format "~a-~a-~aT~a:~a:~aZ"
-          (date-year d)
-          (pad2 (date-month d))
-          (pad2 (date-day d))
-          (pad2 (date-hour d))
-          (pad2 (date-minute d))
-          (pad2 (date-second d))))
-
-(define (pad2 n)
-  (if (< n 10)
-      (format "0~a" n)
-      (format "~a" n)))
+;; F32: format-iso-now/pad2 removed — using current-iso-8601 from helpers.rkt
 
 ;; ---------------------------------------------------------------------------
 ;; Provide
@@ -227,6 +243,7 @@
 (provide current-auto-extraction-enabled
          current-auto-extraction-min-confidence
          classify-sensitivity
+         estimate-confidence ; F10
          try-auto-extract
          extraction-result
          extraction-result?

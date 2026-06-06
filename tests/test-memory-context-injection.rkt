@@ -281,3 +281,18 @@
       (check-false (regexp-match? #rx"^You are" (car result)))
       ;; Must start with the memory section header
       (check-true (regexp-match? #rx"^\\[Memory" (car result))))))
+
+;; ---------------------------------------------------------------------------
+;; F16: Expired items excluded from memory injection
+;; ---------------------------------------------------------------------------
+
+(test-case "expired items excluded from memory injection (F16)"
+  (define expired-item
+    (memory-item "exp1" 'semantic 'session "expired content"
+                 (hasheq 'project-root #f 'session-id "s1" 'tags '()
+                         'origin-message-id "m1" 'source 'tool)
+                 (hasheq 'sensitivity 'public 'confidence 1.0
+                         'expires-at "2020-01-01T00:00:00Z" 'supersedes '())
+                 "2020-01-01T00:00:00Z" "2020-01-01T00:00:00Z"))
+  (define section (build-memory-section (list expired-item) #:budget-tokens 500))
+  (check-false section))

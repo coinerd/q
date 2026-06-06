@@ -15,7 +15,9 @@
          "../runtime/memory/auto-extraction.rkt"
          "../runtime/memory/backends/external-protocol.rkt"
          "../tools/builtins/memory-tools.rkt"
-         "../tools/tool.rkt")
+         "../tools/tool.rkt"
+         (only-in "../runtime/session/session-config.rkt"
+                  hash->session-config config-memory-enabled? config-memory-backend))
 
 ;; ---------------------------------------------------------------------------
 ;; Truth Gate 1: Memory disabled by default
@@ -115,3 +117,12 @@
   (check-equal? (tool-name clear-memory) "clear-memory"))
 
 
+
+;; ---------------------------------------------------------------------------
+;; F19: Session-config defaults have memory disabled
+;; ---------------------------------------------------------------------------
+
+(test-case "session-config defaults have memory disabled (F19)"
+  (define cfg (hash->session-config (hash)))
+  (check-false (config-memory-enabled? cfg))
+  (check-false (config-memory-backend cfg)))

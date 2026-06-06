@@ -5,9 +5,18 @@
 ;; Deterministic ordering: sort by (updated-at, id) descending.
 
 (require racket/list
-         racket/match
+         racket/string
          "../types.rkt"
-         "../protocol.rkt")
+         "../protocol.rkt"
+         (only-in "helpers.rkt"
+                  scope-match?
+                  type-match?
+                  tag-match?
+                  text-match?
+                  expired?
+                  sort-items
+                  take-at-most
+                  current-iso-8601))
 
 (provide make-memory-hash-backend
          memory-hash-backend-items)
@@ -21,44 +30,8 @@
 (define (make-memory-hash-backend)
   (define store (make-hash)) ; id -> memory-item
 
-  ;; Scope/project filter
-  (define (scope-match? item query)
-    (define q-scope (memory-query-scope query))
-    (define q-project (memory-query-project-root query))
-    (define q-session (memory-query-session-id query))
-    (and
-     (or (not q-scope) (eq? q-scope (memory-item-scope item)))
-     (or (not q-project) (equal? q-project (hash-ref (memory-item-metadata item) 'project-root #f)))
-     (or (not q-session) (equal? q-session (hash-ref (memory-item-metadata item) 'session-id #f)))))
-
-  ;; Type filter
-  (define (type-match? item query)
-    (define q-types (memory-query-types query))
-    (or (not q-types) (memq (memory-item-type item) q-types)))
-
-  ;; Tag filter
-  (define (tag-match? item query)
-    (define q-tags (memory-query-tags query))
-    (or (not q-tags)
-        (let ([item-tags (hash-ref (memory-item-metadata item) 'tags '())])
-          (for/and ([t (in-list q-tags)])
-            (member t item-tags)))))
-
-  ;; Expiry filter
-  (define (expired? item)
-    (define expires (hash-ref (memory-item-validity item) 'expires-at #f))
-    (and expires (string<? expires (current-iso-8601))))
-
-  ;; Sort by (updated-at desc, id desc) for deterministic ordering
-  (define (sort-items items)
-    (sort items
-          (lambda (a b)
-            (define ta (memory-item-updated-at a))
-            (define tb (memory-item-updated-at b))
-            (cond
-              [(string>? ta tb) #t]
-              [(string<? ta tb) #f]
-              [else (string>? (memory-item-id a) (memory-item-id b))]))))
+  ;; Scope/type/tag/expiry/text filters imported from helpers.rkt (F28)
+  ;; F7: text-match? added to filter chain
 
   ;; store!
   (define (store! item)
@@ -87,6 +60,7 @@
                 (and (scope-match? item query)
                      (type-match? item query)
                      (tag-match? item query)
+                     (text-match? item query) ; F7
                      (or (memory-query-include-expired? query) (not (expired? item)))))
               all-items))
     (define sorted (sort-items filtered))
@@ -111,12 +85,17 @@
        (define new-content (hash-ref safe-patch 'content (memory-item-content existing)))
        (define new-type (hash-ref safe-patch 'type (memory-item-type existing)))
        (define new-scope (hash-ref safe-patch 'scope (memory-item-scope existing)))
-       (define new-tags (hash-ref safe-patch 'tags #f))
        (define new-validity (hash-ref safe-patch 'validity (memory-item-validity existing)))
        (define new-meta
-         (if new-tags
-             (hash-set (memory-item-metadata existing) 'tags new-tags)
-             (memory-item-metadata existing)))
+         (cond
+           [(hash-ref safe-patch 'metadata #f)
+            =>
+            values] ; F9: full replacement
+           [else
+            (let ([new-tags (hash-ref safe-patch 'tags #f)])
+              (if new-tags
+                  (hash-set (memory-item-metadata existing) 'tags new-tags)
+                  (memory-item-metadata existing)))]))
        (define updated
          (struct-copy memory-item
                       existing
@@ -166,31 +145,4 @@
       (memory-result-value r)
       '()))
 
-;; ---------------------------------------------------------------------------
-;; Helpers
-;; ---------------------------------------------------------------------------
-
-(define (take-at-most lst n)
-  (if (and n (< n (length lst)))
-      (take lst n)
-      lst))
-
-(define (current-iso-8601)
-  ;; Simplified ISO-8601 for deterministic ordering
-  (define ts (current-seconds))
-  (define d (seconds->date ts #f))
-  (format "~a-~a-~aT~a:~a:~aZ"
-          (date-year d)
-          (~a (date-month d) #:width 2 #:align 'right #:pad-string "0")
-          (~a (date-day d) #:width 2 #:align 'right #:pad-string "0")
-          (~a (date-hour d) #:width 2 #:align 'right #:pad-string "0")
-          (~a (date-minute d) #:width 2 #:align 'right #:pad-string "0")
-          (~a (date-second d) #:width 2 #:align 'right #:pad-string "0")))
-
-(define (~a v #:width [w 1] #:align [a 'left] #:pad-string [ps " "])
-  (define s (format "~a" v))
-  (if (<= (string-length s) w)
-      (case a
-        [(right) (string-append (make-string (- w (string-length s)) (string-ref ps 0)) s)]
-        [else (string-append s (make-string (- w (string-length s)) (string-ref ps 0)))])
-      s))
+;; Helpers imported from helpers.rkt (F28)

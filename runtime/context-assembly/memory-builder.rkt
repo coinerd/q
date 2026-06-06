@@ -17,8 +17,14 @@
          racket/string
          "../../runtime/memory/types.rkt"
          "../../runtime/memory/protocol.rkt"
+         ;; F33: Layering inversion — runtime imports from tools. current-memory-backend
+         ;; should ideally live in runtime/memory/service.rkt. Tracked for future cleanup.
          (only-in "../../tools/builtins/memory-tools.rkt" current-memory-backend)
-         (only-in "../../runtime/session/session-config.rkt" config-memory-enabled?))
+         (only-in "../../runtime/session/session-config.rkt" config-memory-enabled?)
+         (only-in "../../runtime/memory/backends/helpers.rkt"
+                  current-iso-8601
+                  sort-items
+                  take-at-most)) ; F36
 
 ;; ---------------------------------------------------------------------------
 ;; Feature flags
@@ -87,6 +93,27 @@
 ;; Retrieve memory for context assembly, returning results + telemetry.
 ;; Does NOT modify prompts. Returns (cons items telemetry).
 ;; Session-config must be provided to check enabled flag.
+;; F5: Timeout wrapper for retrieval calls
+(define (call-with-retrieval-timeout thunk timeout-ms)
+  (define ch (make-channel))
+  (define worker
+    (thread (lambda ()
+              (with-handlers ([exn:fail? (lambda (e) (channel-put ch (cons 'error e)))])
+                (channel-put ch (cons 'ok (thunk)))))))
+  (define result (sync/timeout (/ timeout-ms 1000.0) ch))
+  (cond
+    [result
+     (kill-thread worker)
+     (match result
+       [(cons 'ok value) value]
+       [(cons 'error e) (raise e)])]
+    [else
+     (kill-thread worker)
+     (memory-result #f
+                    '()
+                    (hash 'code 'timeout 'message "Memory retrieval timed out" 'retryable? #t)
+                    (hasheq))]))
+
 (define (observe-memory-for-context session-config
                                     #:scope [scope 'session]
                                     #:session-id [session-id #f]
@@ -100,8 +127,9 @@
     ;; No backend configured
     [(not backend) (cons '() (memory-telemetry 0 0 0 #f #f "no backend configured"))]
     [else
-     ;; Try retrieval with timing
+     ;; Try retrieval with timing and timeout (F5)
      (define start-ms (current-inexact-milliseconds))
+     (define timeout-ms (current-memory-retrieval-timeout-ms))
      (with-handlers ([exn:fail? (lambda (e)
                                   (cons '()
                                         (memory-telemetry
@@ -121,8 +149,20 @@
                        #f ; tags (all tags)
                        limit
                        #f)) ; include-expired?
-       (define qr (gen:retrieve-memory backend query))
-       (process-retrieval-result qr start-ms))]))
+       (define qr
+         (call-with-retrieval-timeout (lambda () (gen:retrieve-memory backend query)) timeout-ms))
+       ;; F23: Client-side expiry filter as defense-in-depth
+       (define filtered-qr
+         (if (memory-result-ok? qr)
+             (let* ([raw-items (memory-result-value qr)]
+                    [now (current-iso-8601)]
+                    [not-expired?
+                     (lambda (item)
+                       (let ([expires (hash-ref (memory-item-validity item) 'expires-at #f)])
+                         (not (and expires (string? expires) (string<? expires now)))))])
+               (memory-result #t (filter not-expired? raw-items) #f (memory-result-metadata qr)))
+             qr))
+       (process-retrieval-result filtered-qr start-ms))]))
 
 ;; ---------------------------------------------------------------------------
 ;; Pure observe: returns telemetry only, discards items
@@ -182,22 +222,7 @@
   (define no-tab (string-replace no-newline "\t" "\\t"))
   (string-replace no-tab "\"" "\\\""))
 
-(define (current-iso-8601)
-  (define ts (current-seconds))
-  (define d (seconds->date ts #f))
-  (format "~a-~a-~aT~a:~a:~aZ"
-          (date-year d)
-          (pad2 (date-month d))
-          (pad2 (date-day d))
-          (pad2 (date-hour d))
-          (pad2 (date-minute d))
-          (pad2 (date-second d))))
-
-(define (pad2 v)
-  (define s (format "~a" v))
-  (if (< (string-length s) 2)
-      (string-append "0" s)
-      s))
+;; F36: current-iso-8601/pad2 removed — imported from helpers.rkt
 
 ;; Format a single memory item as a concise, delimited entry line.
 ;; User-controlled content is escaped so newlines/bullets cannot visually escape

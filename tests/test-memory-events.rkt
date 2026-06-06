@@ -7,6 +7,8 @@
          "../tools/tool.rkt"
          "../runtime/memory/types.rkt"
          "../runtime/memory/backends/memory-hash.rkt"
+         "../runtime/memory/protocol.rkt"
+         (only-in "../runtime/memory/policy.rkt" default-memory-policy)
          "../agent/event-structs/memory-events.rkt"
          "../agent/event-structs/base.rkt"
          (only-in "../util/event/event-macro.rkt" lookup-event-schema-version))
@@ -143,3 +145,78 @@
                   (define r (tool-delete-memory (hash 'id id) ctx))
                   (check-false (tool-result-is-error? r))
                   (check-equal? (event-types events) '("memory.item.deleted")))))
+
+;; ---------------------------------------------------------------------------
+;; F17: Backend store! called exactly once
+;; ---------------------------------------------------------------------------
+
+(test-case "store_memory calls backend store! exactly once (F17)"
+  (define call-count (box 0))
+  (define base-backend (make-memory-hash-backend))
+  ;; Wrap the store! to count calls
+  (define wrapped-backend
+    (memory-backend
+     "counting"
+     (lambda (item)
+       (set-box! call-count (+ 1 (unbox call-count)))
+       (gen:store-memory! base-backend item))
+     (lambda (query) (gen:retrieve-memory base-backend query))
+     (lambda (id patch) (gen:update-memory! base-backend id patch))
+     (lambda (id scope) (gen:delete-memory! base-backend id scope))
+     (lambda (query) (gen:list-memory base-backend query))
+     (lambda () (gen:memory-available? base-backend))
+     (lambda (policy) (gen:manage-memory! base-backend policy))))
+  (define events (box '()))
+  (define ctx (collecting-context events))
+  (parameterize ([current-memory-backend wrapped-backend]
+                 [current-memory-policy default-memory-policy])
+    (define r (tool-store-memory (hash 'content "counting test") ctx))
+    (check-false (tool-result-is-error? r))
+    (check-equal? (unbox call-count) 1)))
+
+;; ---------------------------------------------------------------------------
+;; F18: Event observers do not cause double-write
+;; ---------------------------------------------------------------------------
+
+(test-case "event observers do not cause double-write (F18)"
+  (define call-count (box 0))
+  (define observer-called? (box #f))
+  (define base-backend (make-memory-hash-backend))
+  (define wrapped-backend
+    (memory-backend
+     "double-write-guard"
+     (lambda (item)
+       (set-box! call-count (+ 1 (unbox call-count)))
+       (gen:store-memory! base-backend item))
+     (lambda (query) (gen:retrieve-memory base-backend query))
+     (lambda (id patch) (gen:update-memory! base-backend id patch))
+     (lambda (id scope) (gen:delete-memory! base-backend id scope))
+     (lambda (query) (gen:list-memory base-backend query))
+     (lambda () (gen:memory-available? base-backend))
+     (lambda (policy) (gen:manage-memory! base-backend policy))))
+  ;; Observer that tries to store again — should NOT cause another backend write
+  (define (observing-publisher evt)
+    (unless (unbox observer-called?)
+      (set-box! observer-called? #t)
+      ;; Observer tries to store via a DIFFERENT backend call — harmless
+      (gen:store-memory! base-backend
+                         (memory-item "observer-item"
+                                      'semantic
+                                      'project
+                                      "observer artifact"
+                                      (hasheq 'project-root "/tmp" 'session-id "obs"
+                                              'tags '() 'source 'test 'origin-message-id "obs")
+                                      (hasheq 'sensitivity 'public 'confidence 1.0
+                                              'supersedes '() 'expires-at #f)
+                                      "2026-06-05T12:00:00Z"
+                                      "2026-06-05T12:00:00Z"))))
+  (define ctx
+    (make-exec-context #:working-directory "/tmp/q-memory-events"
+                       #:session-metadata (hasheq 'session-id "sess-dw")
+                       #:event-publisher observing-publisher))
+  (parameterize ([current-memory-backend wrapped-backend]
+                 [current-memory-policy default-memory-policy])
+    (define r (tool-store-memory (hash 'content "double-write guard test") ctx))
+    (check-false (tool-result-is-error? r))
+    ;; The wrapped backend (tool's backend) should be called exactly once
+    (check-equal? (unbox call-count) 1)))

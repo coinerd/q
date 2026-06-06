@@ -251,6 +251,8 @@
   (hash-ref (session-config-data c) 'memory-backend #f))
 
 (define (config-memory-enabled? c)
+  ;; F35: Any truthy value indicates intent to enable memory. Actual backend
+  ;; validation happens at resolution time (current-memory-backend setter).
   (and (hash-ref (session-config-data c) 'memory-backend #f) #t))
 
 ;; ── Dynamic default resolution ─────────────────────────────────

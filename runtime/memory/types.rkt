@@ -87,8 +87,8 @@
 ;; SPEC §3.4: required metadata keys
 (define required-metadata-keys '(project-root session-id tags source))
 
-;; SPEC §3.5: required validity keys
-(define required-validity-keys '(sensitivity confidence))
+;; SPEC §3.5: required validity keys (F25: supersedes required)
+(define required-validity-keys '(sensitivity confidence supersedes))
 
 (define (valid-memory-item? v)
   (and (memory-item? v)
@@ -103,9 +103,12 @@
        ;; SPEC §3.4: required metadata keys (P2-1)
        (for/and ([k (in-list required-metadata-keys)])
          (hash-has-key? (memory-item-metadata v) k))
-       ;; SPEC §3.5: required validity keys (P2-1)
+       ;; SPEC §3.5: required validity keys (P2-1, F25: supersedes)
        (for/and ([k (in-list required-validity-keys)])
          (hash-has-key? (memory-item-validity v) k))
+       ;; SPEC §3.4: origin-message-id or origin-tool-call-id required (F2)
+       (or (hash-has-key? (memory-item-metadata v) 'origin-message-id)
+           (hash-has-key? (memory-item-metadata v) 'origin-tool-call-id))
        (iso-8601-timestamp? (memory-item-created-at v))
        (iso-8601-timestamp? (memory-item-updated-at v))))
 
@@ -131,6 +134,9 @@
         'updated-at
         (memory-item-updated-at item)))
 
+;; WARNING (F26): hash->memory-item is a partial/unsafe conversion for deserialization.
+;; Resulting items may fail valid-memory-item? if the input hash is incomplete.
+;; Callers should validate with valid-memory-item? before storing.
 (define (hash->memory-item h)
   (memory-item (hash-ref h 'id)
                (hash-ref h 'type 'semantic)

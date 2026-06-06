@@ -11,7 +11,6 @@
 ;; List: merges from both, deduped by item id
 
 (require racket/list
-         "memory-hash.rkt"
          "../types.rkt"
          "../protocol.rkt")
 
@@ -34,8 +33,8 @@
 ;; ---------------------------------------------------------------------------
 
 (define (dedup-items items)
-  ;; Keep first occurrence of each id
-  (define seen (make-hasheq))
+  ;; Keep first occurrence of each id (F15: use make-hash for string id comparison)
+  (define seen (make-hash))
   (for/list ([item (in-list items)]
              #:when (not (hash-has-key? seen (memory-item-id item))))
     (hash-set! seen (memory-item-id item) #t)

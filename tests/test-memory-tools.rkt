@@ -213,8 +213,8 @@
                  'semantic
                  'session
                  "secret"
-                 (hasheq 'tags '() 'source 'tool)
-                 (hasheq 'sensitivity 'secret 'confidence 1.0)
+                 (hasheq 'tags '() 'source 'tool 'origin-message-id "test")
+                 (hasheq 'sensitivity 'secret 'confidence 1.0 'supersedes '())
                  "2026-01-01T00:00:00Z"
                  "2026-01-01T00:00:00Z"))
   (check-false (policy-allows-store? policy item)))
@@ -226,8 +226,8 @@
                  'semantic
                  'session
                  "public info"
-                 (hasheq 'tags '() 'source 'tool 'project-root "/tmp" 'session-id "s1")
-                 (hasheq 'sensitivity 'public 'confidence 1.0)
+                 (hasheq 'tags '() 'source 'tool 'project-root "/tmp" 'session-id "s1" 'origin-message-id "test")
+                 (hasheq 'sensitivity 'public 'confidence 1.0 'supersedes '())
                  "2026-01-01T00:00:00Z"
                  "2026-01-01T00:00:00Z"))
   (check-true (policy-allows-store? policy item)))
@@ -240,8 +240,8 @@
                  'semantic
                  'session
                  long-content
-                 (hasheq 'tags '() 'source 'tool)
-                 (hasheq 'sensitivity 'public 'confidence 1.0)
+                 (hasheq 'tags '() 'source 'tool 'origin-message-id "test")
+                 (hasheq 'sensitivity 'public 'confidence 1.0 'supersedes '())
                  "2026-01-01T00:00:00Z"
                  "2026-01-01T00:00:00Z"))
   (check-false (policy-allows-store? policy item)))
@@ -263,8 +263,8 @@
                  'semantic
                  'session
                  "API_KEY=sk-test-secret"
-                 (hasheq 'tags '() 'source 'tool)
-                 (hasheq 'sensitivity 'public 'confidence 1.0)
+                 (hasheq 'tags '() 'source 'tool 'origin-message-id "test")
+                 (hasheq 'sensitivity 'public 'confidence 1.0 'supersedes '())
                  "2026-01-01T00:00:00Z"
                  "2026-01-01T00:00:00Z"))
   (check-false (policy-allows-store? policy item)))

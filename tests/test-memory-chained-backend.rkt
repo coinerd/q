@@ -23,14 +23,15 @@
 (define (make-test-item #:id [id "test-1"]
                         #:content [content "test content"]
                         #:scope [scope 'session])
-  (memory-item id
-               'semantic
-               scope
-               content
-               (hasheq 'source 'test 'project-root "/tmp" 'session-id "s1" 'tags '())
-               (hasheq 'sensitivity 'public 'confidence 0.9)
-               "2025-01-01T00:00:00Z"
-               "2025-01-01T00:00:00Z"))
+  (memory-item
+   id
+   'semantic
+   scope
+   content
+   (hasheq 'source 'test 'project-root "/tmp" 'session-id "s1" 'tags '() 'origin-message-id "test")
+   (hasheq 'sensitivity 'public 'confidence 0.9 'supersedes '())
+   "2025-01-01T00:00:00Z"
+   "2025-01-01T00:00:00Z"))
 
 (define (item-id=? item id)
   (equal? (memory-item-id item) id))
@@ -212,14 +213,15 @@
 ;; ---------------------------------------------------------------------------
 
 (define (make-timestamped-item #:id [id "ts-item"] #:updated-at [ts "2025-01-01T00:00:00Z"])
-  (memory-item id
-               'semantic
-               'session
-               "content"
-               (hasheq 'source 'test 'project-root "/tmp" 'session-id "s1" 'tags '())
-               (hasheq 'sensitivity 'public 'confidence 0.9)
-               "2025-01-01T00:00:00Z"
-               ts))
+  (memory-item
+   id
+   'semantic
+   'session
+   "content"
+   (hasheq 'source 'test 'project-root "/tmp" 'session-id "s1" 'tags '() 'origin-message-id "test")
+   (hasheq 'sensitivity 'public 'confidence 0.9 'supersedes '())
+   "2025-01-01T00:00:00Z"
+   ts))
 
 (test-case "chained: merged results are globally sorted by updated-at desc"
   (define l1 (make-memory-hash-backend))

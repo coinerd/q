@@ -8,7 +8,8 @@
          rackunit
          "../runtime/session/session-config.rkt"
          "../runtime/memory/protocol.rkt"
-         "../runtime/memory/backends/memory-hash.rkt")
+         "../runtime/memory/backends/memory-hash.rkt"
+         (only-in "../tools/builtins/memory-tools.rkt" current-memory-backend))
 
 ;; ---------------------------------------------------------------------------
 ;; Default behavior: memory disabled
@@ -80,3 +81,24 @@
   (check-equal? (config-max-context-tokens cfg) 64000)
   (check-equal? (config-max-tokens cfg) 4096)
   (check-true (config-verbose? cfg)))
+
+;; ---------------------------------------------------------------------------
+;; F20: Stable disabled representation round-trip
+;; ---------------------------------------------------------------------------
+
+(test-case "session-config disabled representation round-trips stably (F20)"
+  (define cfg1 (hash->session-config (hash)))
+  (check-false (config-memory-enabled? cfg1))
+  (define h (session-config->hash cfg1))
+  (define cfg2 (hash->session-config h))
+  (check-false (config-memory-enabled? cfg2))
+  (check-false (config-memory-backend cfg2)))
+
+;; ---------------------------------------------------------------------------
+;; F21: Global parameter does not leak into config
+;; ---------------------------------------------------------------------------
+
+(test-case "setting memory backend does not leak across configs (F21)"
+  (parameterize ([current-memory-backend (make-memory-hash-backend)])
+    (define cfg (hash->session-config (hash)))
+    (check-false (config-memory-backend cfg))))

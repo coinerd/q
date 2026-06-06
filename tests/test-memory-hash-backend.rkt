@@ -25,8 +25,17 @@
                type
                scope
                content
-               (hasheq 'project-root project 'session-id session 'tags tags 'source 'test)
-               (hasheq 'sensitivity sensitivity 'confidence 0.9 'expires-at expires)
+               (hasheq 'project-root
+                       project
+                       'session-id
+                       session
+                       'tags
+                       tags
+                       'source
+                       'test
+                       'origin-message-id
+                       "test")
+               (hasheq 'sensitivity sensitivity 'confidence 0.9 'expires-at expires 'supersedes '())
                created
                updated))
 

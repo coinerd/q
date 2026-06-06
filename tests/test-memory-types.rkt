@@ -9,17 +9,25 @@
 ;; Struct construction
 ;; ---------------------------------------------------------------------------
 
-(define (make-test-item
-         #:id [id "mem-001"]
-         #:type [type 'semantic]
-         #:scope [scope 'project]
-         #:content [content "Test memory item"]
-         #:metadata
-         [metadata
-          (hasheq 'project-root "/tmp/test" 'session-id "sess-1" 'tags '("test") 'source 'unit-test)]
-         #:validity [validity (hasheq 'sensitivity 'public 'confidence 0.9)]
-         #:created-at [created-at "2026-06-05T12:00:00Z"]
-         #:updated-at [updated-at "2026-06-05T12:00:00Z"])
+(define (make-test-item #:id [id "mem-001"]
+                        #:type [type 'semantic]
+                        #:scope [scope 'project]
+                        #:content [content "Test memory item"]
+                        #:metadata [metadata
+                                    (hasheq 'project-root
+                                            "/tmp/test"
+                                            'session-id
+                                            "sess-1"
+                                            'tags
+                                            '("test")
+                                            'source
+                                            'unit-test
+                                            'origin-message-id
+                                            "test")]
+                        #:validity
+                        [validity (hasheq 'sensitivity 'public 'confidence 0.9 'supersedes '())]
+                        #:created-at [created-at "2026-06-05T12:00:00Z"]
+                        #:updated-at [updated-at "2026-06-05T12:00:00Z"])
   (memory-item id type scope content metadata validity created-at updated-at))
 
 (test-case "memory-item construction"
@@ -273,8 +281,17 @@
                  'semantic
                  'project
                  "content"
-                 (hasheq 'project-root "/tmp" 'session-id "s1" 'tags '("t") 'source 'tool)
-                 (hasheq 'sensitivity 'public 'confidence 0.9)
+                 (hasheq 'project-root
+                         "/tmp"
+                         'session-id
+                         "s1"
+                         'tags
+                         '("t")
+                         'source
+                         'tool
+                         'origin-message-id
+                         "test")
+                 (hasheq 'sensitivity 'public 'confidence 0.9 'supersedes '())
                  "2026-01-01T00:00:00Z"
                  "2026-01-01T00:00:00Z"))
   (check-true (valid-memory-item? item)))

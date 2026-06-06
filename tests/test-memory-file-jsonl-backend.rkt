@@ -37,14 +37,15 @@
                         #:scope [scope 'session]
                         #:type [type 'semantic]
                         #:tags [tags '("test")])
-  (memory-item id
-               type
-               scope
-               content
-               (hasheq 'project-root "/tmp" 'session-id "s1" 'tags tags 'source "test")
-               (hasheq 'sensitivity "public" 'confidence 0.9)
-               "2026-06-01T00:00:00Z"
-               "2026-06-01T00:00:00Z"))
+  (memory-item
+   id
+   type
+   scope
+   content
+   (hasheq 'project-root "/tmp" 'session-id "s1" 'tags tags 'source "test" 'origin-message-id "test")
+   (hasheq 'sensitivity "public" 'confidence 0.9 'supersedes '())
+   "2026-06-01T00:00:00Z"
+   "2026-06-01T00:00:00Z"))
 
 ;; ---------------------------------------------------------------------------
 ;; Basic store/retrieve
@@ -172,16 +173,24 @@
    (lambda (backend dir)
      ;; Store items with different timestamps
      (for ([i (in-range 5)])
-       (gen:store-memory!
-        backend
-        (memory-item (format "ord~a" i)
-                     'semantic
-                     'session
-                     (format "content ~a" i)
-                     (hasheq 'project-root "/tmp" 'session-id "s1" 'tags '() 'source "test")
-                     (hasheq 'sensitivity "public" 'confidence 0.9)
-                     "2026-06-01T00:00:00Z"
-                     (format "2026-06-0~aT00:00:00Z" (+ i 1)))))
+       (gen:store-memory! backend
+                          (memory-item (format "ord~a" i)
+                                       'semantic
+                                       'session
+                                       (format "content ~a" i)
+                                       (hasheq 'project-root
+                                               "/tmp"
+                                               'session-id
+                                               "s1"
+                                               'tags
+                                               '()
+                                               'source
+                                               "test"
+                                               'origin-message-id
+                                               "test")
+                                       (hasheq 'sensitivity "public" 'confidence 0.9 'supersedes '())
+                                       "2026-06-01T00:00:00Z"
+                                       (format "2026-06-0~aT00:00:00Z" (+ i 1)))))
      ;; Reload
      (define backend2 (make-file-jsonl-backend dir))
      (define query (memory-query #f #f #f #f #f #f 100 #f))
@@ -237,14 +246,15 @@
 ;; ---------------------------------------------------------------------------
 
 (define (make-tagged-item #:id [id "tagged"] #:tags [tags '()])
-  (memory-item id
-               'semantic
-               'session
-               "tagged content"
-               (hasheq 'tags tags 'project-root "/tmp" 'session-id "s1" 'source "test")
-               (hasheq 'sensitivity "public" 'confidence 0.9)
-               "2026-06-01T00:00:00Z"
-               "2026-06-01T00:00:00Z"))
+  (memory-item
+   id
+   'semantic
+   'session
+   "tagged content"
+   (hasheq 'tags tags 'project-root "/tmp" 'session-id "s1" 'source "test" 'origin-message-id "test")
+   (hasheq 'sensitivity "public" 'confidence 0.9 'supersedes '())
+   "2026-06-01T00:00:00Z"
+   "2026-06-01T00:00:00Z"))
 
 (test-case "retrieve filters by single tag"
   (with-temp-backend

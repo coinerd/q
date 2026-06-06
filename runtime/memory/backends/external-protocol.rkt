@@ -87,6 +87,9 @@
                           (memory-item-type item))
                     transport-fn
                     effective-timeout))
+   ;; F37: Design: retrieve/list return success with empty results when disabled
+   ;; (no items to retrieve = valid empty response). store/delete/update return
+   ;; error when disabled (write operations must not silently succeed).
    (lambda (query)
      (if (not (current-external-backend-enabled))
          (memory-result #t '() #f (hasheq))
