@@ -298,12 +298,14 @@
 ;; Global sort after merge (P3-2)
 ;; ---------------------------------------------------------------------------
 
-(define (make-timestamped-item #:id [id "ts-item"] #:updated-at [ts "2025-01-01T00:00:00Z"])
+(define (make-timestamped-item #:id [id "ts-item"]
+                               #:updated-at [ts "2025-01-01T00:00:00Z"]
+                               #:content [content "content"])
   (memory-item
    id
    'semantic
    'session
-   "content"
+   content
    (hasheq 'source 'test 'project-root "/tmp" 'session-id "s1" 'tags '() 'origin-message-id "test")
    (hasheq 'sensitivity 'public 'confidence 0.9 'supersedes '())
    "2025-01-01T00:00:00Z"
@@ -328,9 +330,15 @@
 (test-case "chained: retrieve merged results are globally sorted"
   (define l1 (make-memory-hash-backend))
   (define l2 (make-memory-hash-backend))
-  (gen:store-memory! l1 (make-timestamped-item #:id "mid-l1" #:updated-at "2025-06-01T00:00:00Z"))
-  (gen:store-memory! l2 (make-timestamped-item #:id "new-l2" #:updated-at "2025-12-01T00:00:00Z"))
-  (gen:store-memory! l2 (make-timestamped-item #:id "old-l2" #:updated-at "2025-01-01T00:00:00Z"))
+  (gen:store-memory!
+   l1
+   (make-timestamped-item #:id "mid-l1" #:updated-at "2025-06-01T00:00:00Z" #:content "mid content"))
+  (gen:store-memory!
+   l2
+   (make-timestamped-item #:id "new-l2" #:updated-at "2025-12-01T00:00:00Z" #:content "new content"))
+  (gen:store-memory!
+   l2
+   (make-timestamped-item #:id "old-l2" #:updated-at "2025-01-01T00:00:00Z" #:content "old content"))
   (define chained (make-chained-backend l1 l2))
   (define result (gen:retrieve-memory chained (memory-query #f #f #f #f #f #f 100 #f)))
   (check-true (memory-result-ok? result))

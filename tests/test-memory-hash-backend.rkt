@@ -121,6 +121,7 @@
   (for ([i (in-range 5)])
     (gen:store-memory! b
                        (make-item #:id (format "mem-~a" i)
+                                  #:content (format "Content ~a" i)
                                   #:updated (format "2026-06-05T12:0~a:00Z" i))))
   (define r (gen:retrieve-memory b (memory-query "" #f #f #f #f #f 3 #f)))
   (check-true (memory-result-ok? r))
@@ -138,8 +139,10 @@
 
 (test-case "retrieve includes expired when requested"
   (define b (make-memory-hash-backend))
-  (gen:store-memory! b (make-item #:id "active" #:expires #f))
-  (gen:store-memory! b (make-item #:id "expired" #:expires "2020-01-01T00:00:00Z"))
+  (gen:store-memory! b (make-item #:id "active" #:content "Active content" #:expires #f))
+  (gen:store-memory!
+   b
+   (make-item #:id "expired" #:content "Expired content" #:expires "2020-01-01T00:00:00Z"))
   (define r (gen:retrieve-memory b (memory-query "" #f #f #f #f #f 10 #t)))
   (check-true (memory-result-ok? r))
   (check-equal? (length (memory-result-value r)) 2))
@@ -207,7 +210,7 @@
 (test-case "list returns all items"
   (define b (make-memory-hash-backend))
   (for ([i (in-range 3)])
-    (gen:store-memory! b (make-item #:id (format "m~a" i))))
+    (gen:store-memory! b (make-item #:id (format "m~a" i) #:content (format "Item ~a" i))))
   (define r (gen:list-memory b (memory-query "" #f #f #f #f #f 100 #t)))
   (check-true (memory-result-ok? r))
   (check-equal? (length (memory-result-value r)) 3))
