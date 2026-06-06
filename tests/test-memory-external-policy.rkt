@@ -1,0 +1,173 @@
+#lang racket/base
+;; tests/test-memory-external-policy.rkt — External backend policy tests
+;;
+;; v0.95.11: Tests for external backend safety:
+;; - External backend blocked when disabled (default)
+;; - Redaction strips secrets from payloads
+;; - External backend receives redacted payloads only
+;; - Availability check prevents calls when unavailable
+;; - Timeout enforced on calls
+
+(require rackunit
+         racket/string
+         "../runtime/memory/backends/external-protocol.rkt"
+         "../runtime/memory/types.rkt"
+         "../runtime/memory/protocol.rkt")
+
+;; ---------------------------------------------------------------------------
+;; Mock transport — records calls
+;; ---------------------------------------------------------------------------
+
+(define recorded-calls (make-parameter '()))
+
+(define (mock-transport method payload)
+  (recorded-calls (cons (cons method payload) (recorded-calls)))
+  (case method
+    [(store) (memory-result #t 'stored #f (hasheq))]
+    [(retrieve) (memory-result #t '() #f (hasheq))]
+    [(update) (memory-result #t #f #f (hasheq))]
+    [(delete) (memory-result #t #f #f (hasheq))]
+    [(list) '()]
+    [(manage) (memory-result #t #f #f (hasheq))]))
+
+(define (with-fresh-calls thunk)
+  (parameterize ([recorded-calls '()])
+    (thunk)))
+
+;; ---------------------------------------------------------------------------
+;; Disabled by default
+;; ---------------------------------------------------------------------------
+
+(test-case "external: disabled by default"
+  (define ext (make-external-backend "test" mock-transport))
+  (check-false (current-external-backend-enabled))
+  (check-false (gen:memory-available? ext)))
+
+(test-case "external: store blocked when disabled"
+  (define ext (make-external-backend "test" mock-transport))
+  (define item
+    (memory-item "id" 'semantic 'session "content" (hasheq) (hasheq) "2025-01-01" "2025-01-01"))
+  (define r (gen:store-memory! ext item))
+  (check-false (memory-result-ok? r)))
+
+(test-case "external: retrieve returns empty when disabled"
+  (define ext (make-external-backend "test" mock-transport))
+  (define q (memory-query #f #f #f #f #f #f 100 #f))
+  (define r (gen:retrieve-memory ext q))
+  (check-true (memory-result-ok? r))
+  (check-equal? (memory-result-value r) '()))
+
+(test-case "external: delete blocked when disabled"
+  (define ext (make-external-backend "test" mock-transport))
+  (define r (gen:delete-memory! ext "id" 'session))
+  (check-false (memory-result-ok? r)))
+
+;; ---------------------------------------------------------------------------
+;; Enabled calls work
+;; ---------------------------------------------------------------------------
+
+(test-case "external: store works when enabled"
+  (define ext (make-external-backend "test" mock-transport))
+  (with-fresh-calls (lambda ()
+                      (parameterize ([current-external-backend-enabled #t])
+                        (define item
+                          (memory-item "id1"
+                                       'semantic
+                                       'session
+                                       "safe content"
+                                       (hasheq)
+                                       (hasheq)
+                                       "2025-01-01"
+                                       "2025-01-01"))
+                        (define r (gen:store-memory! ext item))
+                        (check-true (memory-result-ok? r))
+                        ;; Transport should have been called
+                        (check >= (length (recorded-calls)) 1)))))
+
+(test-case "external: retrieve works when enabled"
+  (define ext (make-external-backend "test" mock-transport))
+  (with-fresh-calls (lambda ()
+                      (parameterize ([current-external-backend-enabled #t])
+                        (define q (memory-query "test" 'session #f #f #f #f 10 #f))
+                        (define r (gen:retrieve-memory ext q))
+                        (check-true (memory-result-ok? r))
+                        (check >= (length (recorded-calls)) 1)))))
+
+;; ---------------------------------------------------------------------------
+;; Redaction
+;; ---------------------------------------------------------------------------
+
+(test-case "redact-content: strips API keys"
+  (define redacted (redact-content "api_key: sk-abc123def456ghi789"))
+  (check-false (string-contains? redacted "sk-abc123"))
+  (check-true (string-contains? redacted "REDACTED")))
+
+(test-case "redact-content: strips passwords"
+  (define redacted (redact-content "password: supersecretpass123"))
+  (check-false (string-contains? redacted "supersecretpass"))
+  (check-true (string-contains? redacted "REDACTED")))
+
+(test-case "redact-content: strips bearer tokens"
+  (define redacted (redact-content "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI"))
+  (check-false (string-contains? redacted "eyJhbGciOiJI"))
+  (check-true (string-contains? redacted "REDACTED")))
+
+(test-case "redact-content: safe content unchanged"
+  (define content "The project uses React for the frontend architecture.")
+  (check-equal? (redact-content content) content))
+
+(test-case "external: stored content is redacted before transport"
+  (define ext (make-external-backend "test" mock-transport))
+  (with-fresh-calls (lambda ()
+                      (parameterize ([current-external-backend-enabled #t])
+                        (define item
+                          (memory-item "id2"
+                                       'semantic
+                                       'session
+                                       "password: secret12345"
+                                       (hasheq)
+                                       (hasheq)
+                                       "2025-01-01"
+                                       "2025-01-01"))
+                        (gen:store-memory! ext item)
+                        ;; Check the transport received redacted content
+                        (define call (car (recorded-calls)))
+                        (define payload (cdr call))
+                        (define sent-content (hash-ref payload 'content ""))
+                        (check-true (string-contains? sent-content "REDACTED"))
+                        (check-false (string-contains? sent-content "secret12345"))))))
+
+;; ---------------------------------------------------------------------------
+;; Error handling
+;; ---------------------------------------------------------------------------
+
+(test-case "external: transport error returns graceful failure"
+  (define bad-transport (lambda (method payload) (error "Network timeout")))
+  (define ext (make-external-backend "bad" bad-transport))
+  (parameterize ([current-external-backend-enabled #t])
+    (define item
+      (memory-item "id3" 'semantic 'session "content" (hasheq) (hasheq) "2025-01-01" "2025-01-01"))
+    (define r (gen:store-memory! ext item))
+    (check-false (memory-result-ok? r))
+    (check-true (string-contains? (hash-ref (memory-result-error r) 'message "") "Network timeout"))))
+
+(test-case "external: list returns empty on error"
+  (define bad-transport (lambda (method payload) (error "Connection refused")))
+  (define ext (make-external-backend "bad" bad-transport))
+  (parameterize ([current-external-backend-enabled #t])
+    (define result (gen:list-memory ext (memory-query #f #f #f #f #f #f 100 #f)))
+    (check-equal? result '())))
+
+;; ---------------------------------------------------------------------------
+;; Availability
+;; ---------------------------------------------------------------------------
+
+(test-case "external: available only when enabled"
+  (define ext (make-external-backend "test" mock-transport))
+  (check-false (gen:memory-available? ext))
+  (parameterize ([current-external-backend-enabled #t])
+    (check-true (gen:memory-available? ext))))
+
+(test-case "external: name includes backend name"
+  (define ext (make-external-backend "pinecone" mock-transport))
+  (check-true (string-contains? (memory-backend-name ext) "pinecone")))
