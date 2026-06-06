@@ -18,6 +18,7 @@
                   memory-item-type
                   memory-item-scope
                   memory-item-metadata
+                  memory-item-updated-at
                   memory-query
                   memory-result-ok?
                   memory-result-value
@@ -249,8 +250,121 @@
                            (scope "string" "Scope of the item (for safety check)")]
              delete-memory-handler)
 
+;; ---------------------------------------------------------------------------
+;; list_memory handler
+;; ---------------------------------------------------------------------------
+
+(define (list-memory-handler args [exec-ctx #f])
+  (define backend (current-memory-backend))
+  (define policy (current-memory-policy))
+  (define scope
+    (let ([s (hash-ref args 'scope #f)])
+      (if (string? s)
+          (string->symbol s)
+          s)))
+  (define types (hash-ref args 'types #f))
+  (define limit (hash-ref args 'limit 50))
+
+  (cond
+    [(not backend) (make-error-result "Memory not available. Enable memory in session config.")]
+    [else
+     (define q (memory-query #f scope #f #f types #f limit #f))
+     (define result (gen:retrieve-memory backend q))
+     (if (memory-result-ok? result)
+         (let ([items (memory-result-value result)])
+           (define summaries
+             (for/list ([item (in-list items)])
+               (hasheq 'id
+                       (memory-item-id item)
+                       'type
+                       (memory-item-type item)
+                       'scope
+                       (memory-item-scope item)
+                       'updated-at
+                       (memory-item-updated-at item)
+                       'snippet
+                       (let ([c (memory-item-content item)])
+                         (substring c 0 (min 80 (string-length c)))))))
+           (make-success-result
+            (list (hasheq 'type "text" 'text (format "~a memory items found" (length items))))
+            (hasheq 'items summaries)))
+         (make-error-result
+          (format "Failed to list memory: ~a"
+                  (hash-ref (memory-result-error result) 'message "unknown error"))))]))
+
+;; ---------------------------------------------------------------------------
+;; clear_memory handler
+;; ---------------------------------------------------------------------------
+
+(define (clear-memory-handler args [exec-ctx #f])
+  (define backend (current-memory-backend))
+  (define policy (current-memory-policy))
+  (define scope
+    (let ([s (hash-ref args 'scope #f)])
+      (if (string? s)
+          (string->symbol s)
+          s)))
+  (define confirm (hash-ref args 'confirm #f))
+
+  (cond
+    [(not backend) (make-error-result "Memory not available. Enable memory in session config.")]
+    [(not scope)
+     (make-error-result "scope is required for clear_memory. Specify session, project, or user.")]
+    [(not (memq scope '(session project user)))
+     (make-error-result (format "Invalid scope: ~a. Must be session, project, or user." scope))]
+    [(not (equal? confirm #t))
+     (make-error-result
+      (format "clear_memory requires confirm=true. This will delete ALL memories in ~a scope."
+              scope))]
+    [(not (policy-allows-delete? policy)) (make-error-result "Memory delete is disabled by policy")]
+    [else
+     ;; Retrieve all items in scope, then delete each
+     (define q (memory-query #f scope #f #f #f #f 1000 #f))
+     (define result (gen:retrieve-memory backend q))
+     (if (memory-result-ok? result)
+         (let ([items (memory-result-value result)])
+           (define deleted-ids
+             (for/list ([item (in-list items)])
+               (gen:delete-memory! backend (memory-item-id item) scope)
+               (memory-item-id item)))
+           (make-success-result (list (hasheq 'type
+                                              "text"
+                                              'text
+                                              (format "Cleared ~a memory items from ~a scope"
+                                                      (length deleted-ids)
+                                                      scope)))
+                                (hasheq 'scope scope 'deleted-count (length deleted-ids))))
+         (make-error-result
+          (format "Failed to retrieve items for clearing: ~a"
+                  (hash-ref (memory-result-error result) 'message "unknown error"))))]))
+
+;; ---------------------------------------------------------------------------
+;; Tool definitions
+;; ---------------------------------------------------------------------------
+
+(define-tool
+ list-memory
+ #:description
+ "List all stored memories, optionally filtered by scope and type. Returns id, type, scope, timestamp, and content snippet for each item."
+ #:required ()
+ #:properties [(scope "string" "Filter by scope: session, project, or user")
+               (types "array" "Filter by memory types")
+               (limit "integer" "Maximum results (default: 50)")]
+ list-memory-handler)
+
+(define-tool
+ clear-memory
+ #:description
+ "Delete ALL memories in a given scope. Destructive — requires confirm=true. Use list_memory first to review."
+ #:required ("scope" "confirm")
+ #:properties [(scope "string" "Scope to clear: session, project, or user")
+               (confirm "boolean" "Must be true to confirm destructive operation")]
+ clear-memory-handler)
+
 (provide store-memory
          search-memory
          delete-memory
+         list-memory
+         clear-memory
          current-memory-backend
          current-memory-policy)

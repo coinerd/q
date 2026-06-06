@@ -41,6 +41,16 @@
                     #:defaults (scope #f)
                     #:schema-version 1)
 
+;; ============================================================
+;; Memory cleared event (batch delete)
+;; ============================================================
+
+(define-typed-event mem-cleared-event
+                    "memory.cleared"
+                    (scope deleted-count)
+                    #:defaults (deleted-count 0)
+                    #:schema-version 1)
+
 (provide (struct-out mem-stored-event)
          make-mem-stored-event
          mem-stored-event-fields
@@ -49,4 +59,7 @@
          mem-retrieved-event-fields
          (struct-out mem-deleted-event)
          make-mem-deleted-event
-         mem-deleted-event-fields)
+         mem-deleted-event-fields
+         (struct-out mem-cleared-event)
+         make-mem-cleared-event
+         mem-cleared-event-fields)
