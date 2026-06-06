@@ -1,3 +1,40 @@
+## v0.95.12 — Modular Memory System (2026-06-03)
+
+### Memory System Foundation
+- **W1**: Protocol and types foundation — `memory-item`, `memory-query`, `memory-result`, `memory-backend` structs with validators (14 tests)
+- **W2**: Deterministic in-memory hash backend — `memory-hash-backend` with store/retrieve/update/delete/list (24 tests)
+- **W3**: Disabled-by-default config wiring — `config-memory-backend`, `config-memory-enabled?` (9 tests)
+
+### Memory Tools and Events
+- **W4**: Explicit memory tools with policy gating — `store_memory`, `search_memory`, `delete_memory` with sensitivity/scope checks (22 tests)
+- **W5**: Memory events — `memory.stored`, `memory.retrieved`, `memory.deleted` typed events (13 tests)
+- **W9**: Management UX tools — `list_memory` (inspect), `clear_memory` (scoped batch delete with confirmation) (14 tests)
+
+### Context Integration
+- **W6**: Observe-only memory context retrieval — `observe-memory-for-context` gathers memory without injection (18 tests)
+- **W7**: Bounded memory prompt injection — `inject-memory-for-context` with budget/framing/safety (18 tests)
+
+### Persistence and Backends
+- **W8**: Project-local JSONL memory backend — append-only file backend with snapshot loading (14 tests)
+- **W10**: Auto-extraction alpha — optional post-response fact extraction, disabled by default, secret pattern blocking (17 tests)
+- **W11**: Chained L1/L2 backend with write-through and dedup; external backend adapter skeleton with redaction (26 tests)
+
+### Release Hardening
+- **W12**: Release gate tests — validates disabled-by-default, no hidden writes, safe tool responses (14 tests)
+- All 14 memory test suites passing (196 total tests)
+- Memory is **disabled by default** — no persistent writes unless explicitly configured
+
+### New Files
+- `runtime/memory/types.rkt`, `runtime/memory/protocol.rkt`, `runtime/memory/policy.rkt`
+- `runtime/memory/backends/memory-hash.rkt`, `runtime/memory/backends/file-jsonl.rkt`
+- `runtime/memory/backends/chained.rkt`, `runtime/memory/backends/external-protocol.rkt`
+- `runtime/memory/auto-extraction.rkt`
+- `runtime/context-assembly/memory-builder.rkt`
+- `tools/builtins/memory-tools.rkt`
+- `agent/event-structs/memory-events.rkt`
+- 14 test files in `tests/test-memory-*.rkt`
+
+
 ## v0.94.9 — GUI-TUI Output Parity (2026-06-03)
 
 ### GUI Enhancements
