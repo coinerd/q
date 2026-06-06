@@ -9,6 +9,7 @@
 ;; - Deterministic ordering
 ;; - Adversarial content is delimited/truncated, not instructions
 
+
 (require rackunit
          racket/string
          "../runtime/context-assembly/memory-builder.rkt"
@@ -16,6 +17,7 @@
          "../runtime/memory/backends/memory-hash.rkt"
          "../runtime/memory/protocol.rkt"
          "../tools/builtins/memory-tools.rkt"
+         "../runtime/memory/service.rkt"
          "../tools/tool.rkt"
          "../runtime/session/session-config.rkt")
 

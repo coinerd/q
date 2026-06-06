@@ -7,17 +7,21 @@
 ;; - All tools return safe responses when disabled
 ;; - No hidden/silent memory writes
 
-(require rackunit
+(require racket/file
+         rackunit
          racket/string
          "../runtime/memory/types.rkt"
          "../runtime/memory/protocol.rkt"
          "../runtime/memory/policy.rkt"
+         "../runtime/memory/service.rkt"
          "../runtime/memory/auto-extraction.rkt"
          "../runtime/memory/backends/external-protocol.rkt"
          "../tools/builtins/memory-tools.rkt"
          "../tools/tool.rkt"
          (only-in "../runtime/session/session-config.rkt"
-                  hash->session-config config-memory-enabled? config-memory-backend))
+                  hash->session-config
+                  config-memory-enabled?
+                  config-memory-backend))
 
 ;; ---------------------------------------------------------------------------
 ;; Truth Gate 1: Memory disabled by default
@@ -89,12 +93,9 @@
 
 (test-case "release-gate: external backend store returns error when disabled"
   (define ext
-    (make-external-backend "test"
-                           (lambda (method payload)
-                             (memory-result #t 'stored #f (hasheq)))))
+    (make-external-backend "test" (lambda (method payload) (memory-result #t 'stored #f (hasheq)))))
   (define item
-    (memory-item "id" 'semantic 'session "content"
-                 (hasheq) (hasheq) "2025-01-01" "2025-01-01"))
+    (memory-item "id" 'semantic 'session "content" (hasheq) (hasheq) "2025-01-01" "2025-01-01"))
   (define r (gen:store-memory! ext item))
   (check-false (memory-result-ok? r)))
 
@@ -116,8 +117,6 @@
   (check-equal? (tool-name list-memory) "list-memory")
   (check-equal? (tool-name clear-memory) "clear-memory"))
 
-
-
 ;; ---------------------------------------------------------------------------
 ;; F19: Session-config defaults have memory disabled
 ;; ---------------------------------------------------------------------------
@@ -126,3 +125,43 @@
   (define cfg (hash->session-config (hash)))
   (check-false (config-memory-enabled? cfg))
   (check-false (config-memory-backend cfg)))
+
+;; ---------------------------------------------------------------------------
+;; M13-F1: Architecture boundary — no runtime→tools imports
+;; ---------------------------------------------------------------------------
+
+(test-case "release-gate: no runtime module imports tools/builtins/memory-tools"
+  ;; Verify memory-builder.rkt does NOT import from tools
+  (define builder-source (file->string "runtime/context-assembly/memory-builder.rkt"))
+  ;; Check actual require lines only (not comments)
+  (define builder-requires
+    (for/list ([line (string-split builder-source "\n")]
+               #:when (or (string-prefix? (string-trim line) "(require")
+                          (string-prefix? (string-trim line) "only-in")
+                          (string-prefix? (string-trim line) "\"../tools")))
+      line))
+  (check-false (for/or ([line builder-requires])
+                 (string-contains? line "tools/builtins/memory-tools")))
+  ;; Verify service.rkt does NOT import from tools
+  (define service-source (file->string "runtime/memory/service.rkt"))
+  (define service-requires
+    (for/list ([line (string-split service-source "\n")]
+               #:when (or (string-prefix? (string-trim line) "(require")
+                          (string-prefix? (string-trim line) "only-in")))
+      line))
+  (check-false (for/or ([line service-requires])
+                 (string-contains? line "tools/"))))
+
+;; ---------------------------------------------------------------------------
+;; M13-F2: Tool schema does not advertise secret sensitivity
+;; ---------------------------------------------------------------------------
+
+(test-case "release-gate: store_memory schema does not advertise secret"
+  (define schema (tool-schema store-memory))
+  (define props (hash-ref schema 'properties (hasheq)))
+  (define sens-prop (hash-ref props 'sensitivity (hasheq)))
+  (define desc (hash-ref sens-prop 'description ""))
+  (check-false (string-contains? desc "secret"))
+  (check-true (string-contains? desc "public"))
+  (check-true (string-contains? desc "internal"))
+  (check-true (string-contains? desc "sensitive")))
