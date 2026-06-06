@@ -34,10 +34,12 @@
                   policy-allows-scope?
                   memory-persistent-write-allowed?
                   redacted-memory-snippet)
-         (only-in "../../runtime/memory/backends/helpers.rkt" current-iso-8601))
+         (only-in "../../runtime/memory/backends/helpers.rkt" current-iso-8601)
+         (only-in "../../runtime/memory/service.rkt" current-memory-backend current-memory-policy))
 
-(define current-memory-backend (make-parameter #f))
-(define current-memory-policy (make-parameter default-memory-policy))
+;; F1: current-memory-backend and current-memory-policy now live in
+;; runtime/memory/service.rkt (the runtime-owned service boundary).
+;; Tools import from service, not the other way around.
 
 (define (make-memory-id)
   (format "mem_~a_~a"
@@ -485,7 +487,7 @@
    "string"
    "Visibility: session, project, or user (default: project when project root exists, else session; user disabled by default)")
   (tags "array" "List of string tags for categorization")
-  (sensitivity "string" "Sensitivity: public, internal, sensitive, secret (default: public)")]
+  (sensitivity "string" "Sensitivity: public, internal, or sensitive (default: public)")]
  store-memory-handler)
 
 (define-tool
@@ -533,6 +535,4 @@
          search-memory
          delete-memory
          list-memory
-         clear-memory
-         current-memory-backend
-         current-memory-policy)
+         clear-memory)

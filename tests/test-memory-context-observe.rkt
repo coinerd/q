@@ -1,12 +1,14 @@
 #lang racket/base
 ;; tests/test-memory-context-observe.rkt — Observe-only memory context retrieval tests
 
+
 (require rackunit
          "../runtime/context-assembly/memory-builder.rkt"
          "../runtime/memory/types.rkt"
          "../runtime/memory/backends/memory-hash.rkt"
          "../runtime/memory/protocol.rkt"
          "../tools/builtins/memory-tools.rkt"
+         "../runtime/memory/service.rkt"
          "../tools/tool.rkt"
          "../runtime/session/session-config.rkt")
 

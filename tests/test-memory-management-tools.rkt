@@ -7,12 +7,14 @@
 ;; - Disabled backend returns clear message
 ;; - Scope filtering works
 
+
 (require rackunit
          "../tools/builtins/memory-tools.rkt"
          "../runtime/memory/types.rkt"
          "../runtime/memory/protocol.rkt"
          "../runtime/memory/backends/memory-hash.rkt"
          "../runtime/memory/policy.rkt"
+         "../runtime/memory/service.rkt"
          "../tools/tool.rkt")
 
 ;; ---------------------------------------------------------------------------

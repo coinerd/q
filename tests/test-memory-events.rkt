@@ -1,6 +1,7 @@
 #lang racket/base
 ;; tests/test-memory-events.rkt — SPEC memory event taxonomy and tool emission tests
 
+
 (require rackunit
          racket/list
          "../tools/builtins/memory-tools.rkt"
@@ -9,6 +10,7 @@
          "../runtime/memory/backends/memory-hash.rkt"
          "../runtime/memory/protocol.rkt"
          (only-in "../runtime/memory/policy.rkt" default-memory-policy)
+         "../runtime/memory/service.rkt"
          "../agent/event-structs/memory-events.rkt"
          "../agent/event-structs/base.rkt"
          (only-in "../util/event/event-macro.rkt" lookup-event-schema-version))

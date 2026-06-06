@@ -17,11 +17,7 @@
          racket/string
          "../../runtime/memory/types.rkt"
          "../../runtime/memory/protocol.rkt"
-         ;; F33/F29: Layering inversion — runtime imports from tools. current-memory-backend
-         ;; should ideally live in runtime/memory/service.rkt. Tracked for future cleanup.
-         ;; TODO — Move current-memory-backend to runtime/memory/service.rkt and have
-         ;; tools import from there instead. This fixes the layering inversion.
-         (only-in "../../tools/builtins/memory-tools.rkt" current-memory-backend)
+         (only-in "../../runtime/memory/service.rkt" current-memory-backend)
          (only-in "../../runtime/session/session-config.rkt" config-memory-enabled?)
          (only-in "../../runtime/memory/backends/helpers.rkt"
                   current-iso-8601

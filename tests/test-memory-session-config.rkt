@@ -9,7 +9,7 @@
          "../runtime/session/session-config.rkt"
          "../runtime/memory/protocol.rkt"
          "../runtime/memory/backends/memory-hash.rkt"
-         (only-in "../tools/builtins/memory-tools.rkt" current-memory-backend))
+         (only-in "../runtime/memory/service.rkt" current-memory-backend))
 
 ;; ---------------------------------------------------------------------------
 ;; Default behavior: memory disabled
