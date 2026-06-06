@@ -37,44 +37,61 @@
 
 (define (get-file-metadata f)
   "Parse metadata from file header, cached per file."
-  (hash-ref! metadata-cache f
-    (lambda ()
-      (define full-path (if (absolute-path? f) f (build-path base-dir f)))
-      (if (file-exists? full-path)
-          (let ([speed #f]
-                [suite #f]
-                [mutates #f]
-                [boundary #f]
-                [isolation #f]
-                [timeout #f])
-            (with-handlers ([exn:fail? (lambda (_) (void))])
-              (call-with-input-file full-path
-                (lambda (port)
-                  (for ([_ (in-range 30)]
-                        #:break (eof-object? (peek-byte port)))
-                    (define line (read-line port))
-                    (when (string? line)
-                      (cond
-                        [(regexp-match? #rx";+[ \t]*@speed[ \t]+fast" line)
-                         (set! speed 'fast)]
-                        [(regexp-match? #rx";+[ \t]*@speed[ \t]+slow" line)
-                         (set! speed 'slow)]
-                        [(regexp-match? #rx";+[ \t]*@speed[ \t]+perf" line)
-                         (set! speed 'perf)]
-                        [(regexp-match #rx";+[ \t]*@suite[ \t]+(.+)$" line)
-                         => (lambda (m) (set! suite (string-trim (cadr m))))]
-                        [(regexp-match #rx";+[ \t]*@mutates[ \t]+(.+)$" line)
-                         => (lambda (m) (set! mutates (string-trim (cadr m))))]
-                        [(regexp-match #rx";+[ \t]*@boundary[ \t]+(.+)$" line)
-                         => (lambda (m) (set! boundary (string-trim (cadr m))))]
-                        [(regexp-match #rx";+[ \t]*@isolation[ \t]+(.+)$" line)
-                         => (lambda (m) (set! isolation (string-trim (cadr m))))]
-                        [(regexp-match #rx";+[ \t]*@timeout[ \t]+([0-9]+)" line)
-                         => (lambda (m) (set! timeout (string->number (cadr m))))]))))))
-            (hash 'speed speed 'suite suite 'mutates mutates
-                  'boundary boundary 'isolation isolation 'timeout timeout))
-          (hash)))))
-
+  (hash-ref!
+   metadata-cache
+   f
+   (lambda ()
+     (define full-path
+       (if (absolute-path? f)
+           f
+           (build-path base-dir f)))
+     (if (file-exists? full-path)
+         (let ([speed #f]
+               [suite #f]
+               [mutates #f]
+               [boundary #f]
+               [isolation #f]
+               [timeout #f])
+           (with-handlers ([exn:fail? (lambda (_) (void))])
+             (call-with-input-file
+              full-path
+              (lambda (port)
+                (for ([_ (in-range 30)]
+                      #:break (eof-object? (peek-byte port)))
+                  (define line (read-line port))
+                  (when (string? line)
+                    (cond
+                      [(regexp-match? #rx";+[ \t]*@speed[ \t]+fast" line) (set! speed 'fast)]
+                      [(regexp-match? #rx";+[ \t]*@speed[ \t]+slow" line) (set! speed 'slow)]
+                      [(regexp-match? #rx";+[ \t]*@speed[ \t]+perf" line) (set! speed 'perf)]
+                      [(regexp-match #rx";+[ \t]*@suite[ \t]+(.+)$" line)
+                       =>
+                       (lambda (m) (set! suite (string-trim (cadr m))))]
+                      [(regexp-match #rx";+[ \t]*@mutates[ \t]+(.+)$" line)
+                       =>
+                       (lambda (m) (set! mutates (string-trim (cadr m))))]
+                      [(regexp-match #rx";+[ \t]*@boundary[ \t]+(.+)$" line)
+                       =>
+                       (lambda (m) (set! boundary (string-trim (cadr m))))]
+                      [(regexp-match #rx";+[ \t]*@isolation[ \t]+(.+)$" line)
+                       =>
+                       (lambda (m) (set! isolation (string-trim (cadr m))))]
+                      [(regexp-match #rx";+[ \t]*@timeout[ \t]+([0-9]+)" line)
+                       =>
+                       (lambda (m) (set! timeout (string->number (cadr m))))]))))))
+           (hash 'speed
+                 speed
+                 'suite
+                 suite
+                 'mutates
+                 mutates
+                 'boundary
+                 boundary
+                 'isolation
+                 isolation
+                 'timeout
+                 timeout))
+         (hash)))))
 
 ;; Safe bytes->string conversion (handles invalid UTF-8)
 (define (bytes->string* bs)
@@ -182,9 +199,9 @@
   (define meta (get-file-metadata f))
   (define meta-speed (hash-ref meta 'speed #f))
   (cond
-    [(eq? meta-speed 'fast) #f]  ; explicitly fast → not slow
-    [(eq? meta-speed 'slow) #t]  ; explicitly slow
-    [(eq? meta-speed 'perf) #t]  ; perf tests are slow
+    [(eq? meta-speed 'fast) #f] ; explicitly fast → not slow
+    [(eq? meta-speed 'slow) #t] ; explicitly slow
+    [(eq? meta-speed 'perf) #t] ; perf tests are slow
     [else
      ;; Fall back to heuristic
      (define base (file-name-from-path f))
@@ -477,8 +494,16 @@
               ;; rackunit/text-ui files that call (run-tests ...) produce
               ;; rackunit/text-ui output format — must use slow path for parsing.
               [uses-rackunit-text-ui? (and has-rackunit-forms?
-                                           (regexp-match? #rx"\\(run-tests" content))])
-         (or module-plus-test? uses-rackunit-text-ui?))))
+                                           (regexp-match? #rx"\\(run-tests" content))]
+              ;; Files with rackunit forms but no explicit run-tests or module+test
+              ;; still need raco test for test discovery. Common in #lang racket
+              ;; files that (require rackunit) and define test-case at top level.
+              [needs-raco-discovery?
+               (and has-rackunit-forms? (not module-plus-test?) (not uses-rackunit-text-ui?))])
+         ;; module+test files need raco test to discover the test submodule.
+         ;; Bare rackunit forms (no module+test, no run-tests) also need raco test.
+         ;; Only text-ui files that call (run-tests ...) are self-contained via racket <file>.
+         (or module-plus-test? needs-raco-discovery?))))
 
 ;; Common result extraction from a running process.
 ;; Handles timeout logic and stdout/stderr parsing uniformly.
@@ -700,15 +725,17 @@
                              (fprintf out "~n--- stderr ---~n")
                              (display (bytes->string* (test-file-result-stderr-bytes f)) out)))))
 
-
 ;; ---------------------------------------------------------------------------
 ;; Unique failure log names (v0.83.8)
 ;; ---------------------------------------------------------------------------
 
 (define (make-unique-log-name test-path)
   "Create a unique log name from test path, incorporating path hash."
-  (define base (let ([b (file-name-from-path test-path)])
-                 (if b (path->string b) "unknown")))
+  (define base
+    (let ([b (file-name-from-path test-path)])
+      (if b
+          (path->string b)
+          "unknown")))
   (define safe-base (regexp-replace* #rx"[^a-zA-Z0-9._-]" base "_"))
   (define path-hash (number->string (equal-hash-code test-path) 16))
   (string-append "q-test-fail-" (string-replace safe-base ".rkt" "") "-" path-hash ".log"))
@@ -727,9 +754,10 @@
       (let* ([half (quotient max-bytes 2)]
              [head (subbytes bts 0 half)]
              [tail (subbytes bts (- (bytes-length bts) half))]
-             [marker (string->bytes/utf-8
-                      (format "\n... truncated (~a bytes, showing ~a + ~a) ...\n"
-                              (bytes-length bts) half half))])
+             [marker (string->bytes/utf-8 (format "\n... truncated (~a bytes, showing ~a + ~a) ...\n"
+                                                  (bytes-length bts)
+                                                  half
+                                                  half))])
         (bytes->string/utf-8 (bytes-append head marker tail)))))
 
 ;; ---------------------------------------------------------------------------

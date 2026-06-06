@@ -27,7 +27,7 @@
     [(retrieve) (memory-result #t '() #f (hasheq))]
     [(update) (memory-result #t #f #f (hasheq))]
     [(delete) (memory-result #t #f #f (hasheq))]
-    [(list) '()]
+    [(list) (memory-result #t '() #f (hasheq))]
     [(manage) (memory-result #t #f #f (hasheq))]))
 
 (define (with-fresh-calls thunk)
@@ -151,12 +151,40 @@
     (check-false (memory-result-ok? r))
     (check-true (string-contains? (hash-ref (memory-result-error r) 'message "") "Network timeout"))))
 
-(test-case "external: list returns empty on error"
+(test-case "external: list returns memory-result on error"
   (define bad-transport (lambda (method payload) (error "Connection refused")))
   (define ext (make-external-backend "bad" bad-transport))
   (parameterize ([current-external-backend-enabled #t])
     (define result (gen:list-memory ext (memory-query #f #f #f #f #f #f 100 #f)))
-    (check-equal? result '())))
+    (check-true (memory-result? result))
+    (check-false (memory-result-ok? result))))
+
+(test-case "external: disabled list returns memory-result"
+  (define ext (make-external-backend "test" mock-transport))
+  (define result (gen:list-memory ext (memory-query #f #f #f #f #f #f 10 #f)))
+  (check-true (memory-result? result))
+  (check-true (memory-result-ok? result))
+  (check-equal? (memory-result-value result) '()))
+
+(test-case "external: recursive redaction covers nested payloads"
+  (define redacted
+    (redact-jsexpr
+     (hasheq 'patch (hasheq 'text "token=abc123456789") 'items (list "password: hunter2"))))
+  (check-false (regexp-match? #px"abc123456789" (format "~a" redacted)))
+  (check-false (regexp-match? #px"hunter2" (format "~a" redacted)))
+  (check-true (regexp-match? #px"REDACTED" (format "~a" redacted))))
+
+(test-case "external: transport timeout returns retryable memory-result"
+  (define slow-transport
+    (lambda (method payload)
+      (sleep 0.2)
+      (memory-result #t 'late #f (hasheq))))
+  (define ext (make-external-backend "slow" slow-transport #:timeout-ms 10))
+  (parameterize ([current-external-backend-enabled #t])
+    (define item (memory-item "id-timeout" 'semantic 'session "content" (hasheq) (hasheq) "" ""))
+    (define result (gen:store-memory! ext item))
+    (check-false (memory-result-ok? result))
+    (check-true (hash-ref (memory-result-error result) 'retryable? #f))))
 
 ;; ---------------------------------------------------------------------------
 ;; Availability

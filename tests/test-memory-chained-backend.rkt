@@ -153,3 +153,14 @@
   (define l2 (make-memory-hash-backend))
   (define chained (make-chained-backend l1 l2))
   (check-true (string-contains? (memory-backend-name chained) "memory-hash")))
+
+(test-case "chained: list returns memory-result"
+  (define l1 (make-memory-hash-backend))
+  (define l2 (make-memory-hash-backend))
+  (gen:store-memory! l1 (make-test-item #:id "l1-list"))
+  (gen:store-memory! l2 (make-test-item #:id "l2-list"))
+  (define chained (make-chained-backend l1 l2))
+  (define result (gen:list-memory chained (memory-query #f #f #f #f #f #f 100 #f)))
+  (check-true (memory-result? result))
+  (check-true (memory-result-ok? result))
+  (check-equal? (length (memory-result-value result)) 2))

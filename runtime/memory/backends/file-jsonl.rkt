@@ -19,12 +19,14 @@
          racket/match
          racket/path
          racket/string
+         racket/system
          "../../../util/json/jsonl.rkt"
          "../types.rkt"
          "../protocol.rkt")
 
 (provide make-file-jsonl-backend
-         file-jsonl-backend-path)
+         file-jsonl-backend-path
+         safe-memory-path)
 
 ;; ---------------------------------------------------------------------------
 ;; Memory item <-> jsexpr conversion
@@ -103,6 +105,13 @@
                  [b (in-list path-parts)])
          (equal? a b))))
 
+(define (restrict-path-permissions! path mode)
+  ;; Best-effort Unix permission hardening. Windows/non-Unix failures are ignored
+  ;; because Racket 8.10 does not expose a portable setter in this environment.
+  (with-handlers ([exn:fail? (lambda (_) (void))])
+    (when (eq? (system-type 'os) 'unix)
+      (system* "/bin/chmod" (number->string mode 8) (path->string path)))))
+
 ;; ---------------------------------------------------------------------------
 ;; Loading: reconstruct latest view
 ;; ---------------------------------------------------------------------------
@@ -138,11 +147,11 @@
 ;; The JSONL file is at `memory-root/memory.jsonl`.
 ;; memory-root is created if it doesn't exist.
 (define (make-file-jsonl-backend memory-root)
-  (define jsonl-path (build-path memory-root "memory.jsonl"))
-
-  ;; Ensure directory exists
+  ;; Ensure directory exists before normalizing target path.
   (unless (directory-exists? memory-root)
     (make-directory* memory-root))
+  (restrict-path-permissions! memory-root #o700)
+  (define jsonl-path (safe-memory-path memory-root "memory.jsonl"))
 
   ;; In-memory cache, lazily loaded
   (define cache #f)
@@ -168,6 +177,7 @@
        (memory-result #f #f (make-memory-error 'duplicate "Item already exists") (hasheq))]
       [else
        (jsonl-append! jsonl-path (make-store-record item))
+       (restrict-path-permissions! jsonl-path #o600)
        (invalidate-cache!)
        (memory-result #t (memory-item-id item) #f (hasheq 'backend 'file-jsonl))]))
 
@@ -211,6 +221,7 @@
                       [validity new-validity]
                       [updated-at (hash-ref patch 'updated-at (current-iso-8601))]))
        (jsonl-append! jsonl-path (make-update-record updated))
+       (restrict-path-permissions! jsonl-path #o600)
        (invalidate-cache!)
        (memory-result #t id #f (hasheq 'backend 'file-jsonl))]))
 
@@ -224,6 +235,7 @@
        (memory-result #f #f (make-memory-error 'scope-mismatch "Scope mismatch") (hasheq))]
       [else
        (jsonl-append! jsonl-path (make-delete-record id scope))
+       (restrict-path-permissions! jsonl-path #o600)
        (invalidate-cache!)
        (memory-result #t id #f (hasheq 'backend 'file-jsonl))]))
 

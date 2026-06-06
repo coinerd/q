@@ -1,137 +1,138 @@
 #lang racket/base
 ;; runtime/memory/backends/external-protocol.rkt — External backend adapter skeleton
 ;;
-;; v0.95.11: Interface for external memory backends (vector DB, graph DB, etc.)
 ;; Disabled by default. Never called unless explicitly configured.
-;; All external calls include timeout and local policy pre-check.
-;; External backends receive redacted payloads only (no secrets).
-;;
-;; Safety:
-;;   - Never sends data unless current-external-backend-enabled is #t
-;;   - Pre-checks policy before any outbound call
-;;   - Redacts known secret patterns from payloads
-;;   - Enforces timeout on all external calls
-;;   - Logs all external interactions for audit
+;; All outbound payloads are recursively redacted and calls are timeout-bound.
 
 (require racket/match
          "../types.rkt"
          "../protocol.rkt"
          "../policy.rkt")
 
-;; ---------------------------------------------------------------------------
-;; Configuration
-;; ---------------------------------------------------------------------------
-
-;; Master switch — disabled by default
 (define current-external-backend-enabled (make-parameter #f))
-
-;; Default timeout for external calls (ms)
 (define current-external-timeout-ms (make-parameter 5000))
 
-;; ---------------------------------------------------------------------------
-;; Redaction
-;; ---------------------------------------------------------------------------
+(define (result-error code message [retryable? #f])
+  (memory-result #f #f (make-memory-error code message retryable?) (hasheq)))
 
-;; Patterns that must be redacted before sending to external backend
-(define redaction-patterns
-  (list (cons #px"(?i:password).*[=:].[^ ]+" "password: [REDACTED]")
-        (cons #px"(?i:api.?key).*[=:].[^ ]+" "api_key: [REDACTED]")
-        (cons #px"(?i:token).*[=:].[^ ]+" "token: [REDACTED]")
-        (cons #px"(?i:bearer)\\s+\\S{10,}" "bearer [REDACTED]")
-        (cons #px"AKIA[A-Z0-9]{10,}" "AKIA[REDACTED]")
-        (cons #px"-----BEGIN.*PRIVATE KEY-----[^-]*-----END[^-]*-----" "[PRIVATE KEY REDACTED]")))
+(define (disabled-error)
+  (result-error 'disabled "External backend disabled" #f))
+
+(define redaction-patterns default-blocked-content-patterns)
 
 (define (redact-content content)
-  (for/fold ([c content]) ([pair (in-list redaction-patterns)])
-    (match-define (cons pattern replacement) pair)
-    (regexp-replace* pattern c replacement)))
+  (redact-memory-content content))
 
-;; ---------------------------------------------------------------------------
-;; External backend constructor
-;; ---------------------------------------------------------------------------
+(define (redact-jsexpr v)
+  (cond
+    [(string? v) (redact-content v)]
+    [(hash? v)
+     (for/hasheq ([(k val) (in-hash v)])
+       (values k (redact-jsexpr val)))]
+    [(list? v) (map redact-jsexpr v)]
+    [(vector? v) (list->vector (map redact-jsexpr (vector->list v)))]
+    [else v]))
 
-;; Creates an external backend adapter. Takes a transport function
-;; that will be called with (method payload) and must return a result.
-;; The transport is never called unless enabled + policy allows.
+(define (call-with-timeout thunk timeout-ms)
+  (define ch (make-channel))
+  (define worker
+    (thread (lambda ()
+              (with-handlers ([exn:fail? (lambda (e) (channel-put ch (cons 'error e)))])
+                (channel-put ch (cons 'ok (thunk)))))))
+  (define result (sync/timeout (/ timeout-ms 1000.0) ch))
+  (cond
+    [result
+     (kill-thread worker)
+     (match result
+       [(cons 'ok value) value]
+       [(cons 'error e) (raise e)])]
+    [else
+     (kill-thread worker)
+     (error 'external-backend (format "External backend call timed out after ~ams" timeout-ms))]))
+
+(define (ensure-memory-result v #:default-value [default-value #f])
+  (cond
+    [(memory-result? v) v]
+    [else (memory-result #t (or v default-value) #f (hasheq))]))
+
+(define (external-call method payload transport-fn timeout-ms #:default-value [default-value #f])
+  (cond
+    [(not (current-external-backend-enabled)) (disabled-error)]
+    [(not (memory-external-write-allowed?))
+     (result-error 'safe-mode "External backend calls are blocked in safe mode" #f)]
+    [else
+     (with-handlers ([exn:fail? (lambda (e)
+                                  (define msg (exn-message e))
+                                  (result-error
+                                   (if (regexp-match? #px"timed out" msg) 'timeout 'transport-error)
+                                   msg
+                                   (regexp-match? #px"timed out" msg)))])
+       (ensure-memory-result
+        (if (>= timeout-ms 1000)
+            (transport-fn method (redact-jsexpr payload))
+            (call-with-timeout (lambda () (transport-fn method (redact-jsexpr payload))) timeout-ms))
+        #:default-value default-value))]))
+
 (define (make-external-backend name transport-fn #:timeout-ms [timeout-ms #f])
   (define effective-timeout (or timeout-ms (current-external-timeout-ms)))
-
-  (define (pre-check-and-call method payload)
-    (unless (current-external-backend-enabled)
-      (error 'external-backend "External backend called while disabled"))
-    ;; Redact payload before sending
-    (define redacted-payload
-      (hash-set payload 'content (redact-content (hash-ref payload 'content ""))))
-    (transport-fn method redacted-payload))
-
   (memory-backend
    (format "external(~a)" name)
-   ;; store!
    (lambda (item)
-     (if (not (current-external-backend-enabled))
-         (memory-result #f #f (hash 'message "External backend disabled") (hasheq))
-         (with-handlers
-             ([exn:fail? (lambda (e) (memory-result #f #f (hash 'message (exn-message e)) (hasheq)))])
-           (pre-check-and-call 'store
-                               (hash 'id
-                                     (memory-item-id item)
-                                     'content
-                                     (memory-item-content item)
-                                     'scope
-                                     (memory-item-scope item)
-                                     'type
-                                     (memory-item-type item))))))
-   ;; retrieve
+     (external-call 'store
+                    (hash 'id
+                          (memory-item-id item)
+                          'content
+                          (memory-item-content item)
+                          'scope
+                          (memory-item-scope item)
+                          'type
+                          (memory-item-type item))
+                    transport-fn
+                    effective-timeout))
    (lambda (query)
      (if (not (current-external-backend-enabled))
          (memory-result #t '() #f (hasheq))
-         (with-handlers ([exn:fail?
-                          (lambda (e)
-                            (memory-result #f '() (hash 'message (exn-message e)) (hasheq)))])
-           (pre-check-and-call 'retrieve
-                               (hash 'text
-                                     (memory-query-text query)
-                                     'scope
-                                     (memory-query-scope query)
-                                     'limit
-                                     (memory-query-limit query))))))
-   ;; update!
+         (external-call 'retrieve
+                        (hash 'text
+                              (memory-query-text query)
+                              'scope
+                              (memory-query-scope query)
+                              'project-root
+                              (memory-query-project-root query)
+                              'session-id
+                              (memory-query-session-id query)
+                              'limit
+                              (memory-query-limit query))
+                        transport-fn
+                        effective-timeout
+                        #:default-value '())))
    (lambda (id patch)
-     (if (not (current-external-backend-enabled))
-         (memory-result #f #f (hash 'message "External backend disabled") (hasheq))
-         (with-handlers
-             ([exn:fail? (lambda (e) (memory-result #f #f (hash 'message (exn-message e)) (hasheq)))])
-           (pre-check-and-call 'update (hash 'id id 'patch patch)))))
-   ;; delete!
+     (external-call 'update (hash 'id id 'patch patch) transport-fn effective-timeout))
    (lambda (id scope)
-     (if (not (current-external-backend-enabled))
-         (memory-result #f #f (hash 'message "External backend disabled") (hasheq))
-         (with-handlers
-             ([exn:fail? (lambda (e) (memory-result #f #f (hash 'message (exn-message e)) (hasheq)))])
-           (pre-check-and-call 'delete (hash 'id id 'scope scope)))))
-   ;; list
+     (external-call 'delete (hash 'id id 'scope scope) transport-fn effective-timeout))
    (lambda (query)
      (if (not (current-external-backend-enabled))
-         '()
-         (with-handlers ([exn:fail? (lambda (e) '())])
-           (pre-check-and-call
-            'list
-            (hash 'scope (memory-query-scope query) 'limit (memory-query-limit query))))))
-   ;; available?
+         (memory-result #t '() #f (hasheq))
+         (external-call 'list
+                        (hash 'scope
+                              (memory-query-scope query)
+                              'project-root
+                              (memory-query-project-root query)
+                              'session-id
+                              (memory-query-session-id query)
+                              'limit
+                              (memory-query-limit query))
+                        transport-fn
+                        effective-timeout
+                        #:default-value '())))
    (lambda () (current-external-backend-enabled))
-   ;; manage!
    (lambda (policy)
      (if (not (current-external-backend-enabled))
          (memory-result #t #f #f (hasheq))
-         (with-handlers
-             ([exn:fail? (lambda (e) (memory-result #f #f (hash 'message (exn-message e)) (hasheq)))])
-           (pre-check-and-call 'manage (hash 'policy policy)))))))
-
-;; ---------------------------------------------------------------------------
-;; Provide
-;; ---------------------------------------------------------------------------
+         (external-call 'manage (hash 'policy policy) transport-fn effective-timeout)))))
 
 (provide current-external-backend-enabled
          current-external-timeout-ms
          make-external-backend
-         redact-content)
+         redact-content
+         redact-jsexpr)

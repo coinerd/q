@@ -170,19 +170,47 @@
 ;; Maximum single entry length in characters (prevents one huge entry consuming budget)
 (define current-memory-max-entry-chars (make-parameter 200))
 
-;; Format a single memory item as a concise entry line.
-;; Includes scope, type, and date for traceability.
-;; Content is truncated to current-memory-max-entry-chars.
+(define (injectable-memory-item? item)
+  (define sensitivity (hash-ref (memory-item-validity item) 'sensitivity 'public))
+  (define expires (hash-ref (memory-item-validity item) 'expires-at #f))
+  (and (not (memq sensitivity '(sensitive secret)))
+       (not (and expires (string? expires) (string<? expires (current-iso-8601))))))
+
+(define (escape-memory-content content)
+  (define no-cr (string-replace content "\r" "\\r"))
+  (define no-newline (string-replace no-cr "\n" "\\n"))
+  (string-replace no-newline "\t" "\\t"))
+
+(define (current-iso-8601)
+  (define ts (current-seconds))
+  (define d (seconds->date ts #f))
+  (format "~a-~a-~aT~a:~a:~aZ"
+          (date-year d)
+          (pad2 (date-month d))
+          (pad2 (date-day d))
+          (pad2 (date-hour d))
+          (pad2 (date-minute d))
+          (pad2 (date-second d))))
+
+(define (pad2 v)
+  (define s (format "~a" v))
+  (if (< (string-length s) 2)
+      (string-append "0" s)
+      s))
+
+;; Format a single memory item as a concise, delimited entry line.
+;; User-controlled content is escaped so newlines/bullets cannot visually escape
+;; the entry and pretend to be instructions.
 (define (format-memory-entry item)
   (define scope (memory-item-scope item))
   (define type (memory-item-type item))
-  (define content (memory-item-content item))
+  (define content (escape-memory-content (memory-item-content item)))
   (define max-chars (current-memory-max-entry-chars))
   (define truncated
     (if (> (string-length content) max-chars)
         (string-append (substring content 0 (- max-chars 3)) "...")
         content))
-  (format "(~a, ~a) ~a" scope type truncated))
+  (format "- (~a, ~a) id=~a content: \"~a\"" scope type (memory-item-id item) truncated))
 
 ;; Build a bounded memory section for prompt injection.
 ;; Returns #f if items is empty or budget is #f/0.
@@ -194,6 +222,7 @@
   (cond
     [(or (not budget-tokens) (<= budget-tokens 0) (null? items)) #f]
     [else
+     (define injectable-items (filter injectable-memory-item? items))
      ;; Header costs ~5 tokens
      (define header-tokens 5)
      (define remaining-budget (- budget-tokens header-tokens))
@@ -201,7 +230,7 @@
      (define-values (entries _used-tokens)
        (for/fold ([acc '()]
                   [budget remaining-budget])
-                 ([item items]
+                 ([item injectable-items]
                   [i (in-naturals)]
                   #:break (or (<= budget 0) (>= i max-entries)))
          (define entry (format-memory-entry item))
