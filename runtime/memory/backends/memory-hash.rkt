@@ -19,25 +19,22 @@
 ;; Returns a new memory-backend using a fresh hash table.
 ;; Thread safety: NOT thread-safe. Callers must serialize access.
 (define (make-memory-hash-backend)
-  (define store (make-hash))  ; id -> memory-item
+  (define store (make-hash)) ; id -> memory-item
 
   ;; Scope/project filter
   (define (scope-match? item query)
     (define q-scope (memory-query-scope query))
     (define q-project (memory-query-project-root query))
     (define q-session (memory-query-session-id query))
-    (and (or (not q-scope)
-             (eq? q-scope (memory-item-scope item)))
-         (or (not q-project)
-             (equal? q-project (hash-ref (memory-item-metadata item) 'project-root #f)))
-         (or (not q-session)
-             (equal? q-session (hash-ref (memory-item-metadata item) 'session-id #f)))))
+    (and
+     (or (not q-scope) (eq? q-scope (memory-item-scope item)))
+     (or (not q-project) (equal? q-project (hash-ref (memory-item-metadata item) 'project-root #f)))
+     (or (not q-session) (equal? q-session (hash-ref (memory-item-metadata item) 'session-id #f)))))
 
   ;; Type filter
   (define (type-match? item query)
     (define q-types (memory-query-types query))
-    (or (not q-types)
-        (memq (memory-item-type item) q-types)))
+    (or (not q-types) (memq (memory-item-type item) q-types)))
 
   ;; Tag filter
   (define (tag-match? item query)
@@ -50,8 +47,7 @@
   ;; Expiry filter
   (define (expired? item)
     (define expires (hash-ref (memory-item-validity item) 'expires-at #f))
-    (and expires
-         (string<? expires (current-iso-8601))))
+    (and expires (string<? expires (current-iso-8601))))
 
   ;; Sort by (updated-at desc, id desc) for deterministic ordering
   (define (sort-items items)
@@ -68,17 +64,12 @@
   (define (store! item)
     (cond
       [(not (valid-memory-item? item))
-       (memory-result #f #f
-                      (make-memory-error 'invalid-item "Invalid memory item")
-                      (hasheq))]
+       (memory-result #f #f (make-memory-error 'invalid-item "Invalid memory item") (hasheq))]
       [(hash-has-key? store (memory-item-id item))
-       (memory-result #f #f
-                      (make-memory-error 'duplicate "Item already exists")
-                      (hasheq))]
+       (memory-result #f #f (make-memory-error 'duplicate "Item already exists") (hasheq))]
       [else
        (hash-set! store (memory-item-id item) item)
-       (memory-result #t (memory-item-id item) #f
-                      (hasheq 'backend 'memory-hash))]))
+       (memory-result #t (memory-item-id item) #f (hasheq 'backend 'memory-hash))]))
 
   ;; retrieve
   (define (retrieve query)
@@ -88,39 +79,41 @@
                 (and (scope-match? item query)
                      (type-match? item query)
                      (tag-match? item query)
-                     (or (memory-query-include-expired? query)
-                         (not (expired? item)))))
+                     (or (memory-query-include-expired? query) (not (expired? item)))))
               all-items))
     (define sorted (sort-items filtered))
     (define limit (memory-query-limit query))
     (define result (take-at-most sorted limit))
-    (memory-result #t result #f
-                    (hasheq 'count (length result)
-                            'total (length filtered)
-                            'backend 'memory-hash)))
+    (memory-result #t
+                   result
+                   #f
+                   (hasheq 'count (length result) 'total (length filtered) 'backend 'memory-hash)))
 
   ;; update!
   (define (update! id patch)
     (define existing (hash-ref store id #f))
     (cond
-      [(not existing)
-       (memory-result #f #f
-                      (make-memory-error 'not-found "Item not found")
-                      (hasheq))]
+      [(not existing) (memory-result #f #f (make-memory-error 'not-found "Item not found") (hasheq))]
       [else
-       (define new-content (hash-ref patch 'content (memory-item-content existing)))
-       (define new-tags (hash-ref patch 'tags #f))
-       (define new-validity (hash-ref patch 'validity (memory-item-validity existing)))
+       ;; Strip immutable fields from patch (P3-3)
+       (define safe-patch
+         (for/hasheq ([(k v) (in-hash patch)]
+                      #:when (not (memq k '(id created-at))))
+           (values k v)))
+       (define new-content (hash-ref safe-patch 'content (memory-item-content existing)))
+       (define new-tags (hash-ref safe-patch 'tags #f))
+       (define new-validity (hash-ref safe-patch 'validity (memory-item-validity existing)))
        (define new-meta
          (if new-tags
              (hash-set (memory-item-metadata existing) 'tags new-tags)
              (memory-item-metadata existing)))
        (define updated
-         (struct-copy memory-item existing
+         (struct-copy memory-item
+                      existing
                       [content new-content]
                       [metadata new-meta]
                       [validity new-validity]
-                      [updated-at (hash-ref patch 'updated-at (current-iso-8601))]))
+                      [updated-at (hash-ref safe-patch 'updated-at (current-iso-8601))]))
        (hash-set! store id updated)
        (memory-result #t id #f (hasheq 'backend 'memory-hash))]))
 
@@ -128,14 +121,9 @@
   (define (delete! id scope)
     (define existing (hash-ref store id #f))
     (cond
-      [(not existing)
-       (memory-result #f #f
-                      (make-memory-error 'not-found "Item not found")
-                      (hasheq))]
+      [(not existing) (memory-result #f #f (make-memory-error 'not-found "Item not found") (hasheq))]
       [(and scope (not (eq? scope (memory-item-scope existing))))
-       (memory-result #f #f
-                      (make-memory-error 'scope-mismatch "Scope mismatch")
-                      (hasheq))]
+       (memory-result #f #f (make-memory-error 'scope-mismatch "Scope mismatch") (hasheq))]
       [else
        (hash-remove! store id)
        (memory-result #t id #f (hasheq 'backend 'memory-hash))]))
@@ -145,14 +133,14 @@
     (retrieve query))
 
   ;; available?
-  (define (available?) #t)
+  (define (available?)
+    #t)
 
   ;; manage! — no-op for in-memory backend
   (define (manage! policy)
     (memory-result #t #f #f (hasheq 'backend 'memory-hash)))
 
-  (memory-backend "memory-hash"
-                  store! retrieve update! delete! list-items available? manage!))
+  (memory-backend "memory-hash" store! retrieve update! delete! list-items available? manage!))
 
 ;; ---------------------------------------------------------------------------
 ;; Test helper: inspect backend contents
@@ -161,8 +149,7 @@
 (define (memory-hash-backend-items backend)
   ;; Access the internal store via closures — for testing only.
   ;; We use the list operation with a permissive query.
-  (define r (gen:list-memory backend
-                             (memory-query "" #f #f #f #f #f 10000 #t)))
+  (define r (gen:list-memory backend (memory-query "" #f #f #f #f #f 10000 #t)))
   (if (memory-result-ok? r)
       (memory-result-value r)
       '()))

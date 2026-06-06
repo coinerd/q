@@ -43,43 +43,41 @@
 ;; ---------------------------------------------------------------------------
 
 (test-case "store and retrieve round-trip"
-  (with-temp-backend
-   (lambda (backend dir)
-     (define item (make-test-item #:id "id1" #:content "hello world"))
-     (define store-result (gen:store-memory! backend item))
-     (check-true (memory-result-ok? store-result))
-     (check-equal? (memory-result-value store-result) "id1")
-     ;; Retrieve
-     (define query (memory-query #f #f #f #f #f #f 100 #f))
-     (define result (gen:retrieve-memory backend query))
-     (check-true (memory-result-ok? result))
-     (define items (memory-result-value result))
-     (check-equal? (length items) 1)
-     (check-equal? (memory-item-content (car items)) "hello world"))))
+  (with-temp-backend (lambda (backend dir)
+                       (define item (make-test-item #:id "id1" #:content "hello world"))
+                       (define store-result (gen:store-memory! backend item))
+                       (check-true (memory-result-ok? store-result))
+                       (check-equal? (memory-result-value store-result) "id1")
+                       ;; Retrieve
+                       (define query (memory-query #f #f #f #f #f #f 100 #f))
+                       (define result (gen:retrieve-memory backend query))
+                       (check-true (memory-result-ok? result))
+                       (define items (memory-result-value result))
+                       (check-equal? (length items) 1)
+                       (check-equal? (memory-item-content (car items)) "hello world"))))
 
 (test-case "store persists to file"
-  (with-temp-backend
-   (lambda (backend dir)
-     (define item (make-test-item #:id "persist-id" #:content "durable"))
-     (gen:store-memory! backend item)
-     ;; Create a new backend reading the same file
-     (define backend2 (make-file-jsonl-backend dir))
-     (define query (memory-query #f #f #f #f #f #f 100 #f))
-     (define result (gen:retrieve-memory backend2 query))
-     (check-true (memory-result-ok? result))
-     (check-equal? (length (memory-result-value result)) 1)
-     (check-equal? (memory-item-content (car (memory-result-value result))) "durable"))))
+  (with-temp-backend (lambda (backend dir)
+                       (define item (make-test-item #:id "persist-id" #:content "durable"))
+                       (gen:store-memory! backend item)
+                       ;; Create a new backend reading the same file
+                       (define backend2 (make-file-jsonl-backend dir))
+                       (define query (memory-query #f #f #f #f #f #f 100 #f))
+                       (define result (gen:retrieve-memory backend2 query))
+                       (check-true (memory-result-ok? result))
+                       (check-equal? (length (memory-result-value result)) 1)
+                       (check-equal? (memory-item-content (car (memory-result-value result)))
+                                     "durable"))))
 
 (test-case "store multiple items and retrieve all"
-  (with-temp-backend
-   (lambda (backend dir)
-     (for ([i (in-range 5)])
-       (gen:store-memory! backend
-                          (make-test-item #:id (format "id~a" i)
-                                          #:content (format "content ~a" i))))
-     (define query (memory-query #f #f #f #f #f #f 100 #f))
-     (define result (gen:retrieve-memory backend query))
-     (check-equal? (length (memory-result-value result)) 5))))
+  (with-temp-backend (lambda (backend dir)
+                       (for ([i (in-range 5)])
+                         (gen:store-memory! backend
+                                            (make-test-item #:id (format "id~a" i)
+                                                            #:content (format "content ~a" i))))
+                       (define query (memory-query #f #f #f #f #f #f 100 #f))
+                       (define result (gen:retrieve-memory backend query))
+                       (check-equal? (length (memory-result-value result)) 5))))
 
 ;; ---------------------------------------------------------------------------
 ;; Delete
@@ -99,42 +97,40 @@
      (check-equal? (length (memory-result-value (gen:retrieve-memory backend2 query))) 0))))
 
 (test-case "delete with scope check"
-  (with-temp-backend
-   (lambda (backend dir)
-     (gen:store-memory! backend (make-test-item #:id "scoped" #:scope 'project))
-     ;; Wrong scope should fail
-     (define del-result (gen:delete-memory! backend "scoped" 'session))
-     (check-false (memory-result-ok? del-result))
-     ;; Correct scope should succeed
-     (define del-result2 (gen:delete-memory! backend "scoped" 'project))
-     (check-true (memory-result-ok? del-result2)))))
+  (with-temp-backend (lambda (backend dir)
+                       (gen:store-memory! backend (make-test-item #:id "scoped" #:scope 'project))
+                       ;; Wrong scope should fail
+                       (define del-result (gen:delete-memory! backend "scoped" 'session))
+                       (check-false (memory-result-ok? del-result))
+                       ;; Correct scope should succeed
+                       (define del-result2 (gen:delete-memory! backend "scoped" 'project))
+                       (check-true (memory-result-ok? del-result2)))))
 
 ;; ---------------------------------------------------------------------------
 ;; Update
 ;; ---------------------------------------------------------------------------
 
 (test-case "update changes content"
-  (with-temp-backend
-   (lambda (backend dir)
-     (gen:store-memory! backend (make-test-item #:id "upd" #:content "original"))
-     (define upd-result (gen:update-memory! backend "upd" (hash 'content "modified")))
-     (check-true (memory-result-ok? upd-result))
-     ;; Verify content changed
-     (define query (memory-query #f #f #f #f #f #f 100 #f))
-     (define items (memory-result-value (gen:retrieve-memory backend query)))
-     (check-equal? (length items) 1)
-     (check-equal? (memory-item-content (car items)) "modified"))))
+  (with-temp-backend (lambda (backend dir)
+                       (gen:store-memory! backend (make-test-item #:id "upd" #:content "original"))
+                       (define upd-result
+                         (gen:update-memory! backend "upd" (hash 'content "modified")))
+                       (check-true (memory-result-ok? upd-result))
+                       ;; Verify content changed
+                       (define query (memory-query #f #f #f #f #f #f 100 #f))
+                       (define items (memory-result-value (gen:retrieve-memory backend query)))
+                       (check-equal? (length items) 1)
+                       (check-equal? (memory-item-content (car items)) "modified"))))
 
 (test-case "update persists after reload"
-  (with-temp-backend
-   (lambda (backend dir)
-     (gen:store-memory! backend (make-test-item #:id "upd2" #:content "v1"))
-     (gen:update-memory! backend "upd2" (hash 'content "v2"))
-     ;; Reload
-     (define backend2 (make-file-jsonl-backend dir))
-     (define query (memory-query #f #f #f #f #f #f 100 #f))
-     (define items (memory-result-value (gen:retrieve-memory backend2 query)))
-     (check-equal? (memory-item-content (car items)) "v2"))))
+  (with-temp-backend (lambda (backend dir)
+                       (gen:store-memory! backend (make-test-item #:id "upd2" #:content "v1"))
+                       (gen:update-memory! backend "upd2" (hash 'content "v2"))
+                       ;; Reload
+                       (define backend2 (make-file-jsonl-backend dir))
+                       (define query (memory-query #f #f #f #f #f #f 100 #f))
+                       (define items (memory-result-value (gen:retrieve-memory backend2 query)))
+                       (check-equal? (memory-item-content (car items)) "v2"))))
 
 ;; ---------------------------------------------------------------------------
 ;; Corrupt lines
@@ -148,9 +144,9 @@
      ;; Append a corrupt line directly to the file
      (define jsonl-path (build-path dir "memory.jsonl"))
      (call-with-output-file jsonl-path
-       (lambda (port)
-         (displayln "THIS IS NOT VALID JSON {{{" port))
-       #:mode 'text #:exists 'append)
+                            (lambda (port) (displayln "THIS IS NOT VALID JSON {{{" port))
+                            #:mode 'text
+                            #:exists 'append)
      ;; Should still load the valid item
      (define backend2 (make-file-jsonl-backend dir))
      (define query (memory-query #f #f #f #f #f #f 100 #f))
@@ -164,65 +160,178 @@
 ;; ---------------------------------------------------------------------------
 
 (test-case "ordering is stable after reload"
-  (with-temp-backend
-   (lambda (backend dir)
-     ;; Store items with different timestamps
-     (for ([i (in-range 5)])
-       (gen:store-memory! backend
-                          (memory-item (format "ord~a" i) 'semantic 'session
-                                       (format "content ~a" i)
-                                       (hasheq) (hasheq) ""
-                                       (format "2026-06-0~aT00:00:00Z" (+ i 1)))))
-     ;; Reload
-     (define backend2 (make-file-jsonl-backend dir))
-     (define query (memory-query #f #f #f #f #f #f 100 #f))
-     (define items (memory-result-value (gen:retrieve-memory backend2 query)))
-     ;; Should be sorted by updated-at descending
-     (check-equal? (length items) 5)
-     (define timestamps (map memory-item-updated-at items))
-     (check-equal? timestamps (sort timestamps string>?)))))
+  (with-temp-backend (lambda (backend dir)
+                       ;; Store items with different timestamps
+                       (for ([i (in-range 5)])
+                         (gen:store-memory! backend
+                                            (memory-item (format "ord~a" i)
+                                                         'semantic
+                                                         'session
+                                                         (format "content ~a" i)
+                                                         (hasheq)
+                                                         (hasheq)
+                                                         "2026-06-01T00:00:00Z"
+                                                         (format "2026-06-0~aT00:00:00Z" (+ i 1)))))
+                       ;; Reload
+                       (define backend2 (make-file-jsonl-backend dir))
+                       (define query (memory-query #f #f #f #f #f #f 100 #f))
+                       (define items (memory-result-value (gen:retrieve-memory backend2 query)))
+                       ;; Should be sorted by updated-at descending
+                       (check-equal? (length items) 5)
+                       (define timestamps (map memory-item-updated-at items))
+                       (check-equal? timestamps (sort timestamps string>?)))))
 
 ;; ---------------------------------------------------------------------------
 ;; Duplicate handling
 ;; ---------------------------------------------------------------------------
 
 (test-case "duplicate store fails"
-  (with-temp-backend
-   (lambda (backend dir)
-     (gen:store-memory! backend (make-test-item #:id "dup"))
-     (define result (gen:store-memory! backend (make-test-item #:id "dup")))
-     (check-false (memory-result-ok? result)))))
+  (with-temp-backend (lambda (backend dir)
+                       (gen:store-memory! backend (make-test-item #:id "dup"))
+                       (define result (gen:store-memory! backend (make-test-item #:id "dup")))
+                       (check-false (memory-result-ok? result)))))
 
 ;; ---------------------------------------------------------------------------
 ;; Available
 ;; ---------------------------------------------------------------------------
 
 (test-case "available? returns #t"
-  (with-temp-backend
-   (lambda (backend dir)
-     (check-true (gen:memory-available? backend)))))
+  (with-temp-backend (lambda (backend dir) (check-true (gen:memory-available? backend)))))
 
 ;; ---------------------------------------------------------------------------
 ;; Manage (no-op)
 ;; ---------------------------------------------------------------------------
 
 (test-case "manage! returns success"
-  (with-temp-backend
-   (lambda (backend dir)
-     (define result (gen:manage-memory! backend (hash)))
-     (check-true (memory-result-ok? result)))))
+  (with-temp-backend (lambda (backend dir)
+                       (define result (gen:manage-memory! backend (hash)))
+                       (check-true (memory-result-ok? result)))))
 
 ;; ---------------------------------------------------------------------------
 ;; Scope filtering
 ;; ---------------------------------------------------------------------------
 
 (test-case "retrieve filters by scope"
+  (with-temp-backend (lambda (backend dir)
+                       (gen:store-memory! backend (make-test-item #:id "s1" #:scope 'session))
+                       (gen:store-memory! backend (make-test-item #:id "p1" #:scope 'project))
+                       ;; Query session only
+                       (define query (memory-query #f 'session #f #f #f #f 100 #f))
+                       (define result (gen:retrieve-memory backend query))
+                       (check-equal? (length (memory-result-value result)) 1)
+                       (check-equal? (memory-item-id (car (memory-result-value result))) "s1"))))
+
+;; ---------------------------------------------------------------------------
+;; Tag filtering (P1-1)
+;; ---------------------------------------------------------------------------
+
+(define (make-tagged-item #:id [id "tagged"] #:tags [tags '()])
+  (memory-item id
+               'semantic
+               'session
+               "tagged content"
+               (hasheq 'tags tags)
+               (hasheq)
+               "2026-06-01T00:00:00Z"
+               "2026-06-01T00:00:00Z"))
+
+(test-case "retrieve filters by single tag"
   (with-temp-backend
    (lambda (backend dir)
-     (gen:store-memory! backend (make-test-item #:id "s1" #:scope 'session))
-     (gen:store-memory! backend (make-test-item #:id "p1" #:scope 'project))
-     ;; Query session only
-     (define query (memory-query #f 'session #f #f #f #f 100 #f))
+     (gen:store-memory! backend (make-tagged-item #:id "rust-item" #:tags '("rust")))
+     (gen:store-memory! backend (make-tagged-item #:id "python-item" #:tags '("python")))
+     (gen:store-memory! backend (make-tagged-item #:id "no-tags" #:tags '()))
+     ;; Query for rust items
+     (define query (memory-query #f #f #f #f #f '("rust") 100 #f))
      (define result (gen:retrieve-memory backend query))
+     (check-true (memory-result-ok? result))
+     (define items (memory-result-value result))
+     (check-equal? (length items) 1)
+     (check-equal? (memory-item-id (car items)) "rust-item"))))
+
+(test-case "retrieve filters by multiple tags (AND semantics)"
+  (with-temp-backend
+   (lambda (backend dir)
+     (gen:store-memory! backend (make-tagged-item #:id "rust-item" #:tags '("rust")))
+     (gen:store-memory! backend (make-tagged-item #:id "python-item" #:tags '("python")))
+     (gen:store-memory! backend (make-tagged-item #:id "both-item" #:tags '("rust" "python")))
+     ;; Query for items that have BOTH rust AND python tags
+     (define query (memory-query #f #f #f #f #f '("rust" "python") 100 #f))
+     (define result (gen:retrieve-memory backend query))
+     (check-true (memory-result-ok? result))
+     (define items (memory-result-value result))
+     ;; Should return only the item that has BOTH tags
+     (check-equal? (length items) 1)
+     (check-equal? (memory-item-id (car items)) "both-item"))))
+
+(test-case "list filters by tags"
+  (with-temp-backend
+   (lambda (backend dir)
+     (gen:store-memory! backend (make-tagged-item #:id "tagged-a" #:tags '("alpha")))
+     (gen:store-memory! backend (make-tagged-item #:id "tagged-b" #:tags '("beta")))
+     (define query (memory-query #f #f #f #f #f '("alpha") 100 #f))
+     (define result (gen:list-memory backend query))
+     (check-true (memory-result-ok? result))
      (check-equal? (length (memory-result-value result)) 1)
-     (check-equal? (memory-item-id (car (memory-result-value result))) "s1"))))
+     (check-equal? (memory-item-id (car (memory-result-value result))) "tagged-a"))))
+
+(test-case "retrieve with empty/null tags returns all items"
+  (with-temp-backend (lambda (backend dir)
+                       (gen:store-memory! backend (make-tagged-item #:id "a" #:tags '("x")))
+                       (gen:store-memory! backend (make-tagged-item #:id "b" #:tags '()))
+                       ;; tags=#f means no tag filter
+                       (define query (memory-query #f #f #f #f #f #f 100 #f))
+                       (define result (gen:retrieve-memory backend query))
+                       (check-equal? (length (memory-result-value result)) 2))))
+
+;; ---------------------------------------------------------------------------
+;; Path traversal safety (P2-1)
+;; ---------------------------------------------------------------------------
+
+(test-case "safe-memory-path rejects directory traversal"
+  (define dir (make-temp-dir))
+  (with-handlers ([exn:fail? (lambda (e)
+                               (delete-directory/files dir #:must-exist? #f)
+                               (raise e))])
+    ;; Direct traversal attempt should raise
+    (check-exn exn:fail? (lambda () (safe-memory-path dir "../../etc/passwd")))
+    (delete-directory/files dir #:must-exist? #f)))
+
+(test-case "safe-memory-path accepts normal relative path"
+  (define dir (make-temp-dir))
+  (with-handlers ([exn:fail? (lambda (e)
+                               (delete-directory/files dir #:must-exist? #f)
+                               (raise e))])
+    (define result (safe-memory-path dir "memory.jsonl"))
+    (check-true (path? result))
+    (delete-directory/files dir #:must-exist? #f)))
+
+;; ---------------------------------------------------------------------------
+;; Update patch immutability guard (P3-3)
+;; ---------------------------------------------------------------------------
+
+(test-case "update: id in patch is ignored"
+  (with-temp-backend (lambda (backend dir)
+                       (gen:store-memory! backend (make-test-item #:id "orig-id"))
+                       (define r
+                         (gen:update-memory! backend "orig-id" (hash 'id "hacked-id" 'content "new")))
+                       (check-true (memory-result-ok? r))
+                       ;; Reload to verify persisted correctly
+                       (define backend2 (make-file-jsonl-backend dir))
+                       (define query (memory-query #f #f #f #f #f #f 100 #f))
+                       (define items (memory-result-value (gen:retrieve-memory backend2 query)))
+                       (check-equal? (length items) 1)
+                       (check-equal? (memory-item-id (car items)) "orig-id")
+                       (check-equal? (memory-item-content (car items)) "new"))))
+
+(test-case "update: created-at in patch is ignored"
+  (with-temp-backend
+   (lambda (backend dir)
+     (gen:store-memory! backend (make-test-item #:id "ts-item"))
+     (define r (gen:update-memory! backend "ts-item" (hash 'created-at "1999-01-01T00:00:00Z")))
+     (check-true (memory-result-ok? r))
+     ;; Reload and verify created-at unchanged
+     (define backend2 (make-file-jsonl-backend dir))
+     (define query (memory-query #f #f #f #f #f #f 100 #f))
+     (define items (memory-result-value (gen:retrieve-memory backend2 query)))
+     (check-equal? (memory-item-created-at (car items)) "2026-06-01T00:00:00Z"))))

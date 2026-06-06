@@ -51,9 +51,9 @@
                  (hasheq)
                  (hasheq)
                  "2026-06-01T00:00:00Z"
-                 "2026-06-01T00:00:00Z"))
+                 "2026-06-05T12:00:00Z"))
   (define entry (format-memory-entry item))
-  (check-true (string-contains? entry "(session, semantic)"))
+  (check-true (string-contains? entry "(session, semantic, 2026-06-05T12:00:00Z)"))
   (check-true (string-contains? entry "test content")))
 
 (test-case "format-memory-entry: truncation"

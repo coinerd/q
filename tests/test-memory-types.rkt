@@ -117,14 +117,19 @@
 ;; Hash round-trip
 ;; ---------------------------------------------------------------------------
 
-(test-case "memory-item->hash / hash->memory-item round-trip"
+(test-case "memory-item->hash / hash->memory-item round-trip: all 8 fields"
   (define item (make-test-item))
   (define h (memory-item->hash item))
   (define restored (hash->memory-item h))
+  ;; Verify ALL 8 fields survive round-trip
   (check-equal? (memory-item-id restored) (memory-item-id item))
   (check-equal? (memory-item-type restored) (memory-item-type item))
   (check-equal? (memory-item-scope restored) (memory-item-scope item))
-  (check-equal? (memory-item-content restored) (memory-item-content item)))
+  (check-equal? (memory-item-content restored) (memory-item-content item))
+  (check-equal? (memory-item-metadata restored) (memory-item-metadata item))
+  (check-equal? (memory-item-validity restored) (memory-item-validity item))
+  (check-equal? (memory-item-created-at restored) (memory-item-created-at item))
+  (check-equal? (memory-item-updated-at restored) (memory-item-updated-at item)))
 
 (test-case "hash->memory-item tolerates missing keys"
   (define h (hasheq 'id "test-id" 'content "hello"))
@@ -197,3 +202,37 @@
   (check-equal? (hash-ref err 'code) 'timeout)
   (check-equal? (hash-ref err 'message) "Backend timeout")
   (check-true (hash-ref err 'retryable?)))
+
+;; ---------------------------------------------------------------------------
+;; ISO-8601 timestamp validation (P3-1)
+;; ---------------------------------------------------------------------------
+
+(test-case "iso-8601-timestamp?: accepts valid timestamp"
+  (check-true (iso-8601-timestamp? "2026-06-05T12:00:00Z"))
+  (check-true (iso-8601-timestamp? "2025-01-01T00:00:00Z")))
+
+(test-case "iso-8601-timestamp?: rejects non-ISO string"
+  (check-false (iso-8601-timestamp? "yesterday"))
+  (check-false (iso-8601-timestamp? ""))
+  (check-false (iso-8601-timestamp? "not-a-date")))
+
+(test-case "iso-8601-timestamp?: rejects non-string"
+  (check-false (iso-8601-timestamp? 12345))
+  (check-false (iso-8601-timestamp? #f)))
+
+(test-case "valid-memory-item?: rejects non-ISO created-at"
+  (define item
+    (memory-item "id"
+                 'semantic
+                 'project
+                 "content"
+                 (hasheq)
+                 (hasheq)
+                 "yesterday"
+                 "2026-01-01T00:00:00Z"))
+  (check-false (valid-memory-item? item)))
+
+(test-case "valid-memory-item?: rejects non-ISO updated-at"
+  (define item
+    (memory-item "id" 'semantic 'project "content" (hasheq) (hasheq) "2026-01-01T00:00:00Z" ""))
+  (check-false (valid-memory-item? item)))

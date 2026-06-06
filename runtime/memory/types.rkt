@@ -13,6 +13,7 @@
          memory-type?
          memory-scope?
          sensitivity?
+         iso-8601-timestamp?
          memory-item->hash
          hash->memory-item
          memory-query->hash
@@ -38,6 +39,11 @@
                       sensitive
                       secret))
        #t))
+
+(define (iso-8601-timestamp? v)
+  (and (string? v)
+       (>= (string-length v) 20)
+       (regexp-match? #px"^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}" v)))
 
 (define default-memory-limit 5)
 
@@ -88,8 +94,8 @@
        (> (string-length (memory-item-content v)) 0)
        (hash? (memory-item-metadata v))
        (hash? (memory-item-validity v))
-       (string? (memory-item-created-at v))
-       (string? (memory-item-updated-at v))))
+       (iso-8601-timestamp? (memory-item-created-at v))
+       (iso-8601-timestamp? (memory-item-updated-at v))))
 
 ;; ---------------------------------------------------------------------------
 ;; Conversions

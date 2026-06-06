@@ -16,8 +16,8 @@
          "protocol.rkt"
          "policy.rkt"
          (only-in "../../agent/event-structs/memory-events.rkt"
-                  make-mem-stored-event
-                  make-mem-deleted-event))
+                  make-mem-item-stored-event
+                  make-mem-policy-blocked-event))
 
 ;; ---------------------------------------------------------------------------
 ;; Configuration
@@ -35,6 +35,13 @@
         #px"(?i:password.*[=:].{6,})"
         #px"(?i:token.*[=:].{15,})"
         #px"(?:DATABASE_URL|MONGO_URI|REDIS_URL|SECRET_KEY).*[=:].{5,}"))
+
+(define (redact-snippet content)
+  (define safe
+    (if (> (string-length content) 80)
+        (substring content 0 80)
+        content))
+  (regexp-replace* #px"(?i:api[_-]?key|password|token|secret).{0,20}" safe "[REDACTED]"))
 
 ;; Content too long to be a fact (likely raw output)
 (define max-fact-length 500)
@@ -100,7 +107,8 @@
                           #:policy policy
                           #:session-id session-id
                           #:project-root project-root
-                          #:on-event [on-event void])
+                          #:on-event [on-event void]
+                          #:on-typed-event [on-typed-event void])
   (cond
     [(not (current-auto-extraction-enabled))
      (list (extraction-result 'skipped #f "Auto-extraction disabled"))]
@@ -131,15 +139,35 @@
          (cond
            [(contains-secret? content)
             (on-event 'blocked item "Contains secret pattern")
+            (on-typed-event (make-mem-policy-blocked-event #:action 'store
+                                                           #:reason "Contains secret pattern"
+                                                           #:source 'auto-extraction
+                                                           #:session-id session-id
+                                                           #:turn-id "auto"
+                                                           #:redacted-snippet
+                                                           (redact-snippet content)))
             (extraction-result 'blocked #f "Contains secret pattern")]
            [(not (policy-allows-store? policy item))
             (on-event 'blocked item "Blocked by policy")
+            (on-typed-event (make-mem-policy-blocked-event #:action 'store
+                                                           #:reason "Blocked by policy"
+                                                           #:source 'auto-extraction
+                                                           #:session-id session-id
+                                                           #:turn-id "auto"
+                                                           #:redacted-snippet ""))
             (extraction-result 'blocked item "Blocked by policy")]
            [else
             (define result (gen:store-memory! backend item))
             (cond
               [(memory-result-ok? result)
                (on-event 'stored item #f)
+               (on-typed-event (make-mem-item-stored-event #:memory-id (memory-item-id item)
+                                                           #:mem-type (memory-item-type item)
+                                                           #:scope (memory-item-scope item)
+                                                           #:source 'auto-extraction
+                                                           #:session-id session-id
+                                                           #:turn-id "auto"
+                                                           #:redacted-snippet ""))
                (extraction-result 'stored item #f)]
               [else
                (extraction-result

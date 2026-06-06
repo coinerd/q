@@ -210,7 +210,12 @@
     (if (> (string-length content) max-chars)
         (string-append (substring content 0 (- max-chars 3)) "...")
         content))
-  (format "- (~a, ~a) id=~a content: \"~a\"" scope type (memory-item-id item) truncated))
+  (format "- (~a, ~a, ~a) id=~a content: \"~a\""
+          scope
+          type
+          (memory-item-updated-at item)
+          (memory-item-id item)
+          truncated))
 
 ;; Build a bounded memory section for prompt injection.
 ;; Returns #f if items is empty or budget is #f/0.

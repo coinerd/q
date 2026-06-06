@@ -235,3 +235,30 @@
   (gen:store-memory! b1 (make-item))
   (check-equal? (length (memory-hash-backend-items b1)) 1)
   (check-equal? (length (memory-hash-backend-items b2)) 0))
+
+;; ---------------------------------------------------------------------------
+;; Update patch immutability guard (P3-3)
+;; ---------------------------------------------------------------------------
+
+(test-case "update: id in patch is ignored"
+  (define b (make-memory-hash-backend))
+  (gen:store-memory! b (make-item #:id "orig-id"))
+  (define r (gen:update-memory! b "orig-id" (hash 'id "hacked-id" 'content "new content")))
+  (check-true (memory-result-ok? r))
+  ;; id should remain unchanged
+  (define items (memory-hash-backend-items b))
+  (check-equal? (memory-item-id (car items)) "orig-id")
+  ;; but content should be updated
+  (check-equal? (memory-item-content (car items)) "new content"))
+
+(test-case "update: created-at in patch is ignored"
+  (define b (make-memory-hash-backend))
+  (gen:store-memory! b (make-item #:id "ts-item"))
+  (define orig-created (memory-item-created-at (car (memory-hash-backend-items b))))
+  (define r (gen:update-memory! b "ts-item" (hash 'created-at "1999-01-01T00:00:00Z" 'content "updated")))
+  (check-true (memory-result-ok? r))
+  ;; created-at should remain unchanged
+  (define items (memory-hash-backend-items b))
+  (check-equal? (memory-item-created-at (car items)) orig-created)
+  ;; but content should be updated
+  (check-equal? (memory-item-content (car items)) "updated"))

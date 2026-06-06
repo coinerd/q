@@ -16,6 +16,20 @@
          "../protocol.rkt")
 
 ;; ---------------------------------------------------------------------------
+;; Sort helper — same deterministic ordering as hash backend
+;; ---------------------------------------------------------------------------
+
+(define (sort-items items)
+  (sort items
+        (lambda (a b)
+          (define ta (memory-item-updated-at a))
+          (define tb (memory-item-updated-at b))
+          (cond
+            [(string>? ta tb) #t]
+            [(string<? ta tb) #f]
+            [else (string>? (memory-item-id a) (memory-item-id b))]))))
+
+;; ---------------------------------------------------------------------------
 ;; Dedup helper
 ;; ---------------------------------------------------------------------------
 
@@ -51,12 +65,24 @@
    ;; retrieve: L1 first, fall back to L2, merge/dedup
    (lambda (query)
      (define r1 (gen:retrieve-memory l1 query))
+     (define items-l1
+       (if (memory-result-ok? r1)
+           (memory-result-value r1)
+           '()))
      (cond
        [(and l2-read? (gen:memory-available? l2))
         (define r2 (gen:retrieve-memory l2 query))
-        (define merged (append (memory-result-value r1) (memory-result-value r2)))
-        (memory-result #t (dedup-items merged) #f (memory-result-metadata r1))]
-       [else r1]))
+        (define items-l2
+          (if (memory-result-ok? r2)
+              (memory-result-value r2)
+              '()))
+        (define merged (append items-l1 items-l2))
+        (memory-result
+         #t
+         (sort-items (dedup-items merged))
+         #f
+         (hasheq 'backend 'chained 'l1-count (length items-l1) 'l2-count (length items-l2)))]
+       [else (memory-result #t items-l1 #f (memory-result-metadata r1))]))
    ;; update!: update both layers
    (lambda (id patch)
      (define r1 (gen:update-memory! l1 id patch))
@@ -85,7 +111,7 @@
               '()))
         (memory-result
          #t
-         (dedup-items (append items-l1 items-l2))
+         (sort-items (dedup-items (append items-l1 items-l2)))
          #f
          (hasheq 'backend 'chained 'l1-count (length items-l1) 'l2-count (length items-l2)))]
        [else (memory-result #t items-l1 #f (hasheq 'backend 'chained 'l1-count (length items-l1)))]))

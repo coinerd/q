@@ -164,3 +164,90 @@
   (check-true (memory-result? result))
   (check-true (memory-result-ok? result))
   (check-equal? (length (memory-result-value result)) 2))
+
+;; ---------------------------------------------------------------------------
+;; L1 error fallback (P1-2)
+;; ---------------------------------------------------------------------------
+
+(test-case "chained: retrieve falls back when L1 errors"
+  (define l1
+    (memory-backend
+     "failing-l1"
+     (lambda (item) (error "L1 store fail"))
+     (lambda (q) (memory-result #f #f (hash 'code 'error 'message "L1 broken") (hasheq)))
+     (lambda (id patch) (memory-result #t #f #f (hasheq)))
+     (lambda (id scope) (memory-result #t #f #f (hasheq)))
+     (lambda (q) (memory-result #f #f (hash 'code 'error 'message "L1 list broken") (hasheq)))
+     (lambda () #t)
+     (lambda (p) (memory-result #t #f #f (hasheq)))))
+  (define l2 (make-memory-hash-backend))
+  (gen:store-memory! l2 (make-test-item #:id "l2-data" #:content "from L2 only"))
+  (define chained (make-chained-backend l1 l2))
+  (define result (gen:retrieve-memory chained (memory-query #f #f #f #f #f #f 100 #f)))
+  (check-true (memory-result-ok? result))
+  (define items (memory-result-value result))
+  (check-equal? (length items) 1)
+  (check-equal? (memory-item-id (car items)) "l2-data"))
+
+(test-case "chained: list falls back when L1 errors"
+  (define l1
+    (memory-backend "failing-l1"
+                    (lambda (item) (error "L1 fail"))
+                    (lambda (q) (memory-result #f #f (hash 'code 'error 'message "broken") (hasheq)))
+                    (lambda (id patch) (memory-result #t #f #f (hasheq)))
+                    (lambda (id scope) (memory-result #t #f #f (hasheq)))
+                    (lambda (q) (memory-result #f #f (hash 'code 'error 'message "broken") (hasheq)))
+                    (lambda () #t)
+                    (lambda (p) (memory-result #t #f #f (hasheq)))))
+  (define l2 (make-memory-hash-backend))
+  (gen:store-memory! l2 (make-test-item #:id "l2-list-item"))
+  (define chained (make-chained-backend l1 l2))
+  (define result (gen:list-memory chained (memory-query #f #f #f #f #f #f 100 #f)))
+  (check-true (memory-result-ok? result))
+  (check-equal? (length (memory-result-value result)) 1)
+  (check-equal? (memory-item-id (car (memory-result-value result))) "l2-list-item"))
+
+;; ---------------------------------------------------------------------------
+;; Global sort after merge (P3-2)
+;; ---------------------------------------------------------------------------
+
+(define (make-timestamped-item #:id [id "ts-item"] #:updated-at [ts "2025-01-01T00:00:00Z"])
+  (memory-item id
+               'semantic
+               'session
+               "content"
+               (hasheq 'source 'test)
+               (hasheq 'sensitivity 'public)
+               "2025-01-01T00:00:00Z"
+               ts))
+
+(test-case "chained: merged results are globally sorted by updated-at desc"
+  (define l1 (make-memory-hash-backend))
+  (define l2 (make-memory-hash-backend))
+  ;; L1 item with old timestamp
+  (gen:store-memory! l1 (make-timestamped-item #:id "old-l1" #:updated-at "2025-01-01T00:00:00Z"))
+  ;; L2 item with new timestamp
+  (gen:store-memory! l2 (make-timestamped-item #:id "new-l2" #:updated-at "2025-12-31T00:00:00Z"))
+  (define chained (make-chained-backend l1 l2))
+  (define result (gen:list-memory chained (memory-query #f #f #f #f #f #f 100 #f)))
+  (check-true (memory-result-ok? result))
+  (define items (memory-result-value result))
+  (check-equal? (length items) 2)
+  ;; Should be sorted: new first, old second
+  (check-equal? (memory-item-id (car items)) "new-l2")
+  (check-equal? (memory-item-id (cadr items)) "old-l1"))
+
+(test-case "chained: retrieve merged results are globally sorted"
+  (define l1 (make-memory-hash-backend))
+  (define l2 (make-memory-hash-backend))
+  (gen:store-memory! l1 (make-timestamped-item #:id "mid-l1" #:updated-at "2025-06-01T00:00:00Z"))
+  (gen:store-memory! l2 (make-timestamped-item #:id "new-l2" #:updated-at "2025-12-01T00:00:00Z"))
+  (gen:store-memory! l2 (make-timestamped-item #:id "old-l2" #:updated-at "2025-01-01T00:00:00Z"))
+  (define chained (make-chained-backend l1 l2))
+  (define result (gen:retrieve-memory chained (memory-query #f #f #f #f #f #f 100 #f)))
+  (check-true (memory-result-ok? result))
+  (define items (memory-result-value result))
+  (check-equal? (length items) 3)
+  ;; Should be sorted by updated-at desc: new, mid, old
+  (define ids (map memory-item-id items))
+  (check-equal? ids '("new-l2" "mid-l1" "old-l2")))

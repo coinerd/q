@@ -208,3 +208,27 @@
                   ;; Wrong scope
                   (define dr (call-tool tool-delete-memory (hash 'id item-id 'scope "session")))
                   (check-true (tool-result-is-error? dr)))))
+
+;; ---------------------------------------------------------------------------
+;; clear_memory 20-item cap (P2-3)
+;; ---------------------------------------------------------------------------
+
+(test-case "clear-memory: capped at policy max-retrieve-count"
+  (define b (make-memory-hash-backend))
+  ;; Store 25 session-scoped items
+  (with-backend b
+                (lambda ()
+                  (for ([i (in-range 25)])
+                    (call-tool tool-store-memory
+                               (hash 'content (format "item ~a" i) 'scope "session")))
+                  ;; Clear session scope
+                  (define r (call-tool tool-clear-memory (hash 'scope "session" 'confirm #t)))
+                  (check-false (tool-result-is-error? r))
+                  ;; The deleted count should reflect the cap (policy default max-retrieve-count = 20)
+                  ;; So at most 20 items are deleted per call
+                  (define deleted-count (hash-ref (tool-result-details r) 'deleted-count 0))
+                  (check-true (<= deleted-count 20))
+                  ;; Verify some items remain if the cap was hit
+                  (define lr (call-tool tool-list-memory (hash 'scope "session")))
+                  (define remaining (hash-ref (tool-result-details lr) 'items '()))
+                  (check-true (>= (length remaining) 5)))))

@@ -21,9 +21,7 @@
 ;; Helpers
 ;; ---------------------------------------------------------------------------
 
-(define (run-extract text
-                     #:backend [backend (make-memory-hash-backend)]
-                     #:enabled? [enabled #t])
+(define (run-extract text #:backend [backend (make-memory-hash-backend)] #:enabled? [enabled #t])
   (parameterize ([current-auto-extraction-enabled enabled])
     (try-auto-extract text
                       #:backend backend
@@ -36,8 +34,7 @@
 ;; ---------------------------------------------------------------------------
 
 (test-case "auto-extraction: disabled by default"
-  (define results (run-extract "Some useful fact about the project."
-                               #:enabled? #f))
+  (define results (run-extract "Some useful fact about the project." #:enabled? #f))
   (check-equal? (length results) 1)
   (check-equal? (extraction-result-action (car results)) 'skipped)
   (check-true (string-contains? (extraction-result-reason (car results)) "disabled")))
@@ -92,10 +89,9 @@
 
 (test-case "looks-like-file-dump?: code-like content"
   (define code-content
-    (string-join
-     (for/list ([i (in-range 10)])
-       "import os; import sys; def main(): pass")
-     "\n"))
+    (string-join (for/list ([i (in-range 10)])
+                   "import os; import sys; def main(): pass")
+                 "\n"))
   (check-true (looks-like-file-dump? code-content)))
 
 (test-case "looks-like-file-dump?: plain text is safe"
@@ -119,8 +115,9 @@
 (test-case "auto-extraction: stores reusable fact"
   (define b (make-memory-hash-backend))
   (define results
-    (run-extract "The project uses a layered architecture with clear separation of concerns between LLM, agent core, runtime, and tools interfaces."
-                 #:backend b))
+    (run-extract
+     "The project uses a layered architecture with clear separation of concerns between LLM, agent core, runtime, and tools interfaces."
+     #:backend b))
   ;; Should have at least one stored result
   (define stored (filter (lambda (r) (eq? (extraction-result-action r) 'stored)) results))
   (check >= (length stored) 1)
@@ -196,3 +193,52 @@
                                    (set! blocked-events (cons action blocked-events)))))
   ;; May or may not have blocked events depending on whether candidates pass extraction
   (check-true (list? blocked-events)))
+
+;; ---------------------------------------------------------------------------
+;; Typed event emission (P2-6)
+;; ---------------------------------------------------------------------------
+
+(require (only-in "../agent/event-structs/memory-events.rkt"
+                  mem-item-stored-event?
+                  mem-policy-blocked-event?
+                  mem-item-stored-event-memory-id
+                  mem-policy-blocked-event-reason))
+
+(test-case "auto-extraction: emits typed stored event via on-typed-event"
+  (define typed-events '())
+  (define b (make-memory-hash-backend))
+  (parameterize ([current-auto-extraction-enabled #t])
+    (try-auto-extract "The service uses gRPC for inter-process communication between microservices."
+                      #:backend b
+                      #:policy default-memory-policy
+                      #:session-id "test"
+                      #:project-root "/test"
+                      #:on-typed-event (lambda (evt) (set! typed-events (cons evt typed-events)))))
+  ;; At least one typed event should have been emitted
+  (check >= (length typed-events) 1)
+  ;; First event should be a stored event
+  (define stored-events (filter mem-item-stored-event? typed-events))
+  (check >= (length stored-events) 0)
+  (when (> (length stored-events) 0)
+    (check-true (string? (mem-item-stored-event-memory-id (car stored-events))))))
+
+(test-case "auto-extraction: emits typed blocked event for secrets"
+  (define typed-events '())
+  (define b (make-memory-hash-backend))
+  ;; Use a restrictive policy that blocks storage
+  (define restrictive-policy
+    (make-memory-policy #:max-items-per-session 0
+                        #:max-retrieve-count 0
+                        #:max-content-length 10
+                        #:allowed-sensitivities '()
+                        #:allow-delete? #f))
+  (parameterize ([current-auto-extraction-enabled #t])
+    (try-auto-extract "A useful fact about project architecture that passes extraction filters."
+                      #:backend b
+                      #:policy restrictive-policy
+                      #:session-id "test"
+                      #:project-root "/test"
+                      #:on-typed-event (lambda (evt) (set! typed-events (cons evt typed-events)))))
+  ;; Should have at least one blocked event from policy
+  (define blocked-evts (filter mem-policy-blocked-event? typed-events))
+  (check >= (length blocked-evts) 1))

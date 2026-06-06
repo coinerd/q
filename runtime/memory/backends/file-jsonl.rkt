@@ -189,6 +189,7 @@
       (filter (lambda (item)
                 (and (scope-match? item query)
                      (type-match? item query)
+                     (tag-match? item query)
                      (or (memory-query-include-expired? query) (not (expired? item)))))
               all-items))
     (define sorted (sort-items filtered))
@@ -206,20 +207,25 @@
     (cond
       [(not existing) (memory-result #f #f (make-memory-error 'not-found "Item not found") (hasheq))]
       [else
-       (define new-content (hash-ref patch 'content (memory-item-content existing)))
+       ;; Strip immutable fields from patch (P3-3)
+       (define safe-patch
+         (for/hasheq ([(k v) (in-hash patch)]
+                      #:when (not (memq k '(id created-at))))
+           (values k v)))
+       (define new-content (hash-ref safe-patch 'content (memory-item-content existing)))
        (define new-meta
-         (let ([new-tags (hash-ref patch 'tags #f)])
+         (let ([new-tags (hash-ref safe-patch 'tags #f)])
            (if new-tags
                (hash-set (memory-item-metadata existing) 'tags new-tags)
                (memory-item-metadata existing))))
-       (define new-validity (hash-ref patch 'validity (memory-item-validity existing)))
+       (define new-validity (hash-ref safe-patch 'validity (memory-item-validity existing)))
        (define updated
          (struct-copy memory-item
                       existing
                       [content new-content]
                       [metadata new-meta]
                       [validity new-validity]
-                      [updated-at (hash-ref patch 'updated-at (current-iso-8601))]))
+                      [updated-at (hash-ref safe-patch 'updated-at (current-iso-8601))]))
        (jsonl-append! jsonl-path (make-update-record updated))
        (restrict-path-permissions! jsonl-path #o600)
        (invalidate-cache!)
@@ -276,6 +282,13 @@
 (define (type-match? item query)
   (define q-types (memory-query-types query))
   (or (not q-types) (memq (memory-item-type item) q-types)))
+
+(define (tag-match? item query)
+  (define q-tags (memory-query-tags query))
+  (or (not q-tags)
+      (let ([item-tags (hash-ref (memory-item-metadata item) 'tags '())])
+        (for/and ([t (in-list q-tags)])
+          (member t item-tags)))))
 
 (define (expired? item)
   (define expires (hash-ref (memory-item-validity item) 'expires-at #f))
