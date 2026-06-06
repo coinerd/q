@@ -7,8 +7,8 @@
 ;; - Disabled backend returns clear message
 ;; - Scope filtering works
 
-
 (require rackunit
+         racket/string
          "../tools/builtins/memory-tools.rkt"
          "../runtime/memory/types.rkt"
          "../runtime/memory/protocol.rkt"
@@ -258,3 +258,221 @@
                   (define lr (call-tool tool-list-memory (hash 'scope "session")))
                   (define remaining (hash-ref (tool-result-details lr) 'items '()))
                   (check-equal? (length remaining) 0))))
+
+;; ---------------------------------------------------------------------------
+;; M13-F5: update_memory tool tests
+;; ---------------------------------------------------------------------------
+
+(test-case "update-memory: requires id"
+  (define b (make-memory-hash-backend))
+  (with-backend b
+                (lambda ()
+                  (define r (call-tool tool-update-memory (hash)))
+                  (check-true (tool-result-is-error? r)))))
+
+(test-case "update-memory: requires existing item in scope"
+  (define b (make-memory-hash-backend))
+  (with-backend b
+                (lambda ()
+                  (define r (call-tool tool-update-memory (hash 'id "nonexistent" 'content "new")))
+                  (check-true (tool-result-is-error? r)))))
+
+(test-case "update-memory: updates content"
+  (define b (make-memory-hash-backend))
+  (with-backend b
+                (lambda ()
+                  (call-tool tool-store-memory (hash 'content "original content" 'scope "project"))
+                  (define lr (call-tool tool-list-memory (hash 'scope "project")))
+                  (define items (hash-ref (tool-result-details lr) 'items '()))
+                  (define item-id (hash-ref (car items) 'id))
+                  (define r
+                    (call-tool tool-update-memory
+                               (hash 'id item-id 'content "updated content" 'scope "project")))
+                  (check-false (tool-result-is-error? r))
+                  (define lr2 (call-tool tool-list-memory (hash 'scope "project")))
+                  (define items2 (hash-ref (tool-result-details lr2) 'items '()))
+                  (check-equal? (length items2) 1)
+                  ;; Content should be updated
+                  (check-true (string-contains? (hash-ref (car items2) 'snippet) "updated")))))
+
+(test-case "update-memory: updates tags"
+  (define b (make-memory-hash-backend))
+  (with-backend
+   b
+   (lambda ()
+     (call-tool tool-store-memory (hash 'content "tagged item" 'scope "project"))
+     (define lr (call-tool tool-list-memory (hash 'scope "project")))
+     (define items (hash-ref (tool-result-details lr) 'items '()))
+     (define item-id (hash-ref (car items) 'id))
+     (define r (call-tool tool-update-memory (hash 'id item-id 'tags '("updated") 'scope "project")))
+     (check-false (tool-result-is-error? r)))))
+
+(test-case "update-memory: emits memory.item.updated event"
+  (define b (make-memory-hash-backend))
+  (define events (box '()))
+  (define ctx
+    (make-exec-context #:working-directory "/tmp/q-memory-mgmt"
+                       #:session-metadata (hasheq 'session-id "sess-mgmt")
+                       #:event-publisher (lambda (evt) (set-box! events (cons evt (unbox events))))))
+  (with-backend
+   b
+   (lambda ()
+     (tool-store-memory (hash 'content "to update" 'scope "project") ctx)
+     (define lr (tool-list-memory (hash 'scope "project") ctx))
+     (define items (hash-ref (tool-result-details lr) 'items '()))
+     (define item-id (hash-ref (car items) 'id))
+     (set-box! events '())
+     (define r (tool-update-memory (hash 'id item-id 'content "new content" 'scope "project") ctx))
+     (check-false (tool-result-is-error? r))
+     (define updated-events
+       (filter (lambda (evt) (equal? (hash-ref evt 'type #f) "memory.item.updated"))
+               (reverse (unbox events))))
+     (check-equal? (length updated-events) 1)
+     (check-equal? (hash-ref (car updated-events) 'id) item-id))))
+
+;; ---------------------------------------------------------------------------
+;; M13-F5: cleanup_expired_memory tool tests
+;; ---------------------------------------------------------------------------
+
+(test-case "cleanup-expired: requires scope"
+  (define b (make-memory-hash-backend))
+  (with-backend b
+                (lambda ()
+                  (define r (call-tool tool-cleanup-expired-memory (hash 'dry-run #t)))
+                  (check-true (tool-result-is-error? r)))))
+
+(test-case "cleanup-expired: dry-run reports expired items"
+  (define b (make-memory-hash-backend))
+  (with-backend b
+                (lambda ()
+                  ;; Store items, some expired, some not
+                  (call-tool tool-store-memory (hash 'content "active item" 'scope "session"))
+                  ;; Manually inject an expired item
+                  (define expired-item
+                    (memory-item "expired-1"
+                                 'semantic
+                                 'session
+                                 "expired content"
+                                 (hasheq 'tags
+                                         '()
+                                         'source
+                                         'test
+                                         'project-root
+                                         #f
+                                         'session-id
+                                         "sess-mgmt"
+                                         'origin-message-id
+                                         #f)
+                                 (hasheq 'sensitivity
+                                         'public
+                                         'confidence
+                                         0.9
+                                         'expires-at
+                                         "2020-01-01T00:00:00Z"
+                                         'supersedes
+                                         '())
+                                 "2020-01-01T00:00:00Z"
+                                 "2020-01-01T00:00:00Z"))
+                  (gen:store-memory! b expired-item)
+                  ;; Dry-run
+                  (define r
+                    (call-tool tool-cleanup-expired-memory (hash 'scope "session" 'dry-run #t)))
+                  (check-false (tool-result-is-error? r))
+                  (define meta (tool-result-details r))
+                  (check-true (>= (hash-ref meta 'expired-count 0) 1))
+                  (check-true (>= (hash-ref meta 'total-count 0) 2)))))
+
+(test-case "cleanup-expired: requires confirm to delete"
+  (define b (make-memory-hash-backend))
+  (with-backend b
+                (lambda ()
+                  (call-tool tool-store-memory (hash 'content "active item" 'scope "session"))
+                  (define r (call-tool tool-cleanup-expired-memory (hash 'scope "session")))
+                  (check-true (tool-result-is-error? r)))))
+
+(test-case "cleanup-expired: deletes expired items with confirm"
+  (define b (make-memory-hash-backend))
+  (with-backend b
+                (lambda ()
+                  ;; Store active item
+                  (call-tool tool-store-memory (hash 'content "active item" 'scope "session"))
+                  ;; Inject expired item
+                  (define expired-item
+                    (memory-item "expired-2"
+                                 'semantic
+                                 'session
+                                 "old content"
+                                 (hasheq 'tags
+                                         '()
+                                         'source
+                                         'test
+                                         'project-root
+                                         #f
+                                         'session-id
+                                         "sess-mgmt"
+                                         'origin-message-id
+                                         #f)
+                                 (hasheq 'sensitivity
+                                         'public
+                                         'confidence
+                                         0.9
+                                         'expires-at
+                                         "2020-01-01T00:00:00Z"
+                                         'supersedes
+                                         '())
+                                 "2020-01-01T00:00:00Z"
+                                 "2020-01-01T00:00:00Z"))
+                  (gen:store-memory! b expired-item)
+                  ;; Confirm cleanup
+                  (define r
+                    (call-tool tool-cleanup-expired-memory (hash 'scope "session" 'confirm #t)))
+                  (check-false (tool-result-is-error? r))
+                  (define meta (tool-result-details r))
+                  (check-equal? (hash-ref meta 'deleted-count) 1)
+                  ;; Active item should still be there
+                  (define lr (call-tool tool-list-memory (hash 'scope "session")))
+                  (define items (hash-ref (tool-result-details lr) 'items '()))
+                  (check-equal? (length items) 1))))
+
+(test-case "cleanup-expired: emits deleted events"
+  (define b (make-memory-hash-backend))
+  (define events (box '()))
+  (define ctx
+    (make-exec-context #:working-directory "/tmp/q-memory-mgmt"
+                       #:session-metadata (hasheq 'session-id "sess-mgmt")
+                       #:event-publisher (lambda (evt) (set-box! events (cons evt (unbox events))))))
+  (with-backend b
+                (lambda ()
+                  (define expired-item
+                    (memory-item "expired-evt"
+                                 'semantic
+                                 'session
+                                 "expired for events"
+                                 (hasheq 'tags
+                                         '()
+                                         'source
+                                         'test
+                                         'project-root
+                                         #f
+                                         'session-id
+                                         "sess-mgmt"
+                                         'origin-message-id
+                                         #f)
+                                 (hasheq 'sensitivity
+                                         'public
+                                         'confidence
+                                         0.9
+                                         'expires-at
+                                         "2020-01-01T00:00:00Z"
+                                         'supersedes
+                                         '())
+                                 "2020-01-01T00:00:00Z"
+                                 "2020-01-01T00:00:00Z"))
+                  (gen:store-memory! b expired-item)
+                  (set-box! events '())
+                  (define r (tool-cleanup-expired-memory (hash 'scope "session" 'confirm #t) ctx))
+                  (check-false (tool-result-is-error? r))
+                  (define deleted-events
+                    (filter (lambda (evt) (equal? (hash-ref evt 'type #f) "memory.item.deleted"))
+                            (reverse (unbox events))))
+                  (check-equal? (length deleted-events) 1))))

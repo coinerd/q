@@ -12,6 +12,7 @@
                   memory-item-type
                   memory-item-scope
                   memory-item-metadata
+                  memory-item-validity
                   memory-item-created-at
                   memory-item-updated-at
                   memory-query
@@ -24,7 +25,9 @@
                   memory-backend-name
                   gen:store-memory!
                   gen:retrieve-memory
-                  gen:delete-memory!)
+                  gen:update-memory!
+                  gen:delete-memory!
+                  gen:manage-memory!)
          (only-in "../../runtime/memory/policy.rkt"
                   default-memory-policy
                   effective-memory-scope
@@ -459,22 +462,219 @@
     [(not (policy-allows-retrieve? policy 20))
      (make-error-result "clear_memory preflight exceeds retrieve policy maximum.")]
     [else
-     ;; Loop until no items remain (P2-9), emit deleted events (F3)
-     (define (clear-loop total-deleted)
-       (define q (make-scoped-query #f scope project-root session-id #f #f 20 #t))
-       (define result (gen:retrieve-memory backend q))
-       (if (and (memory-result-ok? result) (> (length (memory-result-value result)) 0))
-           (let* ([items (memory-result-value result)]
-                  [ids (for/list ([item (in-list items)])
-                         (gen:delete-memory! backend (memory-item-id item) scope)
-                         (emit-deleted! exec-ctx (memory-item-id item) scope backend) ; F3
-                         (memory-item-id item))])
-             (clear-loop (+ total-deleted (length ids))))
-           total-deleted))
-     (define total (clear-loop 0))
+     ;; Iterative loop until no items remain (P2-9), emit deleted events (F3)
+     ;; M13-F5: Converted from recursion to explicit iterative loop
+     (define total
+       (let loop ([total-deleted 0])
+         (define q (make-scoped-query #f scope project-root session-id #f #f 20 #t))
+         (define result (gen:retrieve-memory backend q))
+         (if (and (memory-result-ok? result) (> (length (memory-result-value result)) 0))
+             (let* ([items (memory-result-value result)]
+                    [batch-count (for/sum ([item (in-list items)])
+                                          (gen:delete-memory! backend (memory-item-id item) scope)
+                                          (emit-deleted! exec-ctx (memory-item-id item) scope backend)
+                                          1)])
+               (loop (+ total-deleted batch-count)))
+             total-deleted)))
      (make-success-result
       (list (hasheq 'type "text" 'text (format "Cleared ~a memory items from ~a scope" total scope)))
       (hasheq 'scope scope 'deleted-count total))]))
+
+;; ---------------------------------------------------------------------------
+;; M13-F5: update_memory tool
+;; ---------------------------------------------------------------------------
+
+(define (update-memory-handler args [exec-ctx #f])
+  (define backend (current-memory-backend))
+  (define policy (current-memory-policy))
+  (define id (hash-ref args 'id #f))
+  (define project-root (tool-project-root args exec-ctx))
+  (define session-id (tool-session-id args exec-ctx))
+  (define scope (effective-memory-scope (parse-symbol-arg args 'scope #f) project-root))
+  (cond
+    [(not backend)
+     (emit-backend-unavailable! exec-ctx backend 'update)
+     (make-error-result "Memory not available. Enable memory in session config.")]
+    [(not id) (make-error-result "id is required")]
+    [(not (memory-persistent-write-allowed?))
+     (emit-policy-blocked! exec-ctx 'update 'safe-mode 'tool (hash-ref args 'content #f))
+     (make-error-result "Memory update blocked by safe mode.")]
+    [(validate-scope policy scope)
+     =>
+     make-error-result]
+    [(validate-scope-context scope project-root session-id)
+     =>
+     make-error-result]
+    [else
+     ;; Scoped preflight: verify item exists and is visible in current scope
+     (define preflight-query (make-scoped-query #f scope project-root session-id #f #f 20 #t))
+     (define preflight (gen:retrieve-memory backend preflight-query))
+     (define visible-item
+       (and (memory-result-ok? preflight)
+            (for/first ([item (in-list (memory-result-value preflight))]
+                        #:when (equal? id (memory-item-id item)))
+              item)))
+     (cond
+       [(not (memory-result-ok? preflight))
+        (make-error-result (format "Failed to verify memory scope before update: ~a"
+                                   (memory-error-message preflight)))]
+       [(not visible-item) (make-error-result "Memory not found in current scope/project/session.")]
+       [else
+        ;; Build patch from provided args
+        (define content (hash-ref args 'content #f))
+        (define type-sym (parse-symbol-arg args 'type (memory-item-type visible-item)))
+        (define tags (hash-ref args 'tags #f))
+        (define sensitivity (parse-symbol-arg args 'sensitivity #f))
+        (define supersedes (hash-ref args 'supersedes #f))
+        (when (and sensitivity (eq? sensitivity 'secret))
+          (make-error-result "Secret sensitivity is not allowed for memory storage."))
+        (define patch
+          (for/hash ([(k v) (in-hash
+                             (hasheq 'content
+                                     content
+                                     'type
+                                     (and content type-sym)
+                                     'tags
+                                     tags
+                                     'validity
+                                     (and (or sensitivity supersedes)
+                                          (let ([base (memory-item-validity visible-item)])
+                                            (cond
+                                              [(and sensitivity supersedes)
+                                               (hasheq 'sensitivity
+                                                       sensitivity
+                                                       'supersedes
+                                                       (if (list? supersedes)
+                                                           supersedes
+                                                           '()))]
+                                              [sensitivity (hash-set base 'sensitivity sensitivity)]
+                                              [else
+                                               (hash-set base
+                                                         'supersedes
+                                                         (if (list? supersedes)
+                                                             supersedes
+                                                             '()))])))
+                                     'updated-at
+                                     (format-iso-now)))]
+                     #:when v)
+            (values k v)))
+        ;; Revalidate through policy
+        (define updated-item
+          (memory-item id
+                       (if (hash-has-key? patch 'type)
+                           (hash-ref patch 'type)
+                           (memory-item-type visible-item))
+                       (memory-item-scope visible-item)
+                       (if (hash-has-key? patch 'content)
+                           (hash-ref patch 'content)
+                           (memory-item-content visible-item))
+                       (if (hash-has-key? patch 'tags)
+                           (hash-set (memory-item-metadata visible-item) 'tags (hash-ref patch 'tags))
+                           (memory-item-metadata visible-item))
+                       (if (hash-has-key? patch 'validity)
+                           (hash-ref patch 'validity)
+                           (memory-item-validity visible-item))
+                       (memory-item-created-at visible-item)
+                       (format-iso-now)))
+        (cond
+          [(not (policy-allows-store? policy updated-item))
+           (emit-policy-blocked! exec-ctx 'update 'store-policy 'tool content)
+           (make-error-result "Memory update blocked by policy.")]
+          [else
+           (define result (gen:update-memory! backend id patch))
+           (if (memory-result-ok? result)
+               (begin
+                 (publish-memory-event! exec-ctx
+                                        (event-hash "memory.item.updated"
+                                                    (hasheq 'id
+                                                            id
+                                                            'scope
+                                                            (memory-item-scope visible-item)
+                                                            'fields-updated
+                                                            (hash-keys patch))))
+                 (make-success-result
+                  (list (hasheq 'type "text" 'text (format "Memory updated: ~a" id)))
+                  (hasheq 'memory-id id)))
+               (make-error-result (format "Failed to update memory: ~a"
+                                          (memory-error-message result))))])])]))
+
+;; ---------------------------------------------------------------------------
+;; M13-F5: cleanup_expired_memory management tool
+;; ---------------------------------------------------------------------------
+
+(define (cleanup-expired-handler args [exec-ctx #f])
+  (define backend (current-memory-backend))
+  (define policy (current-memory-policy))
+  (define scope (parse-symbol-arg args 'scope #f))
+  (define dry-run (hash-ref args 'dry-run #f))
+  (define confirm (hash-ref args 'confirm #f))
+  (define project-root (tool-project-root args exec-ctx))
+  (define session-id (tool-session-id args exec-ctx))
+  (cond
+    [(not backend)
+     (emit-backend-unavailable! exec-ctx backend 'cleanup)
+     (make-error-result "Memory not available. Enable memory in session config.")]
+    [(validate-scope policy scope)
+     =>
+     make-error-result]
+    [(validate-scope-context scope project-root session-id)
+     =>
+     make-error-result]
+    [else
+     ;; Retrieve all items including expired
+     (define q (make-scoped-query #f scope project-root session-id #f #f 100 #t))
+     (define result (gen:retrieve-memory backend q))
+     (cond
+       [(not (memory-result-ok? result))
+        (make-error-result (format "Failed to retrieve memories for cleanup: ~a"
+                                   (memory-error-message result)))]
+       [else
+        (define all-items (memory-result-value result))
+        (define expired-items
+          (filter (lambda (item)
+                    (define expires-at (hash-ref (memory-item-validity item) 'expires-at #f))
+                    (and expires-at (string? expires-at) (string<? expires-at (format-iso-now))))
+                  all-items))
+        (cond
+          [dry-run
+           ;; Inspect only: report what would be deleted
+           (make-success-result
+            (list (hasheq
+                   'type
+                   "text"
+                   'text
+                   (format "Cleanup dry-run: ~a expired items found in ~a scope (out of ~a total)"
+                           (length expired-items)
+                           scope
+                           (length all-items))))
+            (hasheq 'scope
+                    scope
+                    'expired-count
+                    (length expired-items)
+                    'total-count
+                    (length all-items)
+                    'expired-ids
+                    (map memory-item-id expired-items)))]
+          [(not confirm)
+           (make-error-result
+            (format "cleanup_expired_memory requires confirm=true. ~a expired items would be deleted."
+                    (length expired-items)))]
+          [else
+           ;; Delete expired items iteratively
+           (define deleted-count
+             (for/sum
+              ([item (in-list expired-items)])
+              (define r (gen:delete-memory! backend (memory-item-id item) (memory-item-scope item)))
+              (when (memory-result-ok? r)
+                (emit-deleted! exec-ctx (memory-item-id item) (memory-item-scope item) backend))
+              (if (memory-result-ok? r) 1 0)))
+           (make-success-result
+            (list (hasheq
+                   'type
+                   "text"
+                   'text
+                   (format "Cleaned up ~a expired memory items from ~a scope" deleted-count scope)))
+            (hasheq 'scope scope 'deleted-count deleted-count))])])]))
 
 (define-tool
  store-memory
@@ -531,8 +731,34 @@
                (confirm "boolean" "Must be true to confirm destructive operation")]
  clear-memory-handler)
 
+(define-tool
+ update-memory
+ #:description
+ "Update an existing memory item by ID. Supports updating content, type, tags, sensitivity, and supersedes."
+ #:required ("id")
+ #:properties [(id "string" "The memory item ID to update")
+               (content "string" "New content for the memory item")
+               (type "string" "New type: episodic, semantic, or procedural")
+               (tags "array" "New list of string tags")
+               (sensitivity "string" "New sensitivity: public, internal, or sensitive")
+               (supersedes "array" "List of memory IDs this item supersedes")
+               (scope "string" "Scope context for visibility check")]
+ update-memory-handler)
+
+(define-tool
+ cleanup-expired-memory
+ #:description
+ "Clean up expired memory items. Use dry-run=true first to inspect, then confirm=true to delete."
+ #:required ("scope")
+ #:properties [(scope "string" "Scope to clean: session, project, or user")
+               (dry-run "boolean" "If true, only report what would be deleted (no deletion)")
+               (confirm "boolean" "Must be true to confirm deletion of expired items")]
+ cleanup-expired-handler)
+
 (provide store-memory
          search-memory
          delete-memory
          list-memory
-         clear-memory)
+         clear-memory
+         update-memory
+         cleanup-expired-memory)
