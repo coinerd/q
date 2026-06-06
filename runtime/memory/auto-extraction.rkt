@@ -33,14 +33,52 @@
 ;; Master switch — disabled by default
 (define current-auto-extraction-enabled (make-parameter #f))
 
-;; F10: Simple confidence estimator based on content quality
+;; F10/M13-F7: Deterministic feature-based confidence estimator.
+;; Replaces naive length-only heuristic with multi-factor scoring.
+;; Factors: conciseness, factual indicators, noise penalty, length cap.
 (define (estimate-confidence content)
-  (define len (string-length content))
   (cond
-    [(< len 30) 0.3] ; very short, likely incomplete
-    [(< len 100) 0.6] ; good fact size
-    [(< len 300) 0.7] ; detailed fact
-    [else 0.4])) ; long, may be paragraph not fact
+    [(not (string? content)) 0.1]
+    [(< (string-length content) 15) 0.2] ; too short to be meaningful
+    [else
+     (define len (string-length content))
+     (define lower (string-downcase content))
+     ;; Base confidence from length sweet spot
+     (define base
+       (cond
+         [(<= len 50) 0.55]
+         [(<= len 150) 0.7]
+         [(<= len 300) 0.6]
+         [else 0.35]))
+     ;; Concise factual boost: ends with period, no question marks
+     (define factual-boost
+       (cond
+         [(regexp-match? #rx"\\?$" content) -0.15] ; question → not a fact
+         [(regexp-match? #rx"\\.$" content) 0.1] ; declarative → good
+         [else 0.0]))
+     ;; Project/process keyword boost
+     (define keyword-boost
+       (if (or (string-contains? lower "config")
+               (string-contains? lower "project")
+               (string-contains? lower "command")
+               (string-contains? lower "function")
+               (string-contains? lower "module")
+               (string-contains? lower "error")
+               (string-contains? lower "file"))
+           0.1
+           0.0))
+     ;; Noise penalty: too many sentences or bullet points
+     (define noise-penalty
+       (let ([sentence-count (length (regexp-match* #rx"[.!?]+" content))]
+             [bullet-count (length (regexp-match* #rx"[-*•]" content))])
+         (cond
+           [(> sentence-count 4) -0.1]
+           [(> bullet-count 3) -0.1]
+           [else 0.0])))
+     ;; Rambling penalty: very long without breaks
+     (define rambling-penalty (if (and (> len 200) (not (regexp-match? #rx"\n" content))) -0.1 0.0))
+     ;; Clamp to [0.1, 1.0]
+     (min 1.0 (max 0.1 (+ base factual-boost keyword-boost noise-penalty rambling-penalty)))]))
 
 ;; Minimum confidence threshold for auto-extracted items (P2-8)
 (define current-auto-extraction-min-confidence (make-parameter 0.5))

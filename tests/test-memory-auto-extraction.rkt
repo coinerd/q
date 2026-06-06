@@ -242,3 +242,32 @@
   ;; Should have at least one blocked event from policy
   (define blocked-evts (filter mem-policy-blocked-event? typed-events))
   (check >= (length blocked-evts) 1))
+
+;; ---------------------------------------------------------------------------
+;; M13-F7: Improved confidence scoring
+;; ---------------------------------------------------------------------------
+
+(test-case "confidence: concise fact scores high"
+  (define score (estimate-confidence "The config file is at /etc/app/config.yaml."))
+  (check-true (> score 0.6) (format "expected >0.6, got ~a" score)))
+
+(test-case "confidence: very short scores low"
+  (define score (estimate-confidence "short"))
+  (check-true (< score 0.3) (format "expected <0.3, got ~a" score)))
+
+(test-case "confidence: rambling paragraph scores lower"
+  (define long-text (make-string 400 #\a))
+  (define score (estimate-confidence long-text))
+  (check-true (< score 0.5) (format "expected <0.5, got ~a" score)))
+
+(test-case "confidence: question gets penalty"
+  (define fact-score (estimate-confidence "The project uses Racket for implementation."))
+  (define question-score (estimate-confidence "What language does the project use?"))
+  (check-true (>= fact-score question-score)
+              (format "fact=~a should >= question=~a" fact-score question-score)))
+
+(test-case "confidence: keyword boost works"
+  (define with-keyword (estimate-confidence "The config setting controls behavior."))
+  (define without-keyword (estimate-confidence "The thing does stuff and things."))
+  (check-true (>= with-keyword without-keyword)
+              (format "keyword=~a should >= no-keyword=~a" with-keyword without-keyword)))

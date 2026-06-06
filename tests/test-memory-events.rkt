@@ -1,7 +1,6 @@
 #lang racket/base
 ;; tests/test-memory-events.rkt — SPEC memory event taxonomy and tool emission tests
 
-
 (require rackunit
          racket/list
          "../tools/builtins/memory-tools.rkt"
@@ -270,3 +269,22 @@
     (check-false (tool-result-is-error? r))
     ;; The wrapped backend (tool's backend) should be called exactly once
     (check-equal? (unbox call-count) 1)))
+
+;; ---------------------------------------------------------------------------
+;; M13-F12: Event schema versioning
+;; ---------------------------------------------------------------------------
+
+(test-case "event: MEMORY-EVENT-SCHEMA-VERSION is defined"
+  (check-true (exact-positive-integer? MEMORY-EVENT-SCHEMA-VERSION)))
+
+(test-case "event: mem-item-updated-event is defined and constructable"
+  (define e (make-mem-item-updated-event "test-id" 'session 'tool "snippet"))
+  (check-equal? (mem-item-updated-event-memory-id e) "test-id")
+  (check-equal? (mem-item-updated-event-scope e) 'session)
+  (check-equal? (mem-item-updated-event-source e) 'tool)
+  (check-equal? (mem-item-updated-event-redacted-snippet e) "snippet"))
+
+(test-case "event: updated event has default values"
+  (define e (make-mem-item-updated-event "id" 'project))
+  (check-equal? (mem-item-updated-event-source e) 'tool)
+  (check-equal? (mem-item-updated-event-redacted-snippet e) ""))
