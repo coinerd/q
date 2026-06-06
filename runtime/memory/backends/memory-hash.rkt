@@ -66,7 +66,15 @@
       [(not (valid-memory-item? item))
        (memory-result #f #f (make-memory-error 'invalid-item "Invalid memory item") (hasheq))]
       [(hash-has-key? store (memory-item-id item))
-       (memory-result #f #f (make-memory-error 'duplicate "Item already exists") (hasheq))]
+       (define existing (hash-ref store (memory-item-id item)))
+       (if (equal? (memory-item-content existing) (memory-item-content item))
+           ;; Idempotent: same content — return success (P2-4)
+           (memory-result #t (memory-item-id item) #f (hasheq 'backend 'memory-hash 'idempotent #t))
+           ;; Different content for same id: error
+           (memory-result #f
+                          #f
+                          (make-memory-error 'duplicate "Item already exists with different content")
+                          (hasheq)))]
       [else
        (hash-set! store (memory-item-id item) item)
        (memory-result #t (memory-item-id item) #f (hasheq 'backend 'memory-hash))]))
@@ -101,6 +109,8 @@
                       #:when (not (memq k '(id created-at))))
            (values k v)))
        (define new-content (hash-ref safe-patch 'content (memory-item-content existing)))
+       (define new-type (hash-ref safe-patch 'type (memory-item-type existing)))
+       (define new-scope (hash-ref safe-patch 'scope (memory-item-scope existing)))
        (define new-tags (hash-ref safe-patch 'tags #f))
        (define new-validity (hash-ref safe-patch 'validity (memory-item-validity existing)))
        (define new-meta
@@ -111,6 +121,8 @@
          (struct-copy memory-item
                       existing
                       [content new-content]
+                      [type new-type]
+                      [scope new-scope]
                       [metadata new-meta]
                       [validity new-validity]
                       [updated-at (hash-ref safe-patch 'updated-at (current-iso-8601))]))

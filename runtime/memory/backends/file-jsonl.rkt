@@ -147,11 +147,15 @@
 ;; The JSONL file is at `memory-root/memory.jsonl`.
 ;; memory-root is created if it doesn't exist.
 (define (make-file-jsonl-backend memory-root)
-  ;; Ensure directory exists before normalizing target path.
-  (unless (directory-exists? memory-root)
-    (make-directory* memory-root))
-  (restrict-path-permissions! memory-root #o700)
-  (define jsonl-path (safe-memory-path memory-root "memory.jsonl"))
+  ;; Lazy directory creation: defer until first write (P3-6)
+  (define dir-initialized? #f)
+  (define (ensure-dir!)
+    (unless dir-initialized?
+      (unless (directory-exists? memory-root)
+        (make-directory* memory-root))
+      (restrict-path-permissions! memory-root #o700)
+      (set! dir-initialized? #t)))
+  (define jsonl-path (build-path memory-root "memory.jsonl"))
 
   ;; In-memory cache, lazily loaded
   (define cache #f)
@@ -161,7 +165,10 @@
     (cond
       [(and cache (not cache-dirty?)) cache]
       [else
-       (set! cache (load-current-view jsonl-path))
+       (set! cache
+             (if (file-exists? jsonl-path)
+                 (load-current-view jsonl-path)
+                 (hash)))
        (set! cache-dirty? #f)
        cache]))
 
@@ -174,10 +181,20 @@
       [(not (valid-memory-item? item))
        (memory-result #f #f (make-memory-error 'invalid-item "Invalid memory item") (hasheq))]
       [(hash-ref (get-view) (memory-item-id item) #f)
-       (memory-result #f #f (make-memory-error 'duplicate "Item already exists") (hasheq))]
+       (define existing (hash-ref (get-view) (memory-item-id item)))
+       (if (equal? (memory-item-content existing) (memory-item-content item))
+           ;; Idempotent: same content — return success (P2-4)
+           (memory-result #t (memory-item-id item) #f (hasheq 'backend 'file-jsonl 'idempotent #t))
+           ;; Different content for same id: error
+           (memory-result #f
+                          #f
+                          (make-memory-error 'duplicate "Item already exists with different content")
+                          (hasheq)))]
       [else
-       (jsonl-append! jsonl-path (make-store-record item))
-       (restrict-path-permissions! jsonl-path #o600)
+       (ensure-dir!)
+       (define safe-path (safe-memory-path memory-root "memory.jsonl"))
+       (jsonl-append! safe-path (make-store-record item))
+       (restrict-path-permissions! safe-path #o600)
        (invalidate-cache!)
        (memory-result #t (memory-item-id item) #f (hasheq 'backend 'file-jsonl))]))
 
@@ -213,6 +230,8 @@
                       #:when (not (memq k '(id created-at))))
            (values k v)))
        (define new-content (hash-ref safe-patch 'content (memory-item-content existing)))
+       (define new-type (hash-ref safe-patch 'type (memory-item-type existing)))
+       (define new-scope (hash-ref safe-patch 'scope (memory-item-scope existing)))
        (define new-meta
          (let ([new-tags (hash-ref safe-patch 'tags #f)])
            (if new-tags
@@ -223,11 +242,15 @@
          (struct-copy memory-item
                       existing
                       [content new-content]
+                      [type new-type]
+                      [scope new-scope]
                       [metadata new-meta]
                       [validity new-validity]
                       [updated-at (hash-ref safe-patch 'updated-at (current-iso-8601))]))
-       (jsonl-append! jsonl-path (make-update-record updated))
-       (restrict-path-permissions! jsonl-path #o600)
+       (ensure-dir!)
+       (define safe-path (safe-memory-path memory-root "memory.jsonl"))
+       (jsonl-append! safe-path (make-update-record updated))
+       (restrict-path-permissions! safe-path #o600)
        (invalidate-cache!)
        (memory-result #t id #f (hasheq 'backend 'file-jsonl))]))
 
@@ -240,8 +263,10 @@
       [(and scope (not (eq? scope (memory-item-scope existing))))
        (memory-result #f #f (make-memory-error 'scope-mismatch "Scope mismatch") (hasheq))]
       [else
-       (jsonl-append! jsonl-path (make-delete-record id scope))
-       (restrict-path-permissions! jsonl-path #o600)
+       (ensure-dir!)
+       (define safe-path (safe-memory-path memory-root "memory.jsonl"))
+       (jsonl-append! safe-path (make-delete-record id scope))
+       (restrict-path-permissions! safe-path #o600)
        (invalidate-cache!)
        (memory-result #t id #f (hasheq 'backend 'file-jsonl))]))
 
@@ -249,23 +274,30 @@
   (define (list-items query)
     (retrieve query))
 
-  ;; available?
+  ;; available?: backend is available if directory exists or can be lazily created (P3-5)
+  ;; A missing JSONL file is a valid state (first write creates it).
   (define (available?)
-    (with-handlers ([exn:fail? (lambda (e) #f)])
-      (or (not (file-exists? jsonl-path)) (file-exists? jsonl-path))))
+    (directory-exists? memory-root))
 
   ;; manage! — compact/compaction placeholder
   (define (manage! policy)
     (memory-result #t #f #f (hasheq 'backend 'file-jsonl)))
 
-  (memory-backend "file-jsonl" store! retrieve update! delete! list-items available? manage!))
+  (memory-backend "file-jsonl" store! retrieve update! delete! list-items available? manage!)
+  (define the-backend
+    (memory-backend "file-jsonl" store! retrieve update! delete! list-items available? manage!))
+  (hash-set! backend-paths the-backend (path->string jsonl-path))
+  the-backend)
 
 ;; ---------------------------------------------------------------------------
 ;; Test helper
 ;; ---------------------------------------------------------------------------
 
+;; Backend path registry — weak hash from backend -> actual jsonl-path (P3-4)
+(define backend-paths (make-weak-hasheq))
+
 (define (file-jsonl-backend-path backend)
-  (memory-backend-name backend))
+  (hash-ref backend-paths backend (memory-backend-name backend)))
 
 ;; ---------------------------------------------------------------------------
 ;; Shared filter/sort helpers (same logic as memory-hash backend)

@@ -18,10 +18,10 @@
 ;; Mock transport — records calls
 ;; ---------------------------------------------------------------------------
 
-(define recorded-calls (make-parameter '()))
+(define recorded-calls (box '()))
 
 (define (mock-transport method payload)
-  (recorded-calls (cons (cons method payload) (recorded-calls)))
+  (set-box! recorded-calls (cons (cons method payload) (unbox recorded-calls)))
   (case method
     [(store) (memory-result #t 'stored #f (hasheq))]
     [(retrieve) (memory-result #t '() #f (hasheq))]
@@ -31,8 +31,8 @@
     [(manage) (memory-result #t #f #f (hasheq))]))
 
 (define (with-fresh-calls thunk)
-  (parameterize ([recorded-calls '()])
-    (thunk)))
+  (set-box! recorded-calls '())
+  (thunk))
 
 ;; ---------------------------------------------------------------------------
 ;; Disabled by default
@@ -82,7 +82,7 @@
                         (define r (gen:store-memory! ext item))
                         (check-true (memory-result-ok? r))
                         ;; Transport should have been called
-                        (check >= (length (recorded-calls)) 1)))))
+                        (check >= (length (unbox recorded-calls)) 1)))))
 
 (test-case "external: retrieve works when enabled"
   (define ext (make-external-backend "test" mock-transport))
@@ -91,7 +91,7 @@
                         (define q (memory-query "test" 'session #f #f #f #f 10 #f))
                         (define r (gen:retrieve-memory ext q))
                         (check-true (memory-result-ok? r))
-                        (check >= (length (recorded-calls)) 1)))))
+                        (check >= (length (unbox recorded-calls)) 1)))))
 
 ;; ---------------------------------------------------------------------------
 ;; Redaction
@@ -131,7 +131,7 @@
                                        "2025-01-01"))
                         (gen:store-memory! ext item)
                         ;; Check the transport received redacted content
-                        (define call (car (recorded-calls)))
+                        (define call (car (unbox recorded-calls)))
                         (define payload (cdr call))
                         (define sent-content (hash-ref payload 'content ""))
                         (check-true (string-contains? sent-content "REDACTED"))

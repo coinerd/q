@@ -84,6 +84,12 @@
 ;; Validation
 ;; ---------------------------------------------------------------------------
 
+;; SPEC §3.4: required metadata keys
+(define required-metadata-keys '(project-root session-id tags source))
+
+;; SPEC §3.5: required validity keys
+(define required-validity-keys '(sensitivity confidence))
+
 (define (valid-memory-item? v)
   (and (memory-item? v)
        (string? (memory-item-id v))
@@ -94,6 +100,12 @@
        (> (string-length (memory-item-content v)) 0)
        (hash? (memory-item-metadata v))
        (hash? (memory-item-validity v))
+       ;; SPEC §3.4: required metadata keys (P2-1)
+       (for/and ([k (in-list required-metadata-keys)])
+         (hash-has-key? (memory-item-metadata v) k))
+       ;; SPEC §3.5: required validity keys (P2-1)
+       (for/and ([k (in-list required-validity-keys)])
+         (hash-has-key? (memory-item-validity v) k))
        (iso-8601-timestamp? (memory-item-created-at v))
        (iso-8601-timestamp? (memory-item-updated-at v))))
 

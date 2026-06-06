@@ -50,21 +50,24 @@
 ;; injected back into prompts. Callers that need a narrower policy can pass an
 ;; explicit #:blocked-content-patterns list to make-memory-policy.
 (define default-blocked-content-patterns
-  (list #px"(?i:api[_-]?key\\s*[:=]\\s*[^\\s]+)"
-        #px"(?i:access[_-]?token\\s*[:=]\\s*[^\\s]+)"
-        #px"(?i:secret[_-]?key\\s*[:=]\\s*[^\\s]+)"
-        #px"(?i:client[_-]?secret[\\\"']*\\s*[:=]\\s*[\\\"']?[^\\s,}]+)"
-        #px"(?i:password\\s*[:=]\\s*[^\\s]+)"
-        #px"(?i:bearer\\s+[A-Za-z0-9._~+/=-]{12,})"
-        #px"(?i:token\\s*[:=]\\s*[^\\s]+)"
-        #px"(?i:oauth[_-]?token\\s*[:=]\\s*[^\\s]+)"
-        #px"(?i:refresh[_-]?token\\s*[:=]\\s*[^\\s]+)"
-        #px"(?i:private_key\\s*[:=])"
-        #px"(?s:-----BEGIN [A-Z ]*PRIVATE KEY-----.*-----END [A-Z ]*PRIVATE KEY-----)"
-        #px"(?m:^\\s*[A-Za-z_][A-Za-z0-9_]*_(KEY|TOKEN|SECRET|PASSWORD)\\s*=\\s*[^\\s]+)"
-        #px"sk-[A-Za-z0-9_-]{8,}"
-        #px"gh[pousr]_[A-Za-z0-9_]{12,}"
-        #px"AKIA[A-Z0-9]{10,}"))
+  (list
+   #px"(?i:api[_-]?key\\s*[:=]\\s*[^\\s]+)"
+   #px"(?i:access[_-]?token\\s*[:=]\\s*[^\\s]+)"
+   #px"(?i:secret[_-]?key\\s*[:=]\\s*[^\\s]+)"
+   #px"(?i:client[_-]?secret[\\\"']*\\s*[:=]\\s*[\\\"']?[^\\s,}]+)"
+   #px"(?i:password\\s*[:=]\\s*[^\\s]+)"
+   #px"(?i:bearer\\s+[A-Za-z0-9._~+/=-]{12,})"
+   #px"(?i:token\\s*[:=]\\s*[^\\s]+)"
+   #px"(?i:oauth[_-]?token\\s*[:=]\\s*[^\\s]+)"
+   #px"(?i:refresh[_-]?token\\s*[:=]\\s*[^\\s]+)"
+   #px"(?i:private_key\\s*[:=])"
+   #px"(?s:-----BEGIN [A-Z ]*PRIVATE KEY-----.*-----END [A-Z ]*PRIVATE KEY-----)"
+   #px"(?m:^\\s*[A-Za-z_][A-Za-z0-9_]*_(KEY|TOKEN|SECRET|PASSWORD)\\s*=\\s*[^\\s]+)"
+   #px"sk-[A-Za-z0-9_-]{8,}"
+   #px"gh[pousr]_[A-Za-z0-9_]{12,}"
+   #px"AKIA[A-Z0-9]{10,}"
+   ;; Multi-line .env holistic pattern (P3-1)
+   #px"(?im:^[A-Za-z_][A-Za-z0-9_]*(?:_KEY|_TOKEN|_SECRET|_PASSWORD|_URL|_HOST|_PORT)\\s*[:=]\\s*[^\\s]+)"))
 
 (define default-memory-policy
   (memory-policy 100 ; max 100 items per session

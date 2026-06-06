@@ -254,6 +254,11 @@
      (define id (make-memory-id))
      (define now (format-iso-now))
      (emit-store-requested! exec-ctx id type-sym scope-sym 'tool)
+     ;; Extract origin-message-id from exec-context if available (P2-2)
+     (define origin-message-id
+       (and (exec-context? exec-ctx)
+            (let ([md (exec-context-session-metadata exec-ctx)])
+              (and (hash? md) (hash-ref md 'message-id #f)))))
      (define item
        (memory-item id
                     type-sym
@@ -268,8 +273,10 @@
                             'project-root
                             project-root
                             'session-id
-                            session-id)
-                    (hasheq 'sensitivity sensitivity 'confidence 1.0)
+                            session-id
+                            'origin-message-id
+                            (or origin-message-id #f))
+                    (hasheq 'sensitivity sensitivity 'confidence 1.0 'expires-at #f 'supersedes '())
                     now
                     now))
      (cond
@@ -440,23 +447,21 @@
     [(not (policy-allows-retrieve? policy 20))
      (make-error-result "clear_memory preflight exceeds retrieve policy maximum.")]
     [else
-     (define q (make-scoped-query #f scope project-root session-id #f #f 20 #f))
-     (define result (gen:retrieve-memory backend q))
-     (if (memory-result-ok? result)
-         (let ([items (memory-result-value result)])
-           (define deleted-ids
-             (for/list ([item (in-list items)])
-               (gen:delete-memory! backend (memory-item-id item) scope)
-               (memory-item-id item)))
-           (make-success-result (list (hasheq 'type
-                                              "text"
-                                              'text
-                                              (format "Cleared ~a memory items from ~a scope"
-                                                      (length deleted-ids)
-                                                      scope)))
-                                (hasheq 'scope scope 'deleted-count (length deleted-ids))))
-         (make-error-result (format "Failed to retrieve items for clearing: ~a"
-                                    (memory-error-message result))))]))
+     ;; Loop until no items remain (P2-9)
+     (define (clear-loop total-deleted)
+       (define q (make-scoped-query #f scope project-root session-id #f #f 20 #t))
+       (define result (gen:retrieve-memory backend q))
+       (if (and (memory-result-ok? result) (> (length (memory-result-value result)) 0))
+           (let* ([items (memory-result-value result)]
+                  [ids (for/list ([item (in-list items)])
+                         (gen:delete-memory! backend (memory-item-id item) scope)
+                         (memory-item-id item))])
+             (clear-loop (+ total-deleted (length ids))))
+           total-deleted))
+     (define total (clear-loop 0))
+     (make-success-result
+      (list (hasheq 'type "text" 'text (format "Cleared ~a memory items from ~a scope" total scope)))
+      (hasheq 'scope scope 'deleted-count total))]))
 
 (define-tool
  store-memory
@@ -476,7 +481,7 @@
  search-memory
  #:description
  "Search stored memories by query, scope, type, or tags. Defaults to project scope when project root exists, else session."
- #:required ()
+ #:required ("query")
  #:properties
  [(query "string" "Search query text")
   (scope "string" "Filter by scope: session, project, or user (user disabled by default)")

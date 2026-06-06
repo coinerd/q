@@ -14,7 +14,9 @@
          #:type [type 'semantic]
          #:scope [scope 'project]
          #:content [content "Test memory item"]
-         #:metadata [metadata (hasheq 'project-root "/tmp/test" 'session-id "sess-1" 'tags '("test"))]
+         #:metadata
+         [metadata
+          (hasheq 'project-root "/tmp/test" 'session-id "sess-1" 'tags '("test") 'source 'unit-test)]
          #:validity [validity (hasheq 'sensitivity 'public 'confidence 0.9)]
          #:created-at [created-at "2026-06-05T12:00:00Z"]
          #:updated-at [updated-at "2026-06-05T12:00:00Z"])
@@ -236,3 +238,67 @@
   (define item
     (memory-item "id" 'semantic 'project "content" (hasheq) (hasheq) "2026-01-01T00:00:00Z" ""))
   (check-false (valid-memory-item? item)))
+
+;; ---------------------------------------------------------------------------
+;; Required metadata/validity keys (P2-1)
+;; ---------------------------------------------------------------------------
+
+(test-case "valid-memory-item?: rejects item missing required metadata keys"
+  (define item-no-meta-keys
+    (memory-item "id"
+                 'semantic
+                 'project
+                 "content"
+                 (hasheq) ; empty metadata — missing project-root, session-id, tags, source
+                 (hasheq 'sensitivity 'public 'confidence 0.9)
+                 "2026-01-01T00:00:00Z"
+                 "2026-01-01T00:00:00Z"))
+  (check-false (valid-memory-item? item-no-meta-keys)))
+
+(test-case "valid-memory-item?: rejects item missing tags in metadata"
+  (define item-no-tags
+    (memory-item "id"
+                 'semantic
+                 'project
+                 "content"
+                 (hasheq 'project-root "/tmp" 'session-id "s1" 'source 'tool) ; missing tags
+                 (hasheq 'sensitivity 'public 'confidence 0.9)
+                 "2026-01-01T00:00:00Z"
+                 "2026-01-01T00:00:00Z"))
+  (check-false (valid-memory-item? item-no-tags)))
+
+(test-case "valid-memory-item?: accepts item with all required metadata keys"
+  (define item
+    (memory-item "id"
+                 'semantic
+                 'project
+                 "content"
+                 (hasheq 'project-root "/tmp" 'session-id "s1" 'tags '("t") 'source 'tool)
+                 (hasheq 'sensitivity 'public 'confidence 0.9)
+                 "2026-01-01T00:00:00Z"
+                 "2026-01-01T00:00:00Z"))
+  (check-true (valid-memory-item? item)))
+
+(test-case "valid-memory-item?: rejects item missing sensitivity in validity"
+  (define item-no-sens
+    (memory-item "id"
+                 'semantic
+                 'project
+                 "content"
+                 (hasheq 'project-root "/tmp" 'session-id "s1" 'tags '() 'source 'tool)
+                 (hasheq 'confidence 0.9) ; missing sensitivity
+                 "2026-01-01T00:00:00Z"
+                 "2026-01-01T00:00:00Z"))
+  (check-false (valid-memory-item? item-no-sens)))
+
+(test-case "valid-memory-item?: rejects item missing confidence in validity"
+  (define item-no-conf
+    (memory-item "id"
+                 'semantic
+                 'project
+                 "content"
+                 (hasheq 'project-root "/tmp" 'session-id "s1" 'tags '() 'source 'tool)
+                 (hasheq 'sensitivity 'public) ; missing confidence
+                 "2026-01-01T00:00:00Z"
+                 "2026-01-01T00:00:00Z"))
+  (check-false (valid-memory-item? item-no-conf)))

@@ -48,19 +48,25 @@
 (define (make-chained-backend l1 l2 #:write-through? [write-through? #t] #:l2-read? [l2-read? #t])
   (memory-backend
    (format "chained(~a+~a)" (memory-backend-name l1) (memory-backend-name l2))
-   ;; store!: write to L1, optionally write through to L2
+   ;; store!: write to L1, optionally write through to L2. Fallback to L2 on L1 failure (P2-5)
    (lambda (item)
      (define r1 (gen:store-memory! l1 item))
      (cond
+       [(memory-result-ok? r1)
+        ;; L1 succeeded, try L2 write-through
+        (when (and write-through? (gen:memory-available? l2))
+          (gen:store-memory! l2 item))
+        r1]
        [(and write-through? (gen:memory-available? l2))
+        ;; L1 failed, try L2 as fallback
         (define r2 (gen:store-memory! l2 item))
-        ;; Return L1 result; mark error if L2 failed
         (if (memory-result-ok? r2)
-            r1
-            (memory-result #f
-                           (memory-result-value r1)
-                           (hash 'l2-error (memory-result-error r2))
-                           (memory-result-metadata r1)))]
+            r2
+            (memory-result
+             #f
+             (memory-result-value r2)
+             (hash 'l1-error (memory-result-error r1) 'l2-error (memory-result-error r2))
+             (memory-result-metadata r2)))]
        [else r1]))
    ;; retrieve: L1 first, fall back to L2, merge/dedup
    (lambda (query)

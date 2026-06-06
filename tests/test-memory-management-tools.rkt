@@ -213,7 +213,7 @@
 ;; clear_memory 20-item cap (P2-3)
 ;; ---------------------------------------------------------------------------
 
-(test-case "clear-memory: capped at policy max-retrieve-count"
+(test-case "clear-memory: loops until all items deleted (P2-9)"
   (define b (make-memory-hash-backend))
   ;; Store 25 session-scoped items
   (with-backend b
@@ -221,14 +221,13 @@
                   (for ([i (in-range 25)])
                     (call-tool tool-store-memory
                                (hash 'content (format "item ~a" i) 'scope "session")))
-                  ;; Clear session scope
+                  ;; Clear session scope — now loops until empty
                   (define r (call-tool tool-clear-memory (hash 'scope "session" 'confirm #t)))
                   (check-false (tool-result-is-error? r))
-                  ;; The deleted count should reflect the cap (policy default max-retrieve-count = 20)
-                  ;; So at most 20 items are deleted per call
+                  ;; All 25 should be deleted
                   (define deleted-count (hash-ref (tool-result-details r) 'deleted-count 0))
-                  (check-true (<= deleted-count 20))
-                  ;; Verify some items remain if the cap was hit
+                  (check-equal? deleted-count 25)
+                  ;; Verify no items remain
                   (define lr (call-tool tool-list-memory (hash 'scope "session")))
                   (define remaining (hash-ref (tool-result-details lr) 'items '()))
-                  (check-true (>= (length remaining) 5)))))
+                  (check-equal? (length remaining) 0))))

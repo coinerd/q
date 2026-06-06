@@ -27,8 +27,8 @@
                'semantic
                scope
                content
-               (hasheq 'source 'test)
-               (hasheq 'sensitivity 'public)
+               (hasheq 'source 'test 'project-root "/tmp" 'session-id "s1" 'tags '())
+               (hasheq 'sensitivity 'public 'confidence 0.9)
                "2025-01-01T00:00:00Z"
                "2025-01-01T00:00:00Z"))
 
@@ -216,8 +216,8 @@
                'semantic
                'session
                "content"
-               (hasheq 'source 'test)
-               (hasheq 'sensitivity 'public)
+               (hasheq 'source 'test 'project-root "/tmp" 'session-id "s1" 'tags '())
+               (hasheq 'sensitivity 'public 'confidence 0.9)
                "2025-01-01T00:00:00Z"
                ts))
 
@@ -251,3 +251,58 @@
   ;; Should be sorted by updated-at desc: new, mid, old
   (define ids (map memory-item-id items))
   (check-equal? ids '("new-l2" "mid-l1" "old-l2")))
+
+;; ---------------------------------------------------------------------------
+;; Store L2 fallback when L1 fails (P2-5)
+;; ---------------------------------------------------------------------------
+
+(test-case "chained: store falls back to L2 when L1 fails"
+  (define l1
+    (memory-backend
+     "failing-l1"
+     (lambda (item)
+       (memory-result #f #f (hash 'code 'error 'message "L1 store fail" 'retryable? #f) (hasheq)))
+     (lambda (q) (memory-result #t '() #f (hasheq)))
+     (lambda (id patch) (memory-result #t #f #f (hasheq)))
+     (lambda (id scope) (memory-result #t #f #f (hasheq)))
+     (lambda (q) (memory-result #t '() #f (hasheq)))
+     (lambda () #t)
+     (lambda (p) (memory-result #t #f #f (hasheq)))))
+  (define l2 (make-memory-hash-backend))
+  (define chained (make-chained-backend l1 l2))
+  (define item (make-test-item #:id "fallback-item"))
+  (define r (gen:store-memory! chained item))
+  ;; L2 should have succeeded
+  (check-true (memory-result-ok? r))
+  (check-equal? (memory-result-value r) "fallback-item")
+  ;; Verify in L2
+  (define r2 (gen:retrieve-memory l2 (memory-query #f 'session #f #f #f #f 100 #f)))
+  (check-equal? (length (memory-result-value r2)) 1))
+
+(test-case "chained: store returns error when both L1 and L2 fail"
+  (define l1
+    (memory-backend
+     "failing-l1"
+     (lambda (item)
+       (memory-result #f #f (hash 'code 'error 'message "L1 fail" 'retryable? #f) (hasheq)))
+     (lambda (q) (memory-result #t '() #f (hasheq)))
+     (lambda (id patch) (memory-result #t #f #f (hasheq)))
+     (lambda (id scope) (memory-result #t #f #f (hasheq)))
+     (lambda (q) (memory-result #t '() #f (hasheq)))
+     (lambda () #t)
+     (lambda (p) (memory-result #t #f #f (hasheq)))))
+  (define l2
+    (memory-backend
+     "failing-l2"
+     (lambda (item)
+       (memory-result #f #f (hash 'code 'error 'message "L2 fail" 'retryable? #f) (hasheq)))
+     (lambda (q) (memory-result #t '() #f (hasheq)))
+     (lambda (id patch) (memory-result #t #f #f (hasheq)))
+     (lambda (id scope) (memory-result #t #f #f (hasheq)))
+     (lambda (q) (memory-result #t '() #f (hasheq)))
+     (lambda () #t)
+     (lambda (p) (memory-result #t #f #f (hasheq)))))
+  (define chained (make-chained-backend l1 l2))
+  (define item (make-test-item #:id "doom-item"))
+  (define r (gen:store-memory! chained item))
+  (check-false (memory-result-ok? r)))

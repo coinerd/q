@@ -21,14 +21,14 @@
                    #:expires [expires #f]
                    #:created [created "2026-06-05T12:00:00Z"]
                    #:updated [updated "2026-06-05T12:00:00Z"])
-  (memory-item id type scope content
-               (hasheq 'project-root project
-                       'session-id session
-                       'tags tags)
-               (hasheq 'sensitivity sensitivity
-                       'confidence 0.9
-                       'expires-at expires)
-               created updated))
+  (memory-item id
+               type
+               scope
+               content
+               (hasheq 'project-root project 'session-id session 'tags tags 'source 'test)
+               (hasheq 'sensitivity sensitivity 'confidence 0.9 'expires-at expires)
+               created
+               updated))
 
 ;; ---------------------------------------------------------------------------
 ;; Backend construction
@@ -53,17 +53,16 @@
   (check-true (memory-result-ok? r))
   (check-equal? (memory-result-value r) "mem-1"))
 
-(test-case "store rejects duplicate id"
+(test-case "store rejects duplicate id with different content"
   (define b (make-memory-hash-backend))
-  (gen:store-memory! b (make-item))
-  (define r (gen:store-memory! b (make-item)))
+  (gen:store-memory! b (make-item #:content "original content"))
+  (define r (gen:store-memory! b (make-item #:content "different content")))
   (check-false (memory-result-ok? r))
   (check-equal? (hash-ref (memory-result-error r) 'code) 'duplicate))
 
 (test-case "store rejects invalid item"
   (define b (make-memory-hash-backend))
-  (define bad-item (memory-item "" 'semantic 'project ""
-                                (hasheq) (hasheq) "" ""))
+  (define bad-item (memory-item "" 'semantic 'project "" (hasheq) (hasheq) "" ""))
   (define r (gen:store-memory! b bad-item))
   (check-false (memory-result-ok? r))
   (check-equal? (hash-ref (memory-result-error r) 'code) 'invalid-item))
@@ -111,8 +110,9 @@
 (test-case "retrieve respects limit"
   (define b (make-memory-hash-backend))
   (for ([i (in-range 5)])
-    (gen:store-memory! b (make-item #:id (format "mem-~a" i)
-                                    #:updated (format "2026-06-05T12:0~a:00Z" i))))
+    (gen:store-memory! b
+                       (make-item #:id (format "mem-~a" i)
+                                  #:updated (format "2026-06-05T12:0~a:00Z" i))))
   (define r (gen:retrieve-memory b (memory-query "" #f #f #f #f #f 3 #f)))
   (check-true (memory-result-ok? r))
   (check-equal? (length (memory-result-value r)) 3)
@@ -255,10 +255,80 @@
   (define b (make-memory-hash-backend))
   (gen:store-memory! b (make-item #:id "ts-item"))
   (define orig-created (memory-item-created-at (car (memory-hash-backend-items b))))
-  (define r (gen:update-memory! b "ts-item" (hash 'created-at "1999-01-01T00:00:00Z" 'content "updated")))
+  (define r
+    (gen:update-memory! b "ts-item" (hash 'created-at "1999-01-01T00:00:00Z" 'content "updated")))
   (check-true (memory-result-ok? r))
   ;; created-at should remain unchanged
   (define items (memory-hash-backend-items b))
   (check-equal? (memory-item-created-at (car items)) orig-created)
   ;; but content should be updated
   (check-equal? (memory-item-content (car items)) "updated"))
+
+;; ---------------------------------------------------------------------------
+;; Update type/scope via patch (P3-2)
+;; ---------------------------------------------------------------------------
+
+(test-case "update: type can be changed via patch"
+  (define b (make-memory-hash-backend))
+  (gen:store-memory! b (make-item #:type 'semantic))
+  (define r (gen:update-memory! b "mem-1" (hash 'type 'procedural)))
+  (check-true (memory-result-ok? r))
+  (define items (memory-hash-backend-items b))
+  (check-equal? (memory-item-type (car items)) 'procedural))
+
+(test-case "update: scope can be changed via patch"
+  (define b (make-memory-hash-backend))
+  (gen:store-memory! b (make-item #:scope 'session))
+  (define r (gen:update-memory! b "mem-1" (hash 'scope 'project)))
+  (check-true (memory-result-ok? r))
+  (define items (memory-hash-backend-items b))
+  (check-equal? (memory-item-scope (car items)) 'project))
+
+;; ---------------------------------------------------------------------------
+;; Idempotent store (P2-4)
+;; ---------------------------------------------------------------------------
+
+(test-case "store: same item twice returns ok with idempotent metadata"
+  (define b (make-memory-hash-backend))
+  (define item (make-item))
+  (define r1 (gen:store-memory! b item))
+  (check-true (memory-result-ok? r1))
+  (define r2 (gen:store-memory! b item))
+  (check-true (memory-result-ok? r2))
+  (check-equal? (memory-result-value r2) "mem-1")
+  (check-equal? (hash-ref (memory-result-metadata r2) 'idempotent) #t))
+
+(test-case "store: different content with same id returns error"
+  (define b (make-memory-hash-backend))
+  (gen:store-memory! b (make-item #:content "original"))
+  (define r (gen:store-memory! b (make-item #:content "different")))
+  (check-false (memory-result-ok? r))
+  (check-equal? (hash-ref (memory-result-error r) 'code) 'duplicate))
+
+;; ---------------------------------------------------------------------------
+;; Error retryable? assertions (P2-11)
+;; ---------------------------------------------------------------------------
+
+(test-case "duplicate error has retryable? field"
+  (define b (make-memory-hash-backend))
+  (gen:store-memory! b (make-item #:content "original"))
+  (define r (gen:store-memory! b (make-item #:content "different content")))
+  (check-false (memory-result-ok? r))
+  (define err (memory-result-error r))
+  (check-true (hash-has-key? err 'retryable?))
+  (check-false (hash-ref err 'retryable?)))
+
+(test-case "not-found error has retryable? field"
+  (define b (make-memory-hash-backend))
+  (define r (gen:delete-memory! b "nonexistent" #f))
+  (check-false (memory-result-ok? r))
+  (define err (memory-result-error r))
+  (check-true (hash-has-key? err 'retryable?)))
+
+(test-case "scope-mismatch error has retryable? field"
+  (define b (make-memory-hash-backend))
+  (gen:store-memory! b (make-item #:scope 'project))
+  (define r (gen:delete-memory! b "mem-1" 'session))
+  (check-false (memory-result-ok? r))
+  (define err (memory-result-error r))
+  (check-true (hash-has-key? err 'retryable?)))

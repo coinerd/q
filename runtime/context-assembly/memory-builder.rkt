@@ -179,7 +179,8 @@
 (define (escape-memory-content content)
   (define no-cr (string-replace content "\r" "\\r"))
   (define no-newline (string-replace no-cr "\n" "\\n"))
-  (string-replace no-newline "\t" "\\t"))
+  (define no-tab (string-replace no-newline "\t" "\\t"))
+  (string-replace no-tab "\"" "\\\""))
 
 (define (current-iso-8601)
   (define ts (current-seconds))
@@ -250,6 +251,17 @@
 
 ;; Full injection pipeline: retrieve + build section in one call.
 ;; Returns (cons section-text-or-#f telemetry).
+;; Includes client-side scope filter as defense-in-depth (P3-9).
+(define (scope-filter items scope project session-id)
+  (for/list ([item items]
+             #:when (and (or (not scope) (eq? scope (memory-item-scope item)))
+                         (or (not project)
+                             (equal? project (hash-ref (memory-item-metadata item) 'project-root #f)))
+                         (or (not session-id)
+                             (equal? session-id
+                                     (hash-ref (memory-item-metadata item) 'session-id #f)))))
+    item))
+
 (define (inject-memory-for-context session-config
                                    #:scope [scope 'session]
                                    #:session-id [session-id #f]
@@ -262,8 +274,10 @@
                                 #:session-id session-id
                                 #:project project
                                 #:limit max-entries))
-  (define items (car result))
+  (define raw-items (car result))
   (define tel (cdr result))
+  ;; Defense-in-depth: filter items to match requested scope (P3-9)
+  (define items (scope-filter raw-items scope project session-id))
   (define section
     (build-memory-section items #:budget-tokens budget-tokens #:max-entries max-entries))
   (cons section tel))

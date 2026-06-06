@@ -7,31 +7,30 @@
 (require racket/contract
          "types.rkt")
 
-(provide
- (struct-out memory-backend)
- memory-backend/c
- gen:store-memory!
- gen:retrieve-memory
- gen:update-memory!
- gen:delete-memory!
- gen:list-memory
- gen:memory-available?
- gen:manage-memory!
- valid-backend?)
+(provide (struct-out memory-backend)
+         memory-backend/c
+         gen:store-memory!
+         gen:retrieve-memory
+         gen:update-memory!
+         gen:delete-memory!
+         gen:list-memory
+         gen:memory-available?
+         gen:manage-memory!
+         valid-backend?)
 
 ;; ---------------------------------------------------------------------------
 ;; Backend struct — wraps implementation functions
 ;; ---------------------------------------------------------------------------
 
 (struct memory-backend
-  (name                ; string — backend identifier
-   store!              ; memory-item -> memory-result
-   retrieve            ; memory-query -> memory-result (list of items)
-   update!             ; id patch-hash -> memory-result
-   delete!             ; id scope -> memory-result
-   list                ; memory-query -> memory-result (list of items)
-   available?          ; -> boolean
-   manage!)            ; policy-hash -> memory-result (initially no-op)
+        (name ; string — backend identifier
+         store! ; memory-item -> memory-result
+         retrieve ; memory-query -> memory-result (list of items)
+         update! ; id patch-hash -> memory-result
+         delete! ; id scope -> memory-result
+         list ; memory-query -> memory-result (list of items)
+         available? ; -> boolean
+         manage!) ; policy-hash -> memory-result (initially no-op)
   #:transparent)
 
 ;; ---------------------------------------------------------------------------
@@ -84,7 +83,7 @@
             (-> memory-item? memory-result?)
             (-> memory-query? memory-result?)
             (-> string? hash? memory-result?)
-            (-> string? memory-scope? memory-result?)
+            (-> string? (or/c memory-scope? #f) memory-result?)
             (-> memory-query? memory-result?)
             (-> boolean?)
             (-> hash? memory-result?)))

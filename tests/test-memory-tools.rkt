@@ -226,7 +226,7 @@
                  'semantic
                  'session
                  "public info"
-                 (hasheq 'tags '() 'source 'tool)
+                 (hasheq 'tags '() 'source 'tool 'project-root "/tmp" 'session-id "s1")
                  (hasheq 'sensitivity 'public 'confidence 1.0)
                  "2026-01-01T00:00:00Z"
                  "2026-01-01T00:00:00Z"))

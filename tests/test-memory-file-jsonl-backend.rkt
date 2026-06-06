@@ -35,8 +35,16 @@
 (define (make-test-item #:id [id "test-id"]
                         #:content [content "test content"]
                         #:scope [scope 'session]
-                        #:type [type 'semantic])
-  (memory-item id type scope content (hasheq) (hasheq) "2026-06-01T00:00:00Z" "2026-06-01T00:00:00Z"))
+                        #:type [type 'semantic]
+                        #:tags [tags '("test")])
+  (memory-item id
+               type
+               scope
+               content
+               (hasheq 'project-root "/tmp" 'session-id "s1" 'tags tags 'source "test")
+               (hasheq 'sensitivity "public" 'confidence 0.9)
+               "2026-06-01T00:00:00Z"
+               "2026-06-01T00:00:00Z"))
 
 ;; ---------------------------------------------------------------------------
 ;; Basic store/retrieve
@@ -160,36 +168,39 @@
 ;; ---------------------------------------------------------------------------
 
 (test-case "ordering is stable after reload"
-  (with-temp-backend (lambda (backend dir)
-                       ;; Store items with different timestamps
-                       (for ([i (in-range 5)])
-                         (gen:store-memory! backend
-                                            (memory-item (format "ord~a" i)
-                                                         'semantic
-                                                         'session
-                                                         (format "content ~a" i)
-                                                         (hasheq)
-                                                         (hasheq)
-                                                         "2026-06-01T00:00:00Z"
-                                                         (format "2026-06-0~aT00:00:00Z" (+ i 1)))))
-                       ;; Reload
-                       (define backend2 (make-file-jsonl-backend dir))
-                       (define query (memory-query #f #f #f #f #f #f 100 #f))
-                       (define items (memory-result-value (gen:retrieve-memory backend2 query)))
-                       ;; Should be sorted by updated-at descending
-                       (check-equal? (length items) 5)
-                       (define timestamps (map memory-item-updated-at items))
-                       (check-equal? timestamps (sort timestamps string>?)))))
+  (with-temp-backend
+   (lambda (backend dir)
+     ;; Store items with different timestamps
+     (for ([i (in-range 5)])
+       (gen:store-memory!
+        backend
+        (memory-item (format "ord~a" i)
+                     'semantic
+                     'session
+                     (format "content ~a" i)
+                     (hasheq 'project-root "/tmp" 'session-id "s1" 'tags '() 'source "test")
+                     (hasheq 'sensitivity "public" 'confidence 0.9)
+                     "2026-06-01T00:00:00Z"
+                     (format "2026-06-0~aT00:00:00Z" (+ i 1)))))
+     ;; Reload
+     (define backend2 (make-file-jsonl-backend dir))
+     (define query (memory-query #f #f #f #f #f #f 100 #f))
+     (define items (memory-result-value (gen:retrieve-memory backend2 query)))
+     ;; Should be sorted by updated-at descending
+     (check-equal? (length items) 5)
+     (define timestamps (map memory-item-updated-at items))
+     (check-equal? timestamps (sort timestamps string>?)))))
 
 ;; ---------------------------------------------------------------------------
 ;; Duplicate handling
 ;; ---------------------------------------------------------------------------
 
-(test-case "duplicate store fails"
-  (with-temp-backend (lambda (backend dir)
-                       (gen:store-memory! backend (make-test-item #:id "dup"))
-                       (define result (gen:store-memory! backend (make-test-item #:id "dup")))
-                       (check-false (memory-result-ok? result)))))
+(test-case "duplicate store fails with different content"
+  (with-temp-backend
+   (lambda (backend dir)
+     (gen:store-memory! backend (make-test-item #:id "dup" #:content "original"))
+     (define result (gen:store-memory! backend (make-test-item #:id "dup" #:content "different")))
+     (check-false (memory-result-ok? result)))))
 
 ;; ---------------------------------------------------------------------------
 ;; Available
@@ -230,8 +241,8 @@
                'semantic
                'session
                "tagged content"
-               (hasheq 'tags tags)
-               (hasheq)
+               (hasheq 'tags tags 'project-root "/tmp" 'session-id "s1" 'source "test")
+               (hasheq 'sensitivity "public" 'confidence 0.9)
                "2026-06-01T00:00:00Z"
                "2026-06-01T00:00:00Z"))
 

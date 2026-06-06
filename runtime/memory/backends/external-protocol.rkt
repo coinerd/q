@@ -68,9 +68,7 @@
                                    msg
                                    (regexp-match? #px"timed out" msg)))])
        (ensure-memory-result
-        (if (>= timeout-ms 1000)
-            (transport-fn method (redact-jsexpr payload))
-            (call-with-timeout (lambda () (transport-fn method (redact-jsexpr payload))) timeout-ms))
+        (call-with-timeout (lambda () (transport-fn method (redact-jsexpr payload))) timeout-ms)
         #:default-value default-value))]))
 
 (define (make-external-backend name transport-fn #:timeout-ms [timeout-ms #f])

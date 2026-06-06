@@ -26,6 +26,18 @@
 ;; Master switch — disabled by default
 (define current-auto-extraction-enabled (make-parameter #f))
 
+;; Minimum confidence threshold for auto-extracted items (P2-8)
+(define current-auto-extraction-min-confidence (make-parameter 0.5))
+
+;; Sensitivity classification for auto-extracted content (P3-10)
+(define (classify-sensitivity content)
+  (define lower (string-downcase content))
+  (if (or (string-contains? lower "internal")
+          (string-contains? lower "private")
+          (string-contains? lower "confidential"))
+      'internal
+      'public))
+
 ;; Secret patterns that block storage
 (define secret-patterns
   (list #px"(?i:api.?key.*[=:].{10,})"
@@ -127,16 +139,28 @@
                    (current-seconds)
                    (modulo (inexact->exact (round (* 1000 (current-inexact-milliseconds)))) 1000000)))
          (define now (format-iso-now))
+         (define sensitivity (classify-sensitivity content))
+         (define confidence 0.5)
          (define item
-           (memory-item id
-                        'semantic
-                        'project
-                        content
-                        (hasheq 'source 'auto-extraction 'session-id session-id)
-                        (hasheq 'sensitivity 'public 'confidence 0.5)
-                        now
-                        now))
+           (memory-item
+            id
+            'semantic
+            'project
+            content
+            (hasheq 'source
+                    'auto-extraction
+                    'session-id
+                    session-id
+                    'project-root
+                    project-root
+                    'tags
+                    '())
+            (hasheq 'sensitivity sensitivity 'confidence confidence 'expires-at #f 'supersedes '())
+            now
+            now))
          (cond
+           [(< confidence (current-auto-extraction-min-confidence))
+            (extraction-result 'skipped #f "Below minimum confidence threshold")]
            [(contains-secret? content)
             (on-event 'blocked item "Contains secret pattern")
             (on-typed-event (make-mem-policy-blocked-event #:action 'store
@@ -201,6 +225,8 @@
 ;; ---------------------------------------------------------------------------
 
 (provide current-auto-extraction-enabled
+         current-auto-extraction-min-confidence
+         classify-sensitivity
          try-auto-extract
          extraction-result
          extraction-result?
