@@ -28,6 +28,7 @@
                   cli-config-session-dir
                   cli-config-sessions-subcommand
                   cli-config-sessions-args
+                  cli-config-memory
                   cli-config->runtime-config))
 
 ;; ============================================================
@@ -249,3 +250,35 @@
 (test-case "doctor → command is 'doctor"
   (define cfg (parse-cli-args '("doctor")))
   (check-equal? (cli-config-command cfg) 'doctor))
+
+;; v0.95.15 W4: --memory flag tests
+
+(test-case "--memory hash sets memory field"
+  (define cfg (parse-cli-args '("--memory" "hash")))
+  (check-equal? (cli-config-memory cfg) 'hash))
+
+(test-case "--memory file-jsonl sets memory field"
+  (define cfg (parse-cli-args '("--memory" "file-jsonl")))
+  (check-equal? (cli-config-memory cfg) 'file-jsonl))
+
+(test-case "--memory disabled sets memory to disabled"
+  (define cfg (parse-cli-args '("--memory" "disabled")))
+  (check-equal? (cli-config-memory cfg) 'disabled))
+
+(test-case "--memory with invalid value sets memory to #f"
+  (define cfg (parse-cli-args '("--memory" "bogus")))
+  (check-false (cli-config-memory cfg)))
+
+(test-case "no --memory flag leaves memory as #f"
+  (define cfg (parse-cli-args '()))
+  (check-false (cli-config-memory cfg)))
+
+(test-case "--memory hash appears in cli-config->runtime-config"
+  (define cfg (parse-cli-args '("--memory" "hash")))
+  (define rt (cli-config->runtime-config cfg))
+  (check-equal? (hash-ref rt 'memory-backend) 'hash))
+
+(test-case "no --memory omits memory-backend from runtime-config"
+  (define cfg (parse-cli-args '()))
+  (define rt (cli-config->runtime-config cfg))
+  (check-false (hash-ref rt 'memory-backend #f)))

@@ -41,6 +41,8 @@
                   project-tree->string)
          (only-in "extension-setup.rkt" make-wired-extension-registry load-extensions-from-dir!)
          (only-in "../runtime/session/session-config.rkt" apply-context-assembly-profile!)
+         (only-in "../runtime/settings.rkt" setting-memory-injection-budget)
+         (only-in "../runtime/context-assembly/memory-builder.rkt" current-memory-injection-budget)
          (only-in "../extensions/gsd/state-machine.rkt" gsm-current)
          (only-in "../runtime/gsd-query.rkt" current-gsd-mode-query))
 
@@ -198,6 +200,11 @@
   (define profile (or cli-profile settings-profile))
   (define final-hash-with-profile (hash-set final-hash 'context-assembly-profile profile))
   (apply-context-assembly-profile! profile)
+
+  ;; v0.95.15 W4: Wire memory injection budget from settings
+  (define settings-budget (setting-memory-injection-budget settings))
+  (when settings-budget
+    (current-memory-injection-budget settings-budget))
 
   (hash->session-config final-hash-with-profile))
 
