@@ -366,12 +366,12 @@
 ;; Tag filtering (P1-1)
 ;; ---------------------------------------------------------------------------
 
-(define (make-tagged-item #:id [id "tagged"] #:tags [tags '()])
+(define (make-tagged-item #:id [id "tagged"] #:tags [tags '()] #:content [content "tagged content"])
   (memory-item
    id
    'semantic
    'session
-   "tagged content"
+   content
    (hasheq 'tags tags 'project-root "/tmp" 'session-id "s1" 'source "test" 'origin-message-id "test")
    (hasheq 'sensitivity 'public 'confidence 0.9 'supersedes '())
    "2026-06-01T00:00:00Z"
@@ -418,13 +418,14 @@
      (check-equal? (memory-item-id (car (memory-result-value result))) "tagged-a"))))
 
 (test-case "retrieve with empty/null tags returns all items"
-  (with-temp-backend (lambda (backend dir)
-                       (gen:store-memory! backend (make-tagged-item #:id "a" #:tags '("x")))
-                       (gen:store-memory! backend (make-tagged-item #:id "b" #:tags '()))
-                       ;; tags=#f means no tag filter
-                       (define query (memory-query #f #f #f #f #f #f 100 #f))
-                       (define result (gen:retrieve-memory backend query))
-                       (check-equal? (length (memory-result-value result)) 2))))
+  (with-temp-backend
+   (lambda (backend dir)
+     (gen:store-memory! backend (make-tagged-item #:id "a" #:tags '("x") #:content "content a"))
+     (gen:store-memory! backend (make-tagged-item #:id "b" #:tags '() #:content "content b"))
+     ;; tags=#f means no tag filter
+     (define query (memory-query #f #f #f #f #f #f 100 #f))
+     (define result (gen:retrieve-memory backend query))
+     (check-equal? (length (memory-result-value result)) 2))))
 
 ;; ---------------------------------------------------------------------------
 ;; Path traversal safety (P2-1)

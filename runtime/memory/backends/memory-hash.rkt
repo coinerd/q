@@ -8,15 +8,8 @@
          racket/string
          "../types.rkt"
          "../protocol.rkt"
-         (only-in "helpers.rkt"
-                  scope-match?
-                  type-match?
-                  tag-match?
-                  text-match?
-                  expired?
-                  sort-items
-                  take-at-most
-                  current-iso-8601))
+         (only-in "helpers.rkt" scope-match? type-match? tag-match? expired? current-iso-8601)
+         "../search.rkt")
 
 (provide make-memory-hash-backend
          memory-hash-backend-items)
@@ -61,20 +54,25 @@
        (hash-set! store (memory-item-id item) item)
        (memory-result #t (memory-item-id item) #f (hasheq 'backend 'memory-hash))]))
 
-  ;; retrieve
+  ;; retrieve — uses search.rkt for ranking + dedup (M13-F3, M13-F4)
   (define (retrieve query)
     (define all-items (hash-values store))
+    ;; Scope/type/tag/expiry filters still done at backend level
     (define filtered
       (filter (lambda (item)
                 (and (scope-match? item query)
                      (type-match? item query)
                      (tag-match? item query)
-                     (text-match? item query) ; F7
                      (or (memory-query-include-expired? query) (not (expired? item)))))
               all-items))
-    (define sorted (sort-items filtered))
-    (define limit (memory-query-limit query))
-    (define result (take-at-most sorted limit))
+    ;; Text filtering: keep items that have any token overlap with query
+    (define query-text (memory-query-text query))
+    (define text-filtered
+      (if (or (not query-text) (string=? query-text ""))
+          filtered
+          (filter (lambda (item) (> (relevance-score item query-text) 0)) filtered)))
+    ;; Post-retrieve: dedup, supersedes, ranking, limit
+    (define result (post-retrieve-process text-filtered query))
     (memory-result #t
                    result
                    #f
