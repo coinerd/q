@@ -144,8 +144,15 @@
 
 (define (redacted-memory-snippet content [max-len 80])
   (define redacted (redact-memory-content (if (string? content) content "")))
-  (define one-line (regexp-replace* #px"[[:space:]]+" redacted " "))
-  (substring one-line 0 (min max-len (string-length one-line))))
+  ;; M13-F13: Collapse whitespace before truncation to avoid leaking context
+  ;; fragments around redacted content. Remove adjacent material to [REDACTED].
+  (define collapsed (regexp-replace* #px"\\s+" redacted " "))
+  ;; Elide text directly adjacent to [REDACTED] to avoid partial secret context
+  (define elided (regexp-replace* #px"\\S*[REDACTED]\\S*" collapsed "[REDACTED]"))
+  (define trimmed (string-trim elided))
+  (if (<= (string-length trimmed) max-len)
+      trimmed
+      (string-append (substring trimmed 0 (- max-len 3)) "...")))
 
 ;; ---------------------------------------------------------------------------
 ;; Policy checks

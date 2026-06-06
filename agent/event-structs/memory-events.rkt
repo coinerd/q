@@ -4,9 +4,20 @@
 ;; Canonical event taxonomy from SPEC-v0.95.xx-MODULAR-MEMORY-SYSTEM.md.
 ;; Payloads are intentionally metadata/redacted-snippet only; raw memory content
 ;; must not be carried in events.
+;;
+;; M13-F12: Schema versioning policy:
+;;   - MEMORY-EVENT-SCHEMA-VERSION tracks the current schema version.
+;;   - Each typed event has #:schema-version N. When fields are added/renamed,
+;;     bump the event's #:schema-version AND this constant.
+;;   - Field removals are breaking; field additions are backward-compatible.
+;;   - Consumers MUST tolerate unknown fields and MUST NOT assume field
+;;     ordering. Consumers SHOULD check #:schema-version >= their minimum.
 
 (require "base.rkt"
          "../../util/event/event-macro.rkt")
+
+;; M13-F12: Schema version constant — bump when event fields change.
+(define MEMORY-EVENT-SCHEMA-VERSION 1)
 
 ;; Before explicit/auto store.
 (define-typed-event mem-store-requested-event
@@ -27,6 +38,13 @@
                     "memory.item.deleted"
                     (memory-id scope backend)
                     #:defaults (backend "unknown")
+                    #:schema-version 1)
+
+;; After successful update (M13-F5/W3).
+(define-typed-event mem-item-updated-event
+                    "memory.item.updated"
+                    (memory-id scope source redacted-snippet)
+                    #:defaults (source 'tool redacted-snippet "")
                     #:schema-version 1)
 
 ;; After search/retrieve/list.
@@ -63,7 +81,8 @@
 (define make-mem-retrieved-event make-mem-retrieval-performed-event) ;; DEPRECATED
 (define make-mem-deleted-event make-mem-item-deleted-event) ;; DEPRECATED
 
-(provide (struct-out mem-store-requested-event)
+(provide MEMORY-EVENT-SCHEMA-VERSION
+         (struct-out mem-store-requested-event)
          make-mem-store-requested-event
          mem-store-requested-event-fields
          (struct-out mem-item-stored-event)
@@ -72,6 +91,9 @@
          (struct-out mem-item-deleted-event)
          make-mem-item-deleted-event
          mem-item-deleted-event-fields
+         (struct-out mem-item-updated-event)
+         make-mem-item-updated-event
+         mem-item-updated-event-fields
          (struct-out mem-retrieval-performed-event)
          make-mem-retrieval-performed-event
          mem-retrieval-performed-event-fields

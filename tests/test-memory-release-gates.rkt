@@ -16,6 +16,8 @@
          "../runtime/memory/service.rkt"
          "../runtime/memory/auto-extraction.rkt"
          "../runtime/memory/backends/external-protocol.rkt"
+         "../agent/event-structs/memory-events.rkt"
+         "../runtime/context-assembly/memory-builder.rkt"
          "../tools/builtins/memory-tools.rkt"
          "../tools/tool.rkt"
          (only-in "../runtime/session/session-config.rkt"
@@ -165,3 +167,52 @@
   (check-true (string-contains? desc "public"))
   (check-true (string-contains? desc "internal"))
   (check-true (string-contains? desc "sensitive")))
+
+;; ---------------------------------------------------------------------------
+;; M13-F12: Event schema versioning gate
+;; ---------------------------------------------------------------------------
+
+(test-case "release-gate: MEMORY-EVENT-SCHEMA-VERSION is positive integer"
+  (check-true (and (integer? MEMORY-EVENT-SCHEMA-VERSION) (positive? MEMORY-EVENT-SCHEMA-VERSION))))
+
+;; ---------------------------------------------------------------------------
+;; M13-F13: Snippet safety gates
+;; ---------------------------------------------------------------------------
+
+(test-case "release-gate: snippet does not expose adjacent secret context"
+  (define content "user api_key=sk-1234567890abcdef was deleted")
+  (define snippet (redacted-memory-snippet content))
+  (check-false (string-contains? snippet "sk-1234567890abcdef"))
+  ;; Should contain [REDACTED] not the secret
+  (check-true (string-contains? snippet "[REDACTED]")))
+
+(test-case "release-gate: snippet truncation appends ellipsis"
+  (define long-content (make-string 200 #\a))
+  (define snippet (redacted-memory-snippet long-content 40))
+  (check-true (string-suffix? snippet "...")))
+
+(test-case "release-gate: snippet collapses whitespace"
+  (define ws-content "hello   world\n\n\ttabs")
+  (define snippet (redacted-memory-snippet ws-content))
+  (check-false (regexp-match? #rx"\n" snippet))
+  (check-false (regexp-match? #rx"  " snippet)))
+
+;; ---------------------------------------------------------------------------
+;; M13-F14: Observe-only integration gate
+;; ---------------------------------------------------------------------------
+
+(test-case "release-gate: observe-memory-for-context is importable and callable"
+  (define result (observe-memory-for-context (hasheq 'memory-backend #f)))
+  (check-true (pair? result))
+  ;; Returns (cons items telemetry) — items is list, telemetry is struct
+  (check-true (list? (car result)))
+  (check-true (memory-telemetry? (cdr result))))
+
+(test-case "release-gate: inject-memory-for-context is importable"
+  ;; Verify the injection pipeline exists and returns correct shape
+  (parameterize ([current-memory-injection-budget 100])
+    (define result (inject-memory-for-context (hasheq 'memory-backend #f) #:budget-tokens 100))
+    (check-true (pair? result))
+    ;; Section should be #f (no backend) and telemetry should be struct
+    (check-false (car result))
+    (check-true (memory-telemetry? (cdr result)))))
