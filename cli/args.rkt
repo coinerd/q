@@ -44,7 +44,8 @@
                        [print-usage (->* () ((or/c output-port? #f)) void?)]
                        [print-version (->* () (output-port?) void?)])
          ;; q-version imported from util/version.rkt (Issue #203)
-         q-version)
+         q-version
+         cli-config-memory)
 
 ;; ============================================================
 ;; CLI config struct
@@ -68,12 +69,12 @@
          keybindings-path ; path-string or #f -- custom keybindings file (#1118)
          print-mode? ; boolean -- -p/--print flag (G9.3)
          context-profile ; symbol: off|observe|bounded|self-healing|full, or #f
-         )
+         memory)
   #:transparent)
 
 ;; Helper: construct a "help" config (used for parse errors and --help)
 (define (make-help-config)
-  (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f #f))
+  (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f #f #f))
 
 ;; ============================================================
 ;; Flag definition table (QUAL-12)
@@ -128,7 +129,8 @@
                      (tools . ())
                      (session-dir . #f)
                      (keybindings-path . #f)
-                     (print-mode? . #f)))
+                     (print-mode? . #f)
+                     (memory . #f)))
 
 ;; Construct a cli-config from an accumulator alist.
 (define (acc->cli-config acc)
@@ -174,7 +176,8 @@
               '() ; sessions-args
               (acc-ref acc 'keybindings-path)
               (acc-ref acc 'print-mode?)
-              (acc-ref acc 'context-profile)))
+              (acc-ref acc 'context-profile)
+              (acc-ref acc 'memory)))
 
 ;; ============================================================
 ;; Flag table -- all option definitions
@@ -313,6 +316,18 @@
                   "Print mode: run once, output plain text to stdout"
                   #f
                   (lambda (val acc) (acc-set (acc-set acc 'print-mode? #t) 'mode 'print)))
+        ;; --memory <backend>
+        (flag-def "memory"
+                  #\m
+                  "memory"
+                  'string
+                  "Memory backend: hash|file-jsonl|disabled (default: disabled)"
+                  #f
+                  (lambda (val acc)
+                    (define sym (string->symbol val))
+                    (if (memq sym '(hash file-jsonl disabled))
+                        (acc-set acc 'memory sym)
+                        (acc-set acc 'memory #f))))
         ;; --context-profile <profile>
         (flag-def "context-profile"
                   #f
@@ -387,7 +402,7 @@
        (cond
          [(eq? result 'help) (make-help-config)]
          [(eq? result 'version)
-          (cli-config 'version #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f #f)]
+          (cli-config 'version #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f #f #f)]
          [else (loop (add1 i) result)]))]
     [(or (eq? t 'string) (eq? t 'integer) (eq? t 'accumulate))
      (if (< (add1 i) n)
@@ -442,6 +457,7 @@
                              rest
                              #f
                              #f
+                             #f
                              #f))
                (make-help-config)))
          (make-help-config))]
@@ -465,6 +481,7 @@
                        #f
                        'verify
                        (cons path-arg rest-args)
+                       #f
                        #f
                        #f
                        #f))
@@ -505,6 +522,9 @@
                 h)]
          [h (if (cli-config-print-mode? cfg)
                 (hash-set h 'print-mode #t)
+                h)]
+         [h (if (cli-config-memory cfg)
+                (hash-set h 'memory-backend (cli-config-memory cfg))
                 h)])
     h))
 

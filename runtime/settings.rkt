@@ -78,7 +78,8 @@
           [credential-policy
            (-> q-settings? (or/c 'auto 'keychain-preferred 'keychain-required 'env-only))]
           [shell-risk-classifier (-> q-settings? (or/c 'regex 'structured 'both))]
-          [setting-context-assembly-profile (-> q-settings? symbol?)])
+          [setting-context-assembly-profile (-> q-settings? symbol?)]
+          [setting-memory-injection-budget (-> q-settings? (or/c exact-positive-integer? #f))])
 
          ;; Sandbox settings (re-exported, not locally defined)
          sandbox-enabled?
@@ -420,6 +421,16 @@
         raw
         (string->symbol raw)))
   (if (memq sym '(off observe bounded self-healing full)) sym 'off))
+
+;; v0.95.15 W4: Memory injection budget from settings
+(define (setting-memory-injection-budget settings)
+  (define raw (setting-ref* settings '(memory injection-budget) #f))
+  (cond
+    [(exact-positive-integer? raw) raw]
+    [(string? raw)
+     (define n (string->number raw))
+     (if (exact-positive-integer? n) n #f)]
+    [else #f]))
 
 ;; ============================================================
 ;; Credential policy (v0.70.1)
