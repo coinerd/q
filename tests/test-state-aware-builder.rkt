@@ -13,7 +13,10 @@
          (only-in "../runtime/context-assembly/state-aware-builder.rkt" check-rollback-triggers)
          (only-in "../util/message/protocol-types.rkt" make-message make-text-part message-role)
          (only-in "../util/message/message.rkt" message-kind)
-         (only-in "../util/fsm/fsm.rkt" fsm-state))
+         (only-in "../util/fsm/fsm.rkt" fsm-state)
+         (only-in "../runtime/session/session-config.rkt" hash->session-config)
+         (only-in "../runtime/memory/service.rkt" current-memory-backend)
+         (only-in "../runtime/memory/backends/memory-hash.rkt" make-memory-hash-backend))
 
 (define (make-test-msg role text [meta (hasheq)])
   (make-message "test-id" #f role 'text (list (make-text-part text)) (current-seconds) meta))
@@ -154,6 +157,24 @@
         (define amnesia-warn (assoc 'task-amnesia-detected warnings))
         (check-not-false amnesia-warn
                          "task-amnesia-detected warning should fire for 4 repeat tool calls")))
+
+    (test-case "state-aware observe-only memory integration emits trace without changing context shape"
+      (define msgs (make-test-msgs 10))
+      (define cfg (hash->session-config (hash 'memory-backend 'memory-hash)))
+      (define events (box '()))
+      (define (trace! phase payload)
+        (set-box! events (cons (cons phase payload) (unbox events))))
+      (parameterize ([current-memory-backend (make-memory-hash-backend)])
+        (define without-memory (build-tiered-context/state-aware msgs #:task-state 'implementation))
+        (define with-memory
+          (build-tiered-context/state-aware msgs
+                                            #:task-state 'implementation
+                                            #:session-config cfg
+                                            #:trace trace!))
+        (check-equal? (length (tiered-context-tier-a with-memory))
+                      (length (tiered-context-tier-a without-memory)))
+        (check-true (for/or ([evt (in-list (unbox events))])
+                      (eq? (car evt) 'memory-observe)))))
 
     (test-case "repeat-tool-count defaults to 0 with no recent-tool-calls"
       (parameterize ([current-task-state-aware-assembly? #t])

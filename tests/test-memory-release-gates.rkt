@@ -8,6 +8,7 @@
 ;; - No hidden/silent memory writes
 
 (require racket/file
+         racket/runtime-path
          rackunit
          racket/string
          "../runtime/memory/types.rkt"
@@ -24,6 +25,9 @@
                   hash->session-config
                   config-memory-enabled?
                   config-memory-backend))
+
+(define-runtime-path memory-builder-path "../runtime/context-assembly/memory-builder.rkt")
+(define-runtime-path memory-service-path "../runtime/memory/service.rkt")
 
 ;; ---------------------------------------------------------------------------
 ;; Truth Gate 1: Memory disabled by default
@@ -134,7 +138,7 @@
 
 (test-case "release-gate: no runtime module imports tools/builtins/memory-tools"
   ;; Verify memory-builder.rkt does NOT import from tools
-  (define builder-source (file->string "runtime/context-assembly/memory-builder.rkt"))
+  (define builder-source (file->string memory-builder-path))
   ;; Check actual require lines only (not comments)
   (define builder-requires
     (for/list ([line (string-split builder-source "\n")]
@@ -145,7 +149,7 @@
   (check-false (for/or ([line builder-requires])
                  (string-contains? line "tools/builtins/memory-tools")))
   ;; Verify service.rkt does NOT import from tools
-  (define service-source (file->string "runtime/memory/service.rkt"))
+  (define service-source (file->string memory-service-path))
   (define service-requires
     (for/list ([line (string-split service-source "\n")]
                #:when (or (string-prefix? (string-trim line) "(require")
@@ -202,7 +206,7 @@
 ;; ---------------------------------------------------------------------------
 
 (test-case "release-gate: observe-memory-for-context is importable and callable"
-  (define result (observe-memory-for-context (hasheq 'memory-backend #f)))
+  (define result (observe-memory-for-context (hash->session-config (hash 'memory-backend #f))))
   (check-true (pair? result))
   ;; Returns (cons items telemetry) — items is list, telemetry is struct
   (check-true (list? (car result)))
@@ -211,7 +215,9 @@
 (test-case "release-gate: inject-memory-for-context is importable"
   ;; Verify the injection pipeline exists and returns correct shape
   (parameterize ([current-memory-injection-budget 100])
-    (define result (inject-memory-for-context (hasheq 'memory-backend #f) #:budget-tokens 100))
+    (define result
+      (inject-memory-for-context (hash->session-config (hash 'memory-backend #f))
+                                 #:budget-tokens 100))
     (check-true (pair? result))
     ;; Section should be #f (no backend) and telemetry should be struct
     (check-false (car result))

@@ -18,14 +18,27 @@
                    #:content [content "test content"]
                    #:scope [scope 'project]
                    #:type [type 'semantic]
+                   #:project [project "/tmp"]
+                   #:session [session "s1"]
                    #:supersedes [supersedes '()]
                    #:updated [updated "2026-06-05T12:00:00Z"])
-  (memory-item id type scope content
-               (hasheq 'project-root "/tmp" 'session-id "s1"
-                       'tags '() 'source "test" 'origin-message-id "test")
-               (hasheq 'sensitivity 'public 'confidence 0.9
-                       'supersedes supersedes 'expires-at #f)
-               "2026-06-05T00:00:00Z" updated))
+  (memory-item id
+               type
+               scope
+               content
+               (hasheq 'project-root
+                       project
+                       'session-id
+                       session
+                       'tags
+                       '()
+                       'source
+                       "test"
+                       'origin-message-id
+                       "test")
+               (hasheq 'sensitivity 'public 'confidence 0.9 'supersedes supersedes 'expires-at #f)
+               "2026-06-05T00:00:00Z"
+               updated))
 
 ;; ---------------------------------------------------------------------------
 ;; M13-F3: Tokenization
@@ -100,7 +113,7 @@
 
 (test-case "content-fingerprint: same content/scope/type = same fingerprint"
   (define a (make-item #:content "hello world"))
-  (define b (make-item #:id "m2" #:content "world hello"))  ; tokens reorder
+  (define b (make-item #:id "m2" #:content "world hello")) ; tokens reorder
   (check-equal? (content-fingerprint a) (content-fingerprint b)))
 
 (test-case "content-fingerprint: different content = different fingerprint"
@@ -112,6 +125,14 @@
   (define a (make-item #:content "hello" #:scope 'project))
   (define b (make-item #:id "m2" #:content "hello" #:scope 'session))
   (check-not-equal? (content-fingerprint a) (content-fingerprint b)))
+
+(test-case "content-fingerprint: project/session visibility affects fingerprint"
+  (define p1 (make-item #:id "p1" #:content "same fact" #:scope 'project #:project "/p1"))
+  (define p2 (make-item #:id "p2" #:content "same fact" #:scope 'project #:project "/p2"))
+  (define s1 (make-item #:id "s1" #:content "same fact" #:scope 'session #:session "s1"))
+  (define s2 (make-item #:id "s2" #:content "same fact" #:scope 'session #:session "s2"))
+  (check-not-equal? (content-fingerprint p1) (content-fingerprint p2))
+  (check-not-equal? (content-fingerprint s1) (content-fingerprint s2)))
 
 (test-case "content-duplicate?: detects duplicates"
   (define a (make-item #:content "test"))
@@ -136,9 +157,7 @@
   (check-equal? (memory-item-id (car deduped)) "new"))
 
 (test-case "dedup-by-content: different content items preserved"
-  (define items
-    (list (make-item #:id "a" #:content "alpha")
-          (make-item #:id "b" #:content "beta")))
+  (define items (list (make-item #:id "a" #:content "alpha") (make-item #:id "b" #:content "beta")))
   (define deduped (dedup-by-content items))
   (check-equal? (length deduped) 2))
 

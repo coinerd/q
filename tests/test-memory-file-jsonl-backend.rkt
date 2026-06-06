@@ -227,6 +227,44 @@
                        (define result (gen:manage-memory! backend (hash)))
                        (check-true (memory-result-ok? result)))))
 
+(test-case "manage! compacts expired items from JSONL view"
+  (with-temp-backend (lambda (backend dir)
+                       (define active (make-test-item #:id "active" #:content "active content"))
+                       (define expired
+                         (memory-item "expired"
+                                      'semantic
+                                      'session
+                                      "expired content"
+                                      (hasheq 'project-root
+                                              "/tmp"
+                                              'session-id
+                                              "s1"
+                                              'tags
+                                              '()
+                                              'source
+                                              "test"
+                                              'origin-message-id
+                                              "test")
+                                      (hasheq 'sensitivity
+                                              'public
+                                              'confidence
+                                              0.9
+                                              'expires-at
+                                              "2020-01-01T00:00:00Z"
+                                              'supersedes
+                                              '())
+                                      "2020-01-01T00:00:00Z"
+                                      "2020-01-01T00:00:00Z"))
+                       (gen:store-memory! backend active)
+                       (gen:store-memory! backend expired)
+                       (define result (gen:manage-memory! backend (hash 'compact? #t)))
+                       (check-true (memory-result-ok? result))
+                       (check-equal? (hash-ref (memory-result-metadata result) 'compacted-count 0) 1)
+                       (define reloaded (make-file-jsonl-backend dir))
+                       (define all
+                         (gen:retrieve-memory reloaded (memory-query #f #f #f #f #f #f 100 #t)))
+                       (check-equal? (map memory-item-id (memory-result-value all)) '("active")))))
+
 ;; ---------------------------------------------------------------------------
 ;; Expiry after reload (F16)
 ;; ---------------------------------------------------------------------------
@@ -394,9 +432,14 @@
 (test-case "retrieve filters by multiple tags (AND semantics)"
   (with-temp-backend
    (lambda (backend dir)
-     (gen:store-memory! backend (make-tagged-item #:id "rust-item" #:tags '("rust")))
-     (gen:store-memory! backend (make-tagged-item #:id "python-item" #:tags '("python")))
-     (gen:store-memory! backend (make-tagged-item #:id "both-item" #:tags '("rust" "python")))
+     (gen:store-memory! backend
+                        (make-tagged-item #:id "rust-item" #:tags '("rust") #:content "rust content"))
+     (gen:store-memory!
+      backend
+      (make-tagged-item #:id "python-item" #:tags '("python") #:content "python content"))
+     (gen:store-memory!
+      backend
+      (make-tagged-item #:id "both-item" #:tags '("rust" "python") #:content "both content"))
      ;; Query for items that have BOTH rust AND python tags
      (define query (memory-query #f #f #f #f #f '("rust" "python") 100 #f))
      (define result (gen:retrieve-memory backend query))
@@ -517,3 +560,16 @@
                        ;; Retrieve — should be empty
                        (define r2 (gen:retrieve-memory backend q))
                        (check-equal? (length (memory-result-value r2)) 0))))
+
+(test-case "incremental cache: truncation/replacement invalidates stale cache"
+  (with-temp-backend
+   (lambda (backend dir)
+     (gen:store-memory! backend (make-test-item #:id "stale" #:content "stale content"))
+     (define q (memory-query #f #f #f #f #f #f 100 #f))
+     (define warm (gen:retrieve-memory backend q))
+     (check-equal? (length (memory-result-value warm)) 1)
+     (define jsonl-path (build-path dir "memory.jsonl"))
+     (call-with-output-file jsonl-path (lambda (out) (void)) #:exists 'truncate #:mode 'text)
+     (define after-truncate (gen:retrieve-memory backend q))
+     (check-true (memory-result-ok? after-truncate))
+     (check-equal? (memory-result-value after-truncate) '()))))

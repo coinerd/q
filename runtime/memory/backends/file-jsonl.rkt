@@ -231,7 +231,8 @@
     [(and old-view (> old-size 0))
      (let ([current-size (file-size path)])
        (cond
-         [(<= current-size old-size) old-view]
+         [(< current-size old-size) (load-current-view path)]
+         [(= current-size old-size) old-view]
          [else
           (let ([new-entries (filter values (read-entries-from-offset path old-size))])
             (apply-entries-to-view old-view new-entries))]))]
@@ -261,17 +262,18 @@
   (define cached-file-size 0)
 
   (define (get-view)
+    (define current-size
+      (if (file-exists? jsonl-path)
+          (file-size jsonl-path)
+          0))
     (cond
-      [(and cache (not cache-dirty?)) cache]
+      [(and cache (not cache-dirty?) (= current-size cached-file-size)) cache]
       [else
        (set! cache
              (if (file-exists? jsonl-path)
                  (incremental-load-view jsonl-path cache cached-file-size)
                  (hash)))
-       (set! cached-file-size
-             (if (file-exists? jsonl-path)
-                 (file-size jsonl-path)
-                 0))
+       (set! cached-file-size current-size)
        (set! cache-dirty? #f)
        cache]))
 
@@ -293,6 +295,16 @@
                           #f
                           (make-memory-error 'duplicate "Item already exists with different content")
                           (hasheq)))]
+      [(for/first ([existing (in-list (hash-values (get-view)))]
+                   #:when (content-duplicate? existing item))
+         existing)
+       =>
+       (lambda (existing)
+         (memory-result
+          #t
+          (memory-item-id existing)
+          #f
+          (hasheq 'backend 'file-jsonl 'idempotent #t 'duplicate-of (memory-item-id existing))))]
       [else
        (ensure-dir!)
        (define safe-path (safe-memory-path memory-root "memory.jsonl"))
@@ -320,7 +332,7 @@
           filtered
           (filter (lambda (item) (> (relevance-score item query-text) 0)) filtered)))
     ;; Post-retrieve: dedup, supersedes, ranking, limit
-    (define result (post-retrieve-process text-filtered query))
+    (define result (post-retrieve-process text-filtered query #:all-items filtered))
     (memory-result #t
                    result
                    #f
@@ -361,12 +373,19 @@
                       [metadata new-meta]
                       [validity new-validity]
                       [updated-at (hash-ref safe-patch 'updated-at (current-iso-8601))]))
-       (ensure-dir!)
-       (define safe-path (safe-memory-path memory-root "memory.jsonl"))
-       (jsonl-append! safe-path (make-update-record updated))
-       (restrict-path-permissions! safe-path #o600)
-       (invalidate-cache!)
-       (memory-result #t id #f (hasheq 'backend 'file-jsonl))]))
+       (cond
+         [(not (valid-memory-item? updated))
+          (memory-result #f
+                         #f
+                         (make-memory-error 'invalid-item "Invalid updated memory item")
+                         (hasheq))]
+         [else
+          (ensure-dir!)
+          (define safe-path (safe-memory-path memory-root "memory.jsonl"))
+          (jsonl-append! safe-path (make-update-record updated))
+          (restrict-path-permissions! safe-path #o600)
+          (invalidate-cache!)
+          (memory-result #t id #f (hasheq 'backend 'file-jsonl))])]))
 
   ;; delete!
   (define (delete! id scope)
@@ -384,18 +403,66 @@
        (invalidate-cache!)
        (memory-result #t id #f (hasheq 'backend 'file-jsonl))]))
 
-  ;; list
+  ;; list — raw scoped view for management/export (no text search, dedup, or supersedes filtering).
   (define (list-items query)
-    (retrieve query))
+    (define view (get-view))
+    (define filtered
+      (filter (lambda (item)
+                (and (scope-match? item query)
+                     (type-match? item query)
+                     (tag-match? item query)
+                     (or (memory-query-include-expired? query) (not (expired? item)))))
+              (hash-values view)))
+    (define sorted
+      (sort filtered
+            (lambda (a b)
+              (define ta (memory-item-updated-at a))
+              (define tb (memory-item-updated-at b))
+              (cond
+                [(string>? ta tb) #t]
+                [(string<? ta tb) #f]
+                [else (string>? (memory-item-id a) (memory-item-id b))]))))
+    (define limit (memory-query-limit query))
+    (define result
+      (if (and limit (< limit (length sorted)))
+          (take sorted limit)
+          sorted))
+    (memory-result #t
+                   result
+                   #f
+                   (hasheq 'count (length result) 'total (length filtered) 'backend 'file-jsonl)))
 
   ;; available? (F8): always #t — directory is lazily created on first write.
   ;; A missing directory/JSONL file is a valid state.
   (define (available?)
     #t)
 
-  ;; manage! — compact/compaction placeholder
+  ;; manage! — compact JSONL to active, non-expired, non-superseded items.
   (define (manage! policy)
-    (memory-result #t #f #f (hasheq 'backend 'file-jsonl)))
+    (define view (get-view))
+    (define current-items (hash-values view))
+    (define kept-items
+      (remove-superseded (filter (lambda (item) (not (expired? item))) current-items)))
+    (define compacted-count (- (length current-items) (length kept-items)))
+    (ensure-dir!)
+    (define safe-path (safe-memory-path memory-root "memory.jsonl"))
+    (call-with-output-file safe-path
+                           (lambda (out)
+                             (for ([item (in-list kept-items)])
+                               (write-json (make-store-record item) out)
+                               (newline out)))
+                           #:exists 'replace
+                           #:mode 'text)
+    (restrict-path-permissions! safe-path #o600)
+    (set! cache
+          (for/hash ([item (in-list kept-items)])
+            (values (memory-item-id item) item)))
+    (set! cached-file-size
+          (if (file-exists? safe-path)
+              (file-size safe-path)
+              0))
+    (set! cache-dirty? #f)
+    (memory-result #t #f #f (hasheq 'backend 'file-jsonl 'compacted-count compacted-count)))
 
   (define the-backend
     (memory-backend "file-jsonl" store! retrieve update! delete! list-items available? manage!))

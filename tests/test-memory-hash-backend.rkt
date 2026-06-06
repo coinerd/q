@@ -69,6 +69,33 @@
   (check-false (memory-result-ok? r))
   (check-equal? (hash-ref (memory-result-error r) 'code) 'duplicate))
 
+(test-case "store deduplicates same content in same visibility domain"
+  (define b (make-memory-hash-backend))
+  (define first (make-item #:id "a" #:content "same durable fact" #:scope 'project #:project "/p"))
+  (define second (make-item #:id "b" #:content "durable same fact" #:scope 'project #:project "/p"))
+  (define r1 (gen:store-memory! b first))
+  (define r2 (gen:store-memory! b second))
+  (check-true (memory-result-ok? r1))
+  (check-true (memory-result-ok? r2))
+  (check-equal? (memory-result-value r2) "a")
+  (check-true (hash-ref (memory-result-metadata r2) 'idempotent #f))
+  (define all (gen:list-memory b (memory-query #f #f #f #f #f #f 10 #t)))
+  (check-equal? (length (memory-result-value all)) 1))
+
+(test-case "store keeps same content across different visibility domains"
+  (define b (make-memory-hash-backend))
+  (define r1
+    (gen:store-memory! b
+                       (make-item #:id "p1" #:content "same fact" #:scope 'project #:project "/p1")))
+  (define r2
+    (gen:store-memory! b
+                       (make-item #:id "p2" #:content "same fact" #:scope 'project #:project "/p2")))
+  (check-true (memory-result-ok? r1))
+  (check-true (memory-result-ok? r2))
+  (check-equal?
+   (length (memory-result-value (gen:list-memory b (memory-query #f #f #f #f #f #f 10 #t))))
+   2))
+
 (test-case "store rejects invalid item"
   (define b (make-memory-hash-backend))
   (define bad-item (memory-item "" 'semantic 'project "" (hasheq) (hasheq) "" ""))
@@ -221,8 +248,10 @@
 
 (test-case "items sorted by updated-at descending"
   (define b (make-memory-hash-backend))
-  (gen:store-memory! b (make-item #:id "old" #:updated "2026-01-01T00:00:00Z"))
-  (gen:store-memory! b (make-item #:id "new" #:updated "2026-06-01T00:00:00Z"))
+  (gen:store-memory! b
+                     (make-item #:id "old" #:content "old content" #:updated "2026-01-01T00:00:00Z"))
+  (gen:store-memory! b
+                     (make-item #:id "new" #:content "new content" #:updated "2026-06-01T00:00:00Z"))
   (define r (gen:list-memory b (memory-query "" #f #f #f #f #f 100 #t)))
   (define items (memory-result-value r))
   (check-equal? (memory-item-id (car items)) "new")

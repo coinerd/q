@@ -240,9 +240,7 @@
 ;; ---------------------------------------------------------------------------
 
 (test-case "external: malformed hash response fails closed"
-  (define bad-transport
-    (lambda (method payload)
-      (hasheq 'random 'stuff 'no-valid 'keys)))
+  (define bad-transport (lambda (method payload) (hasheq 'random 'stuff 'no-valid 'keys)))
   (parameterize ([current-external-backend-enabled #t])
     (define ext (make-external-backend "malformed-test" bad-transport))
     (define q (memory-query "test" 'session #f #f #f #f 5 #f))
@@ -251,10 +249,20 @@
     (check-false (memory-result-ok? r))
     (check-equal? (hash-ref (memory-result-error r) 'code) 'invalid-response)))
 
+(test-case "external: arbitrary non-protocol responses fail closed"
+  (for ([bad-value (in-list (list "oops" '(not protocol) 42 '#(bad vector)))])
+    (define bad-transport (lambda (method payload) bad-value))
+    (parameterize ([current-external-backend-enabled #t])
+      (define ext (make-external-backend "bad-value-test" bad-transport))
+      (define q (memory-query "test" 'session #f #f #f #f 5 #f))
+      (define r (gen:retrieve-memory ext q))
+      (check-true (memory-result? r))
+      (check-false (memory-result-ok? r))
+      (check-equal? (hash-ref (memory-result-error r) 'code) 'invalid-response))))
+
 (test-case "external: valid protocol hash succeeds"
   (define good-transport
-    (lambda (method payload)
-      (hasheq 'ok? #t 'value '() 'error #f 'metadata (hasheq))))
+    (lambda (method payload) (hasheq 'ok? #t 'value '() 'error #f 'metadata (hasheq))))
   (parameterize ([current-external-backend-enabled #t])
     (define ext (make-external-backend "valid-test" good-transport))
     (define q (memory-query "test" 'session #f #f #f #f 5 #f))
@@ -264,8 +272,7 @@
 
 (test-case "external: error protocol hash returns error"
   (define err-transport
-    (lambda (method payload)
-      (hasheq 'ok? #f 'error (hasheq 'code 'test-error 'message "test"))))
+    (lambda (method payload) (hasheq 'ok? #f 'error (hasheq 'code 'test-error 'message "test"))))
   (parameterize ([current-external-backend-enabled #t])
     (define ext (make-external-backend "err-test" err-transport))
     (define q (memory-query "test" 'session #f #f #f #f 5 #f))

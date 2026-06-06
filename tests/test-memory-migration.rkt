@@ -17,15 +17,19 @@
 ;; Helpers
 ;; ---------------------------------------------------------------------------
 
-(define (make-test-item id scope content)
+(define (make-test-item id
+                        scope
+                        content
+                        #:supersedes [supersedes '()]
+                        #:updated [updated "2025-01-01T00:00:00Z"])
   (memory-item id
                'semantic
                scope
                content
                (hasheq 'tags '() 'source 'test 'project-root #f 'session-id #f 'origin-message-id #f)
-               (hasheq 'sensitivity 'public 'confidence 0.9 'expires-at #f 'supersedes '())
+               (hasheq 'sensitivity 'public 'confidence 0.9 'expires-at #f 'supersedes supersedes)
                "2025-01-01T00:00:00Z"
-               "2025-01-01T00:00:00Z"))
+               updated))
 
 ;; ---------------------------------------------------------------------------
 ;; Export tests
@@ -55,6 +59,19 @@
 (test-case "export: rejects invalid backend"
   (define result (export-memory-items #f))
   (check-false (memory-result-ok? result)))
+
+(test-case "export: preserves superseded/history items"
+  (define b (make-memory-hash-backend))
+  (gen:store-memory! b (make-test-item "old" 'project "old alpha" #:updated "2025-01-01T00:00:00Z"))
+  (gen:store-memory!
+   b
+   (make-test-item "new" 'project "new beta" #:supersedes '("old") #:updated "2025-02-01T00:00:00Z"))
+  (define active (gen:retrieve-memory b (memory-query "alpha" 'project #f #f #f #f 10 #f)))
+  (check-true (memory-result-ok? active))
+  (check-equal? (memory-result-value active) '())
+  (define exported (export-memory-items b))
+  (check-true (memory-result-ok? exported))
+  (check-equal? (sort (map memory-item-id (memory-result-value exported)) string<?) '("new" "old")))
 
 ;; ---------------------------------------------------------------------------
 ;; Import tests
@@ -122,16 +139,24 @@
 (test-case "migrate: preserves metadata"
   (define src (make-memory-hash-backend))
   (define dst (make-memory-hash-backend))
-  (define item (memory-item "meta-test"
-                            'semantic
-                            'project
-                            "content with metadata"
-                            (hasheq 'tags '("important") 'source 'test 'project-root "/tmp"
-                                    'session-id #f 'origin-message-id #f)
-                            (hasheq 'sensitivity 'internal 'confidence 0.8
-                                    'expires-at #f 'supersedes '())
-                            "2025-06-01T00:00:00Z"
-                            "2025-06-01T00:00:00Z"))
+  (define item
+    (memory-item "meta-test"
+                 'semantic
+                 'project
+                 "content with metadata"
+                 (hasheq 'tags
+                         '("important")
+                         'source
+                         'test
+                         'project-root
+                         "/tmp"
+                         'session-id
+                         #f
+                         'origin-message-id
+                         #f)
+                 (hasheq 'sensitivity 'internal 'confidence 0.8 'expires-at #f 'supersedes '())
+                 "2025-06-01T00:00:00Z"
+                 "2025-06-01T00:00:00Z"))
   (gen:store-memory! src item)
   (define result (migrate-memory! src dst))
   (check-true (memory-result-ok? result))

@@ -78,10 +78,10 @@
 ;; Content fingerprint (M13-F4)
 ;; ---------------------------------------------------------------------------
 
-;; Produce a canonical fingerprint for an item's content within a scope.
-;; Two items with the same scope + type + content-normalized fingerprint
-;; are considered duplicates.
-;; Fingerprint = (scope . type . sorted-tokens-hash)
+;; Produce a canonical fingerprint for an item's content within a visibility domain.
+;; Two items with the same scope + project/session visibility + type +
+;; content-normalized fingerprint are considered duplicates.
+;; Fingerprint = (scope . project-root . session-id . type . sorted-tokens-hash)
 ;; We use a simple token-frequency string as the fingerprint key.
 
 (define (content-fingerprint item)
@@ -89,7 +89,10 @@
   (define sorted (sort tokens string<?))
   (define scope (memory-item-scope item))
   (define type (memory-item-type item))
-  (format "~a|~a|~a" scope type (string-join sorted " ")))
+  (define meta (memory-item-metadata item))
+  (define project-root (hash-ref meta 'project-root #f))
+  (define session-id (hash-ref meta 'session-id #f))
+  (format "~a|~a|~a|~a|~a" scope project-root session-id type (string-join sorted " ")))
 
 ;; Check if two items are content-duplicates (same scope, type, normalized content)
 (define (content-duplicate? a b)
@@ -142,11 +145,15 @@
 ;; 2. Dedup by content fingerprint
 ;; 3. Rank by relevance (if query text provided) or sort by recency
 ;; 4. Apply limit
-(define (post-retrieve-process items query)
+(define (post-retrieve-process items query #:all-items [all-items items])
   (define query-text (memory-query-text query))
   (define limit (memory-query-limit query))
-  ;; Step 1: remove superseded
-  (define un-superseded (remove-superseded items))
+  ;; Step 1: remove superseded using the full scoped candidate set, not just
+  ;; the text-matching subset. Otherwise a query that matches only an old item
+  ;; can resurrect it even when a newer item supersedes it.
+  (define superseded (superseded-ids all-items))
+  (define un-superseded
+    (filter (lambda (item) (not (hash-has-key? superseded (memory-item-id item)))) items))
   ;; Step 2: dedup by content
   (define deduped (dedup-by-content un-superseded))
   ;; Step 3: rank or sort

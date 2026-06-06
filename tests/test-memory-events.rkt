@@ -278,13 +278,25 @@
   (check-true (exact-positive-integer? MEMORY-EVENT-SCHEMA-VERSION)))
 
 (test-case "event: mem-item-updated-event is defined and constructable"
-  (define e (make-mem-item-updated-event "test-id" 'session 'tool "snippet"))
+  (define e
+    (make-mem-item-updated-event #:memory-id "test-id"
+                                 #:scope 'session
+                                 #:source 'tool
+                                 #:redacted-snippet "snippet"
+                                 #:session-id #f
+                                 #:turn-id #f))
   (check-equal? (mem-item-updated-event-memory-id e) "test-id")
   (check-equal? (mem-item-updated-event-scope e) 'session)
   (check-equal? (mem-item-updated-event-source e) 'tool)
   (check-equal? (mem-item-updated-event-redacted-snippet e) "snippet"))
 
 (test-case "event: updated event has default values"
-  (define e (make-mem-item-updated-event "id" 'project))
+  (define e
+    (make-mem-item-updated-event #:memory-id "id"
+                                 #:scope 'project
+                                 #:source 'tool
+                                 #:redacted-snippet ""
+                                 #:session-id #f
+                                 #:turn-id #f))
   (check-equal? (mem-item-updated-event-source e) 'tool)
   (check-equal? (mem-item-updated-event-redacted-snippet e) ""))

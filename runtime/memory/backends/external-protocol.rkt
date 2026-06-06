@@ -77,7 +77,12 @@
                          (make-memory-error 'invalid-response
                                             "External backend returned malformed response")
                          (hasheq))]))]
-    [else (memory-result #t (or v default-value) #f (hasheq))]))
+    [else
+     (memory-result #f
+                    #f
+                    (make-memory-error 'invalid-response
+                                       "External backend returned non-protocol response")
+                    (hasheq))]))
 
 (define (external-call method payload transport-fn timeout-ms #:default-value [default-value #f])
   (cond

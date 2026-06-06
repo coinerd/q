@@ -330,6 +330,51 @@
      (check-equal? (length updated-events) 1)
      (check-equal? (hash-ref (car updated-events) 'id) item-id))))
 
+(test-case "update-memory: rejects secret sensitivity before backend update"
+  (define b (make-memory-hash-backend))
+  (with-backend
+   b
+   (lambda ()
+     (call-tool tool-store-memory (hash 'content "secret candidate" 'scope "project"))
+     (define lr (call-tool tool-list-memory (hash 'scope "project")))
+     (define item-id (hash-ref (car (hash-ref (tool-result-details lr) 'items '())) 'id))
+     (define r
+       (call-tool tool-update-memory (hash 'id item-id 'scope "project" 'sensitivity "secret")))
+     (check-true (tool-result-is-error? r))
+     (check-true (string-contains? (format "~a" (tool-result-content r)) "Secret sensitivity"))
+     (define stored
+       (gen:retrieve-memory b (memory-query #f 'project "/tmp/q-memory-mgmt" #f #f #f 10 #f)))
+     (check-true (memory-result-ok? stored))
+     (check-equal? (hash-ref (memory-item-validity (car (memory-result-value stored))) 'sensitivity)
+                   'public))))
+
+(test-case "update-memory: sensitivity plus supersedes preserves validity keys"
+  (define b (make-memory-hash-backend))
+  (with-backend
+   b
+   (lambda ()
+     (call-tool tool-store-memory (hash 'content "old fact" 'scope "project"))
+     (call-tool tool-store-memory (hash 'content "new fact" 'scope "project"))
+     (define lr (call-tool tool-list-memory (hash 'scope "project")))
+     (define items (hash-ref (tool-result-details lr) 'items '()))
+     (define new-id (hash-ref (car items) 'id))
+     (define old-id (hash-ref (cadr items) 'id))
+     (define r
+       (call-tool
+        tool-update-memory
+        (hash 'id new-id 'scope "project" 'sensitivity "internal" 'supersedes (list old-id))))
+     (check-false (tool-result-is-error? r))
+     (define stored
+       (gen:retrieve-memory b (memory-query #f 'project "/tmp/q-memory-mgmt" #f #f #f 10 #t)))
+     (check-true (memory-result-ok? stored))
+     (define updated
+       (for/first ([item (in-list (memory-result-value stored))]
+                   #:when (equal? (memory-item-id item) new-id))
+         item))
+     (check-true (valid-memory-item? updated))
+     (check-equal? (hash-ref (memory-item-validity updated) 'sensitivity) 'internal)
+     (check-equal? (hash-ref (memory-item-validity updated) 'supersedes) (list old-id)))))
+
 ;; ---------------------------------------------------------------------------
 ;; M13-F5: cleanup_expired_memory tool tests
 ;; ---------------------------------------------------------------------------

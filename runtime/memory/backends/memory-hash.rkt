@@ -50,6 +50,16 @@
                          #f
                          (make-memory-error 'duplicate "Item already exists with different content")
                          (hasheq))])]
+      [(for/first ([existing (in-list (hash-values store))]
+                   #:when (content-duplicate? existing item))
+         existing)
+       =>
+       (lambda (existing)
+         (memory-result
+          #t
+          (memory-item-id existing)
+          #f
+          (hasheq 'backend 'memory-hash 'idempotent #t 'duplicate-of (memory-item-id existing))))]
       [else
        (hash-set! store (memory-item-id item) item)
        (memory-result #t (memory-item-id item) #f (hasheq 'backend 'memory-hash))]))
@@ -72,7 +82,7 @@
           filtered
           (filter (lambda (item) (> (relevance-score item query-text) 0)) filtered)))
     ;; Post-retrieve: dedup, supersedes, ranking, limit
-    (define result (post-retrieve-process text-filtered query))
+    (define result (post-retrieve-process text-filtered query #:all-items filtered))
     (memory-result #t
                    result
                    #f
@@ -112,8 +122,15 @@
                       [metadata new-meta]
                       [validity new-validity]
                       [updated-at (hash-ref safe-patch 'updated-at (current-iso-8601))]))
-       (hash-set! store id updated)
-       (memory-result #t id #f (hasheq 'backend 'memory-hash))]))
+       (cond
+         [(not (valid-memory-item? updated))
+          (memory-result #f
+                         #f
+                         (make-memory-error 'invalid-item "Invalid updated memory item")
+                         (hasheq))]
+         [else
+          (hash-set! store id updated)
+          (memory-result #t id #f (hasheq 'backend 'memory-hash))])]))
 
   ;; delete!
   (define (delete! id scope)
@@ -126,9 +143,33 @@
        (hash-remove! store id)
        (memory-result #t id #f (hasheq 'backend 'memory-hash))]))
 
-  ;; list
+  ;; list — raw scoped view for management/export (no text search, dedup, or supersedes filtering).
   (define (list-items query)
-    (retrieve query))
+    (define filtered
+      (filter (lambda (item)
+                (and (scope-match? item query)
+                     (type-match? item query)
+                     (tag-match? item query)
+                     (or (memory-query-include-expired? query) (not (expired? item)))))
+              (hash-values store)))
+    (define sorted
+      (sort filtered
+            (lambda (a b)
+              (define ta (memory-item-updated-at a))
+              (define tb (memory-item-updated-at b))
+              (cond
+                [(string>? ta tb) #t]
+                [(string<? ta tb) #f]
+                [else (string>? (memory-item-id a) (memory-item-id b))]))))
+    (define limit (memory-query-limit query))
+    (define result
+      (if (and limit (< limit (length sorted)))
+          (take sorted limit)
+          sorted))
+    (memory-result #t
+                   result
+                   #f
+                   (hasheq 'count (length result) 'total (length filtered) 'backend 'memory-hash)))
 
   ;; available?
   (define (available?)

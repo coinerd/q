@@ -3,11 +3,11 @@
 ;; runtime/context-assembly/state-aware-builder.rkt — State-aware context assembly
 ;; v0.76.0 W2: Extracted from serialization.rkt
 ;;
-;; F34 TODO: Wire memory-builder into context assembly when the memory integration
-;; milestone is active. See memory-builder.rkt observe-memory-for-context and
-;; inject-memory-for-context. Gate behind config-memory-enabled?.
+;; v0.95.14: Observe-only memory telemetry is wired behind session-config gates;
+;; prompt injection remains explicit in memory-builder.rkt.
 
 (require racket/list
+         racket/runtime-path
          racket/string
          (only-in "../../util/content/content-parts.rkt" make-text-part)
          (only-in "../../util/message/message.rkt" message message-id message-content make-message)
@@ -48,6 +48,8 @@
          current-conclusion-token-budget
          current-ws-evolution-enabled?
          check-rollback-triggers-with-actions)
+
+(define-runtime-path memory-builder-path "memory-builder.rkt")
 
 ;; Feature flag: state-aware context assembly (v0.75.3)
 (define current-task-state-aware-assembly? (make-parameter #f))
@@ -93,7 +95,8 @@
                                           #:task-state [task-state #f]
                                           #:conclusions [conclusions '()]
                                           #:trace [trace-cb #f]
-                                          #:recent-tool-calls [recent-tool-calls '()])
+                                          #:recent-tool-calls [recent-tool-calls '()]
+                                          #:session-config [session-config #f])
   ;; Accept both fsm-state structs and bare symbols
   (define state-name
     (cond
@@ -200,6 +203,16 @@
                              (current-seconds)
                              (hasheq)))))]
       [else '()]))
+
+  ;; Observe-only memory integration. This deliberately emits telemetry only;
+  ;; prompt injection remains owned by memory-builder and explicit config gates.
+  (when session-config
+    (define observe-memory-for-context
+      (dynamic-require memory-builder-path 'observe-memory-for-context))
+    (define memory-telemetry->jsexpr (dynamic-require memory-builder-path 'memory-telemetry->jsexpr))
+    (define observed (observe-memory-for-context session-config))
+    (when trace-cb
+      (trace-cb 'memory-observe (memory-telemetry->jsexpr (cdr observed)))))
 
   ;; Build base context with adjusted working-set
   (define base-tc

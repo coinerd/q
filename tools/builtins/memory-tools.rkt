@@ -506,7 +506,6 @@
      =>
      make-error-result]
     [else
-     ;; Scoped preflight: verify item exists and is visible in current scope
      (define preflight-query (make-scoped-query #f scope project-root session-id #f #f 20 #t))
      (define preflight (gen:retrieve-memory backend preflight-query))
      (define visible-item
@@ -520,83 +519,76 @@
                                    (memory-error-message preflight)))]
        [(not visible-item) (make-error-result "Memory not found in current scope/project/session.")]
        [else
-        ;; Build patch from provided args
         (define content (hash-ref args 'content #f))
         (define type-sym (parse-symbol-arg args 'type (memory-item-type visible-item)))
         (define tags (hash-ref args 'tags #f))
         (define sensitivity (parse-symbol-arg args 'sensitivity #f))
         (define supersedes (hash-ref args 'supersedes #f))
-        (when (and sensitivity (eq? sensitivity 'secret))
-          (make-error-result "Secret sensitivity is not allowed for memory storage."))
-        (define patch
-          (for/hash ([(k v) (in-hash
-                             (hasheq 'content
-                                     content
-                                     'type
-                                     (and content type-sym)
-                                     'tags
-                                     tags
-                                     'validity
-                                     (and (or sensitivity supersedes)
-                                          (let ([base (memory-item-validity visible-item)])
-                                            (cond
-                                              [(and sensitivity supersedes)
-                                               (hasheq 'sensitivity
-                                                       sensitivity
-                                                       'supersedes
-                                                       (if (list? supersedes)
-                                                           supersedes
-                                                           '()))]
-                                              [sensitivity (hash-set base 'sensitivity sensitivity)]
-                                              [else
-                                               (hash-set base
-                                                         'supersedes
-                                                         (if (list? supersedes)
-                                                             supersedes
-                                                             '()))])))
-                                     'updated-at
-                                     (format-iso-now)))]
-                     #:when v)
-            (values k v)))
-        ;; Revalidate through policy
-        (define updated-item
-          (memory-item id
-                       (if (hash-has-key? patch 'type)
-                           (hash-ref patch 'type)
-                           (memory-item-type visible-item))
-                       (memory-item-scope visible-item)
-                       (if (hash-has-key? patch 'content)
-                           (hash-ref patch 'content)
-                           (memory-item-content visible-item))
-                       (if (hash-has-key? patch 'tags)
-                           (hash-set (memory-item-metadata visible-item) 'tags (hash-ref patch 'tags))
-                           (memory-item-metadata visible-item))
-                       (if (hash-has-key? patch 'validity)
-                           (hash-ref patch 'validity)
-                           (memory-item-validity visible-item))
-                       (memory-item-created-at visible-item)
-                       (format-iso-now)))
-        (cond
-          [(not (policy-allows-store? policy updated-item))
-           (emit-policy-blocked! exec-ctx 'update 'store-policy 'tool content)
-           (make-error-result "Memory update blocked by policy.")]
-          [else
-           (define result (gen:update-memory! backend id patch))
-           (if (memory-result-ok? result)
-               (begin
-                 (publish-memory-event! exec-ctx
-                                        (event-hash "memory.item.updated"
-                                                    (hasheq 'id
-                                                            id
-                                                            'scope
-                                                            (memory-item-scope visible-item)
-                                                            'fields-updated
-                                                            (hash-keys patch))))
-                 (make-success-result
-                  (list (hasheq 'type "text" 'text (format "Memory updated: ~a" id)))
-                  (hasheq 'memory-id id)))
-               (make-error-result (format "Failed to update memory: ~a"
-                                          (memory-error-message result))))])])]))
+        (if (and sensitivity (eq? sensitivity 'secret))
+            (make-error-result "Secret sensitivity is not allowed for memory storage.")
+            (let* ([base-validity (memory-item-validity visible-item)]
+                   [with-sensitivity (if sensitivity
+                                         (hash-set base-validity 'sensitivity sensitivity)
+                                         base-validity)]
+                   [new-validity (and (or sensitivity supersedes)
+                                      (if supersedes
+                                          (hash-set with-sensitivity
+                                                    'supersedes
+                                                    (if (list? supersedes)
+                                                        supersedes
+                                                        '()))
+                                          with-sensitivity))]
+                   [patch (for/hash ([(k v) (in-hash (hasheq 'content
+                                                             content
+                                                             'type
+                                                             (and content type-sym)
+                                                             'tags
+                                                             tags
+                                                             'validity
+                                                             new-validity
+                                                             'updated-at
+                                                             (format-iso-now)))]
+                                     #:when v)
+                            (values k v))]
+                   [updated-item (memory-item id
+                                              (if (hash-has-key? patch 'type)
+                                                  (hash-ref patch 'type)
+                                                  (memory-item-type visible-item))
+                                              (memory-item-scope visible-item)
+                                              (if (hash-has-key? patch 'content)
+                                                  (hash-ref patch 'content)
+                                                  (memory-item-content visible-item))
+                                              (if (hash-has-key? patch 'tags)
+                                                  (hash-set (memory-item-metadata visible-item)
+                                                            'tags
+                                                            (hash-ref patch 'tags))
+                                                  (memory-item-metadata visible-item))
+                                              (if (hash-has-key? patch 'validity)
+                                                  (hash-ref patch 'validity)
+                                                  (memory-item-validity visible-item))
+                                              (memory-item-created-at visible-item)
+                                              (format-iso-now))])
+              (cond
+                [(not (policy-allows-store? policy updated-item))
+                 (emit-policy-blocked! exec-ctx 'update 'store-policy 'tool content)
+                 (make-error-result "Memory update blocked by policy.")]
+                [else
+                 (define result (gen:update-memory! backend id patch))
+                 (if (memory-result-ok? result)
+                     (begin
+                       (publish-memory-event! exec-ctx
+                                              (event-hash "memory.item.updated"
+                                                          (hasheq 'id
+                                                                  id
+                                                                  'scope
+                                                                  (memory-item-scope visible-item)
+                                                                  'fields-updated
+                                                                  (hash-keys patch))))
+                       (make-success-result
+                        (list (hasheq 'type "text" 'text (format "Memory updated: ~a" id)))
+                        (hasheq 'memory-id id)))
+                     (make-error-result (format "Failed to update memory: ~a"
+                                                (memory-error-message result))))])))])]))
 
 ;; ---------------------------------------------------------------------------
 ;; M13-F5: cleanup_expired_memory management tool
