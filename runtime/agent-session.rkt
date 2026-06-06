@@ -82,7 +82,8 @@
                   config-system-instructions
                   config-thinking-level
                   config-session-dir
-                  config-settings)
+                  config-settings
+                  config-memory-enabled?)
          (only-in "provider/model-registry.rkt" model-registry?)
          ;; F8: browser service lifecycle
          (only-in "../browser/service.rkt"
@@ -105,7 +106,8 @@
                   mock-act
                   mock-screenshot)
          (only-in "../browser/adapters/playwright-sidecar.rkt" make-playwright-adapter)
-         (only-in "../browser/adapter.rkt" make-browser-adapter))
+         (only-in "../browser/adapter.rkt" make-browser-adapter)
+         (only-in "../runtime/memory/service.rkt" initialize-memory-backend!))
 (require "session/session-mutation.rkt")
 
 (provide agent-session?
@@ -359,6 +361,10 @@
                                          #:event-bus (agent-session-event-bus sess)))
           (current-browser-service browser-svc)))))
 
+  ;; v0.95.15 W2: Initialize memory backend from session config
+  (when (config-memory-enabled? cfg-with-rollout)
+    (initialize-memory-backend! cfg-with-rollout))
+
   sess)
 
 ;; ============================================================
@@ -426,6 +432,10 @@
   (maybe-dispatch-hooks (config-extension-registry cfg) 'session-start resume-start-payload)
 
   (wire-session-event-handlers! sess fork-session)
+
+  ;; v0.95.15 W2: Initialize memory backend from session config
+  (when (config-memory-enabled? cfg)
+    (initialize-memory-backend! cfg))
 
   sess)
 
