@@ -206,13 +206,27 @@
 
   ;; Observe-only memory integration. This deliberately emits telemetry only;
   ;; prompt injection remains owned by memory-builder and explicit config gates.
+  (define memory-section-text #f)
   (when session-config
     (define observe-memory-for-context
       (dynamic-require memory-builder-path 'observe-memory-for-context))
     (define memory-telemetry->jsexpr (dynamic-require memory-builder-path 'memory-telemetry->jsexpr))
     (define observed (observe-memory-for-context session-config))
     (when trace-cb
-      (trace-cb 'memory-observe (memory-telemetry->jsexpr (cdr observed)))))
+      (trace-cb 'memory-observe (memory-telemetry->jsexpr (cdr observed))))
+    ;; v0.95.15 W3: Inject memory context when injection budget is configured
+    (define current-memory-injection-budget
+      (dynamic-require memory-builder-path 'current-memory-injection-budget))
+    (when (current-memory-injection-budget)
+      (define inject-memory-for-context
+        (dynamic-require memory-builder-path 'inject-memory-for-context))
+      (define injected (inject-memory-for-context session-config))
+      (define section (car injected))
+      (when (and section (positive? (string-length section)))
+        (set! memory-section-text section)
+        (when trace-cb
+          (define tel (cdr injected))
+          (trace-cb 'memory-inject (memory-telemetry->jsexpr tel))))))
 
   ;; Build base context with adjusted working-set
   (define base-tc
@@ -229,8 +243,19 @@
     (if preamble
         (list preamble)
         '()))
-  ;; Prepend preamble + conclusion entries to tier-a
-  (define new-tier-a (append preamble-entries conclusion-entries (tiered-context-tier-a base-tc)))
+  ;; Prepend preamble + memory + conclusion entries to tier-a
+  (define memory-entries
+    (if memory-section-text
+        (list (make-message (generate-id)
+                            #f
+                            'system
+                            'system-instruction
+                            (list (make-text-part memory-section-text))
+                            (current-seconds)
+                            (hasheq)))
+        '()))
+  (define new-tier-a
+    (append preamble-entries memory-entries conclusion-entries (tiered-context-tier-a base-tc)))
   ;; v0.76.7 W6 + v0.77.9 T2.2: Run rollback trigger checks with action execution
   (when (current-task-state-aware-assembly?)
     (define n-conclusions (length (filter task-conclusion? conclusions)))
@@ -276,7 +301,7 @@
         (define executed (maybe-execute-action recommended-action))
         (when executed
           (log-warning "context-assembly: executed rollback action: ~a" executed)))))
-  (if (and (null? preamble-entries) (null? conclusion-entries))
+  (if (and (null? preamble-entries) (null? memory-entries) (null? conclusion-entries))
       base-tc
       (tiered-context new-tier-a (tiered-context-tier-b base-tc) (tiered-context-tier-c base-tc))))
 
