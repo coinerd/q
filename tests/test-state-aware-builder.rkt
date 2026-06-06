@@ -5,18 +5,28 @@
 
 (require rackunit
          rackunit/text-ui
+         racket/string
          "../runtime/context-assembly/state-aware-builder.rkt"
          "../runtime/context-assembly/context-floor.rkt"
          "../runtime/context-assembly/task-conclusion.rkt"
          (only-in "../runtime/context-assembly/rollback-actions.rkt"
                   current-rollback-action-execution?)
          (only-in "../runtime/context-assembly/state-aware-builder.rkt" check-rollback-triggers)
-         (only-in "../util/message/protocol-types.rkt" make-message make-text-part message-role)
+         (only-in "../util/message/protocol-types.rkt"
+                  make-message
+                  make-text-part
+                  message-role
+                  message-content
+                  text-part?
+                  text-part-text)
          (only-in "../util/message/message.rkt" message-kind)
          (only-in "../util/fsm/fsm.rkt" fsm-state)
-         (only-in "../runtime/session/session-config.rkt" hash->session-config)
+         (only-in "../runtime/session/session-config.rkt" hash->session-config session-config?)
          (only-in "../runtime/memory/service.rkt" current-memory-backend)
-         (only-in "../runtime/memory/backends/memory-hash.rkt" make-memory-hash-backend))
+         (only-in "../runtime/memory/backends/memory-hash.rkt" make-memory-hash-backend)
+         (only-in "../runtime/memory/types.rkt" memory-item)
+         (only-in "../runtime/memory/protocol.rkt" memory-backend-store!)
+         (only-in "../runtime/context-assembly/memory-builder.rkt" current-memory-injection-budget))
 
 (define (make-test-msg role text [meta (hasheq)])
   (make-message "test-id" #f role 'text (list (make-text-part text)) (current-seconds) meta))
@@ -185,4 +195,67 @@
                                             #:working-set-messages msgs))
         (check-not-false tc)))))
 
+;; ============================================================
+;; v0.95.15 W3: Memory injection wiring tests
+;; ============================================================
+
+(define (extract-text-from-messages msgs)
+  (string-join (for*/list ([m msgs]
+                           [p (message-content m)]
+                           #:when (text-part? p))
+                 (text-part-text p))
+               " "))
+
+(define memory-injection-suite
+  (test-suite "state-aware-builder memory injection"
+
+    (test-case "no memory injection when budget not set"
+      (parameterize ([current-memory-backend (make-memory-hash-backend)]
+                     [current-memory-injection-budget #f]
+                     [current-task-state-aware-assembly? #f])
+        (define msgs (make-test-msgs 5))
+        (define tc
+          (build-tiered-context/state-aware msgs
+                                            #:session-config
+                                            (hash->session-config (hasheq 'memory-backend 'hash))
+                                            #:working-set-messages msgs))
+        (define tier-a-text (extract-text-from-messages (tiered-context-tier-a tc)))
+        (check-false (string-contains? tier-a-text "Memory —")
+                     "No memory section expected without budget")))
+
+    (test-case "memory section injected into tier-a when budget is set"
+      (define backend (make-memory-hash-backend))
+      (parameterize ([current-memory-backend backend]
+                     [current-memory-injection-budget 500]
+                     [current-task-state-aware-assembly? #f])
+        (define test-item
+          (memory-item "mem-1"
+                       'semantic
+                       'session
+                       "The project uses Racket"
+                       (hasheq 'project-root
+                               "/test"
+                               'session-id
+                               "sess-1"
+                               'tags
+                               '()
+                               'source
+                               'test
+                               'origin-message-id
+                               "msg-1")
+                       (hasheq 'sensitivity 'public 'confidence 0.9 'expires-at #f 'supersedes '())
+                       "2026-06-05T12:00:00Z"
+                       "2026-06-05T12:00:00Z"))
+        ((memory-backend-store! backend) test-item)
+        (define msgs (make-test-msgs 5))
+        (define tc
+          (build-tiered-context/state-aware msgs
+                                            #:session-config
+                                            (hash->session-config (hasheq 'memory-backend 'hash))
+                                            #:working-set-messages msgs))
+        (define tier-a-text (extract-text-from-messages (tiered-context-tier-a tc)))
+        (check-not-false (string-contains? tier-a-text "Racket")
+                         "Injected memory content should appear in tier-a")))))
+
 (run-tests suite)
+(run-tests memory-injection-suite)
