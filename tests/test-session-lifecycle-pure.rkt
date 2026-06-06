@@ -5,10 +5,14 @@
 
 (require rackunit
          rackunit/text-ui
+         racket/file
          (only-in "../runtime/session/session-lifecycle.rkt"
                   build-user-message
                   compute-parent-id
                   inject-system-instructions)
+         (only-in "../runtime/memory/service.rkt" current-memory-backend initialize-memory-backend!)
+         (only-in "../runtime/memory/protocol.rkt" memory-backend? memory-backend-name)
+         (only-in "../runtime/memory/backends/memory-hash.rkt" make-memory-hash-backend)
          (only-in "../util/message/protocol-types.rkt"
                   message?
                   message-role
@@ -176,6 +180,48 @@
                      (check-equal? (message-role (cadr result)) 'user)
                      (check-equal? (message-role (caddr result)) 'assistant)))
 
+;; ============================================================
+;; v0.95.15 W2: Memory backend initialization tests
+;; ============================================================
+
+(define-test-suite
+ memory-backend-init-tests
+ (test-case "initialize-memory-backend! returns #f when no backend spec"
+   (parameterize ([current-memory-backend #f])
+     (define result (initialize-memory-backend! (hasheq)))
+     (check-false result)
+     (check-false (current-memory-backend))))
+ (test-case "initialize-memory-backend! constructs hash backend from 'hash spec"
+   (parameterize ([current-memory-backend #f])
+     (define cfg (hasheq 'memory-backend 'hash))
+     (define result (initialize-memory-backend! cfg))
+     (check-not-false result)
+     (check-not-false (current-memory-backend))
+     (check-equal? (memory-backend-name result) "memory-hash")))
+ (test-case "initialize-memory-backend! constructs file-jsonl backend from 'file-jsonl spec"
+   (parameterize ([current-memory-backend #f])
+     (define tmp-dir (make-temporary-file "memory-test-~a" 'directory))
+     (define cfg (hasheq 'memory-backend 'file-jsonl 'session-dir (path->string tmp-dir)))
+     (define result (initialize-memory-backend! cfg))
+     (check-not-false result)
+     (check-not-false (current-memory-backend))
+     (check-equal? (memory-backend-name result) "file-jsonl")
+     (delete-directory/files tmp-dir)))
+ (test-case "initialize-memory-backend! uses pre-constructed backend"
+   (parameterize ([current-memory-backend #f])
+     (define pre-made (make-memory-hash-backend))
+     (define cfg (hasheq 'memory-backend pre-made))
+     (define result (initialize-memory-backend! cfg))
+     (check-eq? result pre-made)
+     (check-eq? (current-memory-backend) pre-made)))
+ (test-case "initialize-memory-backend! leaves disabled for unknown spec"
+   (parameterize ([current-memory-backend #f])
+     (define cfg (hasheq 'memory-backend 'unknown))
+     (define result (initialize-memory-backend! cfg))
+     (check-false result)
+     (check-false (current-memory-backend)))))
+
 (module+ main
   (run-tests pure-helper-tests)
-  (run-tests fault-injection-tests))
+  (run-tests fault-injection-tests)
+  (run-tests memory-backend-init-tests))
