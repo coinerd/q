@@ -69,8 +69,12 @@
          session-id ; string | #f
          types ; (listof symbol) | #f — filter by type
          tags ; (listof string) | #f — filter by tags
-         limit ; exact-positive-integer? — max results
+         limit ; exact-positive-integer? | #f — max results
          include-expired?) ; boolean
+  #:guard (lambda (text scope project-root session-id types tags limit include-expired? _name)
+            (when (and limit (or (not (integer? limit)) (<= limit 0)))
+              (error 'memory-query "limit must be a positive integer or #f, got: ~a" limit))
+            (values text scope project-root session-id types tags limit include-expired?))
   #:transparent)
 
 (struct memory-result
@@ -116,6 +120,9 @@
 ;; Conversions
 ;; ---------------------------------------------------------------------------
 
+;; F34: memory-item->hash returns an equal?-based hash (acceptable for serialization)
+;; while internal code uses hasheq. This is intentional — equal? works for both
+;; symbol and string keys, making it safer for interop with JSON.
 (define (memory-item->hash item)
   (hash 'id
         (memory-item-id item)
@@ -134,9 +141,10 @@
         'updated-at
         (memory-item-updated-at item)))
 
-;; WARNING (F26): hash->memory-item is a partial/unsafe conversion for deserialization.
+;; F35: WARNING — hash->memory-item is a partial/unsafe conversion for deserialization.
 ;; Resulting items may fail valid-memory-item? if the input hash is incomplete.
-;; Callers should validate with valid-memory-item? before storing.
+;; Callers MUST validate with valid-memory-item? before storing.
+;; Consider adding #:validate? keyword in future if more callers need guard.
 (define (hash->memory-item h)
   (memory-item (hash-ref h 'id)
                (hash-ref h 'type 'semantic)
@@ -175,6 +183,8 @@
                 (hash-ref h 'limit default-memory-limit)
                 (hash-ref h 'include-expired? #f)))
 
+;; F36: memory-result->hash is for internal use. If used for JSON serialization,
+;; the error hash keys (code, message, retryable?) may need stringification.
 (define (memory-result->hash r)
   (define val (memory-result-value r))
   (hash 'ok?

@@ -169,6 +169,27 @@
     (check-true (memory-telemetry-backend-available? tel))
     (check-true (string? (memory-telemetry-error-message tel)))))
 
+(test-case "observe: timeout fail-closed returns empty with timed-out telemetry (F5)"
+  (define cfg (make-test-config #:memory-enabled? #t))
+  (define slow-backend
+    (memory-backend "slow"
+                    (lambda (item) (memory-result #t (memory-item-id item) #f (hasheq)))
+                    (lambda (query)
+                      (sleep 0.5) ; Sleep longer than timeout
+                      (memory-result #t '() #f (hasheq)))
+                    (lambda (id patch) (memory-result #t id #f (hasheq)))
+                    (lambda (id scope) (memory-result #t id #f (hasheq)))
+                    (lambda (query) (memory-result #t '() #f (hasheq)))
+                    (lambda () #t)
+                    (lambda (policy) (memory-result #t #f #f (hasheq)))))
+  (parameterize ([current-memory-backend slow-backend]
+                 [current-memory-retrieval-timeout-ms 50])
+    (define result (observe-memory-for-context cfg #:scope 'session #:session-id "sess-observe"))
+    (check-equal? (car result) '())
+    (define tel (cdr result))
+    (check-true (memory-telemetry-timed-out? tel))
+    (check-equal? (memory-telemetry-error-message tel) "Memory retrieval timed out")))
+
 (test-case "observe: does not modify any prompt text"
   (define b (make-memory-hash-backend))
   (define cfg (make-test-config #:memory-enabled? #t))

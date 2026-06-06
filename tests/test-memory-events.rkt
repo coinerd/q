@@ -147,6 +147,48 @@
                   (check-equal? (event-types events) '("memory.item.deleted")))))
 
 ;; ---------------------------------------------------------------------------
+;; F22: Retrieval event payload verification
+;; ---------------------------------------------------------------------------
+
+(test-case "retrieval event contains all SPEC-required fields (F22)"
+  (define b (make-memory-hash-backend))
+  (define events (box '()))
+  (define ctx (collecting-context events))
+  (with-backend b
+                (lambda ()
+                  (tool-store-memory (hash 'content "retrieval payload test") ctx)
+                  (set-box! events '())
+                  (define r (tool-search-memory (hash 'query "payload") ctx))
+                  (check-false (tool-result-is-error? r))
+                  (define evts (reverse (unbox events)))
+                  (check-equal? (length evts) 1)
+                  (define evt (car evts))
+                  (check-equal? (hash-ref evt 'type) "memory.retrieval.performed")
+                  (check-true (hash-has-key? evt 'query-snippet))
+                  (check-true (hash-has-key? evt 'result-count))
+                  (check-true (integer? (hash-ref evt 'result-count)))
+                  (check-true (hash-has-key? evt 'scope))
+                  (check-true (hash-has-key? evt 'latency-ms))
+                  (check-true (integer? (hash-ref evt 'latency-ms))))))
+
+;; ---------------------------------------------------------------------------
+;; F24: store.requested fires before policy.blocked
+;; ---------------------------------------------------------------------------
+
+(test-case "policy-blocked store emits store.requested before blocked (F24)"
+  (define b (make-memory-hash-backend))
+  (define events (box '()))
+  (define ctx (collecting-context events))
+  (with-backend b
+                (lambda ()
+                  ;; Secret content triggers policy block
+                  (define r (tool-store-memory (hash 'content "API_KEY=sk-super-secret") ctx))
+                  (check-true (tool-result-is-error? r))
+                  (define evts (event-types events))
+                  ;; Must have BOTH events in order
+                  (check-equal? evts '("memory.item.store.requested" "memory.policy.blocked")))))
+
+;; ---------------------------------------------------------------------------
 ;; F17: Backend store! called exactly once
 ;; ---------------------------------------------------------------------------
 
@@ -155,17 +197,16 @@
   (define base-backend (make-memory-hash-backend))
   ;; Wrap the store! to count calls
   (define wrapped-backend
-    (memory-backend
-     "counting"
-     (lambda (item)
-       (set-box! call-count (+ 1 (unbox call-count)))
-       (gen:store-memory! base-backend item))
-     (lambda (query) (gen:retrieve-memory base-backend query))
-     (lambda (id patch) (gen:update-memory! base-backend id patch))
-     (lambda (id scope) (gen:delete-memory! base-backend id scope))
-     (lambda (query) (gen:list-memory base-backend query))
-     (lambda () (gen:memory-available? base-backend))
-     (lambda (policy) (gen:manage-memory! base-backend policy))))
+    (memory-backend "counting"
+                    (lambda (item)
+                      (set-box! call-count (+ 1 (unbox call-count)))
+                      (gen:store-memory! base-backend item))
+                    (lambda (query) (gen:retrieve-memory base-backend query))
+                    (lambda (id patch) (gen:update-memory! base-backend id patch))
+                    (lambda (id scope) (gen:delete-memory! base-backend id scope))
+                    (lambda (query) (gen:list-memory base-backend query))
+                    (lambda () (gen:memory-available? base-backend))
+                    (lambda (policy) (gen:manage-memory! base-backend policy))))
   (define events (box '()))
   (define ctx (collecting-context events))
   (parameterize ([current-memory-backend wrapped-backend]
@@ -183,33 +224,40 @@
   (define observer-called? (box #f))
   (define base-backend (make-memory-hash-backend))
   (define wrapped-backend
-    (memory-backend
-     "double-write-guard"
-     (lambda (item)
-       (set-box! call-count (+ 1 (unbox call-count)))
-       (gen:store-memory! base-backend item))
-     (lambda (query) (gen:retrieve-memory base-backend query))
-     (lambda (id patch) (gen:update-memory! base-backend id patch))
-     (lambda (id scope) (gen:delete-memory! base-backend id scope))
-     (lambda (query) (gen:list-memory base-backend query))
-     (lambda () (gen:memory-available? base-backend))
-     (lambda (policy) (gen:manage-memory! base-backend policy))))
+    (memory-backend "double-write-guard"
+                    (lambda (item)
+                      (set-box! call-count (+ 1 (unbox call-count)))
+                      (gen:store-memory! base-backend item))
+                    (lambda (query) (gen:retrieve-memory base-backend query))
+                    (lambda (id patch) (gen:update-memory! base-backend id patch))
+                    (lambda (id scope) (gen:delete-memory! base-backend id scope))
+                    (lambda (query) (gen:list-memory base-backend query))
+                    (lambda () (gen:memory-available? base-backend))
+                    (lambda (policy) (gen:manage-memory! base-backend policy))))
   ;; Observer that tries to store again — should NOT cause another backend write
   (define (observing-publisher evt)
     (unless (unbox observer-called?)
       (set-box! observer-called? #t)
       ;; Observer tries to store via a DIFFERENT backend call — harmless
-      (gen:store-memory! base-backend
-                         (memory-item "observer-item"
-                                      'semantic
-                                      'project
-                                      "observer artifact"
-                                      (hasheq 'project-root "/tmp" 'session-id "obs"
-                                              'tags '() 'source 'test 'origin-message-id "obs")
-                                      (hasheq 'sensitivity 'public 'confidence 1.0
-                                              'supersedes '() 'expires-at #f)
-                                      "2026-06-05T12:00:00Z"
-                                      "2026-06-05T12:00:00Z"))))
+      (gen:store-memory!
+       base-backend
+       (memory-item "observer-item"
+                    'semantic
+                    'project
+                    "observer artifact"
+                    (hasheq 'project-root
+                            "/tmp"
+                            'session-id
+                            "obs"
+                            'tags
+                            '()
+                            'source
+                            'test
+                            'origin-message-id
+                            "obs")
+                    (hasheq 'sensitivity 'public 'confidence 1.0 'supersedes '() 'expires-at #f)
+                    "2026-06-05T12:00:00Z"
+                    "2026-06-05T12:00:00Z"))))
   (define ctx
     (make-exec-context #:working-directory "/tmp/q-memory-events"
                        #:session-metadata (hasheq 'session-id "sess-dw")

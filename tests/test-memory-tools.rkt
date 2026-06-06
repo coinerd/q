@@ -222,14 +222,15 @@
 (test-case "policy: allows public sensitivity"
   (define policy default-memory-policy)
   (define item
-    (memory-item "id"
-                 'semantic
-                 'session
-                 "public info"
-                 (hasheq 'tags '() 'source 'tool 'project-root "/tmp" 'session-id "s1" 'origin-message-id "test")
-                 (hasheq 'sensitivity 'public 'confidence 1.0 'supersedes '())
-                 "2026-01-01T00:00:00Z"
-                 "2026-01-01T00:00:00Z"))
+    (memory-item
+     "id"
+     'semantic
+     'session
+     "public info"
+     (hasheq 'tags '() 'source 'tool 'project-root "/tmp" 'session-id "s1" 'origin-message-id "test")
+     (hasheq 'sensitivity 'public 'confidence 1.0 'supersedes '())
+     "2026-01-01T00:00:00Z"
+     "2026-01-01T00:00:00Z"))
   (check-true (policy-allows-store? policy item)))
 
 (test-case "policy: blocks overly long content"
@@ -409,3 +410,28 @@
                                (tool-store-memory (hash 'content "global" 'scope "user") #f)))
                   (check-true (tool-result-is-error? (tool-search-memory (hash 'scope "user") #f)))
                   (check-true (tool-result-is-error? (tool-list-memory (hash 'scope "user") #f))))))
+
+;; ---------------------------------------------------------------------------
+;; F26: Safe-mode integration test
+;; ---------------------------------------------------------------------------
+
+(test-case "store-memory blocked by restrictive policy (F26)"
+  (define b (make-memory-hash-backend))
+  (define events (box '()))
+  (define ctx
+    (make-exec-context #:working-directory "/tmp/q-memory-safe"
+                       #:session-metadata (hasheq 'session-id "sess-safe")
+                       #:event-publisher (lambda (evt) (set-box! events (cons evt (unbox events))))))
+  (with-backend b
+                (lambda ()
+                  ;; Use a restrictive policy with empty allowed sensitivities to block all stores
+                  (parameterize ([current-memory-policy (make-memory-policy #:allowed-sensitivities
+                                                                            '())])
+                    (define r (tool-store-memory (hash 'content "safe mode test") ctx))
+                    (check-true (tool-result-is-error? r))
+                    ;; Verify event stream contains policy.blocked
+                    (define evts (reverse (unbox events)))
+                    (define blocked-types
+                      (filter (lambda (t) (equal? t "memory.policy.blocked"))
+                              (map (lambda (evt) (hash-ref evt 'type #f)) evts)))
+                    (check-equal? (length blocked-types) 1)))))

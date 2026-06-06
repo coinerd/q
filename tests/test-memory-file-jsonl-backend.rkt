@@ -43,7 +43,7 @@
    scope
    content
    (hasheq 'project-root "/tmp" 'session-id "s1" 'tags tags 'source "test" 'origin-message-id "test")
-   (hasheq 'sensitivity "public" 'confidence 0.9 'supersedes '())
+   (hasheq 'sensitivity 'public 'confidence 0.9 'supersedes '())
    "2026-06-01T00:00:00Z"
    "2026-06-01T00:00:00Z"))
 
@@ -188,7 +188,7 @@
                                                "test"
                                                'origin-message-id
                                                "test")
-                                       (hasheq 'sensitivity "public" 'confidence 0.9 'supersedes '())
+                                       (hasheq 'sensitivity 'public 'confidence 0.9 'supersedes '())
                                        "2026-06-01T00:00:00Z"
                                        (format "2026-06-0~aT00:00:00Z" (+ i 1)))))
      ;; Reload
@@ -228,6 +228,127 @@
                        (check-true (memory-result-ok? result)))))
 
 ;; ---------------------------------------------------------------------------
+;; Expiry after reload (F16)
+;; ---------------------------------------------------------------------------
+
+(test-case "expired items excluded after JSONL reload"
+  (with-temp-backend
+   (lambda (backend dir)
+     (define expired-item
+       (memory-item
+        "exp1"
+        'semantic
+        'session
+        "expired content"
+        (hasheq 'project-root #f 'session-id "s1" 'tags '() 'origin-message-id "m1" 'source 'tool)
+        (hasheq 'sensitivity
+                'public
+                'confidence
+                1.0
+                'expires-at
+                "2020-01-01T00:00:00Z"
+                'supersedes
+                '())
+        "2020-01-01T00:00:00Z"
+        "2020-01-01T00:00:00Z"))
+     (gen:store-memory! backend expired-item)
+     ;; Reload from file
+     (define backend2 (make-file-jsonl-backend dir))
+     (define query (memory-query #f #f #f #f #f #f 100 #f))
+     (define result (gen:retrieve-memory backend2 query))
+     (check-true (memory-result-ok? result))
+     (check-equal? (length (memory-result-value result)) 0))))
+
+;; ---------------------------------------------------------------------------
+;; Session-id isolation (F18)
+;; ---------------------------------------------------------------------------
+
+(test-case "retrieve filters by session-id after reload"
+  (with-temp-backend (lambda (backend dir)
+                       (define item-s1
+                         (memory-item "s1-id"
+                                      'semantic
+                                      'session
+                                      "session 1 content"
+                                      (hasheq 'project-root
+                                              "/tmp"
+                                              'session-id
+                                              "sess-1"
+                                              'tags
+                                              '()
+                                              'origin-message-id
+                                              "m1"
+                                              'source
+                                              'tool)
+                                      (hasheq 'sensitivity 'public 'confidence 0.9 'supersedes '())
+                                      "2026-06-01T00:00:00Z"
+                                      "2026-06-01T00:00:00Z"))
+                       (define item-s2
+                         (memory-item "s2-id"
+                                      'semantic
+                                      'session
+                                      "session 2 content"
+                                      (hasheq 'project-root
+                                              "/tmp"
+                                              'session-id
+                                              "sess-2"
+                                              'tags
+                                              '()
+                                              'origin-message-id
+                                              "m2"
+                                              'source
+                                              'tool)
+                                      (hasheq 'sensitivity 'public 'confidence 0.9 'supersedes '())
+                                      "2026-06-01T00:00:00Z"
+                                      "2026-06-01T00:00:00Z"))
+                       (gen:store-memory! backend item-s1)
+                       (gen:store-memory! backend item-s2)
+                       ;; Reload and query with session-id filter
+                       (define backend2 (make-file-jsonl-backend dir))
+                       (define query (memory-query #f 'session "/tmp" "sess-1" #f #f 100 #f))
+                       (define result (gen:retrieve-memory backend2 query))
+                       (check-true (memory-result-ok? result))
+                       (check-equal? (length (memory-result-value result)) 1)
+                       (check-equal? (memory-item-id (car (memory-result-value result))) "s1-id"))))
+
+;; ---------------------------------------------------------------------------
+;; Round-trip valid-memory-item? (F2)
+;; ---------------------------------------------------------------------------
+
+(test-case "round-tripped item passes valid-memory-item?"
+  (with-temp-backend (lambda (backend dir)
+                       (define item
+                         (memory-item "rt-id"
+                                      'semantic
+                                      'session
+                                      "round trip"
+                                      (hasheq 'project-root
+                                              "/tmp"
+                                              'session-id
+                                              "s1"
+                                              'tags
+                                              '("test")
+                                              'origin-message-id
+                                              "m1"
+                                              'source
+                                              'tool)
+                                      (hasheq 'sensitivity 'public 'confidence 0.9 'supersedes '())
+                                      "2026-06-01T00:00:00Z"
+                                      "2026-06-01T00:00:00Z"))
+                       (gen:store-memory! backend item)
+                       (define backend2 (make-file-jsonl-backend dir))
+                       (define query (memory-query #f #f #f #f #f #f 100 #f))
+                       (define result (gen:retrieve-memory backend2 query))
+                       (check-true (memory-result-ok? result))
+                       (check-equal? (length (memory-result-value result)) 1)
+                       (define loaded (car (memory-result-value result)))
+                       (check-true (valid-memory-item? loaded))
+                       ;; Verify sensitivity is symbol, not string (F9)
+                       (define sens (hash-ref (memory-item-validity loaded) 'sensitivity))
+                       (check-true (symbol? sens))
+                       (check-equal? sens 'public))))
+
+;; ---------------------------------------------------------------------------
 ;; Scope filtering
 ;; ---------------------------------------------------------------------------
 
@@ -252,7 +373,7 @@
    'session
    "tagged content"
    (hasheq 'tags tags 'project-root "/tmp" 'session-id "s1" 'source "test" 'origin-message-id "test")
-   (hasheq 'sensitivity "public" 'confidence 0.9 'supersedes '())
+   (hasheq 'sensitivity 'public 'confidence 0.9 'supersedes '())
    "2026-06-01T00:00:00Z"
    "2026-06-01T00:00:00Z"))
 

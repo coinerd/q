@@ -50,17 +50,18 @@
                     #:defaults (backend "none" action #f)
                     #:schema-version 1)
 
-;; Backward-compatible aliases for old code/tests during transition. These keep
-;; constructor names available but canonical type strings are the SPEC names.
-(define mem-stored-event-type mem-item-stored-event-type)
-(define mem-retrieved-event-type mem-retrieval-performed-event-type)
-(define mem-deleted-event-type mem-item-deleted-event-type)
-(define mem-stored-event-fields mem-item-stored-event-fields)
-(define mem-retrieved-event-fields mem-retrieval-performed-event-fields)
-(define mem-deleted-event-fields mem-item-deleted-event-fields)
-(define make-mem-stored-event make-mem-item-stored-event)
-(define make-mem-retrieved-event make-mem-retrieval-performed-event)
-(define make-mem-deleted-event make-mem-item-deleted-event)
+;; F38: Backward-compatible aliases — DEPRECATED, remove after all consumers migrated.
+;; These aliases map old names to canonical SPEC names. New code should use
+;; the canonical mem-item-stored-event, mem-retrieval-performed-event, etc.
+(define mem-stored-event-type mem-item-stored-event-type) ;; DEPRECATED
+(define mem-retrieved-event-type mem-retrieval-performed-event-type) ;; DEPRECATED
+(define mem-deleted-event-type mem-item-deleted-event-type) ;; DEPRECATED
+(define mem-stored-event-fields mem-item-stored-event-fields) ;; DEPRECATED
+(define mem-retrieved-event-fields mem-retrieval-performed-event-fields) ;; DEPRECATED
+(define mem-deleted-event-fields mem-item-deleted-event-fields) ;; DEPRECATED
+(define make-mem-stored-event make-mem-item-stored-event) ;; DEPRECATED
+(define make-mem-retrieved-event make-mem-retrieval-performed-event) ;; DEPRECATED
+(define make-mem-deleted-event make-mem-item-deleted-event) ;; DEPRECATED
 
 (provide (struct-out mem-store-requested-event)
          make-mem-store-requested-event

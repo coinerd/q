@@ -40,14 +40,23 @@
        (memory-result #f #f (make-memory-error 'invalid-item "Invalid memory item") (hasheq))]
       [(hash-has-key? store (memory-item-id item))
        (define existing (hash-ref store (memory-item-id item)))
-       (if (equal? (memory-item-content existing) (memory-item-content item))
-           ;; Idempotent: same content — return success (P2-4)
-           (memory-result #t (memory-item-id item) #f (hasheq 'backend 'memory-hash 'idempotent #t))
-           ;; Different content for same id: error
-           (memory-result #f
-                          #f
-                          (make-memory-error 'duplicate "Item already exists with different content")
-                          (hasheq)))]
+       ;; F12: Full-item idempotency — compare everything except timestamps
+       (define existing-no-ts (struct-copy memory-item existing [created-at ""] [updated-at ""]))
+       (define item-no-ts (struct-copy memory-item item [created-at ""] [updated-at ""]))
+       (cond
+         [(equal? existing-no-ts item-no-ts)
+          ;; Idempotent: full item identical (ignoring timestamps)
+          (memory-result #t (memory-item-id item) #f (hasheq 'backend 'memory-hash 'idempotent #t))]
+         [(equal? (memory-item-content existing) (memory-item-content item))
+          ;; Same content, different metadata/validity: update (F12)
+          (hash-set! store (memory-item-id item) item)
+          (memory-result #t (memory-item-id item) #f (hasheq 'backend 'memory-hash))]
+         [else
+          ;; Different content for same id: error
+          (memory-result #f
+                         #f
+                         (make-memory-error 'duplicate "Item already exists with different content")
+                         (hasheq))])]
       [else
        (hash-set! store (memory-item-id item) item)
        (memory-result #t (memory-item-id item) #f (hasheq 'backend 'memory-hash))]))

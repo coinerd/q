@@ -63,8 +63,12 @@
             r2
             (memory-result
              #f
-             (memory-result-value r2)
-             (hash 'l1-error (memory-result-error r1) 'l2-error (memory-result-error r2))
+             #f
+             (make-memory-error 'chained-failure
+                                (format "L1: ~a; L2: ~a"
+                                        (hash-ref (memory-result-error r1) 'message "unknown")
+                                        (hash-ref (memory-result-error r2) 'message "unknown"))
+                                #t)
              (memory-result-metadata r2)))]
        [else r1]))
    ;; retrieve: L1 first, fall back to L2, merge/dedup
@@ -88,10 +92,10 @@
          #f
          (hasheq 'backend 'chained 'l1-count (length items-l1) 'l2-count (length items-l2)))]
        [else (memory-result #t items-l1 #f (memory-result-metadata r1))]))
-   ;; update!: update both layers
+   ;; update!: update both layers (only propagate to L2 if L1 succeeded) (F11)
    (lambda (id patch)
      (define r1 (gen:update-memory! l1 id patch))
-     (when (and write-through? (gen:memory-available? l2))
+     (when (and (memory-result-ok? r1) write-through? (gen:memory-available? l2))
        (gen:update-memory! l2 id patch))
      r1)
    ;; delete!: remove from both layers

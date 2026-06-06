@@ -45,7 +45,10 @@
 ;; Minimum confidence threshold for auto-extracted items (P2-8)
 (define current-auto-extraction-min-confidence (make-parameter 0.5))
 
-;; Sensitivity classification for auto-extracted content (P3-10)
+;; F32/F41: Sensitivity classification for auto-extracted content (P3-10).
+;; NOTE: This is a placeholder heuristic for v0.95.10 alpha.
+;; Substring matching on "internal"/"private"/"confidential" produces false
+;; positives (e.g., "internal medicine"). Should be improved before stable.
 (define (classify-sensitivity content)
   (define lower (string-downcase content))
   (if (or (string-contains? lower "internal")
@@ -54,7 +57,10 @@
       'internal
       'public))
 
-;; Secret patterns that block storage
+;; F21: Secret patterns for first-pass filtering.
+;; This is a subset of policy.rkt's default-blocked-content-patterns.
+;; Defense-in-depth: auto-extraction does a first-pass filter here, then
+;; policy-allows-store? does a second-pass with the full pattern set.
 (define secret-patterns
   (list #px"(?i:api.?key.*[=:].{10,})"
         #px"(?i:bearer\\s+\\S{15,})"

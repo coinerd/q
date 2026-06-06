@@ -92,7 +92,7 @@
    ;; error when disabled (write operations must not silently succeed).
    (lambda (query)
      (if (not (current-external-backend-enabled))
-         (memory-result #t '() #f (hasheq))
+         (memory-result #t '() #f (hasheq 'disabled #t))
          (external-call 'retrieve
                         (hash 'text
                               (memory-query-text query)
@@ -113,7 +113,7 @@
      (external-call 'delete (hash 'id id 'scope scope) transport-fn effective-timeout))
    (lambda (query)
      (if (not (current-external-backend-enabled))
-         (memory-result #t '() #f (hasheq))
+         (memory-result #t '() #f (hasheq 'disabled #t))
          (external-call 'list
                         (hash 'scope
                               (memory-query-scope query)

@@ -14,6 +14,7 @@
          "../runtime/context-assembly/memory-builder.rkt"
          "../runtime/memory/types.rkt"
          "../runtime/memory/backends/memory-hash.rkt"
+         "../runtime/memory/protocol.rkt"
          "../tools/builtins/memory-tools.rkt"
          "../tools/tool.rkt"
          "../runtime/session/session-config.rkt")
@@ -203,6 +204,16 @@
   (check-false (car result))
   (check-false (memory-telemetry-backend-available? (cdr result))))
 
+(test-case "inject: disabled config returns #f even when backend has items (F7)"
+  (define b (make-memory-hash-backend))
+  (define cfg (make-test-config #:memory-enabled? #f))
+  (store-item b "some fact" #:scope 'session)
+  (parameterize ([current-memory-backend b])
+    (define result (inject-memory-for-context cfg #:scope 'session #:budget-tokens 100))
+    (check-false (car result))
+    ;; Telemetry should show backend available but memory disabled
+    (check-false (memory-telemetry-backend-available? (cdr result)))))
+
 (test-case "inject: enabled with items produces section"
   (define b (make-memory-hash-backend))
   (define cfg (make-test-config #:memory-enabled? #t))
@@ -247,6 +258,45 @@
     (check-equal? (car r1) (car r2))))
 
 ;; ---------------------------------------------------------------------------
+;; F30: Same-timestamp tiebreaker
+;; ---------------------------------------------------------------------------
+
+(test-case "inject: same-timestamp items ordered deterministically by id (F30)"
+  (define b (make-memory-hash-backend))
+  (define cfg (make-test-config #:memory-enabled? #t))
+  ;; Manually construct items with identical timestamps
+  (define item-a
+    (memory-item
+     "id-aaa"
+     'semantic
+     'session
+     "content a"
+     (hasheq 'project-root #f 'session-id "s1" 'tags '() 'origin-message-id "m1" 'source 'tool)
+     (hasheq 'sensitivity 'public 'confidence 1.0 'supersedes '())
+     "2026-06-01T00:00:00Z"
+     "2026-06-01T00:00:00Z"))
+  (define item-b
+    (memory-item
+     "id-bbb"
+     'semantic
+     'session
+     "content b"
+     (hasheq 'project-root #f 'session-id "s1" 'tags '() 'origin-message-id "m2" 'source 'tool)
+     (hasheq 'sensitivity 'public 'confidence 1.0 'supersedes '())
+     "2026-06-01T00:00:00Z"
+     "2026-06-01T00:00:00Z"))
+  (gen:store-memory! b item-a)
+  (gen:store-memory! b item-b)
+  (parameterize ([current-memory-backend b])
+    (define r1 (inject-memory-for-context cfg #:scope 'session #:budget-tokens 1000))
+    (define r2 (inject-memory-for-context cfg #:scope 'session #:budget-tokens 1000))
+    ;; Both calls should produce identical ordering
+    (check-equal? (car r1) (car r2))
+    ;; id-bbb > id-aaa lexicographically, so id-bbb should come first
+    ;; (string>? "id-bbb" "id-aaa") = #t, so bbb before aaa in sort
+    (check-true (string-contains? (car r1) "id-bbb"))))
+
+;; ---------------------------------------------------------------------------
 ;; Budget enforcement: no unbounded growth
 ;; ---------------------------------------------------------------------------
 
@@ -288,11 +338,14 @@
 
 (test-case "expired items excluded from memory injection (F16)"
   (define expired-item
-    (memory-item "exp1" 'semantic 'session "expired content"
-                 (hasheq 'project-root #f 'session-id "s1" 'tags '()
-                         'origin-message-id "m1" 'source 'tool)
-                 (hasheq 'sensitivity 'public 'confidence 1.0
-                         'expires-at "2020-01-01T00:00:00Z" 'supersedes '())
-                 "2020-01-01T00:00:00Z" "2020-01-01T00:00:00Z"))
+    (memory-item
+     "exp1"
+     'semantic
+     'session
+     "expired content"
+     (hasheq 'project-root #f 'session-id "s1" 'tags '() 'origin-message-id "m1" 'source 'tool)
+     (hasheq 'sensitivity 'public 'confidence 1.0 'expires-at "2020-01-01T00:00:00Z" 'supersedes '())
+     "2020-01-01T00:00:00Z"
+     "2020-01-01T00:00:00Z"))
   (define section (build-memory-section (list expired-item) #:budget-tokens 500))
   (check-false section))

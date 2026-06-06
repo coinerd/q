@@ -167,6 +167,92 @@
   (check-equal? (length (memory-result-value result)) 2))
 
 ;; ---------------------------------------------------------------------------
+;; Update (F13)
+;; ---------------------------------------------------------------------------
+
+(test-case "chained: update propagates to both layers"
+  (define l1 (make-memory-hash-backend))
+  (define l2 (make-memory-hash-backend))
+  (define chained (make-chained-backend l1 l2))
+  (gen:store-memory! chained (make-test-item #:id "upd" #:content "v1"))
+  (define r (gen:update-memory! chained "upd" (hash 'content "v2")))
+  (check-true (memory-result-ok? r))
+  ;; Verify updated in L1
+  (define r1 (gen:retrieve-memory l1 (memory-query #f #f #f #f #f #f 100 #f)))
+  (check-equal? (memory-item-content (car (memory-result-value r1))) "v2")
+  ;; Verify updated in L2
+  (define r2 (gen:retrieve-memory l2 (memory-query #f #f #f #f #f #f 100 #f)))
+  (check-equal? (memory-item-content (car (memory-result-value r2))) "v2"))
+
+(test-case "chained: update does not propagate to L2 when L1 fails (F11)"
+  (define l1
+    (memory-backend "failing-l1"
+                    (lambda (item) (memory-result #t (memory-item-id item) #f (hasheq)))
+                    (lambda (q) (memory-result #t '() #f (hasheq)))
+                    (lambda (id patch)
+                      (memory-result #f #f (hash 'code 'not-found 'message "not found") (hasheq)))
+                    (lambda (id scope) (memory-result #t #f #f (hasheq)))
+                    (lambda (q) (memory-result #t '() #f (hasheq)))
+                    (lambda () #t)
+                    (lambda (p) (memory-result #t #f #f (hasheq)))))
+  (define l2 (make-memory-hash-backend))
+  (gen:store-memory! l2 (make-test-item #:id "l2-only" #:content "v1"))
+  (define chained (make-chained-backend l1 l2))
+  ;; L1 doesn't have the item, so update fails; L2 should NOT be updated
+  (define r (gen:update-memory! chained "l2-only" (hash 'content "v2")))
+  (check-false (memory-result-ok? r))
+  ;; L2 should still have original content
+  (define r2 (gen:retrieve-memory l2 (memory-query #f #f #f #f #f #f 100 #f)))
+  (check-equal? (memory-item-content (car (memory-result-value r2))) "v1"))
+
+;; ---------------------------------------------------------------------------
+;; Manage (F14)
+;; ---------------------------------------------------------------------------
+
+(test-case "chained: manage returns success"
+  (define l1 (make-memory-hash-backend))
+  (define l2 (make-memory-hash-backend))
+  (define chained (make-chained-backend l1 l2))
+  (define r (gen:manage-memory! chained (hash)))
+  (check-true (memory-result-ok? r)))
+
+;; ---------------------------------------------------------------------------
+;; Canonical error shape (F10)
+;; ---------------------------------------------------------------------------
+
+(test-case "chained: both-fail store returns canonical error shape"
+  (define l1
+    (memory-backend
+     "failing-l1"
+     (lambda (item)
+       (memory-result #f #f (hash 'code 'error 'message "L1 fail" 'retryable? #f) (hasheq)))
+     (lambda (q) (memory-result #t '() #f (hasheq)))
+     (lambda (id patch) (memory-result #t #f #f (hasheq)))
+     (lambda (id scope) (memory-result #t #f #f (hasheq)))
+     (lambda (q) (memory-result #t '() #f (hasheq)))
+     (lambda () #t)
+     (lambda (p) (memory-result #t #f #f (hasheq)))))
+  (define l2
+    (memory-backend
+     "failing-l2"
+     (lambda (item)
+       (memory-result #f #f (hash 'code 'error 'message "L2 fail" 'retryable? #f) (hasheq)))
+     (lambda (q) (memory-result #t '() #f (hasheq)))
+     (lambda (id patch) (memory-result #t #f #f (hasheq)))
+     (lambda (id scope) (memory-result #t #f #f (hasheq)))
+     (lambda (q) (memory-result #t '() #f (hasheq)))
+     (lambda () #t)
+     (lambda (p) (memory-result #t #f #f (hasheq)))))
+  (define chained (make-chained-backend l1 l2))
+  (define r (gen:store-memory! chained (make-test-item #:id "doom")))
+  (check-false (memory-result-ok? r))
+  (define err (memory-result-error r))
+  (check-equal? (hash-ref err 'code) 'chained-failure)
+  (check-true (string-contains? (hash-ref err 'message) "L1"))
+  (check-true (string-contains? (hash-ref err 'message) "L2"))
+  (check-true (hash-ref err 'retryable?)))
+
+;; ---------------------------------------------------------------------------
 ;; L1 error fallback (P1-2)
 ;; ---------------------------------------------------------------------------
 

@@ -190,6 +190,9 @@
                                              'redacted-snippet
                                              (redacted-memory-snippet (memory-item-content item))))))
 
+;; F25: Plain-hash events use lisp-case keys ('query-snippet, 'latency-ms,
+;; 'result-count) for jsexpr compatibility. These map to the typed-event
+;; struct field names and are consistent with SPEC §6.
 (define (emit-retrieval! exec-ctx scope query-text limit count result)
   (publish-memory-event!
    exec-ctx
@@ -200,7 +203,7 @@
                        (redacted-memory-snippet (or query-text ""))
                        'limit
                        limit
-                       'count
+                       'result-count
                        count
                        'latency-ms
                        (hash-ref (memory-result-metadata result) 'latency-ms 0)))))
@@ -223,8 +226,13 @@
   (define scope-sym (effective-memory-scope (parse-symbol-arg args 'scope #f) project-root))
   (define tags (hash-ref args 'tags '()))
   (define sensitivity (parse-symbol-arg args 'sensitivity 'public))
-  ;; F4: Emit store.requested BEFORE any validation (SPEC §6)
-  (emit-store-requested! exec-ctx (make-memory-id) type-sym scope-sym 'tool)
+  ;; F4: Emit store.requested BEFORE any validation (SPEC §6).
+  ;; F3: Generate single ID and reuse for both event and store.
+  ;; F23: store.requested is emitted even when backend is #f (disabled) for
+  ;; complete audit tracing. The subsequent backend-unavailable event explains
+  ;; why the store did not proceed.
+  (define store-candidate-id (make-memory-id))
+  (emit-store-requested! exec-ctx store-candidate-id type-sym scope-sym 'tool)
   (cond
     [(not backend)
      (emit-backend-unavailable! exec-ctx backend 'store)
@@ -243,15 +251,16 @@
     [(validate-scope-context scope-sym project-root session-id)
      =>
      make-error-result]
+    [(eq? sensitivity 'secret)
+     ;; F4/F33: Reject secret sensitivity early before constructing item
+     (make-error-result "Secret sensitivity is not allowed for memory storage.")]
     [(not (memq sensitivity
                 '(public internal
-                         sensitive
-                         secret)))
-     (make-error-result
-      (format "Invalid sensitivity: ~a. Must be public, internal, sensitive, or secret."
-              sensitivity))]
+                         sensitive)))
+     (make-error-result (format "Invalid sensitivity: ~a. Must be public, internal, or sensitive."
+                                sensitivity))]
     [else
-     (define id (make-memory-id))
+     (define id store-candidate-id)
      (define now (format-iso-now))
      ;; Extract origin-message-id from exec-context if available (P2-2)
      (define origin-message-id

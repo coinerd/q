@@ -42,6 +42,21 @@
 ;; Memory item <-> jsexpr conversion
 ;; ---------------------------------------------------------------------------
 
+;; Convert symbol values to strings for JSON serialization (F2/F31)
+;; JSON cannot represent symbols as values.
+(define (hash-symbols->strings h)
+  (for/hasheq ([(k val) (in-hash h)])
+    (values k
+            (cond
+              [(symbol? val) (symbol->string val)]
+              [(list? val)
+               (map (lambda (v)
+                      (if (symbol? v)
+                          (symbol->string v)
+                          v))
+                    val)]
+              [else val]))))
+
 (define (memory-item->jsexpr item)
   (hasheq 'id
           (memory-item-id item)
@@ -52,21 +67,40 @@
           'content
           (memory-item-content item)
           'metadata
-          (memory-item-metadata item)
+          (hash-symbols->strings (memory-item-metadata item))
           'validity
-          (memory-item-validity item)
+          (hash-symbols->strings (memory-item-validity item))
           'created-at
           (memory-item-created-at item)
           'updated-at
           (memory-item-updated-at item)))
+
+;; Convert string keys back to symbols after JSON round-trip (F2/F31)
+;; JSON serialization converts hasheq symbol keys to strings.
+(define (normalize-string-keys h)
+  (for/hasheq ([(k v) (in-hash h)])
+    (values (if (symbol? k)
+                k
+                (string->symbol k))
+            v)))
+
+;; Convert sensitivity from string to symbol after JSON round-trip (F2/F31)
+(define (normalize-validity v)
+  (define h (normalize-string-keys v))
+  (define sens (hash-ref h 'sensitivity 'public))
+  (hash-set h
+            'sensitivity
+            (if (symbol? sens)
+                sens
+                (string->symbol sens))))
 
 (define (jsexpr->memory-item h)
   (memory-item (hash-ref h 'id "")
                (string->symbol (hash-ref h 'type "semantic"))
                (string->symbol (hash-ref h 'scope "session"))
                (hash-ref h 'content "")
-               (hash-ref h 'metadata (hasheq))
-               (hash-ref h 'validity (hasheq))
+               (normalize-string-keys (hash-ref h 'metadata (hasheq)))
+               (normalize-validity (hash-ref h 'validity (hasheq)))
                (hash-ref h 'created-at "")
                (hash-ref h 'updated-at "")))
 

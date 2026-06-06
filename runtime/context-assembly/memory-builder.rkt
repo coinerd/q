@@ -17,8 +17,10 @@
          racket/string
          "../../runtime/memory/types.rkt"
          "../../runtime/memory/protocol.rkt"
-         ;; F33: Layering inversion — runtime imports from tools. current-memory-backend
+         ;; F33/F29: Layering inversion — runtime imports from tools. current-memory-backend
          ;; should ideally live in runtime/memory/service.rkt. Tracked for future cleanup.
+         ;; TODO — Move current-memory-backend to runtime/memory/service.rkt and have
+         ;; tools import from there instead. This fixes the layering inversion.
          (only-in "../../tools/builtins/memory-tools.rkt" current-memory-backend)
          (only-in "../../runtime/session/session-config.rkt" config-memory-enabled?)
          (only-in "../../runtime/memory/backends/helpers.rkt"
@@ -30,12 +32,9 @@
 ;; Feature flags
 ;; ---------------------------------------------------------------------------
 
-;; Observe-only mode: query memory but don't inject into prompts.
-;; Default #t when memory is enabled — this is always safe (no prompt mutation).
-(define current-memory-observe-mode? (make-parameter #t))
-
-;; Token budget for memory retrieval (observe-only doesn't enforce, just reports)
-(define current-memory-token-budget (make-parameter 500))
+;; F27/F28: Removed dead parameters current-memory-observe-mode? and
+;; current-memory-token-budget. They were defined but never consumed.
+;; current-memory-injection-budget is the active injection budget parameter.
 
 ;; Timeout for memory retrieval in milliseconds
 (define current-memory-retrieval-timeout-ms (make-parameter 2000))
@@ -83,7 +82,8 @@
        (if (hash? err)
            (hash-ref err 'message (format "~a" err))
            (format "~a" err)))
-     (cons '() (memory-telemetry 0 latency 0 #t #f err-msg))]
+     (define was-timeout? (and (hash? err) (eq? (hash-ref err 'code #f) 'timeout)))
+     (cons '() (memory-telemetry 0 latency 0 #t was-timeout? err-msg))]
     [_ (cons '() (memory-telemetry 0 0 0 #t #f "unexpected result type"))]))
 
 ;; ---------------------------------------------------------------------------
@@ -151,7 +151,9 @@
                        #f)) ; include-expired?
        (define qr
          (call-with-retrieval-timeout (lambda () (gen:retrieve-memory backend query)) timeout-ms))
-       ;; F23: Client-side expiry filter as defense-in-depth
+       ;; F23: Client-side expiry filter as defense-in-depth (P3-9).
+       ;; F40: string<? comparison assumes all timestamps are UTC Z-suffixed ISO-8601.
+       ;; Non-UTC timestamps (e.g., +02:00 offsets) would break ordering.
        (define filtered-qr
          (if (memory-result-ok? qr)
              (let* ([raw-items (memory-result-value qr)]
@@ -311,9 +313,7 @@
 ;; Provide
 ;; ---------------------------------------------------------------------------
 
-(provide current-memory-observe-mode?
-         current-memory-token-budget
-         current-memory-retrieval-timeout-ms
+(provide current-memory-retrieval-timeout-ms
          current-memory-injection-budget
          current-memory-max-entry-chars
          ;; Telemetry

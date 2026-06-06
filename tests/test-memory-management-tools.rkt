@@ -210,6 +210,31 @@
                   (check-true (tool-result-is-error? dr)))))
 
 ;; ---------------------------------------------------------------------------
+;; F19: clear_memory emits per-item deleted events
+;; ---------------------------------------------------------------------------
+
+(test-case "clear-memory emits memory.item.deleted per item (F19)"
+  (define b (make-memory-hash-backend))
+  (define events (box '()))
+  (define ctx
+    (make-exec-context #:working-directory "/tmp/q-memory-mgmt"
+                       #:session-metadata (hasheq 'session-id "sess-mgmt")
+                       #:event-publisher (lambda (evt) (set-box! events (cons evt (unbox events))))))
+  (with-backend b
+                (lambda ()
+                  (tool-store-memory (hash 'content "item one" 'scope "session") ctx)
+                  (tool-store-memory (hash 'content "item two" 'scope "session") ctx)
+                  (set-box! events '())
+                  (define r (tool-clear-memory (hash 'scope "session" 'confirm #t) ctx))
+                  (check-false (tool-result-is-error? r))
+                  (define evts (reverse (unbox events)))
+                  ;; Should have 2 deleted events
+                  (define deleted-events
+                    (filter (lambda (evt) (equal? (hash-ref evt 'type #f) "memory.item.deleted"))
+                            evts))
+                  (check-equal? (length deleted-events) 2))))
+
+;; ---------------------------------------------------------------------------
 ;; clear_memory 20-item cap (P2-3)
 ;; ---------------------------------------------------------------------------
 

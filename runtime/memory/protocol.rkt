@@ -77,6 +77,10 @@
 ;; Contract helpers
 ;; ---------------------------------------------------------------------------
 
+;; F37: Contract helper for memory backend implementations.
+;; This is a documentation/validation helper, NOT enforced at module boundaries.
+;; Backends are trusted internal code; violations are caught at runtime when
+;; the malformed backend is invoked, not at construction time.
 (define memory-backend/c
   (struct/c memory-backend
             string?
