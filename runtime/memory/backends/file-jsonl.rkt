@@ -175,6 +175,68 @@
               view)]
          [else view]))]))
 
+;; M13-F6: Apply a list of JSONL entries to a view hash (id -> item).
+;; Used by both full load and incremental load.
+(define (apply-entries-to-view view entries)
+  (for/fold ([v view]) ([entry (in-list entries)])
+    (let ([evt (hash-ref entry '__event #f)])
+      (cond
+        [(equal? evt "stored")
+         (let ([item (jsexpr->memory-item (hash-ref entry 'item (hash)))])
+           (hash-set v (memory-item-id item) item))]
+        [(equal? evt "updated")
+         (let ([item (jsexpr->memory-item (hash-ref entry 'item (hash)))])
+           (hash-set v (memory-item-id item) item))]
+        [(equal? evt "deleted")
+         (let ([id (hash-ref entry 'id #f)])
+           (if id
+               (hash-remove v id)
+               v))]
+        [else v]))))
+
+;; M13-F6: Read entries from a JSONL file starting at byte offset.
+;; Returns list of parsed entries (or '() on error/missing file).
+;; If offset lands at a line boundary, reads all lines from there.
+;; If offset lands mid-line, skips the partial line.
+(define (read-entries-from-offset path offset)
+  (if (not (file-exists? path))
+      '()
+      (call-with-input-file path
+                            (lambda (in)
+                              (cond
+                                [(= offset 0)
+                                 ;; Reading from start — no partial line issue
+                                 (for/list ([line (in-lines in)]
+                                            #:when (non-empty-string? (string-trim line)))
+                                   (with-handlers ([exn:fail? (lambda (_) #f)])
+                                     (string->jsexpr line)))]
+                                [else
+                                 ;; Check if offset is at a line boundary
+                                 (file-position in (max 0 (sub1 offset)))
+                                 (define prev-byte (read-byte in))
+                                 (unless (or (= prev-byte (char->integer #\newline))
+                                             (= prev-byte (char->integer #\return)))
+                                   ;; Mid-line — skip partial line
+                                   (read-line in))
+                                 (for/list ([line (in-lines in)]
+                                            #:when (non-empty-string? (string-trim line)))
+                                   (with-handlers ([exn:fail? (lambda (_) #f)])
+                                     (string->jsexpr line)))]))
+                            #:mode 'text)))
+
+;; M13-F6: Incremental load — only process appended lines since last cache.
+(define (incremental-load-view path old-view old-size)
+  (cond
+    [(not (file-exists? path)) (hash)]
+    [(and old-view (> old-size 0))
+     (let ([current-size (file-size path)])
+       (cond
+         [(<= current-size old-size) old-view]
+         [else
+          (let ([new-entries (filter values (read-entries-from-offset path old-size))])
+            (apply-entries-to-view old-view new-entries))]))]
+    [else (load-current-view path)]))
+
 ;; ---------------------------------------------------------------------------
 ;; Backend constructor
 ;; ---------------------------------------------------------------------------
@@ -193,9 +255,10 @@
       (set! dir-initialized? #t)))
   (define jsonl-path (build-path memory-root "memory.jsonl"))
 
-  ;; In-memory cache, lazily loaded
+  ;; In-memory cache with incremental processing (M13-F6)
   (define cache #f)
   (define cache-dirty? #f)
+  (define cached-file-size 0)
 
   (define (get-view)
     (cond
@@ -203,8 +266,12 @@
       [else
        (set! cache
              (if (file-exists? jsonl-path)
-                 (load-current-view jsonl-path)
+                 (incremental-load-view jsonl-path cache cached-file-size)
                  (hash)))
+       (set! cached-file-size
+             (if (file-exists? jsonl-path)
+                 (file-size jsonl-path)
+                 0))
        (set! cache-dirty? #f)
        cache]))
 
