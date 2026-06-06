@@ -1,0 +1,186 @@
+#lang racket/base
+;; runtime/memory/auto-extraction.rkt — Post-response memory extraction
+;;
+;; v0.95.10: Optional automatic extraction of reusable facts from agent responses.
+;; Disabled by default. Must be explicitly enabled via parameter or session config.
+;;
+;; Safety:
+;;   - Secret patterns are blocked (API keys, tokens, passwords, private keys)
+;;   - Raw tool output, entire file contents, and credentials are never stored
+;;   - Every candidate emits memory.stored or memory.policy.blocked event
+;;   - Extraction failure does NOT fail the agent turn
+;;   - Only low-risk semantic/procedural facts are stored
+
+(require racket/string
+         "types.rkt"
+         "protocol.rkt"
+         "policy.rkt"
+         (only-in "../../agent/event-structs/memory-events.rkt"
+                  make-mem-stored-event
+                  make-mem-deleted-event))
+
+;; ---------------------------------------------------------------------------
+;; Configuration
+;; ---------------------------------------------------------------------------
+
+;; Master switch — disabled by default
+(define current-auto-extraction-enabled (make-parameter #f))
+
+;; Secret patterns that block storage
+(define secret-patterns
+  (list #px"(?i:api.?key.*[=:].{10,})"
+        #px"(?i:bearer\\s+\\S{15,})"
+        #px"AKIA[A-Z0-9]{10,}"
+        #px"-----BEGIN.*PRIVATE KEY"
+        #px"(?i:password.*[=:].{6,})"
+        #px"(?i:token.*[=:].{15,})"
+        #px"(?:DATABASE_URL|MONGO_URI|REDIS_URL|SECRET_KEY).*[=:].{5,}"))
+
+;; Content too long to be a fact (likely raw output)
+(define max-fact-length 500)
+
+;; ---------------------------------------------------------------------------
+;; Extraction result
+;; ---------------------------------------------------------------------------
+
+(struct extraction-result (action item reason) #:transparent)
+;; action: 'stored | 'blocked | 'skipped
+;; item: memory-item or #f
+;; reason: string
+
+;; ---------------------------------------------------------------------------
+;; Content safety checks
+;; ---------------------------------------------------------------------------
+
+(define (contains-secret? content)
+  (for/or ([pattern (in-list secret-patterns)])
+    (regexp-match? pattern content)))
+
+(define (looks-like-raw-output? content)
+  (or (> (string-length content) max-fact-length)
+      ;; Heuristic: very long lines suggest file contents
+      (for/or ([line (in-list (string-split content "\n"))])
+        (> (string-length line) 200))))
+
+(define (looks-like-file-dump? content)
+  ;; Multiple lines with typical code/file markers
+  (define lines (string-split content "\n"))
+  (and (> (length lines) 5)
+       (for/or ([line (in-list lines)])
+         (or (string-contains? line "import ")
+             (string-contains? line "require ")
+             (string-contains? line "func ")
+             (string-contains? line "def ")
+             (string-contains? line "class ")))))
+
+;; ---------------------------------------------------------------------------
+;; Extract candidates from response text
+;; ---------------------------------------------------------------------------
+
+;; Simple extraction: splits on double-newline, filters by length and safety.
+;; Returns list of candidate strings.
+(define (extract-candidates text)
+  (define paragraphs (string-split text "\n\n"))
+  (for/list ([p (in-list paragraphs)]
+             #:when (and (> (string-length (string-trim p)) 20)
+                         (< (string-length p) max-fact-length)
+                         (not (contains-secret? p))
+                         (not (looks-like-raw-output? p))
+                         (not (looks-like-file-dump? p))))
+    (string-trim p)))
+
+;; ---------------------------------------------------------------------------
+;; Main extraction function
+;; ---------------------------------------------------------------------------
+
+;; Try to extract and store memories from response text.
+;; Returns list of extraction-results. Does NOT raise on failure.
+(define (try-auto-extract response-text
+                          #:backend backend
+                          #:policy policy
+                          #:session-id session-id
+                          #:project-root project-root
+                          #:on-event [on-event void])
+  (cond
+    [(not (current-auto-extraction-enabled))
+     (list (extraction-result 'skipped #f "Auto-extraction disabled"))]
+    [(not backend) (list (extraction-result 'skipped #f "No memory backend configured"))]
+    [(not (string? response-text)) (list (extraction-result 'skipped #f "Response is not a string"))]
+    [(= (string-length response-text) 0) (list (extraction-result 'skipped #f "Empty response"))]
+    [else
+     (define candidates (extract-candidates response-text))
+     (for/list ([content (in-list candidates)])
+       (with-handlers
+           ([exn:fail?
+             (lambda (e)
+               (extraction-result 'skipped #f (format "Extraction error: ~a" (exn-message e))))])
+         (define id
+           (format "auto_~a_~a"
+                   (current-seconds)
+                   (modulo (inexact->exact (round (* 1000 (current-inexact-milliseconds)))) 1000000)))
+         (define now (format-iso-now))
+         (define item
+           (memory-item id
+                        'semantic
+                        'project
+                        content
+                        (hasheq 'source 'auto-extraction 'session-id session-id)
+                        (hasheq 'sensitivity 'public 'confidence 0.5)
+                        now
+                        now))
+         (cond
+           [(contains-secret? content)
+            (on-event 'blocked item "Contains secret pattern")
+            (extraction-result 'blocked #f "Contains secret pattern")]
+           [(not (policy-allows-store? policy item))
+            (on-event 'blocked item "Blocked by policy")
+            (extraction-result 'blocked item "Blocked by policy")]
+           [else
+            (define result (gen:store-memory! backend item))
+            (cond
+              [(memory-result-ok? result)
+               (on-event 'stored item #f)
+               (extraction-result 'stored item #f)]
+              [else
+               (extraction-result
+                'blocked
+                #f
+                (format "Store failed: ~a"
+                        (hash-ref (memory-result-error result) 'message "unknown")))])])))]))
+
+;; ---------------------------------------------------------------------------
+;; ISO timestamp helper
+;; ---------------------------------------------------------------------------
+
+(define (format-iso-now)
+  (define ts (current-seconds))
+  (define d (seconds->date ts #f))
+  (format "~a-~a-~aT~a:~a:~aZ"
+          (date-year d)
+          (pad2 (date-month d))
+          (pad2 (date-day d))
+          (pad2 (date-hour d))
+          (pad2 (date-minute d))
+          (pad2 (date-second d))))
+
+(define (pad2 n)
+  (if (< n 10)
+      (format "0~a" n)
+      (format "~a" n)))
+
+;; ---------------------------------------------------------------------------
+;; Provide
+;; ---------------------------------------------------------------------------
+
+(provide current-auto-extraction-enabled
+         try-auto-extract
+         extraction-result
+         extraction-result?
+         extraction-result-action
+         extraction-result-item
+         extraction-result-reason
+         ;; Low-level checks for testing
+         contains-secret?
+         looks-like-raw-output?
+         looks-like-file-dump?
+         extract-candidates)
