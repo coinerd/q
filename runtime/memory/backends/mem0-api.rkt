@@ -11,6 +11,10 @@
 ;;   - No real network access in tests (injectable transport)
 
 (require racket/match
+         racket/string
+         racket/port
+         (only-in json jsexpr->string bytes->jsexpr)
+         net/http-client
          "../types.rkt"
          "../protocol.rkt"
          "external-protocol.rkt")
@@ -90,15 +94,82 @@
 ;; Build an HTTP transport function for Mem0.
 ;; api-key is read once and closed over; never logged.
 ;; Returns (method payload) -> response-hash
-(define (make-mem0-http-transport base-url api-key)
+(define (make-mem0-http-transport base-url api-key #:timeout-ms [timeout-ms 5000])
+  (define base (string-trim base-url #rx"/+"))
+  (define headers
+    (list (string-append "Authorization: Token " api-key) "Content-Type: application/json"))
   (lambda (method payload)
-    ;; Stub: real HTTP calls would go here using racket/http
-    ;; For now, this is a placeholder that returns a transport error
-    ;; Real implementation deferred to manual gate
-    (hash 'ok?
-          #f
-          'error
-          (hash 'code 'not-implemented 'message "Mem0 HTTP transport not yet connected"))))
+    (with-handlers
+        ([exn:fail?
+          (lambda (e)
+            (hash 'ok?
+                  #f
+                  'error
+                  (hash 'code 'transport-error 'message "HTTP transport error" 'retryable? #t)))])
+      (define-values (http-method path json-body) (mem0-method->http method payload base))
+      (define json-str (and json-body (jsexpr->string json-body)))
+      (define-values (status-line header-list in)
+        (http-sendrecv (url-host base)
+                       (url-path+query base path)
+                       #:ssl? (string-prefix? base "https")
+                       #:method http-method
+                       #:headers headers
+                       #:data (or json-str "")))
+      (define resp-body (port->bytes in))
+      (close-input-port in)
+      (define status-code (parse-http-status status-line))
+      (cond
+        [(<= 200 status-code 299)
+         (define resp-json
+           (with-handlers ([exn:fail? (lambda (_) #f)])
+             (bytes->jsexpr resp-body)))
+         (hash 'ok? #t 'value (or resp-json (hash)))]
+        [else
+         (hash 'ok?
+               #f
+               'error
+               (hash 'code
+                     'http-error
+                     'status
+                     status-code
+                     'message
+                     (format "Mem0 API returned ~a" status-code)
+                     'retryable?
+                     (<= 500 status-code 599)))]))))
+
+;; Helper: extract host from base-url
+(define (url-host base-url)
+  (define m (regexp-match #rx"^https?://([^/:]+)" base-url))
+  (and m (cadr m)))
+
+;; Helper: build path from base-url + path
+(define (url-path+query base-url path)
+  (define m (regexp-match #rx"^https?://[^/]+(/.*)?$" base-url))
+  (define base-path
+    (if (and m (cadr m))
+        (string-trim (cadr m) #rx"/+$")
+        ""))
+  (if (string=? base-path "")
+      path
+      (string-append "/" base-path path)))
+
+;; Helper: parse HTTP status code from status line
+(define (parse-http-status status-line)
+  (define m (regexp-match #rx"^HTTP/[0-9.]+ ([0-9]+)" status-line))
+  (if m
+      (string->number (cadr m))
+      0))
+
+;; Map Mem0 method + payload to (HTTP-method path json-body)
+(define (mem0-method->http method payload base)
+  (case method
+    [(store) (values "POST" "/v1/memories/" payload)]
+    [(retrieve) (values "POST" "/v1/memories/search/" payload)]
+    [(list) (values "GET" "/v1/memories/" #f)]
+    [(delete) (values "DELETE" (format "/v1/memories/~a" (hash-ref payload 'id "")) #f)]
+    [(update) (values "PATCH" (format "/v1/memories/~a" (hash-ref payload 'id "")) payload)]
+    [(manage) (values "GET" "/v1/memories/" #f)]
+    [else (values "GET" "/v1/memories/" #f)]))
 
 ;; Build a mock transport for testing.
 ;; Returns (method payload) -> response-hash based on method.
@@ -178,6 +249,7 @@
 
 (provide make-mem0-backend
          make-mem0-mock-transport
+         make-mem0-http-transport
          mem0-store-payload
          mem0-search-payload
          decode-mem0-items)
