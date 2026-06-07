@@ -41,14 +41,13 @@
     (define be (initialize-memory-backend! cfg))
     (check-false be "unknown spec should produce no backend")))
 
-(test-case "W0: complex chained backend spec not yet handled"
+(test-case "W0 F4: complex chained backend spec creates backend"
   (parameterize ([current-memory-backend #f])
     (define cfg (hash 'memory-backend (hash 'type 'chained 'l1 'hash 'l2 'file-jsonl)))
-    ;; Currently falls through to 'else clause → returns #f
     (define be (initialize-memory-backend! cfg))
-    (check-false be "chained backend not yet supported — expected red")))
+    (check-true (memory-backend? be) "chained backend spec should be supported")))
 
-(test-case "W0: complex external backend spec not yet handled"
+(test-case "W0 F4: complex external Mem0 backend spec creates fail-closed backend"
   (parameterize ([current-memory-backend #f])
     (define cfg
       (hash 'memory-backend
@@ -61,7 +60,7 @@
                   'base-url
                   "https://api.mem0.ai")))
     (define be (initialize-memory-backend! cfg))
-    (check-false be "external backend not yet supported — expected red")))
+    (check-true (memory-backend? be) "external backend spec should create a fail-closed backend")))
 
 (test-case "W0: settings returns symbol backend only"
   (define s (make-minimal-settings #:overrides (hash 'memory (hash 'backend 'hash))))
@@ -71,7 +70,8 @@
 
 (test-case "W0: settings does not return complex backend spec"
   (define s
-    (make-minimal-settings #:overrides (hash 'memory (hash 'backend (hash 'type 'chained 'l1 'hash 'l2 'file-jsonl)))))
+    (make-minimal-settings
+     #:overrides (hash 'memory (hash 'backend (hash 'type 'chained 'l1 'hash 'l2 'file-jsonl)))))
   ;; Currently setting-memory-backend only handles symbol/string
   ;; After W4 this should return the hash spec
   (define result (setting-memory-backend s))

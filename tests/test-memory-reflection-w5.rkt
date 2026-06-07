@@ -182,3 +182,24 @@
 
   (check-equal? (memory-item-content (car r1)) (memory-item-content (car r2)))
   (check-equal? (memory-item-id (car r1)) (memory-item-id (car r2))))
+
+;; ---------------------------------------------------------------------------
+;; v0.95.18 W0: Audit regression tests (expected red before W5)
+;; ---------------------------------------------------------------------------
+
+(test-case "W0 F7: default reflection min group size is conservative (3)"
+  (check-equal? (current-reflection-min-group-size) 3))
+
+(test-case "W0 F7: one shared tag is not sufficient for reflection relatedness"
+  (define a (make-test-item "a" "unrelated alpha" '("shared" "left")))
+  (define b (make-test-item "b" "unrelated beta" '("shared" "right")))
+  (check-false (items-related? a b 0.3)))
+
+(test-case "W0 F7: reflection ID is deterministic and not wall-clock based"
+  (define backend (make-memory-hash-backend))
+  (gen:store-memory! backend (make-test-item "id-a" "alpha about reflection" '("t1" "t2")))
+  (gen:store-memory! backend (make-test-item "id-b" "beta about reflection" '("t1" "t2")))
+  (define results
+    (reflect-session-memories! backend #:session-id "s1" #:project-root "." #:min-group-size 2))
+  (check-equal? (length results) 1)
+  (check-false (regexp-match? #px"^refl_[0-9]+_" (memory-item-id (car results)))))
