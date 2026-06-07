@@ -7,7 +7,7 @@
          "../tools/builtins/memory-tools.rkt"
          "../tools/tool.rkt")
 
-(define memory-tools-source (file->string "tools/builtins/memory-tools.rkt"))
+(define memory-tools-source (file->string "../tools/builtins/memory-tools.rkt"))
 
 (test-case "W0 G3 characterization: consolidate-memory tool is currently absent"
   (check-false (string-contains? memory-tools-source "consolidate-memory")))

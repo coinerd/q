@@ -5,11 +5,11 @@
          racket/file
          racket/string)
 
-(define main-loop-source (file->string "agent/iteration/main-loop.rkt"))
+(define main-loop-source (file->string "../agent/iteration/main-loop.rkt"))
 
 (test-case "W0 G1b characterization: non-streaming main loop currently has no auto-extraction hook"
   (check-false (string-contains? main-loop-source "maybe-auto-extract-after-response!")))
 
 (test-case "W0 G1b characterization: streaming loop already imports auto-extraction hook"
-  (define stream-source (file->string "agent/loop-stream.rkt"))
+  (define stream-source (file->string "../agent/loop-stream.rkt"))
   (check-true (string-contains? stream-source "maybe-auto-extract-after-response!")))
