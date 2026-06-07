@@ -131,6 +131,9 @@
                   (now-seconds)
                   (hasheq 'turnId turn-id 'model "streamed")))
 
+  ;; v0.95.17 W1: Post-turn auto-extraction (non-fatal, gated by parameter)
+  ;; Must fire for both text-only and tool-call turns.
+  (maybe-auto-extract-after-response! final-text #:session-id session-id)
   (cond
     [(null? tool-call-parts)
      (emit-typed-event! bus
@@ -150,8 +153,6 @@
      (when hook-dispatcher
        (hook-dispatcher 'agent-end
                         (hasheq 'session-id session-id 'turn-id turn-id 'termination 'completed)))
-     ;; v0.95.16 W3: Post-turn auto-extraction (non-fatal, gated by parameter)
-     (maybe-auto-extract-after-response! final-text #:session-id session-id)
      (make-loop-result
       (loop-state-messages state)
       'completed

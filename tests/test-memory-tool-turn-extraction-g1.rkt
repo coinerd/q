@@ -83,7 +83,7 @@
     (define stream-data (make-tool-call-stream-data fact-text))
     (define result
       (build-stream-result stream-data '() bus "sess-g1" "turn-g1" st #f (test-provider) #f))
-    (check-equal? (memory-count backend) 0 "Tool-call turn: currently no extraction occurs")
+    (check-equal? (memory-count backend) 1 "Tool-call turn: extraction now occurs (W1 fix)")
     (check-equal? (hash-ref (loop-result-metadata result) 'toolCallCount) 1)))
 
 (test-case "W0 G1 characterization: no-tool-call turn still extracts once"
