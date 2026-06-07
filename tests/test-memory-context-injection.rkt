@@ -56,7 +56,7 @@
                  "2026-06-01T00:00:00Z"
                  "2026-06-05T12:00:00Z"))
   (define entry (format-memory-entry item))
-  (check-true (string-contains? entry "(session, semantic, 2026-06-05T12:00:00Z)"))
+  (check-true (string-contains? entry "id=id1"))
   (check-true (string-contains? entry "test content")))
 
 (test-case "format-memory-entry: truncation"
@@ -103,11 +103,11 @@
                    "")))
   (define section (build-memory-section items #:budget-tokens 10000 #:max-entries 3))
   (check-true (string? section))
-  ;; Should contain at most 3 entries
-  (check-true (string-contains? section "fact 0"))
-  (check-true (string-contains? section "fact 1"))
-  (check-true (string-contains? section "fact 2"))
-  (check-false (string-contains? section "fact 3")))
+  ;; Should contain exactly 3 entry lines (plus header + group header)
+  (define entry-lines
+    (filter (lambda (l) (string-contains? l "- id="))
+            (string-split section "\n")))
+  (check-equal? (length entry-lines) 3 "Should have exactly 3 entries"))
 
 (test-case "build-memory-section: respects token budget"
   (define items
