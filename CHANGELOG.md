@@ -1,3 +1,24 @@
+## v0.95.17 — Memory Quality (2026-06-06)
+
+### Characterization & Bug Fixes
+- **W0**: Characterization tests for remaining gaps — tool-call turn extraction, non-streaming hook, Mem0 transport, consolidation tool (4 test files)
+- **W1**: Fix tool-call turn extraction — `maybe-auto-extract-after-response!` now fires for all response types, not just text-only turns
+- **W2**: Verified non-streaming extraction path — `run-agent-turn` always delegates to streaming path
+
+### Features
+- **W3**: Mem0 HTTP transport — real `http-sendrecv` transport replacing `not-implemented` stub, sanitized error messages (7 tests)
+- **W4**: `consolidate-memory` tool — merge multiple items into one with supersedes lineage, optional original deletion (6 tests)
+- **W5**: Deterministic memory reflection — group session items by shared tags/Jaccard overlap, produce project-scope reflections (16 tests)
+
+### Integration & Release
+- **W6**: Documentation updates, changelog, version bump, focused memory test validation
+
+### New Files
+- `runtime/memory/reflection.rkt` — deterministic session-to-project reflection
+- `tests/test-memory-tool-turn-extraction-g1.rkt`, `tests/test-memory-nonstreaming-extraction-g1.rkt`
+- `tests/test-mem0-http-transport-g2.rkt`, `tests/test-memory-consolidation-tool-g3.rkt`
+- `tests/test-memory-reflection-w5.rkt`
+
 ## v0.95.12 — Modular Memory System (2026-06-03)
 
 ### Memory System Foundation

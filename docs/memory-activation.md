@@ -1,4 +1,4 @@
-# Memory Activation (v0.95.16)
+# Memory Activation (v0.95.17)
 
 ## Overview
 
@@ -149,6 +149,7 @@ Seven memory tools are registered by default:
 | `clear-memory` | Clear all memories in a scope (requires `confirm=#t`) |
 | `update-memory` | Update an existing memory item (patches fields, validates via policy) |
 | `cleanup-expired-memory` | Remove expired memories (dry-run by default) |
+| `consolidate-memory` | Merge multiple items into one (supersedes originals) |
 
 ## Lifecycle Events
 
@@ -179,6 +180,44 @@ Memory operations emit typed events for observability:
 4. Context assembly retrieves and injects relevant memories each turn (tiered by type/scope)
 5. Post-turn auto-extraction may store new memories (if enabled)
 6. Memory tools available for explicit store/search/update/delete/cleanup
+
+## Memory Quality Features (v0.95.17)
+
+### Tool-Call Turn Extraction
+
+Auto-extraction now works for **all** response types, not just text-only turns:
+- Tool-call turns also trigger `maybe-auto-extract-after-response!`
+- Extraction fires before the cond branch that checks for tool-call-parts
+- Both streaming and non-streaming paths are covered (non-streaming delegates to streaming internally)
+
+### Mem0 HTTP Transport
+
+The Mem0 backend now has a real HTTP transport layer (previously a `not-implemented` stub):
+- Uses Racket's `net/http-client` for `http-sendrecv`
+- Maps all 6 memory operations to Mem0 REST API endpoints
+- Error messages are sanitized — no API key leakage in exception handlers
+- Requires `MEM0_API_KEY` environment variable; fails closed without it
+
+### Consolidate-Memory Tool
+
+New tool for merging related memory items into a single consolidated item:
+
+```
+consolidate-memory(ids=["m1", "m2"], merged-content="Combined insight", scope="session")
+```
+
+- Creates a new merged item with `supersedes` metadata linking to originals
+- `keep-originals?` parameter (default `true`) controls whether originals are deleted
+- Validates: ≥2 IDs, non-empty content, all IDs exist in scope
+- Superseded items are automatically filtered from retrieval results
+
+### Deterministic Memory Reflection
+
+Session-to-project memory reflection via `runtime/memory/reflection.rkt`:
+- `reflect-session-memories!` groups session items by shared tags or Jaccard token overlap (≥0.3)
+- Produces deterministic project-scope semantic items
+- Each reflection supersedes its source items (automatic superseded removal on retrieval)
+- No-op when fewer than `min-group-size` items or no groupable items found
 
 ## Related Documentation
 
