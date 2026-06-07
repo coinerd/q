@@ -5,7 +5,7 @@
 
 (define collection "q")
 (define pkg-name "q")
-(define version "0.95.18")
+(define version "0.95.19")
 (define pkg-desc "A local-first, extensible coding agent runtime")
 
 (define deps '("base" "gui-easy-lib"))

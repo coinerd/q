@@ -1,3 +1,15 @@
+## v0.95.19 — Memory Injection Hotfix (2026-06-07)
+
+### Bug Fixes
+- **HF1 (HIGH)**: Thread `#:session-config config` to `build-tiered-context/state-aware` in `turn-orchestrator.rkt` — enables memory injection in production context assembly path
+- **HF2 (HIGH)**: Change default `#:scope` from `'session` to `#f` in `observe-memory-for-context`, `inject-memory-for-context`, and `observe-memory-telemetry` — project and user-scoped memories now visible during retrieval
+- **LF1 (Low)**: Check `gen:store-memory!` result in `reflect-session-memories!` — failed stores no longer produce phantom reflection items
+- **LF2 (Low)**: Thread `session-id`/`project-root` from payload into `decode-mem0-items` — Mem0 external backend uses actual query context instead of hardcoded values
+
+### Verification
+- 174+ focused memory tests passing across 10+ test files
+- 4 new regression tests (3 previously failing, now green)
+
 ## v0.95.18 — Memory Quality Remediation (2026-06-07)
 
 ### Regression Harness

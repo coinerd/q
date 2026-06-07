@@ -1,4 +1,4 @@
-# Memory Activation (v0.95.18)
+# Memory Activation (v0.95.19)
 
 ## Overview
 
@@ -240,3 +240,13 @@ Key behavioral improvements:
 
 - [Architecture Overview](architecture/overview.md)
 - [Tool System](tooling.md)
+
+### v0.95.19 Memory Injection Hotfix
+
+**HF1**: Memory injection was silently skipped in production because `assemble-context/pure` in `turn-orchestrator.rkt` did not thread `#:session-config` to `build-tiered-context/state-aware`. The parameter was accepted but never populated. Fixed by adding the wire.
+
+**HF2**: Default scope for `observe-memory-for-context` and `inject-memory-for-context` was `'session`, which excluded project-scoped and user-scoped items from retrieval. Changed to `#f` (all scopes) so tiered injection sees all available memories.
+
+**LF1**: `reflect-session-memories!` returned reflection items even when `gen:store-memory!` failed. Now filters out failed stores.
+
+**LF2**: `decode-mem0-items` in the Mem0 adapter was called with hardcoded `"session"` and `"."` instead of actual query values. Now threaded from the retrieve payload.
