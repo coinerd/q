@@ -632,6 +632,11 @@
               (tool-description cleanup-expired-memory)
               (tool-schema cleanup-expired-memory)
               (tool-execute cleanup-expired-memory)
+              #f)
+   (tool-spec "consolidate-memory"
+              (tool-description consolidate-memory)
+              (tool-schema consolidate-memory)
+              (tool-execute consolidate-memory)
               #f)))
 
 ;; ============================================================
