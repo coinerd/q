@@ -146,7 +146,10 @@
           [config-task-state-aware? (-> session-config? boolean?)]
           [config-context-assembly-profile (-> session-config? symbol?)]
           [config-memory-backend (-> session-config? any/c)]
-          [config-memory-enabled? (-> session-config? boolean?)]))
+          [config-memory-enabled? (-> session-config? boolean?)]
+          [config-memory-auto-extraction-enabled? (-> session-config? boolean?)]
+          [config-memory-auto-extraction-min-confidence
+           (-> session-config? (and/c real? (between/c 0 1)))]))
 
 ;; ── session-config struct ────────────────────────────────────────
 
@@ -255,6 +258,15 @@
   ;; validation happens at resolution time (current-memory-backend setter).
   (and (hash-ref (session-config-data c) 'memory-backend #f) #t))
 
+;; v0.95.16 W1: Auto-extraction config accessors
+;; Default: disabled (#f), min-confidence 0.5
+(define (config-memory-auto-extraction-enabled? c)
+  (hash-ref (session-config-data c) 'memory-auto-extraction-enabled #f))
+
+(define (config-memory-auto-extraction-min-confidence c)
+  (define raw (hash-ref (session-config-data c) 'memory-auto-extraction-min-confidence 0.5))
+  (if (and (real? raw) (<= 0 raw 1)) raw 0.5))
+
 ;; ── Dynamic default resolution ─────────────────────────────────
 
 (define (resolve-max-iterations-hard config max-iterations)
@@ -292,7 +304,9 @@
                session-index
                task-state-aware?
                context-assembly-profile
-               memory-backend))
+               memory-backend
+               memory-auto-extraction-enabled
+               memory-auto-extraction-min-confidence))
   (define base
     (if (hash? h)
         (make-immutable-hash (hash->list h))

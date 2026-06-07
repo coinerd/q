@@ -41,8 +41,15 @@
                   project-tree->string)
          (only-in "extension-setup.rkt" make-wired-extension-registry load-extensions-from-dir!)
          (only-in "../runtime/session/session-config.rkt" apply-context-assembly-profile!)
-         (only-in "../runtime/settings.rkt" setting-memory-injection-budget setting-memory-backend)
+         (only-in "../runtime/settings.rkt"
+                  setting-memory-injection-budget
+                  setting-memory-backend
+                  setting-memory-auto-extraction-enabled?
+                  setting-memory-auto-extraction-min-confidence)
          (only-in "../runtime/context-assembly/memory-builder.rkt" current-memory-injection-budget)
+         (only-in "../runtime/memory/auto-extraction.rkt"
+                  current-auto-extraction-enabled
+                  current-auto-extraction-min-confidence)
          (only-in "../extensions/gsd/state-machine.rkt" gsm-current)
          (only-in "../runtime/gsd-query.rkt" current-gsd-mode-query))
 
@@ -214,7 +221,19 @@
         (hash-set final-hash-with-profile 'memory-backend settings-backend)
         final-hash-with-profile))
 
-  (hash->session-config final-hash-with-memory))
+  ;; v0.95.16 W1: Wire auto-extraction from settings
+  (define auto-extract-enabled? (setting-memory-auto-extraction-enabled? settings))
+  (define auto-extract-min-conf (setting-memory-auto-extraction-min-confidence settings))
+  (current-auto-extraction-enabled auto-extract-enabled?)
+  (current-auto-extraction-min-confidence auto-extract-min-conf)
+  (define final-hash-with-auto-extract
+    (hash-set* final-hash-with-memory
+               'memory-auto-extraction-enabled
+               auto-extract-enabled?
+               'memory-auto-extraction-min-confidence
+               auto-extract-min-conf))
+
+  (hash->session-config final-hash-with-auto-extract))
 
 ;; ============================================================
 ;; mode-for-config
