@@ -156,12 +156,13 @@
            (cond
              [(null? valid-groups) '()]
              [else
-              (for/list ([group (in-list valid-groups)])
-                (define-values (merged-text source-ids tags) (merge-group-items group))
-                (define refl-item
-                  (make-reflection-item merged-text source-ids tags project-root session-id))
-                (gen:store-memory! backend refl-item)
-                refl-item)])])])]))
+              (filter memory-item?
+                      (for/list ([group (in-list valid-groups)])
+                        (define-values (merged-text source-ids tags) (merge-group-items group))
+                        (define refl-item
+                          (make-reflection-item merged-text source-ids tags project-root session-id))
+                        (define store-result (gen:store-memory! backend refl-item))
+                        (if (memory-result-ok? store-result) refl-item #f)))])])])]))
 
 ;; ---------------------------------------------------------------------------
 ;; Provide
