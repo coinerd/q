@@ -97,7 +97,7 @@
 (define (make-mem0-http-transport base-url api-key #:timeout-ms [timeout-ms 5000])
   (define base (string-trim base-url #rx"/+"))
   (define headers
-    (list (string-append "Authorization: Token " api-key) "Content-Type: application/json"))
+    (list (string-append "Authorization: Api-key " api-key) "Content-Type: application/json"))
   (lambda (method payload)
     (with-handlers
         ([exn:fail?
@@ -236,11 +236,15 @@
      (define mem0-transport
        (lambda (method payload)
          (define raw (effective-transport method payload))
-         (case method
-           [(retrieve)
-            (define items (hash-ref raw 'value '()))
-            (hash 'ok? #t 'value (decode-mem0-items items "session" "."))]
-           [else raw])))
+         (cond
+           ;; F1 fix: propagate transport failures before attempting decode
+           [(not (hash-ref raw 'ok? #t)) raw]
+           [else
+            (case method
+              [(retrieve)
+               (define items (hash-ref raw 'value '()))
+               (hash 'ok? #t 'value (decode-mem0-items items "session" "."))]
+              [else raw])])))
      (make-external-backend (format "mem0(~a)" base-url) mem0-transport #:timeout-ms timeout-ms)]))
 
 ;; ---------------------------------------------------------------------------
