@@ -17,7 +17,8 @@
          "protocol.rkt"
          "backends/memory-hash.rkt"
          "backends/file-jsonl.rkt"
-         "backends/chained.rkt")
+         "backends/chained.rkt"
+         "backends/mem0-api.rkt")
 
 ;; ---------------------------------------------------------------------------
 ;; Service parameters
@@ -90,11 +91,7 @@
      (define spec-type (hash-ref spec 'type #f))
      (cond
        [(eq? spec-type 'chained) (build-chained-from-spec spec cfg)]
-       [(eq? spec-type 'external)
-        ;; External backend construction — W5 provides the adapter
-        ;; For now, log and fail closed
-        (log-warning "memory: external backend not yet implemented")
-        #f]
+       [(eq? spec-type 'external) (build-external-from-spec spec cfg)]
        [else
         (log-warning (format "memory: unknown backend spec type: ~a" spec-type))
         #f])]
@@ -125,6 +122,23 @@
         (log-warning "memory: chained backend l2 construction failed")
         #f]
        [else (make-chained-backend l1 l2 #:write-through? write-through?)])]))
+
+;; Build an external backend from spec (v0.95.16 W5)
+;; Spec shape: {type: 'external, provider: 'mem0, base-url: ..., api-key-env: ..., timeout-ms: ...}
+(define (build-external-from-spec spec cfg)
+  (define provider (hash-ref spec 'provider #f))
+  (define base-url (hash-ref spec 'base-url "https://api.mem0.ai"))
+  (define api-key-env (hash-ref spec 'api-key-env #f))
+  (define timeout-ms (hash-ref spec 'timeout-ms 5000))
+  (cond
+    [(not provider)
+     (log-warning "memory: external backend missing provider")
+     #f]
+    [(eq? provider 'mem0)
+     (make-mem0-backend #:base-url base-url #:api-key-env api-key-env #:timeout-ms timeout-ms)]
+    [else
+     (log-warning (format "memory: unknown external provider: ~a" provider))
+     #f]))
 
 ;; ---------------------------------------------------------------------------
 ;; Provide
