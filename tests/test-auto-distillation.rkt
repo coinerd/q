@@ -94,3 +94,21 @@
     (define summaries (hash "m1" long-text))
     (define result (auto-distill '("m1") '() 'idle summaries))
     (check-true (<= (string-length (task-conclusion-text (car result))) 210))))
+
+;; ---------------------------------------------------------------------------
+;; v0.95.18 W0: Blank Auto summary regression (expected red before W2)
+;; ---------------------------------------------------------------------------
+
+(test-case "W0 F9: blank content summary falls back instead of bare [Auto]"
+  (parameterize ([current-auto-distillation-enabled? #t])
+    (define result (auto-distill '("m1") '() 'idle (hash "m1" "")))
+    (check-equal? (length result) 1)
+    (check-not-equal? (string-trim (task-conclusion-text (car result))) "[Auto]")
+    (check-not-false (string-contains? (task-conclusion-text (car result)) "Previously read file"))))
+
+(test-case "W0 F9: whitespace-only content summary falls back instead of bare [Auto]"
+  (parameterize ([current-auto-distillation-enabled? #t])
+    (define result (auto-distill '("m1") '() 'idle (hash "m1" "   \n\t  ")))
+    (check-equal? (length result) 1)
+    (check-not-equal? (string-trim (task-conclusion-text (car result))) "[Auto]")
+    (check-not-false (string-contains? (task-conclusion-text (car result)) "Previously read file"))))

@@ -259,3 +259,22 @@
 
 (run-tests suite)
 (run-tests memory-injection-suite)
+
+;; ---------------------------------------------------------------------------
+;; v0.95.18 W0: Blank Auto preamble regression (expected red before W2)
+;; ---------------------------------------------------------------------------
+
+(test-case "W0 F9: state preamble filters bare Auto conclusions"
+  (define conclusions (list (task-conclusion "auto-blank" "[Auto]" 'fact 'idle '("m1") 1000 '() '())))
+  (define preamble (build-state-awareness-preamble 'implementation conclusions))
+  (define text (extract-text-from-messages (list preamble)))
+  (check-false (string-contains? text "  - [Auto]\n"))
+  (check-false (string-contains? text "Key conclusions (1 in memory)")))
+
+(test-case "W0 F9: state preamble keeps valid Auto conclusions"
+  (define conclusions
+    (list
+     (task-conclusion "auto-valid" "[Auto] Previously read file x" 'fact 'idle '("m1") 1000 '() '())))
+  (define preamble (build-state-awareness-preamble 'implementation conclusions))
+  (define text (extract-text-from-messages (list preamble)))
+  (check-not-false (string-contains? text "[Auto] Previously read file x")))

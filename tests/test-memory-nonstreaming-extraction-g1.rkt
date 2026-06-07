@@ -24,3 +24,9 @@
   (define loop-source (file->string (build-path q-dir "agent" "loop.rkt")))
   ;; run-agent-turn always calls run-streaming-phase — no non-streaming bypass
   (check-true (string-contains? loop-source "run-streaming-phase")))
+
+(test-case "W0 F5: non-streaming extraction acceptance needs behavioral evidence"
+  ;; Source-shape checks are useful drift alerts, but v0.95.18 requires a behavioral
+  ;; public/session/turn test or a stronger reviewed architectural invariant. W3 must
+  ;; replace this expected-red marker with executable evidence.
+  (check-true #f "Expected red: add behavioral non-streaming extraction evidence in W3"))

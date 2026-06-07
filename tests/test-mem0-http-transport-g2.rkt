@@ -4,20 +4,31 @@
 ;;; Uses a fake HTTP server to verify request/response mapping without real network.
 
 (require rackunit
+         racket/file
          racket/match
          racket/string
          racket/port
          (only-in json jsexpr->string bytes->jsexpr)
          (only-in "../runtime/memory/backends/mem0-api.rkt"
+                  make-mem0-backend
                   make-mem0-http-transport
                   mem0-store-payload
                   mem0-search-payload
                   decode-mem0-items)
          (only-in "../runtime/memory/types.rkt"
-                  memory-item memory-item-content memory-item-scope memory-item-type
-                  memory-item-id memory-item-metadata memory-item-validity
-                  memory-item-created-at memory-item-updated-at
-                  memory-query))
+                  memory-item
+                  memory-item-content
+                  memory-item-scope
+                  memory-item-type
+                  memory-item-id
+                  memory-item-metadata
+                  memory-item-validity
+                  memory-item-created-at
+                  memory-item-updated-at
+                  memory-query
+                  memory-result-ok?
+                  memory-result-error)
+         (only-in "../runtime/memory/protocol.rkt" gen:retrieve-memory))
 
 ;; ---------------------------------------------------------------------------
 ;; Fake HTTP transport — captures calls, returns configured responses
@@ -29,33 +40,25 @@
   (set! captured-requests '())
   (lambda (host path method headers data)
     (set! captured-requests
-          (cons (hasheq 'host host
-                        'path path
-                        'method method
-                        'headers headers
-                        'data data)
+          (cons (hasheq 'host host 'path path 'method method 'headers headers 'data data)
                 captured-requests))
     (response-fn method path data)))
 
 ;; Test that the transport sends correct HTTP method/path/headers
 (test-case "W3: store maps to POST /v1/memories/ with auth header"
-  (define transport (make-mem0-http-transport
-                     "https://api.mem0.ai"
-                     "test-key-123"
-                     #:timeout-ms 1000))
+  (define transport (make-mem0-http-transport "https://api.mem0.ai" "test-key-123" #:timeout-ms 1000))
   ;; We can't call transport directly with a fake server without modifying the
   ;; make-mem0-http-transport function. Instead, verify the helper functions.
-  (define item (memory-item "id1"
-                            'semantic
-                            'session
-                            "test content"
-                            (hasheq 'source 'test 'session-id "s1"
-                                    'project-root "." 'tags '()
-                                    'origin-tool-call-id "tc1")
-                            (hasheq 'sensitivity 'public 'confidence 0.7
-                                    'supersedes '())
-                            "2026-01-01T00:00:00Z"
-                            "2026-01-01T00:00:00Z"))
+  (define item
+    (memory-item
+     "id1"
+     'semantic
+     'session
+     "test content"
+     (hasheq 'source 'test 'session-id "s1" 'project-root "." 'tags '() 'origin-tool-call-id "tc1")
+     (hasheq 'sensitivity 'public 'confidence 0.7 'supersedes '())
+     "2026-01-01T00:00:00Z"
+     "2026-01-01T00:00:00Z"))
   (define payload (mem0-store-payload item))
   (check-equal? (hash-ref payload 'content) "test content")
   (check-equal? (hash-ref (hash-ref payload 'metadata) 'type) "semantic"))
@@ -69,11 +72,16 @@
 
 (test-case "W3: decode-mem0-items converts response to memory-items"
   (define raw-items
-    (list (hasheq 'id "mem1"
-                  'content "Racket uses hygienic macros"
-                  'metadata (hasheq 'type "semantic" 'scope "project" 'tags '())
-                  'created_at "2026-01-01T00:00:00Z"
-                  'updated_at "2026-01-01T00:00:00Z")))
+    (list (hasheq 'id
+                  "mem1"
+                  'content
+                  "Racket uses hygienic macros"
+                  'metadata
+                  (hasheq 'type "semantic" 'scope "project" 'tags '())
+                  'created_at
+                  "2026-01-01T00:00:00Z"
+                  'updated_at
+                  "2026-01-01T00:00:00Z")))
   (define items (decode-mem0-items raw-items "s1" "."))
   (check-equal? (length items) 1)
   (check-equal? (memory-item-id (car items)) "mem1")
@@ -84,19 +92,17 @@
 (test-case "W3: transport fails closed on network error"
   ;; The real HTTP transport will fail with exn:fail when no server is listening.
   ;; Verify it returns a fail-closed result, not an exception.
-  (define transport (make-mem0-http-transport
-                     "https://127.0.0.1:1"  ; port 1 — nothing listening
-                     "test-key"
-                     #:timeout-ms 500))
+  (define transport
+    (make-mem0-http-transport "https://127.0.0.1:1" ; port 1 — nothing listening
+                              "test-key"
+                              #:timeout-ms 500))
   (define result (transport 'store (hasheq 'content "test")))
   (check-false (hash-ref result 'ok? #t) "Transport must return ok?=false on network error")
   (check-not-false (hash-ref (hash-ref result 'error) 'code #f)))
 
 (test-case "W3: no API key leakage in error responses"
-  (define transport (make-mem0-http-transport
-                     "https://127.0.0.1:1"
-                     "super-secret-key-do-not-log"
-                     #:timeout-ms 500))
+  (define transport
+    (make-mem0-http-transport "https://127.0.0.1:1" "super-secret-key-do-not-log" #:timeout-ms 500))
   (define result (transport 'store (hasheq 'content "test")))
   ;; Error response must not contain the API key
   (define error-hash (hash-ref result 'error (hasheq)))
@@ -115,3 +121,31 @@
   ;; exported directly — but we can test through the transport.
   ;; All methods should return a hash with ok? key (boolean).
   (check-true #t "Method mapping tested via integration"))
+
+;; ---------------------------------------------------------------------------
+;; v0.95.18 W0: Audit regression tests (expected red before W1)
+;; ---------------------------------------------------------------------------
+
+(test-case "W0 F1: Mem0 retrieve raw transport failure propagates fail-closed"
+  (define backend
+    (make-mem0-backend
+     #:api-key "test-key"
+     #:transport
+     (lambda (method payload)
+       (hash 'ok?
+             #f
+             'error
+             (hash 'code 'mem0-timeout 'message "redacted transport failure" 'retryable? #t)))))
+  (define result (gen:retrieve-memory backend (memory-query "racket" 'session #f "s1" #f #f 10 #t)))
+  (check-false (memory-result-ok? result))
+  (check-equal? (hash-ref (memory-result-error result) 'code) 'mem0-timeout))
+
+(test-case "W0 F2/F3: transport tests must not contain placeholder assertions"
+  (define source (file->string (find-system-path 'run-file)))
+  ;; v0.95.17 left check-true #t placeholders for host/method mapping.
+  ;; This gate stays red until replaced by real fake-server/seam assertions.
+  (check-false (regexp-match? #rx"check-true[[:space:]]+#t" source)))
+
+(test-case "W0 F2: Mem0 authorization scheme follows Api-key contract"
+  (define source (file->string (find-system-path 'run-file)))
+  (check-true (string-contains? source "Authorization: Api-key")))

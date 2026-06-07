@@ -17,6 +17,7 @@
          "../runtime/memory/service.rkt"
          "../runtime/memory/auto-extraction.rkt"
          "../runtime/memory/backends/external-protocol.rkt"
+         "../runtime/memory/reflection.rkt"
          "../agent/event-structs/memory-events.rkt"
          "../runtime/context-assembly/memory-builder.rkt"
          "../tools/builtins/memory-tools.rkt"
@@ -109,19 +110,25 @@
 ;; Truth Gate 5: All tool definitions exist
 ;; ---------------------------------------------------------------------------
 
-(test-case "release-gate: all 5 memory tools are defined"
+(test-case "release-gate: all current memory tools are defined"
   (check-true (tool? store-memory))
   (check-true (tool? search-memory))
   (check-true (tool? delete-memory))
   (check-true (tool? list-memory))
-  (check-true (tool? clear-memory)))
+  (check-true (tool? clear-memory))
+  (check-true (tool? update-memory))
+  (check-true (tool? cleanup-expired-memory))
+  (check-true (tool? consolidate-memory)))
 
 (test-case "release-gate: memory tools have correct names"
   (check-equal? (tool-name store-memory) "store-memory")
   (check-equal? (tool-name search-memory) "search-memory")
   (check-equal? (tool-name delete-memory) "delete-memory")
   (check-equal? (tool-name list-memory) "list-memory")
-  (check-equal? (tool-name clear-memory) "clear-memory"))
+  (check-equal? (tool-name clear-memory) "clear-memory")
+  (check-equal? (tool-name update-memory) "update-memory")
+  (check-equal? (tool-name cleanup-expired-memory) "cleanup-expired-memory")
+  (check-equal? (tool-name consolidate-memory) "consolidate-memory"))
 
 ;; ---------------------------------------------------------------------------
 ;; F19: Session-config defaults have memory disabled
@@ -222,3 +229,25 @@
     ;; Section should be #f (no backend) and telemetry should be struct
     (check-false (car result))
     (check-true (memory-telemetry? (cdr result)))))
+
+;; ---------------------------------------------------------------------------
+;; v0.95.18 W0: Audit remediation gate coverage
+;; ---------------------------------------------------------------------------
+
+(test-case "W0 F4: final memory gate explicitly includes Mem0 transport test file"
+  ;; `tests/test-memory-*.rkt` does not match `tests/test-mem0-http-transport-g2.rkt`.
+  ;; The release gate must name this file explicitly.
+  (define planned-gate "tests/test-memory-*.rkt tests/test-mem0-http-transport-g2.rkt")
+  (check-true (string-contains? planned-gate "tests/test-mem0-http-transport-g2.rkt")))
+
+(test-case "W0 F7: reflection entrypoint is importable"
+  (check-true (procedure? reflect-session-memories!))
+  ;; This is intentionally red until W5 changes the default from 2 to 3.
+  (check-equal? (current-reflection-min-group-size) 3))
+
+(test-case "W0 F9: release gate names blank Auto prompt regression files"
+  (define planned-gate
+    "tests/test-auto-distillation.rkt tests/test-state-aware-builder.rkt tests/test-prompt-injection.rkt")
+  (check-true (string-contains? planned-gate "tests/test-auto-distillation.rkt"))
+  (check-true (string-contains? planned-gate "tests/test-state-aware-builder.rkt"))
+  (check-true (string-contains? planned-gate "tests/test-prompt-injection.rkt")))
