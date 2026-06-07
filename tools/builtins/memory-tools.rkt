@@ -66,6 +66,23 @@
    'tags
    (hash-ref (memory-item-metadata item) 'tags '())))
 
+(define (format-item-line item)
+  (format
+   "  [~a] ~a/~a — \"~a\"~a"
+   (memory-item-id item)
+   (memory-item-type item)
+   (memory-item-scope item)
+   (substring (memory-item-content item) 0 (min 120 (string-length (memory-item-content item))))
+   (let ([ts (hash-ref (memory-item-metadata item) 'tags '())])
+     (if (pair? ts)
+         (format " [tags: ~a]" (string-join (map (lambda (t) (format "~a" t)) ts) ", "))
+         ""))))
+
+(define (format-items-text items label)
+  (if (null? items)
+      (format "No ~a found." label)
+      (format "~a ~a:\n~a" (length items) label (string-join (map format-item-line items) "\n"))))
+
 (define (pathish->string v)
   (cond
     [(path? v) (path->string (simplify-path v))]
@@ -125,7 +142,14 @@
   (define project-root (tool-project-root args exec-ctx))
   (define session-id (tool-session-id args exec-ctx))
   (define scope (effective-memory-scope (parse-symbol-arg args 'scope #f) project-root))
-  (define types (hash-ref args 'types #f))
+  (define raw-types (hash-ref args 'types #f))
+  (define types
+    (and raw-types
+         (map (lambda (t)
+                (if (string? t)
+                    (string->symbol t)
+                    t))
+              raw-types)))
   (define tags (hash-ref args 'tags #f))
   (define limit (hash-ref args 'limit default-limit))
   (define query-text (hash-ref args 'query #f))
@@ -339,7 +363,7 @@
             (let ([items (memory-result-value result)])
               (emit-retrieval! exec-ctx scope query-text limit (length items) result)
               (make-success-result
-               (list (hasheq 'type "text" 'text (format "Found ~a memories" (length items))))
+               (list (hasheq 'type "text" 'text (format-items-text items "memories")))
                (hasheq 'items (map memory-item-summary items))))
             (make-error-result (format "Failed to search memory: ~a"
                                        (memory-error-message result))))])]))
@@ -430,7 +454,7 @@
                           'snippet
                           (redacted-memory-snippet (memory-item-content item)))))
               (make-success-result
-               (list (hasheq 'type "text" 'text (format "~a memory items found" (length items))))
+               (list (hasheq 'type "text" 'text (format-items-text items "memory items")))
                (hasheq 'items summaries)))
             (make-error-result (format "Failed to list memory: ~a"
                                        (memory-error-message result))))])]))

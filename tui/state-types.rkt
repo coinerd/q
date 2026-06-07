@@ -481,10 +481,21 @@
 
 (define (extract-arg-summary args-str)
   (define (summarize-hash h)
-    (define vals (hash-values h))
-    (if (null? vals)
-        "(no args)"
-        (truncate-string (format "~a" (car vals)) 60)))
+    ;; For tools with large text content, show a brief description instead
+    (cond
+      [(hash-has-key? h 'content)
+       (define c (hash-ref h 'content ""))
+       (format "content: \"~a\"~a"
+               (substring c 0 (min 30 (string-length c)))
+               (if (> (string-length c) 30) "..." ""))]
+      [(hash-has-key? h 'query)
+       (define q (hash-ref h 'query ""))
+       (format "query: \"~a\"" (substring q 0 (min 40 (string-length q))))]
+      [else
+       (define vals (hash-values h))
+       (if (null? vals)
+           "(no args)"
+           (truncate-string (format "~a" (car vals)) 60))]))
   (cond
     [(hash? args-str) (summarize-hash args-str)]
     [(string? args-str)
