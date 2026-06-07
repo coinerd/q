@@ -15,6 +15,7 @@
 (require "types.rkt"
          "protocol.rkt"
          "policy.rkt"
+         (only-in "backends/helpers.rkt" current-iso-8601)
          racket/string
          racket/format
          racket/list)
@@ -65,19 +66,7 @@
 (define (item-expired? item)
   (define validity (memory-item-validity item))
   (define expires-at (hash-ref validity 'expires-at #f))
-  (and expires-at (string? expires-at) (string<? expires-at (format-iso-now))))
-
-;; Get current ISO timestamp (simplified — uses seconds since epoch)
-(define (format-iso-now)
-  (define secs (current-seconds))
-  (define d (seconds->date secs #f))
-  (format "~a-~a-~aT~a:~a:~aZ"
-          (date-year d)
-          (~a (date-month d) #:width 2 #:align 'right #:pad-string "0")
-          (~a (date-day d) #:width 2 #:align 'right #:pad-string "0")
-          (~a (date-hour d) #:width 2 #:align 'right #:pad-string "0")
-          (~a (date-minute d) #:width 2 #:align 'right #:pad-string "0")
-          (~a (date-second d) #:width 2 #:align 'right #:pad-string "0")))
+  (and expires-at (string? expires-at) (string<? expires-at (current-iso-8601))))
 
 ;; ---------------------------------------------------------------------------
 ;; Deterministic management engine

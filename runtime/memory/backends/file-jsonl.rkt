@@ -24,7 +24,8 @@
          "../types.rkt"
          "../protocol.rkt"
          (only-in "helpers.rkt" scope-match? type-match? tag-match? expired? current-iso-8601 pad2)
-         "../search.rkt")
+         "../search.rkt"
+         (only-in "../management.rkt" analyze-items))
 
 (provide make-file-jsonl-backend
          file-jsonl-backend-path
@@ -437,32 +438,38 @@
   (define (available?)
     #t)
 
-  ;; manage! — compact JSONL to active, non-expired, non-superseded items.
+  ;; manage! — v0.95.16 W6: Use management.rkt for deterministic analysis
   (define (manage! policy)
     (define view (get-view))
     (define current-items (hash-values view))
-    (define kept-items
-      (remove-superseded (filter (lambda (item) (not (expired? item))) current-items)))
-    (define compacted-count (- (length current-items) (length kept-items)))
-    (ensure-dir!)
-    (define safe-path (safe-memory-path memory-root "memory.jsonl"))
-    (call-with-output-file safe-path
-                           (lambda (out)
-                             (for ([item (in-list kept-items)])
-                               (write-json (make-store-record item) out)
-                               (newline out)))
-                           #:exists 'replace
-                           #:mode 'text)
-    (restrict-path-permissions! safe-path #o600)
-    (set! cache
-          (for/hash ([item (in-list kept-items)])
-            (values (memory-item-id item) item)))
-    (set! cached-file-size
-          (if (file-exists? safe-path)
-              (file-size safe-path)
-              0))
-    (set! cache-dirty? #f)
-    (memory-result #t #f #f (hasheq 'backend 'file-jsonl 'compacted-count compacted-count)))
+    (define report (analyze-items current-items policy))
+    (define compacted-count (length (hash-ref report 'removed-ids '())))
+    (cond
+      ;; Report only — no file mutations
+      [(hash-ref report 'dry-run? #f) (memory-result #t #f #f (hash-set report 'backend 'file-jsonl))]
+      [else
+       ;; Rewrite file with only kept items
+       (define kept-ids (hash-ref report 'kept-ids '()))
+       (define keepers (filter (lambda (i) (member (memory-item-id i) kept-ids)) current-items))
+       (ensure-dir!)
+       (define safe-path (safe-memory-path memory-root "memory.jsonl"))
+       (call-with-output-file safe-path
+                              (lambda (out)
+                                (for ([item (in-list keepers)])
+                                  (write-json (make-store-record item) out)
+                                  (newline out)))
+                              #:exists 'replace
+                              #:mode 'text)
+       (restrict-path-permissions! safe-path #o600)
+       (set! cache
+             (for/hash ([item (in-list keepers)])
+               (values (memory-item-id item) item)))
+       (set! cached-file-size
+             (if (file-exists? safe-path)
+                 (file-size safe-path)
+                 0))
+       (set! cache-dirty? #f)
+       (memory-result #t #f #f (hasheq 'backend 'file-jsonl 'compacted-count compacted-count))]))
 
   (define the-backend
     (memory-backend "file-jsonl" store! retrieve update! delete! list-items available? manage!))

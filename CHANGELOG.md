@@ -35,6 +35,27 @@
 - 14 test files in `tests/test-memory-*.rkt`
 
 
+## v0.95.16 — Memory Gap Closure
+
+### Auto-Extraction Integration
+- **W1**: Config/session-config accessors for auto-extraction
+- **W2**: Runtime parameter wiring in build-runtime-from-cli
+- **W3**: Post-turn lifecycle hook maybe-auto-extract-after-response! in loop-stream.rkt
+
+### Backend Configuration
+- **W4**: Recursive backend factory — chained backends from json config specs
+- **W5**: Mem0 external adapter with injectable transport
+
+### Memory Management
+- **W6**: Deterministic management.rkt module with dedup, expiry, dry-run
+
+### Context Injection Polish
+- **W7**: Tiered injection with type/scope grouping and untrusted header
+
+### Release
+- **W8**: Documentation, focused test gate, milestone closure
+- 24 files changed, +1860/-78 lines, 79 new tests
+
 ## v0.94.9 — GUI-TUI Output Parity (2026-06-03)
 
 ### GUI Enhancements
