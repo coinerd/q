@@ -16,17 +16,20 @@
                   setting-ref
                   security-config-from-settings
                   http-request-timeout
-                  q-settings-merged)
+                  q-settings-merged
+                  setting-memory-injection-budget)
          (only-in "../tools/builtins/bash.rkt" current-execution-policy current-allowed-commands)
          (only-in "../sandbox/subprocess.rkt"
                   current-secret-scrub-denylist
                   current-secret-scrub-allowlist)
          (only-in "../llm/stream.rkt" current-http-request-timeout current-model-timeouts)
          (only-in "../runtime/trace-logger.rkt" make-trace-logger start-trace-logger!)
-         (only-in "../runtime/project-tree.rkt" project-tree->string))
+         (only-in "../runtime/project-tree.rkt" project-tree->string)
+         (only-in "../runtime/context-assembly/memory-builder.rkt" current-memory-injection-budget))
 
 (provide wire-security-config!
          wire-timeouts!
+         wire-memory-settings!
          make-trace-logger
          start-trace-logger!
          project-tree->string)
@@ -74,3 +77,11 @@
           acc)))
   (current-model-timeouts model-timeouts)
   (current-http-request-timeout (http-request-timeout settings)))
+
+;; Apply memory settings from config to current parameters.
+;; Sets injection budget from settings.
+;; Auto-extraction is controlled by current-auto-extraction-enabled parameter directly.
+(define (wire-memory-settings! settings)
+  (define budget (setting-memory-injection-budget settings))
+  (when budget
+    (current-memory-injection-budget budget)))
