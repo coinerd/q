@@ -16,7 +16,8 @@
          "policy.rkt"
          "protocol.rkt"
          "backends/memory-hash.rkt"
-         "backends/file-jsonl.rkt")
+         "backends/file-jsonl.rkt"
+         "backends/chained.rkt")
 
 ;; ---------------------------------------------------------------------------
 ;; Service parameters
@@ -52,6 +53,9 @@
 ;;   - 'hash         → in-memory hash backend (session-scoped)
 ;;   - 'file-jsonl   → file-based JSONL backend (persistent)
 ;;   - memory-backend? → pre-constructed backend (used as-is)
+;;   - hash spec     → complex backend (v0.95.16 W4):
+;;       {type: 'chained, l1: <spec>, l2: <spec>, write-through?: <bool>}
+;;       {type: 'external, ...} (handled by external factory, W5)
 ;;
 ;; When 'file-jsonl, uses the session directory for storage.
 ;; Returns the constructed backend (or #f).
@@ -60,18 +64,19 @@
     (if (dict? cfg)
         (dict-ref cfg 'memory-backend #f)
         #f))
+  (define result (build-backend-from-spec backend-spec cfg))
+  (current-memory-backend result)
+  result)
+
+;; v0.95.16 W4: Recursive backend factory.
+;; Converts a backend spec into a memory-backend? or #f.
+;; Unknown/invalid specs fail closed (return #f).
+(define (build-backend-from-spec spec cfg)
   (cond
-    [(not backend-spec)
-     (current-memory-backend #f)
-     #f]
-    [(memory-backend? backend-spec)
-     (current-memory-backend backend-spec)
-     backend-spec]
-    [(eq? backend-spec 'hash)
-     (define be (make-memory-hash-backend))
-     (current-memory-backend be)
-     be]
-    [(eq? backend-spec 'file-jsonl)
+    [(not spec) #f]
+    [(memory-backend? spec) spec]
+    [(eq? spec 'hash) (make-memory-hash-backend)]
+    [(eq? spec 'file-jsonl)
      (define session-dir
        (if (dict? cfg)
            (dict-ref cfg 'session-dir #f)
@@ -80,13 +85,46 @@
        (if session-dir
            (string->path session-dir)
            (find-system-path 'temp-dir)))
-     (define be (make-file-jsonl-backend memory-root))
-     (current-memory-backend be)
-     be]
+     (make-file-jsonl-backend memory-root)]
+    [(hash? spec)
+     (define spec-type (hash-ref spec 'type #f))
+     (cond
+       [(eq? spec-type 'chained) (build-chained-from-spec spec cfg)]
+       [(eq? spec-type 'external)
+        ;; External backend construction — W5 provides the adapter
+        ;; For now, log and fail closed
+        (log-warning "memory: external backend not yet implemented")
+        #f]
+       [else
+        (log-warning (format "memory: unknown backend spec type: ~a" spec-type))
+        #f])]
     [else
-     ;; Unknown spec — leave disabled
-     (current-memory-backend #f)
+     (log-warning (format "memory: invalid backend spec: ~a" spec))
      #f]))
+
+;; Build a chained backend from spec
+(define (build-chained-from-spec spec cfg)
+  (define l1-spec (hash-ref spec 'l1 #f))
+  (define l2-spec (hash-ref spec 'l2 #f))
+  (define write-through? (hash-ref spec 'write-through? #t))
+  (cond
+    [(not l1-spec)
+     (log-warning "memory: chained backend missing l1 spec")
+     #f]
+    [(not l2-spec)
+     (log-warning "memory: chained backend missing l2 spec")
+     #f]
+    [else
+     (define l1 (build-backend-from-spec l1-spec cfg))
+     (define l2 (build-backend-from-spec l2-spec cfg))
+     (cond
+       [(not l1)
+        (log-warning "memory: chained backend l1 construction failed")
+        #f]
+       [(not l2)
+        (log-warning "memory: chained backend l2 construction failed")
+        #f]
+       [else (make-chained-backend l1 l2 #:write-through? write-through?)])]))
 
 ;; ---------------------------------------------------------------------------
 ;; Provide
@@ -96,4 +134,5 @@
          current-memory-policy
          memory-service-available?
          resolve-memory-backend
-         initialize-memory-backend!)
+         initialize-memory-backend!
+         build-backend-from-spec)
