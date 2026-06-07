@@ -329,10 +329,16 @@
          [(debugging) "DEBUGGING"]
          [else "UNKNOWN"]))
      (define guidance (hash-ref state-guidance-table state-name "Focus on the current task."))
-     (define conclusion-count (length (filter task-conclusion? conclusions)))
+     ;; v0.95.18 F9: Filter bare [Auto] conclusions before count/render
+     (define visible-conclusions
+       (filter (lambda (c)
+                 (and (task-conclusion? c)
+                      (not (equal? (string-trim (task-conclusion-text c)) "[Auto]"))))
+               conclusions))
+     (define conclusion-count (length visible-conclusions))
      (define conclusion-section
        (if (> conclusion-count 0)
-           (let* ([top (take conclusions (min 10 (length conclusions)))]
+           (let* ([top (take visible-conclusions (min 10 (length visible-conclusions)))]
                   [texts (for/list ([c (in-list top)])
                            (format "  - ~a" (task-conclusion-text c)))])
              (format "\n\nKey conclusions (~a in memory):\n~a"
