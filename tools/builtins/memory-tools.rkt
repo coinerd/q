@@ -615,6 +615,102 @@
                                                 (memory-error-message result))))])))])]))
 
 ;; ---------------------------------------------------------------------------
+;; M14: consolidate_memory tool — merge multiple items into one
+;; ---------------------------------------------------------------------------
+
+(define (consolidate-memory-handler args [exec-ctx #f])
+  (define backend (current-memory-backend))
+  (define policy (current-memory-policy))
+  (define ids (hash-ref args 'ids #f))
+  (define merged-content (hash-ref args 'merged-content #f))
+  (define scope (parse-symbol-arg args 'scope 'session))
+  (define target-type (parse-symbol-arg args 'target-type #f))
+  (define target-scope (parse-symbol-arg args 'target-scope #f))
+  (define keep-originals? (hash-ref args 'keep-originals? #t))
+  (define project-root (tool-project-root args exec-ctx))
+  (define session-id (tool-session-id args exec-ctx))
+  (cond
+    [(not backend)
+     (emit-backend-unavailable! exec-ctx backend 'consolidate)
+     (make-error-result "Memory not available. Enable memory in session config.")]
+    [(not (and ids (list? ids) (>= (length ids) 2)))
+     (make-error-result "ids must be a list of at least 2 memory item IDs.")]
+    [(not (and merged-content (string? merged-content) (> (string-length merged-content) 0)))
+     (make-error-result "merged-content must be a non-empty string.")]
+    [(validate-scope policy scope)
+     =>
+     make-error-result]
+    [else
+     (define effective-scope (or target-scope scope))
+     (define effective-type (or target-type 'semantic))
+     ;; Retrieve all items in scope to verify IDs exist
+     (define q (make-scoped-query #f scope project-root session-id #f #f 100 #f))
+     (define result (gen:retrieve-memory backend q))
+     (cond
+       [(not (memory-result-ok? result))
+        (make-error-result (format "Failed to retrieve memories: ~a" (memory-error-message result)))]
+       [else
+        (define all-items (memory-result-value result))
+        (define id-set (list->set ids))
+        (define found-items
+          (filter (lambda (item) (set-member? id-set (memory-item-id item))) all-items))
+        (cond
+          [(< (length found-items) (length ids))
+           (define found-ids (map memory-item-id found-items))
+           (define missing (filter (lambda (id) (not (member id found-ids))) ids))
+           (make-error-result (format "IDs not found in scope: ~a" missing))]
+          [else
+           ;; Create merged item with supersedes metadata
+           (define merged-id (make-memory-id))
+           (define now-ts (format-iso-now))
+           (define merged-item
+             (memory-item merged-id
+                          effective-type
+                          effective-scope
+                          merged-content
+                          (hash 'source
+                                'consolidation
+                                'session-id
+                                (or session-id "unknown")
+                                'project-root
+                                (or project-root ".")
+                                'tags
+                                '()
+                                'origin-tool-call-id
+                                "consolidate-memory")
+                          (hash 'sensitivity 'public 'confidence 0.7 'supersedes ids)
+                          now-ts
+                          now-ts))
+           (define store-result (gen:store-memory! backend merged-item))
+           (cond
+             [(not (memory-result-ok? store-result))
+              (make-error-result (format "Failed to store merged item: ~a"
+                                         (memory-error-message store-result)))]
+             [else
+              ;; Delete originals if keep-originals? is false
+              (when (not keep-originals?)
+                (for ([item (in-list found-items)])
+                  (gen:delete-memory! backend (memory-item-id item) (memory-item-scope item))))
+              (make-success-result
+               (format "Consolidated ~a items into ~a~a"
+                       (length ids)
+                       merged-id
+                       (if keep-originals? " (originals kept)" " (originals deleted)"))
+               (hasheq 'merged-id
+                       merged-id
+                       'supersedes
+                       ids
+                       'keep-originals?
+                       keep-originals?))])])])]))
+
+(define (list->set lst)
+  (for/hash ([v (in-list lst)])
+    (values v #t)))
+
+(define (set-member? st v)
+  (hash-has-key? st v))
+
+;; ---------------------------------------------------------------------------
 ;; M13-F5: cleanup_expired_memory management tool
 ;; ---------------------------------------------------------------------------
 
@@ -771,10 +867,26 @@
                (confirm "boolean" "Must be true to confirm deletion of expired items")]
  cleanup-expired-handler)
 
+(define-tool
+ consolidate-memory
+ #:description
+ "Consolidate multiple memory items into a single merged item. The merged item supersedes the originals."
+ #:required ("ids" "merged-content")
+ #:properties
+ [(ids "array" "List of memory item IDs to consolidate (minimum 2)")
+  (merged-content "string" "The merged content for the new consolidated item")
+  (scope "string" "Scope context for visibility check: session, project, or user")
+  (target-type "string" "Type for merged item: semantic (default), episodic, or procedural")
+  (target-scope "string" "Scope for merged item: defaults to input scope")
+  (keep-originals? "boolean"
+                   "If true (default), keep original items. If false, delete them after merge.")]
+ consolidate-memory-handler)
+
 (provide store-memory
          search-memory
          delete-memory
          list-memory
          clear-memory
          update-memory
-         cleanup-expired-memory)
+         cleanup-expired-memory
+         consolidate-memory)
