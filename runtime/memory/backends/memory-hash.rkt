@@ -9,7 +9,8 @@
          "../types.rkt"
          "../protocol.rkt"
          (only-in "helpers.rkt" scope-match? type-match? tag-match? expired? current-iso-8601)
-         "../search.rkt")
+         "../search.rkt"
+         (only-in "../management.rkt" execute-management! default-management-policy))
 
 (provide make-memory-hash-backend
          memory-hash-backend-items)
@@ -175,11 +176,20 @@
   (define (available?)
     #t)
 
-  ;; manage! — no-op for in-memory backend
-  (define (manage! policy)
-    (memory-result #t #f #f (hasheq 'backend 'memory-hash)))
+  ;; Self-reference for manage! (set after construction)
+  (define self-ref (box #f))
 
-  (memory-backend "memory-hash" store! retrieve update! delete! list-items available? manage!))
+  ;; manage! — v0.95.16 W6: bounded, deterministic management
+  (define (manage! mgmt-policy)
+    (define be (unbox self-ref))
+    (cond
+      [(hash? mgmt-policy) (execute-management! be mgmt-policy)]
+      [else (execute-management! be default-management-policy)]))
+
+  (define the-backend
+    (memory-backend "memory-hash" store! retrieve update! delete! list-items available? manage!))
+  (set-box! self-ref the-backend)
+  the-backend)
 
 ;; ---------------------------------------------------------------------------
 ;; Test helper: inspect backend contents
