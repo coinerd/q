@@ -211,7 +211,7 @@
     (define observe-memory-for-context
       (dynamic-require memory-builder-path 'observe-memory-for-context))
     (define memory-telemetry->jsexpr (dynamic-require memory-builder-path 'memory-telemetry->jsexpr))
-    (define observed (observe-memory-for-context session-config))
+    (define observed (observe-memory-for-context session-config #:scope #f))
     (when trace-cb
       (trace-cb 'memory-observe (memory-telemetry->jsexpr (cdr observed))))
     ;; v0.95.15 W3: Inject memory context when injection budget is configured
@@ -220,7 +220,7 @@
     (when (current-memory-injection-budget)
       (define inject-memory-for-context
         (dynamic-require memory-builder-path 'inject-memory-for-context))
-      (define injected (inject-memory-for-context session-config))
+      (define injected (inject-memory-for-context session-config #:scope #f))
       (define section (car injected))
       (when (and section (positive? (string-length section)))
         (set! memory-section-text section)

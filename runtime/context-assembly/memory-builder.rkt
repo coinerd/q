@@ -111,7 +111,7 @@
                     (hasheq))]))
 
 (define (observe-memory-for-context session-config
-                                    #:scope [scope 'session]
+                                    #:scope [scope #f]
                                     #:session-id [session-id #f]
                                     #:project [project #f]
                                     #:limit [limit 20])
@@ -167,7 +167,7 @@
 ;; ---------------------------------------------------------------------------
 
 (define (observe-memory-telemetry session-config
-                                  #:scope [scope 'session]
+                                  #:scope [scope #f]
                                   #:session-id [session-id #f]
                                   #:project [project #f]
                                   #:limit [limit 20])
@@ -357,7 +357,7 @@
     item))
 
 (define (inject-memory-for-context session-config
-                                   #:scope [scope 'session]
+                                   #:scope [scope #f]
                                    #:session-id [session-id #f]
                                    #:project [project #f]
                                    #:budget-tokens [budget-tokens (current-memory-injection-budget)]
