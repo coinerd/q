@@ -21,6 +21,7 @@
                   effective-memory-scope
                   memory-persistent-write-allowed?)
          (only-in "backends/helpers.rkt" current-iso-8601) ; F32
+         (only-in "service.rkt" current-memory-backend current-memory-policy)
          (only-in "../../agent/event-structs/memory-events.rkt"
                   make-mem-item-stored-event
                   make-mem-policy-blocked-event
@@ -284,6 +285,31 @@
 ;; Provide
 ;; ---------------------------------------------------------------------------
 
+;; ---------------------------------------------------------------------------
+;; Lifecycle helper for post-turn hook
+;; ---------------------------------------------------------------------------
+
+;; Non-fatal post-turn auto-extraction. Called from the agent loop after
+;; a completed assistant text turn. Catches all exceptions silently.
+;; Returns void — extraction results are observable via events only.
+(define (maybe-auto-extract-after-response! response-text
+                                            #:session-id session-id
+                                            #:project-root [project-root #f]
+                                            #:on-event [on-event void]
+                                            #:on-typed-event [on-typed-event void])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-warning (format "auto-extraction error: ~a" (exn-message e))))])
+    (define backend (current-memory-backend))
+    (define policy (current-memory-policy))
+    (when (and (current-auto-extraction-enabled) backend)
+      (try-auto-extract response-text
+                        #:backend backend
+                        #:policy policy
+                        #:session-id session-id
+                        #:project-root (or project-root ".")
+                        #:on-event on-event
+                        #:on-typed-event on-typed-event))))
+
 (provide current-auto-extraction-enabled
          current-auto-extraction-min-confidence
          classify-sensitivity
@@ -294,6 +320,7 @@
          extraction-result-action
          extraction-result-item
          extraction-result-reason
+         maybe-auto-extract-after-response!
          ;; Low-level checks for testing
          contains-secret?
          looks-like-raw-output?

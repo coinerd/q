@@ -55,7 +55,9 @@
                   make-stream-turn-cancelled-event
                   make-stream-tool-call-started-event
                   make-stream-assistant-msg-completed-event)
-         (only-in "loop-messages.rkt" usage-empty? classify-hook-result))
+         (only-in "loop-messages.rkt" usage-empty? classify-hook-result)
+         ;; v0.95.16 W3: Post-turn auto-extraction
+         (only-in "../runtime/memory/auto-extraction.rkt" maybe-auto-extract-after-response!))
 
 (provide classify-chunk
          chunk-has-data?
@@ -148,6 +150,8 @@
      (when hook-dispatcher
        (hook-dispatcher 'agent-end
                         (hasheq 'session-id session-id 'turn-id turn-id 'termination 'completed)))
+     ;; v0.95.16 W3: Post-turn auto-extraction (non-fatal, gated by parameter)
+     (maybe-auto-extract-after-response! final-text #:session-id session-id)
      (make-loop-result
       (loop-state-messages state)
       'completed
