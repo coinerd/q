@@ -79,7 +79,8 @@
            (-> q-settings? (or/c 'auto 'keychain-preferred 'keychain-required 'env-only))]
           [shell-risk-classifier (-> q-settings? (or/c 'regex 'structured 'both))]
           [setting-context-assembly-profile (-> q-settings? symbol?)]
-          [setting-memory-injection-budget (-> q-settings? (or/c exact-positive-integer? #f))])
+          [setting-memory-injection-budget (-> q-settings? (or/c exact-positive-integer? #f))]
+          [setting-memory-backend (-> q-settings? (or/c symbol? #f))])
 
          ;; Sandbox settings (re-exported, not locally defined)
          sandbox-enabled?
@@ -430,6 +431,18 @@
     [(string? raw)
      (define n (string->number raw))
      (if (exact-positive-integer? n) n #f)]
+    [else #f]))
+
+;; v0.95.16: Memory backend from settings (config.json)
+;; Reads memory.memory-backend from config. Valid values:
+;;   'hash, 'file-jsonl, #f (disabled)
+(define (setting-memory-backend settings)
+  (define raw (setting-ref* settings '(memory backend) #f))
+  (cond
+    [(symbol? raw) (if (memq raw '(hash file-jsonl)) raw #f)]
+    [(string? raw)
+     (define sym (string->symbol raw))
+     (if (memq sym '(hash file-jsonl)) sym #f)]
     [else #f]))
 
 ;; ============================================================

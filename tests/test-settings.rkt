@@ -599,3 +599,28 @@
 (test-case "setting-context-assembly-profile falls back for invalid profile"
   (define settings (q-settings (hash) (hash) (hash 'context-assembly (hash 'profile "invalid"))))
   (check-eq? (setting-context-assembly-profile settings) 'off))
+
+;; v0.95.16: Memory backend and injection budget from settings
+(test-case "setting-memory-backend reads from nested config"
+  (define settings (q-settings (hash) (hash) (hash 'memory (hash 'backend "file-jsonl"))))
+  (check-eq? (setting-memory-backend settings) 'file-jsonl))
+
+(test-case "setting-memory-backend reads symbol value"
+  (define settings (q-settings (hash) (hash) (hash 'memory (hash 'backend 'hash))))
+  (check-eq? (setting-memory-backend settings) 'hash))
+
+(test-case "setting-memory-backend returns #f when not set"
+  (define settings (q-settings (hash) (hash) (hash)))
+  (check-false (setting-memory-backend settings)))
+
+(test-case "setting-memory-backend returns #f for invalid value"
+  (define settings (q-settings (hash) (hash) (hash 'memory (hash 'backend "redis"))))
+  (check-false (setting-memory-backend settings)))
+
+(test-case "setting-memory-injection-budget reads from nested config"
+  (define settings (q-settings (hash) (hash) (hash 'memory (hash 'injection-budget 500))))
+  (check-equal? (setting-memory-injection-budget settings) 500))
+
+(test-case "setting-memory-injection-budget returns #f when not set"
+  (define settings (q-settings (hash) (hash) (hash)))
+  (check-false (setting-memory-injection-budget settings)))

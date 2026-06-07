@@ -41,7 +41,7 @@
                   project-tree->string)
          (only-in "extension-setup.rkt" make-wired-extension-registry load-extensions-from-dir!)
          (only-in "../runtime/session/session-config.rkt" apply-context-assembly-profile!)
-         (only-in "../runtime/settings.rkt" setting-memory-injection-budget)
+         (only-in "../runtime/settings.rkt" setting-memory-injection-budget setting-memory-backend)
          (only-in "../runtime/context-assembly/memory-builder.rkt" current-memory-injection-budget)
          (only-in "../extensions/gsd/state-machine.rkt" gsm-current)
          (only-in "../runtime/gsd-query.rkt" current-gsd-mode-query))
@@ -206,7 +206,15 @@
   (when settings-budget
     (current-memory-injection-budget settings-budget))
 
-  (hash->session-config final-hash-with-profile))
+  ;; v0.95.16: Wire memory backend from settings (config.json)
+  ;; Only applies when --memory CLI flag was NOT passed.
+  (define settings-backend (setting-memory-backend settings))
+  (define final-hash-with-memory
+    (if (and settings-backend (not (hash-ref base-config 'memory-backend #f)))
+        (hash-set final-hash-with-profile 'memory-backend settings-backend)
+        final-hash-with-profile))
+
+  (hash->session-config final-hash-with-memory))
 
 ;; ============================================================
 ;; mode-for-config
