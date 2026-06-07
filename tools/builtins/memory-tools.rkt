@@ -19,7 +19,8 @@
                   memory-result-ok?
                   memory-result-value
                   memory-result-error
-                  memory-result-metadata)
+                  memory-result-metadata
+                  memory-type?)
          (only-in "../../runtime/memory/protocol.rkt"
                   memory-backend?
                   memory-backend-name
@@ -643,65 +644,100 @@
     [else
      (define effective-scope (or target-scope scope))
      (define effective-type (or target-type 'semantic))
-     ;; Retrieve all items in scope to verify IDs exist
-     (define q (make-scoped-query #f scope project-root session-id #f #f 100 #f))
-     (define result (gen:retrieve-memory backend q))
+     ;; v0.95.18 F6: Validate target type before storing
      (cond
-       [(not (memory-result-ok? result))
-        (make-error-result (format "Failed to retrieve memories: ~a" (memory-error-message result)))]
+       [(and target-type (not (memory-type? effective-type)))
+        (make-error-result
+         (format "Invalid target-type '~a'. Must be one of: semantic, episodic, procedural"
+                 effective-type))]
        [else
-        (define all-items (memory-result-value result))
-        (define id-set (list->set ids))
-        (define found-items
-          (filter (lambda (item) (set-member? id-set (memory-item-id item))) all-items))
+        ;; Retrieve all items in scope to verify IDs exist
+        (define q (make-scoped-query #f scope project-root session-id #f #f 100 #f))
+        (define result (gen:retrieve-memory backend q))
         (cond
-          [(< (length found-items) (length ids))
-           (define found-ids (map memory-item-id found-items))
-           (define missing (filter (lambda (id) (not (member id found-ids))) ids))
-           (make-error-result (format "IDs not found in scope: ~a" missing))]
+          [(not (memory-result-ok? result))
+           (make-error-result (format "Failed to retrieve memories: ~a"
+                                      (memory-error-message result)))]
           [else
-           ;; Create merged item with supersedes metadata
-           (define merged-id (make-memory-id))
-           (define now-ts (format-iso-now))
-           (define merged-item
-             (memory-item merged-id
-                          effective-type
-                          effective-scope
-                          merged-content
-                          (hash 'source
-                                'consolidation
-                                'session-id
-                                (or session-id "unknown")
-                                'project-root
-                                (or project-root ".")
-                                'tags
-                                '()
-                                'origin-tool-call-id
-                                "consolidate-memory")
-                          (hash 'sensitivity 'public 'confidence 0.7 'supersedes ids)
-                          now-ts
-                          now-ts))
-           (define store-result (gen:store-memory! backend merged-item))
+           (define all-items (memory-result-value result))
+           (define id-set (list->set ids))
+           (define found-items
+             (filter (lambda (item) (set-member? id-set (memory-item-id item))) all-items))
            (cond
-             [(not (memory-result-ok? store-result))
-              (make-error-result (format "Failed to store merged item: ~a"
-                                         (memory-error-message store-result)))]
+             [(< (length found-items) (length ids))
+              (define found-ids (map memory-item-id found-items))
+              (define missing (filter (lambda (id) (not (member id found-ids))) ids))
+              (make-error-result (format "IDs not found in scope: ~a" missing))]
              [else
-              ;; Delete originals if keep-originals? is false
-              (when (not keep-originals?)
-                (for ([item (in-list found-items)])
-                  (gen:delete-memory! backend (memory-item-id item) (memory-item-scope item))))
-              (make-success-result
-               (format "Consolidated ~a items into ~a~a"
-                       (length ids)
-                       merged-id
-                       (if keep-originals? " (originals kept)" " (originals deleted)"))
-               (hasheq 'merged-id
-                       merged-id
-                       'supersedes
-                       ids
-                       'keep-originals?
-                       keep-originals?))])])])]))
+              ;; Create merged item with supersedes metadata
+              (define merged-id (make-memory-id))
+              (define now-ts (format-iso-now))
+              (define merged-item
+                (memory-item merged-id
+                             effective-type
+                             effective-scope
+                             merged-content
+                             (hash 'source
+                                   'consolidation
+                                   'session-id
+                                   (or session-id "unknown")
+                                   'project-root
+                                   (or project-root ".")
+                                   'tags
+                                   '()
+                                   'origin-tool-call-id
+                                   "consolidate-memory")
+                             (hash 'sensitivity 'public 'confidence 0.7 'supersedes ids)
+                             now-ts
+                             now-ts))
+              (define store-result (gen:store-memory! backend merged-item))
+              (cond
+                [(not (memory-result-ok? store-result))
+                 (make-error-result (format "Failed to store merged item: ~a"
+                                            (memory-error-message store-result)))]
+                [else
+                 ;; v0.95.18 F6: Supersede originals with lineage metadata
+                 ;; instead of silent deletion
+                 (define source-updates
+                   (if keep-originals?
+                       '()
+                       (for/list ([item (in-list found-items)])
+                         (define update-validity
+                           (hash-set (memory-item-validity item) 'superseded-by merged-id))
+                         (define update-patch (hasheq 'validity update-validity 'updated-at now-ts))
+                         (define update-res
+                           (gen:update-memory! backend (memory-item-id item) update-patch))
+                         (hash 'id
+                               (memory-item-id item)
+                               'update-ok?
+                               (memory-result-ok? update-res)
+                               'superseded-by
+                               merged-id))))
+                 (define all-updates-ok?
+                   (or keep-originals?
+                       (andmap (lambda (u) (hash-ref u 'update-ok? #f)) source-updates)))
+                 (define result-text
+                   (if keep-originals?
+                       (format "Consolidated ~a items into ~a (originals kept)"
+                               (length ids)
+                               merged-id)
+                       (if all-updates-ok?
+                           (format "Consolidated ~a items into ~a (originals superseded)"
+                                   (length ids)
+                                   merged-id)
+                           (format
+                            "Consolidated ~a items into ~a (partial: some supersessions failed)"
+                            (length ids)
+                            merged-id))))
+                 (make-success-result result-text
+                                      (hasheq 'merged-id
+                                              merged-id
+                                              'supersedes
+                                              ids
+                                              'keep-originals?
+                                              keep-originals?
+                                              'source-updates
+                                              source-updates))])])])])]))
 
 (define (list->set lst)
   (for/hash ([v (in-list lst)])
