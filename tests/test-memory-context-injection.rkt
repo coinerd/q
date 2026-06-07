@@ -351,3 +351,29 @@
      "2020-01-01T00:00:00Z"))
   (define section (build-memory-section (list expired-item) #:budget-tokens 500))
   (check-false section))
+
+;; ---------------------------------------------------------------------------
+;; v0.95.19 W0: HF2 regression — default scope excludes project items
+;; ---------------------------------------------------------------------------
+
+(test-case "W0 HF2: project-scoped item visible with default injection scope"
+  (define backend (make-memory-hash-backend))
+  (parameterize ([current-memory-backend backend])
+    ;; Store a PROJECT-scoped item
+    (define proj-item
+      (memory-item "mem-hf2-proj"
+                   'semantic
+                   'project
+                   "HF2 project-scoped memory content"
+                   (hasheq 'project-root "/test" 'session-id "sess-hf2" 'tags '()
+                           'source 'test 'origin-message-id "msg-hf2")
+                   (hasheq 'sensitivity 'public 'confidence 0.9 'supersedes '())
+                   "2026-06-07T12:00:00Z"
+                   "2026-06-07T12:00:00Z"))
+    ((memory-backend-store! backend) proj-item)
+    (define cfg (make-test-config #:memory-enabled? #t))
+    ;; Call inject with default scope (should be #f = all scopes after fix)
+    (define result (inject-memory-for-context cfg #:budget-tokens 200))
+    (define section (car result))
+    (check-not-false (and section (string-contains? section "HF2 project-scoped"))
+                     "Project-scoped item must appear when default scope is #f (all scopes)")))
