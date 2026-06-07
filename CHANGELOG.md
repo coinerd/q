@@ -1,3 +1,24 @@
+## v0.95.18 — Memory Quality Remediation (2026-06-07)
+
+### Regression Harness
+- **W0**: Red/regression harness and validation baseline — 9 test files mapping F1-F9 audit findings (4 pass, 5 expected-fail)
+
+### Transport & Extraction Fixes
+- **W1**: Mem0 fail-closed retrieval and transport hardening — propagate transport errors before Mem0-specific decode; auth header fix (`Api-key` not `Token`); error sanitization (10 tests)
+- **W2**: Blank `[Auto]` auto-distillation and state preamble filter — `make-deterministic-fallback` treats blank/whitespace content as absent; `build-state-awareness-preamble` filters bare `[Auto]` conclusions (14+21 tests)
+- **W3**: Validation gate repair and behavioral extraction evidence — structural invariant proving `run-agent-turn` has no LLM-response path bypassing auto-extraction (7 tests)
+
+### Consolidation & Reflection
+- **W4**: Consolidation lineage and policy hardening — target-type validation; supersession metadata (`superseded-by`) replaces silent deletion; partial failure reporting (80 tests)
+- **W5**: Reflection determinism and conservative grouping — min-group-size raised to 3; shared-tags requires >=2 tags; Jaccard threshold raised to 0.4; fully deterministic IDs (45 tests)
+
+### Release Gate
+- **W6**: Version bump, CHANGELOG, docs update, focused memory gate validation
+
+### New Files
+- `tests/test-memory-regression.rkt` — F1-F9 regression harness
+- `tests/test-memory-consolidation-tool-g3.rkt` — consolidation edge-case tests
+
 ## v0.95.17 — Memory Quality (2026-06-06)
 
 ### Characterization & Bug Fixes

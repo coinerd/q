@@ -1,4 +1,4 @@
-# Memory Activation (v0.95.17)
+# Memory Activation (v0.95.18)
 
 ## Overview
 
@@ -207,17 +207,34 @@ consolidate-memory(ids=["m1", "m2"], merged-content="Combined insight", scope="s
 ```
 
 - Creates a new merged item with `supersedes` metadata linking to originals
-- `keep-originals?` parameter (default `true`) controls whether originals are deleted
+- `keep-originals?` parameter (default `true`) controls whether originals are kept or superseded
 - Validates: ≥2 IDs, non-empty content, all IDs exist in scope
+- When `keep-originals=false`, originals are superseded via metadata lineage (`superseded-by`), not deleted
 - Superseded items are automatically filtered from retrieval results
+- Partial failure reported if any supersession update fails
 
 ### Deterministic Memory Reflection
 
 Session-to-project memory reflection via `runtime/memory/reflection.rkt`:
-- `reflect-session-memories!` groups session items by shared tags or Jaccard token overlap (≥0.3)
-- Produces deterministic project-scope semantic items
+- `reflect-session-memories!` groups session items by shared tags (≥2 shared) or Jaccard token overlap (≥0.4)
+- Default `min-group-size` is 3 (conservative — prevents spurious small-group reflections)
+- Produces deterministic project-scope semantic items with wall-clock-free IDs
 - Each reflection supersedes its source items (automatic superseded removal on retrieval)
 - No-op when fewer than `min-group-size` items or no groupable items found
+
+### v0.95.18 Quality Remediation
+
+Key behavioral improvements:
+
+**Mem0 fail-closed transport** — Transport errors are propagated before attempting Mem0-specific response decoding. Auth header uses `Api-key` scheme matching Mem0 API contract. Error messages sanitized to prevent API key leakage.
+
+**Blank `[Auto]` preamble fix** — Auto-distillation fallback treats blank/whitespace-only content summaries as absent, falling back to provenance text. State preamble filters bare `[Auto]` conclusions before rendering.
+
+**Consolidation supersession semantics** — `keep-originals=false` now updates each original's validity with `superseded-by` metadata instead of silent deletion. Reports partial failure if any update fails. Result text accurately reflects supersession status.
+
+**Reflection conservative defaults** — `min-group-size` raised from 2 to 3. Shared-tag relatedness requires ≥2 shared tags (was ≥1). Jaccard threshold raised from 0.3 to 0.4. Reflection IDs are fully deterministic (no wall-clock component).
+
+**Validation gate repair** — Structural invariant tests prove all LLM-response paths pass through `run-streaming-phase` (which calls `maybe-auto-extract-after-response!`). Only the `blocked` branch bypasses (no LLM response).
 
 ## Related Documentation
 
