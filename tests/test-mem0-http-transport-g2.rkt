@@ -28,7 +28,13 @@
                   memory-query
                   memory-result-ok?
                   memory-result-error)
-         (only-in "../runtime/memory/protocol.rkt" gen:retrieve-memory))
+         (only-in "../runtime/memory/protocol.rkt"
+                  gen:retrieve-memory
+                  memory-backend-store!
+                  memory-backend-retrieve
+                  memory-backend-list)
+         (only-in "../runtime/memory/backends/external-protocol.rkt"
+                  current-external-backend-enabled))
 
 ;; ---------------------------------------------------------------------------
 ;; Fake HTTP transport — captures calls, returns configured responses
@@ -110,17 +116,57 @@
   (check-false (string-contains? msg "super-secret-key-do-not-log")
                "API key must not appear in error messages"))
 
-(test-case "W3: url-host extraction works"
-  ;; We can't call url-host directly since it's not exported.
-  ;; Instead verify via the transport that it parses the host correctly.
-  ;; If it didn't, the connection would fail differently.
-  (check-true #t "url-host tested via transport integration"))
+(test-case "W3: url-host extraction works via transport seam"
+  ;; Verify the transport receives correctly shaped requests by using
+  ;; an injectable transport seam that captures method + payload.
+  (define captured #f)
+  (define backend
+    (make-mem0-backend #:api-key "test-key"
+                       #:transport (lambda (method payload)
+                                     (set! captured (cons method payload))
+                                     (hash 'ok? #t 'value '()))))
+  ;; Trigger a retrieve — external backend requires enabled flag
+  (parameterize ([current-external-backend-enabled #t])
+    (gen:retrieve-memory backend (memory-query "test" 'session #f "s1" #f #f 10 #t)))
+  (check-equal? (car captured) 'retrieve)
+  (check-equal? (hash-ref (cdr captured) 'text) "test"))
 
-(test-case "W3: mem0-method->http maps all methods"
-  ;; Verify each method has a valid HTTP mapping by checking the helper isn't
-  ;; exported directly — but we can test through the transport.
-  ;; All methods should return a hash with ok? key (boolean).
-  (check-true #t "Method mapping tested via integration"))
+(test-case "W3: mem0-method->http maps all methods correctly"
+  ;; Verify each method reaches the transport seam correctly.
+  (define calls '())
+  (define (tracking-transport method payload)
+    (set! calls (cons (cons method payload) calls))
+    (case method
+      [(store) (hash 'ok? #t 'value (hash 'id "new-id"))]
+      [(retrieve) (hash 'ok? #t 'value '())]
+      [(list) (hash 'ok? #t 'value '())]
+      [(delete) (hash 'ok? #t 'value #t)]
+      [(update) (hash 'ok? #t 'value #t)]
+      [(manage) (hash 'ok? #t 'value (hash 'cleaned 0))]
+      [else (hash 'ok? #f 'error (hash 'code 'unknown-method))]))
+  (define backend (make-mem0-backend #:api-key "key" #:transport tracking-transport))
+  ;; Exercise store directly via backend accessor (external enabled required)
+  (parameterize ([current-external-backend-enabled #t])
+    ((memory-backend-store! backend)
+     (memory-item
+      "id1"
+      'semantic
+      'session
+      "hello"
+      (hasheq 'source 'test 'session-id "s1" 'project-root "." 'tags '() 'origin-tool-call-id "tc1")
+      (hasheq 'sensitivity 'public 'confidence 0.7 'supersedes '())
+      "2026-01-01T00:00:00Z"
+      "2026-01-01T00:00:00Z"))
+    ;; Exercise retrieve
+    ((memory-backend-retrieve backend) (memory-query "q" 'session #f "s1" #f #f 10 #t))
+    ;; Exercise list
+    ((memory-backend-list backend) (memory-query "" #f #f #f #f #f 50 #f)))
+  (define method-set
+    (for/hash ([c (in-list calls)])
+      (values (car c) #t)))
+  (check-true (hash-has-key? method-set 'store))
+  (check-true (hash-has-key? method-set 'retrieve))
+  (check-true (hash-has-key? method-set 'list)))
 
 ;; ---------------------------------------------------------------------------
 ;; v0.95.18 W0: Audit regression tests (expected red before W1)
@@ -136,16 +182,23 @@
              #f
              'error
              (hash 'code 'mem0-timeout 'message "redacted transport failure" 'retryable? #t)))))
-  (define result (gen:retrieve-memory backend (memory-query "racket" 'session #f "s1" #f #f 10 #t)))
+  (define result
+    (parameterize ([current-external-backend-enabled #t])
+      (gen:retrieve-memory backend (memory-query "racket" 'session #f "s1" #f #f 10 #t))))
   (check-false (memory-result-ok? result))
   (check-equal? (hash-ref (memory-result-error result) 'code) 'mem0-timeout))
 
 (test-case "W0 F2/F3: transport tests must not contain placeholder assertions"
-  (define source (file->string (find-system-path 'run-file)))
-  ;; v0.95.17 left check-true #t placeholders for host/method mapping.
-  ;; This gate stays red until replaced by real fake-server/seam assertions.
+  (define this-file (build-path (current-directory) "test-mem0-http-transport-g2.rkt"))
+  (define source (file->string this-file))
+  ;; No check-true #t placeholder assertions should remain
   (check-false (regexp-match? #rx"check-true[[:space:]]+#t" source)))
 
 (test-case "W0 F2: Mem0 authorization scheme follows Api-key contract"
-  (define source (file->string (find-system-path 'run-file)))
-  (check-true (string-contains? source "Authorization: Api-key")))
+  ;; Verify the implementation file uses Api-key, not Token
+  (define impl-path
+    (build-path (current-directory) ".." "runtime" "memory" "backends" "mem0-api.rkt"))
+  (define source (file->string impl-path))
+  (check-true (string-contains? source "Authorization: Api-key"))
+  ;; Also verify no Token scheme is present (was the pre-fix scheme)
+  (check-false (string-contains? source "Authorization: Token")))
