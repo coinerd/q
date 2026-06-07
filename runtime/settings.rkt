@@ -80,7 +80,7 @@
           [shell-risk-classifier (-> q-settings? (or/c 'regex 'structured 'both))]
           [setting-context-assembly-profile (-> q-settings? symbol?)]
           [setting-memory-injection-budget (-> q-settings? (or/c exact-positive-integer? #f))]
-          [setting-memory-backend (-> q-settings? (or/c symbol? #f))]
+          [setting-memory-backend (-> q-settings? (or/c symbol? hash? #f))]
           [setting-memory-auto-extraction-enabled? (-> q-settings? boolean?)]
           [setting-memory-auto-extraction-min-confidence
            (-> q-settings? (and/c real? (between/c 0 1)))])
@@ -439,6 +439,7 @@
 ;; v0.95.16: Memory backend from settings (config.json)
 ;; Reads memory.memory-backend from config. Valid values:
 ;;   'hash, 'file-jsonl, #f (disabled)
+;;   immutable hash spec for complex backends (v0.95.16 W4)
 (define (setting-memory-backend settings)
   (define raw (setting-ref* settings '(memory backend) #f))
   (cond
@@ -446,6 +447,10 @@
     [(string? raw)
      (define sym (string->symbol raw))
      (if (memq sym '(hash file-jsonl)) sym #f)]
+    [(and (hash? raw) (hash-has-key? raw 'type))
+     ;; Complex backend spec — validate type field
+     (define t (hash-ref raw 'type #f))
+     (if (memq t '(chained external)) raw #f)]
     [else #f]))
 
 ;; v0.95.16 W1: Auto-extraction enabled from settings
