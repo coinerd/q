@@ -216,7 +216,8 @@
                                            #:working-set-messages ws-messages
                                            #:task-state task-state
                                            #:conclusions conclusions
-                                           #:recent-tool-calls recent-tool-calls))
+                                           #:recent-tool-calls recent-tool-calls
+                                           #:session-config config))
        (values sa-tc #f)]
       ;; Standard assembly path
       [else
