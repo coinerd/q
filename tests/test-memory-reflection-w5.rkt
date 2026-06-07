@@ -25,8 +25,9 @@
                   memory-item-validity
                   memory-query
                   memory-result-ok?
-                  memory-result-value)
-         (only-in "../runtime/memory/protocol.rkt" gen:store-memory! gen:retrieve-memory))
+                  memory-result-value
+                  memory-result)
+         (only-in "../runtime/memory/protocol.rkt" gen:store-memory! gen:retrieve-memory memory-backend))
 
 (define (make-test-item id content [tags '()] [scope 'session])
   (memory-item
@@ -203,3 +204,40 @@
     (reflect-session-memories! backend #:session-id "s1" #:project-root "." #:min-group-size 2))
   (check-equal? (length results) 1)
   (check-false (regexp-match? #px"^refl_[0-9]+_" (memory-item-id (car results)))))
+
+;; ---------------------------------------------------------------------------
+;; v0.95.19 W0: LF1 regression — reflection discards store result
+;; ---------------------------------------------------------------------------
+
+(test-case "W0 LF1: failed store excludes item from reflection results"
+  ;; Backend whose retrieve returns 3 grouped items but store always fails
+  (define fail-backend
+    (memory-backend
+     "lf1-fail-store"
+     ;; store! — always fails
+     (lambda (item)
+       (memory-result #f #f (hasheq 'code 'store-failed 'message "mock failure") (hasheq)))
+     ;; retrieve — returns 3 items that form a group (shared tags, min-group-size=3)
+     (lambda (query)
+       (memory-result
+        #t
+        (list (make-test-item "lf1-a" "alpha reflection" '("shared" "lf1"))
+              (make-test-item "lf1-b" "beta reflection" '("shared" "lf1"))
+              (make-test-item "lf1-c" "gamma reflection" '("shared" "lf1")))
+        #f (hasheq)))
+     ;; update!
+     (lambda (id patch)
+       (memory-result #f #f (hasheq 'code 'not-supported 'message "mock") (hasheq)))
+     ;; delete!
+     (lambda (id scope)
+       (memory-result #f #f (hasheq 'code 'not-supported 'message "mock") (hasheq)))
+     ;; list
+     (lambda () (list))
+     ;; available?
+     (lambda () #t)
+     ;; manage!
+     (lambda (policy) (memory-result #t #f #f (hasheq)))))
+  (define results
+    (reflect-session-memories! fail-backend #:session-id "s1" #:project-root "." #:min-group-size 3))
+  ;; Store fails, so no items should be returned
+  (check-equal? results '() "Failed store must exclude reflection item from results"))

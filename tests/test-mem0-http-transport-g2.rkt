@@ -27,7 +27,8 @@
                   memory-item-updated-at
                   memory-query
                   memory-result-ok?
-                  memory-result-error)
+                  memory-result-error
+                  memory-result-value)
          (only-in "../runtime/memory/protocol.rkt"
                   gen:retrieve-memory
                   memory-backend-store!
@@ -202,3 +203,41 @@
   (check-true (string-contains? source "Authorization: Api-key"))
   ;; Also verify no Token scheme is present (was the pre-fix scheme)
   (check-false (string-contains? source "Authorization: Token")))
+
+;; ---------------------------------------------------------------------------
+;; v0.95.19 W0: LF2 regression — hardcoded session-id/project-root in decode
+;; ---------------------------------------------------------------------------
+
+(test-case "W0 LF2: decode-mem0-items uses actual session-id not hardcoded value"
+  ;; Create a mock transport that returns a known item
+  (define mock-transport
+    (lambda (method payload)
+      (case method
+        [(retrieve)
+         (hash 'ok?
+               #t
+               'value
+               (list (hash 'id
+                           "mem-lf2"
+                           'content
+                           "LF2 test content"
+                           'metadata
+                           (hash 'tags '("test") 'type "semantic" 'scope "project"))))]
+        [else (hash 'ok? #t 'value '())])))
+  (parameterize ([current-external-backend-enabled #t])
+    (define backend (make-mem0-backend #:api-key "test-key" #:transport mock-transport))
+    ;; Retrieve with a specific session-id and project-root
+    (define q (memory-query "" #f "/my-project" "my-session-123" #f #f 10 #f))
+    (define result ((memory-backend-retrieve backend) q))
+    (check-true (memory-result-ok? result))
+    (define items (memory-result-value result))
+    (when (pair? items)
+      (define meta (memory-item-metadata (car items)))
+      ;; The decoded item should have the query's session-id, not "session"
+      (check-equal? (hash-ref meta 'session-id #f)
+                    "my-session-123"
+                    "Decoded item should use query session-id, not hardcoded 'session'")
+      ;; The decoded item should have the query's project-root, not "."
+      (check-equal? (hash-ref meta 'project-root #f)
+                    "/my-project"
+                    "Decoded item should use query project-root, not hardcoded '.'"))))

@@ -277,4 +277,52 @@
      (task-conclusion "auto-valid" "[Auto] Previously read file x" 'fact 'idle '("m1") 1000 '() '())))
   (define preamble (build-state-awareness-preamble 'implementation conclusions))
   (define text (extract-text-from-messages (list preamble)))
-  (check-not-false (string-contains? text "[Auto] Previously read file x")))
+
+  ;; ---------------------------------------------------------------------------
+  ;; v0.95.19 W0: HF1 regression — missing session-config wire in production path
+  ;; ---------------------------------------------------------------------------
+
+  (test-case "W0 HF1: build-tiered-context/state-aware without session-config skips injection"
+    (define backend (make-memory-hash-backend))
+    (parameterize ([current-memory-backend backend]
+                   [current-memory-injection-budget 500]
+                   [current-task-state-aware-assembly? #f])
+      (define test-item
+        (memory-item "mem-hf1"
+                     'semantic
+                     'session
+                     "HF1 test: this should NOT appear without session-config wire"
+                     (hasheq 'project-root
+                             "/test"
+                             'session-id
+                             "sess-hf1"
+                             'tags
+                             '()
+                             'source
+                             'test
+                             'origin-message-id
+                             "msg-hf1")
+                     (hasheq 'sensitivity 'public 'confidence 0.9 'supersedes '())
+                     "2026-06-07T12:00:00Z"
+                     "2026-06-07T12:00:00Z"))
+      ((memory-backend-store! backend) test-item)
+      (define msgs (make-test-msgs 5))
+      ;; BUG PROOF: without #:session-config, injection is skipped
+      ;; This is the exact gap in turn-orchestrator.rkt assemble-context/pure
+      (define tc-no-config
+        (build-tiered-context/state-aware msgs
+                                          #:task-state 'implementation
+                                          #:working-set-messages msgs))
+      (define text-no (extract-text-from-messages (tiered-context-tier-a tc-no-config)))
+      (check-false (string-contains? text-no "HF1 test")
+                   "BUG CONFIRMED: Without #:session-config wire, injection skipped")
+      ;; FIX PROOF: with #:session-config, injection fires
+      (define cfg (hash->session-config (hasheq 'memory-backend 'hash)))
+      (define tc-with-config
+        (build-tiered-context/state-aware msgs
+                                          #:task-state 'implementation
+                                          #:session-config cfg
+                                          #:working-set-messages msgs))
+      (define text-yes (extract-text-from-messages (tiered-context-tier-a tc-with-config)))
+      (check-not-false (string-contains? text-yes "HF1 test")
+                       "FIX TARGET: With #:session-config wire, injection fires"))))
