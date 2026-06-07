@@ -19,7 +19,8 @@
                   task-conclusion-fsm-state-origin
                   task-conclusion-timestamp
                   task-conclusion-relevance-tags
-                  task-conclusion-dependencies))
+                  task-conclusion-dependencies)
+         racket/string)
 
 ;; ── Uncovered Entry Detection ──
 
@@ -38,18 +39,19 @@
 
 ;; Generate a deterministic fallback conclusion for an uncovered entry.
 ;; v0.79.2 GAP-3: Accept optional content summary for richer fallback text.
+;; v0.95.18 F9: Blank/whitespace content treated as absent — use provenance fallback.
 (define (make-deterministic-fallback msg-id current-state [content-summary #f])
-  (task-conclusion
-   (format "auto-~a" msg-id)
-   (if content-summary
-       (format "[Auto] ~a" (substring content-summary 0 (min (string-length content-summary) 200)))
-       (format "[Auto] Previously read file (origin: ~a)" msg-id))
-   'fact
-   (or current-state 'idle)
-   (list msg-id)
-   (current-seconds)
-   '(auto-distilled)
-   '()))
+  (define trimmed (and content-summary (string-trim content-summary)))
+  (task-conclusion (format "auto-~a" msg-id)
+                   (if (and trimmed (non-empty-string? trimmed))
+                       (format "[Auto] ~a" (substring trimmed 0 (min (string-length trimmed) 200)))
+                       (format "[Auto] Previously read file (origin: ~a)" msg-id))
+                   'fact
+                   (or current-state 'idle)
+                   (list msg-id)
+                   (current-seconds)
+                   '(auto-distilled)
+                   '()))
 
 ;; Generate fallback conclusions for all uncovered entries.
 ;; v0.79.2 GAP-3: Accept optional content-summary hash (msg-id -> string).
