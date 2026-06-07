@@ -24,8 +24,8 @@
 ;; Parameters
 ;; ---------------------------------------------------------------------------
 
-(define current-reflection-min-group-size (make-parameter 2))
-(define current-reflection-overlap-threshold (make-parameter 0.3))
+(define current-reflection-min-group-size (make-parameter 3))
+(define current-reflection-overlap-threshold (make-parameter 0.4))
 
 ;; ---------------------------------------------------------------------------
 ;; Grouping logic
@@ -41,11 +41,12 @@
       0.0
       (/ intersection-size union-size 1.0)))
 
-;; Check if two items share at least one tag
+;; Check if two items share at least 2 tags (conservative grouping)
 (define (shared-tags? a b)
   (define tags-a (hash-ref (memory-item-metadata a) 'tags '()))
   (define tags-b (hash-ref (memory-item-metadata b) 'tags '()))
-  (and (for/or ([ta (in-list tags-a)]) (member ta tags-b)) #t))
+  (define shared-count (for/sum ([ta (in-list tags-a)]) (if (member ta tags-b) 1 0)))
+  (>= shared-count 2))
 
 ;; Check if two items are "related" (shared tags OR token overlap >= threshold)
 (define (items-related? a b threshold)
@@ -103,11 +104,8 @@
 
 ;; Build a memory-item for a reflection
 (define (make-reflection-item merged-content source-ids tags project-root session-id)
-  (define id
-    (format "refl_~a_~a"
-            (current-seconds)
-            ;; Deterministic suffix from sorted source IDs
-            (abs (equal-hash-code (sort source-ids string<?)))))
+  ;; Deterministic ID: hash of sorted source IDs, no wall-clock
+  (define id (format "refl_~a" (abs (equal-hash-code (sort source-ids string<?)))))
   (define now (current-iso-8601))
   (memory-item id
                'semantic

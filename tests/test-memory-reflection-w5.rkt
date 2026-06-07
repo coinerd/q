@@ -64,8 +64,8 @@
 ;; ---------------------------------------------------------------------------
 
 (test-case "W5: shared-tags? with common tags"
-  (define a (make-test-item "a" "x" '("racket" "memory")))
-  (define b (make-test-item "b" "y" '("memory" "test")))
+  (define a (make-test-item "a" "x" '("racket" "memory" "test")))
+  (define b (make-test-item "b" "y" '("memory" "test" "other")))
   (check-true (shared-tags? a b)))
 
 (test-case "W5: shared-tags? with disjoint tags"
@@ -78,9 +78,9 @@
 ;; ---------------------------------------------------------------------------
 
 (test-case "W5: items-related? by shared tags"
-  (define a (make-test-item "a" "completely different content" '("memory")))
-  (define b (make-test-item "b" "totally unrelated text" '("memory")))
-  (check-true (items-related? a b 0.3)))
+  (define a (make-test-item "a" "completely different content" '("memory" "shared")))
+  (define b (make-test-item "b" "totally unrelated text" '("memory" "shared")))
+  (check-true (items-related? a b 0.4)))
 
 (test-case "W5: items-related? by token overlap"
   (define a (make-test-item "a" "the memory system stores facts" '()))
@@ -173,12 +173,12 @@
   (define backend1 (make-memory-hash-backend))
   (gen:store-memory! backend1 (make-test-item "m1" "alpha about memory" '("t")))
   (gen:store-memory! backend1 (make-test-item "m2" "beta about memory" '("t")))
-  (define r1 (reflect-session-memories! backend1 #:session-id "s1" #:project-root "."))
+  (define r1 (reflect-session-memories! backend1 #:session-id "s1" #:project-root "." #:min-group-size 2))
 
   (define backend2 (make-memory-hash-backend))
   (gen:store-memory! backend2 (make-test-item "m1" "alpha about memory" '("t")))
   (gen:store-memory! backend2 (make-test-item "m2" "beta about memory" '("t")))
-  (define r2 (reflect-session-memories! backend2 #:session-id "s1" #:project-root "."))
+  (define r2 (reflect-session-memories! backend2 #:session-id "s1" #:project-root "." #:min-group-size 2))
 
   (check-equal? (memory-item-content (car r1)) (memory-item-content (car r2)))
   (check-equal? (memory-item-id (car r1)) (memory-item-id (car r2))))
@@ -191,8 +191,8 @@
   (check-equal? (current-reflection-min-group-size) 3))
 
 (test-case "W0 F7: one shared tag is not sufficient for reflection relatedness"
-  (define a (make-test-item "a" "unrelated alpha" '("shared" "left")))
-  (define b (make-test-item "b" "unrelated beta" '("shared" "right")))
+  (define a (make-test-item "a" "alpha xyz foo" '("shared" "left")))
+  (define b (make-test-item "b" "beta bar baz" '("shared" "right")))
   (check-false (items-related? a b 0.3)))
 
 (test-case "W0 F7: reflection ID is deterministic and not wall-clock based"
