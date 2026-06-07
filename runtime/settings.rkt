@@ -80,7 +80,10 @@
           [shell-risk-classifier (-> q-settings? (or/c 'regex 'structured 'both))]
           [setting-context-assembly-profile (-> q-settings? symbol?)]
           [setting-memory-injection-budget (-> q-settings? (or/c exact-positive-integer? #f))]
-          [setting-memory-backend (-> q-settings? (or/c symbol? #f))])
+          [setting-memory-backend (-> q-settings? (or/c symbol? #f))]
+          [setting-memory-auto-extraction-enabled? (-> q-settings? boolean?)]
+          [setting-memory-auto-extraction-min-confidence
+           (-> q-settings? (and/c real? (between/c 0 1)))])
 
          ;; Sandbox settings (re-exported, not locally defined)
          sandbox-enabled?
@@ -444,6 +447,28 @@
      (define sym (string->symbol raw))
      (if (memq sym '(hash file-jsonl)) sym #f)]
     [else #f]))
+
+;; v0.95.16 W1: Auto-extraction enabled from settings
+;; Reads (memory auto-extraction enabled) from config.
+;; Default: #f (disabled).
+(define (setting-memory-auto-extraction-enabled? settings)
+  (define raw (setting-ref* settings '(memory auto-extraction enabled) #f))
+  (cond
+    [(boolean? raw) raw]
+    [(string? raw) (and (member (string-downcase raw) '("true" "1" "yes")) #t)]
+    [else #f]))
+
+;; v0.95.16 W1: Auto-extraction min-confidence from settings
+;; Reads (memory auto-extraction min-confidence) from config.
+;; Default: 0.5. Coerces strings to numbers.
+(define (setting-memory-auto-extraction-min-confidence settings)
+  (define raw (setting-ref* settings '(memory auto-extraction min-confidence) 0.5))
+  (cond
+    [(and (real? raw) (<= 0 raw 1)) raw]
+    [(string? raw)
+     (define n (string->number raw))
+     (if (and (real? n) (<= 0 n 1)) n 0.5)]
+    [else 0.5]))
 
 ;; ============================================================
 ;; Credential policy (v0.70.1)
