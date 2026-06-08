@@ -18,6 +18,15 @@
 ;; to prevent accidental export leakage from sub-module changes.
 ;;
 ;; v0.30.6 status: 30+ typed event structs across 9 sub-modules.
+;;
+;; v0.96.1: Event API classification:
+;;   PUBLIC (extension-facing, stability commitment):
+;;     typed-event, context-event, injection-event, turn-start-event
+;;     These are consumed by extensions/, gui/, tui/ and changing their
+;;     field names or removing accessors is a BREAKING CHANGE.
+;;   INTERNAL (runtime-internal, no stability commitment):
+;;     All other events. Consumers are in agent/, runtime/, llm/, tools/.
+;;     Field names may change between minor versions.
 
 (require "event-structs/base.rkt"
          "event-structs/turn-events.rkt"
@@ -83,9 +92,11 @@
 
 (provide
 ;; From event-structs/base.rkt
+         ;; PUBLIC API — stable for extensions
          (struct-out typed-event)
          typed-event?
          ;; From event-structs/turn-events.rkt
+         ;; PUBLIC API — stable for extensions
          (struct-out turn-start-event)
          make-turn-start-event
          turn-start-event-type
@@ -202,6 +213,7 @@
          make-agent-end-event
          agent-end-event-type
          agent-end-event-fields
+         ;; PUBLIC API — stable for extensions
          (struct-out context-event)
          make-context-event
          context-event-type
@@ -259,6 +271,7 @@
          make-compaction-event
          compaction-event-type
          compaction-event-fields
+         ;; PUBLIC API — stable for extensions
          (struct-out injection-event)
          make-injection-event
          injection-event-type
