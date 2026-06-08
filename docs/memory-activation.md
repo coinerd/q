@@ -250,3 +250,35 @@ Key behavioral improvements:
 **LF1**: `reflect-session-memories!` returned reflection items even when `gen:store-memory!` failed. Now filters out failed stores.
 
 **LF2**: `decode-mem0-items` in the Mem0 adapter was called with hardcoded `"session"` and `"."` instead of actual query values. Now threaded from the retrieve payload.
+
+### v0.95.21 Memory Lifecycle Completion
+
+**G1 — Background Reflection Trigger**: Session-scoped memories are now automatically promoted to project scope via deterministic reflection. When `memory.auto-reflection.enabled` is `true`, `maybe-reflect-session-memories!` fires after each turn's auto-extraction. The non-fatal wrapper catches all exceptions and logs warnings, never disrupting the agent loop. Controlled by two config keys:
+
+```json
+{
+  "memory": {
+    "auto-reflection": {
+      "enabled": true,
+      "min-items": 5
+    }
+  }
+}
+```
+
+- `enabled` (boolean, default `false`) — gates auto-reflection
+- `min-items` (integer >= 2, default `5`) — minimum session-scoped items before reflection triggers
+
+**G2 — User-Scope Config Wiring**: User-scope memory (global, cross-project) can be enabled via config:
+
+```json
+{
+  "memory": {
+    "user-scope": {
+      "enabled": true
+    }
+  }
+}
+```
+
+When enabled, the memory policy allows storing and retrieving user-scoped items. Defaults to `false` for safety.
