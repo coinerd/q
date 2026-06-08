@@ -1,3 +1,12 @@
+## [0.96.8] - 2026-06-08
+
+### Test Architecture — Phase 1: Safety & Cleanup
+
+#### Fixed
+- **D2**: Deprecated `fixtures.rkt` `with-temp-dir` (function) in favor of canonical macro in `temp-fs.rkt`
+- **C1**: Fixed temp file leaks in 15 test files — wrapped all `make-temporary-file` calls in `with-temp-dir` for guaranteed cleanup
+- **C2**: Fixed module-level mutable state in 5 test files — converted `set!` counters to `make-parameter` with per-test reset
+- **C3**: Fixed firecrawl env test to use `dynamic-wind` for guaranteed env var restore
 ## v0.96.5 — Phase 1 Quick Wins (2026-06-08)
 
 ### Architecture
