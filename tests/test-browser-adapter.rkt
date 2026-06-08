@@ -12,10 +12,13 @@
 ;; Helpers — mock callback implementations
 ;; ---------------------------------------------------------------------------
 
-(define call-log '())
+(define call-log (make-parameter '()))
 
 (define (log-call! name . args)
-  (set! call-log (append call-log (list (cons name args)))))
+  (call-log (append (call-log) (list (cons name args)))))
+
+(define (reset-call-log!)
+  (call-log '()))
 
 (define (mock-open sid target)
   (log-call! 'open sid target)
@@ -52,6 +55,7 @@
 ;; ---------------------------------------------------------------------------
 
 (test-case "make-browser-adapter creates a browser-adapter"
+  (reset-call-log!)
   (define a (make-browser-adapter
              #:open mock-open
              #:close mock-close
@@ -62,6 +66,7 @@
   (check-true (browser-adapter? a)))
 
 (test-case "browser-adapter is transparent"
+  (reset-call-log!)
   (define a (make-browser-adapter
              #:open mock-open #:close mock-close #:navigate mock-navigate
              #:observe mock-observe #:act mock-act #:screenshot mock-screenshot))
@@ -72,7 +77,8 @@
 ;; ---------------------------------------------------------------------------
 
 (test-case "browser-adapter-open delegates to open-fn"
-  (set! call-log '())
+  (reset-call-log!)
+  (call-log '())
   (define a (make-browser-adapter
              #:open mock-open #:close mock-close #:navigate mock-navigate
              #:observe mock-observe #:act mock-act #:screenshot mock-screenshot))
@@ -81,7 +87,8 @@
   (check-equal? call-log '((open . ("s1" . ("https://example.com"))))))
 
 (test-case "browser-adapter-close delegates to close-fn"
-  (set! call-log '())
+  (reset-call-log!)
+  (call-log '())
   (define a (make-browser-adapter
              #:open mock-open #:close mock-close #:navigate mock-navigate
              #:observe mock-observe #:act mock-act #:screenshot mock-screenshot))
@@ -89,7 +96,8 @@
   (check-equal? call-log '((close . ("s1")))))
 
 (test-case "browser-adapter-navigate delegates to navigate-fn"
-  (set! call-log '())
+  (reset-call-log!)
+  (call-log '())
   (define a (make-browser-adapter
              #:open mock-open #:close mock-close #:navigate mock-navigate
              #:observe mock-observe #:act mock-act #:screenshot mock-screenshot))
@@ -98,7 +106,8 @@
   (check-equal? (browser-observation-url result) "https://example.com"))
 
 (test-case "browser-adapter-observe delegates to observe-fn"
-  (set! call-log '())
+  (reset-call-log!)
+  (call-log '())
   (define a (make-browser-adapter
              #:open mock-open #:close mock-close #:navigate mock-navigate
              #:observe mock-observe #:act mock-act #:screenshot mock-screenshot))
@@ -107,7 +116,8 @@
   (check-equal? call-log '((observe . ("s1" . (#f))))))
 
 (test-case "browser-adapter-observe with selector"
-  (set! call-log '())
+  (reset-call-log!)
+  (call-log '())
   (define a (make-browser-adapter
              #:open mock-open #:close mock-close #:navigate mock-navigate
              #:observe mock-observe #:act mock-act #:screenshot mock-screenshot))
@@ -115,7 +125,8 @@
   (check-equal? call-log '((observe . ("s1" . ("#main"))))))
 
 (test-case "browser-adapter-act delegates to act-fn"
-  (set! call-log '())
+  (reset-call-log!)
+  (call-log '())
   (define a (make-browser-adapter
              #:open mock-open #:close mock-close #:navigate mock-navigate
              #:observe mock-observe #:act mock-act #:screenshot mock-screenshot))
@@ -124,7 +135,8 @@
   (check-equal? (car (car call-log)) 'act))
 
 (test-case "browser-adapter-screenshot delegates to screenshot-fn"
-  (set! call-log '())
+  (reset-call-log!)
+  (call-log '())
   (define a (make-browser-adapter
              #:open mock-open #:close mock-close #:navigate mock-navigate
              #:observe mock-observe #:act mock-act #:screenshot mock-screenshot))
@@ -133,7 +145,8 @@
   (check-equal? call-log '((screenshot . ("s1" . (#f . (#f)))))))
 
 (test-case "browser-adapter-screenshot with options"
-  (set! call-log '())
+  (reset-call-log!)
+  (call-log '())
   (define a (make-browser-adapter
              #:open mock-open #:close mock-close #:navigate mock-navigate
              #:observe mock-observe #:act mock-act #:screenshot mock-screenshot))

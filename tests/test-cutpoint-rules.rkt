@@ -19,10 +19,12 @@
 ;; Helpers
 ;; ============================================================
 
-(define msg-counter 0)
+(define msg-counter (make-parameter 0))
 (define (next-id!)
-  (set! msg-counter (add1 msg-counter))
-  (format "msg-~a" msg-counter))
+  (msg-counter (add1 (msg-counter)))
+  (format "msg-~a" (msg-counter)))
+(define (reset-msg-counter!)
+  (msg-counter 0))
 
 (define (make-user-msg text)
   (make-message (next-id!) #f 'user 'text (list (make-text-part text)) (current-seconds) (hasheq)))
@@ -60,29 +62,35 @@
 ;; ============================================================
 
 (test-case "valid-cutpoint: index 0 is always valid"
+  (reset-msg-counter!)
   (define msgs (list (make-user-msg "hello")))
   (check-true (valid-cutpoint? msgs 0)))
 
 (test-case "valid-cutpoint: index at end is always valid"
+  (reset-msg-counter!)
   (define msgs (list (make-user-msg "hello")))
   (check-true (valid-cutpoint? msgs 1)))
 
 (test-case "valid-cutpoint: before user message is valid"
+  (reset-msg-counter!)
   (define msgs (list (make-assistant-msg "hi") (make-user-msg "hello")))
   (check-true (valid-cutpoint? msgs 1)))
 
 (test-case "valid-cutpoint: before tool-result is invalid"
+  (reset-msg-counter!)
   (define msgs
     (list (make-assistant-tool-call-msg "tc1" "bash") (make-tool-result-msg "tc1" "output")))
   ;; Cut at 1 would separate tool-call from tool-result
   (check-false (valid-cutpoint? msgs 1)))
 
 (test-case "valid-cutpoint: before assistant after user is valid"
+  (reset-msg-counter!)
   (define msgs (list (make-user-msg "q") (make-assistant-msg "a")))
   (check-true (valid-cutpoint? msgs 0))
   (check-true (valid-cutpoint? msgs 1)))
 
 (test-case "adjust-cutpoint: moves backward from invalid to valid"
+  (reset-msg-counter!)
   ;; tool-call at 0, tool-result at 1, user at 2
   (define msgs
     (list (make-assistant-tool-call-msg "tc1" "bash")
@@ -93,11 +101,13 @@
   (check-equal? adjusted 0))
 
 (test-case "adjust-cutpoint: keeps valid cutpoint unchanged"
+  (reset-msg-counter!)
   (define msgs (list (make-user-msg "q1") (make-assistant-msg "a1") (make-user-msg "q2")))
   (define adjusted (adjust-cutpoint msgs 2))
   (check-equal? adjusted 2))
 
 (test-case "adjust-cutpoint: handles tool-call/tool-result chain"
+  (reset-msg-counter!)
   ;; user → assistant(tool-call) → tool-result → assistant(final) → user
   (define msgs
     (list (make-user-msg "q1")
@@ -111,6 +121,7 @@
   (check-equal? adjusted 1))
 
 (test-case "find-nearest-valid-cutpoint: searches backward"
+  (reset-msg-counter!)
   (define msgs (list (make-user-msg "q1") (make-assistant-msg "a1") (make-assistant-msg "a2")))
   ;; Index 2 is assistant, previous is assistant (no tool-calls) → valid cut at 2
   ;; Actually we start by checking 2 itself, which is valid
@@ -119,6 +130,7 @@
   (check-equal? found 3))
 
 (test-case "find-nearest-valid-cutpoint: searches forward"
+  (reset-msg-counter!)
   (define msgs
     (list (make-assistant-tool-call-msg "tc1" "bash")
           (make-tool-result-msg "tc1" "output")
@@ -128,11 +140,13 @@
   (check-equal? found 2))
 
 (test-case "cutpoint-rule-description: describes valid cut"
+  (reset-msg-counter!)
   (define msgs (list (make-user-msg "q1") (make-assistant-msg "a1") (make-user-msg "q2")))
   (define desc (cutpoint-rule-description msgs 2))
   (check-true (string-contains? desc "Valid cut")))
 
 (test-case "cutpoint-rule-description: describes beginning cut"
+  (reset-msg-counter!)
   (define desc (cutpoint-rule-description '() 0))
   (check-true (string-contains? desc "beginning")))
 
@@ -141,21 +155,25 @@
 ;; ============================================================
 
 (test-case "overflow-state: initial state allows retry"
+  (reset-msg-counter!)
   (define state (make-overflow-state))
   (check-true (can-retry-overflow? state))
   (check-true (overflow-state-will-retry state)))
 
 (test-case "overflow-state: after marking attempted, cannot retry"
+  (reset-msg-counter!)
   (define state (make-overflow-state))
   (mark-overflow-attempted! state)
   (check-false (can-retry-overflow? state))
   (check-false (overflow-state-will-retry state)))
 
 (test-case "overflow-state: respects max-attempts"
+  (reset-msg-counter!)
   (define state (make-overflow-state #:max-attempts 0))
   (check-false (overflow-state-will-retry state)))
 
 (test-case "overflow-state: is transparent"
+  (reset-msg-counter!)
   (define state (make-overflow-state))
   (check-true (overflow-state? state))
   (check-false (overflow-state-attempted state))
@@ -166,6 +184,7 @@
 ;; ============================================================
 
 (test-case "build-retry-messages: includes compaction summary"
+  (reset-msg-counter!)
   (define summary-msg
     (make-message "compaction-1"
                   #f
@@ -184,6 +203,7 @@
   (check-true (string-contains? (text-part-text (car (message-content last-msg))) "original prompt")))
 
 (test-case "build-retry-messages: works without summary"
+  (reset-msg-counter!)
   (define result (compaction-result #f 0 (list (make-user-msg "kept msg"))))
   (define retry-msgs (build-retry-messages result "retry prompt"))
   ;; Should have: kept + retry
@@ -192,6 +212,7 @@
   (check-equal? (message-role last-msg) 'user))
 
 (test-case "retry-context: stores all fields"
+  (reset-msg-counter!)
   (define summary-msg
     (make-message "s1"
                   #f
@@ -213,6 +234,7 @@
 ;; ============================================================
 
 (test-case "integration: cutpoint adjustment with overflow recovery"
+  (reset-msg-counter!)
   ;; Simulate: messages that would overflow, cut-point needs adjustment
   (define msgs
     (list (make-user-msg "q1")

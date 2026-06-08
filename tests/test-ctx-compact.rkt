@@ -18,10 +18,12 @@
 ;; Helpers
 ;; ============================================================
 
-(define msg-counter 0)
+(define msg-counter (make-parameter 0))
 (define (next-id!)
-  (set! msg-counter (add1 msg-counter))
-  (format "msg-~a" msg-counter))
+  (msg-counter (add1 (msg-counter)))
+  (format "msg-~a" (msg-counter)))
+(define (reset-msg-counter!)
+  (msg-counter 0))
 
 (define (make-user-msg text)
   (make-message (next-id!) #f 'user 'text (list (make-text-part text)) (current-seconds) (hasheq)))
@@ -46,10 +48,12 @@
 ;; ============================================================
 
 (test-case "rate-limit-allowed?: initially allows"
+  (reset-msg-counter!)
   (reset-rate-limit!)
   (check-true (rate-limit-allowed?)))
 
 (test-case "rate-limit-allowed?: blocks after limit reached"
+  (reset-msg-counter!)
   (parameterize ([current-compact-rate-limit 2]
                  [current-compact-rate-window 60])
     (reset-rate-limit!)
@@ -62,6 +66,7 @@
     (check-false (rate-limit-allowed?))))
 
 (test-case "reset-rate-limit!: resets counter"
+  (reset-msg-counter!)
   (parameterize ([current-compact-rate-limit 1]
                  [current-compact-rate-window 60])
     (reset-rate-limit!)
@@ -75,6 +80,7 @@
 ;; ============================================================
 
 (test-case "ctx-compact-request: stores instructions and callbacks"
+  (reset-msg-counter!)
   (define on-ok (lambda (r) 'ok))
   (define on-err (lambda (r) 'err))
   (define req
@@ -84,6 +90,7 @@
   (check-true (procedure? (ctx-compact-request-on-error req))))
 
 (test-case "ctx-compact?: recognizes requests"
+  (reset-msg-counter!)
   (check-true (ctx-compact? (ctx-compact-request #f #f #f (current-seconds))))
   (check-false (ctx-compact? 'not-a-request)))
 
@@ -92,6 +99,7 @@
 ;; ============================================================
 
 (test-case "compact-callback-result: success"
+  (reset-msg-counter!)
   (define r (compact-callback-result #t "summary text" #f 5))
   (check-true (compact-callback-result-success? r))
   (check-equal? (compact-callback-result-summary r) "summary text")
@@ -99,6 +107,7 @@
   (check-equal? (compact-callback-result-removed-count r) 5))
 
 (test-case "compact-callback-result: failure"
+  (reset-msg-counter!)
   (define r (compact-callback-result #f #f "something went wrong" 0))
   (check-false (compact-callback-result-success? r))
   (check-equal? (compact-callback-result-error r) "something went wrong"))
@@ -108,6 +117,7 @@
 ;; ============================================================
 
 (test-case "ctx-compact: basic compaction"
+  (reset-msg-counter!)
   (reset-rate-limit!)
   (define msgs (make-test-messages 10))
   (define strategy (compaction-strategy 5 3))
@@ -117,6 +127,7 @@
   (check-true (>= (compact-callback-result-removed-count result) 0)))
 
 (test-case "ctx-compact: calls on-complete on success"
+  (reset-msg-counter!)
   (reset-rate-limit!)
   (define msgs (make-test-messages 10))
   (define strategy (compaction-strategy 5 3))
@@ -126,6 +137,7 @@
   (check-true (compact-callback-result-success? callback-result)))
 
 (test-case "ctx-compact: rate-limited returns error"
+  (reset-msg-counter!)
   (parameterize ([current-compact-rate-limit 0]
                  [current-compact-rate-window 60])
     (reset-rate-limit!)
@@ -134,6 +146,7 @@
     (check-true (string? (compact-callback-result-error result)))))
 
 (test-case "ctx-compact: calls on-error when rate-limited"
+  (reset-msg-counter!)
   (parameterize ([current-compact-rate-limit 0]
                  [current-compact-rate-window 60])
     (reset-rate-limit!)
@@ -145,6 +158,7 @@
     (check-false (compact-callback-result-success? error-result))))
 
 (test-case "ctx-compact: publishes events on bus"
+  (reset-msg-counter!)
   (reset-rate-limit!)
   (define bus (make-event-bus))
   (define captured (box '()))
@@ -161,6 +175,7 @@
 ;; ============================================================
 
 (test-case "ctx-compact-async: returns thread"
+  (reset-msg-counter!)
   (reset-rate-limit!)
   (define msgs (make-test-messages 10))
   (define strategy (compaction-strategy 5 3))
