@@ -94,6 +94,70 @@ racket scripts/run-tests.rkt --suite smoke --record-gate
 - Failure logs use unique names with path hash to avoid collisions
 - Logs saved to `/tmp/q-test-fail-<basename>-<hash>.log`
 
+
+## File Naming
+
+- **Convention:** `test-<module>.rkt` or `test-<module>-<aspect>.rkt`
+- **1:1 correspondence preferred:** `tests/test-foo.rkt` ↔ `source/foo.rkt`
+- **Support modules** (helpers, fixtures, scenarios) keep descriptive names without `test-` prefix
+- **All test files in subdirectories** must use `test-` prefix (e.g., `tests/tui/test-state.rkt`)
+
+## Test-Case Naming
+
+- Prefix test-case names with module context for global uniqueness
+- Pattern: `"<module-context>: <descriptive name>"`
+- Example: `"goal-checks: parse-goal-checks extracts command"` not just `"parse-goal-checks extracts command"`
+- This ensures `grep -rn 'test-case "' tests/ | sort | uniq -c | sort -rn` shows all counts ≤ 1
+
+## Temp File Pattern
+
+- Always use `with-temp-dir` from `tests/helpers/temp-fs.rkt` for temporary directories
+- **Never** use bare `make-temporary-file` with `'directory` — it leaks on test failure
+- `with-temp-dir` uses `dynamic-wind` for guaranteed cleanup
+
+```racket
+(require (only-in "helpers/temp-fs.rkt" with-temp-dir))
+
+(test-case "my test"
+  (with-temp-dir (tmpdir)
+    ;; tmpdir is auto-deleted when test completes or fails
+    ...))
+```
+
+## State Isolation
+
+- **No `set!` on module-level variables** — use `make-parameter` with per-test reset
+- For counters: `(define counter (make-parameter 0))` + `(counter (add1 (counter)))`
+- For logs: `(define log (make-parameter '()))` + `(log (cons entry (log)))`
+- Reset at each test-case start: `(reset-my-counter!)`
+
+```racket
+(define msg-counter (make-parameter 0))
+(define (next-id!)
+  (msg-counter (add1 (msg-counter)))
+  (format "msg-~a" (msg-counter)))
+(define (reset-msg-counter!) (msg-counter 0))
+
+(test-case "my test"
+  (reset-msg-counter!)
+  ...)
+```
+
+## Environment Variable Guards
+
+- Tests that modify env vars must use `dynamic-wind` for guaranteed restore
+- Tests requiring external env vars (API keys, DISPLAY) must skip gracefully when absent
+
+```racket
+(test-case "env-dependent test"
+  (define old (getenv "MY_API_KEY"))
+  (dynamic-wind
+    (lambda () (putenv "MY_API_KEY" "test-value"))
+    (lambda () ...)
+    (lambda ()
+      (if old (putenv "MY_API_KEY" old) (putenv "MY_API_KEY" "")))))
+```
+
 ## Adding a New Test
 
 1. Create `tests/test-<feature>.rkt`
