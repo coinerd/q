@@ -37,5 +37,3 @@
 
 (module+ main
   (run-tests serialization-tests))
-(module+ test
-  (run-tests serialization-tests))

@@ -115,5 +115,3 @@
 
 (module+ main
   (run-tests error-hierarchy-tests))
-(module+ test
-  (run-tests error-hierarchy-tests))

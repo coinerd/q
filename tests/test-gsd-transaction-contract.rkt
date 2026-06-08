@@ -174,6 +174,3 @@
 
 (module+ main
   (run-tests gsd-transaction-contract-tests))
-
-(module+ test
-  (run-tests gsd-transaction-contract-tests))

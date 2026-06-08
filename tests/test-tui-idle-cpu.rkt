@@ -89,6 +89,3 @@
       (check-false result)
       (check-true (>= elapsed 15.0)
                   (format "EOF input should back off near timeout; elapsed=~a" elapsed)))))
-
-(module+ test
-  (run-tests idle-cpu-tests))

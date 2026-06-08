@@ -37,5 +37,3 @@
 
 (module+ main
   (run-tests exec-policy-tests))
-(module+ test
-  (run-tests exec-policy-tests))

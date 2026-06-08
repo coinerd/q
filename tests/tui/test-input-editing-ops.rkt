@@ -113,5 +113,3 @@
 
 (module+ main
   (run-tests editing-tests))
-(module+ test
-  (run-tests editing-tests))

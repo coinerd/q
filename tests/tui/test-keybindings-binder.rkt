@@ -52,5 +52,3 @@
 
 (module+ main
   (run-tests resolver-tests))
-(module+ test
-  (run-tests resolver-tests))

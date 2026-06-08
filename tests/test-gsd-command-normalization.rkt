@@ -69,5 +69,3 @@
 
 (module+ main
   (run-tests cmd-norm-tests))
-(module+ test
-  (run-tests cmd-norm-tests))

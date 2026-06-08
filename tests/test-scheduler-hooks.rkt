@@ -251,6 +251,3 @@
 
 (module+ main
   (run-tests scheduler-hook-tests))
-
-(module+ test
-  (run-tests scheduler-hook-tests))

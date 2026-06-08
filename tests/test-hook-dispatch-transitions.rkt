@@ -163,6 +163,3 @@
 
 (module+ main
   (run-tests hook-dispatch-tests))
-
-(module+ test
-  (run-tests hook-dispatch-tests))

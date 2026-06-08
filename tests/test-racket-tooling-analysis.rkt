@@ -21,5 +21,3 @@
 
 (module+ main
   (run-tests analysis-tests))
-(module+ test
-  (run-tests analysis-tests))

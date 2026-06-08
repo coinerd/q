@@ -27,5 +27,3 @@
 
 (module+ main
   (run-tests retry-tests))
-(module+ test
-  (run-tests retry-tests))

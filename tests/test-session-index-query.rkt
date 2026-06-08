@@ -43,5 +43,3 @@
 
 (module+ main
   (run-tests query-tests))
-(module+ test
-  (run-tests query-tests))

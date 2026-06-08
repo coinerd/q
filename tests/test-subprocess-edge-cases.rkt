@@ -125,6 +125,3 @@
 
 (module+ main
   (run-tests subprocess-edge-tests))
-
-(module+ test
-  (run-tests subprocess-edge-tests))

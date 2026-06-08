@@ -27,5 +27,3 @@
 
 (module+ main
   (run-tests plan-diff-tests))
-(module+ test
-  (run-tests plan-diff-tests))

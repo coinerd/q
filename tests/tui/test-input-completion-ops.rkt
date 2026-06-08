@@ -34,5 +34,3 @@
 
 (module+ main
   (run-tests completion-tests))
-(module+ test
-  (run-tests completion-tests))

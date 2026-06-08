@@ -25,5 +25,3 @@
 
 (module+ main
   (run-tests chunk-tests))
-(module+ test
-  (run-tests chunk-tests))

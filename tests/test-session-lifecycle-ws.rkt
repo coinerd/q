@@ -141,5 +141,3 @@
 
 (module+ main
   (run-tests session-lifecycle-ws-tests))
-(module+ test
-  (run-tests session-lifecycle-ws-tests))

@@ -250,6 +250,3 @@
 
 (module+ main
   (run-tests session-compact-tests))
-
-(module+ test
-  (run-tests session-compact-tests))

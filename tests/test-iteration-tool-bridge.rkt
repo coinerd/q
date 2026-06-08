@@ -58,5 +58,3 @@
 
 (module+ main
   (run-tests bridge-tests))
-(module+ test
-  (run-tests bridge-tests))

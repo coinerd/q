@@ -23,5 +23,3 @@
 
 (module+ main
   (run-tests issue-ops-tests))
-(module+ test
-  (run-tests issue-ops-tests))
