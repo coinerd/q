@@ -1,4 +1,5 @@
 #lang racket/base
+;; STABILITY: public
 
 ;;; util/ids.rkt — ULID-like ID generation and parsing
 ;;;

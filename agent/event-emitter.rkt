@@ -1,4 +1,5 @@
 #lang racket/base
+;; STABILITY: public
 
 ;; agent/event-emitter.rkt -- typed event emission bridge
 ;; v0.29.2: Bridge between typed event structs and raw event bus.

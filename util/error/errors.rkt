@@ -1,4 +1,5 @@
 #lang racket/base
+;; STABILITY: public
 
 ;; util/errors.rkt — Domain-specific exception types for q
 ;;

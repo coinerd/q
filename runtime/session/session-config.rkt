@@ -1,4 +1,5 @@
 #lang racket/base
+;; STABILITY: public
 
 ;; runtime/session-config.rkt — typed config wrapper replacing mutable hasheq anti-pattern
 ;;

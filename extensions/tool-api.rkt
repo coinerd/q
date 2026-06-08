@@ -1,4 +1,5 @@
 #lang racket/base
+;; STABILITY: public
 
 ;; extensions/tool-api.rkt — Facade for tool result constructors
 ;;

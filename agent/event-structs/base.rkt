@@ -1,4 +1,5 @@
 #lang racket/base
+;; STABILITY: public
 
 ;; agent/event-structs/base.rkt — base typed-event struct
 ;;

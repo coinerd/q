@@ -1,4 +1,5 @@
 #lang racket/base
+;; STABILITY: public
 
 ;; util/event-macro.rkt -- event struct definition macros + serializer registry
 ;;

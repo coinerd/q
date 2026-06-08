@@ -1,4 +1,5 @@
 #lang racket/base
+;; STABILITY: public
 
 ;; runtime/layer-adapters.rkt — Stable adapter facade for upward layer imports
 ;; STABILITY: internal

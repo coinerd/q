@@ -1,4 +1,5 @@
 #lang racket/base
+;; STABILITY: public
 
 ;; agent/state.rkt — ephemeral loop state for a single run
 ;;

@@ -1,4 +1,5 @@
 #lang racket/base
+;; STABILITY: public
 
 ;; runtime/settings.rkt — global and local runtime settings
 ;;

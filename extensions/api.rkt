@@ -1,4 +1,5 @@
 #lang racket/base
+;; STABILITY: public
 
 ;; extensions/api.rkt — extension registry with registration-order dispatch
 ;;

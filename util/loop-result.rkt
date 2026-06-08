@@ -1,4 +1,5 @@
 #lang typed/racket
+;; STABILITY: public
 
 ;; util/loop-result.rkt — Loop result struct
 ;;

@@ -1,4 +1,5 @@
 #lang racket/base
+;; STABILITY: public
 
 ;; agent/event-bus.rkt — publish/subscribe event bus
 ;; STABILITY: stable
