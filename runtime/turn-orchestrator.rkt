@@ -16,22 +16,20 @@
 ;; ── LAYER EXCEPTION (ARCH-01 / #341) ──────────────────────────
 ;;   tools/tool.rkt       → list-tools-jsexpr, merge-tool-lists
 ;;   tools/scheduler.rkt  → dependency of tool-coordinator (transitive)
-;;   extensions/hooks.rkt → dispatch-hooks (context assembly hook)
+;;   layer-adapters.rkt   → dispatch-hooks (re-exported from extensions/hooks.rkt)
 ;;   extensions/context.rkt → make-extension-ctx (extension registration)
 ;; ───────────────────────────────────────────────────────────────
 
 (require (only-in racket/dict in-dict)
          racket/contract
-         racket/list
          (only-in "../util/loop-result.rkt" loop-result?)
          (only-in "../util/error/errors.rkt" raise-extension-error)
          "../agent/event-bus.rkt"
-         (only-in "../util/cancellation.rkt" cancellation-token? cancellation-token-cancelled?)
+         (only-in "../util/cancellation.rkt" cancellation-token?)
          (only-in "../llm/provider.rkt" provider?)
          (only-in "layer-adapters.rkt"
                   tool-registry?
                   extension-registry?
-                  tool-result?
                   dispatch-hooks
                   list-tools-jsexpr
                   merge-tool-lists)
@@ -39,7 +37,7 @@
          (only-in "../agent/loop-fsm.rkt" current-turn-fsm-state turn-state-blocked)
          (only-in "../runtime/settings.rkt" setting-ref setting-ref*)
          "../util/ids.rkt"
-         (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload hook-result?)
+         (only-in "../util/hook-types.rkt" hook-result-action hook-result?)
          (only-in "../runtime/auto-retry.rkt" with-auto-retry)
          (only-in "provider/provider-factory.rkt" provider-is-mock?)
          (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
