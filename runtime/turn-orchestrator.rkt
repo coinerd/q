@@ -23,14 +23,16 @@
 (require (only-in racket/dict in-dict)
          racket/contract
          racket/list
-         racket/promise
          json
          (only-in racket/string string-contains? string-join)
          (only-in "../util/error/errors.rkt" raise-extension-error)
-         (only-in "../util/json/json-helpers.rkt" ensure-hash-args)
-         (only-in "../util/content/content-parts.rkt" make-text-part text-part? tool-result-part?)
-         (only-in "../util/event/event.rkt" make-event event-ev)
-         (only-in "../util/loop-result.rkt" make-loop-result loop-result-messages)
+         (only-in "../util/event/event.rkt" make-event event-ev event-payload)
+         (only-in "../util/loop-result.rkt"
+                  make-loop-result
+                  loop-result-messages
+                  loop-result-termination-reason
+                  loop-result-metadata
+                  loop-result?)
          (only-in "../util/message/message.rkt"
                   message?
                   message-id
@@ -38,103 +40,56 @@
                   message-content
                   make-message)
          (only-in "../util/tool/tool-types.rkt" tool-call-name tool-call-arguments)
-         (only-in "../util/content/content-parts.rkt" text-part-text tool-result-part-is-error?)
-         (only-in "../util/event/event.rkt" event-payload)
-         (only-in "../util/loop-result.rkt" loop-result-termination-reason loop-result-metadata)
+         (only-in "../util/content/content-parts.rkt"
+                  make-text-part
+                  text-part?
+                  tool-result-part?
+                  text-part-text
+                  tool-result-part-is-error?)
+         (only-in "../util/json/json-helpers.rkt" ensure-hash-args)
          "../agent/event-bus.rkt"
-         (only-in "../util/loop-result.rkt" loop-result?)
-         (only-in "../util/cancellation.rkt" cancellation-token?)
+         (only-in "../util/cancellation.rkt" cancellation-token? cancellation-token-cancelled?)
          (only-in "../llm/provider.rkt" provider?)
-         ;; ARCH-01: tool registry + extension registry via adapter
-         (only-in "layer-adapters.rkt" tool-registry? extension-registry?)
+         (only-in "layer-adapters.rkt"
+                  tool-registry?
+                  extension-registry?
+                  tool-result?
+                  dispatch-hooks
+                  list-tools-jsexpr
+                  merge-tool-lists)
          "../agent/loop.rkt"
          (only-in "../agent/loop-fsm.rkt" current-turn-fsm-state turn-state-blocked)
-         ;; ARCH-01: tool registry queries via adapter
-         (only-in "layer-adapters.rkt" list-tools-jsexpr merge-tool-lists)
-         ;; Settings struct for provider settings resolution
          (only-in "../runtime/settings.rkt" setting-ref setting-ref*)
-         ;; Transitive dependency of tool-coordinator (via adapter)
-         (only-in "layer-adapters.rkt" tool-result? tool-registry?)
-         ;; Context assembly hooks via adapter
-         (only-in "layer-adapters.rkt" dispatch-hooks)
-         (only-in "layer-adapters.rkt" make-extension-ctx)
-         ;; GSD session context via adapter
-         (only-in "layer-adapters.rkt" current-gsd-ctx gsd-session-ctx?)
-         "session/session-store.rkt"
          "../runtime/tool-coordinator.rkt"
-         (only-in "context/context-assembly.rkt"
-                  build-tiered-context-with-hooks
-                  tiered-context->message-list
-                  build-tiered-context
-                  tiered-context?
-                  tiered-context-tier-a
-                  tiered-context-tier-b
-                  tiered-context-tier-c)
-         (only-in "../runtime/working-set.rkt"
-                  working-set?
-                  working-set-resolve-messages
-                  working-set-entry-count
-                  working-set-token-count)
-         (only-in "context-assembly/serialization.rkt"
-                  gsd-progress-message?
-                  build-tiered-context/state-aware
-                  current-task-state-aware-assembly?)
          (only-in "../runtime/tool-coordinator.rkt"
                   handle-tool-calls-pending
                   extract-tool-calls-from-messages)
-         "compaction/cutpoint-rules.rkt"
          "../util/ids.rkt"
-         (only-in "../util/cancellation.rkt" cancellation-token? cancellation-token-cancelled?)
-         ;; R2-6: hook-result accessors
          (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload hook-result?)
          (only-in "../runtime/auto-retry.rkt" with-auto-retry context-overflow-error?)
-         ;; Token estimation for context assembly event
-         (only-in "../llm/token-budget.rkt" estimate-context-tokens)
-         ;; Mock provider detection
          (only-in "provider/provider-factory.rkt" provider-is-mock?)
-         ;; Shared helpers
          (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
-         ;; G4: typed event emission
          "../agent/event-emitter.rkt"
          "../agent/event-structs/iteration-events.rkt"
          "../agent/event-structs/session-events.rkt"
-         (only-in "session/session-types.rkt"
-                  agent-session?
-                  agent-session-task-fsm-state
-                  agent-session-task-conclusions
-                  agent-session-recent-tool-calls)
-         (only-in "session/session-mutation.rkt"
-                  guarded-set-working-set-evolved!
-                  guarded-set-task-conclusions!)
-         (only-in "../runtime/context-assembly/ws-evolution.rkt"
-                  evolve-working-set-for-state/result
-                  evolution-result?)
-         (only-in "../runtime/context-assembly/state-aware-builder.rkt" current-ws-evolution-enabled?)
+         (only-in "session/session-types.rkt" agent-session-recent-tool-calls)
          (only-in "session/session-config.rkt"
                   session-config?
-                  hash->session-config
-                  config-tier-b-count
-                  config-tier-c-count
-                  config-max-tokens
                   config-working-set
                   config-settings
                   config-model-name
-                  config-task-state-aware?)
-         (only-in "../util/message/message.rkt" message-kind message-content)
-         racket/set
-         (only-in "../runtime/context-assembly/auto-distillation.rkt"
-                  auto-distill
-                  current-auto-distillation-enabled?)
-         (only-in "session/session-config.rkt"
+                  config-task-state-aware?
                   config-context-assembly-profile
                   apply-context-assembly-profile!)
-         ;; Turn-context: extracted context assembly helpers
+         ;; tiered-context? needed for provide contract
+         (only-in "context/context-assembly.rkt" tiered-context?)
          (only-in "context-assembly/turn-context.rkt"
                   current-last-task-fsm-state
                   symbol->task-state
                   assemble-context/pure
                   prepare-turn-context-state
-                  emit-context-assembly-events!))
+                  emit-context-assembly-events!)
+         (only-in "extension-setup.rkt" register-session-extensions!))
 
 (provide (contract-out
           [run-provider-turn
@@ -227,39 +182,9 @@
   ctx-final)
 
 ;; ============================================================
-;; Extension Pre-Registration
+;; Extension Pre-Registration — delegated to extension-setup.rkt
 ;; ============================================================
 
-;;; register-session-extensions! : tool-registry? extension-registry? event-bus?
-;;;                                  string? -> (listof hash?)
-;;;
-;;; Dispatches the 'register-tools hook through the extension registry
-;;; so that extension tools are available and extension state (event bus,
-;;; pinned dir) is initialized BEFORE the first run-prompt! call.
-;;;
-;;; Returns the list of extension-provided tools (as jsexpr hashes),
-;;; or '() if no extensions or no tools registered.
-;;;
-;;; Idempotent: extensions track their own registration state internally.
-;;; Safe to call multiple times.
-(define (register-session-extensions! tool-reg ext-reg bus session-id)
-  (cond
-    [(not ext-reg) '()]
-    [else
-     (define the-ext-ctx
-       (make-extension-ctx #:session-id session-id
-                           #:session-dir #f
-                           #:event-bus bus
-                           #:extension-registry ext-reg
-                           #:tool-registry tool-reg
-                           #:gsd-ctx (current-gsd-ctx)))
-     (define-values (_amended hook-res)
-       (maybe-dispatch-hooks ext-reg 'register-tools (hasheq) #:ctx the-ext-ctx))
-     (if (and hook-res (eq? (hook-result-action hook-res) 'amend))
-         (hash-ref (hook-result-payload hook-res) 'tools '())
-         '())]))
-
-;; ============================================================
 ;; Provider turn
 ;; ============================================================
 
