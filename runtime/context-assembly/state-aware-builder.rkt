@@ -37,7 +37,12 @@
                   current-revert-state-fn
                   current-rollback-action-log
                   rollback-action-reason)
-         (only-in "auto-distillation.rkt" current-auto-distillation-enabled?))
+         (only-in "auto-distillation.rkt" current-auto-distillation-enabled?)
+         (only-in "config.rkt"
+                  current-task-state-aware-assembly?
+                  current-graph-conclusion-selection?
+                  current-conclusion-token-budget
+                  current-ws-evolution-enabled?))
 
 (provide current-task-state-aware-assembly?
          build-tiered-context/state-aware
@@ -50,18 +55,6 @@
          check-rollback-triggers-with-actions)
 
 (define-runtime-path memory-builder-path "memory-builder.rkt")
-
-;; Feature flag: state-aware context assembly (v0.75.3)
-(define current-task-state-aware-assembly? (make-parameter #f))
-
-;; v0.77.3 W3.3: Graph-based conclusion selection (disabled by default)
-(define current-graph-conclusion-selection? (make-parameter #f))
-
-;; v0.77.4 W4.3: Hard conclusion token budget (0 = unlimited)
-(define current-conclusion-token-budget (make-parameter 2000))
-
-;; v0.78.1 G1: WS evolution flag (moved from session-events.rkt to avoid cycle)
-(define current-ws-evolution-enabled? (make-parameter #f))
 
 ;; State-specific guidance strings (action-oriented instructions)
 (define state-guidance-table
