@@ -16,12 +16,14 @@
 (define tr (make-tool-result "hello" #f #f))
 
 ;; tools/tool.rkt predicate
-(check-pred tool-result? tr "tool-result? from tools/tool.rkt accepts its own constructor")
-
-;; Accessors from tools/tool.rkt work
-(check-equal? (tool-result-content tr) "hello")
-(check-false (tool-result-details tr))
-(check-false (tool-result-is-error? tr))
+(test-case "test-tool-result-unique: checks block 1"
+  (check-pred tool-result? tr "tool-result? from tools/tool.rkt accepts its own constructor")
+  
+  ;; Accessors from tools/tool.rkt work
+  (check-equal? (tool-result-content tr) "hello")
+  (check-false (tool-result-details tr))
+  (check-false (tool-result-is-error? tr))
+)
 
 ;; Cross-module identity: the tool-result? from agent/types (re-exported)
 ;; must accept values created by the constructor from tools/tool.

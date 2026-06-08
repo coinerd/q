@@ -59,15 +59,17 @@
 ;; 2. sha256-string is deterministic
 ;; ============================================================
 
-(check-equal? (sha256-string "hello") (sha256-string "hello"))
-(check-equal? (sha256-string "") (sha256-string ""))
+(test-case "test-checksum: checks block 2"
+  (check-equal? (sha256-string "hello") (sha256-string "hello"))
+  (check-equal? (sha256-string "") (sha256-string "")))
 
 ;; ============================================================
 ;; 3. sha256-string different for different inputs
 ;; ============================================================
 
-(check-not-equal? (sha256-string "hello") (sha256-string "world"))
-(check-not-equal? (sha256-string "foo") (sha256-string "bar"))
+(test-case "test-checksum: checks block 1"
+  (check-not-equal? (sha256-string "hello") (sha256-string "world"))
+  (check-not-equal? (sha256-string "foo") (sha256-string "bar")))
 
 ;; ============================================================
 ;; 4. sha256-file matches sha256-string for same content

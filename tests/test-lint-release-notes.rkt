@@ -54,7 +54,9 @@
 ;; Test 1: Valid release notes pass
 ;; ===========================================================================
 
-(check-equal? (validate-release-notes (extract-version-block valid-entry "0.5.0"))
+(test-case "test-lint-release-notes: checks block 11"
+  (check-equal? (validate-release-notes (extract-version-block valid-entry "0.5.0"))
+)
               '()
               "valid release notes should produce zero errors")
 
@@ -62,7 +64,9 @@
 ;; Test 2: Missing required section fails
 ;; ===========================================================================
 
-(check-not-false
+(test-case "test-lint-release-notes: checks block 10"
+  (check-not-false
+)
  (let ([errors (validate-release-notes (changelog "## 0.1.0" "" "### Features" "- stuff"))])
    (and (> (length errors) 0) (ormap (λ (e) (string-contains? e "Missing required section")) errors)))
  "missing required sections should produce errors")
@@ -71,7 +75,9 @@
 ;; Test 3: Empty sections are ok (header present, no content)
 ;; ===========================================================================
 
-(check-equal? (validate-release-notes (extract-version-block valid-entry "0.5.0"))
+(test-case "test-lint-release-notes: checks block 9"
+  (check-equal? (validate-release-notes (extract-version-block valid-entry "0.5.0"))
+)
               '()
               "empty section bodies are fine as long as headers exist")
 
@@ -82,9 +88,11 @@
 ;; placeholder check — real validation below
 (void)
 
-(check-false (extract-version-block valid-entry "99.99.99") "version not present returns #f")
-
-(check-not-false (let ([block (extract-version-block valid-entry "99.99.99")]) (not block))
+(test-case "test-lint-release-notes: checks block 8"
+  (check-false (extract-version-block valid-entry "99.99.99") "version not present returns #f")
+  
+  (check-not-false (let ([block (extract-version-block valid-entry "99.99.99")]) (not block))
+)
                  "non-existent version block returns #f")
 
 ;; ===========================================================================
@@ -109,12 +117,16 @@
                  "\n"
                  valid-entry))
 
-(check-equal? (validate-release-notes (extract-version-block multi-version-changelog "0.5.0"))
+(test-case "test-lint-release-notes: checks block 7"
+  (check-equal? (validate-release-notes (extract-version-block multi-version-changelog "0.5.0"))
+)
               '()
               "only the requested version is validated — 0.5.0 is valid")
 
 ;; The 0.4.0 entry is also valid; verify it separately
-(check-equal? (validate-release-notes (extract-version-block multi-version-changelog "0.4.0"))
+(test-case "test-lint-release-notes: checks block 6"
+  (check-equal? (validate-release-notes (extract-version-block multi-version-changelog "0.4.0"))
+)
               '()
               "version 0.4.0 is also valid in multi-version changelog")
 
@@ -138,7 +150,9 @@
              "### OPERATIONAL / RELEASE"
              "- Tagged v1.0.0"))
 
-(check-equal? (validate-release-notes (extract-version-block uppercase-entry "1.0.0"))
+(test-case "test-lint-release-notes: checks block 5"
+  (check-equal? (validate-release-notes (extract-version-block uppercase-entry "1.0.0"))
+)
               '()
               "case-insensitive header matching")
 
@@ -159,7 +173,9 @@
              "### Operational / Release"
              "- misc"))
 
-(check-equal? (validate-release-notes (extract-version-block mixed-case-entry "1.1.0"))
+(test-case "test-lint-release-notes: checks block 4"
+  (check-equal? (validate-release-notes (extract-version-block mixed-case-entry "1.1.0"))
+)
               '()
               "mixed case headers accepted")
 
@@ -189,7 +205,9 @@
              "### Internal Refactoring"
              "- Cleaned up bar module"))
 
-(check-equal? (validate-release-notes (extract-version-block extra-sections-entry "0.6.0"))
+(test-case "test-lint-release-notes: checks block 3"
+  (check-equal? (validate-release-notes (extract-version-block extra-sections-entry "0.6.0"))
+)
               '()
               "extra sections beyond the required ones are fine")
 
@@ -232,7 +250,9 @@
              "### Operational / Release"
              "- tagged"))
 
-(check-equal? (validate-release-notes (extract-version-block v-prefix-entry "2.0.0"))
+(test-case "test-lint-release-notes: checks block 2"
+  (check-equal? (validate-release-notes (extract-version-block v-prefix-entry "2.0.0"))
+)
               '()
               "version with 'v' prefix in heading matched by plain number")
 
@@ -240,7 +260,9 @@
 ;; Test: Features + Bug Fixes together is fine
 ;; ===========================================================================
 
-(check-equal? (validate-release-notes (extract-version-block valid-entry-alt-headers "0.3.0"))
+(test-case "test-lint-release-notes: checks block 1"
+  (check-equal? (validate-release-notes (extract-version-block valid-entry-alt-headers "0.3.0"))
+)
               '()
               "Features + Bug Fixes (without User-Visible Changes) is acceptable")
 
