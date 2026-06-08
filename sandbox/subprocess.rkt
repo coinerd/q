@@ -15,35 +15,33 @@
 
 (define-logger subprocess)
 
-(provide
- ;; Struct accessors (no contract needed for transparent struct)
- subprocess-result
- subprocess-result?
- subprocess-result-exit-code
- subprocess-result-stdout
- subprocess-result-stderr
- subprocess-result-timed-out?
- subprocess-result-elapsed-ms
- subprocess-result-truncated?
- ;; Parameters (no contract needed)
- default-timeout-seconds
- default-max-output-bytes
- current-secret-scrub-denylist
- current-secret-scrub-allowlist
- ;; Contracted functions
- (contract-out
-  [run-subprocess
-   (->* (string?)
-        (#:args (listof string?)
-         #:limits exec-limits?
-         #:timeout (or/c number? #f)
-         #:directory (or/c path-string? #f)
-         #:environment any/c
-         #:encoding symbol?)
-        subprocess-result?)]
-  [kill-subprocess! (-> (or/c custodian? #f) void?)]
-  [sanitize-env (->* () (any/c) any/c)]
-  [secret-env-var? (-> string? boolean?)]))
+;; Struct accessors (no contract needed for transparent struct)
+(provide subprocess-result
+         subprocess-result?
+         subprocess-result-exit-code
+         subprocess-result-stdout
+         subprocess-result-stderr
+         subprocess-result-timed-out?
+         subprocess-result-elapsed-ms
+         subprocess-result-truncated?
+         ;; Parameters (no contract needed)
+         default-timeout-seconds
+         default-max-output-bytes
+         current-secret-scrub-denylist
+         current-secret-scrub-allowlist
+         ;; Contracted functions
+         (contract-out [run-subprocess
+                        (->* (string?)
+                             (#:args (listof string?)
+                                     #:limits exec-limits?
+                                     #:timeout (or/c number? #f)
+                                     #:directory (or/c path-string? #f)
+                                     #:environment any/c
+                                     #:encoding symbol?)
+                             subprocess-result?)]
+                       [kill-subprocess! (-> (or/c custodian? #f) void?)]
+                       [sanitize-env (->* () (any/c) any/c)]
+                       [secret-env-var? (-> string? boolean?)]))
 
 ;; --------------------------------------------------
 ;; Result struct
@@ -62,27 +60,36 @@
 ;; Bounded port reader — reads incrementally with a byte budget
 ;; --------------------------------------------------
 
-;; Non-blocking read — reads only bytes already available
+;; Non-blocking read — reads only bytes already available.
+;; BUGFIX: Uses read-bytes-avail! which returns immediately with
+;; available data, BUT it blocks waiting for NEW data when the pipe
+;; has no data AND is still open (e.g., backgrounded child inherited it).
+;; So we use sync/timeout with a short deadline to check availability
+;; before each read, and stop when no more data is immediately ready.
 (define (read-available-bounded p max-bytes)
   (if (or (not p) (port-closed? p))
       ""
-      ;; Non-blocking read: swallow port errors (port may close
-      ;; mid-read due to custodian shutdown during timeout).
       (with-handlers ([exn:fail? (lambda (e)
                                    (log-subprocess-warning "read-available-bounded: ~a"
                                                            (exn-message e))
                                    "")])
         (define acc (open-output-bytes))
+        (define buf (make-bytes (min 4096 max-bytes)))
         (let loop ([remaining max-bytes])
-          (when (and (> remaining 0) (sync/timeout 0 p))
-            (define buf-size (min 4096 remaining))
-            (define bs (read-bytes buf-size p))
-            (cond
-              [(eof-object? bs) (void)]
-              [(bytes? bs)
-               (write-bytes bs acc)
-               (loop (- remaining (bytes-length bs)))]
-              [else (void)])))
+          (when (> remaining 0)
+            ;; sync/timeout 0 returns #f only when NO bytes are available.
+            ;; When bytes ARE available, it returns the port.
+            ;; This prevents blocking when a backgrounded child holds the pipe.
+            (define ready? (sync/timeout 0 p))
+            (when ready?
+              (define n (read-bytes-avail! buf p))
+              (cond
+                [(eof-object? n) (void)]
+                [(number? n)
+                 (define to-write (min n remaining))
+                 (write-bytes buf acc 0 to-write)
+                 (loop (- remaining to-write))]
+                [else (void)]))))
         (get-output-string acc))))
 
 (define (read-port-bounded p max-bytes)
@@ -290,9 +297,22 @@
         #f)] ; truncated? — partial read, not byte-budget truncation
 
       ;; Completed
+      ;; BUGFIX: Use read-available-bounded (non-blocking) instead of
+      ;; read-port-bounded (blocking) because a backgrounded child process
+      ;; may have inherited the pipe — blocking read-bytes would hang forever
+      ;; waiting for EOF that never comes. Since the subprocess already exited,
+      ;; all its output is available in the pipe buffer.
       [else
-       (define out-str (read-port-bounded stdout-in max-output))
-       (define err-str (read-port-bounded stderr-in max-output))
+       (define out-str
+         (with-handlers ([exn:fail? (lambda (e)
+                                      (log-subprocess-warning "completed stdout: ~a" (exn-message e))
+                                      "")])
+           (read-available-bounded stdout-in max-output)))
+       (define err-str
+         (with-handlers ([exn:fail? (lambda (e)
+                                      (log-subprocess-warning "completed stderr: ~a" (exn-message e))
+                                      "")])
+           (read-available-bounded stderr-in max-output)))
        (define exit-code (subprocess-status sp))
        (define out-truncated? (string-contains? out-str "[output truncated at"))
 
