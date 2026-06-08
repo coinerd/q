@@ -1,3 +1,20 @@
+## v0.96.0 — Turn Orchestrator Decomposition (2026-06-08)
+
+### Architecture
+- **F1 (God Module) — RESOLVED**: `turn-orchestrator.rkt` reduced from 534 LOC / 42 imports to **286 LOC / 24 imports** (47% LOC reduction, 43% import reduction).
+- **F5 (166-line Function) — RESOLVED**: `build-assembled-context` decomposed into 4 clear phases via named helpers.
+- Extracted `runtime/context-assembly/turn-context.rkt` (279 LOC): `symbol->task-state`, `assemble-context/pure`, `prepare-turn-context-state`, `emit-context-assembly-events!`, `current-last-task-fsm-state`.
+- Extracted `runtime/extension-setup.rkt` (51 LOC): `register-session-extensions!`.
+- 18 unused imports cleaned up from turn-orchestrator.rkt.
+
+### Metrics
+| Metric | Before (v0.95.21) | After (v0.96.0) | Change |
+|--------|-------------------|-----------------|--------|
+| turn-orchestrator.rkt LOC | 534 | 286 | -46% |
+| turn-orchestrator.rkt imports | 42 | 24 | -43% |
+| build-assembled-context LOC | ~169 | ~42 (coordinator) | -75% |
+| New modules | 0 | 2 | +2 |
+
 ## v0.95.21 — Memory Lifecycle Completion (2026-06-08)
 
 ### New Features
