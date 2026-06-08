@@ -1,3 +1,26 @@
+## v0.96.2 — Module Sizing + Low-Priority Cleanups (2026-06-08)
+
+### Architecture
+- **F4 (memory-tools god module) — RESOLVED**: Split 928-line `memory-tools.rkt` into 5 focused modules:
+  - `memory-tools-shared.rkt` (316 LOC) — shared helpers + event emitters
+  - `memory-tools-store.rkt` (213 LOC) — store/update handlers
+  - `memory-tools-query.rkt` (89 LOC) — search/list handlers
+  - `memory-tools-manage.rkt` (314 LOC) — delete/clear/consolidate/cleanup
+  - `memory-tools.rkt` (130 LOC) — thin registration facade (-86% LOC)
+- **F6 (stream-from-provider complexity) — DEFERRED**: Single 200-line function with deeply nested state. Extraction assessed as high-risk, low-reward. Existing tests provide safety net.
+- **F7 (wire-session-event-handlers complexity) — DEFERRED**: Similar assessment.
+- **F8 (build-runtime-from-cli) — BELOW THRESHOLD**: 166 LOC, under 200-line limit. No action needed.
+- **F10 (session config accessors) — ALREADY ADEQUATE**: 24 hash-ref accessors documented and consistent.
+- **F11 (format-iso-now duplicate) — DOCUMENTED**: Thin wrapper retained for compatibility.
+- **File headers**: Added to 7 files missing them (json-mode, rpc-mode, grep, firecrawl, scrollback, tui-init, frame-diff).
+
+### Metrics
+| Metric | Before (v0.96.1) | After (v0.96.2) | Change |
+|--------|------------------|-----------------|--------|
+| memory-tools.rkt LOC | 928 | 130 | -86% |
+| Files without headers | 7 | 0 | -7 |
+| God-modules (>500 LOC) | 14 | 13 | -1 |
+
 ## v0.96.1 — Representation Hiding + Parameter Reduction (2026-06-08)
 
 ### Architecture
