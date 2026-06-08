@@ -92,9 +92,11 @@
 
 ;; Test: info.rkt exists at project root
 (define info-path (build-path q-root "info.rkt"))
-(check-pred file-exists? info-path "info.rkt missing at project root")
-
-;; Test: total module count matches BLUEPRINT plan
-(check-equal? (length planned-module-paths)
+(test-case "test-skeleton: checks block 1"
+  (check-pred file-exists? info-path "info.rkt missing at project root")
+  
+  ;; Test: total module count matches BLUEPRINT plan
+  (check-equal? (length planned-module-paths)
+)
               46
               "Planned module count should be 46 (from BLUEPRINT/MODULES.md)")

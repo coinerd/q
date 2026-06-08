@@ -31,10 +31,11 @@
 ;; --------------------------------------------------
 ;; Test 2: destructive-command? correctly identifies destructive commands
 ;; --------------------------------------------------
-(check-true (destructive-command? "rm -rf /tmp/test") "rm -rf should be detected as destructive")
-(check-true (destructive-command? "shutdown -h now") "shutdown should be detected as destructive")
-(check-false (destructive-command? "ls -la /tmp") "ls should NOT be detected as destructive")
-(check-false (destructive-command? "echo hello") "echo should NOT be detected as destructive")
+(test-case "test-destructive-warning: checks block 1"
+  (check-true (destructive-command? "rm -rf /tmp/test") "rm -rf should be detected as destructive")
+  (check-true (destructive-command? "shutdown -h now") "shutdown should be detected as destructive")
+  (check-false (destructive-command? "ls -la /tmp") "ls should NOT be detected as destructive")
+  (check-false (destructive-command? "echo hello") "echo should NOT be detected as destructive"))
 
 ;; --------------------------------------------------
 ;; Test 3: Destructive commands trigger a warning on stderr

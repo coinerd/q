@@ -93,7 +93,8 @@
 ;; AGENT-EVALUATOR-SYSTEM-PROMPT is defined
 ;; ============================================================
 
-(check-true (string? AGENT-EVALUATOR-SYSTEM-PROMPT))
-(check-true (string-contains? AGENT-EVALUATOR-SYSTEM-PROMPT "goal achievement evaluator"))
+(test-case "test-goal-agent-evaluator: checks block 1"
+  (check-true (string? AGENT-EVALUATOR-SYSTEM-PROMPT))
+  (check-true (string-contains? AGENT-EVALUATOR-SYSTEM-PROMPT "goal achievement evaluator")))
 
 (displayln "All goal-agent-evaluator tests passed.")

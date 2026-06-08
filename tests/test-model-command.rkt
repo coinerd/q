@@ -69,13 +69,15 @@
 ;; 1. cmd-ctx construction with new field (3 tests)
 ;; ============================================================
 
-(check-true (cmd-ctx? (make-test-cctx))
-            "cmd-ctx accepts 8 arguments including last-prompt-box and session-runner")
-
-(check-false (cmd-ctx-model-registry-box (make-test-cctx))
-             "cmd-ctx-model-registry-box returns #f when not provided")
-
-(check-true (box? (cmd-ctx-model-registry-box (make-test-cctx #:model-registry 'something)))
+(test-case "test-model-command: checks block 4"
+  (check-true (cmd-ctx? (make-test-cctx))
+              "cmd-ctx accepts 8 arguments including last-prompt-box and session-runner")
+  
+  (check-false (cmd-ctx-model-registry-box (make-test-cctx))
+               "cmd-ctx-model-registry-box returns #f when not provided")
+  
+  (check-true (box? (cmd-ctx-model-registry-box (make-test-cctx #:model-registry 'something)))
+)
             "cmd-ctx-model-registry-box returns a box when registry provided")
 
 ;; ============================================================
@@ -153,17 +155,23 @@
 ;; 6. CLI parse-slash-command (4 tests)
 ;; ============================================================
 
-(check-equal? (parse-slash-command "/model") '(model) "parse-slash-command /model → (model)")
-
-(check-equal? (parse-slash-command "/model gpt-4")
+(test-case "test-model-command: checks block 3"
+  (check-equal? (parse-slash-command "/model") '(model) "parse-slash-command /model → (model)")
+  
+  (check-equal? (parse-slash-command "/model gpt-4")
+)
               '(model "gpt-4")
               "parse-slash-command /model gpt-4 → (model \"gpt-4\")")
 
-(check-equal? (parse-slash-command "/model ")
+(test-case "test-model-command: checks block 2"
+  (check-equal? (parse-slash-command "/model ")
+)
               '(model)
               "parse-slash-command /model (trailing space) → (model)")
 
-(check-false (parse-slash-command "/models") "parse-slash-command /models → #f (different command)")
+(test-case "test-model-command: checks block 1"
+  (check-false (parse-slash-command "/models") "parse-slash-command /models → #f (different command)")
+)
 
 ;; ============================================================
 ;; 7. Model registry integration (5 tests)

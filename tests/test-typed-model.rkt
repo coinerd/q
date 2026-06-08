@@ -39,20 +39,26 @@
 ;; model-request tests
 ;; ============================================================
 
-(check-true (model-request? (make-model-request (list (hasheq 'role "user" 'content "hello"))
+(test-case "test-typed-model: checks block 9"
+  (check-true (model-request? (make-model-request (list (hasheq 'role "user" 'content "hello"))
+)
                                                 #f
                                                 (hasheq 'model "gpt-4")))
             "model-request: basic construction")
 
-(check-equal?
+(test-case "test-typed-model: checks block 8"
+  (check-equal?
+)
  (model-request-messages (make-model-request (list (hasheq 'role "user" 'content "hi")) #f (hasheq)))
  (list (hasheq 'role "user" 'content "hi"))
  "model-request: messages accessor")
 
-(check-false (model-request-tools (make-model-request '() #f (hasheq)))
-             "model-request: tools is #f when not provided")
-
-(check-equal? (model-request-settings (make-model-request '() #f (hasheq 'temperature 0.7)))
+(test-case "test-typed-model: checks block 7"
+  (check-false (model-request-tools (make-model-request '() #f (hasheq)))
+               "model-request: tools is #f when not provided")
+  
+  (check-equal? (model-request-settings (make-model-request '() #f (hasheq 'temperature 0.7)))
+)
               (hasheq 'temperature 0.7)
               "model-request: settings accessor")
 
@@ -83,13 +89,17 @@
 ;; model-response tests
 ;; ============================================================
 
-(check-true (model-response? (make-model-response (list (hasheq 'type "text" 'text "Hello"))
+(test-case "test-typed-model: checks block 6"
+  (check-true (model-response? (make-model-response (list (hasheq 'type "text" 'text "Hello"))
+)
                                                   (hasheq 'prompt-tokens 10 'completion-tokens 5)
                                                   "gpt-4"
                                                   'stop))
             "model-response: basic construction")
 
-(check-equal? (model-response-stop-reason (make-model-response '() (hasheq) "model" 'length))
+(test-case "test-typed-model: checks block 5"
+  (check-equal? (model-response-stop-reason (make-model-response '() (hasheq) "model" 'length))
+)
               'length
               "model-response: stop-reason accessor")
 
@@ -112,13 +122,17 @@
 ;; stream-chunk tests
 ;; ============================================================
 
-(check-true (stream-chunk? (make-stream-chunk "hello" #f #f #f)) "stream-chunk: basic construction")
-
-(check-equal? (stream-chunk-delta-text (make-stream-chunk "hi" #f #f #f))
+(test-case "test-typed-model: checks block 4"
+  (check-true (stream-chunk? (make-stream-chunk "hello" #f #f #f)) "stream-chunk: basic construction")
+  
+  (check-equal? (stream-chunk-delta-text (make-stream-chunk "hi" #f #f #f))
+)
               "hi"
               "stream-chunk: delta-text accessor")
 
-(check-false (stream-chunk-delta-tool-call (make-stream-chunk "hi" #f #f #f))
+(test-case "test-typed-model: checks block 3"
+  (check-false (stream-chunk-delta-tool-call (make-stream-chunk "hi" #f #f #f))
+)
              "stream-chunk: delta-tool-call is #f")
 
 ;; Optional keyword args
@@ -139,13 +153,17 @@
 ;; ============================================================
 
 ;; Empty messages list
-(check-not-exn (lambda () (make-model-request '() #f (hasheq))) "edge: empty messages list")
-
-;; Empty response content
-(check-not-exn (lambda () (make-model-response '() (hasheq) "model" 'stop))
+(test-case "test-typed-model: checks block 2"
+  (check-not-exn (lambda () (make-model-request '() #f (hasheq))) "edge: empty messages list")
+  
+  ;; Empty response content
+  (check-not-exn (lambda () (make-model-response '() (hasheq) "model" 'stop))
+)
                "edge: empty response content")
 
 ;; model-response with tool_calls stop reason
-(check-equal? (model-response-stop-reason (make-model-response '() (hasheq) "model" 'tool-calls))
+(test-case "test-typed-model: checks block 1"
+  (check-equal? (model-response-stop-reason (make-model-response '() (hasheq) "model" 'tool-calls))
+)
               'tool-calls
               "edge: tool-calls stop reason")

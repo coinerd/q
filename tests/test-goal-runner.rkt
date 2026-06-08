@@ -74,13 +74,14 @@
 ;; build-continuation-prompt tests
 ;; ============================================================
 
-(check-equal? (build-continuation-prompt "tests pass" #f)
-              "The goal is not yet achieved. Reason: unknown. Continue working toward: tests pass")
+(test-case "test-goal-runner: checks block 1"
+  (check-equal? (build-continuation-prompt "tests pass" #f)
+                "The goal is not yet achieved. Reason: unknown. Continue working toward: tests pass")
 
-(check-equal?
- (build-continuation-prompt "tests pass"
-                            (make-evaluation-result #:achieved? #f #:reason "still 2 failures"))
- "The goal is not yet achieved. Reason: still 2 failures. Continue working toward: tests pass")
+  (check-equal?)
+  (build-continuation-prompt "tests pass"
+                             (make-evaluation-result #:achieved? #f #:reason "still 2 failures"))
+  "The goal is not yet achieved. Reason: still 2 failures. Continue working toward: tests pass")
 
 ;; ============================================================
 ;; goal-run-simulated! — achieve in 1 turn
@@ -351,9 +352,7 @@
   ;; First turn should include system instructions with turn count and goal text
   (check-not-false (regexp-match? #rx"autonomous goal loop" captured-prompt)
                    "system instructions injected")
-  (check-not-false (regexp-match? #rx"fix the bug" captured-prompt)
-                   "goal text in prompt")
-  (check-not-false (regexp-match? #rx"turn 1/4" captured-prompt)
-                   "turn context in prompt"))
+  (check-not-false (regexp-match? #rx"fix the bug" captured-prompt) "goal text in prompt")
+  (check-not-false (regexp-match? #rx"turn 1/4" captured-prompt) "turn context in prompt"))
 
 (displayln "System instruction injection test passed.")

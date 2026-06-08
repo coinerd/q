@@ -20,9 +20,10 @@
 ;; GOAL-EVIDENCE-SYSTEM-PROMPT is a non-empty string
 ;; ============================================================
 
-(check-true (string? GOAL-EVIDENCE-SYSTEM-PROMPT))
-(check-true (> (string-length GOAL-EVIDENCE-SYSTEM-PROMPT) 50))
-(check-not-false (string-contains? GOAL-EVIDENCE-SYSTEM-PROMPT "GOAL ACHIEVED"))
+(test-case "test-goal-evidence: checks block 7"
+  (check-true (string? GOAL-EVIDENCE-SYSTEM-PROMPT))
+  (check-true (> (string-length GOAL-EVIDENCE-SYSTEM-PROMPT) 50))
+  (check-not-false (string-contains? GOAL-EVIDENCE-SYSTEM-PROMPT "GOAL ACHIEVED")))
 
 ;; ============================================================
 ;; goal-system-instructions returns list of 2 strings
@@ -68,55 +69,61 @@
 ;; consecutive-same-reason? — fewer than threshold → #f
 ;; ============================================================
 
-(check-false (consecutive-same-reason? '()))
-(check-false (consecutive-same-reason? (list (make-evaluation-result #:achieved? #f
-                                                                     #:reason "nope"))))
+(test-case "test-goal-evidence: checks block 6"
+  (check-false (consecutive-same-reason? '()))
+  (check-false (consecutive-same-reason? (list (make-evaluation-result #:achieved? #f)
+                                               #:reason "nope"))))
 
 ;; ============================================================
 ;; consecutive-same-reason? — same reason 3 times → #t
 ;; ============================================================
 
-(check-true (consecutive-same-reason?
-             (list (make-evaluation-result #:achieved? #f #:reason "no progress")
-                   (make-evaluation-result #:achieved? #f #:reason "no progress")
-                   (make-evaluation-result #:achieved? #f #:reason "no progress"))))
+(test-case "test-goal-evidence: checks block 5"
+  (check-true (consecutive-same-reason?)
+              (list (make-evaluation-result #:achieved? #f #:reason "no progress")
+                    (make-evaluation-result #:achieved? #f #:reason "no progress")
+                    (make-evaluation-result #:achieved? #f #:reason "no progress"))))
 
 ;; ============================================================
 ;; consecutive-same-reason? — mixed reasons → #f
 ;; ============================================================
 
-(check-false (consecutive-same-reason?
-              (list (make-evaluation-result #:achieved? #f #:reason "no progress")
-                    (make-evaluation-result #:achieved? #f #:reason "different")
-                    (make-evaluation-result #:achieved? #f #:reason "no progress"))))
+(test-case "test-goal-evidence: checks block 4"
+  (check-false (consecutive-same-reason?)
+               (list (make-evaluation-result #:achieved? #f #:reason "no progress")
+                     (make-evaluation-result #:achieved? #f #:reason "different")
+                     (make-evaluation-result #:achieved? #f #:reason "no progress"))))
 
 ;; ============================================================
 ;; consecutive-same-reason? — one achieved → #f
 ;; ============================================================
 
-(check-false (consecutive-same-reason? (list (make-evaluation-result #:achieved? #t #:reason "done")
-                                             (make-evaluation-result #:achieved? #t #:reason "done")
-                                             (make-evaluation-result #:achieved? #t
-                                                                     #:reason "done"))))
+(test-case "test-goal-evidence: checks block 3"
+  (check-false (consecutive-same-reason? (list (make-evaluation-result #:achieved? #t
+                                                                       #:reason "done"))
+                                         (make-evaluation-result #:achieved? #t #:reason "done")
+                                         (make-evaluation-result #:achieved? #t #:reason "done"))))
 
 ;; ============================================================
 ;; detect-no-progress — same as consecutive-same-reason?
 ;; ============================================================
 
-(check-false (detect-no-progress '()))
+(test-case "test-goal-evidence: checks block 2"
+  (check-false (detect-no-progress '()))
 
-(check-true (detect-no-progress (list (make-evaluation-result #:achieved? #f #:reason "stuck")
-                                      (make-evaluation-result #:achieved? #f #:reason "stuck")
-                                      (make-evaluation-result #:achieved? #f #:reason "stuck"))))
+  (check-true (detect-no-progress (list (make-evaluation-result #:achieved? #f #:reason "stuck"))
+                                  (make-evaluation-result #:achieved? #f #:reason "stuck")
+                                  (make-evaluation-result #:achieved? #f #:reason "stuck"))))
 
 ;; ============================================================
 ;; detect-no-progress — 5 results with last 3 same → #t
 ;; ============================================================
 
-(check-true (detect-no-progress (list (make-evaluation-result #:achieved? #f #:reason "first")
-                                      (make-evaluation-result #:achieved? #f #:reason "second")
-                                      (make-evaluation-result #:achieved? #f #:reason "stuck")
-                                      (make-evaluation-result #:achieved? #f #:reason "stuck")
-                                      (make-evaluation-result #:achieved? #f #:reason "stuck"))))
+(test-case "test-goal-evidence: checks block 1"
+  (check-true (detect-no-progress (list (make-evaluation-result #:achieved? #f #:reason "first"))
+                                  (make-evaluation-result #:achieved? #f #:reason "second")
+                                  (make-evaluation-result #:achieved? #f #:reason "stuck")
+                                  (make-evaluation-result #:achieved? #f #:reason "stuck")
+                                  (make-evaluation-result #:achieved? #f #:reason "stuck"))))
 
 (displayln "All goal-evidence tests passed.")

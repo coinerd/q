@@ -98,13 +98,15 @@
 ;; Tests — registry creation
 ;; ============================================================
 
-(check-not-false (make-model-registry-from-config (make-test-config))
-                 "registry creation from symbol-key config")
-
-(check-not-false (make-model-registry-from-config (make-test-config-with-string-keys))
-                 "registry creation from string-key config")
-
-(check-not-false (make-model-registry-from-config (make-empty-config))
+(test-case "test-model-registry: checks block 10"
+  (check-not-false (make-model-registry-from-config (make-test-config))
+                   "registry creation from symbol-key config")
+  
+  (check-not-false (make-model-registry-from-config (make-test-config-with-string-keys))
+                   "registry creation from string-key config")
+  
+  (check-not-false (make-model-registry-from-config (make-empty-config))
+)
                  "registry creation from empty config")
 
 ;; ============================================================
@@ -175,11 +177,15 @@
   (check-equal? (model-resolution-model-name res) "claude-3-haiku")
   (check-equal? (model-resolution-provider-name res) "anthropic"))
 
-(check-false (resolve-model (make-model-registry-from-config (make-test-config))
+(test-case "test-model-registry: checks block 9"
+  (check-false (resolve-model (make-model-registry-from-config (make-test-config))
+)
                             "unknown-provider/gpt-4o")
              "provider prefix with unknown provider returns #f")
 
-(check-false (resolve-model (make-model-registry-from-config (make-test-config))
+(test-case "test-model-registry: checks block 8"
+  (check-false (resolve-model (make-model-registry-from-config (make-test-config))
+)
                             "openai/nonexistent-model")
              "provider prefix with unknown model returns #f")
 
@@ -216,7 +222,9 @@
 ;; Tests — resolve-model graceful failure
 ;; ============================================================
 
-(check-false (resolve-model (make-model-registry-from-config (make-test-config)) "nonexistent-model")
+(test-case "test-model-registry: checks block 7"
+  (check-false (resolve-model (make-model-registry-from-config (make-test-config)) "nonexistent-model")
+)
              "unknown model returns #f")
 
 (let ([reg (make-model-registry-from-config (make-empty-config))])
@@ -239,7 +247,9 @@
   (check-equal? (model-resolution-model-name res) "claude-3-sonnet")
   (check-equal? (model-resolution-provider-name res) "anthropic"))
 
-(check-false (resolve-model-by-provider (make-model-registry-from-config (make-test-config))
+(test-case "test-model-registry: checks block 6"
+  (check-false (resolve-model-by-provider (make-model-registry-from-config (make-test-config))
+)
                                         "nonexistent")
              "resolve-model-by-provider returns #f for unknown provider")
 
@@ -247,19 +257,27 @@
 ;; Tests — default-model
 ;; ============================================================
 
-(check-equal? (default-model (make-model-registry-from-config (make-test-config)))
+(test-case "test-model-registry: checks block 5"
+  (check-equal? (default-model (make-model-registry-from-config (make-test-config)))
+)
               "gpt-4o"
               "default-model returns global default")
 
-(check-equal? (default-model (make-model-registry-from-config (make-single-provider-config)))
+(test-case "test-model-registry: checks block 4"
+  (check-equal? (default-model (make-model-registry-from-config (make-single-provider-config)))
+)
               "my-model-v2"
               "default-model with single provider")
 
-(check-equal? (default-model (make-model-registry-from-config (make-minimal-config)))
+(test-case "test-model-registry: checks block 3"
+  (check-equal? (default-model (make-model-registry-from-config (make-minimal-config)))
+)
               "llama3-70b"
               "default-model falls back to first provider's default")
 
-(check-false (default-model (make-model-registry-from-config (make-empty-config)))
+(test-case "test-model-registry: checks block 2"
+  (check-false (default-model (make-model-registry-from-config (make-empty-config)))
+)
              "default-model returns #f for empty config")
 
 ;; ============================================================
@@ -272,7 +290,9 @@
   (check-equal? (default-model-for-mode reg 'tool-heavy) "gpt-4o")
   (check-equal? (default-model-for-mode reg 'fast) "gpt-4o"))
 
-(check-false (default-model-for-mode (make-model-registry-from-config (make-empty-config)) 'chat)
+(test-case "test-model-registry: checks block 1"
+  (check-false (default-model-for-mode (make-model-registry-from-config (make-empty-config)) 'chat)
+)
              "default-model-for-mode returns #f for empty registry")
 
 ;; ============================================================
