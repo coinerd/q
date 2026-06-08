@@ -1,4 +1,8 @@
 #lang racket/base
+;;
+;; COMPOSITION ROOT: This module wires together dependencies from
+;; lower layers. It should not be imported by other production modules.
+;;
 
 ;; q/tui/tui-render-loop.rkt — Main render loop, cell-buffer lifecycle, event draining
 ;;
