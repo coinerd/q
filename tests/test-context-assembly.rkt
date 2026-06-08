@@ -9,6 +9,7 @@
          racket/list
          racket/string
          racket/file
+         (only-in "helpers/temp-fs.rkt" with-temp-dir)
          "../util/message/protocol-types.rkt"
          "../util/content/content-parts.rkt"
          "../runtime/session/session-store.rkt"
@@ -21,9 +22,6 @@
 
 (define (make-timestamped-message id parent-id role kind ts)
   (make-message id parent-id role kind (list (make-text-part (format "~a-entry" id))) ts (hasheq)))
-
-(define (make-temp-dir)
-  (make-temporary-file "q-ctx-test-~a" 'directory))
 
 (define (session-path dir)
   (build-path dir "session.jsonl"))
@@ -64,73 +62,75 @@
 ;; ============================================================
 
 (test-case "context-result: linear path"
-  (define dir (make-temp-dir))
-  (define sp (session-path dir))
-  (define ip (index-path dir))
-  (define entries
-    (list (make-timestamped-message "root" #f 'user 'message 1000)
-          (make-timestamped-message "c1" "root" 'assistant 'message 1001)
-          (make-timestamped-message "c2" "c1" 'user 'message 1002)))
-  (append-entries! sp entries)
-  (define idx (build-index! sp ip))
-  (define result (build-assembled-context idx (make-context-assembly-config)))
-  (check-true (context-result? result))
-  (check >= (length (context-result-messages result)) 3)
-  (check >= (context-result-total-tokens result) 0)
-  (check-false (context-result-over-budget? result)))
+  (with-temp-dir (dir)
+                 (define sp (session-path dir))
+                 (define ip (index-path dir))
+                 (define entries
+                   (list (make-timestamped-message "root" #f 'user 'message 1000)
+                         (make-timestamped-message "c1" "root" 'assistant 'message 1001)
+                         (make-timestamped-message "c2" "c1" 'user 'message 1002)))
+                 (append-entries! sp entries)
+                 (define idx (build-index! sp ip))
+                 (define result (build-assembled-context idx (make-context-assembly-config)))
+                 (check-true (context-result? result))
+                 (check >= (length (context-result-messages result)) 3)
+                 (check >= (context-result-total-tokens result) 0)
+                 (check-false (context-result-over-budget? result))))
 
 (test-case "context-result: with system instruction pinned"
-  (define dir (make-temp-dir))
-  (define sp (session-path dir))
-  (define ip (index-path dir))
-  (define entries
-    (list (make-timestamped-message "sys" #f 'system 'system-instruction 1000)
-          (make-timestamped-message "u1" "sys" 'user 'message 1001)
-          (make-timestamped-message "a1" "u1" 'assistant 'message 1002)))
-  (append-entries! sp entries)
-  (define idx (build-index! sp ip))
-  (define result (build-assembled-context idx (make-context-assembly-config)))
-  (check >= (context-result-pinned-count result) 1))
+  (with-temp-dir (dir)
+                 (define sp (session-path dir))
+                 (define ip (index-path dir))
+                 (define entries
+                   (list (make-timestamped-message "sys" #f 'system 'system-instruction 1000)
+                         (make-timestamped-message "u1" "sys" 'user 'message 1001)
+                         (make-timestamped-message "a1" "u1" 'assistant 'message 1002)))
+                 (append-entries! sp entries)
+                 (define idx (build-index! sp ip))
+                 (define result (build-assembled-context idx (make-context-assembly-config)))
+                 (check >= (context-result-pinned-count result) 1)))
 
 (test-case "context-result: excluded messages with small budget"
-  (define dir (make-temp-dir))
-  (define sp (session-path dir))
-  (define ip (index-path dir))
-  ;; Each message ~70 chars ≈ 15 tokens; 30 messages ≈ 450 tokens
-  ;; Use small budget to force exclusion
-  (define entries
-    (for/list ([i (in-range 30)])
-      (make-message (format "m~a" i)
-                    (if (= i 0)
-                        #f
-                        (format "m~a" (sub1 i)))
-                    (if (even? i) 'user 'assistant)
-                    'message
-                    (list (make-text-part
-                           (format "This is message number ~a with enough text to consume tokens" i)))
-                    (+ 1000 i)
-                    (hasheq))))
-  (append-entries! sp entries)
-  (define idx (build-index! sp ip))
-  (define result (build-assembled-context idx (make-context-assembly-config #:recent-tokens 50)))
-  (check >= (context-result-excluded-count result) 1))
+  (with-temp-dir
+   (dir)
+   (define sp (session-path dir))
+   (define ip (index-path dir))
+   ;; Each message ≈ 15 tokens; 30 messages ≈ 450 tokens
+   ;; Use small budget to force exclusion
+   (define entries
+     (for/list ([i (in-range 30)])
+       (make-message
+        (format "m~a" i)
+        (if (= i 0)
+            #f
+            (format "m~a" (sub1 i)))
+        (if (even? i) 'user 'assistant)
+        'message
+        (list (make-text-part (format "This is message number ~a with enough text to consume tokens"
+                                      i)))
+        (+ 1000 i)
+        (hasheq))))
+   (append-entries! sp entries)
+   (define idx (build-index! sp ip))
+   (define result (build-assembled-context idx (make-context-assembly-config #:recent-tokens 50)))
+   (check >= (context-result-excluded-count result) 1)))
 
 ;; ============================================================
 ;; build-session-context: backward compat
 ;; ============================================================
 
 (test-case "build-session-context: returns messages list"
-  (define dir (make-temp-dir))
-  (define sp (session-path dir))
-  (define ip (index-path dir))
-  (define entries
-    (list (make-timestamped-message "u1" #f 'user 'message 1000)
-          (make-timestamped-message "a1" "u1" 'assistant 'message 1001)))
-  (append-entries! sp entries)
-  (define idx (build-index! sp ip))
-  (define result (build-session-context idx))
-  (check-pred list? result)
-  (check >= (length result) 2))
+  (with-temp-dir (dir)
+                 (define sp (session-path dir))
+                 (define ip (index-path dir))
+                 (define entries
+                   (list (make-timestamped-message "u1" #f 'user 'message 1000)
+                         (make-timestamped-message "a1" "u1" 'assistant 'message 1001)))
+                 (append-entries! sp entries)
+                 (define idx (build-index! sp ip))
+                 (define result (build-session-context idx))
+                 (check-pred list? result)
+                 (check >= (length result) 2)))
 
 ;; ============================================================
 ;; Tiered context
@@ -163,31 +163,33 @@
 ;; ============================================================
 
 (test-case "summary uses context-assembly-summary kind"
-  (define dir (make-temp-dir))
-  (define sp (session-path dir))
-  (define ip (index-path dir))
-  (define entries
-    (for/list ([i (in-range 10)])
-      (make-timestamped-message (format "m~a" i)
-                                (if (= i 0)
-                                    #f
-                                    (format "m~a" (sub1 i)))
-                                (if (even? i) 'user 'assistant)
-                                'message
-                                (+ 1000 i))))
-  (append-entries! sp entries)
-  (define idx (build-index! sp ip))
-  (define result (build-assembled-context idx (make-context-assembly-config #:recent-tokens 100)))
-  (define summary-msgs
-    (filter (lambda (m) (eq? (message-kind m) 'context-assembly-summary))
-            (context-result-messages result)))
-  ;; If summary was injected, it should have the right kind
-  (for ([m (in-list summary-msgs)])
-    (check-equal? (message-kind m) 'context-assembly-summary))
-  ;; No compaction-summary should appear from assembly (those come from session store)
-  (define compaction-msgs
-    (filter (lambda (m) (eq? (message-kind m) 'compaction-summary)) (context-result-messages result)))
-  (check-equal? compaction-msgs '()))
+  (with-temp-dir (dir)
+                 (define sp (session-path dir))
+                 (define ip (index-path dir))
+                 (define entries
+                   (for/list ([i (in-range 10)])
+                     (make-timestamped-message (format "m~a" i)
+                                               (if (= i 0)
+                                                   #f
+                                                   (format "m~a" (sub1 i)))
+                                               (if (even? i) 'user 'assistant)
+                                               'message
+                                               (+ 1000 i))))
+                 (append-entries! sp entries)
+                 (define idx (build-index! sp ip))
+                 (define result
+                   (build-assembled-context idx (make-context-assembly-config #:recent-tokens 100)))
+                 (define summary-msgs
+                   (filter (lambda (m) (eq? (message-kind m) 'context-assembly-summary))
+                           (context-result-messages result)))
+                 ;; If summary was injected, it should have the right kind
+                 (for ([m (in-list summary-msgs)])
+                   (check-equal? (message-kind m) 'context-assembly-summary))
+                 ;; No compaction-summary should appear from assembly (those come from session store)
+                 (define compaction-msgs
+                   (filter (lambda (m) (eq? (message-kind m) 'compaction-summary))
+                           (context-result-messages result)))
+                 (check-equal? compaction-msgs '())))
 
 ;; ============================================================
 ;; Catalog

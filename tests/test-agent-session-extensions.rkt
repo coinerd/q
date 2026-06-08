@@ -23,7 +23,6 @@
 
 (require rackunit
          rackunit/text-ui
-         racket/file
          racket/string
          (only-in "../util/message/protocol-types.rkt"
                   message
@@ -90,13 +89,11 @@
                   cancellation-token?
                   cancellation-token-cancelled?
                   cancel-token!))
+         (only-in "helpers/temp-fs.rkt" with-temp-dir))
 
 ;; ============================================================
 ;; Helpers
 ;; ============================================================
-
-(define (make-temp-dir)
-  (make-temporary-file "q-agent-session-test-~a" 'directory))
 
 (define (make-event-collector bus)
   (define collected (box '()))

@@ -8,6 +8,7 @@
 (require rackunit
          racket/file
          racket/runtime-path
+         (only-in "helpers/temp-fs.rkt" with-temp-dir with-temp-file)
          "../tools/tool.rkt"
          "../tools/scheduler.rkt"
          "../runtime/safe-mode.rkt"
@@ -16,6 +17,7 @@
          "../tools/builtins/edit.rkt")
 
 (define-runtime-path test-dir ".")
+
 ;; Helpers
 ;; ============================================================
 
@@ -142,197 +144,173 @@
       (check-false (tool-result-is-error? r) "no errors when safe-mode off"))))
 
 (test-case "SEC-04: tool-read rejects path outside project root in safe-mode (via scheduler)"
-  (define tmp-dir (make-temporary-file "safemode-read-~a" 'directory))
-  (dynamic-wind
-   void
-   (lambda ()
-     (define test-file (build-path tmp-dir "test.txt"))
-     (call-with-output-file test-file (lambda (out) (display "hello" out)))
-     (parameterize ([current-safe-mode #t]
-                    [project-root tmp-dir])
-       ;; Build a fresh registry with read tool that delegates to tool-read
-       (define reg (make-tool-registry))
-       (register-tool! reg
-                       (make-tool "read"
-                                  "Read"
-                                  (hasheq 'type
-                                          "object"
-                                          'properties
-                                          (hasheq 'path (hasheq 'type "string"))
-                                          'required
-                                          '("path"))
-                                  (lambda (args ctx) (tool-read args ctx))))
-       ;; Inside project: should work
-       (define tc-ok (make-tool-call "t1" "read" (hasheq 'path (path->string test-file))))
-       (define sr-ok (run-tool-batch (list tc-ok) reg))
-       (define r-ok (first (scheduler-result-results sr-ok)))
-       (check-false (tool-result-is-error? r-ok) "read inside project succeeds")
-       ;; Outside project: should fail (via scheduler path check)
-       (define tc-bad (make-tool-call "t2" "read" (hasheq 'path "/etc/passwd")))
-       (define sr-bad (run-tool-batch (list tc-bad) reg))
-       (define r-bad (first (scheduler-result-results sr-bad)))
-       (check-pred tool-result-is-error? r-bad "read outside project fails")
-       (define content (tool-result-content r-bad))
-       (check-true (ormap (lambda (item)
-                            (and (hash? item)
-                                 (string-contains? (hash-ref item 'text "") "Access denied")))
-                          content)
-                   "error message mentions access denied")))
-   (lambda () (safe-delete-dir tmp-dir))))
+  (with-temp-dir (tmp-dir)
+    (define test-file (build-path tmp-dir "test.txt"))
+    (call-with-output-file test-file (lambda (out) (display "hello" out)))
+    (parameterize ([current-safe-mode #t]
+                   [project-root tmp-dir])
+      ;; Build a fresh registry with read tool that delegates to tool-read
+      (define reg (make-tool-registry))
+      (register-tool! reg
+                      (make-tool "read"
+                                 "Read"
+                                 (hasheq 'type
+                                         "object"
+                                         'properties
+                                         (hasheq 'path (hasheq 'type "string"))
+                                         'required
+                                         '("path"))
+                                 (lambda (args ctx) (tool-read args ctx))))
+      ;; Inside project: should work
+      (define tc-ok (make-tool-call "t1" "read" (hasheq 'path (path->string test-file))))
+      (define sr-ok (run-tool-batch (list tc-ok) reg))
+      (define r-ok (first (scheduler-result-results sr-ok)))
+      (check-false (tool-result-is-error? r-ok) "read inside project succeeds")
+      ;; Outside project: should fail (via scheduler path check)
+      (define tc-bad (make-tool-call "t2" "read" (hasheq 'path "/etc/passwd")))
+      (define sr-bad (run-tool-batch (list tc-bad) reg))
+      (define r-bad (first (scheduler-result-results sr-bad)))
+      (check-pred tool-result-is-error? r-bad "read outside project fails")
+      (define content (tool-result-content r-bad))
+      (check-true (ormap (lambda (item)
+                           (and (hash? item)
+                                (string-contains? (hash-ref item 'text "") "Access denied")))
+                         content)
+                  "error message mentions access denied"))))
 
 (test-case "SEC-04: tool-write rejects path outside project root in safe-mode (via scheduler)"
-  (define tmp-dir (make-temporary-file "safemode-write-~a" 'directory))
-  (dynamic-wind
-   void
-   (lambda ()
-     (parameterize ([current-safe-mode #t]
-                    [project-root tmp-dir])
-       ;; Build a fresh registry with a non-blocked tool name that delegates to tool-write
-       ;; ("write" is blocked in safe mode, so we use "file-write" to test path-level check)
-       (define reg (make-tool-registry))
-       (register-tool! reg
-                       (make-tool "file-write"
-                                  "File Write"
-                                  (hasheq 'type
-                                          "object"
-                                          'properties
-                                          (hasheq 'path (hasheq 'type "string"))
-                                          'required
-                                          '("path"))
-                                  (lambda (args ctx) (tool-write args ctx))))
-       ;; Inside project: should work
-       (define inside-path (build-path tmp-dir "output.txt"))
-       (define tc-ok
-         (make-tool-call "t1"
-                         "file-write"
-                         (hasheq 'path (path->string inside-path) 'content "hello")))
-       (define sr-ok (run-tool-batch (list tc-ok) reg))
-       (define r-ok (first (scheduler-result-results sr-ok)))
-       (check-false (tool-result-is-error? r-ok) "write inside project succeeds")
-       ;; Outside project: should fail (via scheduler path check)
-       (define tc-bad
-         (make-tool-call "t2"
-                         "file-write"
-                         (hasheq 'path "/tmp/safemode-bypass-write.txt" 'content "evil")))
-       (define sr-bad (run-tool-batch (list tc-bad) reg))
-       (define r-bad (first (scheduler-result-results sr-bad)))
-       (check-pred tool-result-is-error? r-bad "write outside project fails")
-       (define content (tool-result-content r-bad))
-       (check-true (ormap (lambda (item)
-                            (and (hash? item)
-                                 (string-contains? (hash-ref item 'text "") "Access denied")))
-                          content)
-                   "error message mentions access denied")))
-   (lambda () (safe-delete-dir tmp-dir))))
+  (with-temp-dir (tmp-dir)
+    (parameterize ([current-safe-mode #t]
+                   [project-root tmp-dir])
+      ;; Build a fresh registry with a non-blocked tool name that delegates to tool-write
+      ;; ("write" is blocked in safe mode, so we use "file-write" to test path-level check)
+      (define reg (make-tool-registry))
+      (register-tool! reg
+                      (make-tool "file-write"
+                                 "File Write"
+                                 (hasheq 'type
+                                         "object"
+                                         'properties
+                                         (hasheq 'path (hasheq 'type "string"))
+                                         'required
+                                         '("path"))
+                                 (lambda (args ctx) (tool-write args ctx))))
+      ;; Inside project: should work
+      (define inside-path (build-path tmp-dir "output.txt"))
+      (define tc-ok
+        (make-tool-call "t1"
+                        "file-write"
+                        (hasheq 'path (path->string inside-path) 'content "hello")))
+      (define sr-ok (run-tool-batch (list tc-ok) reg))
+      (define r-ok (first (scheduler-result-results sr-ok)))
+      (check-false (tool-result-is-error? r-ok) "write inside project succeeds")
+      ;; Outside project: should fail (via scheduler path check)
+      (define tc-bad
+        (make-tool-call "t2"
+                        "file-write"
+                        (hasheq 'path "/tmp/safemode-bypass-write.txt" 'content "evil")))
+      (define sr-bad (run-tool-batch (list tc-bad) reg))
+      (define r-bad (first (scheduler-result-results sr-bad)))
+      (check-pred tool-result-is-error? r-bad "write outside project fails")
+      (define content (tool-result-content r-bad))
+      (check-true (ormap (lambda (item)
+                           (and (hash? item)
+                                (string-contains? (hash-ref item 'text "") "Access denied")))
+                         content)
+                  "error message mentions access denied"))))
 
 (test-case "SEC-04: tool-edit rejects path outside project root in safe-mode (via scheduler)"
-  (define tmp-dir (make-temporary-file "safemode-edit-~a" 'directory))
-  (dynamic-wind
-   void
-   (lambda ()
-     ;; Create a file inside project
-     (define test-file (build-path tmp-dir "editme.txt"))
-     (call-with-output-file test-file (lambda (out) (display "hello world" out)))
-     ;; Create a file outside project
-     (define outside-file (make-temporary-file "outside-edit-~a.txt"))
-     (call-with-output-file outside-file (lambda (out) (display "target" out)) #:exists 'replace)
-     (parameterize ([current-safe-mode #t]
-                    [project-root tmp-dir])
-       ;; Build a fresh registry with a non-blocked tool name that delegates to tool-edit
-       ;; ("edit" is blocked in safe mode, so we use "file-edit" to test path-level check)
-       (define reg (make-tool-registry))
-       (register-tool! reg
-                       (make-tool "file-edit"
-                                  "File Edit"
-                                  (hasheq 'type
-                                          "object"
-                                          'properties
-                                          (hasheq 'path (hasheq 'type "string"))
-                                          'required
-                                          '("path"))
-                                  (lambda (args ctx) (tool-edit args ctx))))
-       ;; Inside project: should work
-       (define tc-ok
-         (make-tool-call
-          "t1"
-          "file-edit"
-          (hasheq 'path (path->string test-file) 'old-text "hello" 'new-text "goodbye")))
-       (define sr-ok (run-tool-batch (list tc-ok) reg))
-       (define r-ok (first (scheduler-result-results sr-ok)))
-       (check-false (tool-result-is-error? r-ok) "edit inside project succeeds")
-       ;; Outside project: should fail (via scheduler path check)
-       (define tc-bad
-         (make-tool-call
-          "t2"
-          "file-edit"
-          (hasheq 'path (path->string outside-file) 'old-text "target" 'new-text "replaced")))
-       (define sr-bad (run-tool-batch (list tc-bad) reg))
-       (define r-bad (first (scheduler-result-results sr-bad)))
-       (check-pred tool-result-is-error? r-bad "edit outside project fails")
-       (define content (tool-result-content r-bad))
-       (check-true (ormap (lambda (item)
-                            (and (hash? item)
-                                 (string-contains? (hash-ref item 'text "") "Access denied")))
-                          content)
-                   "error message mentions access denied"))
-     (safe-delete-file outside-file))
-   (lambda () (safe-delete-dir tmp-dir))))
+  (with-temp-dir (tmp-dir)
+    ;; Create a file inside project
+    (define test-file (build-path tmp-dir "editme.txt"))
+    (call-with-output-file test-file (lambda (out) (display "hello world" out)))
+    ;; Create a file outside project using with-temp-file
+    (with-temp-file (outside-file)
+      (call-with-output-file outside-file (lambda (out) (display "target" out)) #:exists 'replace)
+      (parameterize ([current-safe-mode #t]
+                     [project-root tmp-dir])
+        ;; Build a fresh registry with a non-blocked tool name that delegates to tool-edit
+        ;; ("edit" is blocked in safe mode, so we use "file-edit" to test path-level check)
+        (define reg (make-tool-registry))
+        (register-tool! reg
+                        (make-tool "file-edit"
+                                   "File Edit"
+                                   (hasheq 'type
+                                           "object"
+                                           'properties
+                                           (hasheq 'path (hasheq 'type "string"))
+                                           'required
+                                           '("path"))
+                                   (lambda (args ctx) (tool-edit args ctx))))
+        ;; Inside project: should work
+        (define tc-ok
+          (make-tool-call
+           "t1"
+           "file-edit"
+           (hasheq 'path (path->string test-file) 'old-text "hello" 'new-text "goodbye")))
+        (define sr-ok (run-tool-batch (list tc-ok) reg))
+        (define r-ok (first (scheduler-result-results sr-ok)))
+        (check-false (tool-result-is-error? r-ok) "edit inside project succeeds")
+        ;; Outside project: should fail (via scheduler path check)
+        (define tc-bad
+          (make-tool-call
+           "t2"
+           "file-edit"
+           (hasheq 'path (path->string outside-file) 'old-text "target" 'new-text "replaced")))
+        (define sr-bad (run-tool-batch (list tc-bad) reg))
+        (define r-bad (first (scheduler-result-results sr-bad)))
+        (check-pred tool-result-is-error? r-bad "edit outside project fails")
+        (define content (tool-result-content r-bad))
+        (check-true (ormap (lambda (item)
+                             (and (hash? item)
+                                  (string-contains? (hash-ref item 'text "") "Access denied")))
+                           content)
+                    "error message mentions access denied")))))
 
 (test-case "SEC-04: symlink bypass is resolved by allowed-path?"
-  (define tmp-dir (make-temporary-file "safemode-symlink-~a" 'directory))
-  (dynamic-wind
-   void
-   (lambda ()
-     ;; Create a file inside project
-     (define real-file (build-path tmp-dir "real.txt"))
-     (call-with-output-file real-file (lambda (out) (display "content" out)))
-     ;; Create symlink outside project pointing inside
-     (define link-dir (make-temporary-file "safemode-linkdir-~a" 'directory))
-     (define symlink-path (build-path link-dir "link.txt"))
-     (with-handlers ([exn:fail? (lambda (e)
-                                  ;; Symlinks may not be supported; skip test
-                                  (safe-delete-dir tmp-dir)
-                                  (safe-delete-dir link-dir))])
-       ;; Make symlink from outside → inside project
-       (make-file-or-directory-link real-file symlink-path)
-       (parameterize ([current-safe-mode #t]
-                      [project-root tmp-dir])
-         ;; The symlink lives outside, but resolves to inside.
-         ;; With the old simplify-path code, this would incorrectly be allowed
-         ;; because the symlink path itself is outside.
-         ;; With resolve-path, the resolved path is inside → allowed.
-         ;; However, the link path string starts with the link-dir prefix,
-         ;; so allowed-path? on the raw path should reject it.
-         ;; The key test: resolve-path should resolve symlinks so that
-         ;; a symlink pointing OUTSIDE from inside gets caught.
-         (define outside-target (build-path link-dir "outside.txt"))
-         (call-with-output-file outside-target (lambda (out) (display "outside" out)))
-         ;; Create symlink inside project pointing outside
-         (define insider-link (build-path tmp-dir "escape.txt"))
-         (make-file-or-directory-link outside-target insider-link)
-         ;; This symlink is inside project root, but resolves to outside.
-         ;; With simplify-path it would be allowed; with resolve-path it should
-         ;; resolve to the outside target, which is NOT under project root.
-         ;; But actually: the path string is inside project root, and
-         ;; resolve-path resolves to outside. The current allowed-path?
-         ;; uses resolve-path, so it checks the RESOLVED path against root.
-         ;; So the resolved path is outside → blocked. Good.
-         (check-false (allowed-path? (path->string insider-link))
-                      "symlink inside project pointing outside is blocked after resolve"))))
-   (lambda ()
-     (safe-delete-dir tmp-dir)
-     ;; link-dir might not exist if symlink creation failed
-     (safe-delete-dir (build-path (find-system-path 'temp-dir) "safemode-linkdir-")))))
+  (with-temp-dir (tmp-dir)
+    ;; Create a file inside project
+    (define real-file (build-path tmp-dir "real.txt"))
+    (call-with-output-file real-file (lambda (out) (display "content" out)))
+    ;; Create symlink outside project pointing inside
+    (with-temp-dir (link-dir)
+      (define symlink-path (build-path link-dir "link.txt"))
+      (with-handlers ([exn:fail? (lambda (e)
+                                   ;; Symlinks may not be supported; skip test
+                                   (void))])
+        ;; Make symlink from outside → inside project
+        (make-file-or-directory-link real-file symlink-path)
+        (parameterize ([current-safe-mode #t]
+                       [project-root tmp-dir])
+          ;; The symlink lives outside, but resolves to inside.
+          ;; With the old simplify-path code, this would incorrectly be allowed
+          ;; because the symlink path itself is outside.
+          ;; With resolve-path, the resolved path is inside → allowed.
+          ;; However, the link path string starts with the link-dir prefix,
+          ;; so allowed-path? on the raw path should reject it.
+          ;; The key test: resolve-path should resolve symlinks so that
+          ;; a symlink pointing OUTSIDE from inside gets caught.
+          (define outside-target (build-path link-dir "outside.txt"))
+          (call-with-output-file outside-target (lambda (out) (display "outside" out)))
+          ;; Create symlink inside project pointing outside
+          (define insider-link (build-path tmp-dir "escape.txt"))
+          (make-file-or-directory-link outside-target insider-link)
+          ;; This symlink is inside project root, but resolves to outside.
+          ;; With simplify-path it would be allowed; with resolve-path it should
+          ;; resolve to the outside target, which is NOT under project root.
+          ;; But actually: the path string is inside project root, and
+          ;; resolve-path resolves to outside. The current allowed-path?
+          ;; uses resolve-path, so it checks the RESOLVED path against root.
+          ;; So the resolved path is outside → blocked. Good.
+          (check-false (allowed-path? (path->string insider-link))
+                       "symlink inside project pointing outside is blocked after resolve"))))))
 
 (test-case "SEC-04: allowed-path? works normally with safe-mode off"
-  (let ([tmp-dir (make-temporary-file "safemode-test-~a")])
-    (delete-file tmp-dir)
-    (make-directory tmp-dir)
+  (with-temp-dir (tmp-dir)
     (parameterize ([current-safe-mode #f]
                    [project-root tmp-dir])
       (check-true (allowed-path? (build-path tmp-dir "sub")) "any path allowed when safe-mode off")
-      (check-true (allowed-path? "/tmp/safemode-arbitrary") "any path allowed when safe-mode off"))
-    (delete-directory/files tmp-dir)))
+      (check-true (allowed-path? "/tmp/safemode-arbitrary") "any path allowed when safe-mode off"))))
 
 ;; ============================================================
 ;; Summary
