@@ -18,6 +18,7 @@
 
 (define-typed-event compaction-event "compaction" (reason tokens-before tokens-after) #:schema-version 1 #:no-serialize)
 
+;; STABILITY: public — stable for extensions
 (define-typed-event injection-event
                     "injection"
                     (source content-type content-length)

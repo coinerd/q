@@ -31,6 +31,7 @@
 
 ;; Context events
 
+;; STABILITY: public — stable for extensions
 (define-typed-event context-event
                     "context.built"
                     (token-count window-size)
