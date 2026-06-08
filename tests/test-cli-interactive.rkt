@@ -5,7 +5,8 @@
 
 (require rackunit
          rackunit/text-ui
-         "../interfaces/cli.rkt")
+         "../interfaces/cli.rkt"
+         (only-in "helpers/temp-fs.rkt" with-temp-dir))
 
 (define-test-suite test-cli-interactive
 
@@ -229,13 +230,13 @@
         (check-true (> (string-length line) 0))))
 
     (test-case "first-run welcome appears before first prompt when config dir missing"
-      (define tmp-home (make-temporary-file "q-test-home-~a" 'directory))
-      (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f #f))
-      (define in (open-input-string "/quit\n"))
-      (define out (open-output-string))
-      (parameterize ([current-directory tmp-home])
-        (run-cli-interactive cfg #:in in #:out out))
-      (check-true (string-contains? (get-output-string out) "Goodbye."))))
+      (with-temp-dir (tmp-home)
+        (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f #f))
+        (define in (open-input-string "/quit\n"))
+        (define out (open-output-string))
+        (parameterize ([current-directory tmp-home])
+          (run-cli-interactive cfg #:in in #:out out))
+        (check-true (string-contains? (get-output-string out) "Goodbye.")))))
 
   (test-suite "Issue #141: Mock provider warning"
 

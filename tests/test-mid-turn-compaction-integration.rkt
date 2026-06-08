@@ -9,6 +9,7 @@
          rackunit/text-ui
          racket/string
          racket/file
+         (only-in "helpers/temp-fs.rkt" with-temp-dir)
          "../util/message/message.rkt"
          "../util/content/content-parts.rkt"
          "../util/event/event.rkt"
@@ -151,84 +152,86 @@
                   "over-budget event emitted by estimate-mid-turn-tokens"))
 
     (test-case "maybe-compact-mid-turn with mock session returns message list"
-      (define tmpdir (make-temporary-file "q-midturn-test-~a" 'directory))
-      (define bus (make-event-bus))
-      (define events '())
-      (subscribe! bus (lambda (evt) (set! events (cons evt events))))
-      (define sess
-        (make-agent-session (hasheq 'session-dir
-                                    (path->string tmpdir)
-                                    'event-bus
-                                    bus
-                                    'provider
-                                    #f
-                                    'tool-registry
-                                    #f
-                                    'model-name
-                                    "test"
-                                    'system-instructions
-                                    '()
-                                    'max-context-tokens
-                                    100)))
-      ;; Build large context to exceed budget
-      (define ctx
-        (for/list ([i (in-range 50)])
-          (message (format "id~a" i)
-                   #f
-                   'user
-                   'message
-                   (list (text-part "text" (format "Message ~a ~a" i (make-string 200 #\x))))
-                   (current-seconds)
-                   (hasheq))))
-      (define result
-        (maybe-compact-mid-turn sess
-                                ctx
-                                "test-session"
-                                (hasheq 'max-context-tokens 100)
-                                #:emit-event (lambda (name payload)
-                                               (emit-session-event! bus "test-session" name payload))
-                                #:compact-proc (lambda (ctx) (compact-context-mid-turn sess ctx))))
-      (check-true (list? result) "maybe-compact-mid-turn returns list")
-      (check-true (<= (length result) (length ctx)) "compaction returns at most original count")
-      (check-true (andmap message? result) "all results are messages"))
+      (with-temp-dir
+       (tmpdir)
+       (define bus (make-event-bus))
+       (define events '())
+       (subscribe! bus (lambda (evt) (set! events (cons evt events))))
+       (define sess
+         (make-agent-session (hasheq 'session-dir
+                                     (path->string tmpdir)
+                                     'event-bus
+                                     bus
+                                     'provider
+                                     #f
+                                     'tool-registry
+                                     #f
+                                     'model-name
+                                     "test"
+                                     'system-instructions
+                                     '()
+                                     'max-context-tokens
+                                     100)))
+       ;; Build large context to exceed budget
+       (define ctx
+         (for/list ([i (in-range 50)])
+           (message (format "id~a" i)
+                    #f
+                    'user
+                    'message
+                    (list (text-part "text" (format "Message ~a ~a" i (make-string 200 #\x))))
+                    (current-seconds)
+                    (hasheq))))
+       (define result
+         (maybe-compact-mid-turn sess
+                                 ctx
+                                 "test-session"
+                                 (hasheq 'max-context-tokens 100)
+                                 #:emit-event (lambda (name payload)
+                                                (emit-session-event! bus "test-session" name payload))
+                                 #:compact-proc (lambda (ctx) (compact-context-mid-turn sess ctx))))
+       (check-true (list? result) "maybe-compact-mid-turn returns list")
+       (check-true (<= (length result) (length ctx)) "compaction returns at most original count")
+       (check-true (andmap message? result) "all results are messages")))
 
     (test-case "maybe-compact-mid-turn under-budget returns original context"
-      (define tmpdir (make-temporary-file "q-midturn-test-~a" 'directory))
-      (define bus (make-event-bus))
-      (define sess
-        (make-agent-session (hasheq 'session-dir
-                                    (path->string tmpdir)
-                                    'event-bus
-                                    bus
-                                    'provider
-                                    #f
-                                    'tool-registry
-                                    #f
-                                    'model-name
-                                    "test"
-                                    'system-instructions
-                                    '()
-                                    'max-context-tokens
-                                    128000)))
-      ;; Small context well under budget
-      (define ctx
-        (for/list ([i (in-range 3)])
-          (message (format "id~a" i)
-                   #f
-                   'user
-                   'message
-                   (list (text-part "text" (format "Message ~a" i)))
-                   (current-seconds)
-                   (hasheq))))
-      (define result
-        (maybe-compact-mid-turn sess
-                                ctx
-                                "test-session"
-                                (hasheq 'max-context-tokens 128000)
-                                #:emit-event (lambda (name payload)
-                                               (emit-session-event! bus "test-session" name payload))
-                                #:compact-proc (lambda (ctx) (compact-context-mid-turn sess ctx))))
-      (check-equal? (length result) (length ctx) "under-budget returns original context unchanged"))
+      (with-temp-dir
+       (tmpdir)
+       (define bus (make-event-bus))
+       (define sess
+         (make-agent-session (hasheq 'session-dir
+                                     (path->string tmpdir)
+                                     'event-bus
+                                     bus
+                                     'provider
+                                     #f
+                                     'tool-registry
+                                     #f
+                                     'model-name
+                                     "test"
+                                     'system-instructions
+                                     '()
+                                     'max-context-tokens
+                                     128000)))
+       ;; Small context well under budget
+       (define ctx
+         (for/list ([i (in-range 3)])
+           (message (format "id~a" i)
+                    #f
+                    'user
+                    'message
+                    (list (text-part "text" (format "Message ~a" i)))
+                    (current-seconds)
+                    (hasheq))))
+       (define result
+         (maybe-compact-mid-turn sess
+                                 ctx
+                                 "test-session"
+                                 (hasheq 'max-context-tokens 128000)
+                                 #:emit-event (lambda (name payload)
+                                                (emit-session-event! bus "test-session" name payload))
+                                 #:compact-proc (lambda (ctx) (compact-context-mid-turn sess ctx))))
+       (check-equal? (length result) (length ctx) "under-budget returns original context unchanged")))
 
     ;; v0.28.24 W0: test shared token estimation helper
 

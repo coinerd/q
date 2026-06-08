@@ -7,6 +7,7 @@
          rackunit/text-ui
          racket/list
          racket/file
+         (only-in "helpers/temp-fs.rkt" with-temp-dir)
          "../util/message/protocol-types.rkt"
          "../runtime/working-set.rkt"
          "../runtime/context/context-pinning.rkt"
@@ -17,9 +18,6 @@
 ;; Helper: create a test message
 (define (make-test-msg id role kind text [parent #f])
   (make-message id parent role kind (list (make-text-part text)) (current-seconds) (hasheq)))
-
-(define (make-temp-dir)
-  (make-temporary-file "q-ctx-ws-test-~a" 'directory))
 
 (define ws-tests
   (test-suite "Context Assembly Working Set Integration"
@@ -48,48 +46,49 @@
       (check-not-false (member tool-msg (tiered-context-tier-a tc))))
 
     (test-case "T02: working set messages survive pair-preserving truncation"
-      (define dir (make-temp-dir))
-      (define sp (build-path dir "session.jsonl"))
-      (define ip (build-path dir "session.index"))
-      (define ws (make-working-set))
-      (define tool-msg
-        (make-message "tool-1"
-                      #f
-                      'tool
-                      'tool-result
-                      (list (make-text-part "content of /tmp/foo.rkt"))
-                      (current-seconds)
-                      (hasheq)))
-      (working-set-update! ws
-                           (list (hasheq 'name "read" 'arguments (hasheq 'path "/tmp/foo.rkt")))
-                           (list (make-message "tool-1"
-                                               #f
-                                               'tool
-                                               'tool-result
-                                               (list (make-text-part "content of /tmp/foo.rkt"))
-                                               (current-seconds)
-                                               (hasheq)))
-                           message-id
-                           (lambda (m) 20))
-      (define entries
-        (cons (make-test-msg "sys" 'system 'system-instruction "System")
-              (cons tool-msg
-                    (for/list ([i (in-range 40)])
-                      (make-message (format "m~a" i)
-                                    (if (= i 0)
-                                        #f
-                                        (format "m~a" (sub1 i)))
-                                    (if (even? i) 'user 'assistant)
-                                    'message
-                                    (list (make-text-part (format "Message ~a text" i)))
-                                    (+ 1000 i)
-                                    (hasheq))))))
-      (append-entries! sp entries)
-      (define idx (build-index! sp ip))
-      (define config (make-context-assembly-config #:recent-tokens 100))
-      (define result (build-assembled-context idx config #:working-set ws))
-      (define result-ids (map message-id (context-result-messages result)))
-      (check-not-false (member "tool-1" result-ids)))
+      (with-temp-dir
+       (dir)
+       (define sp (build-path dir "session.jsonl"))
+       (define ip (build-path dir "session.index"))
+       (define ws (make-working-set))
+       (define tool-msg
+         (make-message "tool-1"
+                       #f
+                       'tool
+                       'tool-result
+                       (list (make-text-part "content of /tmp/foo.rkt"))
+                       (current-seconds)
+                       (hasheq)))
+       (working-set-update! ws
+                            (list (hasheq 'name "read" 'arguments (hasheq 'path "/tmp/foo.rkt")))
+                            (list (make-message "tool-1"
+                                                #f
+                                                'tool
+                                                'tool-result
+                                                (list (make-text-part "content of /tmp/foo.rkt"))
+                                                (current-seconds)
+                                                (hasheq)))
+                            message-id
+                            (lambda (m) 20))
+       (define entries
+         (cons (make-test-msg "sys" 'system 'system-instruction "System")
+               (cons tool-msg
+                     (for/list ([i (in-range 40)])
+                       (make-message (format "m~a" i)
+                                     (if (= i 0)
+                                         #f
+                                         (format "m~a" (sub1 i)))
+                                     (if (even? i) 'user 'assistant)
+                                     'message
+                                     (list (make-text-part (format "Message ~a text" i)))
+                                     (+ 1000 i)
+                                     (hasheq))))))
+       (append-entries! sp entries)
+       (define idx (build-index! sp ip))
+       (define config (make-context-assembly-config #:recent-tokens 100))
+       (define result (build-assembled-context idx config #:working-set ws))
+       (define result-ids (map message-id (context-result-messages result)))
+       (check-not-false (member "tool-1" result-ids))))
 
     (test-case "T03: working set messages appear after system before recent"
       (define ws (make-working-set))

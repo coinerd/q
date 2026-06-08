@@ -10,7 +10,6 @@
 ;;   #1179: Context window overflow recovery
 
 (require rackunit
-         racket/file
          "../util/message/protocol-types.rkt"
          "../runtime/compaction/compactor.rkt"
          "../runtime/compaction/token-compaction.rkt"
@@ -23,9 +22,6 @@
 ;; ============================================================
 ;; Helpers
 ;; ============================================================
-
-(define (make-temp-dir)
-  (make-temporary-file "q-wave1-test-~a" 'directory))
 
 (define (msg id role text [kind 'message])
   (make-message id #f role kind (list (make-text-part text)) (current-seconds) (hasheq)))

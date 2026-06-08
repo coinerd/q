@@ -4,6 +4,7 @@
 
 (require rackunit
          rackunit/text-ui
+         (only-in "helpers/temp-fs.rkt" with-temp-dir)
          "../runtime/context/context-pressure.rkt"
          "../llm/token-budget.rkt"
          "../agent/event-bus.rkt"
@@ -14,12 +15,9 @@
          "../runtime/agent-session.rkt"
          "../util/event/event.rkt")
 
-(define (make-temp-dir)
-  (make-temporary-file "q-pressure-test-~a" 'directory))
-
-(define (make-test-session bus)
+(define (make-test-session bus dir)
   (make-agent-session (hasheq 'session-dir
-                              (make-temp-dir)
+                              dir
                               'event-bus
                               bus
                               'provider
@@ -44,45 +42,48 @@
                      (check-eq? (context-pressure-level 80.1) 'red)
                      (check-eq? (context-pressure-level 100.0) 'red))
                    (test-case "check-context-pressure emits event on bus"
-                     (define bus (make-event-bus))
-                     (define events (box '()))
-                     (subscribe! bus
-                                 (lambda (evt)
-                                   (when (equal? (event-ev evt) "context.pressure")
-                                     (set-box! events (cons evt (unbox events))))))
-                     (define sess (make-test-session bus))
-                     (check-eq? (check-context-pressure sess 50 100) 'green)
-                     (define evts (reverse (unbox events)))
-                     (check-equal? (length evts) 1)
-                     (define evt (car evts))
-                     (check-equal? (event-ev evt) "context.pressure")
-                     (define payload (event-payload evt))
-                     (check-equal? (hash-ref payload 'level) 'green)
-                     (check-true (real? (hash-ref payload 'usage-percent)))
-                     (check-= (hash-ref payload 'usage-percent) 50.0 0.01))
+                     (with-temp-dir (dir)
+                                    (define bus (make-event-bus))
+                                    (define events (box '()))
+                                    (subscribe! bus
+                                                (lambda (evt)
+                                                  (when (equal? (event-ev evt) "context.pressure")
+                                                    (set-box! events (cons evt (unbox events))))))
+                                    (define sess (make-test-session bus dir))
+                                    (check-eq? (check-context-pressure sess 50 100) 'green)
+                                    (define evts (reverse (unbox events)))
+                                    (check-equal? (length evts) 1)
+                                    (define evt (car evts))
+                                    (check-equal? (event-ev evt) "context.pressure")
+                                    (define payload (event-payload evt))
+                                    (check-equal? (hash-ref payload 'level) 'green)
+                                    (check-true (real? (hash-ref payload 'usage-percent)))
+                                    (check-= (hash-ref payload 'usage-percent) 50.0 0.01)))
                    (test-case "check-context-pressure computes correct percentage"
-                     (define bus (make-event-bus))
-                     (define events (box '()))
-                     (subscribe! bus
-                                 (lambda (evt)
-                                   (when (equal? (event-ev evt) "context.pressure")
-                                     (set-box! events (cons evt (unbox events))))))
-                     (define sess (make-test-session bus))
-                     (check-eq? (check-context-pressure sess 25 100) 'green)
-                     (define payload (event-payload (car (reverse (unbox events)))))
-                     (check-= (hash-ref payload 'usage-percent) 25.0 0.01))
+                     (with-temp-dir (dir)
+                                    (define bus (make-event-bus))
+                                    (define events (box '()))
+                                    (subscribe! bus
+                                                (lambda (evt)
+                                                  (when (equal? (event-ev evt) "context.pressure")
+                                                    (set-box! events (cons evt (unbox events))))))
+                                    (define sess (make-test-session bus dir))
+                                    (check-eq? (check-context-pressure sess 25 100) 'green)
+                                    (define payload (event-payload (car (reverse (unbox events)))))
+                                    (check-= (hash-ref payload 'usage-percent) 25.0 0.01)))
                    (test-case "check-context-pressure red at 90%"
-                     (define bus (make-event-bus))
-                     (define events (box '()))
-                     (subscribe! bus
-                                 (lambda (evt)
-                                   (when (equal? (event-ev evt) "context.pressure")
-                                     (set-box! events (cons evt (unbox events))))))
-                     (define sess (make-test-session bus))
-                     (check-eq? (check-context-pressure sess 90 100) 'red)
-                     (define payload (event-payload (car (reverse (unbox events)))))
-                     (check-equal? (hash-ref payload 'level) 'red)
-                     (check-= (hash-ref payload 'usage-percent) 90.0 0.01)))
+                     (with-temp-dir (dir)
+                                    (define bus (make-event-bus))
+                                    (define events (box '()))
+                                    (subscribe! bus
+                                                (lambda (evt)
+                                                  (when (equal? (event-ev evt) "context.pressure")
+                                                    (set-box! events (cons evt (unbox events))))))
+                                    (define sess (make-test-session bus dir))
+                                    (check-eq? (check-context-pressure sess 90 100) 'red)
+                                    (define payload (event-payload (car (reverse (unbox events)))))
+                                    (check-equal? (hash-ref payload 'level) 'red)
+                                    (check-= (hash-ref payload 'usage-percent) 90.0 0.01))))
 
 (module+ main
   (run-tests context-pressure-tests))
