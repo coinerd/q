@@ -3,6 +3,9 @@
 ;; BOUNDARY: integration
 
 ;; tests/helpers/fixtures.rkt — Test cleanup and isolation macros
+;; DEPRECATED (v0.96.8): with-temp-dir is now canonical in temp-fs.rkt (macro version).
+;; This file's function-based with-temp-dir remains for backward compatibility.
+;; New tests should use (require "tests/helpers/temp-fs.rkt") instead.
 ;;
 ;; Provides `with-temp-dir` and `with-env-var` macros for safe,
 ;; deterministic test cleanup via dynamic-wind.
