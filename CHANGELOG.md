@@ -1,3 +1,13 @@
+## [0.96.9] - 2026-06-08
+
+### Test Architecture — Phase 2: Naming & Organization
+
+#### Changed
+- **D1**: Renamed 18 test files in `tests/tui/` to follow `test-<module>.rkt` convention
+- **D1**: Renamed `tests/interfaces/tui.rkt` → `tests/test-interfaces-tui.rkt`, `tests/bench-streaming-render.rkt` → `tests/test-bench-streaming-render.rkt`
+- **D1**: Wrapped bare `check-*` calls in `test-case` blocks across 19 test files
+- **B2**: Deduplicated all test-case names across 74 files — every name is now globally unique with module prefix
+- **D3**: Updated `docs/TEST_CONVENTIONS.md` with naming, temp file, state isolation, and env guard conventions
 ## [0.96.8] - 2026-06-08
 
 ### Test Architecture — Phase 1: Safety & Cleanup
