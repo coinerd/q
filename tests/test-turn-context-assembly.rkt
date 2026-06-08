@@ -31,10 +31,10 @@
   (check-true (string-contains? src "(define (build-assembled-context")
               "build-assembled-context should still exist as coordinator"))
 
-(test-case "W2: turn-orchestrator.rkt still contains register-session-extensions!"
+(test-case "W2: turn-orchestrator.rkt imports register-session-extensions!"
   (define src (file->string turn-orch-path))
-  (check-true (string-contains? src "(define (register-session-extensions!")
-              "register-session-extensions! should still exist"))
+  (check-true (string-contains? src "register-session-extensions!")
+              "register-session-extensions! should be available (imported or defined)"))
 
 (test-case "W2: turn-orchestrator.rkt still contains run-provider-turn"
   (define src (file->string turn-orch-path))
