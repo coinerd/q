@@ -1,4 +1,5 @@
 #lang racket/base
+;; rpc-mode.rkt — RPC mode interface for q
 
 (require racket/contract
          racket/string

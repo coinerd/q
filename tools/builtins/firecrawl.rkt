@@ -1,4 +1,5 @@
 #lang racket/base
+;; firecrawl.rkt — Firecrawl web scraping tool
 
 (require "../../util/error/error-helpers.rkt")
 (require "../../util/json/json-helpers.rkt")

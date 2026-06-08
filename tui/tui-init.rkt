@@ -1,4 +1,5 @@
 #lang racket/base
+;; tui-init.rkt — TUI initialization and setup
 (require racket/contract)
 
 (require racket/dict)

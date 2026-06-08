@@ -1,4 +1,5 @@
 #lang racket/base
+;; scrollback.rkt — Scrollback buffer for TUI
 
 (require racket/contract
          racket/file
