@@ -57,7 +57,9 @@
                   make-stream-assistant-msg-completed-event)
          (only-in "loop-messages.rkt" usage-empty? classify-hook-result)
          ;; v0.95.16 W3: Post-turn auto-extraction
-         (only-in "../runtime/memory/auto-extraction.rkt" maybe-auto-extract-after-response!))
+         (only-in "../runtime/memory/auto-extraction.rkt" maybe-auto-extract-after-response!)
+         ;; v0.95.21 W3: Post-turn auto-reflection
+         (only-in "../runtime/memory/reflection.rkt" maybe-reflect-session-memories!))
 
 (provide classify-chunk
          chunk-has-data?
@@ -134,6 +136,8 @@
   ;; v0.95.17 W1: Post-turn auto-extraction (non-fatal, gated by parameter)
   ;; Must fire for both text-only and tool-call turns.
   (maybe-auto-extract-after-response! final-text #:session-id session-id)
+  ;; v0.95.21 W3: Post-turn auto-reflection (non-fatal, gated by parameter)
+  (maybe-reflect-session-memories! #:session-id session-id)
   (cond
     [(null? tool-call-parts)
      (emit-typed-event! bus

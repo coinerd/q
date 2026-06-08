@@ -105,17 +105,15 @@
   (check-true (string-contains? src "current-auto-reflection-enabled")
               "W1: current-auto-reflection-enabled should exist"))
 
-(test-case "W0 G1: maybe-reflect-session-memories! does not exist in reflection.rkt"
-  ;; Verify the wrapper doesn't exist yet — W3 will add it
+(test-case "W3 G1: maybe-reflect-session-memories! now exists in reflection.rkt"
   (define src (file->string (build-path (current-directory) ".." "runtime" "memory" "reflection.rkt")))
-  (check-false (string-contains? src "maybe-reflect-session-memories!")
-               "W0 baseline: maybe-reflect-session-memories! should not exist yet"))
+  (check-true (string-contains? src "maybe-reflect-session-memories!")
+              "W3: maybe-reflect-session-memories! should exist"))
 
-(test-case "W0 G1: auto-reflection not hooked in loop-stream.rkt"
-  ;; Verify loop-stream.rkt doesn't call reflection yet — W3 will add it
+(test-case "W3 G1: auto-reflection now hooked in loop-stream.rkt"
   (define src (file->string (build-path (current-directory) ".." "agent" "loop-stream.rkt")))
-  (check-false (string-contains? src "reflect-session")
-               "W0 baseline: auto-reflection should not be in loop-stream.rkt yet"))
+  (check-true (string-contains? src "reflect-session")
+              "W3: auto-reflection should be in loop-stream.rkt"))
 
 (test-case "W0 G1: reflect-session-memories! exists and works (existing behavior)"
   ;; Verify the underlying reflection function exists and works
@@ -156,3 +154,86 @@
 (test-case "W2 G1: current-auto-reflection-min-items can be set"
   (parameterize ([current-auto-reflection-min-items 3])
     (check-equal? (current-auto-reflection-min-items) 3)))
+
+;; ---------------------------------------------------------------------------
+;; v0.95.21 W3: G1 — maybe-reflect-session-memories! functional tests
+;; ---------------------------------------------------------------------------
+
+(test-case "W3: maybe-reflect-session-memories! no-ops when disabled"
+  (define backend (make-test-backend))
+  (parameterize ([current-auto-reflection-enabled #f]
+                 [current-memory-backend backend]
+                 [current-memory-policy default-memory-policy]
+                 [current-reflection-min-group-size 2])
+    ;; Store enough items for reflection
+    (for ([i (in-range 3)])
+      ((memory-backend-store! backend)
+       (memory-item (format "no-op-~a" i)
+                    'semantic 'session
+                    (format "shared topic ~a alpha beta gamma" i)
+                    (hasheq 'project-root "/test" 'session-id "sess-w3-noop"
+                            'tags '("shared" "topic") 'source 'test
+                            'origin-message-id (format "m~a" i))
+                    (hasheq 'sensitivity 'public 'confidence 0.9 'supersedes '())
+                    "2026-06-07T12:00:00Z"
+                    "2026-06-07T12:00:00Z")))
+    (maybe-reflect-session-memories! #:session-id "sess-w3-noop")
+    ;; No reflection items created at project scope
+    (define result ((memory-backend-retrieve backend)
+                    (memory-query "" 'project "/test" #f #f #f 100 #f)))
+    (when (memory-result-ok? result)
+      (define items (memory-result-value result))
+      (check-equal? (length items) 0
+                    "Should not reflect when disabled"))))
+
+(test-case "W3: maybe-reflect-session-memories! no-ops when no backend"
+  (parameterize ([current-auto-reflection-enabled #t]
+                 [current-memory-backend #f])
+    ;; Should not raise
+    (maybe-reflect-session-memories! #:session-id "sess-w3-nobackend")
+    (check-true #t "Should not raise when no backend")))
+
+(test-case "W3: maybe-reflect-session-memories! non-fatal on backend error"
+  (define failing-backend
+    (memory-backend "failing"
+                    (lambda (item) (error "store failed"))
+                    (lambda (q) (error "retrieve failed"))
+                    (lambda (id patch) (error "update failed"))
+                    (lambda (id scope) (error "delete failed"))
+                    (lambda () (error "list failed"))
+                    (lambda () #t)
+                    (lambda (action) (error "manage failed"))))
+  (parameterize ([current-auto-reflection-enabled #t]
+                 [current-memory-backend failing-backend]
+                 [current-auto-reflection-min-items 2])
+    ;; Should not raise despite backend errors
+    (maybe-reflect-session-memories! #:session-id "sess-w3-fail")
+    (check-true #t "Should not raise on backend failure")))
+
+(test-case "W3: maybe-reflect-session-memories! fires when enabled with backend"
+  (define backend (make-test-backend))
+  (parameterize ([current-auto-reflection-enabled #t]
+                 [current-memory-backend backend]
+                 [current-memory-policy default-memory-policy]
+                 [current-auto-reflection-min-items 2]
+                 [current-reflection-min-group-size 2])
+    ;; Store 3 groupable items in session scope
+    (for ([i (in-range 3)])
+      ((memory-backend-store! backend)
+       (memory-item (format "fire-~a" i)
+                    'semantic 'session
+                    (format "shared topic ~a alpha beta gamma" i)
+                    (hasheq 'project-root "/test" 'session-id "sess-w3-fire"
+                            'tags '("shared" "topic") 'source 'test
+                            'origin-message-id (format "m~a" i))
+                    (hasheq 'sensitivity 'public 'confidence 0.9 'supersedes '())
+                    "2026-06-07T12:00:00Z"
+                    "2026-06-07T12:00:00Z")))
+    (maybe-reflect-session-memories! #:session-id "sess-w3-fire" #:project-root "/test")
+    ;; Check that a reflection item was created at project scope
+    (define result ((memory-backend-retrieve backend)
+                    (memory-query "" 'project "/test" #f #f #f 100 #f)))
+    (when (memory-result-ok? result)
+      (define items (memory-result-value result))
+      (check-true (>= (length items) 1)
+                  "Should have created at least one reflection item"))))

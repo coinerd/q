@@ -18,7 +18,11 @@
          "types.rkt"
          "protocol.rkt"
          (only-in "search.rkt" tokenize)
-         (only-in "backends/helpers.rkt" current-iso-8601))
+         (only-in "backends/helpers.rkt" current-iso-8601)
+         (only-in "service.rkt"
+                  current-memory-backend
+                  current-auto-reflection-enabled
+                  current-auto-reflection-min-items))
 
 ;; ---------------------------------------------------------------------------
 ;; Parameters
@@ -164,11 +168,30 @@
                         (define store-result (gen:store-memory! backend refl-item))
                         (if (memory-result-ok? store-result) refl-item #f)))])])])]))
 
+;; v0.95.21 W3: Non-fatal auto-reflection trigger.
+;; Gated by current-auto-reflection-enabled and current-auto-reflection-min-items.
+;; Catches all exceptions to prevent reflection errors from disrupting the agent loop.
+(define (maybe-reflect-session-memories! #:session-id session-id
+                                         #:project-root [project-root #f])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-warning (format "memory: auto-reflection failed: ~a"
+                                                    (exn-message e))))])
+    (cond
+      [(not (current-auto-reflection-enabled)) (void)]
+      [(not (current-memory-backend)) (void)]
+      [else
+       (define backend (current-memory-backend))
+       (reflect-session-memories! backend
+                                  #:session-id session-id
+                                  #:project-root project-root
+                                  #:min-group-size (current-auto-reflection-min-items))])))
+
 ;; ---------------------------------------------------------------------------
 ;; Provide
 ;; ---------------------------------------------------------------------------
 
 (provide reflect-session-memories!
+         maybe-reflect-session-memories!
          current-reflection-min-group-size
          current-reflection-overlap-threshold
          ;; Exports for testing
