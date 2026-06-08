@@ -1,4 +1,8 @@
 #lang racket/base
+;;
+;; COMPOSITION ROOT: This module wires together dependencies from
+;; lower layers. It should not be imported by other production modules.
+;;
 
 ;; runtime/session-lifecycle.rkt — session prompt execution lifecycle
 ;; STABILITY: evolving

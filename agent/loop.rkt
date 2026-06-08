@@ -1,4 +1,8 @@
 #lang racket/base
+;;
+;; COMPOSITION ROOT: This module wires together dependencies from
+;; lower layers. It should not be imported by other production modules.
+;;
 
 ;; agent/loop.rkt — effectful agent turn orchestrator
 ;;
