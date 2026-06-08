@@ -1,3 +1,15 @@
+## v0.96.4 — Audit Hotfix (2026-06-08)
+
+### Architecture
+- **BF1 (dead imports) — RESOLVED**: Removed 4 remaining dead imports from `turn-orchestrator.rkt`: `racket/list`, `cancellation-token-cancelled?`, `tool-result?`, `hook-result-payload`.
+- **BF2 (stale comment) — RESOLVED**: Fixed layer-exception comment to reference `layer-adapters.rkt` instead of stale `extensions/hooks.rkt`.
+
+### Metrics
+| Metric | Before (v0.96.3) | After (v0.96.4) | Change |
+|--------|------------------|-----------------|--------|
+| turn-orchestrator dead imports | 4 | 0 | -100% |
+| turn-orchestrator import count | 25 | 21 | -16% |
+
 ## v0.96.3 — Architecture Audit Hotfix (2026-06-08)
 
 ### Architecture
