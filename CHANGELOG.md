@@ -1,3 +1,13 @@
+## v0.95.20 — Memory Tools Event Publisher Fix (2026-06-08)
+
+### Bug Fixes
+- **Event publisher arity mismatch**: `publish-memory-event!` in `memory-tools.rkt` called the event publisher with 1 arg (combined hash) but `tool-coordinator.rkt` provides a `(event-type payload)` 2-arg lambda. All memory tool events failed with arity mismatch, leaking errors into the TUI prompt area.
+
+### Verification
+- 493 focused memory tests passing
+- 1 new regression test verifying 2-arg publisher contract
+- 5 test publisher lambdas updated from 1-arg to 2-arg
+
 ## v0.95.19 — Memory Injection Hotfix (2026-06-07)
 
 ### Bug Fixes
