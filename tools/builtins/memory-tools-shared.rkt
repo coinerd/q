@@ -54,7 +54,7 @@
           (current-seconds)
           (modulo (inexact->exact (round (* 1000 (current-inexact-milliseconds)))) 1000000)))
 
-;; F32: format-iso-now removed in v0.96.2 — use current-iso-8601 directly
+;; format-iso-now: delegates to current-iso-8601 (kept for backward compat)
 (define (format-iso-now)
   (current-iso-8601))
 

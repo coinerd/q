@@ -23,30 +23,8 @@
 (require (only-in racket/dict in-dict)
          racket/contract
          racket/list
-         json
-         (only-in racket/string string-contains? string-join)
+         (only-in "../util/loop-result.rkt" loop-result?)
          (only-in "../util/error/errors.rkt" raise-extension-error)
-         (only-in "../util/event/event.rkt" make-event event-ev event-payload)
-         (only-in "../util/loop-result.rkt"
-                  make-loop-result
-                  loop-result-messages
-                  loop-result-termination-reason
-                  loop-result-metadata
-                  loop-result?)
-         (only-in "../util/message/message.rkt"
-                  message?
-                  message-id
-                  message-role
-                  message-content
-                  make-message)
-         (only-in "../util/tool/tool-types.rkt" tool-call-name tool-call-arguments)
-         (only-in "../util/content/content-parts.rkt"
-                  make-text-part
-                  text-part?
-                  tool-result-part?
-                  text-part-text
-                  tool-result-part-is-error?)
-         (only-in "../util/json/json-helpers.rkt" ensure-hash-args)
          "../agent/event-bus.rkt"
          (only-in "../util/cancellation.rkt" cancellation-token? cancellation-token-cancelled?)
          (only-in "../llm/provider.rkt" provider?)
@@ -60,13 +38,9 @@
          "../agent/loop.rkt"
          (only-in "../agent/loop-fsm.rkt" current-turn-fsm-state turn-state-blocked)
          (only-in "../runtime/settings.rkt" setting-ref setting-ref*)
-         "../runtime/tool-coordinator.rkt"
-         (only-in "../runtime/tool-coordinator.rkt"
-                  handle-tool-calls-pending
-                  extract-tool-calls-from-messages)
          "../util/ids.rkt"
          (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload hook-result?)
-         (only-in "../runtime/auto-retry.rkt" with-auto-retry context-overflow-error?)
+         (only-in "../runtime/auto-retry.rkt" with-auto-retry)
          (only-in "provider/provider-factory.rkt" provider-is-mock?)
          (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
          "../agent/event-emitter.rkt"
