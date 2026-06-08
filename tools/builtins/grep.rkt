@@ -1,4 +1,5 @@
 #lang racket/base
+;; grep.rkt — Grep tool — search file contents
 
 (require racket/port
          racket/string

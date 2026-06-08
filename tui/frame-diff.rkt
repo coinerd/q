@@ -1,4 +1,5 @@
 #lang racket/base
+;; frame-diff.rkt — Frame diff computation for TUI rendering
 
 (require racket/list)
 

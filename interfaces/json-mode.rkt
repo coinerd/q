@@ -1,4 +1,5 @@
 #lang racket/base
+;; json-mode.rkt — JSON mode interface for q
 
 (require racket/contract
          racket/string
