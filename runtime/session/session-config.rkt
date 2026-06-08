@@ -34,7 +34,7 @@
          (only-in "../settings.rkt" q-settings?)
          (only-in "../../util/cancellation.rkt" cancellation-token?)
          (only-in "../session-index/schema.rkt" session-index?)
-         (only-in "../context-assembly/state-aware-builder.rkt"
+         (only-in "../context-assembly/config.rkt"
                   current-task-state-aware-assembly?
                   current-conclusion-token-budget
                   current-graph-conclusion-selection?

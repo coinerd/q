@@ -1,57 +1,23 @@
 #lang racket/base
-
-;; runtime/context-assembly/config.rkt — Consolidated context-assembly configuration
+;; runtime/context-assembly/config.rkt — context-assembly configuration parameters
+;; STABILITY: internal
 ;;
-;; Replaces 12 individual parameters with a single struct.
-;; v0.80.3: Introduced. Old parameters kept as deprecated wrappers.
+;; Thin config module to break the dependency cycle between
+;; session-config.rkt and state-aware-builder.rkt.
 
-;; Struct
-(provide (struct-out context-assembly-config)
-         ;; Constructor with defaults
-         default-context-assembly-config
-         ;; Current config parameter (eventually replaces all 12)
-         current-context-assembly-config)
+(provide current-task-state-aware-assembly?
+         current-graph-conclusion-selection?
+         current-conclusion-token-budget
+         current-ws-evolution-enabled?)
 
-;; ============================================================
-;; Config struct
-;; ============================================================
+;; Whether to enable state-aware assembly for the current task.
+(define current-task-state-aware-assembly? (make-parameter #f))
 
-;; Consolidates the 12 context-assembly parameters into a single record.
-;; Fields are grouped by subsystem.
+;; Whether to use graph-based conclusion selection.
+(define current-graph-conclusion-selection? (make-parameter #f))
 
-(struct context-assembly-config
-        ;; State-aware assembly
-        (state-aware? ; current-task-state-aware-assembly?
-         graph-selection? ; current-graph-conclusion-selection?
-         conclusion-token-budget ; current-conclusion-token-budget
-         ws-evolution? ; current-ws-evolution-enabled?
-         ;; Auto-distillation
-         auto-distill? ; current-auto-distillation-enabled?
-         auto-distill-callback ; current-llm-distill-fn
-         ;; Rollback actions
-         rollback? ; current-rollback-action-execution?
-         force-distill-callback ; current-force-distill-fn
-         expand-context-callback ; current-expand-context-fn
-         revert-state-callback ; current-revert-state-fn
-         rollback-log ; current-rollback-action-log
-         ;; State inference
-         state-inference-threshold) ; current-state-inference-threshold
-  #:transparent)
+;; Token budget for conclusion generation.
+(define current-conclusion-token-budget (make-parameter 2000))
 
-;; Default config — all features off, standard budget, threshold 0.7
-(define (default-context-assembly-config)
-  (context-assembly-config #f ; state-aware?
-                           #f ; graph-selection?
-                           2000 ; conclusion-token-budget
-                           #f ; ws-evolution?
-                           #f ; auto-distill?
-                           #f ; auto-distill-callback
-                           #f ; rollback?
-                           #f ; force-distill-callback
-                           #f ; expand-context-callback
-                           #f ; revert-state-callback
-                           '() ; rollback-log
-                           0.7)) ; state-inference-threshold
-
-;; Global config parameter — for gradual migration
-(define current-context-assembly-config (make-parameter (default-context-assembly-config)))
+;; Whether to enable working-set evolution.
+(define current-ws-evolution-enabled? (make-parameter #f))
