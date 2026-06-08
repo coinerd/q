@@ -79,15 +79,18 @@
     ;; ---- API key detection ----
 
     (test-case "firecrawl-api-key returns #f when no env/config"
-      ;; Temporarily clear env var
+      ;; Temporarily clear env var with proper cleanup
       (define old-env (getenv "FIRECRAWL_API_KEY"))
-      (putenv "FIRECRAWL_API_KEY" "")
-      (define key (firecrawl-api-key))
-      ;; Restore
-      (when old-env
-        (putenv "FIRECRAWL_API_KEY" old-env))
-      ;; key may be #f or the config value — just check it doesn't crash
-      (check-true (or (not key) (string? key))))
+      (dynamic-wind
+        (lambda () (putenv "FIRECRAWL_API_KEY" ""))
+        (lambda ()
+          (define key (firecrawl-api-key))
+          ;; key may be #f or the config value — just check it doesn't crash
+          (check-true (or (not key) (string? key))))
+        (lambda ()
+          (if old-env
+              (putenv "FIRECRAWL_API_KEY" old-env)
+              (putenv "FIRECRAWL_API_KEY" "")))))
 
     ;; ---- Format helpers ----
 

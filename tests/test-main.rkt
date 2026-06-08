@@ -42,7 +42,8 @@
          ;; Session config
          "../runtime/session/session-config.rkt"
          ;; Extensions
-         (only-in "../extensions/api.rkt" extension-registry? list-extensions))
+         (only-in "../extensions/api.rkt" extension-registry? list-extensions)
+         (only-in "helpers/temp-fs.rkt" with-temp-dir))
 
 (define (capture-output thunk)
   (with-output-to-string thunk))
