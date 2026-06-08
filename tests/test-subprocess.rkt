@@ -24,7 +24,7 @@
  (test-case "with-resource-limits: timeout triggers"
    (define-values (result timed-out?)
      (with-resource-limits (lambda (cust)
-                             (sleep 30)
+                             (sleep 3)
                              99)
                            #:timeout 1))
    (check-true timed-out?))
