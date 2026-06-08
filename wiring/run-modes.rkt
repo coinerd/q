@@ -45,11 +45,18 @@
                   setting-memory-injection-budget
                   setting-memory-backend
                   setting-memory-auto-extraction-enabled?
-                  setting-memory-auto-extraction-min-confidence)
+                  setting-memory-auto-extraction-min-confidence
+                  setting-memory-user-scope-enabled?
+                  setting-memory-auto-reflection-enabled?
+                  setting-memory-auto-reflection-min-items)
          (only-in "../runtime/context-assembly/memory-builder.rkt" current-memory-injection-budget)
          (only-in "../runtime/memory/auto-extraction.rkt"
                   current-auto-extraction-enabled
                   current-auto-extraction-min-confidence)
+         (only-in "../runtime/memory/service.rkt"
+                  update-memory-policy!
+                  current-auto-reflection-enabled
+                  current-auto-reflection-min-items)
          (only-in "../extensions/gsd/state-machine.rkt" gsm-current)
          (only-in "../runtime/gsd-query.rkt" current-gsd-mode-query))
 
@@ -232,6 +239,11 @@
                auto-extract-enabled?
                'memory-auto-extraction-min-confidence
                auto-extract-min-conf))
+
+  ;; v0.95.21 fix: Wire user-scope policy and auto-reflection from settings
+  (update-memory-policy! #:user-scope-enabled? (setting-memory-user-scope-enabled? settings))
+  (current-auto-reflection-enabled (setting-memory-auto-reflection-enabled? settings))
+  (current-auto-reflection-min-items (setting-memory-auto-reflection-min-items settings))
 
   (hash->session-config final-hash-with-auto-extract))
 
