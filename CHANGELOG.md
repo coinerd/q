@@ -1,3 +1,16 @@
+## v0.96.5 — Phase 1 Quick Wins (2026-06-08)
+
+### Architecture
+- **F7 (dependency cycle) — RESOLVED**: Extracted 4 context-assembly parameters into new `runtime/context-assembly/config.rkt`, breaking the `session-config` → `state-aware-builder` → `memory-builder` cycle.
+- **F5/F10 (stability markers) — RESOLVED**: Added `;; STABILITY: public` to 27 hub modules (>15 fan-in).
+- **F2 (composition roots) — RESOLVED**: Documented 5 composition root modules with `COMPOSITION ROOT` comments.
+
+### Metrics
+| Metric | Before (v0.96.4) | After (v0.96.5) | Change |
+|--------|------------------|-----------------|--------|
+| Dependency cycles | 1 | 0 | -1 |
+| Stability markers | 89 | 116+ | +27 |
+
 ## v0.96.4 — Audit Hotfix (2026-06-08)
 
 ### Architecture
