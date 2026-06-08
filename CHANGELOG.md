@@ -1,3 +1,18 @@
+## v0.95.21 — Memory Lifecycle Completion (2026-06-08)
+
+### New Features
+- **G1 — Background Reflection Trigger**: Auto-reflection now fires per-turn after auto-extraction when `memory.auto-reflection.enabled` is set to `true`. Non-fatal wrapper `maybe-reflect-session-memories!` catches all exceptions. Defaults to disabled.
+- **G2 — User-Scope Config Wiring**: User-scope memory can be enabled via `memory.user-scope.enabled` config key. Policy updated at session startup from config.
+
+### Configuration Keys
+- `(memory auto-reflection enabled)` — boolean, default `false`
+- `(memory auto-reflection min-items)` — integer >= 2, default `5`
+- `(memory user-scope enabled)` — boolean, default `false`
+
+### Verification
+- 18 lifecycle tests, 18 policy tests passing
+- All new features default off — no behavioral change for existing users
+
 ## v0.95.20 — Memory Tools Event Publisher Fix (2026-06-08)
 
 ### Bug Fixes
