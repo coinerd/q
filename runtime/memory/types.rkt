@@ -1,5 +1,6 @@
 #lang racket/base
 ;; runtime/memory/types.rkt — Memory domain model: structs, predicates, conversions
+;; STABILITY: internal
 ;;
 ;; Canonical types for the modular memory system.
 ;; No session/config/context imports. Pure data + conversion.
@@ -7,9 +8,33 @@
 (require racket/contract
          racket/match)
 
-(provide (struct-out memory-item)
-         (struct-out memory-query)
-         (struct-out memory-result)
+;; Explicit provides (replaces struct-out for AF5 — hub module with 16+ consumers)
+(provide memory-item
+         memory-item?
+         memory-item-id
+         memory-item-type
+         memory-item-scope
+         memory-item-content
+         memory-item-metadata
+         memory-item-validity
+         memory-item-created-at
+         memory-item-updated-at
+         memory-query
+         memory-query?
+         memory-query-text
+         memory-query-scope
+         memory-query-project-root
+         memory-query-session-id
+         memory-query-types
+         memory-query-tags
+         memory-query-limit
+         memory-query-include-expired?
+         memory-result
+         memory-result?
+         memory-result-ok?
+         memory-result-value
+         memory-result-error
+         memory-result-metadata
          memory-type?
          memory-scope?
          sensitivity?

@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; tui/state.rkt — UI state and event→state reduction
+;; STABILITY: internal
 ;;
 ;; Re-export facade. Implementation split into three modules (v0.22.6 W2):
 ;;   state-types.rkt  — Structs, constructors, entry/cache helpers

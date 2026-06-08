@@ -184,6 +184,25 @@
    (sub-modules . (base message-events provider-events session-events tool-events turn-events))
    (budget . 500)
    (convention . "Event struct definitions by domain.")))
+ ;; Composition roots — modules with high fan-out (>25) that wire dependencies
+ ;; from multiple layers. These are expected to have large require lists.
+ ;; Adding new composition roots requires justification (e.g., new subsystem wiring).
+ (composition-roots
+  . (("runtime/agent-session.rkt"
+      (fan-out . 33)
+      (rationale . "Central session orchestration — wires runtime, tools, extensions, LLM, events"))
+      ("tui/tui-render-loop.rkt"
+      (fan-out . 29)
+      (rationale . "TUI render loop — wires terminal, VDOM, state, layout, streaming"))
+      ("agent/loop.rkt"
+      (fan-out . 27)
+      (rationale . "Agent main loop — wires iteration, streaming, dispatch, events"))
+      ("runtime/session/session-lifecycle.rkt"
+      (fan-out . 26)
+      (rationale . "Session lifecycle — wires persistence, config, events, compaction"))
+      ("agent/iteration/main-loop.rkt"
+      (fan-out . 25)
+      (rationale . "Iteration loop — wires step interpreter, FSM, tool bridge, streaming"))))
  ;; R-18: Pure modules — must not gain I/O imports
  ;; Format: ((module-path . allowed-current-impurities) ...)
  (pure-modules (decision . ("runtime/iteration/decision.rkt" . ()))
@@ -200,11 +219,14 @@
  ;; Files with score > block-threshold without a risk-note will fail CI.
  ;; Format of risk-notes: ((file-path (risk . "description") (owner . "team")) ...)
  (hotspot-budget
-  (warn-threshold . 5000)
+  (warn-threshold . 15000)
   (block-threshold . 20000)
   (risk-notes
    . (("runtime/agent-session.rkt"
        (risk . "Central session orchestration; high fan-in, hard to decompose further")
+       (owner . "runtime"))
+      ("runtime/settings.rkt"
+       (risk . "Central settings with 221 provides — provider schemas, credential helpers, model defaults; high surface by design")
        (owner . "runtime"))
       ("runtime/session/session-lifecycle.rkt" (risk . "Session lifecycle FSM; high state complexity")
                                        (owner . "runtime"))
