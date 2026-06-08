@@ -74,7 +74,7 @@
 ;; Deprecated global parameter — kept for backward compatibility only.
 ;; New code should use the explicit breaker-state hash argument.
 ;; DEPRECATED (N-08): Not exported. State is passed explicitly.
-(define circuit-breaker-state (make-parameter (make-hash)))
+;; circuit-breaker-state removed in v0.96.1 — was dead code (0 callers)
 
 ;; Dedicated semaphore for circuit breaker state mutations (#444).
 ;; Avoids ABBA deadlock with the bus semaphore (publish! calls
