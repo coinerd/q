@@ -148,10 +148,34 @@
 ;; ============================================================
 
 ;; Struct types (predicates + accessors)
-(provide (struct-out model-request)
-         (struct-out model-response)
-         (struct-out stream-chunk)
-         (struct-out tool-call-intent)
+(provide ;; Struct type model-request (predicate + accessors)
+         model-request
+         model-request?
+         model-request-messages
+         model-request-tools
+         model-request-settings
+         ;; Struct type model-response (predicate + accessors)
+         model-response
+         model-response?
+         model-response-content
+         model-response-usage
+         model-response-model
+         model-response-stop-reason
+         ;; Struct type stream-chunk (predicate + accessors)
+         stream-chunk
+         stream-chunk?
+         stream-chunk-delta-text
+         stream-chunk-delta-tool-call
+         stream-chunk-delta-thinking
+         stream-chunk-usage
+         stream-chunk-done?
+         stream-chunk-finish-reason
+         ;; Struct type tool-call-intent (predicate + accessors)
+         tool-call-intent
+         tool-call-intent?
+         tool-call-intent-id
+         tool-call-intent-name
+         tool-call-intent-arguments
 
          ;; Constructors with contracts
          (contract-out [make-model-request (-> message-list/c tool-list/c settings/c model-request?)]

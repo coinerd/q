@@ -264,13 +264,24 @@
          (define json-key (cdr fk))
          #`(hash-ref h '#,json-key #,default)))
 
+     ;; F3: Generate explicit accessor identifiers (replaces struct-out)
+     ;; Parent fields (type, timestamp, session-id, turn-id) use typed-event-* accessors.
+     ;; Only the sub-struct's own fields get event-name-* accessors.
+     (define base-ids
+       (list (format-id #'event-name "~a" #'event-name) (format-id #'event-name "~a?" #'event-name)))
+     (define field-accessors
+       (for/list ([f all-fields])
+         (format-id #'event-name "~a-~a" #'event-name f)))
+     (define all-provided-ids (append base-ids field-accessors))
+
      (with-syntax ([make-name make-name]
                    [type-name type-name]
                    [fields-name fields-name]
                    [(all-field ...) all-fields]
                    [(kw-arg ...) kw-args]
                    [(serializer-pair ...) serializer-body]
-                   [(deser-arg ...) deser-args])
+                   [(deser-arg ...) deser-args]
+                   [(provided-id ...) all-provided-ids])
        (if skip-serialize?
            #'(begin
                (struct event-name typed-event (all-field ...) #:transparent)
@@ -287,7 +298,7 @@
                                   #:timestamp [timestamp (current-seconds)]
                                   kw-arg ...)
                  (event-name type-str timestamp session-id turn-id all-field ...))
-               (provide (struct-out event-name)
+               (provide provided-id ...
                         make-name
                         type-name
                         fields-name))
@@ -312,7 +323,7 @@
                (register-event-deserializer! type-str
                                              (lambda (type ts sid tid h)
                                                (event-name type ts sid tid deser-arg ...)))
-               (provide (struct-out event-name)
+               (provide provided-id ...
                         make-name
                         type-name
                         fields-name))))]))
