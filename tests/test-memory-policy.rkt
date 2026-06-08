@@ -1,6 +1,8 @@
 #lang racket/base
 
 (require rackunit
+         racket/file
+         racket/string
          "../runtime/memory/policy.rkt"
          "../runtime/memory/types.rkt"
          "../runtime/safe-mode.rkt")
@@ -56,3 +58,34 @@
                  [current-safe-mode-config #f])
     (check-true (memory-persistent-write-allowed?))
     (check-true (memory-external-write-allowed?))))
+
+;; ---------------------------------------------------------------------------
+;; v0.95.21 W0: G2 — User-scope config wiring tests
+;; ---------------------------------------------------------------------------
+
+(test-case "W0 G2: user-scope disabled by default in policy"
+  (check-false (policy-user-scope-enabled? default-memory-policy)
+               "User scope must be disabled by default"))
+
+(test-case "W0 G2: user-scope blocks 'user scope by default"
+  (check-false (policy-allows-scope? default-memory-policy 'user)
+               "Default policy must block 'user scope"))
+
+;; ---------------------------------------------------------------------------
+;; v0.95.21 W0: G2 — User-scope config wiring gap verification
+;; ---------------------------------------------------------------------------
+
+(test-case "W0 G2: make-memory-policy accepts #:user-scope-enabled? #t"
+  (define enabled-policy (make-memory-policy #:user-scope-enabled? #t))
+  (check-true (policy-user-scope-enabled? enabled-policy))
+  (check-true (policy-allows-scope? enabled-policy 'user)))
+
+(test-case "W0 G2: setting-memory-user-scope-enabled? does not exist in settings.rkt"
+  (define src (file->string (build-path (current-directory) ".." "runtime" "settings.rkt")))
+  (check-false (regexp-match? #rx"setting-memory-user-scope-enabled" src)
+               "W0 baseline: setting-memory-user-scope-enabled? should not exist yet"))
+
+(test-case "W0 G2: update-memory-policy! does not exist in service.rkt"
+  (define src (file->string (build-path (current-directory) ".." "runtime" "memory" "service.rkt")))
+  (check-false (regexp-match? #rx"update-memory-policy" src)
+               "W0 baseline: update-memory-policy! should not exist yet"))

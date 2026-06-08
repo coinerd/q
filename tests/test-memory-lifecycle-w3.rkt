@@ -2,12 +2,14 @@
 ;;; test-memory-lifecycle-w3.rkt — W3 tests for post-turn auto-extraction lifecycle hook
 (require rackunit
          racket/string
+         racket/file
          "../runtime/memory/auto-extraction.rkt"
          "../runtime/memory/types.rkt"
          "../runtime/memory/protocol.rkt"
          "../runtime/memory/backends/memory-hash.rkt"
          "../runtime/memory/policy.rkt"
-         "../runtime/memory/service.rkt")
+         "../runtime/memory/service.rkt"
+         "../runtime/memory/reflection.rkt")
 
 ;; Helper: create a hash backend for testing
 (define (make-test-backend)
@@ -93,3 +95,47 @@
                                         #:session-id "test-session"
                                         #:on-typed-event (lambda (e) (set! events (cons e events))))
     (check-equal? events '())))
+
+;; ---------------------------------------------------------------------------
+;; v0.95.21 W0: G1 — Auto-reflection gap verification
+;; ---------------------------------------------------------------------------
+
+(test-case "W0 G1: current-auto-reflection-enabled does not exist in service.rkt"
+  ;; Verify the parameter doesn't exist yet — W2 will add it
+  (define src (file->string (build-path (current-directory) ".." "runtime" "memory" "service.rkt")))
+  (check-false (string-contains? src "current-auto-reflection-enabled")
+               "W0 baseline: current-auto-reflection-enabled should not exist yet"))
+
+(test-case "W0 G1: maybe-reflect-session-memories! does not exist in reflection.rkt"
+  ;; Verify the wrapper doesn't exist yet — W3 will add it
+  (define src (file->string (build-path (current-directory) ".." "runtime" "memory" "reflection.rkt")))
+  (check-false (string-contains? src "maybe-reflect-session-memories!")
+               "W0 baseline: maybe-reflect-session-memories! should not exist yet"))
+
+(test-case "W0 G1: auto-reflection not hooked in loop-stream.rkt"
+  ;; Verify loop-stream.rkt doesn't call reflection yet — W3 will add it
+  (define src (file->string (build-path (current-directory) ".." "agent" "loop-stream.rkt")))
+  (check-false (string-contains? src "reflect-session")
+               "W0 baseline: auto-reflection should not be in loop-stream.rkt yet"))
+
+(test-case "W0 G1: reflect-session-memories! exists and works (existing behavior)"
+  ;; Verify the underlying reflection function exists and works
+  (define backend (make-test-backend))
+  (parameterize ([current-memory-backend backend]
+                 [current-reflection-min-group-size 2])
+    ;; Store 3 groupable items
+    (for ([i (in-range 3)])
+      ((memory-backend-store! backend)
+       (memory-item (format "refl-base-~a" i)
+                    'semantic 'session
+                    (format "shared topic ~a alpha beta gamma" i)
+                    (hasheq 'project-root "/test" 'session-id "sess-w0" 'tags '("shared" "topic")
+                            'source 'test 'origin-message-id (format "m~a" i))
+                    (hasheq 'sensitivity 'public 'confidence 0.9 'supersedes '())
+                    "2026-06-07T12:00:00Z"
+                    "2026-06-07T12:00:00Z")))
+    (define results
+      (reflect-session-memories! backend #:session-id "sess-w0" #:project-root "/test"
+                                 #:min-group-size 2))
+    (check-true (and (list? results) (>= (length results) 1))
+                "Reflection should produce at least one merged item")))
