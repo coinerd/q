@@ -12,7 +12,7 @@
 (define-test-suite
  subprocess-tests
  ;; --- limits.rkt standalone constants ---
- (test-case "default-timeout-seconds is 300"
+ (test-case "subprocess: default-timeout-seconds is 300"
    (check-equal? default-timeout-seconds 300))
  (test-case "default-max-output-bytes is 10 MB"
    (check-equal? default-max-output-bytes 10485760))
@@ -29,7 +29,7 @@
                            #:timeout 1))
    (check-true timed-out?))
  ;; --- run-subprocess with #:timeout ---
- (test-case "run-subprocess: simple echo"
+ (test-case "subprocess: run-subprocess: simple echo"
    (define result (run-subprocess "echo" #:args '("hello world")))
    (check-equal? (subprocess-result-exit-code result) 0)
    (check-false (subprocess-result-timed-out? result))
@@ -38,7 +38,7 @@
    (define result (run-subprocess "/bin/sh" #:args '("-c" "sleep 30") #:timeout 1))
    (check-pred subprocess-result-timed-out? result)
    (check-true (< (subprocess-result-elapsed-ms result) 10000)))
- (test-case "run-subprocess: non-zero exit code"
+ (test-case "subprocess: run-subprocess: non-zero exit code"
    (define result (run-subprocess "false"))
    (check-not-equal? (subprocess-result-exit-code result) 0)
    (check-false (subprocess-result-timed-out? result)))

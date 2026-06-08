@@ -46,7 +46,7 @@
          (check-equal? (hash-ref (tool-result-details result) 'total-lines) 2))
        (lambda () (cleanup-path p))))
 
-   (test-case "read non-existent file returns error"
+   (test-case "tool-read-builtin: read non-existent file returns error"
      (define result (call-read (hasheq 'path "/tmp/nonexistent-q-test-file-xyz")))
      (check-pred tool-result? result)
      (check-true (tool-result-is-error? result))
@@ -78,7 +78,7 @@
          (check-equal? (hash-ref details 'end-line) 2))
        (lambda () (cleanup-path p))))
 
-   (test-case "read binary file returns error"
+   (test-case "tool-read-builtin: read binary file returns error"
      (define p (make-temp-file ""))
      (dynamic-wind
        (lambda ()

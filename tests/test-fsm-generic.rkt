@@ -26,7 +26,7 @@
 (define fsm-tests
   (test-suite "generic-fsm"
 
-    (test-case "make-fsm creates fsm struct"
+    (test-case "fsm-generic: make-fsm creates fsm struct"
       (check-true (fsm? simple-fsm))
       (check-equal? (fsm-states simple-fsm) '(idle running done))
       (check-equal? (fsm-events simple-fsm) '(start finish reset))
@@ -43,11 +43,11 @@
       (check-false (fsm-lookup simple-fsm 'done 'start))
       (check-false (fsm-lookup simple-fsm 'idle 'reset)))
 
-    (test-case "fsm-valid-transition? returns boolean"
+    (test-case "fsm-generic: fsm-valid-transition? returns boolean"
       (check-true (fsm-valid-transition? simple-fsm 'idle 'start))
       (check-false (fsm-valid-transition? simple-fsm 'idle 'finish)))
 
-    (test-case "fsm-valid-targets lists reachable states"
+    (test-case "fsm-generic: fsm-valid-targets lists reachable states"
       (check-equal? (fsm-valid-targets simple-fsm 'idle) '(running))
       (check-equal? (sort (fsm-valid-targets simple-fsm 'running) symbol<?) '(done idle))
       (check-equal? (fsm-valid-targets simple-fsm 'done) '(idle)))
@@ -57,7 +57,7 @@
       (check-equal? (fsm-find-path simple-fsm 'idle 'done) '(start finish))
       (check-equal? (fsm-find-path simple-fsm 'running 'idle) '(reset)))
 
-    (test-case "fsm-find-path returns #f for unreachable"
+    (test-case "fsm-generic: fsm-find-path returns #f for unreachable"
       ;; All states reachable in simple-fsm, so create one with unreachable
       (define partial-fsm (make-fsm '(a b c) '(go) '(((a . go) . b))))
       (check-false (fsm-find-path partial-fsm 'a 'c)))

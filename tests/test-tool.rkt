@@ -111,7 +111,7 @@
   (check-not-false t)
   (check-equal? (tool-description t) "second"))
 
-(test-case "register-tool! rejects non-tool"
+(test-case "tool: register-tool! rejects non-tool"
   (define reg (make-tool-registry))
   (check-exn exn:fail? (λ () (register-tool! reg "not-a-tool"))))
 

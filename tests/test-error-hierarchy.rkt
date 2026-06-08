@@ -36,7 +36,7 @@
                                          (check-true (provider-error? e)))])
         (raise-provider-error "test" 'timeout)))
 
-    (test-case "provider-error has category and status-code"
+    (test-case "error-hierarchy: provider-error has category and status-code"
       (with-handlers ([provider-error? (lambda (e)
                                          (check-equal? (provider-error-category e) 'rate-limit)
                                          (check-equal? (provider-error-status-code e) 429))])

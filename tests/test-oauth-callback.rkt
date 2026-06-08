@@ -88,7 +88,7 @@
       (define code (get-code))
       (check-false code "should return #f for error response"))
 
-    (test-case "oauth-available? returns true"
+    (test-case "oauth-callback: oauth-available? returns true"
       (check-true (oauth-available?)))
 
     (test-case "oauth-token serialization roundtrip"

@@ -12,7 +12,7 @@
 (define contract-suite
   (test-suite "tool registry contract boundaries"
 
-    (test-case "register-tool! rejects non-tool"
+    (test-case "tool-registry-contracts: register-tool! rejects non-tool"
       (define reg (make-tool-registry))
       (check-exn exn:fail:contract?
                  (lambda () (register-tool! reg "not-a-tool"))))

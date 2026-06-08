@@ -489,10 +489,10 @@
 ;; 22-26. Error Handling Tests — HTTP status codes
 ;; ============================================================
 
-(test-case "HTTP 200 passes without error"
+(test-case "anthropic: HTTP 200 passes without error"
   (check-not-exn (λ () (check-provider-status! "Anthropic" #"HTTP/1.1 200 OK" #"{}"))))
 
-(test-case "HTTP 401 raises authentication error"
+(test-case "anthropic: HTTP 401 raises authentication error"
   (check-exn #rx"authentication failed [(]401[)]"
              (λ ()
                (check-provider-status!
@@ -500,7 +500,7 @@
                 #"HTTP/1.1 401 Unauthorized"
                 #"{\"error\":{\"type\":\"authentication_error\",\"message\":\"Invalid API key\"}}"))))
 
-(test-case "HTTP 403 raises forbidden error"
+(test-case "anthropic: HTTP 403 raises forbidden error"
   (check-exn #rx"forbidden [(]403[)]"
              (λ ()
                (check-provider-status!
@@ -508,7 +508,7 @@
                 #"HTTP/1.1 403 Forbidden"
                 #"{\"error\":{\"type\":\"permission_error\",\"message\":\"Access denied\"}}"))))
 
-(test-case "HTTP 429 raises rate limit error"
+(test-case "anthropic: HTTP 429 raises rate limit error"
   (check-exn #rx"rate limited [(]429[)]"
              (λ ()
                (check-provider-status!
@@ -516,7 +516,7 @@
                 #"HTTP/1.1 429 Too Many Requests"
                 #"{\"error\":{\"type\":\"rate_limit_error\",\"message\":\"Rate limited\"}}"))))
 
-(test-case "HTTP 500 raises server error"
+(test-case "anthropic: HTTP 500 raises server error"
   (check-exn #rx"server error [(]500[)]"
              (λ ()
                (check-provider-status!
@@ -524,7 +524,7 @@
                 #"HTTP/1.1 500 Internal Server Error"
                 #"{\"error\":{\"type\":\"api_error\",\"message\":\"Internal error\"}}"))))
 
-(test-case "HTTP 502 raises server error"
+(test-case "anthropic: HTTP 502 raises server error"
   (check-exn #rx"server error [(]502[)]"
              (λ () (check-provider-status! "Anthropic" #"HTTP/1.1 502 Bad Gateway" #"Bad Gateway"))))
 
@@ -535,7 +535,7 @@
                                        #"HTTP/1.1 400 Bad Request"
                                        #"{\"error\":{\"type\":\"invalid_request_error\"}}"))))
 
-(test-case "String status-line also works"
+(test-case "anthropic: String status-line also works"
   (check-not-exn (λ () (check-provider-status! "Anthropic" "HTTP/1.1 200 OK" "{}"))))
 
 ;; ============================================================
@@ -733,7 +733,7 @@
 ;; 30. read-response-body — size limit enforcement (SEC-10)
 ;; ============================================================
 
-(test-case "read-response-body reads normal-sized responses"
+(test-case "anthropic: read-response-body reads normal-sized responses"
   (define port (open-input-string "Hello World"))
   (define result (read-response-body port))
   (check-equal? result (string->bytes/utf-8 "Hello World")))
@@ -886,13 +886,13 @@
 ;; 41-45. API key validation tests
 ;; ============================================================
 
-(test-case "empty API key raises clear error"
+(test-case "anthropic: empty API key raises clear error"
   (check-exn exn:fail? (lambda () (make-anthropic-provider (hash 'api-key "")))))
 
-(test-case "missing API key raises clear error"
+(test-case "anthropic: missing API key raises clear error"
   (check-exn exn:fail? (lambda () (make-anthropic-provider (hash)))))
 
-(test-case "whitespace-only API key raises clear error"
+(test-case "anthropic: whitespace-only API key raises clear error"
   (check-exn exn:fail? (lambda () (make-anthropic-provider (hash 'api-key "   ")))))
 
 (test-case "error message mentions Anthropic and ANTHROPIC_API_KEY"
@@ -905,7 +905,7 @@
   (check-true (string-contains? msg "ANTHROPIC_API_KEY") "error message mentions ANTHROPIC_API_KEY")
   (check-true (string-contains? msg "API key not set") "error message contains 'API key not set'"))
 
-(test-case "valid API key does not raise"
+(test-case "anthropic: valid API key does not raise"
   (check-not-exn (lambda () (make-anthropic-provider (hash 'api-key "sk-ant-valid-key-456"))))
   (define prov (make-anthropic-provider (hash 'api-key "sk-ant-valid-key-456")))
   (check-equal? (provider-name prov) "anthropic"))

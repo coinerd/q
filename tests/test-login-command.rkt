@@ -46,7 +46,7 @@
       (check-true (for/or ([e (in-list transcript)])
                     (string-contains? (transcript-entry-text e) "not configured"))))
 
-    (test-case "oauth-available? returns true"
+    (test-case "login-command: oauth-available? returns true"
       (check-true (oauth-available?)))
 
     (test-case "/login with placeholder config shows config error (#5334)"

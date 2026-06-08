@@ -49,7 +49,7 @@
   (check-false (parse-skill-frontmatter ""))
   (check-false (parse-skill-frontmatter "---\nname: test\n"))) ; no closing ---
 
-(test-case "parse-skill-frontmatter handles quoted values"
+(test-case "frontmatter: parse-skill-frontmatter handles quoted values"
   (define content "---\nname: \"quoted name\"\n---\n")
   (define fm (parse-skill-frontmatter content))
   (check-not-false fm)

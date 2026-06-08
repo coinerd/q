@@ -37,23 +37,23 @@
      (check-equal? (turn-state->symbol turn-state-emit-start) 'emit-start))
 
    ;; 2. All valid state transitions
-   (test-case "emit-start + start -> build-context"
+   (test-case "loop-fsm: emit-start + start -> build-context"
      (define next (next-turn-state turn-state-emit-start turn-event-start))
      (check-equal? (turn-state->symbol next) 'build-context))
 
-   (test-case "build-context + context-built -> pre-hook"
+   (test-case "loop-fsm: build-context + context-built -> pre-hook"
      (define next (next-turn-state turn-state-build-context turn-event-context-built))
      (check-equal? (turn-state->symbol next) 'pre-hook))
 
-   (test-case "pre-hook + hook-pass -> stream"
+   (test-case "loop-fsm: pre-hook + hook-pass -> stream"
      (define next (next-turn-state turn-state-pre-hook turn-event-hook-pass))
      (check-equal? (turn-state->symbol next) 'stream))
 
-   (test-case "pre-hook + hook-block -> blocked"
+   (test-case "loop-fsm: pre-hook + hook-block -> blocked"
      (define next (next-turn-state turn-state-pre-hook turn-event-hook-block))
      (check-equal? (turn-state->symbol next) 'blocked))
 
-   (test-case "stream + stream-complete -> post-hook"
+   (test-case "loop-fsm: stream + stream-complete -> post-hook"
      (define next (next-turn-state turn-state-stream turn-event-stream-complete))
      (check-equal? (turn-state->symbol next) 'post-hook))
 
@@ -61,11 +61,11 @@
      (define next (next-turn-state turn-state-stream turn-event-msg-hook-block))
      (check-equal? (turn-state->symbol next) 'blocked))
 
-   (test-case "stream + stream-cancel -> complete"
+   (test-case "loop-fsm: stream + stream-cancel -> complete"
      (define next (next-turn-state turn-state-stream turn-event-stream-cancel))
      (check-equal? (turn-state->symbol next) 'complete))
 
-   (test-case "post-hook + post-hook-done -> complete"
+   (test-case "loop-fsm: post-hook + post-hook-done -> complete"
      (define next (next-turn-state turn-state-post-hook turn-event-post-hook-done))
      (check-equal? (turn-state->symbol next) 'complete))
 

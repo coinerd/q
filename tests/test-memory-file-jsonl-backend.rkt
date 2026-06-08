@@ -496,7 +496,7 @@
 ;; Update patch immutability guard (P3-3)
 ;; ---------------------------------------------------------------------------
 
-(test-case "update: id in patch is ignored"
+(test-case "memory-file-jsonl-backend: update: id in patch is ignored"
   (with-temp-backend (lambda (backend dir)
                        (gen:store-memory! backend (make-test-item #:id "orig-id"))
                        (define r
@@ -510,7 +510,7 @@
                        (check-equal? (memory-item-id (car items)) "orig-id")
                        (check-equal? (memory-item-content (car items)) "new"))))
 
-(test-case "update: created-at in patch is ignored"
+(test-case "memory-file-jsonl-backend: update: created-at in patch is ignored"
   (with-temp-backend
    (lambda (backend dir)
      (gen:store-memory! backend (make-test-item #:id "ts-item"))

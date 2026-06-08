@@ -25,7 +25,7 @@
   (check-pred extension-registry? reg)
   (check-equal? (list-extensions reg) '()))
 
-(test-case "register-extension! and lookup-extension"
+(test-case "extension-api: register-extension! and lookup-extension"
   (define reg (make-extension-registry))
   (define ext (extension "e1" "0.1" "1" (hasheq)))
   (register-extension! reg ext)
@@ -38,7 +38,7 @@
   (register-extension! reg (extension "b" "1" "1" (hasheq)))
   (check equal? (sort (map extension-name (list-extensions reg)) string<?) '("a" "b")))
 
-(test-case "unregister-extension! removes extension"
+(test-case "extension-api: unregister-extension! removes extension"
   (define reg (make-extension-registry))
   (register-extension! reg (extension "gone" "1" "1" (hasheq)))
   (unregister-extension! reg "gone")

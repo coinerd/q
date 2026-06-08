@@ -144,7 +144,7 @@
 ;; Command dispatch: unknown command
 ;; ============================================================
 
-(test-case "unknown command returns #f"
+(test-case "gsd-core: unknown command returns #f"
   (reset-gsm!)
   (check-false (gsd-command-dispatch 'foobar "")))
 

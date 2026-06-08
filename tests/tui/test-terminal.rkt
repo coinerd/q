@@ -24,7 +24,7 @@
     (test-case "tui-term-open is a procedure"
       (check-true (procedure? tui-term-open)))
 
-    (test-case "tui-term-close is a procedure"
+    (test-case "terminal: tui-term-close is a procedure"
       (check-true (procedure? tui-term-close)))
 
     (test-case "tui-screen-size is a procedure"

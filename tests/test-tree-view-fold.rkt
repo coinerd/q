@@ -69,18 +69,18 @@
 ;; Navigation helpers
 ;; ============================================================
 
-(test-case "tree-toggle-fold adds and removes from set"
+(test-case "tree-view-fold: tree-toggle-fold adds and removes from set"
   (define s1 (tree-toggle-fold (set) "node-1"))
   (check-true (set-member? s1 "node-1"))
   (define s2 (tree-toggle-fold s1 "node-1"))
   (check-false (set-member? s2 "node-1")))
 
-(test-case "tree-next-node advances index"
+(test-case "tree-view-fold: tree-next-node advances index"
   (define nodes (list "a" "b" "c"))
   (check-equal? (tree-next-node nodes 0) 1)
   (check-equal? (tree-next-node nodes 2) 2)) ; stays at end
 
-(test-case "tree-prev-node decrements index"
+(test-case "tree-view-fold: tree-prev-node decrements index"
   (define nodes (list "a" "b" "c"))
   (check-equal? (tree-prev-node nodes 1) 0)
   (check-equal? (tree-prev-node nodes 0) 0)) ; stays at start

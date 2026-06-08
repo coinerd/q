@@ -15,7 +15,7 @@
   (subscribe-runtime-events! ctx)
   (check-true (tui-ctx? ctx)))
 
-(test-case "make-tui-ctx creates valid context"
+(test-case "tui-init-phases: make-tui-ctx creates valid context"
   (define ctx (make-tui-ctx))
   (check-true (tui-ctx? ctx))
   (check-false (tui-ctx-event-bus ctx))

@@ -90,7 +90,7 @@
       (check-equal? (state->symbol (next-iteration-state state-retrying event-error)) 'aborted))
 
     ;; ── Terminal states ──
-    (test-case "complete is terminal"
+    (test-case "iteration-fsm: complete is terminal"
       (check-equal? (state->symbol (next-iteration-state state-complete event-cancel)) 'complete))
 
     (test-case "aborted is terminal"
@@ -106,7 +106,7 @@
       (check-false (valid-transition? state-complete event-start-loop)))
 
     ;; ── Invalid transitions raise error ──
-    (test-case "invalid transition raises error"
+    (test-case "iteration-fsm: invalid transition raises error"
       (check-exn exn:fail? (lambda () (next-iteration-state state-idle event-model-response))))
 
     (test-case "invalid transition from complete raises error"

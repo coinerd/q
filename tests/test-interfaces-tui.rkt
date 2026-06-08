@@ -760,7 +760,7 @@
     (define state (unbox (tui-ctx-ui-state-box ctx)))
     (check-false (selection-state-anchor (ui-state-selection state))
                  "release without selection does nothing")))
-(test-case "styled-line->text concatenates segments"
+(test-case "interfaces-tui: styled-line->text concatenates segments"
   (let ()
     ;; styled-line->text extracts plain text
     (define line
@@ -880,7 +880,7 @@
     ;; Should extract text from the first rendered line, not empty
     (check-true (and (string? text) (> (string-length text) 0))
                 "selection-text P1 fix: first transcript row extracts text")))
-(test-case "Selection lifecycle tests (BUG: selection vanishes on release)"
+(test-case "interfaces-tui: Selection lifecycle tests (BUG: selection vanishes on release)"
   (let ()
     ;; selection-text row mapping — second transcript line
     (define ctx (make-tui-ctx))
@@ -894,7 +894,7 @@
     (define text (selection-text ctx state-sel2))
     (check-true (and (string? text) (>= (string-length text) 0))
                 "selection-text P1 fix: second transcript row maps correctly")))
-(test-case "Selection lifecycle tests (BUG: selection vanishes on release)"
+(test-case "interfaces-tui: Selection lifecycle tests (BUG: selection vanishes on release) (2)"
   (let ()
     ;; Test 1: Selection persists after release handler
     (define ctx (make-tui-ctx))
@@ -951,7 +951,7 @@
     (define end (selection-state-end (ui-state-selection after-new-click)))
     (check-not-false anchor "click-reset: anchor set after new click")
     (check-equal? anchor end "click-reset: anchor == end after new click (zero-width)")))
-(test-case "Right-click and release position tests (BUG: right-click corrupts selection)"
+(test-case "interfaces-tui: Right-click and release position tests (BUG: right-click corrupts selection)"
   (let ()
     ;; Test 3: Zero-length selection has no text
     (define ctx (make-tui-ctx))
@@ -967,7 +967,7 @@
     ;; Zero-width or single-char selection text
     (check-true (or (not text) (<= (string-length text) 1))
                 "zero-length selection: text is empty or single char")))
-(test-case "Right-click and release position tests (BUG: right-click corrupts selection)"
+(test-case "interfaces-tui: Right-click and release position tests (BUG: right-click corrupts selection) (2)"
   (let ()
     ;; Release does NOT move sel-end to release position
     (define ctx (make-tui-ctx))
@@ -1001,7 +1001,7 @@
     (check-equal? (selection-state-end (ui-state-selection after-right-click))
                   drag-end
                   "right-click does not change sel-end")))
-(test-case "Resize polling tests (BUG: TUI not resized on terminal resize)"
+(test-case "interfaces-tui: Resize polling tests (BUG: TUI not resized on terminal resize)"
   (let ()
     ;; Release copies correct text (from drag selection, not release position)
     ;; With 80x24 terminal: trans-y=1, trans-height=21.
@@ -1027,7 +1027,7 @@
     (define text (selection-text ctx state-after))
     (check-true (and (string? text) (string=? text "Alpha"))
                 (format "release copies drag selection text, got: ~s" text))))
-(test-case "Resize polling tests (BUG: TUI not resized on terminal resize)"
+(test-case "interfaces-tui: Resize polling tests (BUG: TUI not resized on terminal resize) (2)"
   (let ()
     ;; Test: tui-screen-size-changed? returns #t on first call after reset
     (tui-screen-size-cache-reset!)
@@ -1036,14 +1036,14 @@
     ;; After first call, subsequent calls should return #f (same size)
     (define result2 (tui-screen-size-changed?))
     (check-false result2 "resize poll: changed? returns #f when size unchanged")))
-(test-case "no-feedback-loop: first call returns #t"
+(test-case "interfaces-tui: no-feedback-loop: first call returns #t"
   (let ()
     ;; Test: mark-dirty! sets the redraw flag
     (define ctx (make-tui-ctx))
     (set-box! (tui-ctx-needs-redraw-box ctx) #f)
     (mark-dirty! ctx)
     (check-true (unbox (tui-ctx-needs-redraw-box ctx)) "resize poll: mark-dirty! sets redraw flag")))
-(test-case "no-feedback-loop: first call returns #t"
+(test-case "interfaces-tui: no-feedback-loop: first call returns #t (2)"
   (let ()
     ;; Test: tui-screen-size-cache-reset! clears cached size
     ;; After reset, tui-screen-size should re-query (not crash)
@@ -1052,7 +1052,7 @@
     (check-true (and (integer? cols) (> cols 0)) "resize poll: cols is positive integer after reset")
     (check-true (and (integer? rows) (> rows 0))
                 "resize poll: rows is positive integer after reset")))
-(test-case "no-feedback-loop: first call returns #t"
+(test-case "interfaces-tui: no-feedback-loop: first call returns #t (3)"
   (let ()
     ;; BUG regression test: tui-screen-size-changed? must NOT create a
     ;; feedback loop. Simulating the main loop: call changed? multiple

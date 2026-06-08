@@ -99,7 +99,7 @@
                        (check-false (result-is-error? r))
                        (check-equal? (hash-ref (result-details r) 'total-lines) 0))))
 
-    (test-case "read binary file returns error"
+    (test-case "tool-edge-cases: read binary file returns error"
       (with-temp-dir (λ (dir)
                        (define f (build-path dir "binary.dat"))
                        (call-with-output-file f

@@ -32,39 +32,39 @@
       (check-eq? (turn-state->symbol turn-state-blocked) 'blocked))
 
     ;; ── Valid transitions ──
-    (test-case "emit-start + start -> build-context"
+    (test-case "agent-loop-fsm: emit-start + start -> build-context"
       (check-equal? (turn-state->symbol (next-turn-state turn-state-emit-start turn-event-start))
                     'build-context))
 
-    (test-case "build-context + context-built -> pre-hook"
+    (test-case "agent-loop-fsm: build-context + context-built -> pre-hook"
       (check-equal? (turn-state->symbol (next-turn-state turn-state-build-context
                                                          turn-event-context-built))
                     'pre-hook))
 
-    (test-case "pre-hook + hook-pass -> stream"
+    (test-case "agent-loop-fsm: pre-hook + hook-pass -> stream"
       (check-equal? (turn-state->symbol (next-turn-state turn-state-pre-hook turn-event-hook-pass))
                     'stream))
 
-    (test-case "pre-hook + hook-block -> blocked"
+    (test-case "agent-loop-fsm: pre-hook + hook-block -> blocked"
       (check-equal? (turn-state->symbol (next-turn-state turn-state-pre-hook turn-event-hook-block))
                     'blocked))
 
-    (test-case "stream + stream-complete -> post-hook"
+    (test-case "agent-loop-fsm: stream + stream-complete -> post-hook"
       (check-equal? (turn-state->symbol (next-turn-state turn-state-stream
                                                          turn-event-stream-complete))
                     'post-hook))
 
-    (test-case "stream + stream-cancel -> complete"
+    (test-case "agent-loop-fsm: stream + stream-cancel -> complete"
       (check-equal? (turn-state->symbol (next-turn-state turn-state-stream turn-event-stream-cancel))
                     'complete))
 
-    (test-case "post-hook + post-hook-done -> complete"
+    (test-case "agent-loop-fsm: post-hook + post-hook-done -> complete"
       (check-equal? (turn-state->symbol (next-turn-state turn-state-post-hook
                                                          turn-event-post-hook-done))
                     'complete))
 
     ;; ── Terminal states ──
-    (test-case "complete is terminal"
+    (test-case "agent-loop-fsm: complete is terminal"
       (check-equal? (turn-state->symbol (next-turn-state turn-state-complete turn-event-start))
                     'complete))
 
@@ -73,7 +73,7 @@
                     'blocked))
 
     ;; ── Invalid transitions ──
-    (test-case "invalid transition raises error"
+    (test-case "agent-loop-fsm: invalid transition raises error"
       (check-exn exn:fail? (lambda () (next-turn-state turn-state-emit-start turn-event-hook-block))))
 
     ;; ── valid-turn-transition? ──

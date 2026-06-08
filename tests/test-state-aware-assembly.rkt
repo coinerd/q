@@ -165,7 +165,7 @@
       (define sa-ws (count-ws (tiered-context-tier-a sa)))
       (check-true (<= sa-ws 3) (format "sa-ws=~a should be <= 3" sa-ws)))
 
-    (test-case "feature flag can be enabled"
+    (test-case "state-aware-assembly: feature flag can be enabled"
       (parameterize ([current-task-state-aware-assembly? #t])
         (check-true (current-task-state-aware-assembly?))))
 
@@ -212,7 +212,7 @@
       (define text (text-part-text (car (message-content p))))
       (check-not-false (string-contains? text "Found X")))
 
-    (test-case "preamble returns #f for #f state"
+    (test-case "state-aware-assembly: preamble returns #f for #f state"
       (define p (build-state-awareness-preamble #f '()))
       (check-false p))
 

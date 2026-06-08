@@ -171,7 +171,7 @@
   (define reg (make-extension-registry))
   (check-pred extension-registry? reg))
 
-(test-case "register-extension! and lookup-extension"
+(test-case "extensions: register-extension! and lookup-extension"
   (define reg (make-extension-registry))
   (define ext (extension "my-ext" "1.0" "1" (hasheq)))
   (register-extension! reg ext)
@@ -191,7 +191,7 @@
   (define names (sort (map extension-name (list-extensions reg)) string<?))
   (check-equal? names '("a" "b")))
 
-(test-case "unregister-extension! removes extension"
+(test-case "extensions: unregister-extension! removes extension"
   (define reg (make-extension-registry))
   (register-extension! reg (extension "removeme" "1.0" "1" (hasheq)))
   (check-not-false (lookup-extension reg "removeme"))
@@ -248,7 +248,7 @@
   (check-equal? (extension-version versioned-ext) "2.3.1")
   (check-equal? (extension-api-version versioned-ext) "2"))
 
-(test-case "define-q-extension with hook handlers"
+(test-case "extensions: define-q-extension with hook handlers"
   (define-q-extension hooking-ext
                       #:version "1.0"
                       #:on tool-call

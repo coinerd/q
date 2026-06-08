@@ -17,7 +17,7 @@
       (define sl (plain-line "hello"))
       (check-equal? (styled-line->text sl) "hello"))
 
-    (test-case "styled-line->text concatenates segments"
+    (test-case "render-message-layout: styled-line->text concatenates segments"
       (define sl (styled-line (list (styled-segment "hello " '(bold)) (styled-segment "world" '()))))
       (check-equal? (styled-line->text sl) "hello world"))
 

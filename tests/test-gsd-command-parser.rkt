@@ -26,7 +26,7 @@
       (define r (parse-gsd-command "/i" "/i"))
       (check-pred gsd-cmd-go? r))
 
-    (test-case "parse /go with wave arg"
+    (test-case "gsd-command-parser: parse /go with wave arg"
       (define r (parse-gsd-command "/go" "/go 3"))
       (check-pred gsd-cmd-go? r)
       (check-equal? (gsd-cmd-go-wave-arg r) "3"))
@@ -113,7 +113,7 @@
       (check-true (gsd-cmd-done-force? r)))
 
     ;; ── Unknown ──
-    (test-case "unknown command returns #f"
+    (test-case "gsd-command-parser: unknown command returns #f"
       (define r (parse-gsd-command "/unknown" "/unknown"))
       (check-false r))
 

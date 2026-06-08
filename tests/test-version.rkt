@@ -9,7 +9,7 @@
 (define version-suite
   (test-suite "version tests"
 
-    (test-case "q-version is a string"
+    (test-case "version: q-version is a string"
       (check-true (string? q-version)))
 
     (test-case "q-version matches semver pattern"

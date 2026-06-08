@@ -41,7 +41,7 @@
 ;; 20. HTTP status checks (200, 400, 401, 403, 429, 500)
 ;; ============================================================
 
-(test-case "HTTP 200 passes without error"
+(test-case "gemini-provider: HTTP 200 passes without error"
   (check-not-exn (lambda () (check-provider-status! "Gemini" #"HTTP/1.1 200 OK" #"{}"))))
 
 (test-case "HTTP 400 raises bad request error"
@@ -51,40 +51,40 @@
                                        #"HTTP/1.1 400 Bad Request"
                                        #"{\"error\":{\"message\":\"Invalid\"}}"))))
 
-(test-case "HTTP 401 raises authentication error"
+(test-case "gemini-provider: HTTP 401 raises authentication error"
   (check-exn #rx"authentication failed [(]401[)]"
              (lambda ()
                (check-provider-status! "Gemini"
                                        #"HTTP/1.1 401 Unauthorized"
                                        #"{\"error\":{\"message\":\"Invalid API key\"}}"))))
 
-(test-case "HTTP 403 raises forbidden error"
+(test-case "gemini-provider: HTTP 403 raises forbidden error"
   (check-exn #rx"forbidden [(]403[)]"
              (lambda ()
                (check-provider-status! "Gemini"
                                        #"HTTP/1.1 403 Forbidden"
                                        #"{\"error\":{\"message\":\"Access denied\"}}"))))
 
-(test-case "HTTP 429 raises rate limit error"
+(test-case "gemini-provider: HTTP 429 raises rate limit error"
   (check-exn #rx"rate limited [(]429[)]"
              (lambda ()
                (check-provider-status! "Gemini"
                                        #"HTTP/1.1 429 Too Many Requests"
                                        #"{\"error\":{\"message\":\"Rate limited\"}}"))))
 
-(test-case "HTTP 500 raises server error"
+(test-case "gemini-provider: HTTP 500 raises server error"
   (check-exn #rx"server error [(]500[)]"
              (lambda ()
                (check-provider-status! "Gemini"
                                        #"HTTP/1.1 500 Internal Server Error"
                                        #"{\"error\":{\"message\":\"Internal error\"}}"))))
 
-(test-case "HTTP 502 raises server error"
+(test-case "gemini-provider: HTTP 502 raises server error"
   (check-exn #rx"server error [(]502[)]"
              (lambda ()
                (check-provider-status! "Gemini" #"HTTP/1.1 502 Bad Gateway" #"Bad Gateway"))))
 
-(test-case "String status-line also works"
+(test-case "gemini-provider: String status-line also works"
   (check-not-exn (lambda () (check-provider-status! "Gemini" "HTTP/1.1 200 OK" "{}"))))
 
 ;; ============================================================
@@ -134,13 +134,13 @@
 ;; 41-45. API key validation tests
 ;; ============================================================
 
-(test-case "empty API key raises clear error"
+(test-case "gemini-provider: empty API key raises clear error"
   (check-exn exn:fail? (lambda () (make-gemini-provider (hash 'api-key "")))))
 
-(test-case "missing API key raises clear error"
+(test-case "gemini-provider: missing API key raises clear error"
   (check-exn exn:fail? (lambda () (make-gemini-provider (hash)))))
 
-(test-case "whitespace-only API key raises clear error"
+(test-case "gemini-provider: whitespace-only API key raises clear error"
   (check-exn exn:fail? (lambda () (make-gemini-provider (hash 'api-key "   ")))))
 
 (test-case "error message mentions Gemini and GEMINI_API_KEY"
@@ -153,7 +153,7 @@
   (check-true (string-contains? msg "GEMINI_API_KEY") "error message mentions GEMINI_API_KEY")
   (check-true (string-contains? msg "API key not set") "error message contains 'API key not set'"))
 
-(test-case "valid API key does not raise"
+(test-case "gemini-provider: valid API key does not raise"
   (check-not-exn (lambda () (make-gemini-provider (hash 'api-key "AIzaSyValidKey-789"))))
   (define prov (make-gemini-provider (hash 'api-key "AIzaSyValidKey-789")))
   (check-equal? (provider-name prov) "gemini"))

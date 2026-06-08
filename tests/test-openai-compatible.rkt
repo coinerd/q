@@ -102,16 +102,16 @@
 
 (define-test-suite
  api-key-validation-tests
- (test-case "empty API key raises clear error"
+ (test-case "openai-compatible: empty API key raises clear error"
    (check-exn exn:fail?
               (lambda ()
                 (make-openai-compatible-provider (hash 'api-key "" 'base-url "http://localhost")))
               "empty-api-key"))
- (test-case "missing API key raises clear error"
+ (test-case "openai-compatible: missing API key raises clear error"
    (check-exn exn:fail?
               (lambda () (make-openai-compatible-provider (hash 'base-url "http://localhost")))
               "missing-api-key"))
- (test-case "whitespace-only API key raises clear error"
+ (test-case "openai-compatible: whitespace-only API key raises clear error"
    (check-exn exn:fail?
               (lambda ()
                 (make-openai-compatible-provider (hash 'api-key "   " 'base-url "http://localhost")))
@@ -125,7 +125,7 @@
    (check-true (string-contains? msg "OpenAI") "error message mentions OpenAI")
    (check-true (string-contains? msg "OPENAI_API_KEY") "error message mentions OPENAI_API_KEY")
    (check-true (string-contains? msg "API key not set") "error message contains 'API key not set'"))
- (test-case "valid API key does not raise"
+ (test-case "openai-compatible: valid API key does not raise"
    (check-not-exn (lambda ()
                     (make-openai-compatible-provider
                      (hash 'api-key "sk-valid-key-123" 'base-url "http://localhost"))))
@@ -139,7 +139,7 @@
 ;; ============================================================
 
 (define-test-suite response-size-limit-tests
-                   (test-case "read-response-body reads normal-sized responses"
+                   (test-case "openai-compatible: read-response-body reads normal-sized responses"
                      (define port (open-input-string "Hello World"))
                      (define result (read-response-body port))
                      (check-equal? result (string->bytes/utf-8 "Hello World")))

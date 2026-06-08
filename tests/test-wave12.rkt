@@ -112,7 +112,7 @@
       (check-false (parse-skill-frontmatter "---\nonly opener"))
       (check-false (parse-skill-frontmatter "a\nb")))
 
-    (test-case "parse-skill-frontmatter handles quoted values"
+    (test-case "wave12: parse-skill-frontmatter handles quoted values"
       (define content "---\nname: \"quoted-name\"\n---\n")
       (define fm (parse-skill-frontmatter content))
       (check-equal? (hash-ref fm 'name) "quoted-name"))

@@ -33,7 +33,7 @@
 
     ;; --- jsonl-line-valid? ---
 
-    (test-case "jsonl-line-valid? accepts valid JSON objects"
+    (test-case "jsonl: jsonl-line-valid? accepts valid JSON objects"
       (check-true (jsonl-line-valid? "{\"a\":1}"))
       (check-true (jsonl-line-valid? "{\"name\":\"test\",\"value\":42}"))
       (check-true (jsonl-line-valid? "null"))

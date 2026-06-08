@@ -13,7 +13,7 @@
     (test-case "provider-error is exn:fail subtype"
       (check-exn exn:fail? (lambda () (raise-provider-error "test" 'timeout 408))))
 
-    (test-case "provider-error has category and status-code"
+    (test-case "provider-errors: provider-error has category and status-code"
       (with-handlers ([provider-error? (lambda (e)
                                          (check-equal? (provider-error-category e) 'rate-limit)
                                          (check-equal? (provider-error-status-code e) 429))])

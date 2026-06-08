@@ -90,7 +90,7 @@
                        (check-false (regexp-match? #rx"aaa" c))
                        (check-false (regexp-match? #rx"eee" c)))))
 
-    (test-case "read non-existent file returns error"
+    (test-case "file-tools: read non-existent file returns error"
       (define r (tool-read (hasheq 'path "/tmp/q-no-such-file-xyz-999.txt")))
       (check-true (result-is-error? r))
       (define c (string-join (result-content r) ""))
@@ -130,7 +130,7 @@
                        (check-equal? (hash-ref (result-details r) 'start-line) 1)
                        (check-equal? (hash-ref (result-details r) 'end-line) 1))))
 
-    (test-case "read binary file returns error"
+    (test-case "file-tools: read binary file returns error"
       (with-temp-dir (λ (dir)
                        (define f (build-path dir "binary.dat"))
                        (call-with-output-file f

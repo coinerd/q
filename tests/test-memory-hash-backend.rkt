@@ -281,7 +281,7 @@
 ;; Update patch immutability guard (P3-3)
 ;; ---------------------------------------------------------------------------
 
-(test-case "update: id in patch is ignored"
+(test-case "memory-hash-backend: update: id in patch is ignored"
   (define b (make-memory-hash-backend))
   (gen:store-memory! b (make-item #:id "orig-id"))
   (define r (gen:update-memory! b "orig-id" (hash 'id "hacked-id" 'content "new content")))
@@ -292,7 +292,7 @@
   ;; but content should be updated
   (check-equal? (memory-item-content (car items)) "new content"))
 
-(test-case "update: created-at in patch is ignored"
+(test-case "memory-hash-backend: update: created-at in patch is ignored"
   (define b (make-memory-hash-backend))
   (gen:store-memory! b (make-item #:id "ts-item"))
   (define orig-created (memory-item-created-at (car (memory-hash-backend-items b))))

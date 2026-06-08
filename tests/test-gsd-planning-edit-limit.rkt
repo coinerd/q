@@ -17,7 +17,7 @@
 ;; Box-based state tests
 ;; ============================================================
 
-(test-case "current-max-old-text-len defaults to 500"
+(test-case "gsd-planning-edit-limit: current-max-old-text-len defaults to 500"
   (check-equal? (current-max-old-text-len) 500))
 
 (test-case "current-max-old-text-len can be raised and restored"
