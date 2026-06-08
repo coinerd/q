@@ -422,7 +422,8 @@
   (define ctx
     (make-exec-context #:working-directory "/tmp/q-memory-safe"
                        #:session-metadata (hasheq 'session-id "sess-safe")
-                       #:event-publisher (lambda (evt) (set-box! events (cons evt (unbox events))))))
+                       #:event-publisher
+                       (lambda (type evt) (set-box! events (cons evt (unbox events))))))
   (with-backend b
                 (lambda ()
                   ;; Use a restrictive policy with empty allowed sensitivities to block all stores
@@ -436,3 +437,32 @@
                       (filter (lambda (t) (equal? t "memory.policy.blocked"))
                               (map (lambda (evt) (hash-ref evt 'type #f)) evts)))
                     (check-equal? (length blocked-types) 1)))))
+
+;; ---------------------------------------------------------------------------
+;; v0.95.20 regression: event-publisher arity mismatch
+;; The publisher is called with (event-type-string, payload-hash) — 2 args.
+;; Memory tools must not call it with a single combined hash.
+;; ---------------------------------------------------------------------------
+
+(test-case "v0.95.20: publish-memory-event! calls publisher with 2 args"
+  (define publisher-calls (box '()))
+  (define backend (make-memory-hash-backend))
+  (define ctx
+    (make-exec-context #:working-directory "/tmp"
+                       #:session-metadata (hasheq 'session-id "sess-arity")
+                       #:event-publisher (lambda (event-type payload)
+                                           (set-box! publisher-calls
+                                                     (cons (list event-type payload)
+                                                           (unbox publisher-calls))))))
+  (with-backend
+   backend
+   (lambda ()
+     (parameterize ([current-memory-policy default-memory-policy])
+       (define r (tool-store-memory (hash 'content "arity regression test" 'scope "session") ctx))
+       (check-false (tool-result-is-error? r)))))
+  (define calls (reverse (unbox publisher-calls)))
+  (check > (length calls) 0 "publisher should have been called")
+  (for ([call (in-list calls)])
+    (check equal? (length call) 2 "each call must be (event-type payload)")
+    (check-pred string? (car call) "first arg must be event-type string")
+    (check-pred hash? (cadr call) "second arg must be payload hash")))

@@ -21,7 +21,8 @@
 (define (collecting-context events)
   (make-exec-context #:working-directory "/tmp/q-memory-events"
                      #:session-metadata (hasheq 'session-id "sess-events")
-                     #:event-publisher (lambda (evt) (set-box! events (cons evt (unbox events))))))
+                     #:event-publisher
+                     (lambda (type evt) (set-box! events (cons evt (unbox events))))))
 
 (define (event-types events)
   (map (lambda (evt)
@@ -236,7 +237,7 @@
                     (lambda () (gen:memory-available? base-backend))
                     (lambda (policy) (gen:manage-memory! base-backend policy))))
   ;; Observer that tries to store again — should NOT cause another backend write
-  (define (observing-publisher evt)
+  (define (observing-publisher type evt)
     (unless (unbox observer-called?)
       (set-box! observer-called? #t)
       ;; Observer tries to store via a DIFFERENT backend call — harmless

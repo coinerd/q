@@ -221,7 +221,8 @@
   (define ctx
     (make-exec-context #:working-directory "/tmp/q-memory-mgmt"
                        #:session-metadata (hasheq 'session-id "sess-mgmt")
-                       #:event-publisher (lambda (evt) (set-box! events (cons evt (unbox events))))))
+                       #:event-publisher
+                       (lambda (type evt) (set-box! events (cons evt (unbox events))))))
   (with-backend b
                 (lambda ()
                   (tool-store-memory (hash 'content "item one" 'scope "session") ctx)
@@ -313,7 +314,8 @@
   (define ctx
     (make-exec-context #:working-directory "/tmp/q-memory-mgmt"
                        #:session-metadata (hasheq 'session-id "sess-mgmt")
-                       #:event-publisher (lambda (evt) (set-box! events (cons evt (unbox events))))))
+                       #:event-publisher
+                       (lambda (type evt) (set-box! events (cons evt (unbox events))))))
   (with-backend
    b
    (lambda ()
@@ -485,7 +487,8 @@
   (define ctx
     (make-exec-context #:working-directory "/tmp/q-memory-mgmt"
                        #:session-metadata (hasheq 'session-id "sess-mgmt")
-                       #:event-publisher (lambda (evt) (set-box! events (cons evt (unbox events))))))
+                       #:event-publisher
+                       (lambda (type evt) (set-box! events (cons evt (unbox events))))))
   (with-backend b
                 (lambda ()
                   (define expired-item

@@ -178,7 +178,7 @@
                                  (fprintf (current-error-port)
                                           "memory event emission failed: ~a\n"
                                           (exn-message e)))])
-      ((exec-context-event-publisher exec-ctx) event))))
+      ((exec-context-event-publisher exec-ctx) (hash-ref event 'type "memory.unknown") event))))
 
 (define (event-hash type fields)
   (hash-set fields 'type type))
