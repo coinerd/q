@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite security
+
 ;; tests/test-permission-policy-mode.rkt — Policy mode tests (v0.54.4 W0)
 
 (require rackunit

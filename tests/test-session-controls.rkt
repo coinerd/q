@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite runtime
+
 ;; BOUNDARY: integration
 
 ;; tests/test-session-controls.rkt — W2-D4: Test scaffold for runtime/session-controls.rkt

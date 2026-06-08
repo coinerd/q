@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite tui
+
 ;; tests/test-tui-smoke.rkt — Smoke tests for TUI vdom render pipeline
 ;;
 ;; Exercises the full render pipeline without requiring a real terminal:

@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 ;; FIX VERIFICATION TEST — confirms retry/error classification bug is fixed
 

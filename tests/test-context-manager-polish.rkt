@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-context-manager-polish.rkt — Wave 4 (#1394): Polish & Edge Cases

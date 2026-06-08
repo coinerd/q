@@ -1,4 +1,7 @@
 #lang racket
+
+;; @speed fast
+;; @suite default
 ;; BOUNDARY: integration
 
 ;; test-model-command.rkt — tests for /model command in TUI and CLI

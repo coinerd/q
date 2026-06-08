@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite tui
+
 ;; BOUNDARY: io
 
 ;; test-tui-utf8.rkt — Tests for BUG-28: TUI UTF-8 support (accumulator-based)

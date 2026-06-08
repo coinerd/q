@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;;; tests/test-tree-view.rkt — TDD tests for tui/tree-view.rkt

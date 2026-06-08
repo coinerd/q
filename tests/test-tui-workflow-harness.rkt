@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed slow  ;; @suite tui
+
 ;; BOUNDARY: io
 
 ;; tests/test-tui-workflow-harness.rkt — Smoke tests for the TUI workflow

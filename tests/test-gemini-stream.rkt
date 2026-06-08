@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-gemini-stream.rkt — v0.70.8 W1
 ;; Extracted from test-gemini.rkt: streaming + parse-single-event tests
 

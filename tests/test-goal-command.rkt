@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-goal-command.rkt — Tests for /goal command parsing and handling
 
 (require rackunit

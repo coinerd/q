@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite tui
+
 ;; BOUNDARY: io
 
 ;; test-tui-keybindings.rkt — Tests for tui/tui-keybindings.rkt

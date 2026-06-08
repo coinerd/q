@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite runtime
+
 ;; tests/helpers/session-fixture.rkt — Session fixture builders for tests
 ;;
 ;; Provides convenient session construction functions for tests.

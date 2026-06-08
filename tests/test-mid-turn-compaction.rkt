@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite runtime
+
 ;; BOUNDARY: integration
 
 ;; test-mid-turn-compaction.rkt — TDD tests for v0.28.21 W3

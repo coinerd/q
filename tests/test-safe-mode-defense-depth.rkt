@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite security
+
 ;; BOUNDARY: integration
 
 ;; tests/test-safe-mode-defense-depth.rkt

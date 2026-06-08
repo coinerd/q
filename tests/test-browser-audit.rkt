@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-browser-audit.rkt — Browser audit logging tests
 
 (require rackunit

@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed slow  ;; @suite tui
+
 ;; BOUNDARY: integration
 
 ;; tests/tui/test-command-integration.rkt — TUI command integration tests

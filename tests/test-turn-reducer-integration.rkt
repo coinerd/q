@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed slow  ;; @suite runtime
+
 ;; BOUNDARY: integration
 
 ;; tests/test-turn-reducer-integration.rkt -- Turn-reducer integration tests (v0.43.0)

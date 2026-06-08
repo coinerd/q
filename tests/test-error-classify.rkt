@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-error-classify.rkt — Failure-domain classifier unit tests
 ;;
 ;; Verifies the 7-domain error classifier classifies exceptions correctly.

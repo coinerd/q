@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite runtime
+
 ;; BOUNDARY: integration
 ;; CHARACTERIZATION TEST — documents current state for v0.57.1 remediation
 

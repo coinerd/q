@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed slow  ;; @suite workflows
+
 ;; tests/workflows/parity/test-sdk-cli-parity.rkt (#177)
 ;;
 ;; Verifies that SDK and CLI modes produce equivalent results

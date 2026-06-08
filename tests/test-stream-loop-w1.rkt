@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-stream-loop-w1.rkt — Streaming decomposition & loop cleanup tests (W-06, I-01)

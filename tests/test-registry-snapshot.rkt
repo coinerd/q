@@ -1,4 +1,7 @@
 #lang racket/base
+
+;; @speed fast
+;; @suite default
 ;; BOUNDARY: pure
 
 ;; tests/test-registry-snapshot.rkt — with-registry-snapshot tests (F12)

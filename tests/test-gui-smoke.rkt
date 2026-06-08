@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-gui-smoke.rkt — Smoke tests for all GUI modules
 
 (require rackunit

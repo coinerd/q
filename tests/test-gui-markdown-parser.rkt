@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-gui-markdown-parser.rkt — Tests for markdown code block parsing
 ;;
 ;; Tests for gui/components/markdown-parser.rkt

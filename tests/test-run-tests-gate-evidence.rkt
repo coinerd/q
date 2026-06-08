@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed slow
+;; @suite default
+
 ;; BOUNDARY: unit
 ;; Tests for gate evidence v2 in run-tests.rkt (v0.83.1 W1)
 

@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-provider-registry.rkt — tests for Dynamic Provider Registration (#700-#703)

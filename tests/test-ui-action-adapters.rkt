@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-ui-action-adapters.rkt — Tests for TUI and GUI action adapters
 ;;
 ;; W1.3 (v0.94.1): Verify both adapters correctly apply ui-delta values

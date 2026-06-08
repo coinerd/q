@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed slow
+;; @suite default
+
 ;; BOUNDARY: unit
 ;; @suite runtime
 ;; @boundary unit

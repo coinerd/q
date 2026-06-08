@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite runtime
+
 ;; BOUNDARY: contract
 
 ;; tests/test-tool-coordinator-contracts.rkt — Contract enforcement tests for tool-coordinator

@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 (require rackunit
          racket/string
          rackunit/text-ui

@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: pure
 
 ;; tests/test-state-machine-pure.rkt — Pure FSM tests (RA-26)

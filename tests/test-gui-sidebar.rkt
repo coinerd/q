@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-gui-sidebar.rkt — Tests for gui/views/sidebar.rkt
 
 (require rackunit

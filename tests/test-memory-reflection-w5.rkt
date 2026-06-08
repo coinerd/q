@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;;; test-memory-reflection-w5.rkt — W5: Deterministic memory reflection tests
 
 (require rackunit

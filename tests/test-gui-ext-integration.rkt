@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed slow
+;; @suite default
+
 ;; q/tests/test-gui-ext-integration.rkt — Integration test for extension slots
 
 (require rackunit

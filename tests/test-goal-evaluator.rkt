@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-goal-evaluator.rkt — Evaluator unit tests with mock provider
 
 (require rackunit

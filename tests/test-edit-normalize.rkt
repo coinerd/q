@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 (require rackunit
          "../tools/builtins/edit-normalize.rkt")
 

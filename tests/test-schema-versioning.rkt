@@ -1,4 +1,7 @@
 #lang racket/base
+
+;; @speed fast
+;; @suite default
 ;; BOUNDARY: pure
 
 ;; tests/test-schema-versioning.rkt — Per-type schema version tests (F6, S8-F1)

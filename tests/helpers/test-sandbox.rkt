@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed slow  ;; @suite security
+
 ;; tests/helpers/test-sandbox.rkt — Canonical test sandbox for environment isolation.
 ;;
 ;; Provides `with-test-sandbox` that creates isolated temp directories for

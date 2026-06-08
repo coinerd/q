@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-state-aware-assembly.rkt — tests for state-aware context assembly
 ;; v0.75.3 W0: Verify build-tiered-context/state-aware respects state relevance.
 

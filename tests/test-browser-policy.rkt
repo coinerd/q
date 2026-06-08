@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-browser-policy.rkt — Browser policy engine tests
 ;;
 ;; TDD test suite for browser/policy.rkt.

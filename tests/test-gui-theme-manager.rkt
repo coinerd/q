@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-gui-theme-manager.rkt — Tests for gui/theme-manager.rkt
 
 (require rackunit

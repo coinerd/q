@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-task-state.rkt — tests for task-state FSM, conclusion types, and task memory
 ;; v0.75.0: Foundation milestone tests.
 

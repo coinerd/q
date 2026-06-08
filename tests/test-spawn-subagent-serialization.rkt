@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; test-spawn-subagent-serialization.rkt — TDD regression for JSON serialization
 ;;
 ;; Verifies that spawn-subagent and spawn-subagents send provider-facing

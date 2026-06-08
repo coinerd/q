@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; test-openai-compatible.rkt — Tests for OpenAI-compatible provider adapter

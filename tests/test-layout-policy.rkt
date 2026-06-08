@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-layout-policy.rkt — Layout breakpoint and policy tests
 ;;
 ;; W5.1 (v0.94.5): Verify layout breakpoint classification and adaptive policy.

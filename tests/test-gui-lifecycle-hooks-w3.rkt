@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-gui-lifecycle-hooks-w3.rkt — W3 lifecycle hook tests
 ;;
 ;; W3 (v0.94.8): H-1 (export current-gui-event-runtime),

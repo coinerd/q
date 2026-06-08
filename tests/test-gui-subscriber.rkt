@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 (require rackunit
          rackunit/text-ui
          "../gui/state-sync.rkt"

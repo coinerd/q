@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite extensions
+
 ;; tests/test-gsd-wave-gen-validation.rkt — v0.75.7 W1 tests
 ;; Wave generation validation: wave-exists?, parse-plan-index, wave cleanup
 

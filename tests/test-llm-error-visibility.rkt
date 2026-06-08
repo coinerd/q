@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-llm-error-visibility.rkt — T1-1: Verify LLM parse errors are logged, not silently swallowed
 ;; STABILITY: evolving
 

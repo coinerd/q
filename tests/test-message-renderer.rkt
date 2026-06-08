@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-message-renderer.rkt — tests for Overlay Positioning & Message Renderers (#725-#727)

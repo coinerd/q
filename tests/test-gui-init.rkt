@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-gui-init.rkt — Tests for GUI scaffold
 ;;
 ;; All tests are headless-safe: they test module structure,

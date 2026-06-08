@@ -1,4 +1,7 @@
 #lang racket/base
+
+;; @speed fast
+;; @suite default
 ;; tests/test-memory-external-policy.rkt — External backend policy tests
 ;;
 ;; v0.95.11: Tests for external backend safety:

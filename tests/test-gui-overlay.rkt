@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-gui-overlay.rkt — Tests for gui/views/overlay.rkt
 
 (require rackunit

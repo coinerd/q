@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-browser-types.rkt — Browser domain type tests
 ;;
 ;; Tests for browser/types.rkt: construction, serialization, edge cases.

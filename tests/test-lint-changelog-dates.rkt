@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-lint-changelog-dates.rkt — Unit tests for lint-changelog-dates.rkt

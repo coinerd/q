@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite extensions
+
 ;; BOUNDARY: integration
 
 ;; tests/test-gsd-command-dispatch.rkt -- A6-03 + A7-03: dispatch-gsd-command routing tests

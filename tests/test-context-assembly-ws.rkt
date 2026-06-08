@@ -1,4 +1,7 @@
 #lang racket
+
+;; @speed fast
+;; @suite default
 ;; BOUNDARY: integration
 
 ;; tests/test-context-assembly-ws.rkt — Working set integration into context assembly

@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-lint-deprecation.rkt — Tests for scripts/lint-deprecation-deadlines.rkt

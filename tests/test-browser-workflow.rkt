@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-browser-workflow.rkt — Workflow tool tests
 ;;
 ;; Tests browser-check-local-app composite workflow using mock adapter.

@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: fsm
 
 ;; tests/test-agent-loop-fsm.rkt — R-06/R-07: Agent turn FSM tests

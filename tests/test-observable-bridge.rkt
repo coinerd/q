@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-observable-bridge.rkt — Tests for ui-core/observable-bridge
 
 (require rackunit

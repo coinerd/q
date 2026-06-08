@@ -1,4 +1,6 @@
 #lang racket/base
+
+;; @speed fast  ;; @suite runtime
 ;;; test-memory-session-config-w1.rkt — W1 tests for session-config auto-extraction accessors
 (require rackunit
          "../runtime/session/session-config.rkt")

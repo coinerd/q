@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-context-assembly-config.rkt — T2-1: Context assembly config struct
 ;; STABILITY: evolving
 

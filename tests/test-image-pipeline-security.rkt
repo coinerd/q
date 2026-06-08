@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite security
+
 ;; tests/test-image-pipeline-security.rkt — Security hardening tests (#5360)
 ;;
 ;; Tests that shell metacharacters in filenames/paths cannot inject commands.

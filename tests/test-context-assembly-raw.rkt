@@ -1,4 +1,7 @@
 #lang racket
+
+;; @speed fast
+;; @suite default
 ;; BOUNDARY: pure
 
 ;; BOUNDARY: integration

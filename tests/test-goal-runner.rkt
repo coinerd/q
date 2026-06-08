@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-goal-runner.rkt — Runner tests with mock provider + simulated loop
 
 (require rackunit

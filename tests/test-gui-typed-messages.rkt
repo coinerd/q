@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-gui-typed-messages.rkt — W1: typed gui-message kind field
 ;;
 ;; Tests that gui-message supports a kind field for typed transcript entries.

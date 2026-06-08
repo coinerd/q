@@ -1,4 +1,7 @@
 #lang racket/base
+
+;; @speed fast
+;; @suite default
 ;;; test-memory-external-mem0-w5.rkt — W5 tests for Mem0 external adapter
 (require rackunit
          racket/string

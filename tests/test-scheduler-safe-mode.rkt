@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite security
+
 ;; BOUNDARY: integration
 
 ;;; tests/test-scheduler-safe-mode.rkt — TDD tests for scheduler-level safe-mode

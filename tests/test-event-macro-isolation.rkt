@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-event-macro-isolation.rkt — A3: Event macro registry isolation
 ;; STABILITY: evolving
 

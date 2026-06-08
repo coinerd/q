@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-ui-dispatch.rkt — Tests for ui-core/dispatch
 
 (require rackunit

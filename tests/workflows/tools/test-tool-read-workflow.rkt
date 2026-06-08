@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed slow  ;; @suite workflows
+
 ;; tests/workflows/tools/test-tool-read-workflow.rkt — Read-file workflow (#171)
 ;;
 ;; Tests the read-file workflow: agent reads a file via tool-call,

@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-widget-zone.rkt — Tests for gui/extension-slots/widget-zone.rkt
 
 (require rackunit

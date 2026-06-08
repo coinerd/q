@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-gui-input.rkt — Tests for gui/views/input.rkt
 
 (require rackunit

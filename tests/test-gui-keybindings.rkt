@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-gui-keybindings.rkt — Tests for keyboard shortcut registry
 ;;
 ;; Tests for gui/components/keybindings.rkt

@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed slow
+;; @suite default
+
 ;; tests/test-browser-settings-integration.rkt — F5: load-browser-settings
 
 (require rackunit

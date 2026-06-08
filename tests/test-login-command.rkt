@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;;; tests/test-login-command.rkt — /login command tests
 
 (require rackunit

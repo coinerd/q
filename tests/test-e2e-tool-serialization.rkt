@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed slow
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-e2e-tool-serialization.rkt — E2E tool→API serialization pipeline tests

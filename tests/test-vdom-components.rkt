@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-vdom-components.rkt — Tests for tui/vdom-components.rkt
 
 (require rackunit

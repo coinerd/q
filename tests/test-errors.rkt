@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; test-errors.rkt — Tests for q/util/errors.rkt domain-specific exception types

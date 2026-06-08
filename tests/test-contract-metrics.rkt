@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-contract-metrics.rkt
 ;; TDD tests for contract-metrics exact counting (only any/c inside contract forms)
 

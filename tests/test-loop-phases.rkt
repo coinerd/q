@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-loop-phases.rkt — Tests for runtime/iteration/loop-phases.rkt (v0.54.3 W1)
 ;;
 ;; Tests the extracted pure and effectful sub-phases from main-loop.

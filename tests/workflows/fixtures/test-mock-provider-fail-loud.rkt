@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed slow  ;; @suite workflows
+
 ;; tests/workflows/fixtures/test-mock-provider-fail-loud.rkt — Fail-loud contract (#5469)
 ;;
 ;; Verifies that the scripted mock provider fails loudly on script exhaustion

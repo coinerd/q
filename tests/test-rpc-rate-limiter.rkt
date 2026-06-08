@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;;; tests/test-rpc-rate-limiter.rkt — TDD tests for RPC rate limiting (SEC-08)

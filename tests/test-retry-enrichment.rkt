@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; test-retry-enrichment.rkt — Tests for v0.14.2 Wave 2: enriched /retry

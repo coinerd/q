@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-v0756-audit-closure.rkt — W3 tests for v0.75.6 Audit Closure
 ;; T1: Persistence round-trip tests
 ;; T2: Preamble integration test

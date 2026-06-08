@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite tui
+
 ;; BOUNDARY: io
 
 ;; q/tests/tui/palette.rkt — TDD tests for the slash-command palette

@@ -1,4 +1,6 @@
 #lang racket
+
+;; @speed fast  ;; @suite runtime
 ;; BOUNDARY: pure
 ;; BOUNDARY: unit
 ;; tests/test-iteration-counters-unit.rkt -- Counter computation tests (T-1a)

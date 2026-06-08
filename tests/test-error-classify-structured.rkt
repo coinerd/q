@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-error-classify-structured.rkt — T1-4: Structured error classification
 ;; STABILITY: evolving
 

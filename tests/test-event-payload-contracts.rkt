@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: contract
 
 ;; tests/test-event-payload-contracts.rkt — Event payload contract validation

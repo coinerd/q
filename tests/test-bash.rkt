@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: io
 
 ;; test-bash.rkt — tests for tools/builtins/bash.rkt

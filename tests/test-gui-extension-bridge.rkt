@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-gui-extension-bridge.rkt — Tests for gui/extension-slots/extension-bridge.rkt
 
 (require rackunit

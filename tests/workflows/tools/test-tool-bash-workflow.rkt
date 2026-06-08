@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed slow  ;; @suite workflows
+
 ;; tests/workflows/tools/test-tool-bash-workflow.rkt — Bash tool workflow test
 ;;
 ;; Tests the bash tool workflow: agent runs a bash command via tool-call,

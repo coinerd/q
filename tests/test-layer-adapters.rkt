@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-layer-adapters.rkt — Tests for runtime/layer-adapters.rkt (v0.54.3 W0)
 ;;
 ;; Verifies that the layer adapter facade:

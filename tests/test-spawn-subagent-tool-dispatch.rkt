@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-spawn-subagent-tool-dispatch.rkt — v0.19.4 GAP-1 fix verification

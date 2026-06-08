@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-ws-evolution.rkt — Working-set evolution tests
 ;; v0.75.4 W0: Verify ws-evolution behavior on state transitions.
 

@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite arch
+
 ;; tests/test-arch-01-regression.rkt — ARCH-01 regression test (v0.54.7 W0)
 ;;
 ;; Regression test for execute-tool-batch-phase arity mismatch.

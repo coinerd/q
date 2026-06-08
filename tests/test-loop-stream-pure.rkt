@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; test-loop-stream-pure.rkt — T2-6: Pure chunk classification tests
 ;; Tests classify-chunk and chunk-has-data? without mocks or providers.
 

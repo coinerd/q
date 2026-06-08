@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed slow  ;; @suite workflows
+
 ;; tests/workflows/tools/test-tool-edit-workflow.rkt — Edit workflow (#173)
 ;;
 ;; Tests the edit-file workflow: agent edits file content via tool-call.

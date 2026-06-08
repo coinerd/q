@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/helpers/contract-blame.rkt — Contract blame assertion helpers
 ;;
 ;; Provides:

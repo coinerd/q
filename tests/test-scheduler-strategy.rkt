@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-scheduler-strategy.rkt — R-15: scheduler strategy tests
 
 (require rackunit

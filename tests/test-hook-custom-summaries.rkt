@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite extensions
+
 ;; BOUNDARY: integration
 
 ;;; tests/test-hook-custom-summaries.rkt — tests for hook-provided custom summaries (#769)

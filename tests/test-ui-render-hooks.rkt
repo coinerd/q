@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-ui-render-hooks.rkt — Render hook schema and isolation tests
 ;;
 ;; W7.1–W7.4 (v0.94.7): Verify hook construction, validation, safe application,

@@ -1,4 +1,7 @@
 #lang racket/base
+
+;; @speed fast
+;; @suite default
 ;; test-hash-helpers.rkt — Tests for util/hash-helpers.rkt (T3-6)
 
 (require rackunit

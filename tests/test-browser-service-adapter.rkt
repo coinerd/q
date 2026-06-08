@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-browser-service-adapter.rkt — F4: service uses adapter interface
 
 (require rackunit

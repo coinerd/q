@@ -1,4 +1,7 @@
 #lang racket/base
+
+;; @speed fast
+;; @suite default
 ;; BOUNDARY: pure
 
 ;; tests/test-effect-executor.rkt — Step effect executor tests (F2)

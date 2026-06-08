@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed slow
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; test-metrics-readme-sync.rkt — Tests for metrics.rkt --sync-readme and --lint-prose

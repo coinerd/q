@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite runtime
+
 ;; BOUNDARY: integration
 
 ;; tests/test-agent-session-tree.rkt — Tree operations in agent-session (#1317, #1318, #1319)

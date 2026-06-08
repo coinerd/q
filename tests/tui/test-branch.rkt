@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite tui
+
 ;; BOUNDARY: io
 
 ;;; tests/tui/branch.rkt — tests for TUI branch inspection commands

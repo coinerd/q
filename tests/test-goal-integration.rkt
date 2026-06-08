@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed slow
+;; @suite default
+
 ;; tests/test-goal-integration.rkt — Integration tests for goal feature wiring
 ;; F-3: Verify agent-session-box is populated and goal-cancel-box works
 

@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite runtime
+
 ;; BOUNDARY: integration
 
 ;;; tests/test-session-lifecycle-hooks.rkt — tests for session lifecycle hooks (#764)

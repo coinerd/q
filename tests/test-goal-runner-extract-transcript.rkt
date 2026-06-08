@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 (require rackunit
          (only-in "../runtime/goal/goal-runner.rkt"
                   extract-transcript-from-result)

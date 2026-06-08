@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-w9-ui-regression.rkt — W9.3 Full UI regression summary
 ;;
 ;; Runs all UI-related test files and verifies total test count.

@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; test-wiring-run-modes.rkt — Tests for wiring/run-modes.rkt

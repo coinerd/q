@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-scheduler-hooks.rkt — Wave 11: TS1-TS8 scheduler hook protocol

@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; test-rpc-mode.rkt — tests for q/interfaces/rpc-mode.rkt

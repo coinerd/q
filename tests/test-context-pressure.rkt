@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;;; tests/test-context-pressure.rkt — context pressure event tests
 
 (require rackunit

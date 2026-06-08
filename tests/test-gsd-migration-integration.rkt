@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed slow  ;; @suite extensions
+
 ;; BOUNDARY: integration
 
 ;; tests/test-gsd-migration-integration.rkt — Integration tests for GSD migration

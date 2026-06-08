@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-strict-runner.rkt — Strict summary mode tests (v0.54.5 W0)
 
 (require rackunit

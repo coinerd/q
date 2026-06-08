@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-model-timeouts.rkt — Per-model timeout profile tests (v0.14.2 Wave 3)

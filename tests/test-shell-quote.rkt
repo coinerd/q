@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-shell-quote.rkt — T-7 tests for util/shell-quote.rkt
 
 (require rackunit

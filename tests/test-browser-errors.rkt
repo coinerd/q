@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-browser-errors.rkt — Browser error hierarchy tests
 ;;
 ;; Tests for q-browser-error branch in util/error/errors.rkt.

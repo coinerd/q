@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-wave4-user-facing.rkt — Wave 4 user-facing ergonomics tests

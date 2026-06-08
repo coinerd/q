@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-ui-widget-descriptor.rkt — Widget descriptor schema tests
 ;;
 ;; W6.1 (v0.94.6): Verify widget descriptor construction, validation,

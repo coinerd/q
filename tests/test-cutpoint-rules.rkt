@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-cutpoint-rules.rkt — tests for Compaction Cut-point Rules (#693-#696)

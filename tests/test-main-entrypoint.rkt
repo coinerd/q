@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-main-entrypoint.rkt — Subprocess-level tests for main.rkt entry point
 ;; BOUNDARY: integration (process-level)
 ;;

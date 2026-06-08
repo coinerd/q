@@ -1,4 +1,7 @@
 #lang racket/base
+
+;; @speed fast
+;; @suite default
 ;;; test-memory-external-mem0.rkt — W0/W5 characterization tests
 ;;;
 ;;; W0: Characterize external backend / Mem0 adapter gaps.

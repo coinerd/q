@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-ui-action-parity.rkt — Equivalence fixture tests
 ;;
 ;; W2.4 (v0.94.2): Verify that the same UI actions produce equivalent

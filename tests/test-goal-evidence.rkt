@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-goal-evidence.rkt — Evidence prompt + no-progress detection tests
 
 (require rackunit

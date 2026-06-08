@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed slow  ;; @suite workflows
+
 ;; BOUNDARY: integration
 ;; @suite workflows
 ;; @boundary integration

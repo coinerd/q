@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite runtime
+
 ;; BOUNDARY: integration
 
 ;; tests/test-session-lifecycle-guards.rkt — Wave 10: S1-S5 session lifecycle guards

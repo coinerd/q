@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-ui-import-safety.rkt — Characterization tests for
 ;; headless import safety of UI modules.
 ;;

@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed slow  ;; @suite workflows
+
 ;; BOUNDARY: integration
 
 ;; tests/workflows/fixtures/mock-provider.rkt — scripted provider

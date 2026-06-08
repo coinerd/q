@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; test-lint-pkg-metadata.rkt — Tests for scripts/lint-pkg-metadata.rkt

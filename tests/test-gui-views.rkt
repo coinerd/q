@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-gui-views.rkt — Tests for transcript + message-entry views
 
 (require rackunit

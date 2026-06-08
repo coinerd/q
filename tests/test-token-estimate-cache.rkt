@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-token-estimate-cache.rkt — v0.70.6 W0
 
 (require rackunit

@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 (require rackunit
          rackunit/text-ui
          (only-in "../runtime/context-assembly/task-conclusion.rkt"

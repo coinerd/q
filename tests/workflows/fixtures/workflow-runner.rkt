@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed slow  ;; @suite workflows
+
 ;; BOUNDARY: integration
 
 ;; tests/workflows/fixtures/workflow-runner.rkt — full workflow orchestration

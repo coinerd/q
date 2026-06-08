@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: architecture
 
 ;; Verifies v0.81.1 protocol-types migration guardrails:

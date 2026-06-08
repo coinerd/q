@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;;; tests/test-image-format.rkt — Provider image format tests (#5272)
 
 (require rackunit

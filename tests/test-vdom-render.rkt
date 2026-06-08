@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-vdom-render.rkt — Tests for tui/vdom-render.rkt
 
 (require rackunit

@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-goal-checks.rkt — Deterministic check execution tests
 
 (require rackunit

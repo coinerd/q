@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-vdom-backend-parity.rkt — Architecture validation
 ;;
 ;; Proves the vdom pipeline is backend-agnostic by rendering the same

@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite extensions
+
 ;; BOUNDARY: integration
 
 ;; tests/test-sdk-gsd-live.rkt — v0.20.5 W4: Live SDK Integration Test

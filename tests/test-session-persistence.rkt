@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite runtime
+
 ;; tests/test-session-persistence.rkt — tests for session persistence helpers
 ;; v0.74.8: Complete rewrite with temp dir isolation + meaningful assertions.
 

@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: unit
 
 ;; tests/test-deprecation-warning.rkt -- Tests for warn-deprecated! utility (S3)

@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;;; tests/test-oauth-callback.rkt — OAuth2 callback server tests
 
 (require rackunit

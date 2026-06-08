@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite runtime
+
 ;; BOUNDARY: integration
 
 ;; tests/test-session-switch.rkt — tests for Atomic Session Switching Lifecycle (#704-#707)

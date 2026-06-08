@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-context-assembly-pure.rkt — Pure context assembly selection tests (F23)
 ;; BOUNDARY: pure
 

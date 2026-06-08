@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: unit
 
 ;; tests/test-command-parity.rkt -- Command conformance parity fixture (R14)

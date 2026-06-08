@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-sdk-steer-followup.rkt — FEAT-76: steer!/follow-up! in SDK

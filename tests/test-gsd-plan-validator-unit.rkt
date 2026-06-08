@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite extensions
+
 ;; tests/test-gsd-plan-validator-unit.rkt — Unit tests for GSD plan validator (T-6)
 
 (require racket/base

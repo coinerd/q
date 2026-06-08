@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-browser-mock-adapter.rkt — Mock adapter tests
 ;;
 ;; Tests for browser/adapters/mock.rkt: deterministic responses,

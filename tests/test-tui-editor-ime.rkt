@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite tui
+
 ;; BOUNDARY: io
 
 ;; tests/test-tui-editor-ime.rkt — Tests for custom editor component (#1150) and IME cursor markers (#1151)

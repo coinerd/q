@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; test-file-tools.rkt — tests for read.rkt, write.rkt, edit.rkt

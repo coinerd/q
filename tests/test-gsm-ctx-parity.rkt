@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-gsm-ctx-parity.rkt — T1-5: Verify gsm-* and gsm-ctx-* produce same results
 ;; STABILITY: evolving
 

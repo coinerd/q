@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;;; test-memory-consolidation-tool-g3.rkt — W4: consolidate-memory tool tests
 
 (require rackunit

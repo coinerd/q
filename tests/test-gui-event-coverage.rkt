@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-gui-event-coverage.rkt — W3: thinking, retry, compaction, exploration
 ;;
 ;; Tests that new event subscriptions produce typed gui-messages

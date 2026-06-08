@@ -1,4 +1,7 @@
 #lang racket/base
+
+;; @speed fast
+;; @suite default
 ;; tests/test-memory-context-injection.rkt — Bounded memory prompt injection tests
 ;;
 ;; v0.95.7: Tests that bounded prompt injection works correctly:

@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite tui
+
 ;;; tests/test-tui-layout.rkt — Layout region computation tests (#5260)
 
 (require rackunit

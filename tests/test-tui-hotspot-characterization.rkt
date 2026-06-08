@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite tui
+
 ;; BOUNDARY: integration
 ;; CHARACTERIZATION TEST — documents current TUI behavior for v0.57.3 decomposition
 

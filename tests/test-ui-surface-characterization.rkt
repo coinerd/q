@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-ui-surface-characterization.rkt — Characterization tests for ui-surface
 ;;
 ;; W6 (v0.94.8): T-2 fix — removed redundant manual save/restore.

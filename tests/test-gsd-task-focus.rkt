@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite extensions
+
 ;; tests/test-gsd-task-focus.rkt — v0.75.7 W3 tests
 ;; Task focus preservation: extract-task-summary
 

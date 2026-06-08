@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite arch
+
 ;; q/tests/test-gui-error-boundary.rkt — Tests for gui/views/error-boundary.rkt
 
 (require rackunit

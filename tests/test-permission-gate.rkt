@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite security
+
 ;; BOUNDARY: integration
 
 ;;; tests/test-permission-gate.rkt — Tests for tools/permission-gate.rkt (G3.4)

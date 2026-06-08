@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-lint-doc-freshness.rkt — Doc freshness lint tests (v0.54.6 W2)
 
 (require rackunit

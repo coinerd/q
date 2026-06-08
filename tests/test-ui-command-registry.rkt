@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-ui-command-registry.rkt — Tests for unified command metadata registry
 ;;
 ;; W4.1 (v0.94.4): Verify canonical command list, registry operations, and parity.

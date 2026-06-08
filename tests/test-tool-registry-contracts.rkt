@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: contract
 
 ;; tests/test-tool-registry-contracts.rkt -- R3: registry contract boundary tests

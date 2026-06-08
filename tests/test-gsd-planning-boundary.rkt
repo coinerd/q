@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite arch
+
 ;; BOUNDARY: integration
 
 ;; tests/test-gsd-planning-boundary.rkt — GSD planning/execution boundary tests

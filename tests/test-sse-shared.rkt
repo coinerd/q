@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-sse-shared.rkt — T1-2: Test shared SSE streaming function
 ;; STABILITY: evolving
 

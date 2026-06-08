@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: unit
 ;; Tests for test-metadata.rkt metadata parser (v0.83.2 W0)
 

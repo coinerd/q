@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; test-tool-edge-cases.rkt — Edge case tests for tool-write and tool-read (#259)

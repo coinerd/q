@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-cell-buffer.rkt — Tests for tui/cell-buffer.rkt
 
 (require rackunit

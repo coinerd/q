@@ -1,4 +1,7 @@
 #lang racket/base
+
+;; @speed fast
+;; @suite default
 ;;; test-memory-wiring-w2.rkt — W2 tests verifying auto-extraction runtime wiring
 (require rackunit
          "../runtime/memory/auto-extraction.rkt"

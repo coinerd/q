@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite extensions
+
 ;; BOUNDARY: integration
 
 ;; tests/test-gsd-facade-sm-assertion.rkt — GSD facade split & state machine assertion (W-17, I-16, I-18, I-24)

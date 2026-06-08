@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;;; tests/test-cumulative-file-tracking.rkt — tests for cumulative file tracking (#768)
