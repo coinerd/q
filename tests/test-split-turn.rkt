@@ -17,10 +17,12 @@
 ;; Helpers
 ;; ============================================================
 
-(define msg-counter 0)
+(define msg-counter (make-parameter 0))
 (define (next-id!)
-  (set! msg-counter (add1 msg-counter))
-  (format "msg-~a" msg-counter))
+  (msg-counter (add1 (msg-counter)))
+  (format "msg-~a" (msg-counter)))
+(define (reset-msg-counter!)
+  (msg-counter 0))
 
 (define (make-user-msg text)
   (make-message (next-id!) #f 'user 'text (list (make-text-part text)) (current-seconds) (hasheq)))
@@ -64,16 +66,19 @@
 ;; ============================================================
 
 (test-case "find-split-turn: empty messages returns no split"
+  (reset-msg-counter!)
   (define result (find-split-turn '() 0))
   (check-false (split-turn-result-is-split? result)))
 
 (test-case "find-split-turn: split at index 0 is not a split"
+  (reset-msg-counter!)
   (define msgs (list (make-user-msg "hello")))
   (define result (find-split-turn msgs 0))
   (check-false (split-turn-result-is-split? result))
   (check-equal? (split-turn-result-split-index result) 0))
 
 (test-case "find-split-turn: split at user boundary is not a split"
+  (reset-msg-counter!)
   ;; Two complete turns, split between them
   (define msgs (append (make-full-turn "q1" "a1" "t1" "f1") (make-full-turn "q2" "a2" "t2" "f2")))
   ;; Split at index 4 (start of second turn = user message)
@@ -81,6 +86,7 @@
   (check-false (split-turn-result-is-split? result)))
 
 (test-case "find-split-turn: split mid-turn detects split"
+  (reset-msg-counter!)
   ;; One full turn + start of second turn, split in middle of second turn
   (define msgs
     (append (make-full-turn "q1" "a1" "t1" "f1")
@@ -93,6 +99,7 @@
   (check-equal? (length (split-turn-result-turn-messages result)) 2))
 
 (test-case "find-split-turn: split after assistant in turn"
+  (reset-msg-counter!)
   (define msgs
     (list (make-user-msg "q1") (make-assistant-msg "a1") (make-assistant-msg "continuing")))
   ;; Split at index 2 (after second assistant msg, mid-turn)
@@ -101,6 +108,7 @@
   (check-equal? (split-turn-result-turn-start-index result) 0))
 
 (test-case "find-split-turn: turn-messages contains the partial turn"
+  (reset-msg-counter!)
   (define msgs
     (list (make-user-msg "q1")
           (make-assistant-msg "a1")
@@ -116,24 +124,29 @@
   (check-equal? (length (split-turn-result-turn-messages result)) 1))
 
 (test-case "turn-start-index: finds user message"
+  (reset-msg-counter!)
   (define msgs (list (make-user-msg "q1") (make-assistant-msg "a1")))
   (check-equal? (turn-start-index msgs 1) 0))
 
 (test-case "turn-start-index: user at index 0"
+  (reset-msg-counter!)
   (define msgs (list (make-user-msg "q1")))
   (check-equal? (turn-start-index msgs 0) 0))
 
 (test-case "messages-at-turn-boundary: adjusts mid-turn to turn start"
+  (reset-msg-counter!)
   (define msgs (list (make-user-msg "q1") (make-assistant-msg "a1") (make-tool-result-msg "t1")))
   (define adjusted (messages-at-turn-boundary msgs 2))
   (check-equal? adjusted 0))
 
 (test-case "messages-at-turn-boundary: keeps turn-boundary split"
+  (reset-msg-counter!)
   (define msgs (append (make-full-turn "q1" "a1" "t1" "f1") (make-full-turn "q2" "a2" "t2" "f2")))
   (define adjusted (messages-at-turn-boundary msgs 4))
   (check-equal? adjusted 4))
 
 (test-case "find-turn-start: finds nearest user message backward"
+  (reset-msg-counter!)
   (define msgs
     (list (make-user-msg "q1")
           (make-assistant-msg "a1")
@@ -148,9 +161,11 @@
 ;; ============================================================
 
 (test-case "generate-turn-prefix: empty messages returns empty string"
+  (reset-msg-counter!)
   (check-equal? (generate-turn-prefix '()) ""))
 
 (test-case "generate-turn-prefix: includes role annotations"
+  (reset-msg-counter!)
   (define msgs (list (make-user-msg "what is 2+2?") (make-assistant-msg "let me calculate")))
   (define prefix (generate-turn-prefix msgs))
   (check-true (string-contains? prefix "[user]"))
@@ -158,11 +173,13 @@
   (check-true (string-contains? prefix "TURN PREFIX")))
 
 (test-case "generate-turn-prefix: includes message text"
+  (reset-msg-counter!)
   (define msgs (list (make-user-msg "what is 2+2?")))
   (define prefix (generate-turn-prefix msgs))
   (check-true (string-contains? prefix "what is 2+2?")))
 
 (test-case "generate-turn-prefix: truncates very long messages"
+  (reset-msg-counter!)
   (define long-text (make-string 1000 #\x))
   (define msgs (list (make-user-msg long-text)))
   (define prefix (generate-turn-prefix msgs))
@@ -171,6 +188,7 @@
   (check-true (string-contains? prefix "...")))
 
 (test-case "generate-turn-prefix: handles tool-result messages"
+  (reset-msg-counter!)
   (define msgs
     (list (make-user-msg "run bash")
           (make-assistant-msg "executing")
@@ -184,6 +202,7 @@
 ;; ============================================================
 
 (test-case "integration: token-based split with turn detection"
+  (reset-msg-counter!)
   ;; Create messages where a token-based split would fall mid-turn
   (define msgs
     (append (make-full-turn "question one" "answer one" "tool one" "final one")
@@ -198,6 +217,7 @@
   (check-true (> (string-length prefix) 0)))
 
 (test-case "integration: no prefix needed for clean turn-boundary split"
+  (reset-msg-counter!)
   (define msgs (append (make-full-turn "q1" "a1" "t1" "f1") (make-full-turn "q2" "a2" "t2" "f2")))
   (define result (find-split-turn msgs 4))
   (check-false (split-turn-result-is-split? result))
@@ -205,6 +225,7 @@
   (check-equal? prefix ""))
 
 (test-case "integration: system-instruction counts as turn-start"
+  (reset-msg-counter!)
   (define msgs
     (list (make-system-msg "you are helpful") (make-user-msg "hello") (make-assistant-msg "hi")))
   ;; turn-start at index 0 (system) and index 1 (user)

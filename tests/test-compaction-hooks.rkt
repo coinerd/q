@@ -20,10 +20,12 @@
 ;; Helpers
 ;; ============================================================
 
-(define msg-counter 0)
+(define msg-counter (make-parameter 0))
 (define (next-id!)
-  (set! msg-counter (add1 msg-counter))
-  (format "msg-~a" msg-counter))
+  (msg-counter (add1 (msg-counter)))
+  (format "msg-~a" (msg-counter)))
+(define (reset-msg-counter!)
+  (msg-counter 0))
 
 (define (make-user-msg text)
   (make-message (next-id!) #f 'user 'text (list (make-text-part text)) (current-seconds) (hasheq)))
@@ -42,6 +44,7 @@
 ;; ============================================================
 
 (test-case "build-enriched-compact-payload: includes message counts"
+  (reset-msg-counter!)
   (define msgs
     (append (for/list ([i (in-range 10)])
               (make-user-msg (format "q~a" i)))
@@ -54,24 +57,28 @@
   (check-true (positive? (hash-ref payload 'tokens-before))))
 
 (test-case "build-enriched-compact-payload: includes strategy"
+  (reset-msg-counter!)
   (define msgs (list (make-user-msg "hello")))
   (define strategy (compaction-strategy 5 3))
   (define payload (build-enriched-compact-payload msgs strategy))
   (check-equal? (hash-ref payload 'strategy) strategy))
 
 (test-case "build-enriched-compact-payload: includes previous-summary"
+  (reset-msg-counter!)
   (define msgs (list (make-user-msg "hello")))
   (define strategy (compaction-strategy 5 3))
   (define payload (build-enriched-compact-payload msgs strategy #:previous-summary "old summary"))
   (check-equal? (hash-ref payload 'previous-summary) "old summary"))
 
 (test-case "build-enriched-compact-payload: includes session-id"
+  (reset-msg-counter!)
   (define msgs (list (make-user-msg "hello")))
   (define strategy (compaction-strategy 5 3))
   (define payload (build-enriched-compact-payload msgs strategy #:session-id "sess-123"))
   (check-equal? (hash-ref payload 'session-id) "sess-123"))
 
 (test-case "dispatch-enriched-before-compact: returns payload and hook result"
+  (reset-msg-counter!)
   (define msgs
     (for/list ([i (in-range 8)])
       (make-user-msg (format "q~a" i))))
@@ -81,6 +88,7 @@
   (check-true (hash? payload)))
 
 (test-case "dispatch-enriched-before-compact: hook receives enriched payload"
+  (reset-msg-counter!)
   (define msgs
     (for/list ([i (in-range 8)])
       (make-user-msg (format "q~a" i))))
@@ -95,14 +103,17 @@
   (check-true (hook-result? hook-res)))
 
 (test-case "maybe-use-custom-summary: extracts custom summary from replace action"
+  (reset-msg-counter!)
   (define res (hook-result 'replace (hasheq 'summary "custom summary text")))
   (check-equal? (maybe-use-custom-summary res) "custom summary text"))
 
 (test-case "maybe-use-custom-summary: returns #f for pass action"
+  (reset-msg-counter!)
   (define res (hook-result 'pass (hasheq 'summary "ignored")))
   (check-false (maybe-use-custom-summary res)))
 
 (test-case "maybe-use-custom-summary: returns #f for #f input"
+  (reset-msg-counter!)
   (check-false (maybe-use-custom-summary #f)))
 
 ;; ============================================================
@@ -110,6 +121,7 @@
 ;; ============================================================
 
 (test-case "make-compaction-start-event: creates event with correct topic"
+  (reset-msg-counter!)
   (define evt (make-compaction-start-event 'threshold 100 5000 "sess-1" "turn-1"))
   (check-equal? (event-ev evt) "compaction.start")
   (define payload (event-payload evt))
@@ -118,6 +130,7 @@
   (check-equal? (hash-ref payload 'tokens-before) 5000))
 
 (test-case "make-compaction-end-event: creates event with correct topic"
+  (reset-msg-counter!)
   (define evt (make-compaction-end-event 'overflow 50 5000 2000 "sess-1" "turn-1"))
   (check-equal? (event-ev evt) "compaction.end")
   (define payload (event-payload evt))
@@ -128,11 +141,13 @@
   (check-true (hash-ref payload 'summary-generated?)))
 
 (test-case "make-compaction-end-event: respects summary-generated flag"
+  (reset-msg-counter!)
   (define evt
     (make-compaction-end-event 'threshold 5 3000 2500 "sess-1" "turn-1" #:summary-generated? #f))
   (check-false (hash-ref (event-payload evt) 'summary-generated?)))
 
 (test-case "publish-compaction-start!: publishes to event bus"
+  (reset-msg-counter!)
   (define bus (make-event-bus))
   (define received #f)
   (subscribe! bus (lambda (evt) (set! received evt)))
@@ -141,6 +156,7 @@
   (check-equal? (event-ev received) "compaction.start"))
 
 (test-case "publish-compaction-end!: publishes to event bus"
+  (reset-msg-counter!)
   (define bus (make-event-bus))
   (define received #f)
   (subscribe! bus (lambda (evt) (set! received evt)))
@@ -149,15 +165,18 @@
   (check-equal? (event-ev received) "compaction.end"))
 
 (test-case "publish-compaction-start!: handles #f bus gracefully"
+  (reset-msg-counter!)
   ;; Should not crash when bus is #f
   (publish-compaction-start! #f 'threshold 50 3000 "sess-1" "turn-1")
   (void))
 
 (test-case "publish-compaction-end!: handles #f bus gracefully"
+  (reset-msg-counter!)
   (publish-compaction-end! #f 'overflow 30 5000 2000 "sess-1" "turn-1")
   (void))
 
 (test-case "compaction events: topic constants are strings"
+  (reset-msg-counter!)
   (check-true (string? compaction-start-topic))
   (check-true (string? compaction-end-topic))
   (check-equal? compaction-start-topic "compaction.start")
@@ -168,6 +187,7 @@
 ;; ============================================================
 
 (test-case "integration: enriched hook with events"
+  (reset-msg-counter!)
   ;; Simulate full enriched compaction flow
   (define bus (make-event-bus))
   (define events-received '())
