@@ -5,6 +5,7 @@
          racket/string
          "../runtime/memory/policy.rkt"
          "../runtime/memory/types.rkt"
+         "../runtime/memory/service.rkt"
          "../runtime/safe-mode.rkt")
 
 (define (item content #:sensitivity [sensitivity 'public] #:scope [scope 'project])
@@ -80,12 +81,34 @@
   (check-true (policy-user-scope-enabled? enabled-policy))
   (check-true (policy-allows-scope? enabled-policy 'user)))
 
-(test-case "W0 G2: setting-memory-user-scope-enabled? does not exist in settings.rkt"
+(test-case "W1 G2: setting-memory-user-scope-enabled? now exists in settings.rkt"
   (define src (file->string (build-path (current-directory) ".." "runtime" "settings.rkt")))
-  (check-false (regexp-match? #rx"setting-memory-user-scope-enabled" src)
-               "W0 baseline: setting-memory-user-scope-enabled? should not exist yet"))
+  (check-true (regexp-match? #rx"setting-memory-user-scope-enabled" src)
+              "W1: setting-memory-user-scope-enabled? should exist"))
 
-(test-case "W0 G2: update-memory-policy! does not exist in service.rkt"
+(test-case "W1 G2: update-memory-policy! now exists in service.rkt"
   (define src (file->string (build-path (current-directory) ".." "runtime" "memory" "service.rkt")))
-  (check-false (regexp-match? #rx"update-memory-policy" src)
-               "W0 baseline: update-memory-policy! should not exist yet"))
+  (check-true (regexp-match? #rx"update-memory-policy" src)
+              "W1: update-memory-policy! should exist"))
+
+;; ---------------------------------------------------------------------------
+;; v0.95.21 W1: G2 — User-scope wiring functional tests
+;; ---------------------------------------------------------------------------
+
+(test-case "W1 G2: update-memory-policy! enables user scope"
+  (parameterize ([current-memory-policy default-memory-policy])
+    (update-memory-policy! #:user-scope-enabled? #t)
+    (check-true (policy-user-scope-enabled? (current-memory-policy)))
+    (check-true (policy-allows-scope? (current-memory-policy) 'user))))
+
+(test-case "W1 G2: update-memory-policy! preserves other fields"
+  (parameterize ([current-memory-policy default-memory-policy])
+    (define orig-max (memory-policy-max-items-per-session (current-memory-policy)))
+    (update-memory-policy! #:user-scope-enabled? #t)
+    (check-equal? (memory-policy-max-items-per-session (current-memory-policy)) orig-max)))
+
+(test-case "W1 G2: update-memory-policy! with #f disables user scope"
+  (parameterize ([current-memory-policy (make-memory-policy #:user-scope-enabled? #t)])
+    (check-true (policy-user-scope-enabled? (current-memory-policy)))
+    (update-memory-policy! #:user-scope-enabled? #f)
+    (check-false (policy-user-scope-enabled? (current-memory-policy)))))

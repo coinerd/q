@@ -12,6 +12,7 @@
 ;;   - This module does NOT import concrete tool modules or UI modules
 
 (require racket/dict
+         racket/match
          racket/string
          "policy.rkt"
          "protocol.rkt"
@@ -29,6 +30,15 @@
 
 ;; The active memory policy. Defaults to the standard safe policy.
 (define current-memory-policy (make-parameter default-memory-policy))
+
+;; v0.95.21 W2: Auto-reflection enabled parameter.
+;; When #t, maybe-reflect-session-memories! will trigger reflection.
+(define current-auto-reflection-enabled (make-parameter #f))
+
+;; v0.95.21 W2: Auto-reflection minimum items parameter.
+;; Minimum session-scoped items required before reflection triggers.
+;; Must be >= 2. Default: 5.
+(define current-auto-reflection-min-items (make-parameter 5))
 
 ;; ---------------------------------------------------------------------------
 ;; Service helpers
@@ -140,12 +150,27 @@
      (log-warning (format "memory: unknown external provider: ~a" provider))
      #f]))
 
+;; v0.95.21 W1: Update memory policy with user-scope override.
+;; Creates a new policy based on the current one with user-scope enabled/disabled.
+(define (update-memory-policy! #:user-scope-enabled? [enabled? #f])
+  (define current (current-memory-policy))
+  (match-define
+    (memory-policy max-items max-retrieve max-content sensitivities
+                   patterns allow-delete _user-scope)
+    current)
+  (current-memory-policy
+   (memory-policy max-items max-retrieve max-content sensitivities
+                  patterns allow-delete enabled?)))
+
 ;; ---------------------------------------------------------------------------
 ;; Provide
 ;; ---------------------------------------------------------------------------
 
 (provide current-memory-backend
          current-memory-policy
+         current-auto-reflection-enabled
+         current-auto-reflection-min-items
+         update-memory-policy!
          memory-service-available?
          resolve-memory-backend
          initialize-memory-backend!
