@@ -1,3 +1,16 @@
+## v0.96.1 — Representation Hiding + Parameter Reduction (2026-06-08)
+
+### Architecture
+- **F2 (Event struct-out over-exposure) — DOCUMENTED**: Classified 60 event types as PUBLIC (4) vs INTERNAL (56). PUBLIC events marked with stability commitment. Assessment: `struct-out` for `#:transparent` immutable structs is idiomatic Racket; explicit provides would be more verbose with no security benefit.
+- **F3 (Parameter proliferation) — RESOLVED**: Audited all 129 production parameters. Dead `circuit-breaker-state` removed. Already at ≤130 target. Classification: 42 function-arg candidates, 27 groupable, 36 keep-as-is.
+
+### Metrics
+| Metric | Before (v0.96.0) | After (v0.96.1) | Change |
+|--------|------------------|-----------------|--------|
+| Production parameters | 130 | 129 | -1 |
+| Event types classified | 0 | 60 | +60 |
+| Dead parameters | 1 | 0 | -1 |
+
 ## v0.96.0 — Turn Orchestrator Decomposition (2026-06-08)
 
 ### Architecture
