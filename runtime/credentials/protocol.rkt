@@ -10,31 +10,32 @@
 (require "../../util/error/error-helpers.rkt"
          "../../util/error/errors.rkt")
 
-(provide
- ;; Backend struct
- credential-backend
- credential-backend?
- credential-backend-name
- credential-backend-store-fn
- credential-backend-load-fn
- credential-backend-delete-fn
- credential-backend-list-fn
- credential-backend-available?-fn
- ;; Generic operations
- backend-name
- backend-store!
- backend-load
- backend-delete!
- backend-list-providers
- backend-available?
- ;; Command runner seams
- current-external-command-runner
- current-shell-command-runner
- ;; Credential policy
- credential-policy?
- valid-credential-policies
- ;; Helpers
- shell-escape)
+;; Backend struct
+(provide credential-backend
+         credential-backend?
+         credential-backend-name
+         credential-backend-store-fn
+         credential-backend-load-fn
+         credential-backend-delete-fn
+         credential-backend-list-fn
+         credential-backend-available?-fn
+         ;; Generic operations (with contracts — F4)
+         (contract-out
+          [backend-name (-> credential-backend? string?)]
+          [backend-store! (-> credential-backend? string? string? void?)]
+          [backend-load
+           (->* (credential-backend? string?) (#:env-var (or/c string? #f)) (or/c hash? #f))]
+          [backend-delete! (-> credential-backend? string? void?)]
+          [backend-list-providers (-> credential-backend? (listof string?))]
+          [backend-available? (-> credential-backend? boolean?)])
+         ;; Command runner seams
+         current-external-command-runner
+         current-shell-command-runner
+         ;; Credential policy
+         credential-policy?
+         valid-credential-policies
+         ;; Helpers
+         shell-escape)
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Backend struct
