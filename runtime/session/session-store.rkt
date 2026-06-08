@@ -1,4 +1,5 @@
 #lang racket/base
+;; STABILITY: public
 ;; STABILITY: evolving
 
 ;;; runtime/session-store.rkt — append-only JSONL session storage (facade)

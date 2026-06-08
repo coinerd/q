@@ -1,4 +1,5 @@
 #lang racket/base
+;; STABILITY: public
 ;; tools/tool.rkt — Tool contract, execution context, and registry facade
 ;; STABILITY: stable
 ;; v0.30.8: Decomposed into submodules (exec-context, registry, schema-helpers)

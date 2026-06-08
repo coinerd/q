@@ -1,4 +1,5 @@
 #lang typed/racket
+;; STABILITY: public
 
 ;; util/hook-types.rkt — canonical hook result types and per-hook validation
 ;; Shared between extensions layer and agent core.

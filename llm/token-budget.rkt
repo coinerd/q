@@ -1,4 +1,5 @@
 #lang racket/base
+;; STABILITY: public
 
 ;; llm/token-budget.rkt — token budget estimation and thresholds
 ;;

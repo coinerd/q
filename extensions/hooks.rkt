@@ -1,4 +1,5 @@
 #lang racket/base
+;; STABILITY: public
 
 ;; extensions/hooks.rkt — hook dispatch and result normalization
 ;; STABILITY: stable

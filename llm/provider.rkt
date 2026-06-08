@@ -1,4 +1,5 @@
 #lang racket/base
+;; STABILITY: public
 ;; TR NOTE: Remains #lang racket/base due to define-generics incompatibility with Typed Racket.
 
 ;; llm/provider.rkt — provider interface contract

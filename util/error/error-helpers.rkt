@@ -1,4 +1,5 @@
 #lang racket/base
+;; STABILITY: public
 
 ;;; error-helpers.rkt — Error handling macros for common fallback patterns.
 ;;;

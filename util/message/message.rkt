@@ -1,4 +1,5 @@
 #lang racket/base
+;; STABILITY: public
 
 ;; util/message.rkt — Message struct and serialization
 ;;

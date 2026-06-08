@@ -1,4 +1,5 @@
 #lang typed/racket
+;; STABILITY: public
 
 ;; util/event.rkt — Event envelope struct and serialization
 ;;

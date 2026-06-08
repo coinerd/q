@@ -1,4 +1,5 @@
 #lang racket/base
+;; STABILITY: public
 
 (require racket/contract)
 

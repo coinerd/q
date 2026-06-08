@@ -1,4 +1,5 @@
 #lang racket/base
+;; STABILITY: public
 
 ;; llm/model.rkt — normalized model request/response types
 ;;

@@ -1,4 +1,5 @@
 #lang racket/base
+;; STABILITY: public
 
 ;; util/content-parts.rkt — Content part structs for messages
 ;;

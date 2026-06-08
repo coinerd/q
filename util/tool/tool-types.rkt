@@ -1,4 +1,5 @@
 #lang racket/base
+;; STABILITY: public
 
 ;; util/tool-types.rkt -- standalone tool-call and tool-result structs + tool? predicate
 ;;

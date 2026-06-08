@@ -1,4 +1,5 @@
 #lang racket/base
+;; STABILITY: public
 
 ;; extensions/context.rkt — rich extension context
 ;;
