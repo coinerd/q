@@ -9,10 +9,10 @@
 
 (require rackunit
          racket/async-channel
-         "../../../q/tui/input.rkt"
-         "../../../q/tui/state.rkt"
-         "../../../q/tui/terminal.rkt"
-         (only-in "../../../q/tui/render.rkt"
+         "../tui/input.rkt"
+         "../tui/state.rkt"
+         "../tui/terminal.rkt"
+         (only-in "../tui/render.rkt"
                   styled-line
                   styled-line?
                   styled-segment
@@ -32,11 +32,11 @@
                   format-entry
                   md-format-assistant
                   wrap-styled-line)
-         "../../../q/tui/layout.rkt"
-         "../../../q/util/message/protocol-types.rkt"
-         "../../../q/agent/event-bus.rkt"
-         "../../../q/interfaces/tui.rkt"
-         (only-in "../../../q/tui/command-parse.rkt" parsed-command? parsed-command-canonical-name))
+         "../tui/layout.rkt"
+         "../util/message/protocol-types.rkt"
+         "../agent/event-bus.rkt"
+         "../interfaces/tui.rkt"
+         (only-in "../tui/command-parse.rkt" parsed-command? parsed-command-canonical-name))
 
 (test-case "make-tui-ctx returns a valid tui-ctx with default values"
   (let ([ctx (make-tui-ctx)])
