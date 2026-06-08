@@ -13,9 +13,37 @@
 ;; Opaque types (EventBus, ToolRegistry, ExtRegistry, CancellationToken)
 ;; are defined via #:opaque to avoid any-wrap/c issues with TR boundaries.
 
-(provide (struct-out loop-infra)
-         (struct-out loop-counters)
-         (struct-out iteration-snapshot)
+(provide ;; loop-infra
+         loop-infra
+         loop-infra?
+         loop-infra-ctx
+         loop-infra-ext-reg
+         loop-infra-reg
+         loop-infra-bus
+         loop-infra-session-id
+         loop-infra-log-path
+         loop-infra-token
+         ;; loop-counters
+         loop-counters
+         loop-counters?
+         loop-counters-iteration
+         loop-counters-consecutive-tool-count
+         loop-counters-seen-paths
+         loop-counters-intent-retry-count
+         loop-counters-consecutive-error-count
+         loop-counters-recent-tool-names
+         loop-counters-explore-count
+         loop-counters-implement-count
+         loop-counters-stall-retry-count
+         ;; iteration-snapshot
+         iteration-snapshot
+         iteration-snapshot?
+         iteration-snapshot-counters
+         iteration-snapshot-ws
+         iteration-snapshot-config
+         iteration-snapshot-sess
+         iteration-snapshot-max-iterations
+         iteration-snapshot-max-iterations-hard
          make-initial-counters)
 
 ;; ── Opaque types for untyped struct values ────────────────────
