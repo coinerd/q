@@ -13,18 +13,7 @@
                   delete-memory-handler
                   clear-memory-handler
                   consolidate-memory-handler
-                  cleanup-expired-handler)
-         (only-in "memory-tools-shared.rkt"
-                  backend-name
-                  current-memory-backend
-                  current-memory-policy
-                  pathish->string
-                  tool-project-root
-                  tool-session-id
-                  format-items-text
-                  memory-error-message
-                  make-error-result
-                  make-success-result))
+                  cleanup-expired-handler))
 
 (define-tool
  store-memory

@@ -5,14 +5,10 @@
 ;; Extracted from turn-orchestrator.rkt (v0.96.0 W3) for module sizing.
 
 (require racket/contract
-         (only-in "layer-adapters.rkt"
-                  tool-registry?
-                  extension-registry?
-                  make-extension-ctx
-                  dispatch-hooks)
+         (only-in "layer-adapters.rkt" tool-registry? extension-registry? make-extension-ctx)
          (only-in "layer-adapters.rkt" current-gsd-ctx)
          "../agent/event-bus.rkt"
-         (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload hook-result?)
+         (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload)
          (only-in "runtime-helpers.rkt" maybe-dispatch-hooks))
 
 (provide (contract-out
