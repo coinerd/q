@@ -59,7 +59,7 @@
  ;; ═══════════════════════════════════════════
  (test-suite "check-racket-version"
 
-   (test-case "returns a check-result"
+   (test-case "doctor: returns a check-result"
      (define r (check-racket-version))
      (check-pred check-result? r)
      (check-equal? (check-result-name r) "Racket"))
@@ -73,7 +73,7 @@
  ;; ═══════════════════════════════════════════
  (test-suite "check-packages"
 
-   (test-case "returns a check-result"
+   (test-case "doctor: returns a check-result (2)"
      (define r (check-packages))
      (check-pred check-result? r)
      (check-equal? (check-result-name r) "Packages"))
@@ -86,7 +86,7 @@
  ;; ═══════════════════════════════════════════
  (test-suite "check-config-dir"
 
-   (test-case "returns a check-result"
+   (test-case "doctor: returns a check-result (3)"
      (define r (check-config-dir))
      (check-pred check-result? r)
      (check-equal? (check-result-name r) "Config dir"))
@@ -99,7 +99,7 @@
  ;; ═══════════════════════════════════════════
  (test-suite "check-config-file"
 
-   (test-case "returns a check-result"
+   (test-case "doctor: returns a check-result (4)"
      (define r (check-config-file))
      (check-pred check-result? r)
      (check-equal? (check-result-name r) "Config file")))
@@ -108,7 +108,7 @@
  ;; ═══════════════════════════════════════════
  (test-suite "check-credentials"
 
-   (test-case "returns a check-result"
+   (test-case "doctor: returns a check-result (5)"
      (define r (check-credentials))
      (check-pred check-result? r)
      (check-equal? (check-result-name r) "Credentials")))
@@ -117,7 +117,7 @@
  ;; ═══════════════════════════════════════════
  (test-suite "check-session-dir"
 
-   (test-case "returns a check-result"
+   (test-case "doctor: returns a check-result (6)"
      (define r (check-session-dir))
      (check-pred check-result? r)
      (check-equal? (check-result-name r) "Session dir")))
@@ -126,7 +126,7 @@
  ;; ═══════════════════════════════════════════
  (test-suite "check-tui-packages"
 
-   (test-case "returns a check-result"
+   (test-case "doctor: returns a check-result (7)"
      (define r (check-tui-packages))
      (check-pred check-result? r)
      (check-not-false (member (check-result-name r) '("TUI" "TUI (char-term)"))

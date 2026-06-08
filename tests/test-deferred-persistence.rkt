@@ -97,7 +97,7 @@
                  (define log-path (build-path tmpdir (session-id sess) "session.jsonl"))
                  (check-true (file-exists? log-path))))
 
-(test-case "ensure-persisted! is idempotent"
+(test-case "deferred-persistence: ensure-persisted! is idempotent"
   (with-temp-dir (tmpdir)
                  (define sess
                    (make-agent-session (hasheq 'session-dir
@@ -114,7 +114,7 @@
                  (ensure-persisted! sess)
                  (check-true (agent-session-persisted? sess))))
 
-(test-case "buffer-or-append! writes immediately when persisted"
+(test-case "deferred-persistence: buffer-or-append! writes immediately when persisted"
   (with-temp-dir (tmpdir)
                  (define sess
                    (make-agent-session (hasheq 'session-dir

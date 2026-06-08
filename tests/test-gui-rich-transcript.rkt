@@ -160,39 +160,39 @@
 
 (define-test-suite test-scroll-state
 
-  (test-case "make-scroll-state defaults to auto-scroll enabled"
+  (test-case "gui-rich-transcript: make-scroll-state defaults to auto-scroll enabled"
     (define ss (make-scroll-state))
     (check-true (scroll-state-auto-scroll? ss))
     (check-false (scroll-state-user-scrolled-up? ss)))
 
-  (test-case "make-scroll-state can be created with auto disabled"
+  (test-case "gui-rich-transcript: make-scroll-state can be created with auto disabled"
     (define ss (make-scroll-state #f))
     (check-false (scroll-state-auto-scroll? ss)))
 
-  (test-case "scroll-state-on-scroll near bottom enables auto-scroll"
+  (test-case "gui-rich-transcript: scroll-state-on-scroll near bottom enables auto-scroll"
     (define ss (make-scroll-state #f))
     (define updated (scroll-state-on-scroll ss 0.97))
     (check-true (scroll-state-auto-scroll? updated))
     (check-false (scroll-state-user-scrolled-up? updated)))
 
-  (test-case "scroll-state-on-scroll mid-way disables auto-scroll"
+  (test-case "gui-rich-transcript: scroll-state-on-scroll mid-way disables auto-scroll"
     (define ss (make-scroll-state))
     (define updated (scroll-state-on-scroll ss 0.5))
     (check-false (scroll-state-auto-scroll? updated))
     (check-true (scroll-state-user-scrolled-up? updated)))
 
-  (test-case "scroll-state-on-scroll at top disables auto-scroll"
+  (test-case "gui-rich-transcript: scroll-state-on-scroll at top disables auto-scroll"
     (define ss (make-scroll-state))
     (define updated (scroll-state-on-scroll ss 0.0))
     (check-false (scroll-state-auto-scroll? updated)))
 
-  (test-case "scroll-state-on-submit re-enables auto-scroll"
+  (test-case "gui-rich-transcript: scroll-state-on-submit re-enables auto-scroll"
     (define ss (hash 'auto-scroll #f 'scroll-ratio 0.3 'user-scrolled-up #t))
     (define updated (scroll-state-on-submit ss))
     (check-true (scroll-state-auto-scroll? updated))
     (check-false (scroll-state-user-scrolled-up? updated)))
 
-  (test-case "scroll-state-on-scroll boundary at 0.95"
+  (test-case "gui-rich-transcript: scroll-state-on-scroll boundary at 0.95"
     (define ss (make-scroll-state #f))
     (define at-boundary (scroll-state-on-scroll ss 0.95))
     (check-true (scroll-state-auto-scroll? at-boundary))
@@ -306,33 +306,33 @@
 
 (define-test-suite test-multiline-input
 
-  (test-case "input-key-should-submit? Enter without modifiers"
+  (test-case "gui-rich-transcript: input-key-should-submit? Enter without modifiers"
     (check-true (input-key-should-submit? 'return #f #f)))
 
-  (test-case "input-key-should-submit? Shift+Enter does not submit"
+  (test-case "gui-rich-transcript: input-key-should-submit? Shift+Enter does not submit"
     (check-false (input-key-should-submit? 'return #t #f)))
 
-  (test-case "input-key-should-submit? Control+Enter does not submit"
+  (test-case "gui-rich-transcript: input-key-should-submit? Control+Enter does not submit"
     (check-false (input-key-should-submit? 'return #f #t)))
 
-  (test-case "input-key-should-submit? non-return key does not submit"
+  (test-case "gui-rich-transcript: input-key-should-submit? non-return key does not submit"
     (check-false (input-key-should-submit? 'space #f #f)))
 
-  (test-case "prepare-input-for-submit trims trailing whitespace"
+  (test-case "gui-rich-transcript: prepare-input-for-submit trims trailing whitespace"
     (check-equal? (prepare-input-for-submit "hello   ") "hello")
     (check-equal? (prepare-input-for-submit "hello") "hello"))
 
-  (test-case "input-line-count single line"
+  (test-case "gui-rich-transcript: input-line-count single line"
     (check-equal? (input-line-count "hello") 1))
 
-  (test-case "input-line-count multiple lines"
+  (test-case "gui-rich-transcript: input-line-count multiple lines"
     (check-equal? (input-line-count "line1\nline2\nline3") 3))
 
-  (test-case "input-looks-like-code? detects racket"
+  (test-case "gui-rich-transcript: input-looks-like-code? detects racket"
     (check-true (input-looks-like-code? "(define x 1)"))
     (check-true (input-looks-like-code? "(let ([x 1]) x)")))
 
-  (test-case "input-looks-like-code? plain text"
+  (test-case "gui-rich-transcript: input-looks-like-code? plain text"
     (check-false (input-looks-like-code? "Hello, how are you?"))))
 
 (run-tests test-multiline-input)

@@ -70,13 +70,13 @@
 ;; navigate-to-leaf!
 ;; ============================================================
 
-(test-case "navigate-to-leaf! succeeds for leaf node"
+(test-case "session-navigation: navigate-to-leaf! succeeds for leaf node"
   (define idx (make-test-index))
   (define result (navigate-to-leaf! idx "f"))
   (check-not-false result)
   (check-equal? (message-id (navigate-result-entry result)) "f"))
 
-(test-case "navigate-to-leaf! returns #f for non-leaf node"
+(test-case "session-navigation: navigate-to-leaf! returns #f for non-leaf node"
   (define idx (make-test-index))
   (check-false (navigate-to-leaf! idx "a")))
 

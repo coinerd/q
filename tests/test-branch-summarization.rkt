@@ -191,7 +191,7 @@
                   (check-equal? (message-kind active) 'branch-summary))
                 (lambda () (cleanup! tmpdir))))
 
-(test-case "branch-with-summary! returns #f for nonexistent entry"
+(test-case "branch-summarization: branch-with-summary! returns #f for nonexistent entry"
   (define m1
     (make-message "root" #f 'user 'message (list (make-text-part "root")) (current-seconds) (hasheq)))
   (define-values (idx tmpdir) (make-test-index (list m1)))

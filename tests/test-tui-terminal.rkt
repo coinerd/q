@@ -39,7 +39,7 @@
       ;; Check arity: should accept at least 0 args, with keyword support
       (check-true (procedure-arity-includes? tui-term-open 0)))
 
-    (test-case "tui-term-close is a procedure"
+    (test-case "tui-terminal: tui-term-close is a procedure"
       (check-pred procedure? tui-term-close)
       (check-true (procedure-arity-includes? tui-term-close 1)))
 
@@ -196,7 +196,7 @@
       (input-buffer-reset!)
       (check-equal? (input-buffer-length) 0))
 
-    (test-case "detect-sync-mode-support! runs without error"
+    (test-case "tui-terminal: detect-sync-mode-support! runs without error"
       (detect-sync-mode-support!)
       (check-true (or (terminal-sync-available?) (not (terminal-sync-available?)))))
 

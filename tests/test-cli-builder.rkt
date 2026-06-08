@@ -84,7 +84,7 @@
    (define ext-reg (make-extension-registry))
    (check-not-exn (lambda () (load-extensions-from-dir! ext-reg (build-path dir "ext"))))
    (delete-directory/files dir))
- (test-case "load-extensions-from-dir! skips non-.rkt files"
+ (test-case "cli-builder: load-extensions-from-dir! skips non-.rkt files"
    (define dir (make-temp-dir))
    (define ext-dir (build-path dir "extensions"))
    (make-directory* ext-dir)

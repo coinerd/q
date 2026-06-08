@@ -93,7 +93,7 @@
 
 (define-test-suite
  subprocess-tests
- (test-case "run-subprocess: simple echo"
+ (test-case "sandbox: run-subprocess: simple echo"
    (define result (run-subprocess "echo" #:args '("hello world")))
    (check-equal? (subprocess-result-exit-code result) 0)
    (check-false (subprocess-result-timed-out? result))
@@ -102,7 +102,7 @@
    (define result (run-subprocess "/bin/sh" #:args '("-c" "echo err >&2")))
    (check-equal? (subprocess-result-exit-code result) 0)
    (check regexp-match? #rx"err" (subprocess-result-stderr result)))
- (test-case "run-subprocess: non-zero exit code"
+ (test-case "sandbox: run-subprocess: non-zero exit code"
    (define result (run-subprocess "false"))
    (check-not-equal? (subprocess-result-exit-code result) 0)
    (check-false (subprocess-result-timed-out? result)))

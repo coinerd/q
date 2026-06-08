@@ -50,7 +50,7 @@
       (check-true (> (transcript-length s3) (transcript-length s2)) "transcript grew during overlay"))
 
     ;; Overlay dismiss clears overlay
-    (test-case "dismiss-overlay clears active overlay"
+    (test-case "tui-overlay-state: dismiss-overlay clears active overlay"
       (define s0 (initial-ui-state))
       (define s1 (show-overlay s0 'command-palette '(("A" normal)) ""))
       (check-true (overlay-active? s1) "overlay active")

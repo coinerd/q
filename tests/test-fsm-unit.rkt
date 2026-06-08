@@ -23,7 +23,7 @@
 (define fsm-suite
   (test-suite
    "FSM unit tests"
-   (test-case "make-fsm creates fsm struct"
+   (test-case "fsm-unit: make-fsm creates fsm struct"
      (check-pred fsm? traffic-machine)
      (check-equal? (fsm-states traffic-machine) '(red green yellow))
      (check-equal? (fsm-events traffic-machine) '(go slow stop))
@@ -39,11 +39,11 @@
      (check-false (fsm-lookup traffic-machine 'green 'go))
      (check-false (fsm-lookup traffic-machine 'yellow 'go)))
 
-   (test-case "fsm-valid-transition? returns boolean"
+   (test-case "fsm-unit: fsm-valid-transition? returns boolean"
      (check-true (fsm-valid-transition? traffic-machine 'red 'go))
      (check-false (fsm-valid-transition? traffic-machine 'red 'slow)))
 
-   (test-case "fsm-valid-targets lists reachable states"
+   (test-case "fsm-unit: fsm-valid-targets lists reachable states"
      (check-equal? (fsm-valid-targets traffic-machine 'red) '(green))
      (check-equal? (fsm-valid-targets traffic-machine 'green) '(yellow))
      (check-equal? (fsm-valid-targets traffic-machine 'yellow) '(red))
@@ -54,7 +54,7 @@
      (check-equal? (fsm-find-path traffic-machine 'red 'yellow) '(go slow))
      (check-equal? (fsm-find-path traffic-machine 'red 'red) '()))
 
-   (test-case "fsm-find-path returns #f for unreachable"
+   (test-case "fsm-unit: fsm-find-path returns #f for unreachable"
      (check-false (fsm-find-path disconnected 'a 'c)))
 
    (test-case "fsm-state and fsm-event structs"

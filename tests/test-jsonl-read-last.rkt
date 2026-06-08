@@ -119,13 +119,13 @@
 ;; jsonl-read-last — max-lines edge cases
 ;; ============================================================
 
-(test-case "jsonl-read-last with max-lines 1 returns only last entry"
+(test-case "jsonl-read-last: jsonl-read-last with max-lines 1 returns only last entry"
   (with-temp-jsonl (list (hash 'a 1) (hash 'b 2))
                    (lambda (tmp)
                      (define result (jsonl-read-last tmp 1))
                      (check-equal? (length result) 1))))
 
-(test-case "jsonl-read-last with max-lines 1 returns only last entry"
+(test-case "jsonl-read-last: jsonl-read-last with max-lines 1 returns only last entry (2)"
   (define entries
     (for/list ([i (in-range 5)])
       (hash 'i i)))
@@ -195,7 +195,7 @@
 ;; jsonl-line-valid? — companion function tests
 ;; ============================================================
 
-(test-case "jsonl-line-valid? accepts valid JSON objects"
+(test-case "jsonl-read-last: jsonl-line-valid? accepts valid JSON objects"
   (check-true (jsonl-line-valid? "{\"a\":1}"))
   (check-true (jsonl-line-valid? "42"))
   (check-true (jsonl-line-valid? "\"hello\""))

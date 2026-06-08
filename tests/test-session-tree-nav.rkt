@@ -134,7 +134,7 @@
 ;; Tests: navigate-to-leaf!
 ;; ============================================================
 
-(test-case "navigate-to-leaf! succeeds for leaf node"
+(test-case "session-tree-nav: navigate-to-leaf! succeeds for leaf node"
   (define idx
     (build-index-from-spec '(("root" #f "root content") ("a" "root" "a content")
                                                         ("c" "a" "c content"))))
@@ -143,7 +143,7 @@
   (check-equal? (message-id (navigate-result-entry result)) "c")
   (check-true (navigate-result-leaf? result)))
 
-(test-case "navigate-to-leaf! returns #f for non-leaf node"
+(test-case "session-tree-nav: navigate-to-leaf! returns #f for non-leaf node"
   (define idx
     (build-index-from-spec '(("root" #f "root content") ("a" "root" "a content")
                                                         ("b" "a" "b content"))))
@@ -338,7 +338,7 @@
   (check-not-false active)
   (check-equal? (message-kind active) 'branch-summary))
 
-(test-case "branch-with-summary! returns #f for nonexistent entry"
+(test-case "session-tree-nav: branch-with-summary! returns #f for nonexistent entry"
   (define idx (build-index-from-spec '(("root" #f "root content"))))
   (check-false (branch-with-summary! idx "nonexistent" "Summary")))
 

@@ -42,7 +42,7 @@
    (define-values (s1 result) (component-handle-input comp 'click s0))
    (check-true (input-action? result))
    (check-equal? (input-action-data result) 'clicked))
- (test-case "component-handle-input bubbles without handler"
+ (test-case "component-model: component-handle-input bubbles without handler"
    (define comp (make-q-component (lambda (state width) '())))
    (define s0 (initial-ui-state))
    (define-values (s1 result) (component-handle-input comp 'key s0))
@@ -83,7 +83,7 @@
            (make-q-component (lambda (s w) '()) #:id 'b #:wants-focus? #t)))
    (check-equal? (cycle-focus comps 'a -1) 'b)
    (check-equal? (cycle-focus comps 'b -1) 'a))
- (test-case "cycle-focus returns #f when no focusable components"
+ (test-case "component-model: cycle-focus returns #f when no focusable components"
    (define comps (list (make-q-component (lambda (s w) '()) #:id 'a)))
    (check-false (cycle-focus comps #f)))
  ;; ──────────────────────────────
@@ -239,7 +239,7 @@
  ;; ──────────────────────────────
  ;; Focus cycling via cycle-focus
  ;; ──────────────────────────────
- (test-case "cycle-focus returns #f when no focusable components"
+ (test-case "component-model: cycle-focus returns #f when no focusable components (2)"
    (define comp (make-q-component (lambda (s w) '()) #:wants-focus? #f))
    (check-false (cycle-focus (list comp) #f)))
  (test-case "cycle-focus cycles forward through focusable components"

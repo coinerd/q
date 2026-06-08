@@ -160,7 +160,7 @@
                        (check-equal? c '("code.rkt")))))
 
     ;; 9. Non-existent path returns error
-    (test-case "non-existent path returns error"
+    (test-case "find: non-existent path returns error"
       (define r (tool-find (hasheq 'path "/tmp/q-no-such-dir-xyz-999")))
       (check-true (result-is-error? r))
       (define c (string-join (result-content r) ""))

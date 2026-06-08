@@ -41,7 +41,7 @@
     (test-case "current-task-state-aware-assembly? defaults to #f"
       (check-false (current-task-state-aware-assembly?)))
 
-    (test-case "feature flag can be enabled"
+    (test-case "state-aware-builder: feature flag can be enabled"
       (parameterize ([current-task-state-aware-assembly? #t])
         (check-true (current-task-state-aware-assembly?))))
 
@@ -125,7 +125,7 @@
     (test-case "preamble returns message for idle (v0.78+)"
       (check-not-false (build-state-awareness-preamble 'idle '())))
 
-    (test-case "preamble returns #f for #f state"
+    (test-case "state-aware-builder: preamble returns #f for #f state"
       (check-false (build-state-awareness-preamble #f '())))
 
     (test-case "preamble returns message for exploration"

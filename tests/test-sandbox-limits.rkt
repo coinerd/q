@@ -118,7 +118,7 @@
 ;; Standalone defaults
 ;; ============================================================
 
-(test-case "default-timeout-seconds is 300"
+(test-case "sandbox-limits: default-timeout-seconds is 300"
   (check-equal? default-timeout-seconds 300))
 
 (test-case "default-max-output-bytes is 10MB"

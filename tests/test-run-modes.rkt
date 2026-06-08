@@ -66,7 +66,7 @@
   (check-true (path? global-ext-dir))
   (check-equal? (path->string (file-name-from-path global-ext-dir)) "extensions"))
 
-(test-case "load-extensions-from-dir! skips non-.rkt files"
+(test-case "run-modes: load-extensions-from-dir! skips non-.rkt files"
   (define tmp-dir (make-temp-ext-dir))
   (define ext-dir (build-path tmp-dir "extensions"))
   (make-directory* ext-dir)

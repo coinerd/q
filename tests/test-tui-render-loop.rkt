@@ -102,7 +102,7 @@
     (test-case "terminal-sync-available? returns boolean"
       (check-pred boolean? (terminal-sync-available?)))
 
-    (test-case "detect-sync-mode-support! runs without error"
+    (test-case "tui-render-loop: detect-sync-mode-support! runs without error"
       (check-not-exn (lambda () (detect-sync-mode-support!))))
 
     (test-case "sync mode wraps render output when supported"

@@ -64,7 +64,7 @@
 ;; gsd-mode state machine tests
 ;; ============================================================
 
-(test-case "gsd-mode defaults to #f"
+(test-case "gsd-planning-boundary: gsd-mode defaults to #f"
   (check-equal? (gsd-mode) #f))
 
 (test-case "gsd-mode can be set to 'planning"

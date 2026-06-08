@@ -38,7 +38,7 @@
      (when (null? focusable)
        (check-false (cycle-focus comps 'transcript-vdom))))
 
-   (test-case "component-handle-input bubbles without handler"
+   (test-case "vdom-component-integration: component-handle-input bubbles without handler"
      (define comp (make-header-vdom-component))
      (define st (initial-ui-state))
      (define-values (st* result)

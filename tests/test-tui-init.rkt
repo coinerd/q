@@ -56,7 +56,7 @@
     ;; --------------------------------------------------
     ;; Test 4: make-tui-ctx defaults work
     ;; --------------------------------------------------
-    (test-case "make-tui-ctx creates valid context"
+    (test-case "tui-init: make-tui-ctx creates valid context"
       (define ctx (make-tui-ctx))
       (check-pred tui-ctx? ctx)
       (check-true (unbox (tui-ctx-running-box ctx)))

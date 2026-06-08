@@ -27,7 +27,7 @@
       (check-equal? (gui-message-role (car msgs)) "user")
       (check-equal? (gui-message-text (car msgs)) "hello"))
 
-    (test-case "appends to existing messages"
+    (test-case "gui-state-sync: appends to existing messages"
       (define sb (fresh-box))
       (define sub (make-gui-event-subscriber sb))
       (sub (mk-event "user.input" (hash 'text "first")))

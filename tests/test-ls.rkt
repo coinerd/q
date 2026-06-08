@@ -177,13 +177,13 @@
                        (check-true (and subdir-idx aaa-idx (< subdir-idx aaa-idx))))))
 
     ;; 9. Non-existent path returns error
-    (test-case "non-existent path returns error"
+    (test-case "ls: non-existent path returns error"
       (define r (tool-ls (hasheq 'path "/no/such/directory/ever")))
       (check-true (result-is-error? r))
       (check-not-false (regexp-match? #rx"not found" (first (result-content r)))))
 
     ;; 10. Missing path returns error
-    (test-case "missing path returns error"
+    (test-case "ls: missing path returns error"
       (define r (tool-ls (hasheq)))
       (check-true (result-is-error? r))
       (check-not-false (regexp-match? #rx"Missing" (first (result-content r)))))

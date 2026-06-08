@@ -10,7 +10,7 @@
 ;; Hook result constructors
 ;; ============================================================
 
-(test-case "hook-pass creates pass result"
+(test-case "hooks: hook-pass creates pass result"
   (define r (hook-pass "data"))
   (check-pred hook-result? r)
   (check-eq? (hook-result-action r) 'pass)
@@ -20,12 +20,12 @@
   (define r (hook-pass))
   (check-false (hook-result-payload r)))
 
-(test-case "hook-amend creates amend result"
+(test-case "hooks: hook-amend creates amend result"
   (define r (hook-amend "new-data"))
   (check-eq? (hook-result-action r) 'amend)
   (check-equal? (hook-result-payload r) "new-data"))
 
-(test-case "hook-block creates block result"
+(test-case "hooks: hook-block creates block result"
   (define r (hook-block "denied"))
   (check-eq? (hook-result-action r) 'block)
   (check-equal? (hook-result-payload r) "denied"))

@@ -52,20 +52,20 @@
       (check-equal? (length (tree-browser-state-nodes tbs)) 4))
 
     ;; Navigation
-    (test-case "tree-next-node advances index"
+    (test-case "tree-browser: tree-next-node advances index"
       (define nodes '("a" "b" "c"))
       (check-equal? (tree-next-node nodes 0) 1)
       (check-equal? (tree-next-node nodes 1) 2)
       (check-equal? (tree-next-node nodes 2) 2)) ; clamps at end
 
-    (test-case "tree-prev-node decrements index"
+    (test-case "tree-browser: tree-prev-node decrements index"
       (define nodes '("a" "b" "c"))
       (check-equal? (tree-prev-node nodes 2) 1)
       (check-equal? (tree-prev-node nodes 1) 0)
       (check-equal? (tree-prev-node nodes 0) 0)) ; clamps at start
 
     ;; Fold/unfold
-    (test-case "tree-toggle-fold adds and removes from set"
+    (test-case "tree-browser: tree-toggle-fold adds and removes from set"
       (define folded (set))
       (define folded1 (tree-toggle-fold folded "id1"))
       (check-true (set-member? folded1 "id1"))
@@ -80,7 +80,7 @@
       (check-equal? (tree-browser-state-selected-idx (overlay-state-extra ov)) 0))
 
     ;; Dismiss overlay
-    (test-case "dismiss-overlay clears active overlay"
+    (test-case "tree-browser: dismiss-overlay clears active overlay"
       (define state (make-test-state-with-overlay (make-test-tbs)))
       (check-true (overlay-active? state))
       (define dismissed (dismiss-overlay state))

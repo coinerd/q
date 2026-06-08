@@ -31,7 +31,7 @@
      (check-not-false cmd)
      (check-true (gsd-cmd-go? cmd)))
 
-   (test-case "parse /go with wave arg"
+   (test-case "gsd-command-handlers-unit: parse /go with wave arg"
      (define cmd (parse-gsd-command "/go" "/go 3"))
      (check-not-false cmd)
      (check-true (gsd-cmd-go? cmd))

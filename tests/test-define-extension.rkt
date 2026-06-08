@@ -23,7 +23,7 @@
   (check-equal? (extension-version simple-ext) "0.1.0")
   (check-equal? (extension-api-version simple-ext) "1"))
 
-(test-case "define-q-extension with hook handlers"
+(test-case "define-extension: define-q-extension with hook handlers"
   (define-q-extension hooked-ext
                       #:version "2.0"
                       #:on before-send

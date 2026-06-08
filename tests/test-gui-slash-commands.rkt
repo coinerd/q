@@ -24,7 +24,7 @@
       (check-equal? (gui-message-role (car msgs)) "system")
       (check-equal? (gui-message-text (car msgs)) "hello"))
 
-    (test-case "appends to existing messages"
+    (test-case "gui-slash-commands: appends to existing messages"
       (define state-box (box (make-gui-state #:messages (list (make-gui-message "user" "hi")))))
       (define lock (make-semaphore 1))
       (add-system-msg! "sys" state-box lock)

@@ -37,16 +37,16 @@
 ;; Test that util/hook-types.rkt (now #lang typed/racket) exports work from untyped
 (require "../util/hook-types.rkt")
 
-(test-case "hook-pass creates pass result"
+(test-case "tr-event: hook-pass creates pass result"
   (define r (hook-pass "data"))
   (check-equal? (hook-result-action r) 'pass)
   (check-equal? (hook-result-payload r) "data"))
 
-(test-case "hook-amend creates amend result"
+(test-case "tr-event: hook-amend creates amend result"
   (define r (hook-amend "new-data"))
   (check-equal? (hook-result-action r) 'amend))
 
-(test-case "hook-block creates block result"
+(test-case "tr-event: hook-block creates block result"
   (define r (hook-block "reason"))
   (check-equal? (hook-result-action r) 'block))
 

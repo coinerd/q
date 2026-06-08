@@ -149,7 +149,7 @@
              [s2 (apply-event-to-state s evt)])
         (check-false (ui-state-busy? s2))))
 
-    (test-case "turn.cancelled clears busy and streaming"
+    (test-case "state: turn.cancelled clears busy and streaming"
       (define s0
         (set-pending-tool-name (set-streaming-text (set-busy (initial-ui-state) #t) "partial...")
                                "bash"))
@@ -529,13 +529,13 @@
     ;; String helpers: truncate-string, extract-arg-summary
     ;; ============================================================
 
-    (test-case "truncate-string: short string unchanged"
+    (test-case "state: truncate-string: short string unchanged"
       (check-equal? (truncate-string "hello" 10) "hello"))
 
     (test-case "truncate-string: long string truncated with ellipsis"
       (check-equal? (truncate-string "hello world" 6) "hel..."))
 
-    (test-case "truncate-string: exact length unchanged"
+    (test-case "state: truncate-string: exact length unchanged"
       (check-equal? (truncate-string "hello" 5) "hello"))
 
     (test-case "extract-arg-summary: JSON object shows first value"

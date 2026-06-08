@@ -99,10 +99,10 @@
 (test-case "valid-api-version? accepts \"1\""
   (check-true (valid-api-version? "1")))
 
-(test-case "valid-api-version? rejects \"0\""
+(test-case "extension-tiers: valid-api-version? rejects \"0\""
   (check-false (valid-api-version? "0")))
 
-(test-case "valid-api-version? rejects \"2\""
+(test-case "extension-tiers: valid-api-version? rejects \ (2)"2\""
   (check-false (valid-api-version? "2")))
 
 (test-case "valid-api-version? rejects empty string"

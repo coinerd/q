@@ -156,7 +156,7 @@
                        (check-equal? (result-content r) '()))))
 
     ;; 8. Non-existent path returns error
-    (test-case "non-existent path returns error"
+    (test-case "grep: non-existent path returns error"
       (define r (tool-grep (hasheq 'pattern "foo" 'path "/tmp/q-no-such-path-xyz-999")))
       (check-true (result-is-error? r))
       (define c (string-join (result-content r) ""))
@@ -173,7 +173,7 @@
                        (check-true (regexp-match? #rx"[Pp]attern" c)))))
 
     ;; 9b. Missing path argument returns error
-    (test-case "missing path returns error"
+    (test-case "grep: missing path returns error"
       (define r (tool-grep (hasheq 'pattern "foo")))
       (check-true (result-is-error? r))
       (define c (string-join (result-content r) ""))

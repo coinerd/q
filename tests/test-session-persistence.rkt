@@ -125,7 +125,7 @@
                       (with-handlers ([exn:fail? void])
                         (delete-directory/files tmp)))))
 
-    (test-case "ensure-persisted! is idempotent"
+    (test-case "session-persistence: ensure-persisted! is idempotent"
       (define tmp (make-temporary-file "q-persist-flag-~a" 'directory))
       (dynamic-wind void
                     (lambda ()
@@ -156,7 +156,7 @@
                       (with-handlers ([exn:fail? void])
                         (delete-directory/files tmp)))))
 
-    (test-case "buffer-or-append! writes immediately when persisted"
+    (test-case "session-persistence: buffer-or-append! writes immediately when persisted"
       (define tmp (make-temporary-file "q-buffer-write-test-~a" 'directory))
       (dynamic-wind
        void

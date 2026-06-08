@@ -5,10 +5,10 @@
 (require rackunit
          "../util/string-helpers.rkt")
 
-(test-case "truncate-string: short string unchanged"
+(test-case "string-helpers: truncate-string: short string unchanged"
   (check-equal? (truncate-string "hello" 10) "hello"))
 
-(test-case "truncate-string: exact length unchanged"
+(test-case "string-helpers: truncate-string: exact length unchanged"
   (check-equal? (truncate-string "hello" 5) "hello"))
 
 (test-case "truncate-string: long string truncated with default ellipsis"

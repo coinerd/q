@@ -38,7 +38,7 @@
 ;; gsd-mode tests
 ;; ============================================================
 
-(test-case "gsd-mode defaults to #f"
+(test-case "gsd-planning-state: gsd-mode defaults to #f"
   (reset-all-gsd-state!)
   (check-equal? (gsd-mode) #f))
 
@@ -84,7 +84,7 @@
 ;; current-max-old-text-len tests
 ;; ============================================================
 
-(test-case "current-max-old-text-len defaults to 500"
+(test-case "gsd-planning-state: current-max-old-text-len defaults to 500"
   (reset-all-gsd-state!)
   (check-equal? (current-edit-limit) 500))
 
