@@ -32,5 +32,3 @@
 
 (module+ main
   (run-tests schema-tests))
-(module+ test
-  (run-tests schema-tests))

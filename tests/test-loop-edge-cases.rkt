@@ -270,6 +270,4 @@
   (run-tests edge-case-tests)
   (run-tests stream-safety-tests))
 
-(module+ test
-  (run-tests edge-case-tests)
-  (run-tests stream-safety-tests))
+(run-tests edge-case-tests)

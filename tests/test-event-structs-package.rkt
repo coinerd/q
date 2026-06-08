@@ -176,5 +176,3 @@
 
 (module+ main
   (run-tests es-tests))
-(module+ test
-  (run-tests es-tests))

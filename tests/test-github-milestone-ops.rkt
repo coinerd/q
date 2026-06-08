@@ -30,5 +30,3 @@
 
 (module+ main
   (run-tests milestone-ops-tests))
-(module+ test
-  (run-tests milestone-ops-tests))

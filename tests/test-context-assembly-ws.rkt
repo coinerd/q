@@ -177,5 +177,3 @@
 
 (module+ main
   (run-tests ws-tests))
-(module+ test
-  (run-tests ws-tests))

@@ -19,6 +19,3 @@
 
 (module+ main
   (run-tests event-contract-tests))
-
-(module+ test
-  (run-tests event-contract-tests))

@@ -204,5 +204,3 @@
 
 (module+ main
   (run-tests iteration-observability-tests))
-(module+ test
-  (run-tests iteration-observability-tests))

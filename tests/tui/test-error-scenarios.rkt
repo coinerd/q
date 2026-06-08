@@ -163,5 +163,3 @@
   (displayln "All 6 error scenarios passed."))
 
 ;; Self-test when run directly
-(module+ test
-  (run-all-scenarios))

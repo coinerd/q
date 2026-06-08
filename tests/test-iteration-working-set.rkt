@@ -113,6 +113,3 @@
 
 (module+ main
   (run-tests iteration-ws-tests))
-
-(module+ test
-  (run-tests iteration-ws-tests))

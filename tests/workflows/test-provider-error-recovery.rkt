@@ -248,7 +248,6 @@
 ;; Run
 ;; ============================================================
 
-(module+ test
-  (define result (run-tests provider-error-recovery-tests 'verbose))
-  (unless (zero? result)
-    (error 'test-provider-error-recovery "~a test(s) failed" result)))
+ (define result (run-tests provider-error-recovery-tests 'verbose))
+ (unless (zero? result)
+  (error 'test-provider-error-recovery "~a test(s) failed" result))

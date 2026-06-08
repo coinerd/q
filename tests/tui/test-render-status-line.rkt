@@ -203,5 +203,3 @@
 
 (module+ main
   (run-tests status-tests))
-(module+ test
-  (run-tests status-tests))

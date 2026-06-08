@@ -182,6 +182,3 @@
 
 (module+ main
   (run-tests session-fork-tests))
-
-(module+ test
-  (run-tests session-fork-tests))

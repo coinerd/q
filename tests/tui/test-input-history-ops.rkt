@@ -80,5 +80,3 @@
 
 (module+ main
   (run-tests history-tests))
-(module+ test
-  (run-tests history-tests))

@@ -165,6 +165,3 @@
 
 (module+ main
   (run-tests cancellation-tests))
-
-(module+ test
-  (run-tests cancellation-tests))

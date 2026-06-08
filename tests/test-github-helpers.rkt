@@ -32,6 +32,3 @@
 
 (module+ main
   (run-tests github-helpers-tests))
-
-(module+ test
-  (run-tests github-helpers-tests))

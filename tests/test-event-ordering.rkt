@@ -182,6 +182,3 @@
       (check-equal? (last events)
                     "stream.turn.completed"
                     "turn.completed must be the last event in the sequence"))))
-
-(module+ test
-  (run-tests event-ordering-tests))

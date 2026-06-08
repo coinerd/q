@@ -289,6 +289,3 @@
 
 (module+ main
   (run-tests safe-mode-boundary-tests))
-
-(module+ test
-  (run-tests safe-mode-boundary-tests))

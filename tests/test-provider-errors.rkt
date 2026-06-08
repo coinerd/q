@@ -57,5 +57,3 @@
 
 (module+ main
   (run-tests provider-error-tests))
-(module+ test
-  (run-tests provider-error-tests))

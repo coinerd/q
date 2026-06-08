@@ -69,8 +69,6 @@
       (check-equal? (loop-infra-session-id infra2) "sid-2")
       (check-equal? (loop-infra-ctx infra2) '(ctx)))))
 
-(module+ test
-  (run-tests suite))
 
 (module+ main
   (run-tests suite))

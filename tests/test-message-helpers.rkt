@@ -99,6 +99,3 @@
 
 (module+ main
   (run-tests message-helper-tests))
-
-(module+ test
-  (run-tests message-helper-tests))

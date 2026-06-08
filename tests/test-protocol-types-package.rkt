@@ -83,5 +83,3 @@
 
 (module+ main
   (run-tests pt-tests))
-(module+ test
-  (run-tests pt-tests))

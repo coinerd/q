@@ -49,6 +49,4 @@
   (check-true (fsm-state? (effect:update-fsm-from-state eff)))
   (check-true (fsm-event? (effect:update-fsm-event eff))))
 
-(module+ test
-  (require rackunit/text-ui)
-  (run-tests (test-suite "effect-update-fsm-contract")))
+(require rackunit/text-ui)

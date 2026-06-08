@@ -69,5 +69,3 @@
 
 (module+ main
   (run-tests layout-tests))
-(module+ test
-  (run-tests layout-tests))

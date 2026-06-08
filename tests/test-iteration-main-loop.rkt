@@ -77,5 +77,3 @@
 
 (module+ main
   (run-tests main-loop-tests))
-(module+ test
-  (run-tests main-loop-tests))

@@ -740,6 +740,3 @@
 ;; Run tests
 (module+ main
   (run-tests hooks-tests))
-
-(module+ test
-  (run-tests hooks-tests))

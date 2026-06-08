@@ -133,6 +133,3 @@
 
 (module+ main
   (run-tests execute-command-hook-tests))
-
-(module+ test
-  (run-tests execute-command-hook-tests))

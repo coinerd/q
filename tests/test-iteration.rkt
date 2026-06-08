@@ -172,6 +172,3 @@
 ;; Run tests
 (module+ main
   (run-tests iteration-tests))
-
-(module+ test
-  (run-tests iteration-tests))

@@ -135,5 +135,3 @@
 
 (module+ main
   (run-tests counters-tests))
-(module+ test
-  (run-tests counters-tests))

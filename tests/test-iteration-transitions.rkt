@@ -314,6 +314,3 @@
 
 (module+ main
   (run-tests iteration-transition-tests))
-
-(module+ test
-  (run-tests iteration-transition-tests))

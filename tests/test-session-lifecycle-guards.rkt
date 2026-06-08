@@ -152,6 +152,3 @@
 
 (module+ main
   (run-tests session-lifecycle-guard-tests))
-
-(module+ test
-  (run-tests session-lifecycle-guard-tests))

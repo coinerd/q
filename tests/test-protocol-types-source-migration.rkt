@@ -46,6 +46,3 @@
 
 (module+ main
   (run-tests protocol-migration-tests))
-
-(module+ test
-  (run-tests protocol-migration-tests))

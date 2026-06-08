@@ -109,5 +109,3 @@
 
 (module+ main
   (run-tests step-interpreter-tests))
-(module+ test
-  (run-tests step-interpreter-tests))

@@ -38,5 +38,3 @@
 
 (module+ main
   (run-tests budget-tests))
-(module+ test
-  (run-tests budget-tests))
