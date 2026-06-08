@@ -485,8 +485,8 @@
         (check-equal? (tool-spec-description spec) (tool-description t))))
 
     (test-case "tool-specs count includes memory tools"
-      ;; 27 existing + 7 memory = 34
-      (check-equal? (length tool-specs) 34))
+      ;; 27 existing + 8 memory = 35
+      (check-equal? (length tool-specs) 35))
 
     (test-case "existing tools still work after memory addition"
       (define reg (make-tool-registry))

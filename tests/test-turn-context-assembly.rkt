@@ -19,7 +19,7 @@
                   task-implementation
                   task-verification
                   task-debugging)
-         (only-in "../../q/util/fsm/fsm.rkt" fsm-state-name)
+         (only-in "../util/fsm/fsm.rkt" fsm-state-name)
          (only-in "../runtime/session/session-config.rkt" hash->session-config session-config?))
 
 (define turn-orch-path (build-path (current-directory) ".." "runtime" "turn-orchestrator.rkt"))
