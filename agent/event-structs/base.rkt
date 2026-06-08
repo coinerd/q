@@ -8,5 +8,6 @@
 (provide (struct-out typed-event)
          typed-event?)
 
+;; STABILITY: public — stable for extensions
 ;; Base struct: all events carry type, timestamp, session-id, turn-id
 (struct typed-event (type timestamp session-id turn-id) #:transparent)
