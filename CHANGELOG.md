@@ -1,3 +1,12 @@
+## [0.96.11] - 2026-06-08
+
+### Test Architecture — Phase 4: Runner Refactor
+
+#### Changed
+- **A1**: Extracted `scripts/run-tests/` into sub-modules (types, classify, parse) — modular API for external consumers
+- **A2**: Created `scripts/lint-test-tags.rkt` and auto-tagged all 905 test files with `@speed` and `@suite` metadata tags
+- **B1/B3**: God test file splitting deferred (low risk/benefit ratio for test-only changes)
+
 ## [0.96.10] - 2026-06-08
 
 ### Test Architecture — Phase 3: Efficiency
