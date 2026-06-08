@@ -22,7 +22,8 @@
          "../llm/stream.rkt"
          "../llm/anthropic.rkt"
          "../llm/openai-compatible.rkt"
-         "../llm/gemini.rkt")
+         "../llm/gemini.rkt"
+         "../llm/azure-openai.rkt")
 
 ;; ============================================================
 ;; Shared test fixtures
@@ -365,7 +366,8 @@
 (test-case "All providers: provider-name returns non-empty string"
   (for ([spec (list (hash 'make make-anthropic-provider 'name "anthropic")
                     (hash 'make make-openai-compatible-provider 'name "openai-compatible")
-                    (hash 'make make-gemini-provider 'name "gemini"))])
+                    (hash 'make make-gemini-provider 'name "gemini")
+                    (hash 'make make-azure-openai-provider 'name "Azure OpenAI"))])
     (define p
       ((hash-ref spec 'make) (hash 'api-key "test" 'model "test" 'base-url "https://example.com")))
     (check-true (string? (provider-name p)))
@@ -373,7 +375,10 @@
     (check-equal? (provider-name p) (hash-ref spec 'name))))
 
 (test-case "All providers: capabilities is a hash with streaming #t"
-  (for ([make-fn (list make-anthropic-provider make-openai-compatible-provider make-gemini-provider)])
+  (for ([make-fn (list make-anthropic-provider
+                       make-openai-compatible-provider
+                       make-gemini-provider
+                       make-azure-openai-provider)])
     (define p (make-fn (hash 'api-key "test" 'model "test" 'base-url "https://example.com")))
     (define caps (provider-capabilities p))
     (check-pred hash? caps)
