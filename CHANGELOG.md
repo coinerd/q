@@ -1,3 +1,12 @@
+## [0.96.10] - 2026-06-08
+
+### Test Architecture — Phase 3: Efficiency
+
+#### Changed
+- **E1**: Reduced sleep calls in 4 test files (sleep 30→3, sleep 10→2) — saves ~80s per run
+- **E2**: Converted 58 files from `(module+ test ...)` to top-level test forms for unified runner detection
+- **E3**: Changed GC from every-batch to every-5-batches in `scripts/run-tests.rkt` for reduced overhead
+
 ## [0.96.9] - 2026-06-08
 
 ### Test Architecture — Phase 2: Naming & Organization

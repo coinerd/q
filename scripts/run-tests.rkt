@@ -618,6 +618,8 @@
   ;; This prevents FD/thread exhaustion on large test suites.
   (define batch-size jobs)
   (define batches (split-list files batch-size))
+  (define gc-counter 0)
+  (define total-batches (length batches))
 
   (for ([batch (in-list batches)]
         [batch-idx (in-naturals)])
@@ -634,8 +636,11 @@
                   (add-result! result)))))
     ;; Wait for entire batch to complete before starting next
     (for-each thread-wait batch-threads)
-    ;; Major GC after each batch to prevent port/FD accumulation
-    (collect-garbage 'major))
+    ;; Major GC every 5 batches to prevent port/FD accumulation
+    (set! gc-counter (add1 gc-counter))
+    (when (or (= 0 (modulo gc-counter 5))
+              (= gc-counter total-batches))
+      (collect-garbage 'major)))
 
   (newline)
 
