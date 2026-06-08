@@ -31,7 +31,12 @@
          (only-in "../util/content/content-parts.rkt" make-text-part text-part? tool-result-part?)
          (only-in "../util/event/event.rkt" make-event event-ev)
          (only-in "../util/loop-result.rkt" make-loop-result loop-result-messages)
-         (only-in "../util/message/message.rkt" message? message-id message-role message-content make-message)
+         (only-in "../util/message/message.rkt"
+                  message?
+                  message-id
+                  message-role
+                  message-content
+                  make-message)
          (only-in "../util/tool/tool-types.rkt" tool-call-name tool-call-arguments)
          (only-in "../util/content/content-parts.rkt" text-part-text tool-result-part-is-error?)
          (only-in "../util/event/event.rkt" event-payload)
@@ -229,34 +234,15 @@
                                         #:working-set-messages ws-messages)]))
   (values (tiered-context->message-list tc) hook-result tc))
 
-;; Build assembled context using tiered context assembly with hooks.
-;; Returns the assembled message list.
-(define (build-assembled-context ctx-to-use
-                                 config-raw
-                                 ext-reg
-                                 bus
-                                 session-id
-                                 iteration
-                                 #:session [session #f])
-  ;; WP-37 + R2-6: Context Assembly with Tier A/B/C separation and Hook support
-  (define config config-raw)
-  (define ws (config-working-set config))
-
-  ;; R2-6: Create hook dispatcher function for context assembly
-  (define ctx-assembly-hook-dispatcher
-    (and ext-reg
-         (lambda (hook-point payload)
-           (define result (dispatch-hooks hook-point payload ext-reg))
-           result)))
-
-  ;; v0.75.6: Extract task state from session for state-aware assembly
+;; Prepare task state, conclusions (with auto-distill), and WS evolution
+;; for context assembly. Mutates session state when auto-distill adds conclusions
+;; or WS evolution produces a new working set.
+(define (prepare-turn-context-state ctx-to-use config-raw session)
+  (define ws-early (config-working-set config-raw))
   (define task-state-raw (and session (agent-session-task-fsm-state session)))
   (define task-state (or (symbol->task-state task-state-raw) task-state-raw))
-  ;; task-state-raw: raw symbol ('idle, 'exploration, etc.) — for auto-distill, eq? checks
-  ;; task-state: fsm-state? struct (or raw symbol if unknown) — for ws-evolution, state-aware-builder
   (define conclusions (and session (agent-session-task-conclusions session)))
   ;; v0.77.9 T2.1: Auto-distill uncovered WS entries when enabled
-  (define ws-early (config-working-set config-raw))
   (define augmented-conclusions
     (if (and (current-auto-distillation-enabled?) session conclusions task-state ws-early)
         (let ([ws-msgs (working-set-resolve-messages ws-early ctx-to-use message-id)])
@@ -270,7 +256,6 @@
                   (auto-distill (map message-id ws-msgs) conclusions task-state-raw summaries)))
         (or conclusions '())))
   ;; v0.78.2 G3: Persist auto-distilled conclusions back to session
-  ;; Only when auto-distill added new conclusions
   (when (and (current-auto-distillation-enabled?)
              session
              (pair? augmented-conclusions)
@@ -278,48 +263,29 @@
              (> (length augmented-conclusions) (length conclusions)))
     (guarded-set-task-conclusions! session augmented-conclusions))
   ;; v0.78.2 G2: WS evolution — evolve working set on state transition
-  ;; Only when WS evolution enabled and session has a working set
   (when (and (current-ws-evolution-enabled?)
              ws-early
              session
              task-state
              (not (eq? task-state-raw 'idle)))
-    ;; v0.78.6 C1+W1: Use /result variant (returns evolution-result? struct)
-    ;; v0.79.2 GAP-2: Pass tracked old-state instead of #f.
     (define old-state (current-last-task-fsm-state))
     (define result
       (evolve-working-set-for-state/result ws-early old-state task-state augmented-conclusions))
-    ;; Update tracked state for next turn
     (current-last-task-fsm-state task-state)
     (when (and (evolution-result? result) session)
       (guarded-set-working-set-evolved! session result)))
-  ;; FD-05: Delegate pure assembly to assemble-context/pure
-  ;; v0.76.3: Pass per-session rollout flag
-  ;; v0.77.9 T2.4: Apply context-assembly profile before assembly
-  (define profile (config-context-assembly-profile config-raw))
-  (unless (eq? profile 'off)
-    (apply-context-assembly-profile! profile))
-  (define-values (ctx-assembled assembly-hook-result tc-struct)
-    (assemble-context/pure ctx-to-use
-                           config-raw
-                           #:hook-dispatcher ctx-assembly-hook-dispatcher
-                           #:task-state task-state
-                           #:conclusions augmented-conclusions
-                           #:state-aware? (config-task-state-aware? config)
-                           #:recent-tool-calls (if session
-                                                   (agent-session-recent-tool-calls session)
-                                                   '())))
+  (values task-state-raw task-state augmented-conclusions))
 
-  ;; Handle block action from context-assembly hook
-  (when (and assembly-hook-result (eq? (hook-result-action assembly-hook-result) 'block))
-    (current-turn-fsm-state turn-state-blocked)
-    (emit-typed-event! bus
-                       (make-context-blocked-event #:session-id session-id
-                                                   #:turn-id ""
-                                                   #:timestamp (current-inexact-milliseconds)
-                                                   #:reason "extension-block"))
-    (raise-extension-error "Context assembly blocked by extension" "unknown" "turn.started"))
-
+;; Emit telemetry events for context assembly results.
+;; Fires: working-set.injected, context.assembled, context-assembly-detail.
+(define (emit-context-assembly-events! bus
+                                       session-id
+                                       iteration
+                                       ctx-to-use
+                                       ctx-assembled
+                                       tc-struct
+                                       ws
+                                       config-raw)
   ;; v0.26.0: Emit working-set.injected event
   (when ws
     (emit-typed-event! bus
@@ -328,9 +294,7 @@
                                                         #:timestamp (current-inexact-milliseconds)
                                                         #:entries (working-set-entry-count ws)
                                                         #:tokens (working-set-token-count ws))))
-
-  ;; Emit context.assembled event (v0.19.12 W1: added tokenCount)
-  ;; v0.29.5 W3: Defer token estimation — only computed when forced for event
+  ;; Emit context.assembled event
   (define ctx-token-count-promise
     (delay
       (estimate-context-tokens ctx-assembled)))
@@ -349,14 +313,11 @@
                       #:working-set-tokens (if ws
                                                (working-set-token-count ws)
                                                0)))
-
-  ;; v0.45.5 (OBS-01/02/03): Emit detailed assembly metrics
-  ;; v0.45.7 (NF3): Replaced stubs with real computed values
+  ;; v0.45.5: Emit detailed assembly metrics
   (define tier-a-len (length (tiered-context-tier-a tc-struct)))
   (define tier-b-len (length (tiered-context-tier-b tc-struct)))
   (define tier-c-len (length (tiered-context-tier-c tc-struct)))
   (define assembled-total (+ tier-a-len tier-b-len tier-c-len))
-  ;; Compute excluded IDs from messages not in assembled output
   (define assembled-ids
     (for/set ([m (in-list ctx-assembled)])
       (message-id m)))
@@ -365,12 +326,10 @@
                #:unless (set-member? assembled-ids (message-id m)))
       (message-id m)))
   (define excluded-ids-str (string-join excluded-id-list ","))
-  ;; Compute summary length from compaction-summary messages
   (define summary-len
     (for/sum ([m (in-list ctx-assembled)] #:when (eq? (message-kind m) 'compaction-summary))
              (for/sum ([p (in-list (message-content m))] #:when (text-part? p))
                       (string-length (text-part-text p)))))
-  ;; Count GSD-pinned messages (using gsd-progress-message? predicate)
   (define gsd-pinned (for/sum ([m (in-list ctx-assembled)] #:when (gsd-progress-message? m)) 1))
   (emit-typed-event! bus
                      (make-context-assembly-detail-event
@@ -391,12 +350,61 @@
                       #:ws-tokens (if ws
                                       (working-set-token-count ws)
                                       0)
-                      #:cache-hit-p #f) ;; TODO: future — track context cache hits from provider
-                     )
+                      #:cache-hit-p #f)))
 
-  ;; Dispatch 'context hook — extensions can amend final context
+;; Build assembled context using tiered context assembly with hooks.
+;; Returns the assembled message list.
+(define (build-assembled-context ctx-to-use
+                                 config-raw
+                                 ext-reg
+                                 bus
+                                 session-id
+                                 iteration
+                                 #:session [session #f])
+  (define config config-raw)
+  (define ws (config-working-set config))
+  (define ctx-assembly-hook-dispatcher
+    (and ext-reg
+         (lambda (hook-point payload)
+           (define result (dispatch-hooks hook-point payload ext-reg))
+           result)))
+  ;; Phase 1: Prepare task state and conclusions
+  (define-values (task-state-raw task-state augmented-conclusions)
+    (prepare-turn-context-state ctx-to-use config-raw session))
+  ;; Phase 2: Apply profile and run pure assembly
+  (define profile (config-context-assembly-profile config-raw))
+  (unless (eq? profile 'off)
+    (apply-context-assembly-profile! profile))
+  (define-values (ctx-assembled assembly-hook-result tc-struct)
+    (assemble-context/pure ctx-to-use
+                           config-raw
+                           #:hook-dispatcher ctx-assembly-hook-dispatcher
+                           #:task-state task-state
+                           #:conclusions augmented-conclusions
+                           #:state-aware? (config-task-state-aware? config)
+                           #:recent-tool-calls (if session
+                                                   (agent-session-recent-tool-calls session)
+                                                   '())))
+  ;; Handle block action from context-assembly hook
+  (when (and assembly-hook-result (eq? (hook-result-action assembly-hook-result) 'block))
+    (current-turn-fsm-state turn-state-blocked)
+    (emit-typed-event! bus
+                       (make-context-blocked-event #:session-id session-id
+                                                   #:turn-id ""
+                                                   #:timestamp (current-inexact-milliseconds)
+                                                   #:reason "extension-block"))
+    (raise-extension-error "Context assembly blocked by extension" "unknown" "turn.started"))
+  ;; Phase 3: Emit telemetry events
+  (emit-context-assembly-events! bus
+                                 session-id
+                                 iteration
+                                 ctx-to-use
+                                 ctx-assembled
+                                 tc-struct
+                                 ws
+                                 config-raw)
+  ;; Phase 4: Final context hook dispatch
   (define-values (ctx-final _ctx-hook) (maybe-dispatch-hooks ext-reg 'context ctx-assembled))
-
   ctx-final)
 
 ;; ============================================================
