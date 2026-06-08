@@ -100,11 +100,10 @@
 ;; v0.95.21 W0: G1 — Auto-reflection gap verification
 ;; ---------------------------------------------------------------------------
 
-(test-case "W0 G1: current-auto-reflection-enabled does not exist in service.rkt"
-  ;; Verify the parameter doesn't exist yet — W2 will add it
+(test-case "W1 G2: current-auto-reflection-enabled now exists in service.rkt"
   (define src (file->string (build-path (current-directory) ".." "runtime" "memory" "service.rkt")))
-  (check-false (string-contains? src "current-auto-reflection-enabled")
-               "W0 baseline: current-auto-reflection-enabled should not exist yet"))
+  (check-true (string-contains? src "current-auto-reflection-enabled")
+              "W1: current-auto-reflection-enabled should exist"))
 
 (test-case "W0 G1: maybe-reflect-session-memories! does not exist in reflection.rkt"
   ;; Verify the wrapper doesn't exist yet — W3 will add it
@@ -139,3 +138,21 @@
                                  #:min-group-size 2))
     (check-true (and (list? results) (>= (length results) 1))
                 "Reflection should produce at least one merged item")))
+
+;; ---------------------------------------------------------------------------
+;; v0.95.21 W2: G1 — Auto-reflection settings functional tests
+;; ---------------------------------------------------------------------------
+
+(test-case "W2 G1: current-auto-reflection-enabled defaults to #f"
+  (check-false (current-auto-reflection-enabled)))
+
+(test-case "W2 G1: current-auto-reflection-min-items defaults to 5"
+  (check-equal? (current-auto-reflection-min-items) 5))
+
+(test-case "W2 G1: current-auto-reflection-enabled can be set"
+  (parameterize ([current-auto-reflection-enabled #t])
+    (check-true (current-auto-reflection-enabled))))
+
+(test-case "W2 G1: current-auto-reflection-min-items can be set"
+  (parameterize ([current-auto-reflection-min-items 3])
+    (check-equal? (current-auto-reflection-min-items) 3)))

@@ -12,7 +12,8 @@
          "types.rkt"
          (only-in "../../util/safe-mode/safe-mode-state.rkt" safe-mode?))
 
-(provide memory-policy?
+(provide (struct-out memory-policy)
+         memory-policy?
          default-memory-policy
          default-blocked-content-patterns
          make-memory-policy

@@ -17,7 +17,10 @@
                   security-config-from-settings
                   http-request-timeout
                   q-settings-merged
-                  setting-memory-injection-budget)
+                  setting-memory-injection-budget
+                  setting-memory-user-scope-enabled?
+                  setting-memory-auto-reflection-enabled?
+                  setting-memory-auto-reflection-min-items)
          (only-in "../tools/builtins/bash.rkt" current-execution-policy current-allowed-commands)
          (only-in "../sandbox/subprocess.rkt"
                   current-secret-scrub-denylist
@@ -25,7 +28,11 @@
          (only-in "../llm/stream.rkt" current-http-request-timeout current-model-timeouts)
          (only-in "../runtime/trace-logger.rkt" make-trace-logger start-trace-logger!)
          (only-in "../runtime/project-tree.rkt" project-tree->string)
-         (only-in "../runtime/context-assembly/memory-builder.rkt" current-memory-injection-budget))
+         (only-in "../runtime/context-assembly/memory-builder.rkt" current-memory-injection-budget)
+         (only-in "../runtime/memory/service.rkt"
+                  update-memory-policy!
+                  current-auto-reflection-enabled
+                  current-auto-reflection-min-items))
 
 (provide wire-security-config!
          wire-timeouts!
@@ -79,9 +86,14 @@
   (current-http-request-timeout (http-request-timeout settings)))
 
 ;; Apply memory settings from config to current parameters.
-;; Sets injection budget from settings.
-;; Auto-extraction is controlled by current-auto-extraction-enabled parameter directly.
+;; Sets injection budget, user-scope, and auto-reflection from settings.
 (define (wire-memory-settings! settings)
   (define budget (setting-memory-injection-budget settings))
   (when budget
-    (current-memory-injection-budget budget)))
+    (current-memory-injection-budget budget))
+  ;; v0.95.21 W1: User-scope policy wiring
+  (define user-scope-enabled? (setting-memory-user-scope-enabled? settings))
+  (update-memory-policy! #:user-scope-enabled? user-scope-enabled?)
+  ;; v0.95.21 W2: Auto-reflection settings wiring
+  (current-auto-reflection-enabled (setting-memory-auto-reflection-enabled? settings))
+  (current-auto-reflection-min-items (setting-memory-auto-reflection-min-items settings)))

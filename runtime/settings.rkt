@@ -83,7 +83,11 @@
           [setting-memory-backend (-> q-settings? (or/c symbol? hash? #f))]
           [setting-memory-auto-extraction-enabled? (-> q-settings? boolean?)]
           [setting-memory-auto-extraction-min-confidence
-           (-> q-settings? (and/c real? (between/c 0 1)))])
+           (-> q-settings? (and/c real? (between/c 0 1)))]
+          [setting-memory-user-scope-enabled? (-> q-settings? boolean?)]
+          [setting-memory-auto-reflection-enabled? (-> q-settings? boolean?)]
+          [setting-memory-auto-reflection-min-items
+           (-> q-settings? (and/c exact-positive-integer? (>=/c 2)))])
 
          ;; Sandbox settings (re-exported, not locally defined)
          sandbox-enabled?
@@ -474,6 +478,38 @@
      (define n (string->number raw))
      (if (and (real? n) (<= 0 n 1)) n 0.5)]
     [else 0.5]))
+
+;; v0.95.21 W1: User-scope enabled from settings
+;; Reads (memory user-scope enabled) from config.
+;; Default: #f (disabled).
+(define (setting-memory-user-scope-enabled? settings)
+  (define raw (setting-ref* settings '(memory user-scope enabled) #f))
+  (cond
+    [(boolean? raw) raw]
+    [(string? raw) (and (member (string-downcase raw) '("true" "1" "yes")) #t)]
+    [else #f]))
+
+;; v0.95.21 W2: Auto-reflection enabled from settings
+;; Reads (memory auto-reflection enabled) from config.
+;; Default: #f (disabled).
+(define (setting-memory-auto-reflection-enabled? settings)
+  (define raw (setting-ref* settings '(memory auto-reflection enabled) #f))
+  (cond
+    [(boolean? raw) raw]
+    [(string? raw) (and (member (string-downcase raw) '("true" "1" "yes")) #t)]
+    [else #f]))
+
+;; v0.95.21 W2: Auto-reflection min-items from settings
+;; Reads (memory auto-reflection min-items) from config.
+;; Default: 5. Must be >= 2.
+(define (setting-memory-auto-reflection-min-items settings)
+  (define raw (setting-ref* settings '(memory auto-reflection min-items) 5))
+  (cond
+    [(and (exact-positive-integer? raw) (>= raw 2)) raw]
+    [(string? raw)
+     (define n (string->number raw))
+     (if (and (exact-positive-integer? n) (>= n 2)) n 5)]
+    [else 5]))
 
 ;; ============================================================
 ;; Credential policy (v0.70.1)
