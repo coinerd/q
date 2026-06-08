@@ -1,3 +1,20 @@
+## v0.96.3 — Architecture Audit Hotfix (2026-06-08)
+
+### Architecture
+- **AF1 (dead imports) — RESOLVED**: Removed 8 dead import entries from `turn-orchestrator.rkt` (33→25 imports).
+- **AF2 (misleading comment) — RESOLVED**: Fixed `format-iso-now` comment in `memory-tools-shared.rkt`.
+- **AF3 (behavioral tests) — RESOLVED**: Added 3 behavioral test cases for `symbol->task-state` and `hash->session-config`.
+- **AF4 (dead imports) — RESOLVED**: Removed `dispatch-hooks` + `hook-result?` from `extension-setup.rkt`.
+- **AF5 (stability markers) — RESOLVED**: Added `STABILITY: public` markers to 4 PUBLIC event definitions.
+- **AF6 (dead imports) — RESOLVED**: Removed 10 unused shared imports from `memory-tools.rkt` facade.
+
+### Metrics
+| Metric | Before (v0.96.2) | After (v0.96.3) | Change |
+|--------|------------------|-----------------|--------|
+| turn-orchestrator.rkt imports | 33 | 25 | -24% |
+| Behavioral tests for extracted fns | 0 | 3 | +3 |
+| Event stability markers | 0 | 4 | +4 |
+
 ## v0.96.2 — Module Sizing + Low-Priority Cleanups (2026-06-08)
 
 ### Architecture
