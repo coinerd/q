@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite tui
+
 ;; BOUNDARY: io
 
 ;; tests/tui/test-mouse-bridge.rkt — Mouse bridge integration tests (#1120, #1121)

@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-gui-tool-display.rkt — W2: tool argument + result display
 ;;
 ;; Tests that tool events produce typed entries with proper kinds,

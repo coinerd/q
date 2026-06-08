@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite runtime
+
 ;; BOUNDARY: integration
 
 ;; test-tool-coordinator-cwd.rkt — BUG-4 regression tests

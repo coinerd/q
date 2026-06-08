@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;;; test-mem0-http-transport-g2.rkt — W3: Mem0 HTTP transport tests
 ;;; Uses a fake HTTP server to verify request/response mapping without real network.
 

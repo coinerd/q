@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-fsm-unit.rkt — T-7 tests for util/fsm.rkt
 
 (require rackunit

@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite runtime
+
 ;; BOUNDARY: integration
 
 ;; tests/test-tool-coordinator.rkt — tests for runtime/tool-coordinator.rkt

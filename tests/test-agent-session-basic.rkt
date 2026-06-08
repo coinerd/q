@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite runtime
+
 ;; BOUNDARY: integration
 
 ;; tests/test-agent-session-basic.rkt — session creation, text prompts, tool calls, lifecycle

@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-gui-hooks.rkt — Tests for GUI hook schemas
 ;;
 ;; W3.1 (v0.94.3): Verify GUI lifecycle hooks are registered with valid schemas.

@@ -1,4 +1,7 @@
 #lang racket/base
+
+;; @speed fast
+;; @suite default
 ;; tests/test-memory-events.rkt — SPEC memory event taxonomy and tool emission tests
 
 (require rackunit

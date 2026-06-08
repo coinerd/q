@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-ui-delta.rkt — Tests for ui-delta module
 ;;
 ;; W2 (v0.94.8): Cover overlay delta types (C-1) and action→delta mapping.

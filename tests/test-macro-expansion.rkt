@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: macro
 
 ;; tests/test-macro-expansion.rkt — Macro expansion tests (RA-08)

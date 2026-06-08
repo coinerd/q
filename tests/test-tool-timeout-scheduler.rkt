@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-tool-timeout-scheduler.rkt — v0.70.7 W1
 
 (require rackunit

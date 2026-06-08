@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; test-sync-version-historical.rkt — Tests for version-guard.rkt historical-line? guard

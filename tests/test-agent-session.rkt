@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite runtime
+
 ;; BOUNDARY: integration
 
 ;; tests/test-agent-session.rkt — tests for concurrent prompt execution guard

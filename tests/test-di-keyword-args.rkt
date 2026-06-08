@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-di-keyword-args.rkt — MOD-02: DI keyword args for iteration loop

@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite runtime
+
 ;; BOUNDARY: fsm
 
 ;; tests/test-iteration-fsm.rkt — R-06/R-07: Iteration FSM transition tests

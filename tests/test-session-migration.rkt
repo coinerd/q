@@ -1,4 +1,6 @@
 #lang racket
+
+;; @speed fast  ;; @suite runtime
 ;; BOUNDARY: serialization
 
 ;; BOUNDARY: integration

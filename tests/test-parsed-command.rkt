@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-parsed-command.rkt — TUI command parsing tests (R-17)

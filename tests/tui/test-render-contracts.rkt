@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite tui
+
 ;; BOUNDARY: contract
 
 ;; tests/tui/render-contracts.rkt — Tier 1 + Tier 2 UX contract tests

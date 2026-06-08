@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-gui-code-block.rkt — Tests for gui/views/code-block.rkt
 
 (require rackunit

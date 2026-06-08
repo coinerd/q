@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite security
+
 ;; tests/test-browser-permission-tiers.rkt — F6: browser tool risk tiers
 
 (require rackunit

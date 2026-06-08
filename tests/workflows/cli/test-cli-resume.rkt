@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed slow  ;; @suite workflows
+
 ;; tests/workflows/cli/test-cli-resume.rkt — CLI session resume workflow tests (#169)
 ;;
 ;; Tests that multi-turn and resumed sessions preserve history correctly.

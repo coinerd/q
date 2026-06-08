@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-ui-theme-layout.rkt — Tests for ui-core/theme-protocol and layout-protocol
 
 (require rackunit

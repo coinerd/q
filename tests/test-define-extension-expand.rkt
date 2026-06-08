@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite extensions
+
 ;; tests/test-define-extension-expand.rkt — define-q-extension macro tests (M-4)
 ;; BOUNDARY: pure
 ;;

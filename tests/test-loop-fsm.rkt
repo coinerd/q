@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-loop-fsm.rkt — T-1b tests for agent/loop-fsm.rkt
 
 (require rackunit

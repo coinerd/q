@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite extensions
+
 ;; tests/test-gsd-command-ctx-isolation.rkt
 ;; TDD for W7: command handlers isolate per ctx via current-gsd-ctx parameter
 

@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-stream-error-wrapping.rkt -- A6-02 + A7-02: streaming error wrapping tests

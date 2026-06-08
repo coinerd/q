@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite tui
+
 ;; BOUNDARY: io
 
 ;; tests/tui/test-wave4-markdown-theme.rkt — Wave 4 edge case tests

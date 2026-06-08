@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite runtime
+
 ;; tests/test-tool-coordinator-phases.rkt -- N-02: tool-coordinator phase tests
 
 (require rackunit

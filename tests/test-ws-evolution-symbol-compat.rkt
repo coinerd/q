@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-ws-evolution-symbol-compat.rkt
 ;; Regression test: evolve-working-set-for-state must accept raw symbols
 ;; (not just fsm-state? structs) because the runtime stores task-fsm-state

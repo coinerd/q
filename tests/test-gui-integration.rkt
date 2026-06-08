@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed slow
+;; @suite default
+
 ;; q/tests/test-gui-integration.rkt — Smoke tests for GUI bridge integration
 
 (require rackunit

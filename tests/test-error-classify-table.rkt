@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-error-classify-table.rkt — R-23: Error classification data table

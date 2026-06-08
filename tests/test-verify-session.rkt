@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite runtime
+
 ;; BOUNDARY: integration
 
 ;; test-verify-session.rkt — Tests for q verify-session CLI command

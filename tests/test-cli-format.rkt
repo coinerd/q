@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-cli-format.rkt — v0.70.8 W0
 ;; Extracted from test-cli.rkt: format-event-for-terminal tests
 

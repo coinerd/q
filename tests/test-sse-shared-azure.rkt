@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; test-sse-shared-azure.rkt — Tests for Azure OpenAI SSE dedup (W1)
 ;; Part of v0.81.0
 

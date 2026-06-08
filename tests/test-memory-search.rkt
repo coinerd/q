@@ -1,4 +1,7 @@
 #lang racket/base
+
+;; @speed fast
+;; @suite default
 ;; tests/test-memory-search.rkt — Search ranking + dedup + supersedes tests
 ;;
 ;; v0.95.13 W2: Tests for runtime/memory/search.rkt

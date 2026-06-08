@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-event-coverage.rkt — #1149: fine-grained lifecycle event coverage

@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite tui
+
 ;; BOUNDARY: io
 
 ;; tests/test-tui-init-phases.rkt -- TUI init phase extraction tests (W-19)

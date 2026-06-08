@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-goal-agent-evaluator.rkt — Agent evaluator tests
 
 (require rackunit

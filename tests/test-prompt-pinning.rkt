@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-prompt-pinning.rkt — Tests for first-user-prompt pinning (#1380)

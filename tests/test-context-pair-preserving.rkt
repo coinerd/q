@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; Test that context builder preserves tool_call/tool_result pairing

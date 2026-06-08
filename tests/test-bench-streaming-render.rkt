@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; tests/bench-streaming-render.rkt — Streaming render benchmarks
 ;;
 ;; Measures cell-diff pipeline performance:

@@ -1,4 +1,7 @@
 #lang racket/base
+
+;; @speed fast
+;; @suite default
 ;;; test-memory-consolidation-w6.rkt — W6 tests for memory management/consolidation
 (require rackunit
          "../runtime/memory/types.rkt"

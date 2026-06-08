@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite runtime
+
 ;; BOUNDARY: integration
 
 ;; tests/test-iteration-main-loop.rkt -- Tests for run-iteration-loop orchestration

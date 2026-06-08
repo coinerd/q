@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed slow
+;; @suite default
+
 ;; test-cell-diff-integration.rkt — Full pipeline integration tests
 ;;
 ;; Tests the complete cell-diff rendering pipeline:

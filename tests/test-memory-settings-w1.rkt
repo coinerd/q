@@ -1,4 +1,7 @@
 #lang racket/base
+
+;; @speed fast
+;; @suite default
 ;;; test-memory-settings-w1.rkt — W1 tests for auto-extraction settings
 (require rackunit
          "../runtime/settings.rkt")

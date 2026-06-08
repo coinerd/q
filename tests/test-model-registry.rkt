@@ -1,4 +1,7 @@
 #lang racket
+
+;; @speed fast
+;; @suite default
 ;; BOUNDARY: integration
 
 ;; test-model-registry.rkt — tests for runtime/model-registry.rkt

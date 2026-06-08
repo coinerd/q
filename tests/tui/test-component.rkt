@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite tui
+
 ;; BOUNDARY: io
 
 ;;; tests/tui/component.rkt — Tests for tui/component.rkt

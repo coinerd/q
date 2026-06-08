@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;;; tests/test-file-mutation-queue.rkt — tests for per-file serialization.

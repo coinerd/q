@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite runtime
+
 ;; BOUNDARY: integration
 
 ;; tests/test-wave1-compaction.rkt — Wave 1 compaction hardening tests

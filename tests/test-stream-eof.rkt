@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; test-stream-eof.rkt — Tests for silent stream EOF detection (BUG-SILENT-STREAM-EOF)

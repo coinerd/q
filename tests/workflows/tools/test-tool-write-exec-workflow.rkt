@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed slow  ;; @suite workflows
+
 ;; tests/workflows/tools/test-tool-write-exec-workflow.rkt — Multi-tool chaining (#172)
 ;;
 ;; THE KEY TEST: Tests multi-tool chaining — write file then execute.

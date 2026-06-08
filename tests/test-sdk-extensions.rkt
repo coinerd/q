@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-sdk-extensions.rkt — tests for v0.20.5 W3: Extension Pre-Registration

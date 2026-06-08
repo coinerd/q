@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite extensions
+
 ;; BOUNDARY: integration
 
 ;; tests/test-gsd-isolation.rkt — Multi-session isolation test (H-05)

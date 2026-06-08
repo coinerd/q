@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-browser-adapter-contracts.rkt — Adapter contract boundary tests
 ;;
 ;; Validates that adapter contracts reject invalid inputs.

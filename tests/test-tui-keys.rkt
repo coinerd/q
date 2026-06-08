@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite tui
+
 ;; BOUNDARY: io
 
 ;; test-tui-keys.rkt — Tests for BUG-36: TUI arrow key and special key handling

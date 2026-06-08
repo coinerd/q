@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed slow  ;; @suite security
+
 ;; BOUNDARY: io
 
 ;; test-sandbox.rkt — Tests for sandbox/ modules: limits, subprocess, evaluator

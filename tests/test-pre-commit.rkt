@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed slow
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; q/tests/test-pre-commit.rkt — tests for scripts/pre-commit.rkt

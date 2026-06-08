@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite runtime
+
 ;; BOUNDARY: integration
 
 ;;; tests/test-split-turn-compaction.rkt — integration tests for split-turn in compaction (#767)

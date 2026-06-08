@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-record-conclusion.rkt — tests for record_conclusion tool
 ;; v0.76.0 W0: Tool implementation + persistence wiring
 

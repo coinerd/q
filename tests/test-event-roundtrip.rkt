@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: serialization
 
 ;; tests/test-event-roundtrip.rkt — Round-trip tests for event serialization

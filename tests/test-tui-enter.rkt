@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite tui
+
 ;; BOUNDARY: io
 
 ;; test-tui-enter.rkt — Tests for BUG-26: TUI Enter key handling

@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-extension-types-predicate.rkt — C1 regression test
 ;;
 ;; Verifies that extension-registry? from util/extension-types.rkt

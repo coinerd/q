@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-ws-conclusion-fallback.rkt — M5 W0/W1: Conclusion-first working-set
 ;; v0.76.4: When WS is filtered/excluded, replace with matching conclusions.
 

@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite tui
+
 ;; BOUNDARY: io
 
 ;; tests/tui/bracketed-paste.rkt — Tests for bracketed paste support (#435)

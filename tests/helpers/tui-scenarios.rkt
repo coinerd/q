@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: unit
 ;; @suite tui
 ;; @boundary unit

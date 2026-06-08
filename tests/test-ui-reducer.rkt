@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-ui-reducer.rkt — Tests for ui-core/ui-reducer.rkt
 ;;
 ;; W2.1 (v0.94.2): Verify shared reducer protocol, handler tables,

@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-browser-playwright-adapter.rkt — Playwright sidecar adapter tests
 
 (require rackunit

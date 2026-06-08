@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-rollback-actions.rkt — Rollback action model tests
 ;; v0.77.10 M2: Updated to verify real execution via injectable callbacks
 

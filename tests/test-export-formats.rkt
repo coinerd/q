@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; q/tests/test-export-formats.rkt — Tests for session export (Markdown, HTML, JSON)

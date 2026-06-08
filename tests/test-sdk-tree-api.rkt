@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-sdk-tree-api.rkt — SDK tree API integration tests (#1336 Finding 9)

@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed slow
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-bump-version.rkt — Tests for scripts/bump-version.rkt

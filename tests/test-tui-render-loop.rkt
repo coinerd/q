@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite tui
+
 ;; BOUNDARY: io
 
 ;; test-tui-render-loop.rkt — Tests for tui/tui-render-loop.rkt

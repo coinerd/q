@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed slow  ;; @suite workflows
+
 ;; tests/workflows/cli/test-cli-no-tools.rkt — CLI no-tools/restricted tools workflow tests (#170)
 ;;
 ;; Tests that tool-call responses degrade correctly when tools are

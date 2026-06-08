@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed slow
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; q/tests/test-check-deps.rkt — tests for scripts/check-deps.rkt

@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite tui
+
 ;; BOUNDARY: io
 
 ;; tests/tui/test-gsd-mode-decoupling.rkt — Test TUI→GSD circular import fix

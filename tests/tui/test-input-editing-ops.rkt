@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite tui
+
 ;; BOUNDARY: io
 
 ;; tests/tui/test-input-editing-ops.rkt — unit tests for tui/input/editing-ops

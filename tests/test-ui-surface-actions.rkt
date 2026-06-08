@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-ui-surface-actions.rkt — Tests for event-publishing dual-path
 ;; in extensions/ui-surface.rkt
 ;;

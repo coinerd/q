@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-llm-timing.rkt — Unit test for shared timing utility
 ;;
 ;; Verifies that log-stream-setup-timing accepts both exact and inexact

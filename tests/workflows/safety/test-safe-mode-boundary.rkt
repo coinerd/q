@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed slow  ;; @suite workflows
+
 ;; BOUNDARY: integration
 
 ;; tests/workflows/safety/test-safe-mode-boundary.rkt — Safe-mode boundary workflow test (#176)

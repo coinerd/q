@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-print-mode.rkt — Tests for G9.3: -p/--print flag (print mode)

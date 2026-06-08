@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;;; tests/test-widget-lifecycle.rkt — Lifecycle widget protocol tests (#5256)
 
 (require rackunit

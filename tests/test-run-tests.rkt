@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed slow
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; Tests for the rewritten run-tests.rkt test runner.

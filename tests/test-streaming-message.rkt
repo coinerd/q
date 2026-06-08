@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-streaming-message.rkt — FEAT-71/72: Streaming accumulator + thinking

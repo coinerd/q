@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed slow  ;; @suite runtime
+
 ;; BOUNDARY: integration
 
 ;; tests/test-iteration-integration.rkt — integration tests for struct refactor

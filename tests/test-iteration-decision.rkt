@@ -1,4 +1,6 @@
 #lang racket
+
+;; @speed fast  ;; @suite runtime
 ;; BOUNDARY: pure
 ;; BOUNDARY: unit
 ;; tests/test-iteration-decision.rkt — Pure decision function tests (T-1a)

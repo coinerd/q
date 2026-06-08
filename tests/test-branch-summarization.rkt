@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;;; tests/test-branch-summarization.rkt — tests for branch summarization (#776)

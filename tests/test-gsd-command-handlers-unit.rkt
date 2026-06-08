@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite extensions
+
 ;; tests/test-gsd-command-handlers-unit.rkt — Unit tests for GSD command parsing & dispatch (T-6)
 ;; Tests the pure parse-gsd-command and dispatch-gsd-command functions.
 

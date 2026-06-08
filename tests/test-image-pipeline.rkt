@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;;; tests/test-image-pipeline.rkt — Image pipeline tests (#5268)
 
 (require rackunit

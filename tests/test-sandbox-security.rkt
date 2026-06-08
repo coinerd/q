@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed slow  ;; @suite security
+
 ;; BOUNDARY: io
 
 ;; tests/test-sandbox-security.rkt — security regression tests

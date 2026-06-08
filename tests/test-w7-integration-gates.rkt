@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed slow
+;; @suite default
+
 ;; q/tests/test-w7-integration-gates.rkt — W7 integration gate verification
 ;;
 ;; G0: Pure contracts — all UI core functions compile and return expected types

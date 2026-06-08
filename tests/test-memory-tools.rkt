@@ -1,4 +1,7 @@
 #lang racket/base
+
+;; @speed fast
+;; @suite default
 ;; tests/test-memory-tools.rkt — Memory tools (store/search/delete) tests
 ;;
 ;; Tests the three memory tools with policy gating, error cases,

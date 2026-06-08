@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite extensions
+
 ;; BOUNDARY: integration
 
 ;; tests/test-gsd-context-bundle.rkt — Context bundle assembly tests

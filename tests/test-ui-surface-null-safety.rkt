@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-ui-surface-null-safety.rkt — Null-safety regression tests
 ;;
 ;; W1 (v0.94.8): Verify all ui-surface callbacks are null-safe and

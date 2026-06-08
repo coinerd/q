@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite arch
+
 ;; tests/test-hotspot-report.rkt — Tests for hotspot scoring logic
 
 (require rackunit

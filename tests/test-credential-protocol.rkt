@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; test-credential-protocol.rkt — Verify credential backend protocol contracts (F4)
 ;;
 ;; Tests that all backends conform to the credential-backend interface

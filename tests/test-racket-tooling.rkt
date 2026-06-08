@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed slow
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-racket-tooling.rkt — tests for racket-tooling extension

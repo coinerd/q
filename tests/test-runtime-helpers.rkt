@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite runtime
+
 ;; BOUNDARY: integration
 
 ;; tests/test-runtime-helpers.rkt — QUAL-01: runtime helper extraction

@@ -1,4 +1,7 @@
 #lang racket/base
+
+;; @speed fast
+;; @suite default
 ;; tests/test-memory-management-tools.rkt — list_memory and clear_memory tests
 ;;
 ;; v0.95.9: Tests for memory management UX tools:

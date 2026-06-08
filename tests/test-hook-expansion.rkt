@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite extensions
+
 ;; BOUNDARY: integration
 
 ;; tests/test-hook-expansion.rkt — tests for hook point expansion (#665)

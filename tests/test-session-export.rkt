@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite runtime
+
 ;; BOUNDARY: integration
 
 ;; tests/test-session-export.rkt — Tests for session-export extension

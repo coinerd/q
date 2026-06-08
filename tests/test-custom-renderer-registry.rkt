@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-custom-renderer-registry.rkt — FEAT-70: custom renderer registry + wiring

@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite runtime
+
 ;; BOUNDARY: integration
 
 ;; tests/test-gsd-per-session-ctx.rkt — Per-session GSD context isolation (C-01, v0.35.1)

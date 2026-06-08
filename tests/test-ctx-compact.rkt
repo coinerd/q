@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-ctx-compact.rkt — tests for Programmatic Compaction (#708-#709)

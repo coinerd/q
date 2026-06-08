@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite security
+
 ;;; tests/test-oauth-callback-security.rkt — OAuth2 security regression tests
 ;;;
 ;;; Tests for v0.59.1 W0 (#5340): RFC7636 PKCE + CSPRNG primitives

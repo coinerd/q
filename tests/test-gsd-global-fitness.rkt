@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite arch
+
 ;; tests/test-gsd-global-fitness.rkt
 ;; W9: No-new-GSD-globals fitness gate
 ;;

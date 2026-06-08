@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite extensions
+
 ;; BOUNDARY: integration
 
 (require rackunit

@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; Tests for scripts/lint-release-readiness.rkt
 ;; BOUNDARY: integration
 

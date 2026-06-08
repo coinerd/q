@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite tui
+
 ;; BOUNDARY: io
 
 (require rackunit

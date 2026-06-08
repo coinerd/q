@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; q/tests/test-sdk-ergonomics.rkt — tests for Wave 10 SDK ergonomics

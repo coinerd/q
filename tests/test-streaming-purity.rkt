@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-streaming-purity.rkt — Cost tracker purity tests
 
 (require rackunit

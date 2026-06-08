@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-conclusion-dependencies.rkt — M6: Conclusion dependency tracking
 ;; v0.76.5: Conclusions store file paths they depend on.
 

@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed slow
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-examples-compile.rkt — Verify all SDK examples compile

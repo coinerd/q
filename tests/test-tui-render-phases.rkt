@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite tui
+
 ;; tests/test-tui-render-phases.rkt -- Tests for TUI render phase helpers
 ;; v0.74.5: Pure function tests for extracted render helpers.
 

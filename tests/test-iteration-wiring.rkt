@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite runtime
+
 ;; BOUNDARY: integration
 
 ;; tests/test-iteration-wiring.rkt — Verify decide-next-action is wired into production loop

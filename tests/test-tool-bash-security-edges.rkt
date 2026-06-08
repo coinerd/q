@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite security
+
 ;; tests/test-tool-bash-security-edges.rkt — Tool builtin security edge-case tests
 ;;
 ;; Tests destructive commands and security patterns using the shell-risk classifier.

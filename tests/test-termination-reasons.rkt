@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; test-termination-reasons.rkt — Exhaustiveness: every known termination reason handled

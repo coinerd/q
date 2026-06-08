@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite security
+
 ;; BOUNDARY: io
 
 ;; tests/test-property-security.rkt — property-based tests for security-critical modules

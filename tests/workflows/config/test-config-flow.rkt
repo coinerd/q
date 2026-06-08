@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed slow  ;; @suite workflows
+
 ;; BOUNDARY: integration
 
 ;; test-config-flow.rkt — Settings config flow contract tests

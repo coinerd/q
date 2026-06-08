@@ -1,4 +1,7 @@
 #lang racket/base
+
+;; @speed fast
+;; @suite default
 ;; tests/test-memory-types.rkt — Memory domain model tests
 
 (require racket/list

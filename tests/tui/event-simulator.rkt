@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite tui
+
 ;; BOUNDARY: io
 
 ;; tests/tui/event-simulator.rkt — Infrastructure for TUI state transition testing

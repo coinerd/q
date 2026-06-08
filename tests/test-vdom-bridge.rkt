@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-vdom-bridge.rkt — Integration test for vdom pipeline
 
 (define (row-string buf row)

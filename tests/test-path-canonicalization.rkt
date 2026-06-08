@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-path-canonicalization.rkt — SEC-02/SEC-03 path canonicalization tests

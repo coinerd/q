@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite runtime
+
 ;; BOUNDARY: integration
 
 ;; tests/test-session-store-integrity.rkt — W2-D5: Test scaffold for runtime/session-store-integrity.rkt

@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-token-metrics.rkt — Token metrics validation tests
 ;; v0.76.2 W2: Verify measurement functions are accurate.
 

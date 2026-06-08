@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-browser-lifecycle.rkt — F7/F8: exec-context + agent-session lifecycle
 
 (require rackunit

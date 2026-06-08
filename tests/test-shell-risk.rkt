@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-shell-risk.rkt — Shell risk classifier tests (v0.70.3)
 
 (require racket/list

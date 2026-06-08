@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-browser-ipv6-policy.rkt — F3: IPv6 policy classification
 
 (require rackunit

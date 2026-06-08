@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-context-assembly-e2e.rkt — End-to-end context assembly lifecycle test
 ;; v0.75.4 W1: Full lifecycle integration test.
 

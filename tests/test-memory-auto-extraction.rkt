@@ -1,4 +1,7 @@
 #lang racket/base
+
+;; @speed fast
+;; @suite default
 ;; tests/test-memory-auto-extraction.rkt — Auto-extraction alpha tests
 ;;
 ;; v0.95.10: Tests for automatic memory extraction:

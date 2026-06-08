@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite tui
+
 ;; BOUNDARY: io
 
 ;; tests/test-tui-overlay-state.rkt — Wave 6: T11 overlay + event interaction

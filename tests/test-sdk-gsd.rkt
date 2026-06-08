@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-sdk-gsd.rkt — tests for v0.20.5 W2: GSD Convenience API

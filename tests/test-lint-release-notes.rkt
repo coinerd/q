@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;;; test-lint-release-notes.rkt — Tests for lint-release-notes script.

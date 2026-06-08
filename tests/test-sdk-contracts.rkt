@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: contract
 
 ;; tests/test-sdk-contracts.rkt — Contract blame verification for v0.30.0

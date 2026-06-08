@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite extensions
+
 ;; BOUNDARY: integration
 
 ;; tests/helpers/gsd-test-helpers.rkt — Test helper for GSD context

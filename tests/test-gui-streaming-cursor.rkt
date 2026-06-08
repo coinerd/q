@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-gui-streaming-cursor.rkt — Tests for streaming-cursor.rkt
 
 (require rackunit

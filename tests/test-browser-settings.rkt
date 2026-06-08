@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-browser-settings.rkt — Browser settings tests
 ;;
 ;; Tests for browser/settings.rkt: construction, defaults, parameter.

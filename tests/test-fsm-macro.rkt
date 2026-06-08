@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-fsm-macro.rkt — Tests for define-fsm-machine macro
 ;;
 ;; TDD tests for the FSM machine definition macro in util/fsm.rkt.

@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite security
+
 ;; tests/test-browser-safe-mode.rkt — F1: browser tools blocked in safe-mode
 
 (require rackunit

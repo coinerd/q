@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite runtime
+
 ;; BOUNDARY: integration
 
 ;; tests/test-iteration-tool-bridge.rkt — tests for iteration/tool-turn-bridge

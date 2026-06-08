@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite runtime
+
 ;; tests/test-session-rollout.rkt -- Per-session config + rollout gate tests
 ;; v0.76.3 W0: Feature-flag activation with deterministic A/B assignment.
 

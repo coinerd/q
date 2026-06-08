@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-gui-lifecycle-hooks.rkt — Tests for GUI lifecycle hook dispatch
 ;;
 ;; W3.1 (v0.94.3): Verify hook registration, dispatch, and multi-handler ordering.

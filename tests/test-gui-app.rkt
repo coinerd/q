@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-gui-app.rkt — Tests for gui/app.rkt
 
 (require rackunit

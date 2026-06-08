@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite runtime
+
 ;; tests/test-session-lifecycle-pure.rkt -- Pure helper tests for session-lifecycle.rkt
 ;; v0.74.4: Expanded pure function test coverage for FSM extraction.
 

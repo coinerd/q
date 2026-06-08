@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite runtime
+
 ;; BOUNDARY: integration
 
 ;; Test: P0 fix — mutable config hash-set! doesn't crash on second prompt

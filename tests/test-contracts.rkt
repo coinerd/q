@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: contract
 
 ;; tests/test-contracts.rkt — Boundary contract tests

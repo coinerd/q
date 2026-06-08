@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-gui-markdown-render.rkt — W5: markdown rendering polish
 ;;
 ;; Tests that parse-markdown-elements, contains-markdown?, and

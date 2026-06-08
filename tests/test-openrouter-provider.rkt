@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;;; tests/test-openrouter-provider.rkt — OpenRouter provider wrapper tests
 
 (require rackunit

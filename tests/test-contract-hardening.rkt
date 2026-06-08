@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: contract
 
 ;; tests/test-contract-hardening.rkt -- W0: contract hardening tests

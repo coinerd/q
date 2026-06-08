@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-on2-audit.rkt — O(n²) audit for append-in-loop patterns (#1382)

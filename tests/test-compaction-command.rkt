@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite runtime
+
 ;;; tests/test-compaction-command.rkt — /compact command tests
 
 (require rackunit

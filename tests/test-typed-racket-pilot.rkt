@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-typed-racket-pilot.rkt — RKT-01: Typed Racket pilot validation

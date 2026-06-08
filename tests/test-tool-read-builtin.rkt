@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-tool-read-builtin.rkt — T-2 tests for tools/builtins/read.rkt
 
 (require rackunit

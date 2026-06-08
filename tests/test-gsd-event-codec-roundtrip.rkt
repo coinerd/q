@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite extensions
+
 ;; BOUNDARY: unit
 
 ;; tests/test-gsd-event-codec-roundtrip.rkt -- Round-trip codec tests for GSD typed events (v0.43.1)

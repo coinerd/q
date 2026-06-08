@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;;; tests/test-tool-properties.rkt — Property-based Tests für Tool-Verträge

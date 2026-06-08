@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; test-wiring-run-interactive.rkt — Tests for wiring/run-interactive.rkt

@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed slow  ;; @suite tui
+
 ;; BOUNDARY: io
 
 ;; test-tui-terminal.rkt — Tests for native TUI terminal adapter

@@ -1,4 +1,7 @@
 #lang racket/base
+
+;; @speed fast
+;; @suite default
 ;; tests/test-memory-context-observe.rkt — Observe-only memory context retrieval tests
 
 

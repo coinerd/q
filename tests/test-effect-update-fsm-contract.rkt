@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: regression
 ;; tests/test-effect-update-fsm-contract.rkt — Regression for effect:update-fsm contract mismatch (v0.55.4)
 ;;

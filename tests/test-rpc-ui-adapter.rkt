@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-rpc-ui-adapter.rkt — FEAT-80: Extension UI over RPC (e2e)

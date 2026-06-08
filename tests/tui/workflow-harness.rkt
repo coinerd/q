@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed slow  ;; @suite tui
+
 ;; BOUNDARY: io
 
 ;; tests/tui/workflow-harness.rkt — Test infrastructure for simulating agent

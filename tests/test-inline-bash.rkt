@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: io
 
 ;; q/tests/test-inline-bash.rkt — Tests for G3.3 inline bash expansion

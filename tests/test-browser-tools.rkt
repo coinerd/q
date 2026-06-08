@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-browser-tools.rkt — Browser tool handler tests
 
 (require rackunit

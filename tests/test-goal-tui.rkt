@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-goal-tui.rkt — TUI goal event reducer + display tests
 
 (require rackunit

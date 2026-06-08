@@ -1,4 +1,7 @@
 #lang racket/base
+
+;; @speed fast
+;; @suite default
 ;; tests/test-memory-hash-backend.rkt — In-memory hash backend tests
 
 (require rackunit

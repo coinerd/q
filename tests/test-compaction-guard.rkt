@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite runtime
+
 ;; BOUNDARY: integration
 
 ;;; tests/test-compaction-guard.rkt — tests for compaction guard (#765)

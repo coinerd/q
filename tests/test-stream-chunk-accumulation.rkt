@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-stream-chunk-accumulation.rkt -- W0: accumulate-stream-chunks tests

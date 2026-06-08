@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 (require rackunit
          racket/runtime-path
          "../browser/adapter.rkt"

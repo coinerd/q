@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;;; tests/test-compactor.rkt — tests for runtime/compactor.rkt

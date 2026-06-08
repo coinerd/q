@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; q/tests/test-pipeline-smoke.rkt — End-to-end pipeline smoke tests

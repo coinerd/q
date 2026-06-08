@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite extensions
+
 ;; BOUNDARY: pure
 
 ;; tests/extensions/test-wave-executor-pure.rkt — Tests for pure wave-executor functions

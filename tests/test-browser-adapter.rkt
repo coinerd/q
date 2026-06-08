@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-browser-adapter.rkt — Browser adapter interface tests
 ;;
 ;; Tests for browser/adapter.rkt: construction, delegation, edge cases.

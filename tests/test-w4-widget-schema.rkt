@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-w4-widget-schema.rkt — W4 widget + schema tests
 ;;
 ;; W4 (v0.94.8): M-2 (schema validation), M-5 (zone/kind enums), m-8 (lifecycle consumer).

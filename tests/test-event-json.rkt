@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-event-json.rkt — W2-D1: Test scaffold for agent/event-json.rkt

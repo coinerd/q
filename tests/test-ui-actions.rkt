@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-ui-actions.rkt — Tests for ui-core/ui-actions.rkt and ui-core/ui-delta.rkt
 ;;
 ;; W1.1 (v0.94.1): Verify UI action definitions, validators, emitter, and reducer.

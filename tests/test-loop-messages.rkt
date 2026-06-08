@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-loop-messages.rkt — W2-D2: Test scaffold for agent/loop-messages.rkt

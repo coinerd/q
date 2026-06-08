@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed slow  ;; @suite workflows
+
 ;; tests/workflows/fixtures/test-workflow-timeout-cleanup.rkt — Timeout/cleanup tests (#5470)
 ;;
 ;; Tests that workflow timeout and cleanup wrappers work correctly:

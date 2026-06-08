@@ -1,4 +1,6 @@
 #lang racket/base
+
+;; @speed fast
 ;; test-lifecycle-state.rkt — Tests for extracted lifecycle-state struct (A1-05)
 ;; @suite fast
 

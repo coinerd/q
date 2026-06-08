@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite runtime
+
 ;; BOUNDARY: integration
 
 ;;; tests/test-session-store.rkt — tests for runtime/session-store.rkt

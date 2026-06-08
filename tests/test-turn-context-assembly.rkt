@@ -1,4 +1,6 @@
 #lang racket/base
+
+;; @speed fast  ;; @suite runtime
 ;; test-turn-context-assembly.rkt — Characterization + behavioral tests for
 ;; turn-orchestrator decomposition and extracted functions.
 ;;

@@ -1,4 +1,7 @@
 #lang racket/base
+
+;; @speed fast
+;; @suite default
 ;;; test-memory-backend-config.rkt — W0/W4 characterization tests
 ;;;
 ;;; W0: Characterize complex backend config gaps.

@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-gui-goal-commands.rkt — GUI /goal handler tests
 
 (require rackunit

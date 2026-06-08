@@ -1,4 +1,7 @@
 #lang racket/base
+
+;; @speed fast
+;; @suite default
 ;; BOUNDARY: serialization
 
 ;; tests/test-jsonl-format-version.rkt — JSONL format header tests (F8)

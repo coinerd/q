@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-run-json-rpc.rkt — Tests for wiring/run-json-rpc.rkt

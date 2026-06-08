@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite runtime
+
 ;; BOUNDARY: pure
 
 ;; tests/test-tool-coordinator-pure.rkt -- W2: Pure helper tests for tool-coordinator.rkt

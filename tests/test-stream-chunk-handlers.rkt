@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-stream-chunk-handlers.rkt — T2-2: Test per-chunk handler decomposition
 ;; STABILITY: evolving
 

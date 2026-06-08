@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed slow  ;; @suite workflows
+
 ;; tests/workflows/cli/test-cli-single-shot.rkt — CLI single-shot workflow tests (#168)
 ;;
 ;; Tests that a single prompt through the full SDK path:

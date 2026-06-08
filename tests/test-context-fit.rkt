@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-context-fit.rkt — W2-D3: Test scaffold for runtime/context-fit.rkt

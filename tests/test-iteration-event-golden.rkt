@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite runtime
+
 ;; tests/test-iteration-event-golden.rkt — Golden tests for iteration phase events (v0.54.3 W2)
 ;;
 ;; Locks event-ordering behavior for extracted orchestration phases.

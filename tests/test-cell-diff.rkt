@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-cell-diff.rkt — Tests for tui/cell-diff.rkt
 
 (require rackunit

@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-browser-events.rkt — Browser typed events + JSON codec roundtrip
 ;;
 ;; Tests for browser/events.rkt and event-json.rkt registration.

@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 (require racket/string
          rackunit
          (only-in "../tui/commands/goal-bridge.rkt"

@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-state-relevance.rkt — tests for state-relevance matrix
 ;; v0.76.0 W3: Tighten state-relevance matrix
 

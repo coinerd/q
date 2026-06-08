@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-goal-state.rkt — Tests for runtime/goal-state.rkt
 ;;
 ;; Covers: construction, contracts, serialization round-trip, defaults.

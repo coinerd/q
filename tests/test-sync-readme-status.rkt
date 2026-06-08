@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed slow
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; test-sync-readme-status.rkt — Tests for scripts/sync-readme-status.rkt

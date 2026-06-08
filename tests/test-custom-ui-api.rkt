@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-custom-ui-api.rkt — tests for Custom Footer, Header, Tool Rendering (#717-#720)

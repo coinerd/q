@@ -1,4 +1,7 @@
 #lang racket/base
+
+;; @speed fast
+;; @suite default
 ;; BOUNDARY: serialization
 
 ;; tests/test-jsonl-contracts.rkt — Contract boundary tests for jsonl.rkt

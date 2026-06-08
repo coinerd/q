@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed slow  ;; @suite extensions
+
 ;; BOUNDARY: integration
 
 ;; tests/test-gsd-planning-integration.rkt — Integration tests for GSD planning

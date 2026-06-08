@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed slow  ;; @suite security
+
 ;; BOUNDARY: unit
 ;; @suite runtime
 ;; @boundary unit

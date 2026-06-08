@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed slow  ;; @suite security
+
 ;; tests/test-sandbox-limits-unit.rkt — S-1 tests for sandbox/limits.rkt
 
 (require rackunit

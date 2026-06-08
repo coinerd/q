@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/helpers/temp-fs.rkt — T05: Temporary filesystem test helpers

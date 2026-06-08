@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed slow
+;; @suite default
+
 ;; BOUNDARY: unit
 ;; Tests for strict argument validation in run-tests.rkt (v0.83.1 W0)
 

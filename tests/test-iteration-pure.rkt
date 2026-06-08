@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite runtime
+
 ;; BOUNDARY: pure
 
 ;; tests/test-iteration-pure.rkt — Property tests for pure iteration functions

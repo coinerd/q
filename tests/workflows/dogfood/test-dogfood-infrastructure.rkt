@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed slow  ;; @suite workflows
+
 ;; BOUNDARY: integration
 
 ;; tests/workflows/dogfood/test-dogfood-infrastructure.rkt

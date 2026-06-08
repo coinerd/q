@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-loop-dispatch.rkt — T-1b surface tests for agent/loop-dispatch.rkt
 ;;
 ;; loop-dispatch.rkt is documented as IMPURE streaming dispatch.

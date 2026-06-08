@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-streaming-tool-bug.rkt — Wave 0: Reproduction test for streaming content

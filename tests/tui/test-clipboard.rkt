@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite tui
+
 ;; BOUNDARY: io
 
 ;; q/tests/tui/clipboard.rkt — Unit tests for q/tui/clipboard module

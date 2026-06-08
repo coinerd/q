@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite extensions
+
 ;; BOUNDARY: integration
 
 ;; tests/test-hook-dispatch-transitions.rkt — Wave 12: E1-E8 extension hook dispatch

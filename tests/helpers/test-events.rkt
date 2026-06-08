@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/helpers/test-events.rkt — Shared event builder functions
 ;;
 ;; Provides convenient constructors for building events in tests.

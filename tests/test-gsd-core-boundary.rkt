@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite arch
+
 ;; tests/test-gsd-core-boundary.rkt -- Boundary tests for gsd/core.rkt API
 ;; v0.74.5: Verify contract-out on GSD core exports.
 

@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: macro
 
 ;; tests/test-schema-macro.rkt — Tests for tools/schema-macro.rkt

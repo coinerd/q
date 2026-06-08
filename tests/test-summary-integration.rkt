@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed slow
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; q/tests/test-summary-integration.rkt — Wave 2B (#1396): Summary Integration tests

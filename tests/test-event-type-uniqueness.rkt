@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-event-type-uniqueness.rkt — T1-3: Verify ALL event type strings are unique
 ;; STABILITY: evolving
 ;; v0.80.xx audit: Expanded from 10-sample to ALL event types after

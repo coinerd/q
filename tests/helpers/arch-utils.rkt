@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite arch
+
 ;; BOUNDARY: integration
 
 ;; tests/helpers/arch-utils.rkt — Shared architecture test utilities

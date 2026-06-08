@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: macro
 
 ;; tests/test-define-event-macro.rkt — tests for define-typed-event macro

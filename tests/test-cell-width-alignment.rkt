@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-cell-width-alignment.rkt — Width-aware cell buffer alignment tests
 ;;
 ;; TDD RED gate for emoji/wide-char column misalignment fix.

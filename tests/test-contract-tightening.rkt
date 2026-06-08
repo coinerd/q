@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; test-contract-tightening.rkt — Tests for any/c → typed contract tightening (W2)
 ;; Part of v0.81.0
 

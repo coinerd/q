@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed slow
+;; @suite default
+
 ;; tests/test-vdom-component-integration.rkt — Component input dispatch + focus tests
 ;;
 ;; Run: raco test tests/test-vdom-component-integration.rkt

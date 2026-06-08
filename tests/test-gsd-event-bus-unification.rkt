@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite extensions
+
 ;; tests/test-gsd-event-bus-unification.rkt
 ;; TDD test for W5: Unify GSD event bus under gsd-session-ctx
 

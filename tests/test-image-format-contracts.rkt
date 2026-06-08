@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-image-format-contracts.rkt — Contract enforcement for image-format.rkt (#5466)
 ;;
 ;; Tests that image format public APIs enforce contracts on invalid inputs.

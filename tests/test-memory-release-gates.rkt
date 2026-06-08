@@ -1,4 +1,7 @@
 #lang racket/base
+
+;; @speed fast
+;; @suite default
 ;; tests/test-memory-release-gates.rkt — Release hardening truth gates
 ;;
 ;; v0.95.12: Validates that memory system defaults are safe:

@@ -1,4 +1,7 @@
 #lang racket/base
+
+;; @speed fast
+;; @suite default
 ;;; test-memory-backend-factory-w4.rkt — W4 tests for complex backend config factory
 (require rackunit
          "../runtime/memory/service.rkt"

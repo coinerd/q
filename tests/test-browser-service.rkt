@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-browser-service.rkt — SecureBrowserService tests
 ;;
 ;; End-to-end tests using mock adapter:

@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite runtime
+
 ;; BOUNDARY: contract
 
 ;; tests/test-compaction-contracts.rkt — API contract assertions for compaction

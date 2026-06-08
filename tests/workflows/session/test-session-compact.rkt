@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed slow  ;; @suite workflows
+
 ;; BOUNDARY: integration
 
 ;; tests/workflows/session/test-session-compact.rkt — Session compaction workflow test (#175)

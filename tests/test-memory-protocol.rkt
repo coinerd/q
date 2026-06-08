@@ -1,4 +1,7 @@
 #lang racket/base
+
+;; @speed fast
+;; @suite default
 ;; tests/test-memory-protocol.rkt — Memory backend protocol tests
 
 (require rackunit

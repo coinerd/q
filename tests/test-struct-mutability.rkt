@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; test-struct-mutability.rkt — Tests for struct mutability fixes (T3-1, T3-9)
 ;; Part of v0.80.5 Polish Sweep
 

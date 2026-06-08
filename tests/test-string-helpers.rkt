@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-string-helpers.rkt — Canonical truncate-string tests
 
 (require rackunit

@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite extensions
+
 ;; BOUNDARY: integration
 
 ;; tests/test-hook-catalog.rkt — Wave 1 tests for Extension Hook Catalog Expansion

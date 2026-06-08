@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite extensions
+
 ;; BOUNDARY: integration
 
 ;; test-hook-match-dispatch.rkt — Tests for classify-hook-result (data-return)

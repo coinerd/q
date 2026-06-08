@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite security
+
 ;; BOUNDARY: io
 
 ;; tests/test-permission-bash-w1.rkt — Permission contract & bash stderr tests (W-11, W-18, I-13)

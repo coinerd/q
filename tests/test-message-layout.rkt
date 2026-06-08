@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-message-layout.rkt — Tests for tui/render/message-layout.rkt
 ;; Regression tests for wrap-styled-line ordering, leading-space stripping,
 ;; and vdom-layout width-aware truncation.

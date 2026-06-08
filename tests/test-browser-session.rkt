@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite runtime
+
 ;; tests/test-browser-session.rkt — Browser session manager tests
 ;;
 ;; Tests for browser/session.rkt: lifecycle, max enforcement, action counting.

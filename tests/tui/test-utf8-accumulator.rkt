@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite tui
+
 ;; BOUNDARY: io
 
 ;; tests/tui/utf8-accumulator.rkt — Tests for UTF-8 accumulator (#435)

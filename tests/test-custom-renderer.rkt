@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; q/tests/test-custom-renderer.rkt — Tests for gui/extension-slots/custom-renderer.rkt
 
 (require rackunit

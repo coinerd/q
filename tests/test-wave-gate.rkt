@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; Tests for wave-gate blocking in wave-executor.rkt
 ;; BOUNDARY: unit
 

@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; tests/test-context-assembly-agents.rkt — Tests for AGENTS.md context wiring (G2.3)

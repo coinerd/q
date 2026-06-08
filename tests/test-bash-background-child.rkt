@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; Regression test for BUG_REPORT-v0.96.x-BASH-TOOL-HANG-BACKGROUND-CHILD
 ;; Verifies that a backgrounded child process inheriting the stdout pipe
 ;; does not cause the bash tool to hang forever.

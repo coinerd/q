@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;;; tests/test-provider-registry-schema.rkt — Provider schema loading and registry tests
 ;;;
 ;;; #5244: provider registry tests — load, merge, resolve

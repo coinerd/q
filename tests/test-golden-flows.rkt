@@ -1,5 +1,8 @@
 #lang racket
 
+;; @speed fast
+;; @suite default
+
 ;; BOUNDARY: integration
 
 ;; q/tests/test-golden-flows.rkt — end-to-end golden-path integration tests

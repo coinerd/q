@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-util-reclassification.rkt — T2-4: util/ reclassification scaffolding
 ;; STABILITY: evolving
 
