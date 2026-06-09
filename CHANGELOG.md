@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.97.0] - 2026-06-08
+
+### Fixed
+- GAP-2: Tool-result auto-extraction now correctly maps tool-call-id → tool-name instead of using message-id (UUID)
+- Fixed stray paren in wiring/run-modes.rkt blocking compilation
+
+### Added
+- New test file: tests/test-gap2-tool-extraction.rkt (3 tests)
+
 ## [0.96.19] - 2026-06-08
 
 ### Added
