@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.96.17] - 2026-06-08
+
+### Added
+- GAP-1: LLM distillation wiring — channel-based sync with 5s timeout and deterministic fallback
+- GAP-3: Tool result auto-extraction for read/grep/find with content filtering
+- GAP-6: Default context-assembly profile changed from `off` to `observe`
+
+### Fixed
+- distill-with-llm now correctly receives LLM function result via channel instead of thread descriptor
+
 ## [0.96.16] - 2026-06-08
 
 ### Changed
