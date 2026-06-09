@@ -65,8 +65,9 @@
 
 ;; Apply a profile: sets individual feature flags according to the profile.
 ;; v0.78.1 G1: Proper activation matrix with all feature flags.
+;; v0.97.4 GAP-E: Dynamic conclusion budget from max-context-tokens (default 128000).
 ;; Each profile is a superset of the previous one.
-(define (apply-context-assembly-profile! profile)
+(define (apply-context-assembly-profile! profile [max-context-tokens 128000])
   (current-context-assembly-profile profile)
   (case profile
     [(off)
@@ -76,7 +77,7 @@
      (current-rollback-action-execution? #f)
      (current-ws-evolution-enabled? #f)
      (current-conclusion-to-memory-bridge-enabled #f)
-     (current-conclusion-token-budget (compute-conclusion-budget 8000))]
+     (current-conclusion-token-budget (compute-conclusion-budget max-context-tokens))]
     [(observe)
      (current-task-state-aware-assembly? #t)
      (current-graph-conclusion-selection? #f)
@@ -84,7 +85,7 @@
      (current-rollback-action-execution? #f)
      (current-ws-evolution-enabled? #f)
      (current-conclusion-to-memory-bridge-enabled #f)
-     (current-conclusion-token-budget (compute-conclusion-budget 8000))]
+     (current-conclusion-token-budget (compute-conclusion-budget max-context-tokens))]
     [(bounded)
      (current-task-state-aware-assembly? #t)
      (current-graph-conclusion-selection? #t)
@@ -92,7 +93,7 @@
      (current-rollback-action-execution? #f)
      (current-ws-evolution-enabled? #f)
      (current-conclusion-to-memory-bridge-enabled #f)
-     (current-conclusion-token-budget (compute-conclusion-budget 8000))]
+     (current-conclusion-token-budget (compute-conclusion-budget max-context-tokens))]
     [(self-healing)
      (current-task-state-aware-assembly? #t)
      (current-graph-conclusion-selection? #t)
@@ -100,7 +101,7 @@
      (current-rollback-action-execution? #t)
      (current-ws-evolution-enabled? #f)
      (current-conclusion-to-memory-bridge-enabled #t)
-     (current-conclusion-token-budget (compute-conclusion-budget 8000))]
+     (current-conclusion-token-budget (compute-conclusion-budget max-context-tokens))]
     [(full)
      (current-task-state-aware-assembly? #t)
      (current-graph-conclusion-selection? #t)
@@ -108,7 +109,7 @@
      (current-rollback-action-execution? #t)
      (current-ws-evolution-enabled? #t)
      (current-conclusion-to-memory-bridge-enabled #t)
-     (current-conclusion-token-budget (compute-conclusion-budget 8000))]
+     (current-conclusion-token-budget (compute-conclusion-budget max-context-tokens))]
     [else (void)]))
 
 (provide session-config?
