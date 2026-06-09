@@ -1,3 +1,20 @@
+## [0.96.13] - 2026-06-09
+
+### Memory Continuity & Looping Prevention
+
+#### Added
+- **WP-1**: Context-aware memory retrieval — query text now derived from task state and recent messages, forwarded to memory search relevance scoring
+- **WP-4**: Anti-looping escalation — warning counter with escalation to force-distill after 2+ repeated tool warnings; exploration-loop and stuck-detection triggers
+- **WP-3**: Forced reflection on large tool results — reflection-suggested event when results >4000 chars, advisory reminder in state-aware preamble
+- **WP-2-light**: Transition detection infrastructure — ws-entry->text helper, warning counter reset on task-state transitions
+- All new behaviors default OFF via feature flags (current-reflection-prompt-enabled, current-auto-distillation-enabled?)
+
+#### Changed
+- observe-memory-for-context and inject-memory-for-context accept #:query-text parameter
+- warnings->actions escalates to force-distill after threshold (case-insensitive pattern matching)
+- check-rollback-triggers detects exploration loops and stuck states
+- build-state-awareness-preamble includes reflection reminder when events exist
+
 ## [0.96.12] - 2026-06-09
 
 ### Test Architecture — Post-Audit Hotfix
