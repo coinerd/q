@@ -1,4 +1,17 @@
 ## [0.96.14] - 2026-06-09
+## [0.96.15] - 2026-06-09
+
+### Fixed
+- **HF1**: Centralize `current-loop-warning-count` mutations into `increment-loop-warning-count!` helper (eliminates dual-mutation maintenance hazard)
+- **MF1**: Document Trigger 3+4 overlap in `check-rollback-triggers` (intentional dual-fire behavior)
+- **MF2**: Replace 4 `dynamic-require` calls in `state-aware-builder.rkt` with static `only-in` imports (eliminates runtime crash class)
+- **MF3**: Add integration tests for counter increment helper and escalation wiring (5 new tests)
+- **LF3**: Add post-implementation deviation notes to v0.96.13 PLAN
+- **LF4**: Remove redundant `only-in` import of settings in `run-modes.rkt`
+
+### Audit Source
+- `.planning/AUDIT-v0.96.14-MEMORY-CONTINUITY-HOTFIX.md`
+
 
 ### Memory Continuity — Post-Audit Hotfix
 
