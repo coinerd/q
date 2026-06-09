@@ -77,6 +77,9 @@
                   detect-exploration-loop)
          (only-in "../../runtime/context-assembly/rollback-actions.rkt" increment-loop-warning-count!)
          (only-in "../../runtime/context-assembly/state-aware-builder.rkt" current-reflection-event)
+         (only-in "../../runtime/memory/auto-extraction.rkt"
+                  maybe-auto-extract-tool-results!
+                  current-auto-extraction-enabled)
          (only-in "../../runtime/iteration/decision.rkt"
                   step-result
                   step-result?
@@ -175,6 +178,15 @@
                            payload)
       ;; v0.96.14 F3: Wire reflection event → parameter for preamble consumption
       (current-reflection-event payload)))
+  ;; GAP-3: Auto-extract from tool results (ADR-0023)
+  (when (current-auto-extraction-enabled)
+    (define extractable-msgs
+      (for/list ([m (in-list tool-result-msgs)])
+        (define content-str (format "~a" (message-content m)))
+        (hasheq 'content content-str 'name (or (let ([mid (message-id m)]) mid) "unknown"))))
+    (maybe-auto-extract-tool-results! extractable-msgs
+                                      #:session-id (loop-infra-session-id infra)
+                                      #:project-root (loop-infra-log-path infra)))
   updated-ctx)
 
 ;; ============================================================
