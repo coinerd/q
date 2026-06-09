@@ -26,7 +26,13 @@
                   rollback-action?
                   rollback-action-type
                   rollback-action-severity
-                  current-loop-warning-count))
+                  current-loop-warning-count)
+         (only-in "../runtime/context-assembly/state-aware-builder.rkt"
+                  current-reflection-event
+                  build-state-awareness-preamble)
+         (only-in "../agent/iteration/step-interpreter.rkt"
+                  current-reflection-prompt-enabled
+                  REFLECTION-THRESHOLD-CHARS))
 
 ;; ══════════════════════════════════════════════════════════════════
 ;; W1: Context-aware memory retrieval
@@ -119,11 +125,37 @@
     (check-equal? (current-loop-warning-count) 1)))
 
 ;; ══════════════════════════════════════════════════════════════════
-;; W3: Forced reflection — placeholder
+;; W3: Forced reflection on tool results
 ;; ══════════════════════════════════════════════════════════════════
 
-(test-case "W3.1: reflection feature flag exists"
-  (check-true #t "placeholder — W3"))
+(test-case "W3.1: current-reflection-prompt-enabled parameter exists and defaults to #f"
+  (check-false (current-reflection-prompt-enabled)))
+
+(test-case "W3.2: REFLECTION-THRESHOLD-CHARS is a positive integer"
+  (check-true (exact-positive-integer? REFLECTION-THRESHOLD-CHARS)))
+
+(test-case "W3.3: current-reflection-event parameter exists and defaults to #f"
+  (check-false (current-reflection-event)))
+
+(test-case "W3.4: preamble without reflection event — no reminder"
+  (parameterize ([current-reflection-event #f])
+    (define preamble (build-state-awareness-preamble 'exploration '()))
+    (check-true (message? preamble))
+    (define text (format "~a" (message-content preamble)))
+    (check-false (string-contains? text "reflection-suggested"))))
+
+(test-case "W3.5: preamble with reflection event — includes reminder"
+  (parameterize ([current-reflection-event (hasheq 'tools '("read") 'message "Large results")])
+    (define preamble (build-state-awareness-preamble 'exploration '()))
+    (check-true (message? preamble))
+    (define text (format "~a" (message-content preamble)))
+    (check-true (string-contains? text "record_conclusion") "preamble includes reflection reminder")))
+
+(test-case "W3.6: reflection event consumed after preamble build"
+  (parameterize ([current-reflection-event (hasheq 'tools '("read"))])
+    (define preamble (build-state-awareness-preamble 'exploration '()))
+    ;; After building preamble, the event should be cleared
+    (check-false (current-reflection-event) "reflection event cleared after consumption")))
 
 ;; ══════════════════════════════════════════════════════════════════
 ;; W4: Transition detection — placeholder

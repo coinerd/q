@@ -36,7 +36,7 @@
                   loop-counters-iteration
                   loop-counters-consecutive-tool-count
                   loop-counters-recent-tool-names)
-         (only-in "../../util/message/message.rkt" message-role message-id)
+         (only-in "../../util/message/message.rkt" message-role message-id message-content)
          (only-in "../../util/tool/tool-types.rkt" tool-call-name tool-call-arguments)
          (only-in "../../runtime/layer-adapters.rkt" permission-config?)
          (only-in "../../runtime/tool-coordinator.rkt"
@@ -89,7 +89,13 @@
           [handle-stop-action
            (-> loop-result? (listof any/c) loop-infra? loop-counters? any/c any/c loop-result?)]
           [execute-pending-tool-calls (-> (listof any/c) loop-infra? any/c any/c (listof any/c))]
-          [sink-append-entries! (->* (loop-infra? (listof any/c)) ((or/c any/c #f)) void?)]))
+          [sink-append-entries! (->* (loop-infra? (listof any/c)) ((or/c any/c #f)) void?)]
+          [current-reflection-prompt-enabled (parameter/c boolean?)]
+          [REFLECTION-THRESHOLD-CHARS exact-positive-integer?]))
+
+;; ── v0.96.13 W3: Reflection prompt ──
+(define current-reflection-prompt-enabled (make-parameter #f))
+(define REFLECTION-THRESHOLD-CHARS 4000)
 
 ;; ============================================================
 ;; R-09/R-10: Sink-aware append helper
@@ -147,6 +153,23 @@
                                (working-set-token-count ws)
                                'paths
                                (map ws-entry-path (working-set-entries ws))))
+  ;; v0.96.13 W3: Post-tool reflection — emit event if large results detected
+  (when (current-reflection-prompt-enabled)
+    (define large-results
+      (for/list ([m (in-list tool-result-msgs)]
+                 #:when (let ([content-str (format "~a" (message-content m))])
+                          (> (string-length content-str) REFLECTION-THRESHOLD-CHARS)))
+        (or (message-id m) "unknown")))
+    (when (pair? large-results)
+      (emit-session-event!
+       (loop-infra-bus infra)
+       (loop-infra-session-id infra)
+       "reflection-suggested"
+       (hasheq
+        'tools
+        large-results
+        'message
+        "Large tool results received. Consider using record_conclusion to persist key findings before proceeding."))))
   updated-ctx)
 
 ;; ============================================================
