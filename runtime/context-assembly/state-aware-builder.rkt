@@ -443,7 +443,13 @@
                 warnings)))
 
   ;; Trigger 3: Repeated tool calls (same file re-read > 2x)
-  ;; Indicates agent is re-reading files it should have conclusions for
+  ;; Indicates agent is re-reading files it should have conclusions for.
+  ;; NOTE: When repeat-tool-count >= 6 AND conclusion-coverage = 0,
+  ;; this trigger AND Trigger 4 (stuck-detected) both fire. This is
+  ;; intentional — Trigger 3 produces task-amnesia warnings that feed
+  ;; the repeat escalation path; Trigger 4 produces stuck warnings that
+  ;; trigger expand-context. The actions from both paths are collected
+  ;; and the highest-priority action wins (see check-rollback-triggers-with-actions).
   (when (> repeat-tool-count 2)
     (set! warnings
           (cons (list 'task-amnesia-detected

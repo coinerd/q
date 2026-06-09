@@ -75,7 +75,7 @@
                   estimate-mid-turn-tokens
                   maybe-compact-mid-turn
                   detect-exploration-loop)
-         (only-in "../../runtime/context-assembly/rollback-actions.rkt" current-loop-warning-count)
+         (only-in "../../runtime/context-assembly/rollback-actions.rkt" increment-loop-warning-count!)
          (only-in "../../runtime/context-assembly/state-aware-builder.rkt" current-reflection-event)
          (only-in "../../runtime/iteration/decision.rkt"
                   step-result
@@ -294,7 +294,7 @@
                      (loop-counters-iteration counters)))
        ;; v0.96.14 F2: Feed exploration loop into rollback pipeline
        ;; by incrementing the warning counter (triggers escalation on next check)
-       (current-loop-warning-count (add1 (current-loop-warning-count))))
+       (increment-loop-warning-count!))
      ;; Reuse make-next-counters for consistent counter increment
      (directive-recurse updated-ctx
                         (struct-copy loop-counters
