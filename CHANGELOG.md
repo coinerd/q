@@ -1,3 +1,13 @@
+## [0.96.12] - 2026-06-09
+
+### Test Architecture — Post-Audit Hotfix
+
+#### Fixed
+- **A1**: Removed 3 dead runner submodules (`scripts/run-tests/{types,classify,parse}.rkt`) — 381 LOC of unreachable code with zero consumers and behavioral drift
+- **E2**: Added `run-tests` calls to `test-streaming-tool-events.rkt` and `test-tui-idle-cpu.rkt` — both had `rackunit/text-ui` imported but never invoked
+- Fixed stale comment in `test-ui-render-hooks.rkt` (10s → 2s reflecting actual sleep value)
+- Added missing `@speed @suite` tags to `test-cursor-debug.rkt` (A2 coverage now 100%)
+
 ## [0.96.11] - 2026-06-08
 
 ### Test Architecture — Phase 4: Runner Refactor
