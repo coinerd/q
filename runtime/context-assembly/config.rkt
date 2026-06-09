@@ -8,7 +8,8 @@
 (provide current-task-state-aware-assembly?
          current-graph-conclusion-selection?
          current-conclusion-token-budget
-         current-ws-evolution-enabled?)
+         current-ws-evolution-enabled?
+         compute-conclusion-budget)
 
 ;; Whether to enable state-aware assembly for the current task.
 (define current-task-state-aware-assembly? (make-parameter #f))
@@ -18,6 +19,17 @@
 
 ;; Token budget for conclusion generation.
 (define current-conclusion-token-budget (make-parameter 2000))
+
+;; GAP-8: Dynamic conclusion budget (ADR-0023)
+;; 10% of context window, capped at 4000 tokens, minimum 500.
+(define CONCLUSION-BUDGET-MAX 4000)
+(define CONCLUSION-BUDGET-MIN 500)
+(define CONCLUSION-BUDGET-FRACTION 0.10)
+
+(define (compute-conclusion-budget max-context-tokens)
+  (min CONCLUSION-BUDGET-MAX
+       (max CONCLUSION-BUDGET-MIN
+            (inexact->exact (floor (* max-context-tokens CONCLUSION-BUDGET-FRACTION))))))
 
 ;; Whether to enable working-set evolution.
 (define current-ws-evolution-enabled? (make-parameter #f))

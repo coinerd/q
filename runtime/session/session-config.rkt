@@ -39,7 +39,8 @@
                   current-task-state-aware-assembly?
                   current-conclusion-token-budget
                   current-graph-conclusion-selection?
-                  current-ws-evolution-enabled?)
+                  current-ws-evolution-enabled?
+                  compute-conclusion-budget)
          (only-in "../context-assembly/auto-distillation.rkt" current-auto-distillation-enabled?)
          (only-in "../context-assembly/rollback-actions.rkt" current-rollback-action-execution?))
 
@@ -73,35 +74,35 @@
      (current-auto-distillation-enabled? #f)
      (current-rollback-action-execution? #f)
      (current-ws-evolution-enabled? #f)
-     (current-conclusion-token-budget 2000)]
+     (current-conclusion-token-budget (compute-conclusion-budget 8000))]
     [(observe)
      (current-task-state-aware-assembly? #t)
      (current-graph-conclusion-selection? #f)
      (current-auto-distillation-enabled? #f)
      (current-rollback-action-execution? #f)
      (current-ws-evolution-enabled? #f)
-     (current-conclusion-token-budget 2000)]
+     (current-conclusion-token-budget (compute-conclusion-budget 8000))]
     [(bounded)
      (current-task-state-aware-assembly? #t)
      (current-graph-conclusion-selection? #t)
      (current-auto-distillation-enabled? #f)
      (current-rollback-action-execution? #f)
      (current-ws-evolution-enabled? #f)
-     (current-conclusion-token-budget 2000)]
+     (current-conclusion-token-budget (compute-conclusion-budget 8000))]
     [(self-healing)
      (current-task-state-aware-assembly? #t)
      (current-graph-conclusion-selection? #t)
      (current-auto-distillation-enabled? #t)
      (current-rollback-action-execution? #t)
      (current-ws-evolution-enabled? #f)
-     (current-conclusion-token-budget 2000)]
+     (current-conclusion-token-budget (compute-conclusion-budget 8000))]
     [(full)
      (current-task-state-aware-assembly? #t)
      (current-graph-conclusion-selection? #t)
      (current-auto-distillation-enabled? #t)
      (current-rollback-action-execution? #t)
      (current-ws-evolution-enabled? #t)
-     (current-conclusion-token-budget 2000)]
+     (current-conclusion-token-budget (compute-conclusion-budget 8000))]
     [else (void)]))
 
 (provide session-config?

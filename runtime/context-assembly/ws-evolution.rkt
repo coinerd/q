@@ -111,15 +111,21 @@
 ;; Like evolve-working-set-for-state but returns a structured result with
 ;; archived entries for append-only persistence.
 (define (evolve-working-set-for-state/result ws old-state new-state conclusions)
-  (define entries-before (working-set-entries ws))
-  (define injected (evolve-working-set-for-state ws old-state new-state conclusions))
-  (define entries-after (working-set-entries ws))
-  ;; Compute archived: entries present before but not after
-  (define after-paths
-    (for/set ([e (in-list entries-after)])
-      (ws-entry-path e)))
-  (define archived
-    (for/list ([e (in-list entries-before)]
-               #:when (not (set-member? after-paths (ws-entry-path e))))
-      e))
-  (evolution-result entries-after archived injected))
+  ;; GAP-5: Skip evolution when old-state equals new-state
+  (define old-name (state->name old-state))
+  (define new-name (state->name new-state))
+  (if (equal? old-name new-name)
+      #f ;; No evolution needed — same state
+      (let ()
+        (define entries-before (working-set-entries ws))
+        (define injected (evolve-working-set-for-state ws old-state new-state conclusions))
+        (define entries-after (working-set-entries ws))
+        ;; Compute archived: entries present before but not after
+        (define after-paths
+          (for/set ([e (in-list entries-after)])
+            (ws-entry-path e)))
+        (define archived
+          (for/list ([e (in-list entries-before)]
+                     #:when (not (set-member? after-paths (ws-entry-path e))))
+            e))
+        (evolution-result entries-after archived injected))))
