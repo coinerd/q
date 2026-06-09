@@ -131,11 +131,32 @@
 ;; Contracts and exports
 ;; ============================================================
 
-(provide (struct-out vtext)
-         (struct-out vhbox)
-         (struct-out vvbox)
-         (struct-out vfill)
-         (struct-out voverlay)
+(provide vtext
+         vtext?
+         struct:vtext
+         vtext-text
+         vtext-style
+         vhbox
+         vhbox?
+         struct:vhbox
+         vhbox-children
+         vvbox
+         vvbox?
+         struct:vvbox
+         vvbox-children
+         vfill
+         vfill?
+         struct:vfill
+         vfill-width
+         vfill-char
+         vfill-style
+         voverlay
+         voverlay?
+         struct:voverlay
+         voverlay-content
+         voverlay-anchor
+         voverlay-col
+         voverlay-row
          vnode?
          vtext*
          vfill*

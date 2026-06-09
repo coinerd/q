@@ -126,7 +126,11 @@
 
 ;; ── Exports ──
 
-(provide (struct-out task-memory)
+(provide task-memory
+         task-memory?
+         struct:task-memory
+         task-memory-conclusions
+         task-memory-max-conclusions
          (contract-out
           [make-task-memory (->* () (integer?) task-memory?)]
           [add-conclusion (-> task-memory? task-conclusion? task-memory?)]

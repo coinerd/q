@@ -12,7 +12,16 @@
          "types.rkt"
          (only-in "../../util/safe-mode/safe-mode-state.rkt" safe-mode?))
 
-(provide (struct-out memory-policy)
+(provide memory-policy
+         memory-policy?
+         struct:memory-policy
+         memory-policy-max-items-per-session
+         memory-policy-max-retrieve-count
+         memory-policy-max-content-length
+         memory-policy-allowed-sensitivities
+         memory-policy-blocked-content-patterns
+         memory-policy-allow-delete?
+         memory-policy-user-scope-enabled?
          memory-policy?
          default-memory-policy
          default-blocked-content-patterns

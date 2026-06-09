@@ -104,7 +104,13 @@
 ;; Contracts and exports
 ;; ============================================================
 
-(provide (struct-out cell-delta)
+(provide cell-delta
+         cell-delta?
+         struct:cell-delta
+         cell-delta-col
+         cell-delta-row
+         cell-delta-old-cell
+         cell-delta-new-cell
          diff-cell-buffers
          row-hash
          delta-changed-rows

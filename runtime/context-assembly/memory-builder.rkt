@@ -387,7 +387,15 @@
          current-memory-injection-budget
          current-memory-max-entry-chars
          ;; Telemetry
-         (struct-out memory-telemetry)
+         memory-telemetry
+         memory-telemetry?
+         struct:memory-telemetry
+         memory-telemetry-retrieved-count
+         memory-telemetry-latency-ms
+         memory-telemetry-token-estimate
+         memory-telemetry-backend-available?
+         memory-telemetry-timed-out?
+         memory-telemetry-error-message
          memory-telemetry->jsexpr
          ;; Retrieval
          observe-memory-for-context
