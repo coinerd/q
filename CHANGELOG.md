@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.97.2] - 2026-06-08
+
+### Added
+- GAP-5: Conclusion-to-memory bridge enabled in self-healing and full profiles
+- GAP-5: Expanded high-value-categories to include 'fact' conclusions
+- GAP-6: LLM distillation prompt enrichment with content summaries (max 300 chars)
+- GAP-6: Forward content-summaries through auto-distill → distill-with-llm → factory lambda
+- New test files: test-gap5-conclusion-bridge.rkt (5 tests), test-gap6-llm-prompt-enrichment.rkt (3 tests)
+
+### Changed
+- self-healing and full profiles now persist conclusions to memory on session shutdown
+- LLM distillation prompt includes actual content instead of just IDs
+
 ## [0.97.1] - 2026-06-08
 
 ### Added
