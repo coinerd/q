@@ -61,26 +61,33 @@
 
 ;; ── Optional LLM Distillation Interface ──
 
-;; LLM distillation function type: (listof string?) symbol? -> (listof task-conclusion?)
+;; LLM distillation function type: (listof string?) symbol? hash? -> (listof task-conclusion?)
 ;; When provided, called instead of deterministic fallback.
 ;; On timeout/error, falls back to deterministic.
 
-(define (distill-with-llm uncovered-ids current-state llm-distill-fn timeout-secs)
-  (with-handlers ([exn:fail? (lambda (e)
-                               (generate-fallback-conclusions uncovered-ids current-state))])
+(define (distill-with-llm uncovered-ids
+                          current-state
+                          llm-distill-fn
+                          timeout-secs
+                          [content-summaries (hash)])
+  (with-handlers ([exn:fail?
+                   (lambda (e)
+                     (generate-fallback-conclusions uncovered-ids current-state content-summaries))])
     (define result-ch (make-channel))
     (define thd
       (thread (lambda ()
                 (with-handlers ([exn:fail? (lambda (e) (channel-put result-ch 'error))])
-                  (channel-put result-ch (llm-distill-fn uncovered-ids current-state))))))
+                  (channel-put result-ch
+                               (llm-distill-fn uncovered-ids current-state content-summaries))))))
     (define result (sync/timeout timeout-secs result-ch))
     (cond
       [(not result)
        (kill-thread thd)
-       (generate-fallback-conclusions uncovered-ids current-state)]
-      [(eq? result 'error) (generate-fallback-conclusions uncovered-ids current-state)]
+       (generate-fallback-conclusions uncovered-ids current-state content-summaries)]
+      [(eq? result 'error)
+       (generate-fallback-conclusions uncovered-ids current-state content-summaries)]
       [(and (list? result) (andmap task-conclusion? result)) result]
-      [else (generate-fallback-conclusions uncovered-ids current-state)])))
+      [else (generate-fallback-conclusions uncovered-ids current-state content-summaries)])))
 
 ;; ── Main Entry Point ──
 
@@ -98,7 +105,8 @@
   (cond
     [(null? uncovered) '()]
     [(not (current-auto-distillation-enabled?)) '()]
-    [(current-llm-distill-fn) (distill-with-llm uncovered current-state (current-llm-distill-fn) 5)]
+    [(current-llm-distill-fn)
+     (distill-with-llm uncovered current-state (current-llm-distill-fn) 5 content-summaries)]
     [else (generate-fallback-conclusions uncovered current-state content-summaries)]))
 
 ;; ── Exports ──
