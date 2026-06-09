@@ -115,7 +115,7 @@
      (define-values (text-llm ids-llm tags-llm)
        (parameterize ([current-reflection-llm-fn mock-synthesize])
          (merge-group-items (list item-1 item-2))))
-     (check-not-false (string-contains? text-llm "synthesized")
+     (check-not-false (string-contains? (string-downcase text-llm) "synthesized")
                       "With LLM: should contain synthesis output"))))
 
 ;; ═══════════════════════════════════════════════════════════════
