@@ -87,7 +87,8 @@
          symbol->task-state
          assemble-context/pure
          prepare-turn-context-state
-         emit-context-assembly-events!)
+         emit-context-assembly-events!
+         content-part->text)
 
 ;; ============================================================
 ;; Task state conversion
@@ -158,6 +159,26 @@
                                         #:working-set-messages ws-messages)]))
   (values (tiered-context->message-list tc) hook-result tc))
 
+;; v0.97.6 F3: Extracted from prepare-turn-context-state for testability.
+;; Converts a content part (text-part or tool-result-part) to a plain string.
+;; tool-call-part and unknown types are intentionally discarded —
+;; tool calls have no useful summary text for distillation purposes.
+(define (content-part->text part)
+  (cond
+    [(text-part? part) (text-part-text part)]
+    [(and (tool-result-part? part) (not (tool-result-part-is-error? part)))
+     (define c (tool-result-part-content part))
+     (define raw
+       (cond
+         [(string? c) c]
+         [(hash? c) (~a c)]
+         [(list? c) (string-join (map ~a c) " ")]
+         [else ""]))
+     (if (> (string-length raw) 500)
+         (string-append (substring raw 0 497) "...")
+         raw)]
+    [else ""]))
+
 ;; ============================================================
 ;; Turn context state preparation
 ;; ============================================================
@@ -176,21 +197,6 @@
         (let ([ws-msgs (working-set-resolve-messages ws-early ctx-to-use message-id)])
           ;; v0.79.2 GAP-3: Build content summaries for richer auto-distill text
           ;; GAP-C: Include tool-result-parts in content summaries
-          (define (content-part->text part)
-            (cond
-              [(text-part? part) (text-part-text part)]
-              [(and (tool-result-part? part) (not (tool-result-part-is-error? part)))
-               (define c (tool-result-part-content part))
-               (define raw
-                 (cond
-                   [(string? c) c]
-                   [(hash? c) (~a c)]
-                   [(list? c) (string-join (map ~a c) " ")]
-                   [else ""]))
-               (if (> (string-length raw) 500)
-                   (string-append (substring raw 0 497) "...")
-                   raw)]
-              [else ""]))
           (define summaries
             (for/hash ([m (in-list ws-msgs)])
               (define parts (map content-part->text (message-content m)))
