@@ -70,7 +70,6 @@
 ;; v0.96.13 W3: Latest reflection event (set by step-interpreter, checked in preamble)
 (define current-reflection-event (make-parameter #f))
 
-
 ;; v0.96.13 WP-1: Extract recent assistant message text for memory query context.
 ;; Takes a list of messages and count N, returns concatenated text of the last N
 ;; assistant/user messages truncated to 200 chars. Returns #f if no text found.
@@ -161,9 +160,18 @@
       [(not (current-graph-conclusion-selection?)) conclusions]
       [(null? conclusions) '()]
       [else
+       ;; GAP-4: Map WS message IDs → conclusion IDs via origin-message-ids
        (define seed-ids
-         (for/list ([m (in-list ws-messages)])
-           (message-id m)))
+         (let ([mapped (for*/list ([m (in-list ws-messages)]
+                                   [c (in-list conclusions)]
+                                   #:when (task-conclusion? c)
+                                   #:when (member (message-id m)
+                                                  (task-conclusion-origin-message-ids c)))
+                         (task-conclusion-id c))])
+           ;; Use mapped IDs if any; fall back to raw WS IDs for backward compat
+           (if (pair? mapped)
+               mapped
+               (map (lambda (m) (message-id m)) ws-messages))))
        (define current-states
          (if state-name
              (list state-name)
