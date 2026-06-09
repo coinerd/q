@@ -161,15 +161,20 @@
                           (> (string-length content-str) REFLECTION-THRESHOLD-CHARS)))
         (or (message-id m) "unknown")))
     (when (pair? large-results)
-      (emit-session-event!
-       (loop-infra-bus infra)
-       (loop-infra-session-id infra)
-       "reflection-suggested"
-       (hasheq
-        'tools
-        large-results
-        'message
-        "Large tool results received. Consider using record_conclusion to persist key findings before proceeding."))))
+      (define payload
+        (hasheq
+         'tools
+         large-results
+         'message
+         "Large tool results received. Consider using record_conclusion to persist key findings before proceeding."))
+      (emit-session-event! (loop-infra-bus infra)
+                           (loop-infra-session-id infra)
+                           "reflection-suggested"
+                           payload)
+      ;; v0.96.14 F3: Wire reflection event → parameter for preamble consumption
+      ((dynamic-require "../../runtime/context-assembly/state-aware-builder.rkt"
+                        'current-reflection-event)
+       payload)))
   updated-ctx)
 
 ;; ============================================================
@@ -286,7 +291,13 @@
                      'recent-tools
                      (loop-counters-recent-tool-names new-counters)
                      'iteration
-                     (loop-counters-iteration counters))))
+                     (loop-counters-iteration counters)))
+       ;; v0.96.14 F2: Feed exploration loop into rollback pipeline
+       ;; by incrementing the warning counter (triggers escalation on next check)
+       ((dynamic-require "../../runtime/context-assembly/rollback-actions.rkt"
+                         'current-loop-warning-count)
+        (add1 ((dynamic-require "../../runtime/context-assembly/rollback-actions.rkt"
+                                'current-loop-warning-count)))))
      ;; Reuse make-next-counters for consistent counter increment
      (directive-recurse updated-ctx
                         (struct-copy loop-counters

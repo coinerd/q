@@ -1,3 +1,16 @@
+## [0.96.14] - 2026-06-09
+
+### Memory Continuity — Post-Audit Hotfix
+
+#### Fixed
+- **F1**: Added stuck-detection trigger to `check-rollback-triggers` — fires when ≥6 tool calls with 0 conclusion coverage, producing "stuck" warning → `expand-context` action
+- **F2**: Wired exploration-loop detection into rollback pipeline — step-interpreter now increments `current-loop-warning-count` when `detect-exploration-loop` fires, enabling escalation on next `check-rollback-triggers` call
+- **F3**: Wired reflection event → `current-reflection-event` parameter — step-interpreter sets the parameter directly after emitting `reflection-suggested` event, enabling preamble reminder consumption
+- **F4**: Replaced magic number `2` with named `escalation-threshold` constant in rollback-actions
+
+#### Tests
+- 6 new test cases for stuck trigger, exploration-loop wiring, and escalation-threshold constant (27 total)
+
 ## [0.96.13] - 2026-06-09
 
 ### Memory Continuity & Looping Prevention

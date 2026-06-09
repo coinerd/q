@@ -70,8 +70,11 @@
 
 ;; v0.96.13 W2: Loop warning counter for escalation.
 ;; Incremented each time a "repeat" or "loop" warning fires.
-;; When >= 2, warnings->actions escalates to force-distill.
+;; When >= escalation-threshold, warnings->actions escalates to force-distill.
 (define current-loop-warning-count (make-parameter 0))
+
+;; v0.96.14 F4: Named constant for escalation threshold (was magic number 2).
+(define escalation-threshold 2)
 
 ;; v0.77.10 M2: Execute force-distill action.
 ;; Calls the injectable callback if available, then logs.
@@ -151,7 +154,7 @@
        (make-expand-context-action w (hasheq 'trigger 'stuck))]
       ;; v0.96.13 W2: Escalate repeat warnings based on counter
       [(string-contains? (string-downcase w) "repeat")
-       (if (>= (current-loop-warning-count) 2)
+       (if (>= (current-loop-warning-count) escalation-threshold)
            (begin
              (current-loop-warning-count 0) ; reset after escalation
              (make-force-distill-action w (hasheq 'trigger 'repeat-escalation)))
@@ -166,6 +169,7 @@
          current-rollback-action-execution?
          current-rollback-action-log
          current-loop-warning-count
+         escalation-threshold
          current-force-distill-fn
          current-expand-context-fn
          current-revert-state-fn

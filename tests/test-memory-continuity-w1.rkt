@@ -26,17 +26,16 @@
                   rollback-action?
                   rollback-action-type
                   rollback-action-severity
-                  current-loop-warning-count)
+                  current-loop-warning-count
+                  escalation-threshold)
          (only-in "../runtime/context-assembly/state-aware-builder.rkt"
                   current-reflection-event
-                  build-state-awareness-preamble)
+                  build-state-awareness-preamble
+                  check-rollback-triggers)
          (only-in "../agent/iteration/step-interpreter.rkt"
                   current-reflection-prompt-enabled
                   REFLECTION-THRESHOLD-CHARS)
-         (only-in "../runtime/working-set.rkt"
-                  ws-entry
-                  ws-entry->text
-                  ws-entry?))
+         (only-in "../runtime/working-set.rkt" ws-entry ws-entry->text ws-entry?))
 
 ;; ══════════════════════════════════════════════════════════════════
 ;; W1: Context-aware memory retrieval
@@ -189,3 +188,72 @@
   (define entry (ws-entry "/a.rkt" "m1" 10 1000))
   (check-true (ws-entry? entry))
   (check-false (ws-entry? "not an entry")))
+
+;; ══════════════════════════════════════════════════════════════════
+;; v0.96.14: Audit hotfix tests (F1, F2, F3, F4)
+;; ══════════════════════════════════════════════════════════════════
+
+;; F4: Escalation threshold is a named constant
+(test-case "F4: escalation-threshold is defined and equals 2"
+  (check-equal? escalation-threshold 2))
+
+;; F1: Stuck detection trigger in check-rollback-triggers
+(test-case "F1: check-rollback-triggers fires stuck-detected at ≥6 tool calls, 0 coverage"
+  (define warnings
+    (check-rollback-triggers #:before-messages 10
+                             #:after-messages 8
+                             #:conclusion-coverage 0
+                             #:repeat-tool-count 7))
+  (define stuck-warning
+    (for/or ([w (in-list warnings)])
+      (and (eq? (car w) 'stuck-detected) (cadr w))))
+  (check-not-false stuck-warning)
+  (check-true (string-contains? stuck-warning "stuck"))
+  (check-true (string-contains? stuck-warning "7")))
+
+(test-case "F1: check-rollback-triggers does NOT fire stuck at ≥6 tool calls with conclusions"
+  (define warnings
+    (check-rollback-triggers #:before-messages 10
+                             #:after-messages 8
+                             #:conclusion-coverage 0.3
+                             #:repeat-tool-count 7))
+  (define stuck-warning
+    (for/or ([w (in-list warnings)])
+      (and (eq? (car w) 'stuck-detected) w)))
+  (check-false stuck-warning "no stuck warning when conclusions exist"))
+
+(test-case "F1: check-rollback-triggers does NOT fire stuck at <6 tool calls"
+  (define warnings
+    (check-rollback-triggers #:before-messages 10
+                             #:after-messages 8
+                             #:conclusion-coverage 0
+                             #:repeat-tool-count 5))
+  (define stuck-warning
+    (for/or ([w (in-list warnings)])
+      (and (eq? (car w) 'stuck-detected) w)))
+  (check-false stuck-warning "no stuck warning below threshold"))
+
+;; F1: Stuck trigger → expand-context via warnings->actions
+(test-case "F1: stuck trigger from check-rollback-triggers → expand-context action"
+  (define warnings
+    (check-rollback-triggers #:before-messages 10
+                             #:after-messages 8
+                             #:conclusion-coverage 0
+                             #:repeat-tool-count 8))
+  (define warning-strs (map cadr warnings))
+  (define actions (warnings->actions warning-strs))
+  (define stuck-action
+    (for/or ([a (in-list actions)])
+      (and (eq? (rollback-action-type a) 'expand-context) a)))
+  (check-not-false stuck-action "stuck trigger produces expand-context action"))
+
+;; F3: Reflection event wiring — current-reflection-event is settable
+(test-case "F3: current-reflection-event can be set and is consumed by preamble"
+  (parameterize ([current-reflection-event (hasheq 'tools '("read" "grep"))])
+    (check-not-false (current-reflection-event))
+    (define preamble (build-state-awareness-preamble 'implementation '()))
+    (check-true (message? preamble))
+    (define text (format "~a" (message-content preamble)))
+    (check-true (string-contains? text "record_conclusion"))
+    ;; After preamble build, event should be cleared
+    (check-false (current-reflection-event))))

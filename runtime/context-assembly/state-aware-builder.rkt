@@ -450,6 +450,14 @@
                       (format "Repeated tool calls detected: ~a re-reads" repeat-tool-count))
                 warnings)))
 
+  ;; v0.96.14 F1: Trigger 4 — Stuck detection (≥6 tool calls, 0 conclusions)
+  ;; Agent has done many tool calls but hasn't recorded any conclusions
+  (when (and (>= repeat-tool-count 6) (= conclusion-coverage 0))
+    (set! warnings
+          (cons (list 'stuck-detected
+                      (format "stuck: ~a tool calls without recording conclusions" repeat-tool-count))
+                warnings)))
+
   (reverse warnings))
 
 ;; v0.77.6 W6.2: Extended trigger output with recommended actions.
