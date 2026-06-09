@@ -219,9 +219,12 @@
   (apply-context-assembly-profile! profile max-ctx-tokens)
 
   ;; v0.95.15 W4: Wire memory injection budget from settings
+  ;; v0.97.4 GAP-D: Default to 5% of context window for self-healing/full profiles
   (define settings-budget (setting-memory-injection-budget settings))
-  (when settings-budget
-    (current-memory-injection-budget settings-budget))
+  (cond
+    [settings-budget (current-memory-injection-budget settings-budget)]
+    [(memq profile '(self-healing full))
+     (current-memory-injection-budget (quotient max-ctx-tokens 20))])
 
   ;; v0.95.16: Wire memory backend from settings (config.json)
   ;; Only applies when --memory CLI flag was NOT passed.
