@@ -10,6 +10,7 @@
 ;;   execute-pending-tool-calls — execute pending tool calls, update working set
 
 (require racket/contract
+         racket/string
          racket/match
          racket/class
          racket/list
@@ -37,7 +38,11 @@
                   loop-counters-consecutive-tool-count
                   loop-counters-recent-tool-names)
          (only-in "../../util/message/message.rkt" message-role message-id message-content)
-         (only-in "../../util/tool/tool-types.rkt" tool-call-name tool-call-arguments)
+         (only-in "../../util/content/content-parts.rkt"
+                  tool-result-part?
+                  tool-result-part-tool-call-id
+                  tool-result-part-content)
+         (only-in "../../util/tool/tool-types.rkt" tool-call-name tool-call-arguments tool-call-id)
          (only-in "../../runtime/layer-adapters.rkt" permission-config?)
          (only-in "../../runtime/tool-coordinator.rkt"
                   handle-tool-calls-pending
@@ -180,10 +185,30 @@
       (current-reflection-event payload)))
   ;; GAP-3: Auto-extract from tool results (ADR-0023)
   (when (current-auto-extraction-enabled)
+    ;; GAP-2 fix: Build tool-call-id → tool-name lookup from current tool calls
+    (define tcid->name
+      (for/hash ([tc (in-list current-tool-calls)])
+        (define tcid (tool-call-id tc))
+        (values (or tcid "") (tool-call-name tc))))
     (define extractable-msgs
       (for/list ([m (in-list tool-result-msgs)])
-        (define content-str (format "~a" (message-content m)))
-        (hasheq 'content content-str 'name (or (let ([mid (message-id m)]) mid) "unknown"))))
+        ;; Extract tool-call-id from tool-result-part content
+        (define parts (message-content m))
+        (define tcid
+          (for/or ([p (in-list parts)]
+                   #:when (tool-result-part? p))
+            (tool-result-part-tool-call-id p)))
+        (define tool-name (hash-ref tcid->name (or tcid "") "unknown"))
+        ;; Extract actual content from tool-result-parts
+        (define content-str
+          (string-join (for/list ([p (in-list parts)]
+                                  #:when (tool-result-part? p))
+                         (define c (tool-result-part-content p))
+                         (if (string? c)
+                             c
+                             (format "~a" c)))
+                       "\n"))
+        (hasheq 'content content-str 'name tool-name)))
     (maybe-auto-extract-tool-results! extractable-msgs
                                       #:session-id (loop-infra-session-id infra)
                                       #:project-root (loop-infra-log-path infra)))
