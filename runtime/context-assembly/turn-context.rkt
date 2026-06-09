@@ -8,13 +8,19 @@
 ;;           prepare-turn-context-state, emit-context-assembly-events!,
 ;;           current-last-task-fsm-state parameter.
 
-(require racket/list
+(require racket/format
+         racket/list
          racket/promise
          racket/set
          (only-in racket/string string-join)
          ;; Message/content types
          (only-in "../../util/message/message.rkt" message-id message-kind message-content)
-         (only-in "../../util/content/content-parts.rkt" text-part? text-part-text)
+         (only-in "../../util/content/content-parts.rkt"
+                  text-part?
+                  text-part-text
+                  tool-result-part?
+                  tool-result-part-content
+                  tool-result-part-is-error?)
          ;; Event emission
          "../../agent/event-emitter.rkt"
          "../../agent/event-structs/iteration-events.rkt"
@@ -169,10 +175,26 @@
     (if (and (current-auto-distillation-enabled?) session conclusions task-state ws-early)
         (let ([ws-msgs (working-set-resolve-messages ws-early ctx-to-use message-id)])
           ;; v0.79.2 GAP-3: Build content summaries for richer auto-distill text
+          ;; GAP-C: Include tool-result-parts in content summaries
+          (define (content-part->text part)
+            (cond
+              [(text-part? part) (text-part-text part)]
+              [(and (tool-result-part? part) (not (tool-result-part-is-error? part)))
+               (define c (tool-result-part-content part))
+               (define raw
+                 (cond
+                   [(string? c) c]
+                   [(hash? c) (~a c)]
+                   [(list? c) (string-join (map ~a c) " ")]
+                   [else ""]))
+               (if (> (string-length raw) 500)
+                   (string-append (substring raw 0 497) "...")
+                   raw)]
+              [else ""]))
           (define summaries
             (for/hash ([m (in-list ws-msgs)])
-              (define text-parts (filter text-part? (message-content m)))
-              (define full-text (string-join (map text-part-text text-parts) " "))
+              (define parts (map content-part->text (message-content m)))
+              (define full-text (string-join (filter (lambda (s) (> (string-length s) 0)) parts) " "))
               (values (message-id m) full-text)))
           (append conclusions
                   (auto-distill (map message-id ws-msgs) conclusions task-state-raw summaries)))
