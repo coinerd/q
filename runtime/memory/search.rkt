@@ -97,12 +97,15 @@
          [else
           ;; GAP-3: Batch-compute all item embeddings in one pass
           (define item-embs (batch-embed-items items))
+          ;; Pre-build item→embedding map for O(1) lookup in sort
+          (define emb-map
+            (for/hash ([item (in-list items)]
+                       [emb (in-list item-embs)])
+              (values item emb)))
           (sort items
                 (lambda (a b)
-                  (define idx-a (index-of items a))
-                  (define idx-b (index-of items b))
-                  (define emb-a (list-ref item-embs idx-a))
-                  (define emb-b (list-ref item-embs idx-b))
+                  (define emb-a (hash-ref emb-map a #f))
+                  (define emb-b (hash-ref emb-map b #f))
                   (define sa
                     (if emb-a
                         (cosine-similarity query-emb emb-a)

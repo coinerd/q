@@ -1,4 +1,5 @@
 #lang racket/base
+;; @speed fast @suite default
 ;; tests/test-gap6-llm-prompt-enrichment.rkt — GAP-6 TDD tests
 ;; Validates LLM distillation prompt enrichment with content summaries
 

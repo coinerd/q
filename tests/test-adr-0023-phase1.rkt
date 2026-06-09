@@ -34,7 +34,7 @@
       (define captured-ids #f)
       (define captured-state #f)
       (define mock-distill
-        (lambda (ids state)
+        (lambda (ids state content-summaries)
           (set! captured-ids ids)
           (set! captured-state state)
           (list (task-conclusion "distilled-1"
@@ -58,7 +58,7 @@
 
     (test-case "GAP-1: auto-distill falls back to deterministic when LLM fn returns #f"
       (define mock-distill-bad
-        (lambda (ids state)
+        (lambda (ids state content-summaries)
           ;; Return non-list to trigger fallback
           "not a list"))
       (parameterize ([current-auto-distillation-enabled? #t]
@@ -71,7 +71,8 @@
                     "Fallback conclusions should have [Auto] prefix")))
 
     (test-case "GAP-1: auto-distill falls back when LLM fn throws"
-      (define mock-distill-error (lambda (ids state) (error "LLM provider unavailable")))
+      (define mock-distill-error
+        (lambda (ids state content-summaries) (error "LLM provider unavailable")))
       (parameterize ([current-auto-distillation-enabled? #t]
                      [current-llm-distill-fn mock-distill-error])
         (define results (auto-distill '("msg-1") '() 'exploration))

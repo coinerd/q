@@ -1,4 +1,5 @@
 #lang racket/base
+;; @speed fast @suite default
 ;; tests/test-gap3-embedding-cache.rkt — GAP-3 TDD tests
 ;; Validates embedding cache hit/miss, batch provider, and fallback
 

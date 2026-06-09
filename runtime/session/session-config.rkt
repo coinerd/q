@@ -75,6 +75,7 @@
      (current-auto-distillation-enabled? #f)
      (current-rollback-action-execution? #f)
      (current-ws-evolution-enabled? #f)
+     (current-conclusion-to-memory-bridge-enabled #f)
      (current-conclusion-token-budget (compute-conclusion-budget 8000))]
     [(observe)
      (current-task-state-aware-assembly? #t)
@@ -82,6 +83,7 @@
      (current-auto-distillation-enabled? #f)
      (current-rollback-action-execution? #f)
      (current-ws-evolution-enabled? #f)
+     (current-conclusion-to-memory-bridge-enabled #f)
      (current-conclusion-token-budget (compute-conclusion-budget 8000))]
     [(bounded)
      (current-task-state-aware-assembly? #t)
@@ -89,6 +91,7 @@
      (current-auto-distillation-enabled? #f)
      (current-rollback-action-execution? #f)
      (current-ws-evolution-enabled? #f)
+     (current-conclusion-to-memory-bridge-enabled #f)
      (current-conclusion-token-budget (compute-conclusion-budget 8000))]
     [(self-healing)
      (current-task-state-aware-assembly? #t)

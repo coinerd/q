@@ -59,9 +59,10 @@
 (define cache-hits (make-parameter 0))
 (define cache-misses (make-parameter 0))
 
-;; Compute a stable cache key for a string.
+;; Compute a collision-resistant cache key for a string.
+;; Uses length + hash-code to reduce collision probability.
 (define (cache-key text)
-  (equal-hash-code text))
+  (cons (string-length text) (equal-hash-code text)))
 
 ;; Look up embedding in cache. Returns #f if not found.
 (define (cache-lookup text)

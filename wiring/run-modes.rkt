@@ -297,10 +297,10 @@
                         [id (in-list uncovered-ids)])
                (task-conclusion id
                                 line
-                                'observation
+                                'fact
                                 (or current-state 'unknown)
                                 (list id)
-                                (current-inexact-milliseconds)
+                                (current-seconds)
                                 '()
                                 '())))))
      ;; GAP-7: Reflection LLM factory - synthesizes merged reflection text
