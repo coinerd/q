@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.96.19] - 2026-06-08
+
+### Added
+- GAP-2: Semantic memory retrieval — rank-by-relevance uses embedding cosine similarity when provider configured (NEW: runtime/memory/embeddings.rkt)
+- GAP-7: LLM-powered reflection — merge-group-items uses injectable LLM synthesis via current-reflection-lln-fn
+- GAP-10: Conclusion-to-memory bridge — high-value decisions/patterns persisted as project-scoped memory on session end (NEW: runtime/memory/conclusion-bridge.rkt)
+
+### Changed
+- GAP-9: Sensitivity classification now uses regex patterns for API keys, tokens, passwords instead of substring matching
+
 ## [0.96.18] - 2026-06-08
 
 ### Fixed
