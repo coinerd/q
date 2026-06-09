@@ -42,6 +42,33 @@
     ;; Parameter can be set to #t
     (test-case "current-mid-session-bridge-enabled can be enabled"
       (parameterize ([current-mid-session-bridge-enabled #t])
-        (check-equal? (current-mid-session-bridge-enabled) #t)))))
+        (check-equal? (current-mid-session-bridge-enabled) #t)))
+
+    ;; F7: Bridge action fires on major forward transition when enabled
+    (test-case "bridge action fires on major forward transition when enabled"
+      (parameterize ([current-mid-session-bridge-enabled #t])
+        (check-true (major-forward-transition? 'exploration 'planning))
+        (check-true (current-mid-session-bridge-enabled))
+        ;; The bridge gate requires both: enabled AND major forward transition
+        (check-true (and (current-mid-session-bridge-enabled)
+                         (major-forward-transition? 'planning 'implementation)))))
+
+    ;; F7: Bridge does NOT fire when disabled even with forward transition
+    (test-case "bridge does NOT fire when disabled even with forward transition"
+      (parameterize ([current-mid-session-bridge-enabled #f])
+        (check-true (major-forward-transition? 'exploration 'planning))
+        (check-false (and (current-mid-session-bridge-enabled)
+                          (major-forward-transition? 'exploration 'planning)))))
+
+    ;; F7: Bridge does NOT fire when enabled but no forward transition
+    (test-case "bridge does NOT fire when enabled but no forward transition"
+      (parameterize ([current-mid-session-bridge-enabled #t])
+        (check-false (major-forward-transition? 'planning 'exploration))
+        (check-false (and (current-mid-session-bridge-enabled)
+                          (major-forward-transition? 'planning 'exploration)))))
+
+    ;; F7: Bridge parameter resets after parameterize scope
+    (test-case "bridge parameter resets after parameterize scope"
+      (check-equal? (current-mid-session-bridge-enabled) #f))))
 
 (run-tests suite)
