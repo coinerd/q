@@ -1,3 +1,19 @@
+## [0.97.4] - 2026-06-08
+
+### Added
+- GAP-D: Default memory injection budget (5% of max-context-tokens) for self-healing and full profiles
+- GAP-E: Dynamic conclusion budget from actual max-context-tokens via compute-conclusion-budget
+- GAP-E: apply-context-assembly-profile! accepts max-context-tokens parameter (default 128000)
+
+### Changed
+- wiring/run-modes.rkt: passes actual max-context-tokens to apply-context-assembly-profile!
+- turn-orchestrator.rkt: passes config-max-context-tokens to apply-context-assembly-profile!
+
+### Added
+- tests/test-gap-dynamic-budget.rkt -- 6 tests for compute-conclusion-budget
+- tests/test-gapd-memory-injection-default.rkt -- 5 tests for injection budget logic
+- tests/test-gapde-budget-activation-integration.rkt -- 5 integration tests
+
 ## [0.97.3] - 2026-06-08
 
 ### Fixed
