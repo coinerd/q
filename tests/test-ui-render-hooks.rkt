@@ -95,7 +95,7 @@
      (make-render-hook 'slow
                        'pre-render
                        (lambda (d)
-                         (sleep 2)
+                         (sleep 0.5)
                          d) ;; 2s — will timeout
                        #:timeout-ms 50))
    (define result (apply-render-hook h "original"))
@@ -106,7 +106,7 @@
      (make-render-hook 'slow-safe
                        'pre-render
                        (lambda (d)
-                         (sleep 2)
+                         (sleep 0.5)
                          d)
                        #:timeout-ms 50))
    (define-values (result ok?) (apply-render-hook-safe h "original"))

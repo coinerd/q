@@ -67,7 +67,7 @@
                "1.0"
                (hasheq 'tool-call
                        (lambda (payload)
-                         (sleep 2)
+                         (sleep 0.5)
                          payload))))
   (register-extension! reg slow-ext)
   (parameterize ([current-hook-timeout-ms 50])
@@ -82,7 +82,7 @@
                "1.0"
                (hasheq 'context
                        (lambda (payload)
-                         (sleep 2)
+                         (sleep 0.5)
                          payload))))
   (register-extension! reg slow-ext)
   (parameterize ([current-hook-timeout-ms 50])
