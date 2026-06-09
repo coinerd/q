@@ -42,7 +42,8 @@
                   current-ws-evolution-enabled?
                   compute-conclusion-budget)
          (only-in "../context-assembly/auto-distillation.rkt" current-auto-distillation-enabled?)
-         (only-in "../context-assembly/rollback-actions.rkt" current-rollback-action-execution?))
+         (only-in "../context-assembly/rollback-actions.rkt" current-rollback-action-execution?)
+         (only-in "../memory/conclusion-bridge.rkt" current-conclusion-to-memory-bridge-enabled))
 
 ;; Global rollout rate for state-aware assembly (0.0 = none, 1.0 = all)
 (define current-task-state-aware-rollout-rate (make-parameter 0.0))
@@ -95,6 +96,7 @@
      (current-auto-distillation-enabled? #t)
      (current-rollback-action-execution? #t)
      (current-ws-evolution-enabled? #f)
+     (current-conclusion-to-memory-bridge-enabled #t)
      (current-conclusion-token-budget (compute-conclusion-budget 8000))]
     [(full)
      (current-task-state-aware-assembly? #t)
@@ -102,6 +104,7 @@
      (current-auto-distillation-enabled? #t)
      (current-rollback-action-execution? #t)
      (current-ws-evolution-enabled? #t)
+     (current-conclusion-to-memory-bridge-enabled #t)
      (current-conclusion-token-budget (compute-conclusion-budget 8000))]
     [else (void)]))
 
