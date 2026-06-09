@@ -426,7 +426,7 @@
 ;; Returns a symbol: off, observe, bounded, self-healing, or full.
 ;; Default: 'off.
 (define (setting-context-assembly-profile settings)
-  (define raw (setting-ref* settings '(context-assembly profile) "off"))
+  (define raw (setting-ref* settings '(context-assembly profile) "observe"))
   (define sym
     (if (symbol? raw)
         raw
