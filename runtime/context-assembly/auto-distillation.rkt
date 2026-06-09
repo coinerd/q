@@ -68,10 +68,17 @@
 (define (distill-with-llm uncovered-ids current-state llm-distill-fn timeout-secs)
   (with-handlers ([exn:fail? (lambda (e)
                                (generate-fallback-conclusions uncovered-ids current-state))])
-    (define result
-      (sync/timeout timeout-secs (thread (lambda () (llm-distill-fn uncovered-ids current-state)))))
+    (define result-ch (make-channel))
+    (define thd
+      (thread (lambda ()
+                (with-handlers ([exn:fail? (lambda (e) (channel-put result-ch 'error))])
+                  (channel-put result-ch (llm-distill-fn uncovered-ids current-state))))))
+    (define result (sync/timeout timeout-secs result-ch))
     (cond
-      [(not result) (generate-fallback-conclusions uncovered-ids current-state)]
+      [(not result)
+       (kill-thread thd)
+       (generate-fallback-conclusions uncovered-ids current-state)]
+      [(eq? result 'error) (generate-fallback-conclusions uncovered-ids current-state)]
       [(and (list? result) (andmap task-conclusion? result)) result]
       [else (generate-fallback-conclusions uncovered-ids current-state)])))
 
