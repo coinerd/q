@@ -215,8 +215,18 @@
   (define cli-profile (cli-config-context-profile cfg))
   (define profile (or cli-profile settings-profile))
   (define final-hash-with-profile (hash-set final-hash 'context-assembly-profile profile))
-  ;; v0.97.4 GAP-E: Dynamic conclusion budget from actual max-context-tokens
-  (define max-ctx-tokens (hash-ref base-config 'max-context-tokens 128000))
+  ;; v0.97.4 GAP-E / v0.97.6 F4: Dynamic conclusion budget from model registry
+  ;; Resolve context window from model config when available, fall back to
+  ;; CLI config, then default 128000.
+  (define model-cw
+    (and model-reg
+         effective-model-name
+         (model-registry-context-window model-reg effective-model-name)))
+  (define max-ctx-tokens (or model-cw (hash-ref base-config 'max-context-tokens 128000)))
+  (log-info "context-assembly: model=~a context-window=~a (source: ~a)"
+            (or effective-model-name "(default)")
+            max-ctx-tokens
+            (if model-cw "model-registry" "config-default"))
   (apply-context-assembly-profile! profile max-ctx-tokens)
 
   ;; v0.97.5 GAP-F: Wire mid-session bridge enabled (default #f, only self-healing/full)
@@ -225,11 +235,19 @@
 
   ;; v0.95.15 W4: Wire memory injection budget from settings
   ;; v0.97.4 GAP-D: Default to 5% of context window for self-healing/full profiles
+  ;; v0.97.6 F5: Startup log for auto-budget observability
   (define settings-budget (setting-memory-injection-budget settings))
   (cond
-    [settings-budget (current-memory-injection-budget settings-budget)]
+    [settings-budget
+     (current-memory-injection-budget settings-budget)
+     (log-info "memory-injection: using configured budget ~a tokens" settings-budget)]
     [(memq profile '(self-healing full))
-     (current-memory-injection-budget (quotient max-ctx-tokens 20))])
+     (define auto-budget (quotient max-ctx-tokens 20))
+     (current-memory-injection-budget auto-budget)
+     (log-info "memory-injection: auto-budget ~a tokens (5% of ~a context window, profile=~a)"
+               auto-budget
+               max-ctx-tokens
+               profile)])
 
   ;; v0.95.16: Wire memory backend from settings (config.json)
   ;; Only applies when --memory CLI flag was NOT passed.
