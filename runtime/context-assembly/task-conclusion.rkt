@@ -62,7 +62,17 @@
 
 ;; ── Exports ──
 
-(provide (struct-out task-conclusion)
+(provide task-conclusion
+         task-conclusion?
+         struct:task-conclusion
+         task-conclusion-id
+         task-conclusion-text
+         task-conclusion-category
+         task-conclusion-fsm-state-origin
+         task-conclusion-origin-message-ids
+         task-conclusion-timestamp
+         task-conclusion-relevance-tags
+         task-conclusion-dependencies
          task-conclusion-category?
          valid-categories
          (contract-out [conclusion->hash (-> task-conclusion? hash?)]

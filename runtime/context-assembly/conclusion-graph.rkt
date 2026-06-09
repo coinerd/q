@@ -147,7 +147,12 @@
 
 ;; ── Exports ──
 
-(provide (struct-out conclusion-graph)
+(provide conclusion-graph
+         conclusion-graph?
+         struct:conclusion-graph
+         conclusion-graph-nodes
+         conclusion-graph-edges
+         conclusion-graph-reverse
          (contract-out
           [build-conclusion-graph (-> (listof task-conclusion?) conclusion-graph?)]
           [graph-conclusion-count (-> conclusion-graph? exact-nonnegative-integer?)]

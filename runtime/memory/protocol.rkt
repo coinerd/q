@@ -7,7 +7,17 @@
 (require racket/contract
          "types.rkt")
 
-(provide (struct-out memory-backend)
+(provide memory-backend
+         memory-backend?
+         struct:memory-backend
+         memory-backend-name
+         memory-backend-store!
+         memory-backend-retrieve
+         memory-backend-update!
+         memory-backend-delete!
+         memory-backend-list
+         memory-backend-available?
+         memory-backend-manage!
          memory-backend/c
          gen:store-memory!
          gen:retrieve-memory
