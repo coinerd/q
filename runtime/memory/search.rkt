@@ -13,7 +13,8 @@
 
 (require racket/list
          racket/string
-         "types.rkt")
+         "types.rkt"
+         (only-in "embeddings.rkt" current-embedding-provider cosine-similarity))
 
 ;; ---------------------------------------------------------------------------
 ;; Tokenization
@@ -54,9 +55,48 @@
            0))
      (+ (* overlap 3) phrase-boost)]))
 
+;; Embedding-based score: cosine similarity between item content and query embedding
+(define (embedding-score item query-emb)
+  (define provider (current-embedding-provider))
+  (if provider
+      (let ([item-emb (provider (memory-item-content item))])
+        (if item-emb
+            (cosine-similarity query-emb item-emb)
+            0.0))
+      0.0))
+
 ;; Sort items by relevance score descending, then by recency/id for determinism.
 ;; Returns a new sorted list.
 (define (rank-by-relevance items query-text)
+  (cond
+    ;; GAP-2: Embedding path when provider is configured
+    [(and (current-embedding-provider) (pair? items))
+     (with-handlers ([exn:fail? (lambda (e)
+                                  ;; Fallback to lexical on any error
+                                  (rank-by-relevance-lexical items query-text))])
+       (define query-emb ((current-embedding-provider) query-text))
+       (cond
+         [(not query-emb) (rank-by-relevance-lexical items query-text)]
+         [else
+          (sort items
+                (lambda (a b)
+                  (define sa (embedding-score a query-emb))
+                  (define sb (embedding-score b query-emb))
+                  (cond
+                    [(> sa sb) #t]
+                    [(< sa sb) #f]
+                    [else
+                     ;; Tiebreaker: lexical score
+                     (let ([la (relevance-score a query-text)]
+                           [lb (relevance-score b query-text)])
+                       (cond
+                         [(> la lb) #t]
+                         [(< la lb) #f]
+                         [else (string>? (memory-item-id a) (memory-item-id b))]))])))]))]
+    ;; Lexical path: existing token-overlap scoring
+    [else (rank-by-relevance-lexical items query-text)]))
+
+(define (rank-by-relevance-lexical items query-text)
   (sort items
         (lambda (a b)
           (define sa (relevance-score a query-text))
