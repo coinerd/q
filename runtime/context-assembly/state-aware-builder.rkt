@@ -284,18 +284,51 @@
                     (string-append "Task: " state-str ". " recent-text)
                     (format "Task: ~a" state-str))))))
 
+  ;; v0.97.5 GAP-G: Enrich memory query with state, active tags, and recent conclusions
+  (define enriched-query-text
+    (and
+     task-state
+     (let* ([state-str (if (symbol? task-state)
+                           (symbol->string task-state)
+                           (if (fsm-state? task-state)
+                               (symbol->string (fsm-state-name task-state))
+                               #f))]
+            [recent-text (extract-recent-text messages 3)]
+            [tag-str (if (and (pair? active-tags) (> (length active-tags) 0))
+                         (format "Active Tags: ~a. "
+                                 (string-join (map symbol->string
+                                                   (take active-tags (min 5 (length active-tags))))
+                                              ", "))
+                         "")]
+            [conclusion-str (if (and (pair? budgeted-conclusions) (> (length budgeted-conclusions) 0))
+                                (format "Recent Conclusions: ~a. "
+                                        (string-join (map task-conclusion-text
+                                                          (take budgeted-conclusions
+                                                                (min 2
+                                                                     (length budgeted-conclusions))))
+                                                     "; "))
+                                "")])
+       (and state-str
+            (string-append "State: " state-str ". " tag-str conclusion-str (or recent-text ""))))))
+
   ;; Observe-only memory integration. This deliberately emits telemetry only;
   ;; prompt injection remains owned by memory-builder and explicit config gates.
   (define memory-section-text #f)
   (when session-config
     (define observed
-      (observe-memory-for-context session-config #:scope #f #:query-text memory-query-text))
+      (observe-memory-for-context session-config
+                                  #:scope #f
+                                  #:query-text (or enriched-query-text memory-query-text)
+                                  #:tags active-tags))
     (when trace-cb
       (trace-cb 'memory-observe (memory-telemetry->jsexpr (cdr observed))))
     ;; v0.95.15 W3: Inject memory context when injection budget is configured
     (when (current-memory-injection-budget)
       (define injected
-        (inject-memory-for-context session-config #:scope #f #:query-text memory-query-text))
+        (inject-memory-for-context session-config
+                                   #:scope #f
+                                   #:query-text (or enriched-query-text memory-query-text)
+                                   #:tags active-tags))
       (define section (car injected))
       (when (and section (positive? (string-length section)))
         (set! memory-section-text section)
