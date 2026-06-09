@@ -1,4 +1,14 @@
-# Changelog
+## [0.97.3] - 2026-06-08
+
+### Fixed
+- GAP-A: Distillation for/list zip truncation causing silent data loss when LLM returns fewer lines than uncovered IDs
+- GAP-B: Conclusion IDs now use generate-id instead of reusing WS message IDs, ensuring uniqueness
+- GAP-C: Content summaries now include tool-result-part content (string/hash/list) with 500-char cap and error filtering
+
+### Added
+- tests/test-gap-ab-distillation-zip.rkt -- 3 tests for zip truncation + unique IDs
+- tests/test-gapc-tool-result-summaries.rkt -- 5 tests for tool result summary extraction
+- tests/test-gap-distillation-integration.rkt -- 4 integration tests for distillation pipeline
 
 ## [0.97.2] - 2026-06-08
 
