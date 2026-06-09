@@ -14,7 +14,11 @@
 (require racket/list
          racket/string
          "types.rkt"
-         (only-in "embeddings.rkt" current-embedding-provider cosine-similarity))
+         (only-in "embeddings.rkt"
+                  current-embedding-provider
+                  cosine-similarity
+                  current-batch-embedding-provider
+                  cached-embed))
 
 ;; ---------------------------------------------------------------------------
 ;; Tokenization
@@ -56,32 +60,57 @@
      (+ (* overlap 3) phrase-boost)]))
 
 ;; Embedding-based score: cosine similarity between item content and query embedding
+;; GAP-3: Uses cached-embed to avoid redundant API calls
 (define (embedding-score item query-emb)
-  (define provider (current-embedding-provider))
-  (if provider
-      (let ([item-emb (provider (memory-item-content item))])
-        (if item-emb
-            (cosine-similarity query-emb item-emb)
-            0.0))
+  (define item-emb (cached-embed (memory-item-content item)))
+  (if item-emb
+      (cosine-similarity query-emb item-emb)
       0.0))
+
+;; Batch-compute embeddings for all items. Returns list of (or/c #f vector).
+;; Uses current-batch-embedding-provider if available, else sequential cached-embed.
+(define (batch-embed-items items)
+  (define batch-provider (current-batch-embedding-provider))
+  (cond
+    [(and batch-provider (pair? items))
+     (define texts (map memory-item-content items))
+     (with-handlers ([exn:fail? (lambda (e)
+                                  ;; On batch failure, fall back to sequential
+                                  (map (lambda (item) (cached-embed (memory-item-content item)))
+                                       items))])
+       (batch-provider texts))]
+    [else (map (lambda (item) (cached-embed (memory-item-content item))) items)]))
 
 ;; Sort items by relevance score descending, then by recency/id for determinism.
 ;; Returns a new sorted list.
 (define (rank-by-relevance items query-text)
   (cond
-    ;; GAP-2: Embedding path when provider is configured
+    ;; GAP-2 + GAP-3: Embedding path with batch pre-computation
     [(and (current-embedding-provider) (pair? items))
      (with-handlers ([exn:fail? (lambda (e)
                                   ;; Fallback to lexical on any error
                                   (rank-by-relevance-lexical items query-text))])
-       (define query-emb ((current-embedding-provider) query-text))
+       ;; GAP-3: Pre-compute query embedding with cache
+       (define query-emb (cached-embed query-text))
        (cond
          [(not query-emb) (rank-by-relevance-lexical items query-text)]
          [else
+          ;; GAP-3: Batch-compute all item embeddings in one pass
+          (define item-embs (batch-embed-items items))
           (sort items
                 (lambda (a b)
-                  (define sa (embedding-score a query-emb))
-                  (define sb (embedding-score b query-emb))
+                  (define idx-a (index-of items a))
+                  (define idx-b (index-of items b))
+                  (define emb-a (list-ref item-embs idx-a))
+                  (define emb-b (list-ref item-embs idx-b))
+                  (define sa
+                    (if emb-a
+                        (cosine-similarity query-emb emb-a)
+                        0.0))
+                  (define sb
+                    (if emb-b
+                        (cosine-similarity query-emb emb-b)
+                        0.0))
                   (cond
                     [(> sa sb) #t]
                     [(< sa sb) #f]
