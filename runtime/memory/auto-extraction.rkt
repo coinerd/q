@@ -88,13 +88,26 @@
 ;; NOTE: This is a placeholder heuristic for v0.95.10 alpha.
 ;; Substring matching on "internal"/"private"/"confidential" produces false
 ;; positives (e.g., "internal medicine"). Should be improved before stable.
+;; GAP-9: Enhanced sensitivity patterns (ADR-0023)
+(define sensitive-patterns
+  (list #px"(?i:api.?key|apikey|secret.?key)"
+        #px"(?i:sk-proj-|sk-live-|ghp_|gho_)"
+        #px"(?i:password|passwd|pwd)"
+        #px"Bearer [A-Za-z0-9_-]+"
+        #px"(?i:token[_.-]?[a-z]*[_.-]?[a-z]*)"))
+
+(define internal-patterns
+  (list #px"(?i:internal|private|confidential)" #px"(?i:localhost|127\\.0\\.0\\.1|0\\.0\\.0\\.0)"))
+
 (define (classify-sensitivity content)
-  (define lower (string-downcase content))
-  (if (or (string-contains? lower "internal")
-          (string-contains? lower "private")
-          (string-contains? lower "confidential"))
-      'internal
-      'public))
+  (cond
+    [(for/or ([p (in-list sensitive-patterns)])
+       (regexp-match? p content))
+     'sensitive]
+    [(for/or ([p (in-list internal-patterns)])
+       (regexp-match? p content))
+     'internal]
+    [else 'public]))
 
 ;; F21: Secret patterns for first-pass filtering.
 ;; This is a subset of policy.rkt's default-blocked-content-patterns.
