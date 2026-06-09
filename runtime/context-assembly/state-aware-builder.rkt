@@ -59,7 +59,11 @@
          current-conclusion-token-budget
          current-ws-evolution-enabled?
          check-rollback-triggers-with-actions
-         extract-recent-text)
+         extract-recent-text
+         current-reflection-event)
+
+;; v0.96.13 W3: Latest reflection event (set by step-interpreter, checked in preamble)
+(define current-reflection-event (make-parameter #f))
 
 (define-runtime-path memory-builder-path "memory-builder.rkt")
 
@@ -384,12 +388,19 @@
                      conclusion-count
                      (string-join texts "\n")))
            "\n\nNo conclusions in memory yet. Use record_conclusion to save findings."))
+     (define reflection-reminder
+       (if (current-reflection-event)
+           "\n\nReminder: You recently received large tool results. Use record_conclusion to save key findings before taking more actions."
+           ""))
      (define preamble-text
        (format
-        "You are currently in the ~a phase.~a~a\n\nWorkflow: Use record_conclusion to persist findings. Use set_task_state to transition: exploration→planning→implementation→verification→debugging."
+        "You are currently in the ~a phase.~a~a~a\n\nWorkflow: Use record_conclusion to persist findings. Use set_task_state to transition: exploration→planning→implementation→verification→debugging."
         label
         guidance
-        conclusion-section))
+        conclusion-section
+        reflection-reminder))
+     ;; Clear reflection event after consuming it
+     (current-reflection-event #f)
      (make-message "state-awareness-preamble"
                    #f
                    'system
