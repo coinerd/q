@@ -114,7 +114,8 @@
                                     #:scope [scope #f]
                                     #:session-id [session-id #f]
                                     #:project [project #f]
-                                    #:limit [limit 20])
+                                    #:limit [limit 20]
+                                    #:query-text [query-text #f])
   (define enabled? (and session-config (config-memory-enabled? session-config)))
   (define backend (current-memory-backend))
   (cond
@@ -137,7 +138,7 @@
                                          #f
                                          (exn-message e))))])
        (define query
-         (memory-query #f ; text (no text search in observe)
+         (memory-query query-text ; v0.96.13 WP-1: context-aware retrieval
                        scope
                        project ; project-root
                        session-id
@@ -361,13 +362,15 @@
                                    #:session-id [session-id #f]
                                    #:project [project #f]
                                    #:budget-tokens [budget-tokens (current-memory-injection-budget)]
-                                   #:max-entries [max-entries 10])
+                                   #:max-entries [max-entries 10]
+                                   #:query-text [query-text #f])
   (define result
     (observe-memory-for-context session-config
                                 #:scope scope
                                 #:session-id session-id
                                 #:project project
-                                #:limit max-entries))
+                                #:limit max-entries
+                                #:query-text query-text))
   (define raw-items (car result))
   (define tel (cdr result))
   ;; Defense-in-depth: filter items to match requested scope (P3-9)
