@@ -20,7 +20,13 @@
          (only-in "../runtime/context-assembly/memory-builder.rkt"
                   observe-memory-for-context
                   inject-memory-for-context)
-         (only-in "../runtime/context-assembly/state-aware-builder.rkt" extract-recent-text))
+         (only-in "../runtime/context-assembly/state-aware-builder.rkt" extract-recent-text)
+         (only-in "../runtime/context-assembly/rollback-actions.rkt"
+                  warnings->actions
+                  rollback-action?
+                  rollback-action-type
+                  rollback-action-severity
+                  current-loop-warning-count))
 
 ;; ══════════════════════════════════════════════════════════════════
 ;; W1: Context-aware memory retrieval
@@ -82,11 +88,35 @@
 ;; W2: Anti-looping escalation — placeholders (implemented in W2)
 ;; ══════════════════════════════════════════════════════════════════
 
-(test-case "W2.1: warnings->actions escalation for repeated tool calls"
-  (check-true #t "placeholder — implemented in W2"))
+(test-case "W2.1: warnings->actions escalation — 1st repeat → warn-only"
+  (parameterize ([current-loop-warning-count 0])
+    (define actions (warnings->actions '("Repeated tool calls detected: 3 re-reads")))
+    (check-true (andmap rollback-action? actions))
+    (check-equal? (rollback-action-type (car actions)) 'warn-only)
+    (check-equal? (current-loop-warning-count) 1)))
 
-(test-case "W2.4: warning counter increments and resets"
-  (check-true #t "placeholder — implemented in W2"))
+(test-case "W2.1: warnings->actions escalation — 3rd repeat → force-distill"
+  (parameterize ([current-loop-warning-count 2])
+    (define actions (warnings->actions '("Repeated tool calls detected: 3 re-reads")))
+    (check-true (andmap rollback-action? actions))
+    (check-equal? (rollback-action-type (car actions)) 'force-distill)
+    ;; Counter resets after escalation
+    (check-equal? (current-loop-warning-count) 0)))
+
+(test-case "W2.2: exploration loop → force-distill immediately"
+  (parameterize ([current-loop-warning-count 0])
+    (define actions (warnings->actions '("exploration loop detected: (read edit) repeated 3 times")))
+    (check-equal? (rollback-action-type (car actions)) 'force-distill)))
+
+(test-case "W2.3: stuck → expand-context"
+  (define actions (warnings->actions '("stuck: 45 messages with only 3% conclusion coverage")))
+  (check-equal? (rollback-action-type (car actions)) 'expand-context))
+
+(test-case "W2.4: current-loop-warning-count parameter works"
+  (parameterize ([current-loop-warning-count 0])
+    (check-equal? (current-loop-warning-count) 0)
+    (current-loop-warning-count (add1 (current-loop-warning-count)))
+    (check-equal? (current-loop-warning-count) 1)))
 
 ;; ══════════════════════════════════════════════════════════════════
 ;; W3: Forced reflection — placeholder
