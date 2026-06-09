@@ -6,11 +6,20 @@
 ;; key/mouse event generation, and UTF-8 accumulator state.
 ;; Native terminal input handling (raw mode, ANSI decoding).
 ;;
-;; Extracted from terminal.rkt for separation of concerns.
 
 (require racket/match
          racket/port
-         racket/string)
+         racket/string
+         (only-in "input/kitty-protocol.rkt"
+                  [kitty-mode-enable! impl:kitty-mode-enable!]
+                  [kitty-mode-disable! impl:kitty-mode-disable!]
+                  modify-other-keys-enable!
+                  modify-other-keys-disable!
+                  [detect-kitty-support! impl:detect-kitty-support!]
+                  parse-kitty-csi-u
+                  parse-modify-other-keys
+                  kitty-codepoint->key
+                  decode-sgr-mouse))
 (require racket/contract)
 
 ;; ============================================================
@@ -185,9 +194,6 @@
 (define bracketed-paste-start-seq "\x1b[200~")
 (define bracketed-paste-end-seq "\x1b[201~")
 
-;; Paste buffer state — now uses decoder-state struct (v0.51.3)
-
-;; Maximum paste buffer size (1 MB)
 (define paste-buffer-max-size 1048576)
 
 (define (in-paste?)
@@ -203,18 +209,15 @@
 (define (paste-buffer-get)
   (decoder-state-paste-buf (ds)))
 
-;; Make a paste event
 (define (make-paste-event text)
   (vector 'tpaste text))
 
 (define (paste-event? msg)
   (and (vector? msg) (eq? (vector-ref msg 0) 'tpaste)))
 
-;; Check if a CSI sequence matches bracketed paste start (200~)
 (define (bracketed-paste-begin-pattern? CSI-params final-byte)
   (and (string=? CSI-params "200") (char=? final-byte #\~)))
 
-;; Check if a CSI sequence matches bracketed paste end (201~)
 (define (bracketed-paste-end-pattern? CSI-params final-byte)
   (and (string=? CSI-params "201") (char=? final-byte #\~)))
 
@@ -258,7 +261,7 @@
     [50 (decode-csi-tilled in 50)]
     [51 (decode-csi-tilled in 51)]
     ;; ESC[< — SGR mouse event (mode 1006)
-    [60 (decode-sgr-mouse in)]
+    [60 (decode-sgr-mouse in buffered-read-byte)]
     [77 ;; ESC[M — X10 mouse event
      (define cb (buffered-read-byte in 0.01))
      (define cx (buffered-read-byte in 0.01))
@@ -285,15 +288,10 @@
     ;; Final ~ — standard CSI N ~ sequence
     [(list _ #t)
      (match param-str
-       ;; Bracketed paste start: ESC[200~
        ["200"
         (set-in-paste! #t)
         (paste-buffer-reset!)
-        ;; Read all bytes until ESC[201~ and return as paste event
         (read-paste-until-end in)]
-       ;; Bracketed paste end: ESC[201~
-       ;; Should not reach here normally (handled in read-paste-until-end),
-       ;; but handle gracefully if it does.
        ["201"
         (set-in-paste! #f)
         (define text (paste-buffer-get))
@@ -363,8 +361,6 @@
     (bytes->string/utf-8 bs)))
 
 ;; Read pasted content until ESC[201~ is received.
-;; Returns a paste-event with the accumulated text.
-;; Uses a byte accumulator to avoid UTF-8 decode errors on partial sequences.
 (define (read-paste-until-end in)
   (define end-seq (bytes->list #"\x1b[201~"))
   (define end-len (length end-seq))
@@ -396,118 +392,20 @@
   (loop '() '()))
 
 ;; ============================================================
-;; Kitty keyboard protocol (Issue #410)
-;; ============================================================
-
-;; Kitty keyboard protocol provides unambiguous key encoding.
-;; Enable: ESC[=1u  Disable: ESC[=0u
-;; Sequences: ESC[<codepoint>;<modifiers>u
-;; Modifier bitmask: 1=shift, 2=alt, 4=ctrl, 8=super
-
-;; kitty-supported — now in decoder-state (v0.51.3)
+;; Kitty keyboard protocol — thin wrappers (AX1-1 extraction)
 
 (define (kitty-mode-supported?)
   (decoder-state-kitty-supp (ds)))
 
 (define (kitty-mode-enable!)
-  (when (decoder-state-kitty-supp (ds))
-    (display "\x1b[=1u")
-    (flush-output)))
+  (impl:kitty-mode-enable! (decoder-state-kitty-supp (ds))))
 
 (define (kitty-mode-disable!)
-  (when (decoder-state-kitty-supp (ds))
-    (display "\x1b[=0u")
-    (flush-output)))
+  (impl:kitty-mode-disable! (decoder-state-kitty-supp (ds))))
 
-;; modifyOtherKeys mode 4 (xterm-compatible)
-;; Enable: ESC[>4;2m  Disable: ESC[>4;0m
-(define (modify-other-keys-enable!)
-  (display "\x1b[>4;2m")
-  (flush-output))
-
-(define (modify-other-keys-disable!)
-  (display "\x1b[>4;0m")
-  (flush-output))
-
-;; Detect Kitty support from environment
 (define (detect-kitty-support!)
-  (define term-program (getenv "TERM_PROGRAM"))
-  (define term (getenv "TERM"))
-  (set-decoder-state-kitty-supp!
-   (ds)
-   (or (and term-program (member (string-downcase term-program) '("kitty" "ghostty")))
-       (and term (regexp-match? #rx"^(kitty|ghostty)" term)))))
+  (set-decoder-state-kitty-supp! (ds) (impl:detect-kitty-support!)))
 
-;; Parse a Kitty CSI-u sequence: ESC[<codepoint>;<modifiers>u
-;; Returns (list 'key key-symbol modifiers) or #f
-(define (parse-kitty-csi-u codepoint modifiers)
-  (define base-key (kitty-codepoint->key codepoint))
-  (define mods (bitmask->modifiers modifiers))
-  (list base-key mods))
-
-;; Parse modifyOtherKeys sequence: ESC[27;<modifiers>;<keycode>~
-;; Returns (list 'key key-symbol modifiers) or #f
-(define (parse-modify-other-keys modifiers keycode)
-  (define base-key
-    (match keycode
-      [13 'return]
-      [27 'escape]
-      [127 'backspace]
-      [(? (lambda (v) (<= 32 v 126))) (integer->char keycode)]
-      [_ #f]))
-  (if base-key
-      (list base-key (bitmask->modifiers modifiers))
-      #f))
-
-;; Convert modifier bitmask to list of modifier symbols
-;; Bit 1=shift, 2=alt, 4=ctrl, 8=super
-(define (bitmask->modifiers mask)
-  (define mods '())
-  (when (bitwise-bit-set? mask 0)
-    (set! mods (cons 'shift mods)))
-  (when (bitwise-bit-set? mask 1)
-    (set! mods (cons 'alt mods)))
-  (when (bitwise-bit-set? mask 2)
-    (set! mods (cons 'ctrl mods)))
-  (when (bitwise-bit-set? mask 3)
-    (set! mods (cons 'super mods)))
-  (reverse mods))
-
-;; Map Kitty key codepoints to key symbols
-;; Special keys have fixed codepoints per the Kitty protocol
-(define (kitty-codepoint->key cp)
-  (match cp
-    ;; Printable ASCII (32-126)
-    [(? (lambda (v) (and (>= v 32) (<= v 126)))) (integer->char cp)]
-    ;; Special keys (Kitty-defined codepoints)
-    [57344 'escape]
-    [57345 'enter]
-    [57346 'tab]
-    [57347 'backspace]
-    [57348 'insert]
-    [57349 'delete]
-    [57350 'left]
-    [57351 'right]
-    [57352 'up]
-    [57353 'down]
-    [57354 'page-up]
-    [57355 'page-down]
-    [57356 'home]
-    [57357 'end]
-    [57358 'caps-lock]
-    [57359 'scroll-lock]
-    [57360 'num-lock]
-    [57361 'print-screen]
-    [57362 'pause]
-    [57363 'menu]
-    ;; F1-F12: 57376-57387
-    [(? (lambda (v) (and (>= v 57376) (<= v 57387)))) (string->symbol (format "f~a" (- cp 57375)))]
-    ;; F13-F24: 57388-57399
-    [(? (lambda (v) (and (>= v 57388) (<= v 57399)))) (string->symbol (format "f~a" (- cp 57375)))]
-    ;; Unknown
-    [_ 'unknown]))
-
-;; ============================================================
 ;; Input byte buffer (Issue #409)
 ;; ============================================================
 
@@ -552,80 +450,9 @@
              [else #f])))]))
 
 ;; ============================================================
-;; SGR mouse decoding (mode 1006)
-;; ============================================================
-
-;; Decode an SGR-encoded mouse event from a port.
-;; Called when decode-csi-sequence sees ESC[< (byte 60).
-;; SGR format: ESC[<button;x;yM (press/drag/scroll) or ESC[<button;x;ym (release)
-;; Button codes: 0=left, 1=middle, 2=right, 32+button=drag, 64=wheel-up, 65=wheel-down
-;; Coordinates are 1-based.
-;; Returns: tmousemsg vector with X10-compatible cb byte so existing
-;; decode-mouse-x10 in input.rkt handles the rest.
-;; Returns (make-tkeymsg-raw 'escape) on decode failure.
-(define (decode-sgr-mouse in)
-  ;; Read SGR params: button;x;y terminated by M or m
-  (define (read-sgr-param acc)
-    (define b (buffered-read-byte in 0.01))
-    (match b
-      [#f
-       (values (if (null? acc)
-                   #f
-                   (string->number (list->string (reverse acc))))
-               #f)]
-      ;; digit
-      [(? (lambda (v) (and (>= v 48) (<= v 57)))) (read-sgr-param (cons (integer->char b) acc))]
-      [59 ;; semicolon — end of param
-       (values (if (null? acc)
-                   0
-                   (string->number (list->string (reverse acc))))
-               'cont)]
-      [_
-       (values (if (null? acc)
-                   #f
-                   (string->number (list->string (reverse acc))))
-               b)]))
-  (define-values (sgr-button rest1) (read-sgr-param '()))
-  (match (list sgr-button rest1)
-    [(list #f _) (make-tkeymsg-raw 'escape)]
-    [(list _ (not 'cont)) (make-tkeymsg-raw 'escape)]
-    [_
-     (define-values (sgr-x rest2) (read-sgr-param '()))
-     (match (list sgr-x rest2)
-       [(list #f _) (make-tkeymsg-raw 'escape)]
-       [(list _ (not 'cont)) (make-tkeymsg-raw 'escape)]
-       [_
-        (define-values (sgr-y final-byte) (read-sgr-param '()))
-        (match (list sgr-y final-byte)
-          [(list #f _) (make-tkeymsg-raw 'escape)]
-          [(list _ #f) (make-tkeymsg-raw 'escape)]
-          [_
-           ;; final-byte: 77 = 'M' (press/drag/scroll), 109 = 'm' (release)
-           (define release? (= final-byte 109))
-           ;; Convert SGR button to X10 cb byte:
-           ;; SGR uses same encoding as X10 but with text params instead of bytes+32
-           ;; X10 cb = 32 + button_code
-           ;; button_code: bits 0-1 = button (0/1/2), bit 5 (32) = motion, bit 6 (64) = wheel
-           ;; SGR release: same button code but terminated with 'm' instead of 'M'
-           ;; In X10, release = cb=32+3=35 (button bits=3 means release)
-           ;; So for SGR release, synthesize X10 cb = 32 + 3 = 35
-           (define cb
-             (if release?
-                 35 ;; X10 release code: button=3, no motion, no shift
-                 (+ 32 sgr-button)))
-           ;; Convert coordinates: SGR is 1-based, X10 is 1-based+32
-           (define cx (+ sgr-x 32))
-           (define cy (+ sgr-y 32))
-           (make-tmousemsg-raw cb cx cy)])])]))
-
-;; ============================================================
 ;; Raw stdin reading
 ;; ============================================================
 
-;; Native stdin-based input using buffered reading.
-;; Uses buffered reading (Issue #409) for efficient stdin parsing.
-;; Reads raw bytes from stdin, decodes ANSI escape sequences,
-;; and returns tkeymsg/tsizemsg structs (as vectors).
 (define (real-stdin-read-msg #:timeout [timeout 0.20])
   (define in (current-input-port))
   (define b (buffered-read-byte in timeout))
