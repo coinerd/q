@@ -185,14 +185,18 @@
              (> (length augmented-conclusions) (length conclusions)))
     (guarded-set-task-conclusions! session augmented-conclusions))
   ;; v0.78.2 G2: WS evolution — evolve working set on state transition
+  ;; MF1 (GAP-5): Guard at call site — skip when same state to avoid
+  ;; unnecessary snapshot + evolve-working-set overhead.
+  (define ws-old-state (current-last-task-fsm-state))
   (when (and (current-ws-evolution-enabled?)
              ws-early
              session
              task-state
-             (not (eq? task-state-raw 'idle)))
-    (define old-state (current-last-task-fsm-state))
+             (not (eq? task-state-raw 'idle))
+             ;; GAP-5: Skip same-state transitions (first transition: old=#f → proceed)
+             (or (not ws-old-state) (not (eq? ws-old-state task-state))))
     (define result
-      (evolve-working-set-for-state/result ws-early old-state task-state augmented-conclusions))
+      (evolve-working-set-for-state/result ws-early ws-old-state task-state augmented-conclusions))
     (current-last-task-fsm-state task-state)
     (when (and (evolution-result? result) session)
       (guarded-set-working-set-evolved! session result)))

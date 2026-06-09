@@ -26,6 +26,8 @@
          (only-in "../skills/resource-loader.rkt" skills-summary-section)
          "../runtime/provider/model-registry.rkt"
          (only-in "../runtime/provider/provider-factory.rkt" build-provider)
+         (only-in "../llm/model.rkt" make-model-request model-response-content)
+         (only-in "../llm/provider.rkt" provider-send)
          "../tools/tool.rkt"
          (only-in "../tools/registry-defaults.rkt" register-default-tools!)
          "../agent/event-bus.rkt"
@@ -51,7 +53,9 @@
                   current-auto-reflection-min-items)
          (only-in "../agent/iteration/step-interpreter.rkt" current-reflection-prompt-enabled)
          (only-in "../runtime/context-assembly/auto-distillation.rkt"
-                  current-auto-distillation-enabled?)
+                  current-auto-distillation-enabled?
+                  current-llm-distill-fn)
+         (only-in "../runtime/memory/reflection.rkt" current-reflection-llm-fn)
          (only-in "../extensions/gsd/state-machine.rkt" gsm-current)
          (only-in "../runtime/gsd-query.rkt" current-gsd-mode-query))
 
@@ -246,6 +250,70 @@
     (unless (eq? ad 'unset)
       (current-auto-distillation-enabled? ad)))
 
+  ;; LF1 (GAP-1/7): Wire LLM distill function and reflection LLM function
+  ;; from provider. These enable LLM-powered conclusion distillation and
+  ;; reflection merging when a provider is available. Both default to #f
+  ;; (deterministic fallback) when provider is missing or fails.
+  (when (and prov effective-model-name)
+    ;; GAP-1: LLM distill factory - generates conclusions for uncovered WS entries
+    (current-llm-distill-fn
+     (lambda (uncovered-ids current-state)
+       (with-handlers ([exn:fail? (lambda (e) '())])
+         (define prompt-text
+           (format
+            "For each working set entry, generate a brief conclusion about what was learned.\nState: ~a\nEntries: ~a\nOutput one conclusion per line."
+            (or current-state 'unknown)
+            (string-join uncovered-ids ", ")))
+         (define user-msg (make-hash))
+         (hash-set! user-msg 'role "user")
+         (hash-set! user-msg 'content prompt-text)
+         (define req-args (make-hash))
+         (hash-set! req-args 'model effective-model-name)
+         (hash-set! req-args 'max_tokens 1000)
+         (define resp (provider-send prov (make-model-request (list user-msg) #f req-args)))
+         (define resp-parts (model-response-content resp))
+         (define text
+           (string-trim (string-join (for/list ([p (in-list resp-parts)])
+                                       (cond
+                                         [(hash? p) (hash-ref p 'text "")]
+                                         [(string? p) p]
+                                         [else ""]))
+                                     "")))
+         (if (string=? text "")
+             '()
+             (for/list ([line (in-list (string-split text "\n"))]
+                        [id (in-list uncovered-ids)])
+               (define h (make-hash))
+               (hash-set! h 'id id)
+               (hash-set! h 'text line)
+               (hash-set! h 'state (or current-state 'unknown))
+               h)))))
+    ;; GAP-7: Reflection LLM factory - synthesizes merged reflection text
+    (current-reflection-llm-fn
+     (lambda (contents)
+       (with-handlers ([exn:fail? (lambda (e) (string-join (sort contents string<?) "; "))])
+         (define prompt-text
+           (format
+            "Synthesize these related memory items into one concise observation:\n~a\nOutput one synthesized observation."
+            (string-join contents "\n- ")))
+         (define user-msg (make-hash))
+         (hash-set! user-msg 'role "user")
+         (hash-set! user-msg 'content prompt-text)
+         (define req-args (make-hash))
+         (hash-set! req-args 'model effective-model-name)
+         (hash-set! req-args 'max_tokens 500)
+         (define resp (provider-send prov (make-model-request (list user-msg) #f req-args)))
+         (define resp-parts (model-response-content resp))
+         (define text
+           (string-trim (string-join (for/list ([p (in-list resp-parts)])
+                                       (cond
+                                         [(hash? p) (hash-ref p 'text "")]
+                                         [(string? p) p]
+                                         [else ""]))
+                                     "")))
+         (if (string=? text "")
+             (string-join (sort contents string<?) "; ")
+             text)))))
   (hash->session-config final-hash-with-auto-extract))
 
 ;; ============================================================
