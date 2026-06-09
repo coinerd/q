@@ -99,12 +99,27 @@
 (define (merge-group-items items)
   (define contents (map memory-item-content items))
   (define ids (map memory-item-id items))
-  ;; Collect all unique tags from sources
   (define all-tags
     (remove-duplicates (apply append
                               (for/list ([item (in-list items)])
                                 (hash-ref (memory-item-metadata item) 'tags '())))))
-  ;; Build deterministic merged content
+  (cond
+    ;; GAP-7: LLM synthesis when provider is configured and ≥2 items
+    [(and (current-reflection-llm-fn) (>= (length items) 2))
+     (with-handlers ([exn:fail? (lambda (e) (merge-group-items-concatenation items))])
+       (define synthesized ((current-reflection-llm-fn) contents))
+       (values (format "[reflection] ~a" synthesized) ids all-tags))]
+    [else
+     (define merged-text (string-append "[reflection] " (string-join (sort contents string<?) "; ")))
+     (values merged-text ids all-tags)]))
+
+(define (merge-group-items-concatenation items)
+  (define contents (map memory-item-content items))
+  (define ids (map memory-item-id items))
+  (define all-tags
+    (remove-duplicates (apply append
+                              (for/list ([item (in-list items)])
+                                (hash-ref (memory-item-metadata item) 'tags '())))))
   (define merged-text (string-append "[reflection] " (string-join (sort contents string<?) "; ")))
   (values merged-text ids all-tags))
 

@@ -34,6 +34,7 @@
                      'semantic
                      'project
                      (task-conclusion-text c)
+                     ;; Required metadata: source, session-id, project-root, tags, origin-tool-call-id
                      (hasheq 'source
                              'conclusion-bridge
                              'session-id
@@ -45,8 +46,11 @@
                              'category
                              (task-conclusion-category c)
                              'tags
-                             (task-conclusion-relevance-tags c))
-                     (hasheq 'sensitivity 'public 'confidence 0.8)
+                             (task-conclusion-relevance-tags c)
+                             'origin-tool-call-id
+                             (format "bridge_~a" (task-conclusion-id c)))
+                     ;; Required validity: sensitivity, confidence, supersedes
+                     (hasheq 'sensitivity 'public 'confidence 0.8 'supersedes '())
                      (current-iso-8601)
                      (current-iso-8601)))
       (gen:store-memory! backend item))))
