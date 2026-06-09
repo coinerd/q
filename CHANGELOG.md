@@ -1,3 +1,22 @@
+## [0.97.5] - 2026-06-08
+
+### Added
+- GAP-F: Mid-session conclusion bridge on major forward state transitions
+  (exploration→planning→implementation→review)
+- GAP-F: current-mid-session-bridge-enabled parameter (default #f, wired for
+  self-healing/full profiles via settings)
+- GAP-G: Enriched memory query text with state name, active tags, and recent conclusions
+- GAP-G: observe-memory-for-context and inject-memory-for-context accept #:tags keyword
+
+### Changed
+- state-aware-builder.rkt: builds enriched query before memory observation/injection
+- memory-builder.rkt: threads #:tags through to memory-query struct
+
+### Added
+- tests/test-gapg-enriched-memory-query.rkt -- 4 tests for query enrichment
+- tests/test-gapf-mid-session-bridge.rkt -- 6 tests for transition detection
+- tests/test-gapfg-memory-pipeline-integration.rkt -- 5 integration tests
+
 ## [0.97.4] - 2026-06-08
 
 ### Added
