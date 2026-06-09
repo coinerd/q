@@ -11,6 +11,13 @@
 #### Tests
 - 6 new test cases for stuck trigger, exploration-loop wiring, and escalation-threshold constant (27 total)
 
+#### Added
+- Config wiring: `reflection-prompt-enabled` and `auto-distillation-enabled` configurable from config.json via new settings accessors (`setting-reflection-prompt-enabled?`, `setting-auto-distillation-enabled?`)
+- Both flags enabled in `~/.q/config.json`, `.q/config.json`, `q/.q/config.json`
+
+#### Fixed
+- Replaced `dynamic-require` with static `require` imports in step-interpreter.rkt — `dynamic-require` with relative paths resolves against CWD, causing runtime crash when q launched from a different directory
+
 ## [0.96.13] - 2026-06-09
 
 ### Memory Continuity & Looping Prevention
