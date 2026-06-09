@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.96.18] - 2026-06-08
+
+### Fixed
+- GAP-4: Graph seed resolution now maps WS message IDs to conclusion IDs via origin-message-ids
+- GAP-5: WS evolution only fires on actual state transitions (old ≠ new), eliminating redundant computation
+
+### Changed
+- GAP-8: Conclusion token budget is now dynamic — 10% of model context window, capped at 4000 tokens, minimum 500 (was hardcoded 2000)
+
 ## [0.96.17] - 2026-06-08
 
 ### Added
