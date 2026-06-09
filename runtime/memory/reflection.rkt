@@ -94,6 +94,8 @@
 ;; ---------------------------------------------------------------------------
 
 ;; Merge a group of items into a single reflection summary
+(define current-reflection-llm-fn (make-parameter #f))
+
 (define (merge-group-items items)
   (define contents (map memory-item-content items))
   (define ids (map memory-item-id items))
@@ -171,8 +173,7 @@
 ;; v0.95.21 W3: Non-fatal auto-reflection trigger.
 ;; Gated by current-auto-reflection-enabled and current-auto-reflection-min-items.
 ;; Catches all exceptions to prevent reflection errors from disrupting the agent loop.
-(define (maybe-reflect-session-memories! #:session-id session-id
-                                         #:project-root [project-root #f])
+(define (maybe-reflect-session-memories! #:session-id session-id #:project-root [project-root #f])
   (with-handlers ([exn:fail? (lambda (e)
                                (log-warning (format "memory: auto-reflection failed: ~a"
                                                     (exn-message e))))])
@@ -199,4 +200,5 @@
          shared-tags?
          items-related?
          group-items
-         merge-group-items)
+         merge-group-items
+         current-reflection-llm-fn)
