@@ -302,7 +302,7 @@
                                 (list id)
                                 (current-seconds)
                                 '()
-                                '())))))
+                                '()))))))
      ;; GAP-7: Reflection LLM factory - synthesizes merged reflection text
      (current-reflection-llm-fn
       (lambda (contents)
@@ -326,7 +326,7 @@
                                       "")))
           (if (string=? text "")
               (string-join (sort contents string<?) "; ")
-              text))))))
+              text)))))
   (hash->session-config final-hash-with-auto-extract))
 
 ;; ============================================================
