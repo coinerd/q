@@ -60,7 +60,8 @@
           [available-models (-> model-registry? (listof model-entry?))]
           [default-model (-> model-registry? (or/c string? #f))]
           [default-model-for-mode (-> model-registry? symbol? (or/c string? #f))]
-          [make-model-registry-from-config (-> hash? model-registry?)]))
+          [make-model-registry-from-config (-> hash? model-registry?)])
+         model-registry-context-window)
 
 ;; ============================================================
 ;; Structs
@@ -305,3 +306,36 @@
   ;; Extension point: per-mode model selection
   ;; For now, all modes use the same default model
   (default-model registry))
+
+;; ============================================================
+;; Context window lookup — v0.97.6 F4
+;; ============================================================
+
+;; Resolve context-window for a model name from the registry.
+;; Returns the context window size in tokens, or #f if unknown.
+(define (model-registry-context-window registry model-name)
+  (define entries (hash-ref (model-registry-index registry) (or model-name "") '()))
+  (if (null? entries)
+      #f
+      (let* ([entry (car entries)]
+             [prov-cfg (model-entry-provider-config entry)]
+             [models-list (flex-ref prov-cfg 'models '())])
+        ;; Find the matching model entry and extract context-window.
+        ;; Handles two formats:
+        ;;   - Hash format (from JSON config): #hash((id . "model") (context-window . N))
+        ;;   - List/alist format (from providers.rktd): ("model" (context-window . N))
+        (for/or ([m (in-list models-list)])
+          (define m-id (extract-model-id m))
+          (and (equal? m-id model-name)
+               (cond
+                 ;; Hash format: flex-ref for context-window
+                 [(hash? m) (flex-ref m 'context-window #f)]
+                 ;; List format with string car: alist cdr
+                 [(and (pair? m) (string? (car m)))
+                  (define cw (assoc 'context-window (cdr m)))
+                  (and cw (cdr cw))]
+                 ;; Other alist format
+                 [(pair? m)
+                  (define cw (assoc 'context-window m))
+                  (and cw (cdr cw))]
+                 [else #f]))))))
