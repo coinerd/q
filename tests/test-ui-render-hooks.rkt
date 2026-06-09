@@ -96,7 +96,7 @@
                        'pre-render
                        (lambda (d)
                          (sleep 2)
-                         d) ;; 10s — will timeout
+                         d) ;; 2s — will timeout
                        #:timeout-ms 50))
    (define result (apply-render-hook h "original"))
    ;; Should return original data when timeout fires

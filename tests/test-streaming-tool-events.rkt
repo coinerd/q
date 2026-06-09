@@ -290,3 +290,5 @@
       (check-not-false tcs-event "tool.call.started event found")
       (check-equal? (hash-ref (event-payload tcs-event) 'id) "tc-42" "tool call id correct")
       (check-equal? (hash-ref (event-payload tcs-event) 'name) "read" "tool call name correct"))))
+
+(run-tests streaming-tool-event-tests)
