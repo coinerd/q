@@ -41,16 +41,6 @@
                   project-tree->string)
          (only-in "extension-setup.rkt" make-wired-extension-registry load-extensions-from-dir!)
          (only-in "../runtime/session/session-config.rkt" apply-context-assembly-profile!)
-         (only-in "../runtime/settings.rkt"
-                  setting-memory-injection-budget
-                  setting-memory-backend
-                  setting-memory-auto-extraction-enabled?
-                  setting-memory-auto-extraction-min-confidence
-                  setting-memory-user-scope-enabled?
-                  setting-memory-auto-reflection-enabled?
-                  setting-memory-auto-reflection-min-items
-                  setting-reflection-prompt-enabled?
-                  setting-auto-distillation-enabled?)
          (only-in "../runtime/context-assembly/memory-builder.rkt" current-memory-injection-budget)
          (only-in "../runtime/memory/auto-extraction.rkt"
                   current-auto-extraction-enabled
