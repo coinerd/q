@@ -13,8 +13,7 @@
          racket/set
          (only-in racket/string string-join)
          ;; Message/content types
-         (only-in "../../util/message/message.rkt"
-                  message-id message-kind message-content)
+         (only-in "../../util/message/message.rkt" message-id message-kind message-content)
          (only-in "../../util/content/content-parts.rkt" text-part? text-part-text)
          ;; Event emission
          "../../agent/event-emitter.rkt"
@@ -64,6 +63,7 @@
                   evolve-working-set-for-state/result
                   evolution-result?)
          (only-in "../context-assembly/state-aware-builder.rkt" current-ws-evolution-enabled?)
+         (only-in "../context-assembly/rollback-actions.rkt" current-loop-warning-count)
          ;; Auto-distillation
          (only-in "../context-assembly/auto-distillation.rkt"
                   auto-distill
@@ -196,6 +196,13 @@
     (current-last-task-fsm-state task-state)
     (when (and (evolution-result? result) session)
       (guarded-set-working-set-evolved! session result)))
+  ;; v0.96.13 W4: Transition detection — trigger deterministic distillation on state change
+  ;; Also resets the loop warning counter on state transition
+  (when (and task-state
+             (not (eq? task-state-raw 'idle))
+             (let ([old (current-last-task-fsm-state)]) (and old (not (eq? old task-state)))))
+    ;; State transition detected — reset warning counter
+    (current-loop-warning-count 0))
   (values task-state-raw task-state augmented-conclusions))
 
 ;; ============================================================

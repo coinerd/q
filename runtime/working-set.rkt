@@ -25,6 +25,13 @@
 ;; A working set entry tracks a file read that's still "active"
 (struct ws-entry (path message-id token-estimate timestamp) #:transparent)
 
+;; v0.96.13 W4: Extract text summary from a ws-entry for distillation input
+(define (ws-entry->text entry)
+  (format "[~a] ~a (~a tokens)"
+          (ws-entry-timestamp entry)
+          (ws-entry-path entry)
+          (ws-entry-token-estimate entry)))
+
 ;; Working set state (mutable)
 (struct working-set ([entries #:mutable] [max-entries #:mutable] [max-tokens #:mutable])
   #:transparent)
@@ -219,6 +226,7 @@
           [ws-entry-message-id (-> ws-entry? any/c)]
           [ws-entry-token-estimate (-> ws-entry? exact-nonnegative-integer?)]
           [ws-entry-timestamp (-> ws-entry? exact-nonnegative-integer?)]
+          [ws-entry->text (-> ws-entry? string?)]
           [working-set-selective-remove! (-> working-set? procedure? void?)]
           [working-set-add! (-> working-set? string? any/c exact-nonnegative-integer? void?)]
           [working-set-remove! (-> working-set? string? void?)]))

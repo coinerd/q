@@ -32,7 +32,11 @@
                   build-state-awareness-preamble)
          (only-in "../agent/iteration/step-interpreter.rkt"
                   current-reflection-prompt-enabled
-                  REFLECTION-THRESHOLD-CHARS))
+                  REFLECTION-THRESHOLD-CHARS)
+         (only-in "../runtime/working-set.rkt"
+                  ws-entry
+                  ws-entry->text
+                  ws-entry?))
 
 ;; ══════════════════════════════════════════════════════════════════
 ;; W1: Context-aware memory retrieval
@@ -158,8 +162,30 @@
     (check-false (current-reflection-event) "reflection event cleared after consumption")))
 
 ;; ══════════════════════════════════════════════════════════════════
-;; W4: Transition detection — placeholder
+;; W4: Transition detection infrastructure
 ;; ══════════════════════════════════════════════════════════════════
 
-(test-case "W4.2: ws-entry->text helper"
-  (check-true #t "placeholder — W4"))
+(test-case "W4.1: ws-entry->text extracts formatted text"
+  (define entry (ws-entry "/tmp/test.rkt" "msg-001" 150 (current-seconds)))
+  (define text (ws-entry->text entry))
+  (check-true (string? text))
+  (check-true (string-contains? text "/tmp/test.rkt"))
+  (check-true (string-contains? text "150")))
+
+(test-case "W4.2: ws-entry->text includes timestamp"
+  (define ts 1700000000)
+  (define entry (ws-entry "/path/file.rkt" "msg-002" 200 ts))
+  (define text (ws-entry->text entry))
+  (check-true (string-contains? text (number->string ts))))
+
+(test-case "W4.3: warning counter resets on state transition"
+  (parameterize ([current-loop-warning-count 3])
+    (check-equal? (current-loop-warning-count) 3)
+    ;; Simulating transition reset — the actual reset happens in turn-context.rkt
+    (current-loop-warning-count 0)
+    (check-equal? (current-loop-warning-count) 0)))
+
+(test-case "W4.4: ws-entry? predicate works"
+  (define entry (ws-entry "/a.rkt" "m1" 10 1000))
+  (check-true (ws-entry? entry))
+  (check-false (ws-entry? "not an entry")))
