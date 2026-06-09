@@ -1,3 +1,22 @@
+## [0.97.6] - 2026-06-08
+
+### Fixed
+- F3: Extract content-part->text to module-level in turn-context.rkt for reuse and testability
+- F4: model-registry-context-window resolves context window from model config (hash and alist formats)
+- F5: Startup log for context-window resolution source and auto-budget observability
+
+### Changed
+- wiring/run-modes.rkt: resolves max-context-tokens from model registry before falling back to config default
+- model-registry.rkt: new model-registry-context-window function handles both JSON hash and providers.rktd alist entries
+- turn-context.rkt: content-part->text extracted from local binding to module-level (F11: documents tool-call-part discard)
+
+### Added
+- tests/test-content-part-to-text.rkt -- 9 tests for content-part->text extraction (W0)
+- tests/test-gap-e4-dynamic-context-tokens.rkt -- 6 tests for model-registry-context-window (W1)
+- tests/test-gapf-mid-session-bridge.rkt -- 4 new bridge action tests (W2, F7)
+- tests/test-gapd-memory-injection-default.rkt -- 3 new parameter smoke tests (W2, F8)
+- tests/test-gapg-enriched-memory-query.rkt -- test-cases moved inside test-suite form (W2, F12)
+
 ## [0.97.5] - 2026-06-08
 
 ### Added
