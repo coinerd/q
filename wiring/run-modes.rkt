@@ -326,8 +326,8 @@
                                       "")))
           (if (string=? text "")
               (string-join (sort contents string<?) "; ")
-              text)))))
-    (hash->session-config final-hash-with-auto-extract)))
+              text))))))
+  (hash->session-config final-hash-with-auto-extract))
 
 ;; ============================================================
 ;; mode-for-config
