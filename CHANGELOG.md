@@ -1,4 +1,5 @@
-## [0.96.14] - 2026-06-09
+# Changelog
+
 ## [0.96.15] - 2026-06-09
 
 ### Fixed
@@ -86,6 +87,7 @@
 - **D1**: Wrapped bare `check-*` calls in `test-case` blocks across 19 test files
 - **B2**: Deduplicated all test-case names across 74 files — every name is now globally unique with module prefix
 - **D3**: Updated `docs/TEST_CONVENTIONS.md` with naming, temp file, state isolation, and env guard conventions
+
 ## [0.96.8] - 2026-06-08
 
 ### Test Architecture — Phase 1: Safety & Cleanup
