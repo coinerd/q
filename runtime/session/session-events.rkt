@@ -10,13 +10,19 @@
          "../../agent/event-bus.rkt"
          "session-store.rkt"
          "../compaction/compactor.rkt"
-         "../session-index/schema.rkt" "../session-index/mutations.rkt" "../session-index/query.rkt"
+         "../session-index/schema.rkt"
+         "../session-index/mutations.rkt"
+         "../session-index/query.rkt"
          (only-in "../../util/event/event.rkt" event-ev)
          (only-in "../../util/message/message.rkt" message-id)
          (only-in "../../util/event/event.rkt" event-payload)
          (only-in "../runtime-helpers.rkt" emit-session-event!)
          "session-types.rkt"
-         (only-in "../context-assembly/task-conclusion.rkt" task-conclusion task-conclusion-id))
+         (only-in "../context-assembly/task-conclusion.rkt" task-conclusion task-conclusion-id)
+         (only-in "../memory/conclusion-bridge.rkt"
+                  current-conclusion-to-memory-bridge-enabled
+                  persist-high-value-conclusions!)
+         (only-in "../memory/service.rkt" current-memory-backend))
 (require "session-mutation.rkt")
 (require (only-in "../context-assembly/state-inference.rkt"
                   infer-task-state-from-tools
@@ -27,11 +33,37 @@
 ;; context.ws-evolve-requested event for turn-orchestrator to handle.
 ;; (require (only-in "../context-assembly/ws-evolution.rkt" evolve-working-set-for-state))
 
-(provide (contract-out [wire-session-event-handlers! (-> agent-session? procedure? void?)]))
+(provide (contract-out [wire-session-event-handlers! (-> agent-session? procedure? void?)])
+         current-mid-session-bridge-enabled
+         major-forward-transition?)
 
 ;; ============================================================
 ;; Event bus wiring
 ;; ============================================================
+
+;; v0.97.5 GAP-F: Mid-session bridge on major forward transitions
+(define current-mid-session-bridge-enabled (make-parameter #f))
+
+(define major-forward-transitions
+  '((exploration . planning) (planning . implementation) (implementation . review)))
+
+(define (major-forward-transition? old-state new-state)
+  (and (symbol? old-state)
+       (symbol? new-state)
+       (not (eq? old-state new-state))
+       (pair? (member (cons old-state new-state) major-forward-transitions))))
+
+(define (maybe-persist-mid-session! sess old-state new-state)
+  (when (and (current-mid-session-bridge-enabled)
+             (current-conclusion-to-memory-bridge-enabled)
+             (major-forward-transition? old-state new-state))
+    (define backend (current-memory-backend))
+    (when backend
+      (with-handlers ([exn:fail? (lambda (e)
+                                   (log-warning "mid-session bridge failed: ~a" (exn-message e)))])
+        (persist-high-value-conclusions! (agent-session-task-conclusions sess)
+                                         #:backend backend
+                                         #:session-id (agent-session-session-id sess))))))
 
 ;; Wire event-bus subscribers for fork.requested, compact.requested,
 ;; tool execution, conclusions, and state transitions.
@@ -108,6 +140,8 @@
                     (when (and inferred-state (>= confidence (current-state-inference-threshold)))
                       (define old-state (agent-session-task-fsm-state sess))
                       (guarded-set-task-fsm-state! sess (fsm-state-name inferred-state))
+                      ;; v0.97.5 GAP-F: Mid-session bridge on major forward transitions
+                      (maybe-persist-mid-session! sess old-state (fsm-state-name inferred-state))
                       ;; v0.75.6: Persist task state change
                       (define log-path (session-log-path (agent-session-session-dir sess)))
                       (when (file-exists? log-path)
@@ -202,6 +236,8 @@
                target))
          (define old-state (agent-session-task-fsm-state sess))
          (guarded-set-task-fsm-state! sess target-sym)
+         ;; v0.97.5 GAP-F: Mid-session bridge on major forward transitions
+         (maybe-persist-mid-session! sess old-state target-sym)
          ;; Persist task state change
          (define log-path (session-log-path-for sess))
          (when (file-exists? log-path)

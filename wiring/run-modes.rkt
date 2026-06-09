@@ -59,7 +59,8 @@
          (only-in "../util/ids.rkt" generate-id)
          (only-in "../runtime/memory/reflection.rkt" current-reflection-llm-fn)
          (only-in "../extensions/gsd/state-machine.rkt" gsm-current)
-         (only-in "../runtime/gsd-query.rkt" current-gsd-mode-query))
+         (only-in "../runtime/gsd-query.rkt" current-gsd-mode-query)
+         (only-in "../runtime/session/session-events.rkt" current-mid-session-bridge-enabled))
 
 ;; Re-export mode runners from sub-modules
 (require "run-interactive.rkt"
@@ -217,6 +218,10 @@
   ;; v0.97.4 GAP-E: Dynamic conclusion budget from actual max-context-tokens
   (define max-ctx-tokens (hash-ref base-config 'max-context-tokens 128000))
   (apply-context-assembly-profile! profile max-ctx-tokens)
+
+  ;; v0.97.5 GAP-F: Wire mid-session bridge enabled (default #f, only self-healing/full)
+  (current-mid-session-bridge-enabled (and (memq profile '(self-healing full))
+                                           (setting-ref settings 'mid-session-bridge-enabled #f)))
 
   ;; v0.95.15 W4: Wire memory injection budget from settings
   ;; v0.97.4 GAP-D: Default to 5% of context window for self-healing/full profiles
