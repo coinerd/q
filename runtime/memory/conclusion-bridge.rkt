@@ -16,11 +16,12 @@
                   task-conclusion-relevance-tags))
 
 (provide current-conclusion-to-memory-bridge-enabled
-         persist-high-value-conclusions!)
+         persist-high-value-conclusions!
+         high-value-categories)
 
 (define current-conclusion-to-memory-bridge-enabled (make-parameter #f))
 
-(define high-value-categories '(decision pattern))
+(define high-value-categories '(decision pattern fact))
 
 (define (persist-high-value-conclusions! conclusions
                                          #:backend backend
