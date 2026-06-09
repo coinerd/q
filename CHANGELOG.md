@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.96.16] - 2026-06-08
+
+### Changed
+- **AX1-1**: Decompose `terminal-input.rkt` (671→498 LOC) — extract Kitty keyboard protocol + SGR mouse decoding into `tui/input/kitty-protocol.rkt`
+- **AX1-2**: Decompose `tui-render-loop.rkt` (634→422 LOC) — extract frame-vdom + watchdog into `tui/render-loop/` submodules
+- **AX1-3**: Decompose `run-tests.rkt` (1388→370 LOC) — extract 6 sub-modules into `scripts/run-tests/`
+- **AX1-5**: Convert 13 `struct-out` to explicit provides across 9 files (33→20 remaining)
+- **AX3-3**: Reduce test sleeps >0.5s from 12 to 6 (remaining are intentional timeout tests)
+- **AX5-x**: Fix stale version references in README, info.rkt, CHANGELOG
+- **AX6-3**: Pre-commit quick mode now runs `raco fmt`/`raco make` on staged files only
+
+### Audit Source
+- `.planning/PLAN-v0.96.16-AUDIT-REMEDIATION.md`
+
+
 ## [0.96.15] - 2026-06-09
 
 ### Fixed
