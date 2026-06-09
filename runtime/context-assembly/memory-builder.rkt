@@ -115,7 +115,8 @@
                                     #:session-id [session-id #f]
                                     #:project [project #f]
                                     #:limit [limit 20]
-                                    #:query-text [query-text #f])
+                                    #:query-text [query-text #f]
+                                    #:tags [tags #f])
   (define enabled? (and session-config (config-memory-enabled? session-config)))
   (define backend (current-memory-backend))
   (cond
@@ -143,7 +144,7 @@
                        project ; project-root
                        session-id
                        #f ; types (all types)
-                       #f ; tags (all tags)
+                       tags ; v0.97.5 GAP-G: thread active tags into query
                        limit
                        #f)) ; include-expired?
        (define qr
@@ -363,14 +364,16 @@
                                    #:project [project #f]
                                    #:budget-tokens [budget-tokens (current-memory-injection-budget)]
                                    #:max-entries [max-entries 10]
-                                   #:query-text [query-text #f])
+                                   #:query-text [query-text #f]
+                                   #:tags [tags #f])
   (define result
     (observe-memory-for-context session-config
                                 #:scope scope
                                 #:session-id session-id
                                 #:project project
                                 #:limit max-entries
-                                #:query-text query-text))
+                                #:query-text query-text
+                                #:tags tags))
   (define raw-items (car result))
   (define tel (cdr result))
   ;; Defense-in-depth: filter items to match requested scope (P3-9)
