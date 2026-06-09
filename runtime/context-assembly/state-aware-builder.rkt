@@ -16,6 +16,7 @@
                   message-id
                   message-content
                   message-role
+                  message-meta-safe
                   make-message)
          (only-in "task-conclusion.rkt"
                   task-conclusion?
@@ -193,12 +194,36 @@
               (fallback-select-conclusions conclusions 20 current-states)
               selected-conclusions)])]))
 
+  ;; GAP-4: Extract active tags from working-set messages for tag-based ranking
+  (define active-tags
+    (let* ([path-symbols (for*/list ([m (in-list effective-ws)]
+                                     #:when (hash? (message-meta-safe m))
+                                     [k (in-list '(path file filepath))]
+                                     [v (in-value (hash-ref (message-meta-safe m) k #f))]
+                                     #:when (string? v))
+                           ;; Extract filename without extension and directory path components as tags
+                           (define basename
+                             (let ([parts (string-split v "/")])
+                               (if (pair? parts)
+                                   (last parts)
+                                   v)))
+                           (define name-no-ext
+                             (path->string (path-replace-suffix (string->path basename) "")))
+                           (list basename name-no-ext v))]
+           [flat-tags (filter-map (lambda (p) (and (string? p) (> (string-length p) 0) p))
+                                  (apply append path-symbols))]
+           [deduped (remove-duplicates flat-tags)])
+      (if (> (length deduped) 20)
+          (take deduped 20)
+          deduped)))
+
   ;; v0.77.9 T1.2: Apply rank-and-budget when budget is configured (>0)
   (define budgeted-conclusions
     (let ([budget (current-conclusion-token-budget)])
       (if (and budget (> budget 0) (pair? effective-conclusions))
           (rank-and-budget effective-conclusions
                            #:current-state state-name
+                           #:active-tags active-tags
                            #:max-conclusion-tokens budget)
           effective-conclusions)))
 
@@ -230,6 +255,7 @@
            ;; v0.78.3 G8: Use rank-and-budget for summary (not first+last)
            (let ([ranked (rank-and-budget budgeted-conclusions
                                           #:current-state state-name
+                                          #:active-tags active-tags
                                           #:max-conclusion-tokens 500)])
              (for/list ([c (in-list ranked)]
                         #:when (task-conclusion? c))
