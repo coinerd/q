@@ -27,7 +27,7 @@
       (check-exn exn:fail?
                  (lambda ()
                    (with-workflow-timeout (lambda ()
-                                            (sleep 10)
+                                            (sleep 1)
                                             'done)
                                           #:timeout-ms 100))))
 
@@ -64,11 +64,11 @@
       (check-exn
        exn:fail?
        (lambda ()
-         (with-workflow-timeout (lambda () (sleep 10)) #:timeout-ms 50 #:context "test-context"))))
+         (with-workflow-timeout (lambda () (sleep 1)) #:timeout-ms 50 #:context "test-context"))))
 
     (test-case "custom on-timeout handler is called"
       (define called? (box #f))
-      (with-workflow-timeout (lambda () (sleep 10))
+      (with-workflow-timeout (lambda () (sleep 1))
                              #:timeout-ms 50
                              #:on-timeout (lambda ()
                                             (set-box! called? #t)

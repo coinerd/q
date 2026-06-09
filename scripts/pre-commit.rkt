@@ -127,6 +127,32 @@
         (printf "Lint checks: FAIL~n")
         #f)))
 
+;; --- Run format + compile only on staged files ---
+
+(define (run-staged-lint staged-files)
+  (printf "~n--- Staged Lint (format + compile ~a files) ---~n" (length staged-files))
+  (define all-ok #t)
+  (for ([f (in-list staged-files)])
+    (printf "  Checking: ~a ... " f)
+    (flush-output)
+    (define fmt-code (system/exit-code (format "raco fmt -i ~a 2>&1" f)))
+    (define make-code (system/exit-code (format "raco make ~a 2>&1" f)))
+    (cond
+      [(and (= fmt-code 0) (= make-code 0)) (printf "OK~n")]
+      [(not (= fmt-code 0))
+       (printf "FORMAT FAIL~n")
+       (set! all-ok #f)]
+      [else
+       (printf "COMPILE FAIL~n")
+       (set! all-ok #f)]))
+  (if all-ok
+      (begin
+        (printf "Staged lint: PASS~n")
+        #t)
+      (begin
+        (printf "Staged lint: FAIL~n")
+        #f)))
+
 ;; --- Run test file ---
 
 (define (run-test test-path)
@@ -183,9 +209,23 @@
 
   (define all-pass #t)
 
-  ;; 1. Lint checks (delegated to lint-all.rkt)
-  (unless (run-lint-checks #:full? full-mode?)
-    (set! all-pass #f))
+  ;; 1. Lint checks — scoped to staged files in quick mode
+  (define staged (get-staged-rkt-files))
+  (printf "~n--- Staged .rkt files: ~a ---~n"
+          (if (null? staged)
+              "(none)"
+              (string-join staged ", ")))
+
+  (cond
+    [(or full-mode? all-mode?)
+     (unless (run-lint-checks #:full? full-mode?)
+       (set! all-pass #f))]
+    [(not (null? staged))
+     (unless (run-staged-lint staged)
+       (set! all-pass #f))]
+    [else
+     (unless (run-lint-checks)
+       (set! all-pass #f))])
 
   ;; 2. Tests (skipped when --no-tests to avoid infinite recursion)
   (unless no-tests?
@@ -194,12 +234,6 @@
        (unless (run-full-suite)
          (set! all-pass #f))]
       [else
-       (define staged (get-staged-rkt-files))
-       (printf "~n--- Staged .rkt files: ~a ---~n"
-               (if (null? staged)
-                   "(none)"
-                   (string-join staged ", ")))
-
        (define test-files (remove-duplicates (append-map source->test-files staged)))
 
        (if (null? test-files)

@@ -41,13 +41,13 @@
 ;; ============================================================
 
 (test-case "eval-in-sandbox kills code that exceeds timeout"
-  ;; Use a very short timeout; sleeping 10s should be killed
-  (define result (eval-in-sandbox "(sleep 10)" #:timeout 1))
+  ;; Use a very short timeout; sleeping 3s should be killed
+  (define result (eval-in-sandbox "(sleep 3)" #:timeout 1))
   (check-pred eval-result? result)
   (check-false (eval-result-value result))
   (check-true (string? (eval-result-error result)))
   ;; Should have been killed well before 10 seconds (generous timeout)
-  (check-true (< (eval-result-elapsed-ms result) 15000)))
+  (check-true (< (eval-result-elapsed-ms result) 5000)))
 
 ;; ============================================================
 ;; eval-in-sandbox — forbidden operations

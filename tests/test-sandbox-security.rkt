@@ -132,7 +132,7 @@
  (test-case "with-resource-limits returns timed-out on slow thunk"
    (define-values (result timed-out?)
      (with-resource-limits (lambda (cust)
-                             (sleep 3)
+                             (sleep 1)
                              'done)
                            #:timeout 0.5))
    (check-true timed-out?))
