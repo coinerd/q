@@ -202,9 +202,12 @@
       (guarded-set-working-set-evolved! session result)))
   ;; v0.96.13 W4: Transition detection — trigger deterministic distillation on state change
   ;; Also resets the loop warning counter on state transition
+  ;; MF1-1 fix: Use ws-old-state (captured before WS mutation) instead of
+  ;; re-reading current-last-task-fsm-state, which was already mutated above.
   (when (and task-state
              (not (eq? task-state-raw 'idle))
-             (let ([old (current-last-task-fsm-state)]) (and old (not (eq? old task-state)))))
+             ws-old-state
+             (not (eq? ws-old-state task-state)))
     ;; State transition detected — reset warning counter
     (current-loop-warning-count 0))
   (values task-state-raw task-state augmented-conclusions))

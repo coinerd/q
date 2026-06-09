@@ -90,9 +90,7 @@
                   config-memory-enabled?)
          (only-in "provider/model-registry.rkt" model-registry?)
          ;; LF2 (GAP-10): conclusion-to-memory bridge
-         (only-in "memory/conclusion-bridge.rkt"
-                  persist-high-value-conclusions!
-                  current-conclusion-to-memory-bridge-enabled)
+         (only-in "memory/conclusion-bridge.rkt" persist-high-value-conclusions!)
          (only-in "memory/service.rkt" current-memory-backend)
          ;; F8: browser service lifecycle
          (only-in "../browser/service.rkt"

@@ -55,6 +55,8 @@
          (only-in "../runtime/context-assembly/auto-distillation.rkt"
                   current-auto-distillation-enabled?
                   current-llm-distill-fn)
+         (only-in "../runtime/context-assembly/task-conclusion.rkt"
+                  task-conclusion)
          (only-in "../runtime/memory/reflection.rkt" current-reflection-llm-fn)
          (only-in "../extensions/gsd/state-machine.rkt" gsm-current)
          (only-in "../runtime/gsd-query.rkt" current-gsd-mode-query))
@@ -264,13 +266,9 @@
             "For each working set entry, generate a brief conclusion about what was learned.\nState: ~a\nEntries: ~a\nOutput one conclusion per line."
             (or current-state 'unknown)
             (string-join uncovered-ids ", ")))
-         (define user-msg (make-hash))
-         (hash-set! user-msg 'role "user")
-         (hash-set! user-msg 'content prompt-text)
-         (define req-args (make-hash))
-         (hash-set! req-args 'model effective-model-name)
-         (hash-set! req-args 'max_tokens 1000)
-         (define resp (provider-send prov (make-model-request (list user-msg) #f req-args)))
+         (define resp (provider-send prov (make-model-request (list (hasheq 'role "user" 'content prompt-text))
+                                                      #f
+                                                      (hasheq 'model effective-model-name 'max_tokens 1000))))
          (define resp-parts (model-response-content resp))
          (define text
            (string-trim (string-join (for/list ([p (in-list resp-parts)])
@@ -281,13 +279,18 @@
                                      "")))
          (if (string=? text "")
              '()
+             ;; LF1-1 fix: Return task-conclusion structs, not hashes.
+             ;; distill-with-llm validates with task-conclusion? predicate.
              (for/list ([line (in-list (string-split text "\n"))]
                         [id (in-list uncovered-ids)])
-               (define h (make-hash))
-               (hash-set! h 'id id)
-               (hash-set! h 'text line)
-               (hash-set! h 'state (or current-state 'unknown))
-               h)))))
+               (task-conclusion id
+                                line
+                                'observation
+                                (or current-state 'unknown)
+                                (list id)
+                                (current-inexact-milliseconds)
+                                '()
+                                '())))))
     ;; GAP-7: Reflection LLM factory - synthesizes merged reflection text
     (current-reflection-llm-fn
      (lambda (contents)
@@ -296,13 +299,9 @@
            (format
             "Synthesize these related memory items into one concise observation:\n~a\nOutput one synthesized observation."
             (string-join contents "\n- ")))
-         (define user-msg (make-hash))
-         (hash-set! user-msg 'role "user")
-         (hash-set! user-msg 'content prompt-text)
-         (define req-args (make-hash))
-         (hash-set! req-args 'model effective-model-name)
-         (hash-set! req-args 'max_tokens 500)
-         (define resp (provider-send prov (make-model-request (list user-msg) #f req-args)))
+         (define resp (provider-send prov (make-model-request (list (hasheq 'role "user" 'content prompt-text))
+                                                      #f
+                                                      (hasheq 'model effective-model-name 'max_tokens 500))))
          (define resp-parts (model-response-content resp))
          (define text
            (string-trim (string-join (for/list ([p (in-list resp-parts)])
