@@ -213,9 +213,10 @@
            [flat-tags (filter-map (lambda (p) (and (string? p) (> (string-length p) 0) p))
                                   (apply append path-symbols))]
            [deduped (remove-duplicates flat-tags)])
-      (if (> (length deduped) 20)
-          (take deduped 20)
-          deduped)))
+      (let ([syms (map string->symbol deduped)])
+        (if (> (length syms) 20)
+            (take syms 20)
+            syms))))
 
   ;; v0.77.9 T1.2: Apply rank-and-budget when budget is configured (>0)
   (define budgeted-conclusions

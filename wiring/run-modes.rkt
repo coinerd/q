@@ -245,7 +245,9 @@
   (current-auto-reflection-enabled (setting-memory-auto-reflection-enabled? settings))
   (current-auto-reflection-min-items (setting-memory-auto-reflection-min-items settings))
 
-  ;; v0.96.14: Wire reflection-prompt-enabled and auto-distillation from config
+  ;; v0.96.14: Wire reflection-prompt-enabled and auto-distillation from config.
+  ;; Precedence: apply-context-assembly-profile! sets profile-based default first (line 219),
+  ;; then explicit config.json setting overrides it. 'unset sentinel preserves profile default.
   (current-reflection-prompt-enabled (setting-reflection-prompt-enabled? settings))
   (let ([ad (setting-auto-distillation-enabled? settings)])
     (unless (eq? ad 'unset)
@@ -259,7 +261,7 @@
     ;; GAP-1: LLM distill factory - generates conclusions for uncovered WS entries
     (current-llm-distill-fn
      (lambda (uncovered-ids current-state [content-summaries (hash)])
-       (with-handlers ([exn:fail? (lambda (e) '())])
+       (with-handlers ([exn:fail? (lambda (e) (raise e))]) ; re-raise so distill-with-llm's outer handler generates deterministic fallback
          ;; GAP-6: Include content summaries in prompt for richer distillation
          (define content-lines
            (for/list ([id (in-list uncovered-ids)])

@@ -24,7 +24,7 @@
                    'fact
                    'exploring
                    '()
-                   (inexact->exact (floor (current-inexact-milliseconds)))
+                   (current-seconds)
                    tags ; relevance-tags
                    '()))
 
