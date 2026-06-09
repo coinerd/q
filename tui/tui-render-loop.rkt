@@ -8,17 +8,6 @@
 ;;
 ;; Extracted from interfaces/tui.rkt for modularity (Issue #194).
 ;;
-;; Dependency chain: tui-init.rkt → tui-render-loop.rkt → tui-keybindings.rkt
-;;
-;; Provides:
-;;   tui-ctx-init-terminal!    — terminal + cell-buffer initialization
-;;   tui-ctx-resize-ubuf!      — resize cell-buffer on terminal resize
-;;   tui-ctx-ubuf, tui-ctx-term — ubuf/term accessors
-;;   render-frame!, draw-frame  — frame rendering (vdom + cell-diff)
-;;   next-message               — terminal message adapter
-;;   tui-main-loop              — main event loop
-;;   drain-events!              — runtime event draining
-;;   Re-exports: fix-sgr-bg-black, decode-mouse-x10
 
 (require "../util/error/error-helpers.rkt")
 (require racket/contract
@@ -61,7 +50,13 @@
          ;; W17: handle-user-submit! extracted to submit-handler.rkt
          "submit-handler.rkt"
          ;; W18: process-tui-message! extracted to message-dispatch.rkt
-         "message-dispatch.rkt")
+         "message-dispatch.rkt"
+         (only-in "render-loop/frame-vdom.rkt"
+                  render-frame-vdom!
+                  clip-visible-lines
+                  compute-pad-count
+                  clip-overlay-content)
+         (only-in "render-loop/watchdog.rkt" current-busy-watchdog-ms check-busy-watchdog))
 
 (define (tui-output-port)
   (or (guarded-real-output-port) (current-output-port)))
@@ -99,31 +94,20 @@
          (all-from-out "submit-handler.rkt"))
 
 ;; ============================================================
-;; Cell buffer (native)
 ;; ============================================================
 
-;; Minimum render interval in milliseconds.
-;; Coalesces rapid state changes (e.g., streaming) into single frames.
-;; 16ms ≈ 60fps, prevents flicker during fast streaming output.
 (define MIN-RENDER-INTERVAL-MS 16)
 
-;; Track last render timestamp for debouncing.
 (define last-render-ms (box 0.0))
 
-;; Cursor blink interval (milliseconds). Standard terminal blink is ~530ms.
 (define BLINK-INTERVAL-MS 530)
 
-;; Track last blink toggle and current phase (#t = cursor visible).
 (define last-blink-toggle-ms (box 0.0))
 (define blink-phase (box #t))
 
-;; Idle resize fallback polling. Resize events remain immediate, but fallback
-;; polling must be coarse enough to avoid repeated stty subprocess churn.
 (define current-resize-poll-interval-ms (make-parameter 1000.0))
 (define last-resize-poll-ms (box #f))
 
-;; Cursor-only redraw state. A blink tick should not force component cache
-;; invalidation or full VDOM rendering.
 (define cursor-blink-redraw-needed-box (box #f))
 (define last-cursor-col-box (box #f))
 (define last-cursor-row-box (box #f))
@@ -166,11 +150,6 @@
 
 ;; Native cell-buffer operations (no dynamic-require)
 
-;; ============================================================
-;; Terminal/ubuf lifecycle helpers
-;; ============================================================
-
-;; Initialize terminal and ubuf for a context
 (define (tui-ctx-init-terminal! ctx)
   (define term (tui-term-open))
   (set-box! (tui-ctx-term-box ctx) term)
@@ -180,10 +159,7 @@
   (define-values (cols rows) (tui-screen-size))
   (define ubuf (make-cell-buffer cols rows))
   (set-box! (tui-ctx-ubuf-box ctx) ubuf)
-  ;; Configure renderer to use cell-buffer operations
-  ;; Enable mouse tracking for scroll wheel support
   (enable-mouse-tracking)
-  ;; Detect synchronized output support
   (detect-sync-mode-support!)
   ;; Start idle timers from terminal initialization so an idle TUI does not
   ;; immediately blink/poll as if the last tick occurred at process start.
@@ -192,166 +168,22 @@
   (set-box! last-resize-poll-ms (current-inexact-milliseconds))
   (void))
 
-;; Resize ubuf when terminal size changes
 (define (tui-ctx-resize-ubuf! ctx)
   (define-values (cols rows) (tui-screen-size))
   (define ubuf (make-cell-buffer cols rows))
   (set-box! (tui-ctx-ubuf-box ctx) ubuf)
-  ;; Clear previous frame on resize to force full redraw
   (set-box! (tui-ctx-previous-frame-box ctx) #f))
 
-;; Get current ubuf from context
 (define (tui-ctx-ubuf ctx)
   (unbox (tui-ctx-ubuf-box ctx)))
 
-;; Get current term from context
 (define (tui-ctx-term ctx)
   (unbox (tui-ctx-term-box ctx)))
-
-;; ============================================================
-;; Frame rendering (cell-buffer-based)
-;; ============================================================
-
-;; ============================================================
-;; Pure render helpers (extracted for testability, v0.74.5)
-;; ============================================================
-
-;; clip-visible-lines : (listof any/c) natural? -> (listof any/c)
-;; Pure: clips lines to visible height from the bottom.
-(define (clip-visible-lines lines height)
-  (if (> (length lines) height)
-      (take-right lines height)
-      lines))
-
-;; compute-pad-count : (listof any/c) natural? -> natural?
-;; Pure: computes number of padding lines needed.
-(define (compute-pad-count lines height)
-  (max 0 (- height (length lines))))
-
-;; clip-overlay-content : (listof any/c) natural? -> (listof any/c)
-;; Pure: clips overlay content to fit transcript height.
-(define (clip-overlay-content content height)
-  (if (> (length content) height)
-      (take-right content height)
-      content))
 
 (provide (contract-out [clip-visible-lines (-> list? exact-nonnegative-integer? list?)]
                        [compute-pad-count
                         (-> list? exact-nonnegative-integer? exact-nonnegative-integer?)]
                        [clip-overlay-content (-> list? exact-nonnegative-integer? list?)]))
-
-;; Render the complete frame to the terminal using ubuf.
-;; Hides cursor during redraw to prevent flicker, shows after.
-;; Clears needs-redraw flag after drawing.
-(define (render-frame-vdom! ubuf ui-state input-st layout #:component-registry [comp-registry #f])
-  ;; Render a complete frame using the vdom pipeline.
-  (define header-region (layout-header layout))
-  (define transcript-region (layout-transcript layout))
-  (define input-region (layout-input layout))
-  (define cols (layout-region-width header-region))
-  (define rows (+ (layout-region-y input-region) (layout-region-height input-region)))
-  (define header-row (layout-region-y header-region))
-  (define transcript-start-row (layout-region-y transcript-region))
-  (define transcript-height (layout-region-height transcript-region))
-  (define status-y (layout-region-y input-region))
-  (define input-y (min (sub1 rows) (add1 status-y)))
-
-  ;; Get component from registry (if available) or create ephemeral
-  (define (get-comp id make-fn)
-    (if comp-registry
-        (hash-ref comp-registry id (lambda () (make-fn)))
-        (make-fn)))
-
-  ;; 1. Clear the buffer
-  (cell-buffer-clear! ubuf)
-
-  ;; 2. Draw header row via vdom component
-  (when header-row
-    (define header-comp (get-comp 'header-vdom vdom-comp:make-header-vdom-component))
-    (define header-vnodes (component-render header-comp ui-state cols))
-    (render-vdom-section-to-buffer! header-vnodes ubuf cols header-row 1))
-
-  ;; 3. Render transcript → styled-lines → vnodes → cell-buffer
-  ;; NOTE: Direct render-transcript call is required because it returns (values styled-lines ui-state*)
-  ;; where ui-state* carries the updated render cache. The transcript vdom component wrapper
-  ;; (make-transcript-vdom-component) discards this state, so it can only be used in test scenarios.
-  ;; However, the registered transcript component's state-box is used for frame-level metadata.
-  (define trans-comp (and comp-registry (hash-ref comp-registry 'transcript-vdom #f)))
-  (define trans-frame-count
-    (if trans-comp
-        (add1 (component-state-ref trans-comp 'render-count 0))
-        1))
-  (when trans-comp
-    (component-state-update trans-comp 'render-count trans-frame-count)
-    (component-state-update trans-comp 'last-width cols)
-    ;; Shadow scroll-offset from ui-state into component state
-    ;; This proves component-state-ref/set! works for scroll-relevant data
-    (component-state-update trans-comp 'last-scroll-offset (ui-state-scroll-offset ui-state)))
-  (define-values (trans-lines-raw ui-state*) (render-transcript ui-state transcript-height cols))
-  (define visible-lines-raw (clip-visible-lines trans-lines-raw transcript-height))
-  (define pad-count (compute-pad-count trans-lines-raw transcript-height))
-  (define sel (ui-state-selection ui-state))
-  (define sel-anchor (selection-state-anchor sel))
-  (define sel-end (selection-state-end sel))
-  (define trans-lines
-    (if (and sel-anchor sel-end)
-        (apply-selection-highlight visible-lines-raw
-                                   sel-anchor
-                                   sel-end
-                                   transcript-start-row
-                                   pad-count)
-        visible-lines-raw))
-  ;; Convert styled-lines to vnodes and render via section renderer
-  (define trans-pad-vnodes
-    (for/list ([_ (in-range pad-count)])
-      (vdom-comp:styled-line->vnode (plain-line ""))))
-  (define trans-content-vnodes (vdom-comp:styled-lines->vnodes trans-lines))
-  (render-vdom-section-to-buffer! (append trans-pad-vnodes trans-content-vnodes)
-                                  ubuf
-                                  cols
-                                  transcript-start-row)
-
-  ;; 4. Draw widget lines via vdom section renderer
-  (define widget-lines (get-widget-lines-above ui-state))
-  (when (> (length widget-lines) 0)
-    (define widget-vnodes (vdom-comp:styled-lines->vnodes widget-lines))
-    (for ([vn (in-list widget-vnodes)]
-          [i (in-naturals)])
-      (define widget-y (+ transcript-start-row transcript-height i))
-      (when (< widget-y status-y)
-        (render-vdom-to-buffer! vn ubuf cols #:start-row widget-y))))
-
-  ;; 5. Draw status bar via vdom component
-  (define status-comp (get-comp 'status-bar-vdom vdom-comp:make-status-bar-vdom-component))
-  (define status-vnodes (component-render status-comp ui-state cols))
-  (render-vdom-section-to-buffer! status-vnodes ubuf cols status-y 1)
-
-  ;; 6. Draw input line via vdom component
-  (define input-comp (vdom-comp:make-input-vdom-component/istate input-st))
-  (define input-vnodes (component-render input-comp ui-state cols))
-  (render-vdom-section-to-buffer! input-vnodes ubuf cols input-y 1)
-
-  ;; 7. Draw overlay if active (via vdom section renderer)
-  (define overlay (ui-state-active-overlay ui-state))
-  (when overlay
-    (define ov-content (overlay-state-content overlay))
-    (define ov-lines (clip-overlay-content ov-content transcript-height))
-    ;; Convert overlay content to vnodes with background style
-    (define ov-vnodes
-      (for/list ([line (in-list ov-lines)]
-                 [_ (in-naturals)])
-        #:break (>= _ transcript-height)
-        (vdom-comp:styled-line->vnode line)))
-    ;; Clear overlay area with bg=8 then render content
-    (for ([i (in-range transcript-height)])
-      (cell-buffer-putstring! ubuf 0 (+ transcript-start-row i) (make-string cols #\space) #:bg 8))
-    (when (pair? ov-vnodes)
-      (render-vdom-section-to-buffer! ov-vnodes ubuf cols transcript-start-row (length ov-vnodes))))
-
-  ;; 8. Return cursor position
-  (define-values (_visible-text _scroll-offset cursor-display-col)
-    (input-visible-window input-st cols))
-  (values cursor-display-col input-y ui-state* '()))
 
 (define (render-frame! ctx)
   (define state (unbox (tui-ctx-ui-state-box ctx)))
@@ -412,7 +244,6 @@
                       #:italic (cell-italic? cursor-cell)
                       #:blink (cell-blink? cursor-cell)))
 
-  ;; Write back state with updated render cache
   (set-box! (tui-ctx-ui-state-box ctx) state*)
 
   ;; Cell-level incremental diff with synchronized output.
@@ -481,18 +312,9 @@
      (mark-dirty! ctx)
      #f]))
 
-;; Deprecated: Old draw-frame is now an alias for render-frame!
-;; Use render-frame! for new code.
 (define (draw-frame ctx)
   (render-frame! ctx))
 
-;; ============================================================
-;; Message adapter
-;; ============================================================
-
-;; Read the next message from the terminal.
-;; This is the ONLY place that touches terminal input details.
-;; All other code (update, handle-key) works with the abstract message.
 (define (next-message ctx #:timeout [timeout 0.05])
   (define msg (tui-read-key #:timeout timeout))
   (cond
@@ -517,40 +339,6 @@
        [else #f])]
     ;; Unknown message type
     [else #f]))
-
-;; ============================================================
-;; Main TUI loop
-;; ============================================================
-
-;; handle-user-submit! extracted to submit-handler.rkt (W17)
-;; Re-exported via (all-from-out "submit-handler.rkt")
-
-;; v0.45.12 L3: Configurable via parameter so tests can override it.
-;; Default: 30 minutes. When busy? stays true for this long without
-;; a turn.completed event, the watchdog force-clears it.
-(define current-busy-watchdog-ms (make-parameter (* 30 60 1000)))
-
-;; v0.45.12 L4: Extracted watchdog check to a testable pure function.
-;; v0.45.14: Added streaming guard — don't fire if agent is actively streaming.
-;; Returns #f if no action needed, or the updated state if watchdog fires.
-(define (check-busy-watchdog state now-ms watchdog-ms)
-  (if (and (ui-state-busy? state)
-           (not (ui-state-streaming-text state))) ;; agent is actively streaming — don't fire
-      (let ([since (ui-state-busy-since state)])
-        (if (and since (> (- now-ms since) watchdog-ms))
-            (let* ([cleared (set-busy-since
-                             (set-status-message
-                              (clear-streaming (set-pending-tool-name (set-busy state #f) #f))
-                              "watchdog: busy timeout")
-                             #f)]
-                   [watchdog-entry
-                    (make-entry 'system
-                                "[Watchdog: busy state timed out — force-cleared after 30 min]"
-                                now-ms
-                                (hasheq 'watchdog #t))])
-              (add-transcript-entry cleared watchdog-entry))
-            #f))
-      #f))
 
 ;; Apply the pure watchdog state transition to the live TUI context.
 ;; When the watchdog fires, also signal goal cancellation so the UI watchdog
