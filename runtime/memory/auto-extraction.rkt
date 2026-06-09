@@ -310,6 +310,57 @@
                         #:on-event on-event
                         #:on-typed-event on-typed-event))))
 
+;; ---------------------------------------------------------------------------
+;; GAP-3: Tool result auto-extraction (ADR-0023)
+;; ---------------------------------------------------------------------------
+
+;; Extractable tool names — information-dense read-only tools
+(define extractable-tool-names '("read" "grep" "find"))
+
+;; Check if a tool name produces extractable content
+(define (tool-result-extractable? tool-name)
+  (and (string? tool-name) (member tool-name extractable-tool-names) #t))
+
+;; Maximum content length for tool result extraction (skip large outputs)
+(define max-tool-result-extract-length 5000)
+
+;; Non-fatal extraction from tool results after tool execution.
+;; Filters by tool name, content length, and file-dump detection.
+(define (maybe-auto-extract-tool-results! tool-result-msgs
+                                          #:session-id session-id
+                                          #:project-root [project-root #f]
+                                          #:tool-names [tool-names '()]
+                                          #:on-event [on-event void]
+                                          #:on-typed-event [on-typed-event void])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-warning (format "auto-extraction tool-result error: ~a"
+                                                    (exn-message e))))])
+    (define backend (current-memory-backend))
+    (define policy (current-memory-policy))
+    (when (and (current-auto-extraction-enabled) backend)
+      (for ([m (in-list tool-result-msgs)])
+        (define content-str
+          (format "~a"
+                  (if (hash? m)
+                      (hash-ref m 'content "")
+                      "")))
+        (define tool-name
+          (if (hash? m)
+              (hash-ref m 'name #f)
+              #f))
+        (when (and tool-name
+                   (tool-result-extractable? tool-name)
+                   (<= (string-length content-str) max-tool-result-extract-length)
+                   (not (looks-like-file-dump? content-str))
+                   (not (contains-secret? content-str)))
+          (try-auto-extract content-str
+                            #:backend backend
+                            #:policy policy
+                            #:session-id session-id
+                            #:project-root (or project-root ".")
+                            #:on-event on-event
+                            #:on-typed-event on-typed-event))))))
+
 (provide current-auto-extraction-enabled
          current-auto-extraction-min-confidence
          classify-sensitivity
@@ -321,6 +372,8 @@
          extraction-result-item
          extraction-result-reason
          maybe-auto-extract-after-response!
+         maybe-auto-extract-tool-results!
+         tool-result-extractable?
          ;; Low-level checks for testing
          contains-secret?
          looks-like-raw-output?
