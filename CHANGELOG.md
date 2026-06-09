@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.97.1] - 2026-06-08
+
+### Added
+- GAP-3: Session-scoped embedding cache (max 500 entries, LRU eviction)
+- GAP-3: Batch embedding provider for single API call to compute all embeddings
+- GAP-3: cached-embed function to avoid N+1 embedding API calls
+- GAP-4: Active tag extraction from working-set message metadata for conclusion ranking
+- New test files: test-gap3-embedding-cache.rkt (8 tests), test-gap4-active-tags.rkt (3 tests)
+
+### Changed
+- rank-by-relevance now uses batch pre-computation instead of per-item embedding calls
+- state-aware-builder extracts file-name tags and passes to rank-and-budget
+
 ## [0.97.0] - 2026-06-08
 
 ### Fixed
