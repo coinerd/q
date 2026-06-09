@@ -17,7 +17,7 @@
     (test-case "major forward transitions are detected"
       (check-true (major-forward-transition? 'exploration 'planning))
       (check-true (major-forward-transition? 'planning 'implementation))
-      (check-true (major-forward-transition? 'implementation 'review)))
+      (check-true (major-forward-transition? 'implementation 'verification)))
 
     ;; Same state is NOT a forward transition
     (test-case "same state is not a forward transition"
@@ -28,12 +28,12 @@
     (test-case "reverse transitions are not forward transitions"
       (check-false (major-forward-transition? 'planning 'exploration))
       (check-false (major-forward-transition? 'implementation 'planning))
-      (check-false (major-forward-transition? 'review 'implementation)))
+      (check-false (major-forward-transition? 'verification 'implementation)))
 
     ;; Non-transition states return #f
     (test-case "unrelated states are not forward transitions"
       (check-false (major-forward-transition? 'idle 'planning))
-      (check-false (major-forward-transition? 'debugging 'review)))
+      (check-false (major-forward-transition? 'debugging 'verification)))
 
     ;; Parameter defaults to #f
     (test-case "current-mid-session-bridge-enabled defaults to #f"

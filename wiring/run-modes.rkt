@@ -307,6 +307,7 @@
                                          [else ""]))
                                      "")))
          (define llm-lines (string-split text "\n"))
+         (define n-llm-lines (length llm-lines))
          ;; GAP-A: indexed iteration with fallback for truncated LLM output
          ;; GAP-B: unique conclusion IDs via generate-id
          (if (string=? text "")
@@ -314,7 +315,7 @@
              (for/list ([id (in-list uncovered-ids)]
                         [i (in-naturals)])
                (define line-text
-                 (if (< i (length llm-lines))
+                 (if (< i n-llm-lines)
                      (string-trim (list-ref llm-lines i))
                      (format "[auto] uncovered entry ~a" id)))
                (task-conclusion (generate-id)

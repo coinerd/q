@@ -45,7 +45,7 @@
 (define current-mid-session-bridge-enabled (make-parameter #f))
 
 (define major-forward-transitions
-  '((exploration . planning) (planning . implementation) (implementation . review)))
+  '((exploration . planning) (planning . implementation) (implementation . verification)))
 
 (define (major-forward-transition? old-state new-state)
   (and (symbol? old-state)
