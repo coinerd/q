@@ -48,7 +48,9 @@
                   setting-memory-auto-extraction-min-confidence
                   setting-memory-user-scope-enabled?
                   setting-memory-auto-reflection-enabled?
-                  setting-memory-auto-reflection-min-items)
+                  setting-memory-auto-reflection-min-items
+                  setting-reflection-prompt-enabled?
+                  setting-auto-distillation-enabled?)
          (only-in "../runtime/context-assembly/memory-builder.rkt" current-memory-injection-budget)
          (only-in "../runtime/memory/auto-extraction.rkt"
                   current-auto-extraction-enabled
@@ -57,6 +59,9 @@
                   update-memory-policy!
                   current-auto-reflection-enabled
                   current-auto-reflection-min-items)
+         (only-in "../agent/iteration/step-interpreter.rkt" current-reflection-prompt-enabled)
+         (only-in "../runtime/context-assembly/auto-distillation.rkt"
+                  current-auto-distillation-enabled?)
          (only-in "../extensions/gsd/state-machine.rkt" gsm-current)
          (only-in "../runtime/gsd-query.rkt" current-gsd-mode-query))
 
@@ -244,6 +249,12 @@
   (update-memory-policy! #:user-scope-enabled? (setting-memory-user-scope-enabled? settings))
   (current-auto-reflection-enabled (setting-memory-auto-reflection-enabled? settings))
   (current-auto-reflection-min-items (setting-memory-auto-reflection-min-items settings))
+
+  ;; v0.96.14: Wire reflection-prompt-enabled and auto-distillation from config
+  (current-reflection-prompt-enabled (setting-reflection-prompt-enabled? settings))
+  (let ([ad (setting-auto-distillation-enabled? settings)])
+    (unless (eq? ad 'unset)
+      (current-auto-distillation-enabled? ad)))
 
   (hash->session-config final-hash-with-auto-extract))
 

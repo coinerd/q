@@ -88,7 +88,9 @@
           [setting-memory-user-scope-enabled? (-> q-settings? boolean?)]
           [setting-memory-auto-reflection-enabled? (-> q-settings? boolean?)]
           [setting-memory-auto-reflection-min-items
-           (-> q-settings? (and/c exact-positive-integer? (>=/c 2)))])
+           (-> q-settings? (and/c exact-positive-integer? (>=/c 2)))]
+          [setting-reflection-prompt-enabled? (-> q-settings? boolean?)]
+          [setting-auto-distillation-enabled? (-> q-settings? (or/c boolean? 'unset))])
 
          ;; Sandbox settings (re-exported, not locally defined)
          sandbox-enabled?
@@ -511,6 +513,27 @@
      (define n (string->number raw))
      (if (and (exact-positive-integer? n) (>= n 2)) n 5)]
     [else 5]))
+
+;; v0.96.14: Reflection prompt enabled from settings
+;; Reads (reflection-prompt-enabled) from config.
+;; Default: #f (disabled).
+(define (setting-reflection-prompt-enabled? settings)
+  (define raw (setting-ref* settings '(reflection-prompt-enabled) #f))
+  (cond
+    [(boolean? raw) raw]
+    [(string? raw) (and (member (string-downcase raw) '("true" "1" "yes")) #t)]
+    [else #f]))
+
+;; v0.96.14: Auto-distillation enabled from settings (overrides profile default)
+;; Reads (auto-distillation-enabled) from config.
+;; When not set, falls back to the context-assembly profile.
+(define (setting-auto-distillation-enabled? settings)
+  (define raw (setting-ref* settings '(auto-distillation-enabled) 'unset))
+  (cond
+    [(eq? raw 'unset) 'unset] ; caller uses profile default
+    [(boolean? raw) raw]
+    [(string? raw) (and (member (string-downcase raw) '("true" "1" "yes")) #t)]
+    [else 'unset]))
 
 ;; ============================================================
 ;; Credential policy (v0.70.1)
