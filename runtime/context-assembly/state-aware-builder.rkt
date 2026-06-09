@@ -10,7 +10,13 @@
          racket/runtime-path
          racket/string
          (only-in "../../util/content/content-parts.rkt" make-text-part)
-         (only-in "../../util/message/message.rkt" message message-id message-content make-message)
+         (only-in "../../util/message/message.rkt"
+                  message
+                  message?
+                  message-id
+                  message-content
+                  message-role
+                  make-message)
          (only-in "task-conclusion.rkt"
                   task-conclusion?
                   task-conclusion-text
@@ -52,9 +58,33 @@
          current-graph-conclusion-selection?
          current-conclusion-token-budget
          current-ws-evolution-enabled?
-         check-rollback-triggers-with-actions)
+         check-rollback-triggers-with-actions
+         extract-recent-text)
 
 (define-runtime-path memory-builder-path "memory-builder.rkt")
+
+;; v0.96.13 WP-1: Extract recent assistant message text for memory query context.
+;; Takes a list of messages and count N, returns concatenated text of the last N
+;; assistant/user messages truncated to 200 chars. Returns #f if no text found.
+(define (extract-recent-text messages n)
+  (define assistant-msgs
+    (for/list ([m (in-list messages)]
+               #:when (and (message? m) (memq (message-role m) '(assistant user))))
+      (define content-parts (message-content m))
+      (define text
+        (for/fold ([acc ""])
+                  ([part (in-list (if (list? content-parts)
+                                      content-parts
+                                      '()))])
+          (if (text-part? part)
+              (string-append acc (if (string=? acc "") "" " ") (text-part-text part))
+              acc)))
+      text))
+  (define recent (take (reverse assistant-msgs) (min n (length assistant-msgs))))
+  (define joined (string-join (filter (lambda (s) (> (string-length s) 0)) recent) ". "))
+  (if (> (string-length joined) 0)
+      (substring joined 0 (min (string-length joined) 200))
+      #f))
 
 ;; State-specific guidance strings (action-oriented instructions)
 (define state-guidance-table
@@ -197,6 +227,20 @@
                              (hasheq)))))]
       [else '()]))
 
+  ;; v0.96.13 WP-1: Construct memory query text from task state + recent messages
+  (define memory-query-text
+    (and task-state
+         (let* ([state-str (if (symbol? task-state)
+                               (symbol->string task-state)
+                               (if (fsm-state? task-state)
+                                   (symbol->string (fsm-state-name task-state))
+                                   #f))]
+                [recent-text (extract-recent-text messages 3)])
+           (and state-str
+                (if recent-text
+                    (string-append "Task: " state-str ". " recent-text)
+                    (format "Task: ~a" state-str))))))
+
   ;; Observe-only memory integration. This deliberately emits telemetry only;
   ;; prompt injection remains owned by memory-builder and explicit config gates.
   (define memory-section-text #f)
@@ -204,7 +248,8 @@
     (define observe-memory-for-context
       (dynamic-require memory-builder-path 'observe-memory-for-context))
     (define memory-telemetry->jsexpr (dynamic-require memory-builder-path 'memory-telemetry->jsexpr))
-    (define observed (observe-memory-for-context session-config #:scope #f))
+    (define observed
+      (observe-memory-for-context session-config #:scope #f #:query-text memory-query-text))
     (when trace-cb
       (trace-cb 'memory-observe (memory-telemetry->jsexpr (cdr observed))))
     ;; v0.95.15 W3: Inject memory context when injection budget is configured
@@ -213,7 +258,8 @@
     (when (current-memory-injection-budget)
       (define inject-memory-for-context
         (dynamic-require memory-builder-path 'inject-memory-for-context))
-      (define injected (inject-memory-for-context session-config #:scope #f))
+      (define injected
+        (inject-memory-for-context session-config #:scope #f #:query-text memory-query-text))
       (define section (car injected))
       (when (and section (positive? (string-length section)))
         (set! memory-section-text section)
