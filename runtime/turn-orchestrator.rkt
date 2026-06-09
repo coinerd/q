@@ -52,6 +52,7 @@
                   config-model-name
                   config-task-state-aware?
                   config-context-assembly-profile
+                  config-max-context-tokens
                   apply-context-assembly-profile!)
          ;; tiered-context? needed for provide contract
          (only-in "context/context-assembly.rkt" tiered-context?)
@@ -120,7 +121,8 @@
   ;; Phase 2: Apply profile and run pure assembly
   (define profile (config-context-assembly-profile config-raw))
   (unless (eq? profile 'off)
-    (apply-context-assembly-profile! profile))
+    ;; v0.97.4 GAP-E: Dynamic conclusion budget from actual max-context-tokens
+    (apply-context-assembly-profile! profile (config-max-context-tokens config-raw)))
   (define-values (ctx-assembled assembly-hook-result tc-struct)
     (assemble-context/pure ctx-to-use
                            config-raw

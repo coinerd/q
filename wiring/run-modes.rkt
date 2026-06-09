@@ -214,7 +214,9 @@
   (define cli-profile (cli-config-context-profile cfg))
   (define profile (or cli-profile settings-profile))
   (define final-hash-with-profile (hash-set final-hash 'context-assembly-profile profile))
-  (apply-context-assembly-profile! profile)
+  ;; v0.97.4 GAP-E: Dynamic conclusion budget from actual max-context-tokens
+  (define max-ctx-tokens (hash-ref base-config 'max-context-tokens 128000))
+  (apply-context-assembly-profile! profile max-ctx-tokens)
 
   ;; v0.95.15 W4: Wire memory injection budget from settings
   (define settings-budget (setting-memory-injection-budget settings))
