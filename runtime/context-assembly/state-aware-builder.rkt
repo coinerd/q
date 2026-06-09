@@ -48,7 +48,12 @@
                   current-task-state-aware-assembly?
                   current-graph-conclusion-selection?
                   current-conclusion-token-budget
-                  current-ws-evolution-enabled?))
+                  current-ws-evolution-enabled?)
+         (only-in "memory-builder.rkt"
+                  observe-memory-for-context
+                  memory-telemetry->jsexpr
+                  current-memory-injection-budget
+                  inject-memory-for-context))
 
 (provide current-task-state-aware-assembly?
          build-tiered-context/state-aware
@@ -65,7 +70,6 @@
 ;; v0.96.13 W3: Latest reflection event (set by step-interpreter, checked in preamble)
 (define current-reflection-event (make-parameter #f))
 
-(define-runtime-path memory-builder-path "memory-builder.rkt")
 
 ;; v0.96.13 WP-1: Extract recent assistant message text for memory query context.
 ;; Takes a list of messages and count N, returns concatenated text of the last N
@@ -249,19 +253,12 @@
   ;; prompt injection remains owned by memory-builder and explicit config gates.
   (define memory-section-text #f)
   (when session-config
-    (define observe-memory-for-context
-      (dynamic-require memory-builder-path 'observe-memory-for-context))
-    (define memory-telemetry->jsexpr (dynamic-require memory-builder-path 'memory-telemetry->jsexpr))
     (define observed
       (observe-memory-for-context session-config #:scope #f #:query-text memory-query-text))
     (when trace-cb
       (trace-cb 'memory-observe (memory-telemetry->jsexpr (cdr observed))))
     ;; v0.95.15 W3: Inject memory context when injection budget is configured
-    (define current-memory-injection-budget
-      (dynamic-require memory-builder-path 'current-memory-injection-budget))
     (when (current-memory-injection-budget)
-      (define inject-memory-for-context
-        (dynamic-require memory-builder-path 'inject-memory-for-context))
       (define injected
         (inject-memory-for-context session-config #:scope #f #:query-text memory-query-text))
       (define section (car injected))
