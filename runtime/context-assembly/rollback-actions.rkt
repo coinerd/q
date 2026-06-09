@@ -76,6 +76,15 @@
 ;; v0.96.14 F4: Named constant for escalation threshold (was magic number 2).
 (define escalation-threshold 2)
 
+;; Centralized counter mutation: all increments go through this function.
+;; step-interpreter calls it for exploration-loop detection.
+;; warnings->actions calls it for repeat-pattern escalation.
+;; They are non-overlapping: exploration-loop fires from detect-exploration-loop
+;; on consecutive identical tool names; repeat fires from check-rollback-triggers
+;; on high repeat-tool-count. Both increment toward the same escalation threshold.
+(define (increment-loop-warning-count! [amount 1])
+  (current-loop-warning-count (+ (current-loop-warning-count) amount)))
+
 ;; v0.77.10 M2: Execute force-distill action.
 ;; Calls the injectable callback if available, then logs.
 (define (execute-force-distill! action)
@@ -159,7 +168,7 @@
              (current-loop-warning-count 0) ; reset after escalation
              (make-force-distill-action w (hasheq 'trigger 'repeat-escalation)))
            (begin
-             (current-loop-warning-count (add1 (current-loop-warning-count)))
+             (increment-loop-warning-count!)
              (make-warn-action w)))]
       [else (make-warn-action w)])))
 
@@ -170,6 +179,7 @@
          current-rollback-action-log
          current-loop-warning-count
          escalation-threshold
+         increment-loop-warning-count!
          current-force-distill-fn
          current-expand-context-fn
          current-revert-state-fn
