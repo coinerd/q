@@ -55,8 +55,7 @@
          (only-in "../runtime/context-assembly/auto-distillation.rkt"
                   current-auto-distillation-enabled?
                   current-llm-distill-fn)
-         (only-in "../runtime/context-assembly/task-conclusion.rkt"
-                  task-conclusion)
+         (only-in "../runtime/context-assembly/task-conclusion.rkt" task-conclusion)
          (only-in "../runtime/memory/reflection.rkt" current-reflection-llm-fn)
          (only-in "../extensions/gsd/state-machine.rkt" gsm-current)
          (only-in "../runtime/gsd-query.rkt" current-gsd-mode-query))
@@ -259,16 +258,29 @@
   (when (and prov effective-model-name)
     ;; GAP-1: LLM distill factory - generates conclusions for uncovered WS entries
     (current-llm-distill-fn
-     (lambda (uncovered-ids current-state)
+     (lambda (uncovered-ids current-state [content-summaries (hash)])
        (with-handlers ([exn:fail? (lambda (e) '())])
+         ;; GAP-6: Include content summaries in prompt for richer distillation
+         (define content-lines
+           (for/list ([id (in-list uncovered-ids)])
+             (define summary (hash-ref content-summaries id ""))
+             (if (string=? summary "")
+                 (format "  ~a: (no content)" id)
+                 (format "  ~a: ~a"
+                         id
+                         (if (> (string-length summary) 300)
+                             (string-append (substring summary 0 300) "...")
+                             summary)))))
          (define prompt-text
            (format
-            "For each working set entry, generate a brief conclusion about what was learned.\nState: ~a\nEntries: ~a\nOutput one conclusion per line."
+            "For each working set entry, generate a brief conclusion about what was learned.\nState: ~a\nEntries:\n~a\nOutput one conclusion per line."
             (or current-state 'unknown)
-            (string-join uncovered-ids ", ")))
-         (define resp (provider-send prov (make-model-request (list (hasheq 'role "user" 'content prompt-text))
-                                                      #f
-                                                      (hasheq 'model effective-model-name 'max_tokens 1000))))
+            (string-join content-lines "\n")))
+         (define resp
+           (provider-send prov
+                          (make-model-request (list (hasheq 'role "user" 'content prompt-text))
+                                              #f
+                                              (hasheq 'model effective-model-name 'max_tokens 1000))))
          (define resp-parts (model-response-content resp))
          (define text
            (string-trim (string-join (for/list ([p (in-list resp-parts)])
@@ -291,29 +303,31 @@
                                 (current-inexact-milliseconds)
                                 '()
                                 '())))))
-    ;; GAP-7: Reflection LLM factory - synthesizes merged reflection text
-    (current-reflection-llm-fn
-     (lambda (contents)
-       (with-handlers ([exn:fail? (lambda (e) (string-join (sort contents string<?) "; "))])
-         (define prompt-text
-           (format
-            "Synthesize these related memory items into one concise observation:\n~a\nOutput one synthesized observation."
-            (string-join contents "\n- ")))
-         (define resp (provider-send prov (make-model-request (list (hasheq 'role "user" 'content prompt-text))
-                                                      #f
-                                                      (hasheq 'model effective-model-name 'max_tokens 500))))
-         (define resp-parts (model-response-content resp))
-         (define text
-           (string-trim (string-join (for/list ([p (in-list resp-parts)])
-                                       (cond
-                                         [(hash? p) (hash-ref p 'text "")]
-                                         [(string? p) p]
-                                         [else ""]))
-                                     "")))
-         (if (string=? text "")
-             (string-join (sort contents string<?) "; ")
-             text)))))
-  (hash->session-config final-hash-with-auto-extract)))
+     ;; GAP-7: Reflection LLM factory - synthesizes merged reflection text
+     (current-reflection-llm-fn
+      (lambda (contents)
+        (with-handlers ([exn:fail? (lambda (e) (string-join (sort contents string<?) "; "))])
+          (define prompt-text
+            (format
+             "Synthesize these related memory items into one concise observation:\n~a\nOutput one synthesized observation."
+             (string-join contents "\n- ")))
+          (define resp
+            (provider-send prov
+                           (make-model-request (list (hasheq 'role "user" 'content prompt-text))
+                                               #f
+                                               (hasheq 'model effective-model-name 'max_tokens 500))))
+          (define resp-parts (model-response-content resp))
+          (define text
+            (string-trim (string-join (for/list ([p (in-list resp-parts)])
+                                        (cond
+                                          [(hash? p) (hash-ref p 'text "")]
+                                          [(string? p) p]
+                                          [else ""]))
+                                      "")))
+          (if (string=? text "")
+              (string-join (sort contents string<?) "; ")
+              text)))))
+    (hash->session-config final-hash-with-auto-extract)))
 
 ;; ============================================================
 ;; mode-for-config
