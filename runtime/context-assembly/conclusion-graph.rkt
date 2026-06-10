@@ -24,13 +24,14 @@
 ;; ── Constructor ──
 
 ;; GAP-J v0.97.12: Warn on duplicate IDs (for/hash silently overwrites).
+;; H4 v0.97.13: Converted from make-hash/hash-set!/hash-update! to immutable for/fold.
 (define (build-conclusion-graph conclusions)
-  (define seen-ids (make-hash))
-  (for ([c (in-list conclusions)])
+  ;; Check for duplicates and warn (pure scan)
+  (for/fold ([seen (hash)]) ([c (in-list conclusions)])
     (define cid (task-conclusion-id c))
-    (when (hash-has-key? seen-ids cid)
+    (when (hash-has-key? seen cid)
       (log-warning "conclusion-graph: duplicate conclusion ID overwritten: ~a" cid))
-    (hash-set! seen-ids cid #t))
+    (hash-set seen cid #t))
   (define nodes
     (for/hash ([c (in-list conclusions)])
       (values (task-conclusion-id c) c)))
@@ -38,14 +39,15 @@
     (for/hash ([c (in-list conclusions)])
       (values (task-conclusion-id c)
               (filter (λ (dep-id) (hash-has-key? nodes dep-id)) (task-conclusion-dependencies c)))))
-  (define reverse
-    (let ([rev (make-hash)])
-      (for ([(id deps) (in-hash edges)])
-        (for ([dep (in-list deps)])
-          (hash-update! rev dep (λ (lst) (cons id lst)) '())))
-      (for/hash ([(k v) (in-hash rev)])
-        (values k (reverse-list v)))))
-  (conclusion-graph nodes edges reverse))
+  ;; Build reverse edge table immutably
+  (define reverse-raw
+    (for/fold ([rev (hash)]) ([(id deps) (in-hash edges)])
+      (for/fold ([r rev]) ([dep (in-list deps)])
+        (hash-update r dep (λ (lst) (cons id lst)) '()))))
+  (define reverse-clean
+    (for/hash ([(k v) (in-hash reverse-raw)])
+      (values k (reverse-list v))))
+  (conclusion-graph nodes edges reverse-clean))
 
 (define (reverse-list lst)
   (for/fold ([acc '()]) ([x (in-list lst)])
@@ -61,68 +63,83 @@
 
 ;; ── Cycle Detection ──
 
+;; H4 v0.97.13: Converted from make-hash/hash-set!/set! to immutable for/fold.
 ;; Returns list of cyclic node IDs (nodes involved in any cycle).
 (define (graph-detect-cycles g)
   (define edges (conclusion-graph-edges g))
   (define all-ids (hash-keys edges))
-  (define visited (make-hash))
-  (define rec-stack (make-hash))
-  (define cycles '())
-  (define (dfs id)
-    (hash-set! visited id #t)
-    (hash-set! rec-stack id #t)
-    (for ([dep (in-list (hash-ref edges id '()))])
-      (cond
-        [(hash-ref rec-stack dep #f) (set! cycles (cons id cycles))]
-        [(not (hash-ref visited dep #f)) (dfs dep)]))
-    (hash-set! rec-stack id #f))
-  (for ([id (in-list all-ids)])
-    (unless (hash-ref visited id #f)
-      (dfs id)))
-  (remove-duplicates cycles))
+  (define (dfs id visited rec-stack cycles)
+    (let* ([visited (hash-set visited id #t)]
+           [rec-stack (hash-set rec-stack id #t)])
+      (for/fold ([v visited]
+                 [rs rec-stack]
+                 [cy cycles])
+                ([dep (in-list (hash-ref edges id '()))])
+        (cond
+          [(hash-ref rs dep #f) (values v rs (cons id cy))]
+          [(not (hash-ref v dep #f))
+           (define-values (v2 rs2 cy2) (dfs dep v rs cy))
+           (values v2 rs2 cy2)]
+          [else (values v rs cy)]))))
+  (define-values (final-visited _final-stack final-cycles)
+    (for/fold ([visited (hash)]
+               [rec-stack (hash)]
+               [cycles '()])
+              ([id (in-list all-ids)])
+      (if (hash-ref visited id #f)
+          (values visited rec-stack cycles)
+          (let-values ([(v rs cy) (dfs id visited rec-stack cycles)])
+            (values v rs cy)))))
+  (remove-duplicates final-cycles))
 
 ;; ── Topological Sort ──
 
+;; H4 v0.97.13: Converted from make-hash/hash-set!/set! to immutable for/fold.
 ;; Returns list of IDs in dependency order (dependencies first).
 ;; Undefined for cyclic graphs — call graph-detect-cycles first.
 (define (graph-topological-sort g)
   (define edges (conclusion-graph-edges g))
   (define all-ids (hash-keys edges))
-  (define visited (make-hash))
-  (define result '())
-  (define (visit id)
-    (unless (hash-ref visited id #f)
-      (hash-set! visited id #t)
-      (for ([dep (in-list (hash-ref edges id '()))])
-        (visit dep))
-      (set! result (cons id result))))
-  (for ([id (in-list all-ids)])
-    (visit id))
-  (reverse result))
+  (define (visit id visited result)
+    (if (hash-ref visited id #f)
+        (values visited result)
+        (let ([visited+ (hash-set visited id #t)])
+          (define-values (v2 r2)
+            (for/fold ([v visited+]
+                       [r result])
+                      ([dep (in-list (hash-ref edges id '()))])
+              (visit dep v r)))
+          (values v2 (cons id r2)))))
+  (define-values (_final-visited final-result)
+    (for/fold ([visited (hash)]
+               [result '()])
+              ([id (in-list all-ids)])
+      (visit id visited result)))
+  (reverse final-result))
 
 ;; ── Seed Selection ──
 
+;; H4 v0.97.13: Converted from make-hash/hash-set! to immutable for/fold.
 ;; Given seed IDs, return all reachable IDs (transitive closure via dependencies).
 ;; Seeds not in the graph are silently ignored.
 (define (graph-select-by-seeds g seed-ids)
   (define nodes (conclusion-graph-nodes g))
   (define edges (conclusion-graph-edges g))
-  (define visited (make-hash))
-  (define (bfs queue)
-    (cond
-      [(null? queue) '()]
-      [else
-       (define id (car queue))
-       (cond
-         [(hash-ref visited id #f) (bfs (cdr queue))]
-         [else
-          (hash-set! visited id #t)
-          (define deps (hash-ref edges id '()))
-          (bfs (append (cdr queue) deps))])]))
   ;; Only start from seeds that exist in graph
   (define valid-seeds (filter (λ (s) (hash-has-key? nodes s)) seed-ids))
-  (bfs valid-seeds)
-  (hash-keys visited))
+  (define final-visited
+    (let loop ([queue valid-seeds]
+               [visited (hash)])
+      (cond
+        [(null? queue) visited]
+        [else
+         (define id (car queue))
+         (if (hash-ref visited id #f)
+             (loop (cdr queue) visited)
+             (let ([visited (hash-set visited id #t)]
+                   [deps (hash-ref edges id '())])
+               (loop (append (cdr queue) deps) visited)))])))
+  (hash-keys final-visited))
 
 ;; ── Degraded Fallback ──
 
