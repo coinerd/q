@@ -280,8 +280,23 @@
                                                                 (hash-ref per-tool-start-ms
                                                                           (tool-call-id tc)
                                                                           batch-start-ms))))
-                        #:result-summary (if (tool-result-is-error? tr) 'error 'completed))))
+                        #:result-summary (if (tool-result-is-error? tr) 'error 'completed)
+                        #:result-error (and (tool-result-is-error? tr) (tool-result-error-text tr)))))
   sched-result)
+
+;; Helper: extract error text from tool-result content for event propagation.
+;; Bug fix (v0.97.x): ALL tool failures showed "tool failed" because
+;; tool-execution-end-event had no error text field.
+(define (tool-result-error-text tr)
+  (define content (tool-result-content tr))
+  (cond
+    [(string? content) content]
+    [(pair? content)
+     (define first-part (car content))
+     (if (hash? first-part)
+         (or (hash-ref first-part 'text #f) (format "~a" content))
+         (format "~a" content))]
+    [else (format "~a" content)]))
 
 ;; Phase 3: Assembly (pure result construction)
 (define (assemble-tool-results-phase tool-calls

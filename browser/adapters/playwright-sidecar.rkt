@@ -264,7 +264,8 @@
   ;; Adapter callback implementations
   (define (adapter-open session-id target)
     (define st (ensure-state))
-    (define data (send-command! st "navigate" (hasheq 'url target 'sessionId session-id)))
+    (define data
+      (send-command! st "navigate" (hasheq 'url target 'sessionId session-id) #:timeout-ms 30000))
     (data->obs data))
 
   (define (adapter-close session-id)
@@ -274,7 +275,8 @@
 
   (define (adapter-navigate session-id url)
     (define st (ensure-state))
-    (define data (send-command! st "navigate" (hasheq 'url url 'sessionId session-id)))
+    (define data
+      (send-command! st "navigate" (hasheq 'url url 'sessionId session-id) #:timeout-ms 30000))
     (data->obs data))
 
   (define (adapter-observe session-id selector)
