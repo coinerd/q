@@ -158,7 +158,10 @@
       (define selected (fallback-select-conclusions (list c-new-irrelevant c-old-relevant) 2))
       ;; With multi-factor scoring, the decision with relevance tags should rank higher
       (check-true (>= (length selected) 1))
-      ;; First element should be the higher-scoring one (not necessarily newest)
+      ;; MF2 fix: Assert ORDERING — old-rel (decision + tags) must come before new-irr (fact, no tags)
+      (check-equal? (task-conclusion-id (car selected))
+                    "old-rel"
+                    "Multi-factor scoring: higher-relevance conclusion must rank first")
       (check-not-false (member "old-rel" (map task-conclusion-id selected)))
       (check-not-false (member "new-irr" (map task-conclusion-id selected))))
 

@@ -539,8 +539,8 @@
                              #:after-messages after-messages
                              #:conclusion-coverage conclusion-coverage
                              #:repeat-tool-count repeat-tool-count))
-  (define warning-strs (map (lambda (w) (cadr w)) warnings))
-  (define actions (warnings->actions warning-strs))
+  ;; Pass full (symbol . string) pairs to warnings->actions for symbol-based matching.
+  (define actions (warnings->actions warnings))
   (define recommended (select-highest-priority-action actions))
   (values warnings recommended))
 

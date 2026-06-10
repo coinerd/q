@@ -29,7 +29,7 @@
                   infer-task-state-from-tools
                   current-state-inference-threshold))
 (require (only-in "../../util/fsm/fsm.rkt" fsm-state-name))
-(require (only-in "../context-assembly/state-aware-builder.rkt" current-ws-evolution-enabled?))
+;; LF1 fix: removed dead import current-ws-evolution-enabled? — never used in this file.
 ;; v0.77.10 M1: evolve-working-set-for-state import removed — subscriber now emits
 ;; context.ws-evolve-requested event for turn-orchestrator to handle.
 ;; (require (only-in "../context-assembly/ws-evolution.rkt" evolve-working-set-for-state))
@@ -273,7 +273,8 @@
     ;; The event-driven approach was abandoned because the subscriber in session-events
     ;; doesn't have access to the working-set (which lives in session config scope).
 
-    ;; GAP-E v0.97.11: session.ended — persist all session conclusions on shutdown.
+    ;; GAP-E v0.97.11: session.closed — persist all session conclusions on shutdown.
+    ;; (Event name is "session.closed" from agent-session.rkt, not "session.ended".)
     ;; Belt-and-suspenders with close-session! in agent-session.rkt which also
     ;; calls persist-high-value-conclusions!. This handler catches cases where
     ;; close-session! is bypassed or the session ends via event bus.

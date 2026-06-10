@@ -10,7 +10,8 @@
 (require racket/contract
          racket/list
          "task-conclusion.rkt"
-         (only-in "conclusion-ranker.rkt" rank-and-budget))
+         (only-in "conclusion-ranker.rkt" rank-and-budget)
+         (only-in "config.rkt" current-conclusion-token-budget))
 
 ;; ── Struct ──
 
@@ -138,7 +139,7 @@
           (filter (λ (c) (hash-has-key? state-set (task-conclusion-fsm-state-origin c)))
                   conclusions))))
   ;; Delegate to rank-and-budget for consistent multi-factor scoring
-  (define budget (* max-count 200))
+  (define budget (or (current-conclusion-token-budget) (* max-count 200)))
   (define ranked
     (rank-and-budget filtered
                      #:current-state (and (pair? states) (car states))

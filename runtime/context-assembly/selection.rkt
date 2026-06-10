@@ -39,7 +39,7 @@
                   summary-cache?
                   context-summary-from-id
                   context-summary-to-id)
-         (only-in "../../util/error/errors.rkt" warn-deprecated!)
+         ;; LF4 fix: removed dead import warn-deprecated! (GAP-K removed its only usage)
          (only-in "../../llm/provider.rkt" provider?))
 
 ;; R10: Call-options struct bundling keyword args for build-assembled-context

@@ -175,6 +175,15 @@
       [(eq? sym 'exploration-loop)
        (make-force-distill-action msg (hasheq 'trigger 'exploration-loop))]
       [(eq? sym 'stuck-detected) (make-expand-context-action msg (hasheq 'trigger 'stuck))]
+      [(eq? sym 'task-amnesia-detected)
+       ;; Repeated tool calls indicate amnesia — escalate to distill if threshold reached
+       (if (>= (current-loop-warning-count) escalation-threshold)
+           (begin
+             (current-loop-warning-count 0)
+             (make-force-distill-action msg (hasheq 'trigger 'task-amnesia-escalation)))
+           (begin
+             (increment-loop-warning-count!)
+             (make-warn-action msg)))]
       [(eq? sym 'repeat-tool)
        (if (>= (current-loop-warning-count) escalation-threshold)
            (begin
