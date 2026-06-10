@@ -106,11 +106,17 @@
 
     ;; ── Other transitions: no change ──
 
-    (test-case "planning→verification keeps working-set"
+    ;; GAP-B v0.97.8: planning→verification now keeps spec/test/validation files
+    (test-case "planning→verification keeps spec/test files"
       (define ws (make-working-set))
-      (populate-ws ws '("plan.rkt"))
+      (populate-ws ws '("plan.rkt" "tests/test-foo.rkt" "spec.rkt" "src/main.rkt" "validation.rkt"))
       (evolve-working-set-for-state ws task-planning task-verification conclusions)
-      (check-equal? (working-set-entry-count ws) 1 "ws unchanged for planning→verification"))
+      (define remaining (map ws-entry-path (working-set-entries ws)))
+      (check-not-false (member "tests/test-foo.rkt" remaining) "test file kept")
+      (check-not-false (member "spec.rkt" remaining) "spec file kept")
+      (check-not-false (member "validation.rkt" remaining) "validation file kept")
+      (check-false (member "plan.rkt" remaining) "plan.rkt removed")
+      (check-false (member "src/main.rkt" remaining) "main.rkt removed"))
 
     (test-case "idle→exploration keeps working-set"
       (define ws (make-working-set))
@@ -150,13 +156,79 @@
       (check-equal? (length (evolution-result-kept-entries result)) 2)
       (check-equal? (length (evolution-result-archived-entries result)) 1))
 
-    (test-case "evolution-result no-change transition has empty archives"
+    (test-case "evolution-result no-change transition returns #f"
       (define ws (make-working-set))
       (populate-ws ws '("plan.rkt"))
       (define result
+        (evolve-working-set-for-state/result ws task-exploration task-exploration conclusions))
+      (check-false result "same-state transition returns #f"))
+
+    ;; ============================================================
+    ;; v0.97.8 W1: GAP-B WS transition regression tests
+    ;; ============================================================
+
+    (test-case "GAP-B: planning→implementation clears working-set"
+      (define ws (make-working-set))
+      (populate-ws ws '("plan.rkt" "notes.md" "spec.rkt"))
+      (define result (evolve-working-set-for-state ws task-planning task-implementation conclusions))
+      (check-equal? (working-set-entry-count ws) 0 "ws should be cleared")
+      (check-equal? (length result) 2 "conclusions returned"))
+
+    (test-case "GAP-B: planning→debugging keeps error/test/spec files"
+      (define ws (make-working-set))
+      (populate-ws ws '("plan.rkt" "tests/test-bug.rkt" "src/error.rkt" "spec.rkt" "docs.md"))
+      (evolve-working-set-for-state ws task-planning task-debugging conclusions)
+      (define remaining (map ws-entry-path (working-set-entries ws)))
+      (check-not-false (member "tests/test-bug.rkt" remaining) "test file kept")
+      (check-not-false (member "src/error.rkt" remaining) "error file kept")
+      (check-not-false (member "spec.rkt" remaining) "spec file kept")
+      (check-false (member "plan.rkt" remaining) "plan.rkt removed")
+      (check-false (member "docs.md" remaining) "docs.md removed"))
+
+    (test-case "GAP-B: verification→implementation clears working-set"
+      (define ws (make-working-set))
+      (populate-ws ws '("tests/test-a.rkt" "spec.rkt" "validation.rkt"))
+      (define result
+        (evolve-working-set-for-state ws task-verification task-implementation conclusions))
+      (check-equal? (working-set-entry-count ws) 0 "ws should be cleared")
+      (check-equal? (length result) 2 "conclusions returned"))
+
+    (test-case "GAP-B: planning→implementation returns all valid conclusions"
+      (define ws (make-working-set))
+      (populate-ws ws '("plan.rkt"))
+      (define many-conclusions
+        (for/list ([i (in-range 5)])
+          (task-conclusion (format "bc~a" i)
+                           (format "finding ~a" i)
+                           'fact
+                           'planning
+                           '()
+                           (current-seconds)
+                           '()
+                           '())))
+      (define result
+        (evolve-working-set-for-state ws task-planning task-implementation many-conclusions))
+      (check-equal? (length result) 5 "all conclusions returned")
+      (check-equal? (working-set-entry-count ws) 0))
+
+    (test-case "GAP-B: planning→verification result struct tracks archives"
+      (define ws (make-working-set))
+      (populate-ws ws '("plan.rkt" "tests/test-x.rkt" "spec.rkt" "src/main.rkt"))
+      (define result
         (evolve-working-set-for-state/result ws task-planning task-verification conclusions))
       (check-true (evolution-result? result))
-      (check-equal? (length (evolution-result-kept-entries result)) 1)
-      (check-equal? (length (evolution-result-archived-entries result)) 0))))
+      (check-equal? (length (evolution-result-kept-entries result)) 2 "test+spec kept")
+      (check-equal? (length (evolution-result-archived-entries result)) 2 "plan+main archived")
+      (check-equal? (length (evolution-result-evicted-conclusions result)) 2))
+
+    (test-case "GAP-B: verification→implementation result struct tracks archives"
+      (define ws (make-working-set))
+      (populate-ws ws '("tests/test-a.rkt" "spec.rkt"))
+      (define result
+        (evolve-working-set-for-state/result ws task-verification task-implementation conclusions))
+      (check-true (evolution-result? result))
+      (check-equal? (length (evolution-result-kept-entries result)) 0 "all cleared")
+      (check-equal? (length (evolution-result-archived-entries result)) 2 "both archived")
+      (check-equal? (length (evolution-result-evicted-conclusions result)) 2))))
 
 (run-tests suite)
