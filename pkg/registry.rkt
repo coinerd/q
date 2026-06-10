@@ -22,18 +22,31 @@
 (require (only-in "../util/error/error-helpers.rkt" with-safe-fallback))
 
 ;; Functions (contracted)
-(provide (contract-out [load-package-index (->* () (any/c) any/c)]
-                       [fetch-remote-index (->* () (any/c) any/c)]
-                       [index-packages (-> any/c any/c)]
-                       [search-packages (-> any/c string? any/c)]
-                       [get-package-info (-> any/c string? any/c)]
-                       [resolve-version (->* (any/c string?) (any/c) any/c)]
-                       [install-package! (-> any/c any/c)]
-                       [verify-package (-> any/c any/c)]
-                       [list-installed-packages (-> any/c)]
-                       [check-updates (-> any/c any/c)]
-                       [validate-index-entry (-> any/c any/c)]
-                       [validate-index (-> any/c any/c)]
+;; Contract aliases for package registry types
+(define package-index/c hash?)
+(define package-entry/c hash?)
+(define install-result/c (hash/c symbol? any/c))
+(define verify-result/c (hash/c symbol? any/c))
+(define update-info/c (hash/c symbol? any/c))
+
+(provide package-index/c
+         package-entry/c
+         install-result/c
+         verify-result/c
+         update-info/c
+         (contract-out [load-package-index (->* () ((or/c path-string? #f)) package-index/c)]
+                       [fetch-remote-index (->* () ((or/c string? #f)) (or/c package-index/c #f))]
+                       [index-packages (-> package-index/c (listof package-entry/c))]
+                       [search-packages (-> package-index/c string? (listof package-entry/c))]
+                       [get-package-info (-> package-index/c string? (or/c package-entry/c #f))]
+                       [resolve-version
+                        (->* (package-index/c string?) ((or/c string? #f)) (or/c package-entry/c #f))]
+                       [install-package! (-> package-entry/c install-result/c)]
+                       [verify-package (-> package-entry/c verify-result/c)]
+                       [list-installed-packages (-> (listof package-entry/c))]
+                       [check-updates (-> package-index/c (listof update-info/c))]
+                       [validate-index-entry (-> package-entry/c (listof string?))]
+                       [validate-index (-> package-index/c (hash/c symbol? any/c))]
                        [version<=? (-> string? string? boolean?)]
                        [version<? (-> string? string? boolean?)]))
 
