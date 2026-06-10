@@ -148,29 +148,51 @@
 ;; ── Trigger to Action Mapping ──
 
 ;; Convert rollback trigger warnings to recommended actions.
-;; Returns a list of rollback-action.
+;; Each warning is a (list symbol string) pair from check-rollback-triggers.
+;; GAP-H v0.97.11: Symbol-based matching replaces fragile string-contains?.
 (define (warnings->actions warnings)
   (for/list ([w (in-list warnings)])
+    (define sym
+      (if (pair? w)
+          (car w)
+          #f))
+    (define msg
+      (if (pair? w)
+          (cadr w)
+          (format "~a" w)))
     (cond
-      [(string-contains? w "amnesia") (make-force-distill-action w (hasheq 'trigger 'amnesia))]
-      [(string-contains? w "excessive")
-       (make-expand-context-action w (hasheq 'trigger 'excessive-savings))]
-      ;; v0.96.13 W2: Exploration loop → force-distill immediately (check before repeat)
-      [(string-contains? (string-downcase w) "exploration loop")
-       (make-force-distill-action w (hasheq 'trigger 'exploration-loop))]
-      ;; v0.96.13 W2: Stuck detection → expand-context (check before repeat)
-      [(string-contains? (string-downcase w) "stuck")
-       (make-expand-context-action w (hasheq 'trigger 'stuck))]
-      ;; v0.96.13 W2: Escalate repeat warnings based on counter
-      [(string-contains? (string-downcase w) "repeat")
+      [(eq? sym 'amnesia-risk) (make-force-distill-action msg (hasheq 'trigger 'amnesia))]
+      [(eq? sym 'excessive-savings)
+       (make-expand-context-action msg (hasheq 'trigger 'excessive-savings))]
+      [(eq? sym 'exploration-loop)
+       (make-force-distill-action msg (hasheq 'trigger 'exploration-loop))]
+      [(eq? sym 'stuck-detected) (make-expand-context-action msg (hasheq 'trigger 'stuck))]
+      [(eq? sym 'repeat-tool)
        (if (>= (current-loop-warning-count) escalation-threshold)
            (begin
              (current-loop-warning-count 0) ; reset after escalation
+             (make-force-distill-action msg (hasheq 'trigger 'repeat-escalation)))
+           (begin
+             (increment-loop-warning-count!)
+             (make-warn-action msg)))]
+      ;; Fallback: string-based matching for backwards compatibility
+      [(and (string? w) (string-contains? w "amnesia"))
+       (make-force-distill-action w (hasheq 'trigger 'amnesia))]
+      [(and (string? w) (string-contains? w "excessive"))
+       (make-expand-context-action w (hasheq 'trigger 'excessive-savings))]
+      [(and (string? w) (string-contains? (string-downcase w) "exploration loop"))
+       (make-force-distill-action w (hasheq 'trigger 'exploration-loop))]
+      [(and (string? w) (string-contains? (string-downcase w) "stuck"))
+       (make-expand-context-action w (hasheq 'trigger 'stuck))]
+      [(and (string? w) (string-contains? (string-downcase w) "repeat"))
+       (if (>= (current-loop-warning-count) escalation-threshold)
+           (begin
+             (current-loop-warning-count 0)
              (make-force-distill-action w (hasheq 'trigger 'repeat-escalation)))
            (begin
              (increment-loop-warning-count!)
              (make-warn-action w)))]
-      [else (make-warn-action w)])))
+      [else (make-warn-action (if (pair? w) msg w))])))
 
 ;; ── Exports ──
 
@@ -184,11 +206,12 @@
          current-expand-context-fn
          current-revert-state-fn
          rollback-action-type?
-         (contract-out [make-warn-action (-> string? rollback-action?)]
-                       [make-expand-context-action (-> string? hash? rollback-action?)]
-                       [make-force-distill-action (-> string? hash? rollback-action?)]
-                       [make-revert-state-action (-> string? hash? rollback-action?)]
-                       [select-highest-priority-action
-                        (-> (listof rollback-action?) (or/c rollback-action? #f))]
-                       [maybe-execute-action (-> (or/c rollback-action? #f) (or/c symbol? #f))]
-                       [warnings->actions (-> (listof string?) (listof rollback-action?))]))
+         (contract-out
+          [make-warn-action (-> string? rollback-action?)]
+          [make-expand-context-action (-> string? hash? rollback-action?)]
+          [make-force-distill-action (-> string? hash? rollback-action?)]
+          [make-revert-state-action (-> string? hash? rollback-action?)]
+          [select-highest-priority-action (-> (listof rollback-action?) (or/c rollback-action? #f))]
+          [maybe-execute-action (-> (or/c rollback-action? #f) (or/c symbol? #f))]
+          [warnings->actions
+           (-> (listof (or/c string? (list/c symbol? string?))) (listof rollback-action?))]))

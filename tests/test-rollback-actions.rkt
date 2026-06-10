@@ -137,6 +137,40 @@
                      [current-rollback-action-log '()])
         (define result (maybe-execute-action (make-revert-state-action "danger" (hasheq))))
         (check-false result)
-        (check-equal? (length (current-rollback-action-log)) 0 "revert not logged")))))
+        (check-equal? (length (current-rollback-action-log)) 0 "revert not logged")))
+
+    ;; ============================================================
+    ;; v0.97.11 W2: GAP-H symbol-based matching tests
+    ;; ============================================================
+
+    (test-case "GAP-H: symbol-based matching — amnesia-risk → force-distill"
+      (define actions (warnings->actions (list (list 'amnesia-risk "coverage 10%"))))
+      (check-equal? (length actions) 1)
+      (check-equal? (rollback-action-type (car actions)) 'force-distill))
+
+    (test-case "GAP-H: symbol-based matching — excessive-savings → expand-context"
+      (define actions (warnings->actions (list (list 'excessive-savings "50% cut"))))
+      (check-equal? (length actions) 1)
+      (check-equal? (rollback-action-type (car actions)) 'expand-context))
+
+    (test-case "GAP-H: symbol-based matching — exploration-loop → force-distill"
+      (define actions (warnings->actions (list (list 'exploration-loop "repeated reads"))))
+      (check-equal? (length actions) 1)
+      (check-equal? (rollback-action-type (car actions)) 'force-distill))
+
+    (test-case "GAP-H: symbol-based matching — stuck-detected → expand-context"
+      (define actions (warnings->actions (list (list 'stuck-detected "no progress"))))
+      (check-equal? (length actions) 1)
+      (check-equal? (rollback-action-type (car actions)) 'expand-context))
+
+    (test-case "GAP-H: symbol-based matching — unknown symbol → warn-only"
+      (define actions (warnings->actions (list (list 'unknown-trigger "something"))))
+      (check-equal? (length actions) 1)
+      (check-equal? (rollback-action-type (car actions)) 'warn-only))
+
+    (test-case "GAP-H: string fallback still works for backwards compat"
+      (define actions (warnings->actions '("amnesia detected")))
+      (check-equal? (length actions) 1)
+      (check-equal? (rollback-action-type (car actions)) 'force-distill))))
 
 (run-tests suite)
