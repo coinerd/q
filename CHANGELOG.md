@@ -1,3 +1,28 @@
+## [0.97.14] - 2026-06-10
+
+### Fixed
+- Bug fix: ALL tool failures now show actual error in TUI instead of generic "tool failed"
+  - Added result-error field to tool-execution-end-event (event layer)
+  - Extract error text from tool-result in tool-coordinator (runtime layer)
+  - TUI reads result-error from event payload (presentation layer)
+  - Added with-handlers to all 8 browser tool handlers (error wrapping)
+  - Increased navigate timeout from 10s to 30s (timeout mismatch)
+- Bug fix: browser_screenshot blows up context window (4 root causes)
+  - summarize-tool-result ignores tool-result-part (truncation bypassed)
+  - build-raw-messages missing #:handle-hash? (270K base64 dumped verbatim)
+  - result-content->string has no binary/base64 guard
+  - context.pressure only emitted once per prompt (stale ctx:1% in TUI)
+- M1: Tighten step-interpreter any/c contracts (9 replacements)
+- M2: browser/types.rkt struct-out → explicit provides (11 structs)
+- M3: gsd/plan-types.rkt struct-out → explicit provides (7 structs)
+- M4: all-from-out → explicit provides in 5 facade modules (~12 replacements)
+- M9: Parameter naming convention (3 renames to current- prefix)
+- M9: MAX-STREAM-CHUNKS converted from make-parameter to define constant
+- H6: Deprecated legacy global GSD state-machine API (4 functions)
+
+### Skipped
+- M8: field->json-key duplication — Racket phase system requires separate runtime/compile-time implementations
+
 ## [0.97.13] - 2026-06-10
 
 ### Fixed
