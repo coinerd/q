@@ -114,6 +114,15 @@
           (string-append "Focus on error-related files. "
                          "Save error analysis as conclusions with record_conclusion.")))
 
+;; GAP-I v0.97.11: Extracted state coercion helper (was duplicated ×4).
+;; Converts task-state (symbol, fsm-state struct, or #f) to a bare symbol or #f.
+(define (coerce-task-state ts)
+  (cond
+    [(not ts) #f]
+    [(symbol? ts) ts]
+    [(fsm-state? ts) (fsm-state-name ts)]
+    [else #f]))
+
 ;; build-tiered-context/state-aware :
 ;;   Same signature as build-tiered-context, plus optional task-state and conclusions.
 ;;   When a task-state is provided, uses state-relevance-table to decide which
@@ -128,12 +137,7 @@
                                           #:recent-tool-calls [recent-tool-calls '()]
                                           #:session-config [session-config #f])
   ;; Accept both fsm-state structs and bare symbols
-  (define state-name
-    (cond
-      [(not task-state) #f]
-      [(symbol? task-state) task-state]
-      [(fsm-state? task-state) (fsm-state-name task-state)]
-      [else #f]))
+  (define state-name (coerce-task-state task-state))
   (define ws-level (and state-name (context-level-for-state state-name 'working-set)))
   (define conclusions-level (and state-name (context-level-for-state state-name 'conclusions)))
 
@@ -276,11 +280,7 @@
   ;; v0.96.13 WP-1: Construct memory query text from task state + recent messages
   (define memory-query-text
     (and task-state
-         (let* ([state-str (if (symbol? task-state)
-                               (symbol->string task-state)
-                               (if (fsm-state? task-state)
-                                   (symbol->string (fsm-state-name task-state))
-                                   #f))]
+         (let* ([state-str (let ([s (coerce-task-state task-state)]) (and s (symbol->string s)))]
                 [recent-text (extract-recent-text messages 3)])
            (and state-str
                 (if recent-text
@@ -291,11 +291,7 @@
   (define enriched-query-text
     (and
      task-state
-     (let* ([state-str (if (symbol? task-state)
-                           (symbol->string task-state)
-                           (if (fsm-state? task-state)
-                               (symbol->string (fsm-state-name task-state))
-                               #f))]
+     (let* ([state-str (let ([s (coerce-task-state task-state)]) (and s (symbol->string s)))]
             [recent-text (extract-recent-text messages 3)]
             [tag-str (if (and (pair? active-tags) (> (length active-tags) 0))
                          (format "Active Tags: ~a. "
@@ -421,12 +417,7 @@
 ;; Returns #f if no meaningful preamble (idle state with no conclusions).
 (define (build-state-awareness-preamble task-state conclusions)
   ;; Accept both fsm-state structs and bare symbols
-  (define state-name
-    (cond
-      [(not task-state) #f]
-      [(symbol? task-state) task-state]
-      [(fsm-state? task-state) (fsm-state-name task-state)]
-      [else #f]))
+  (define state-name (coerce-task-state task-state))
   (cond
     [(not state-name) #f]
     [else

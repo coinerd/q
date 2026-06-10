@@ -1,3 +1,16 @@
+## [0.97.11] - 2026-06-08
+
+### Fixed
+- GAP-E: Added session.closed subscriber for belt-and-suspenders conclusion persistence
+- GAP-E: Added dedup set (current-mid-session-persisted-ids) to mid-session bridge
+- GAP-F: Complete reload-config! — refresh all 10 memory/context parameters on hot-reload
+- GAP-H: Replace fragile string-contains? matching in warnings->actions with symbol-based matching
+- GAP-I: Extract coerce-task-state helper (was duplicated ×4)
+
+### Tests
+- 3 dedup parameter tests (gapf-mid-session-bridge)
+- 6 symbol-based rollback matching tests (rollback-actions)
+
 ## [0.97.10] - 2026-06-08
 
 ### Fixed
