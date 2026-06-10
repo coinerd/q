@@ -49,17 +49,17 @@
 ;; Per-request tool call ID counter (Issue #200)
 ;; Parameter justified: thread-local isolation via `parameterize` in stream/send calls;
 ;; concurrent requests must not share or collide on IDs.
-(define gemini-tool-id-counter-param (make-parameter 0))
+(define current-gemini-tool-id-counter (make-parameter 0))
 
 ;; Generate a unique tool call ID within the current request.
 (define (gemini-gen-tool-id)
-  (define next (add1 (gemini-tool-id-counter-param)))
-  (gemini-tool-id-counter-param next)
+  (define next (add1 (current-gemini-tool-id-counter)))
+  (current-gemini-tool-id-counter next)
   (format "gemini_~a" next))
 
 ;; Reset the parameter for a fresh request.
 (define (gemini-reset-tool-id-counter!)
-  (gemini-tool-id-counter-param 0))
+  (current-gemini-tool-id-counter 0))
 
 ;; ============================================================
 ;; Request body construction
@@ -297,7 +297,7 @@
         #f))
 
   ;; Emit text/tool deltas from parts
-  ;; Tool calls use a running index from gemini-tool-id-counter-param
+  ;; Tool calls use a running index from current-gemini-tool-id-counter
   ;; so that multiple functionCalls across SSE chunks get distinct indices.
   ;; The counter starts at 0 and is incremented by gemini-gen-tool-id.
   (for ([part (in-list parts)])
@@ -309,7 +309,7 @@
       [(hash-has-key? part 'functionCall)
        (let* ([fc (hash-ref part 'functionCall)]
               [tc-id (gemini-gen-tool-id)]
-              [tc-index (sub1 (gemini-tool-id-counter-param))]
+              [tc-index (sub1 (current-gemini-tool-id-counter))]
               [tc-delta
                (hasheq
                 'index
@@ -373,7 +373,7 @@
     (define body (gemini-build-request-body merged-req))
     (define model-name (hash-ref (model-request-settings merged-req) 'model default-model))
     ;; Bind per-request counter (Issue #200)
-    (parameterize ([gemini-tool-id-counter-param 0])
+    (parameterize ([current-gemini-tool-id-counter 0])
       (define raw (gemini-do-http-request base-url api-key model-name body))
       (gemini-parse-response raw)))
 
@@ -439,7 +439,7 @@
          (define resp-body (read-response-body/timeout response-port))
          (check-provider-status! "Gemini" status-line resp-body))
        ;; Bind per-request counter (Issue #200)
-       (parameterize ([gemini-tool-id-counter-param 0])
+       (parameterize ([current-gemini-tool-id-counter 0])
          ;; Incremental SSE parsing — generator yields chunks one at a time
          (define raw-port response-port)
          (log-stream-setup-timing "gemini" _stream-t0)
