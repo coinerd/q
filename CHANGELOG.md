@@ -1,3 +1,15 @@
+## [0.97.7] - 2026-06-08
+
+### Fixed
+- GAP-A: Preamble now uses budgeted conclusions capped at 20 instead of arbitrary top-10
+- GAP-A: Format string shows total+shown counts for transparency
+
+### Changed
+- state-aware-builder.rkt: `build-state-awareness-preamble` respects ranking order from `rank-and-budget`
+
+### Added
+- 6 new regression tests for preamble ranking behavior
+
 ## [0.97.6] - 2026-06-08
 
 ### Fixed
