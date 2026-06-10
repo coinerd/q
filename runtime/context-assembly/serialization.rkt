@@ -29,11 +29,43 @@
 
 ;; Re-export from context-floor.rkt
 (require "context-floor.rkt")
-(provide (all-from-out "context-floor.rkt"))
+;; Explicit re-exports from context-floor.rkt — do NOT use all-from-out (ADR-0028)
+(provide tiered-context
+         tiered-context?
+         tiered-context-tier-a
+         tiered-context-tier-b
+         tiered-context-tier-c
+         build-tiered-context
+         tiered-context->message-list
+         build-tiered-context-with-hooks
+         compute-dynamic-tier-b-count
+         context-assembly-payload
+         context-assembly-payload?
+         context-assembly-payload-tier-a-messages
+         context-assembly-payload-tier-b-messages
+         context-assembly-payload-tier-c-messages
+         context-assembly-payload-max-tokens
+         context-assembly-payload-metadata
+         payload->tiered-context
+         tiered-context->payload
+         gsd-progress-message?
+         (contract-out [compute-tier-c-count
+                        (-> exact-nonnegative-integer? exact-nonnegative-integer?)]))
 
 ;; Re-export from state-aware-builder.rkt
 (require "state-aware-builder.rkt")
-(provide (all-from-out "state-aware-builder.rkt"))
+;; Explicit re-exports from state-aware-builder.rkt — do NOT use all-from-out (ADR-0028)
+(provide current-task-state-aware-assembly?
+         build-tiered-context/state-aware
+         build-state-awareness-preamble
+         check-rollback-triggers
+         ws-entry->conclusion-or-self
+         current-graph-conclusion-selection?
+         current-conclusion-token-budget
+         current-ws-evolution-enabled?
+         check-rollback-triggers-with-actions
+         extract-recent-text
+         current-reflection-event)
 
 ;; Remaining exports (not moved)
 (provide build-session-context/tokens
