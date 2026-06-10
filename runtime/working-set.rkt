@@ -169,6 +169,13 @@
 ;;   'max-entries, 'max-tokens,
 ;;   'add!, 'remove!, 'reset!
 ;; Thread-safe via internal semaphore.
+;; GAP-N v0.97.12: Token-budget eviction helper for ws-context closure.
+(define (evict-to-token-budget entries max-tokens)
+  (let loop ([es entries])
+    (if (and (pair? es) (> (for/sum ([e (in-list es)]) (ws-entry-token-estimate e)) max-tokens))
+        (loop (take es (sub1 (length es))))
+        es)))
+
 (define (make-ws-context #:max-entries [max-entries 30] #:max-tokens [max-tokens 15000])
   (let ([entries '()]
         [sem (make-semaphore 1)])
@@ -197,7 +204,9 @@
             (set! entries (cons new-entry without-existing))
             ;; Enforce max-entries
             (when (> (length entries) max-entries)
-              (set! entries (take entries max-entries)))]
+              (set! entries (take entries max-entries)))
+            ;; GAP-N v0.97.12: Enforce max-tokens (evict from tail)
+            (set! entries (evict-to-token-budget entries max-tokens))]
            [(remove!)
             (define path (car args))
             (set! entries (filter (lambda (e) (not (equal? (ws-entry-path e) path))) entries))]

@@ -1,3 +1,17 @@
+## [0.97.12] - 2026-06-08
+
+### Fixed
+- GAP-J: Added field validation to hash->conclusion (id, text, category)
+- GAP-J: Added duplicate-ID warning in build-conclusion-graph
+- GAP-K: Removed spurious deprecation warning from build-assembled-context/raw
+- GAP-L: Excluded 'fact' from high-value-categories for auto-persistence
+- GAP-M: Capped current-rollback-action-log at 100 entries
+- GAP-N: Added max-tokens enforcement to ws-context closure
+- GAP-P: Replaced kill-thread with custodian-shutdown-all in auto-distillation
+
+### Tests
+- 5 data validation tests (test-conclusion-graph)
+
 ## [0.97.11] - 2026-06-08
 
 ### Fixed
