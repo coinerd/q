@@ -115,6 +115,38 @@
      (filter task-conclusion? conclusions)]
 
     ;; GAP-B v0.97.8: verification → implementation: clear ws, return conclusions
+    ;; GAP-C v0.97.10: implementation → verification: keep test/spec, return conclusions
+    [(and (eq? old-name 'implementation) (eq? new-name 'verification))
+     (working-set-selective-remove! ws
+                                    (lambda (e)
+                                      (define p (ws-entry-path e))
+                                      (and (string? p)
+                                           (or (string-contains? p "test")
+                                               (string-contains? p "spec")
+                                               (string-contains? p "validation")))))
+     (filter task-conclusion? conclusions)]
+
+    ;; GAP-C v0.97.10: verification → debugging: keep error/test files
+    [(and (eq? old-name 'verification) (eq? new-name 'debugging))
+     (working-set-selective-remove! ws
+                                    (lambda (e)
+                                      (define p (ws-entry-path e))
+                                      (and (string? p)
+                                           (or (string-contains? p "test")
+                                               (string-contains? p "error")
+                                               (string-contains? p "spec")))))
+     (filter task-conclusion? conclusions)]
+
+    ;; GAP-C v0.97.10: debugging → verification: keep test/spec/validation files
+    [(and (eq? old-name 'debugging) (eq? new-name 'verification))
+     (working-set-selective-remove! ws
+                                    (lambda (e)
+                                      (define p (ws-entry-path e))
+                                      (and (string? p)
+                                           (or (string-contains? p "test")
+                                               (string-contains? p "spec")
+                                               (string-contains? p "validation")))))
+     (filter task-conclusion? conclusions)]
     [(and (eq? old-name 'verification) (eq? new-name 'implementation))
      (working-set-reset! ws)
      (filter task-conclusion? conclusions)]

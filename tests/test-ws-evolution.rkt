@@ -271,6 +271,37 @@
       (define result (evolve-working-set-for-state/result ws task-exploration task-idle conclusions))
       (check-true (evolution-result? result))
       (check-equal? (working-set-entry-count ws) 0 "WS reset on exploration→idle")
-      (check-equal? (length (evolution-result-archived-entries result)) 4 "all entries archived"))))
+      (check-equal? (length (evolution-result-archived-entries result)) 4 "all entries archived"))
+
+    ;; ============================================================
+    ;; v0.97.10 W2: GAP-C missing FSM transition tests
+    ;; ============================================================
+
+    (test-case "GAP-C: implementation→verification keeps test/spec files"
+      (define ws (make-working-set))
+      (populate-ws ws '("src/main.rkt" "src/helper.rkt" "tests/test-main.rkt" "spec/design.md"))
+      (define result
+        (evolve-working-set-for-state/result ws task-implementation task-verification conclusions))
+      (check-true (evolution-result? result))
+      (check-true (>= (working-set-entry-count ws) 2) "test/spec files kept")
+      (check-true (< (working-set-entry-count ws) 4) "some files removed"))
+
+    (test-case "GAP-C: verification→debugging keeps error/test files"
+      (define ws (make-working-set))
+      (populate-ws ws '("tests/test-foo.rkt" "spec/bar.md" "src/error.rkt" "src/impl.rkt"))
+      (define result
+        (evolve-working-set-for-state/result ws task-verification task-debugging conclusions))
+      (check-true (evolution-result? result))
+      ;; error/test/spec files should be kept
+      (check-true (>= (working-set-entry-count ws) 2) "error/test/spec kept"))
+
+    (test-case "GAP-C: debugging→verification keeps test/spec/validation files"
+      (define ws (make-working-set))
+      (populate-ws ws '("tests/test.rkt" "spec/plan.md" "validation/check.rkt" "src/bug.rkt"))
+      (define result
+        (evolve-working-set-for-state/result ws task-debugging task-verification conclusions))
+      (check-true (evolution-result? result))
+      (check-true (>= (working-set-entry-count ws) 2) "test/spec/validation kept")
+      (check-true (< (working-set-entry-count ws) 4) "non-validation removed"))))
 
 (run-tests suite)

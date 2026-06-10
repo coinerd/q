@@ -14,8 +14,8 @@
                   build-conclusion-graph
                   graph-select-by-seeds
                   graph-detect-cycles)
-         (only-in "conclusion-ranker.rkt"
-                  rank-and-budget))
+         (only-in "conclusion-ranker.rkt" rank-and-budget)
+         (only-in "config.rkt" current-conclusion-token-budget))
 
 ;; ── Struct ──
 
@@ -102,18 +102,22 @@
   (cond
     [(null? concs) '()]
     ;; Degraded fallback: no seeds, use semantic ranking
+    ;; GAP-D v0.97.10: Use canonical budget parameter instead of magic 200
     [(null? seed-ids)
-     (take-at-most (rank-and-budget concs #:current-state state
-                                    #:max-conclusion-tokens (* max-count 200))
+     (take-at-most (rank-and-budget concs
+                                    #:current-state state
+                                    #:max-conclusion-tokens (current-conclusion-token-budget))
                    max-count)]
     [else
      (define g (build-conclusion-graph concs))
      (define cycles (graph-detect-cycles g))
      (cond
        ;; Degraded fallback: graph has cycles, use semantic ranking
+       ;; GAP-D v0.97.10: Use canonical budget parameter
        [(pair? cycles)
-        (take-at-most (rank-and-budget concs #:current-state state
-                                       #:max-conclusion-tokens (* max-count 200))
+        (take-at-most (rank-and-budget concs
+                                       #:current-state state
+                                       #:max-conclusion-tokens (current-conclusion-token-budget))
                       max-count)]
        [else
         (define selected-ids (graph-select-by-seeds g seed-ids))
