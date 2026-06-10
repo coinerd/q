@@ -54,15 +54,32 @@
 
 ;; ── Execution Guard ──
 
+;; H1 v0.97.13: Config struct for snapshot/grouped access.
+;; Individual parameters still exist for backward compat with parameterize.
+(struct rollback-actions-config
+        (execution? ; boolean: enable action execution
+         force-distill ; (or/c (-> rollback-action? void?) #f)
+         expand-context ; (or/c (-> rollback-action? void?) #f)
+         revert-state) ; (or/c (-> rollback-action? void?) #f)
+  #:transparent)
+
+(define (make-default-rollback-config)
+  (rollback-actions-config #f #f #f #f))
+
 ;; Feature flag for action execution (disabled by default — warn-only mode)
 (define current-rollback-action-execution? (make-parameter #f))
 
-;; v0.77.10 M2: Injectable execution callbacks.
-;; Default to no-op. Runtime wires real implementations.
-;; Signature: (-> rollback-action? void?)
+;; Injectable execution callbacks.
 (define current-force-distill-fn (make-parameter #f))
 (define current-expand-context-fn (make-parameter #f))
 (define current-revert-state-fn (make-parameter #f))
+
+;; Snapshot current state as config struct
+(define (current-rollback-actions-config)
+  (rollback-actions-config (current-rollback-action-execution?)
+                           (current-force-distill-fn)
+                           (current-expand-context-fn)
+                           (current-revert-state-fn)))
 
 ;; v0.77.10 M2: Action execution log for observability.
 ;; Each entry is a hash with 'type, 'reason, 'timestamp.
@@ -214,6 +231,9 @@
 ;; ── Exports ──
 
 (provide (struct-out rollback-action)
+         (struct-out rollback-actions-config)
+         current-rollback-actions-config
+         make-default-rollback-config
          current-rollback-action-execution?
          current-rollback-action-log
          current-loop-warning-count
