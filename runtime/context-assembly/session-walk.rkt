@@ -21,6 +21,8 @@
                   make-message)
          (only-in "../../util/entry-predicates.rkt" compaction-summary-entry?)
          (only-in "../../util/content/content-parts.rkt" text-part text-part? text-part-text)
+         (only-in "../../util/content/content-parts.rkt" tool-result-part? tool-result-part-content)
+         (only-in "../../util/content/content-helpers.rkt" result-content->string)
          (only-in "../session-index.rkt" active-leaf get-branch))
 
 (provide build-session-context
@@ -73,10 +75,16 @@
 
 (define (summarize-tool-result entry)
   (define content (message-content entry))
+  ;; Bug fix: also extract text from tool-result-part (browser screenshot, etc.)
+  ;; Without this, large binary/hash tool results bypass truncation entirely.
   (define text
     (string-join (for/list ([part (in-list content)]
-                            #:when (text-part? part))
-                   (text-part-text part))
+                            #:when (or (text-part? part) (tool-result-part? part)))
+                   (cond
+                     [(text-part? part) (text-part-text part)]
+                     [(tool-result-part? part)
+                      (result-content->string (tool-result-part-content part) #:handle-hash? #t)]
+                     [else ""]))
                  "\n"))
   (cond
     [(<= (string-length text) MAX-TOOL-RESULT-CHARS) entry]

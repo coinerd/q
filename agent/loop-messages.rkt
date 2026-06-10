@@ -210,7 +210,7 @@
                     'tool_call_id
                     (tool-result-part-tool-call-id p)
                     'content
-                    (result-content->string (tool-result-part-content p))))]
+                    (result-content->string (tool-result-part-content p) #:handle-hash? #t)))]
 
          ;; fallback -- unknown role
          [else
