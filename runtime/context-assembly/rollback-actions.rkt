@@ -111,14 +111,22 @@
   (log-action! action))
 
 ;; Log an executed action to the rollback action log.
+;; GAP-M v0.97.12: Cap log at 100 entries (ring buffer semantics).
+(define max-rollback-log-size 100)
+
 (define (log-action! action)
-  (current-rollback-action-log (append (current-rollback-action-log)
-                                       (list (hasheq 'type
-                                                     (rollback-action-type action)
-                                                     'reason
-                                                     (rollback-action-reason action)
-                                                     'timestamp
-                                                     (current-seconds))))))
+  (define entry
+    (hasheq 'type
+            (rollback-action-type action)
+            'reason
+            (rollback-action-reason action)
+            'timestamp
+            (current-seconds)))
+  (define current-log (current-rollback-action-log))
+  (define new-log (append current-log (list entry)))
+  (current-rollback-action-log (if (> (length new-log) max-rollback-log-size)
+                                   (drop new-log (- (length new-log) max-rollback-log-size))
+                                   new-log)))
 
 ;; Execute a rollback action if execution is enabled.
 ;; v0.77.10 M2: Now dispatches to real execution functions.

@@ -21,7 +21,9 @@
 
 (define current-conclusion-to-memory-bridge-enabled (make-parameter #f))
 
-(define high-value-categories '(decision pattern fact))
+;; GAP-L v0.97.12: Excluded 'fact' and 'test-result' — too common for auto-persistence.
+;; Facts are stored in session events; only decisions and patterns are persisted to memory backend.
+(define high-value-categories '(decision pattern))
 
 (define (persist-high-value-conclusions! conclusions
                                          #:backend backend
