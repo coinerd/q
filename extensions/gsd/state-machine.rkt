@@ -179,6 +179,7 @@
 ;; Core API — now backed by session-state parameters
 ;; ============================================================
 
+#| DEPRECATED — use gsm-ctx-* with explicit context instead. Will be removed in v1.0.0. |#
 (define (gsm-current)
   (gsm-ctx-current gsd-default-ctx))
 
@@ -329,6 +330,7 @@
 ;; Wave state accessors — now backed by session-state parameters
 ;; ============================================================
 
+#| DEPRECATED — use gsm-ctx-* with explicit context instead. Will be removed in v1.0.0. |#
 (define (gsm-wave-executor)
   (gsm-ctx-wave-executor gsd-default-ctx))
 
@@ -341,6 +343,7 @@
 (define (gsm-set-total-waves! n)
   (gsm-ctx-set-total-waves! gsd-default-ctx n))
 
+#| DEPRECATED — use gsm-ctx-* with explicit context instead. Will be removed in v1.0.0. |#
 (define (gsm-current-wave)
   (gsm-ctx-current-wave gsd-default-ctx))
 
@@ -353,6 +356,7 @@
 (define (gsm-mark-wave-complete! idx)
   (gsm-ctx-mark-wave-complete! gsd-default-ctx idx))
 
+#| DEPRECATED — use gsm-ctx-* with explicit context instead. Will be removed in v1.0.0. |#
 (define (gsm-wave-complete? idx)
   (set-member? (gsm-completed-waves) idx))
 
