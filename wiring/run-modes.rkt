@@ -406,6 +406,13 @@
   (define new-reg (make-model-registry-from-config (q-settings-merged new-settings)))
   ;; v0.14.2 Wave 3: Refresh per-model timeouts
   (wire-timeouts! new-settings)
+  ;; v0.97.6 LF3: Re-apply context-assembly profile with updated context window
+  (define new-profile
+    (or (cli-config-context-profile base-config) (setting-context-assembly-profile new-settings)))
+  (define new-model-name (dict-ref base-config 'model #f))
+  (define new-cw (model-registry-context-window new-reg (or new-model-name "")))
+  (define new-max-ctx (or new-cw (dict-ref base-config 'max-context-tokens 128000)))
+  (apply-context-assembly-profile! new-profile new-max-ctx)
   ;; Return updated config + registry
   (values
    (hash->session-config

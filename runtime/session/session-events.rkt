@@ -35,7 +35,8 @@
 
 (provide (contract-out [wire-session-event-handlers! (-> agent-session? procedure? void?)])
          current-mid-session-bridge-enabled
-         major-forward-transition?)
+         major-forward-transition?
+         maybe-persist-mid-session!)
 
 ;; ============================================================
 ;; Event bus wiring

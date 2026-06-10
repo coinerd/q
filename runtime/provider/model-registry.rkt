@@ -61,7 +61,9 @@
           [default-model (-> model-registry? (or/c string? #f))]
           [default-model-for-mode (-> model-registry? symbol? (or/c string? #f))]
           [make-model-registry-from-config (-> hash? model-registry?)])
-         model-registry-context-window)
+         ;; v0.97.6: Contract-wrapped for consistency with H-02 discipline
+         (contract-out [model-registry-context-window
+                        (-> model-registry? (or/c string? #f) (or/c exact-nonnegative-integer? #f))]))
 
 ;; ============================================================
 ;; Structs
