@@ -103,8 +103,11 @@
        ;; exploration: ≥3 reads, 0 writes
        [(and (>= n-read 3) (= n-write 0)) (values task-exploration 0.85)]
 
-       ;; planning: meta tools (save-conclusion) + reads (gathering info)
-       [(and (>= (count-category recent-calls 'meta) 1) (= n-write 0)) (values task-planning 0.75)]
+       ;; GAP-C v0.97.8: planning: meta tools + reads, allow writes when meta ≥ writes
+       ;; (agent may write PLAN.md while planning)
+       [(and (>= (count-category recent-calls 'meta) 1)
+             (>= (count-category recent-calls 'meta) n-write))
+        (values task-planning 0.75)]
 
        ;; Light exploration: some reads, no writes
        [(and (>= n-read 1) (= n-write 0)) (values task-exploration 0.5)]
