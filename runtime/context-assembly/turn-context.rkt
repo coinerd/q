@@ -215,12 +215,13 @@
   ;; v0.78.2 G2: WS evolution — evolve working set on state transition
   ;; MF1 (GAP-5): Guard at call site — skip when same state to avoid
   ;; unnecessary snapshot + evolve-working-set overhead.
+  ;; GAP-B v0.97.10: Removed idle guard — idle transitions must trigger
+  ;; WS reset via the any→idle rule in ws-evolution.rkt.
   (define ws-old-state (current-last-task-fsm-state))
   (when (and (current-ws-evolution-enabled?)
              ws-early
              session
              task-state
-             (not (eq? task-state-raw 'idle))
              ;; GAP-5: Skip same-state transitions (first transition: old=#f → proceed)
              (or (not ws-old-state) (not (eq? ws-old-state task-state))))
     (define result
@@ -232,10 +233,7 @@
   ;; Also resets the loop warning counter on state transition
   ;; MF1-1 fix: Use ws-old-state (captured before WS mutation) instead of
   ;; re-reading current-last-task-fsm-state, which was already mutated above.
-  (when (and task-state
-             (not (eq? task-state-raw 'idle))
-             ws-old-state
-             (not (eq? ws-old-state task-state)))
+  (when (and task-state ws-old-state (not (eq? ws-old-state task-state)))
     ;; State transition detected — reset warning counter
     (current-loop-warning-count 0))
   (values task-state-raw task-state augmented-conclusions))

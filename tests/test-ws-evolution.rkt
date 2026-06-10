@@ -241,6 +241,36 @@
       ;; else clause: returns conclusions, keeps WS intact
       (check-equal? (length (evolution-result-kept-entries result)) 2 "WS unchanged")
       (check-equal? (length (evolution-result-archived-entries result)) 0 "nothing archived")
-      (check-equal? (length (evolution-result-evicted-conclusions result)) 2))))
+      (check-equal? (length (evolution-result-evicted-conclusions result)) 2))
+
+    ;; ============================================================
+    ;; v0.97.10 W1: GAP-B idle-reset regression tests
+    ;; ============================================================
+
+    (test-case "GAP-B v0.97.10: implementation→idle resets WS entries"
+      (define ws (make-working-set))
+      (populate-ws ws '("src/impl.rkt" "src/helper.rkt" "tests/test.rkt"))
+      (define result
+        (evolve-working-set-for-state/result ws task-implementation task-idle conclusions))
+      (check-true (evolution-result? result))
+      (check-equal? (working-set-entry-count ws) 0 "WS should be reset on impl→idle")
+      (check-equal? (length (evolution-result-kept-entries result)) 0 "no entries kept")
+      (check-equal? (length (evolution-result-archived-entries result)) 3 "all archived"))
+
+    (test-case "GAP-B v0.97.10: idle→idle is no-op (same state)"
+      (define ws (make-working-set))
+      (populate-ws ws '("a.rkt"))
+      ;; Same-state transition should return #f (no change)
+      (define result (evolve-working-set-for-state/result ws task-idle task-idle conclusions))
+      (check-false result "idle→idle should be no-op")
+      (check-equal? (working-set-entry-count ws) 1 "WS unchanged"))
+
+    (test-case "GAP-B v0.97.10: exploration→idle with populated WS"
+      (define ws (make-working-set))
+      (populate-ws ws '("explore1.rkt" "explore2.rkt" "explore3.rkt" "explore4.rkt"))
+      (define result (evolve-working-set-for-state/result ws task-exploration task-idle conclusions))
+      (check-true (evolution-result? result))
+      (check-equal? (working-set-entry-count ws) 0 "WS reset on exploration→idle")
+      (check-equal? (length (evolution-result-archived-entries result)) 4 "all entries archived"))))
 
 (run-tests suite)
