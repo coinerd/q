@@ -28,6 +28,7 @@
                   make-model-request-blocked-event
                   make-message-blocked-event
                   make-turn-end-event)
+         (only-in "event-structs/context-pressure-events.rkt" make-context-pressure-event)
          (only-in "turn-reducer.rkt" decide-after-pre-hook decide-after-msg-hook decide-after-stream)
          (only-in "turn-model.rkt"
                   make-stream-completion
@@ -121,9 +122,24 @@
                         #:timestamp (current-inexact-milliseconds)
                         #:token-count token-count
                         #:window-size (length raw-messages)))
+  ;; Bug fix (v0.97.x): also emit context.pressure per iteration turn.
+  ;; Without this, TUI shows stale ctx:1% from initial prompt while context
+  ;; grows to 91K tokens from browser screenshot results.
+  (define ctx-window-size 128000) ;; conservative default; providers override
+  (define usage-pct (* 100.0 (/ token-count ctx-window-size)))
+  (define pressure-event
+    (make-context-pressure-event #:session-id session-id
+                                 #:turn-id turn-id
+                                 #:timestamp (current-inexact-milliseconds)
+                                 #:level (cond
+                                           [(>= usage-pct 80) 'red]
+                                           [(>= usage-pct 60) 'yellow]
+                                           [else 'green])
+                                 #:usage-percent usage-pct))
   ;; Return effect instead of emitting directly (purity fix W2-T1)
   (define effects
     (list (effect:emit-event 'context ctx-event)
+          (effect:emit-event 'context pressure-event)
           (effect:update-fsm turn-state-build-context turn-event-context-built)))
   (values raw-messages effects))
 
