@@ -2,6 +2,7 @@
 
 ;; runtime/context-assembly/auto-distillation.rkt — Automatic fallback conclusions
 ;; STABILITY: evolving
+;; CONSUMERS: state-aware-builder, loop-phases
 ;;
 ;; Identifies uncovered working-set entries (no matching conclusion origin-message-ids)
 ;; and produces deterministic fallback conclusions. Optional LLM distillation is injectable

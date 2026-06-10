@@ -17,6 +17,10 @@
          (only-in "../../runtime/runtime-helpers.rkt" emit-session-event! make-event-bus)
          (only-in "../../runtime/settings.rkt" q-settings? setting-ref)
          "../model-bridge.rkt"
+         (only-in "provider-hash-bridge.rkt"
+                  message->provider-hash
+                  content-part->provider-hash
+                  messages->provider-hashes)
          "../../util/ids.rkt"
          (only-in "../../util/content/content-parts.rkt"
                   tool-call-part?

@@ -2,6 +2,7 @@
 #lang racket/base
 
 ;; scripts/bump-version.rkt — DEPRECATED: Use scripts/sync-version.rkt instead.
+;; Will be removed in v1.0.0.
 ;;
 ;; This script is deprecated as of v0.51.9. The sync-version.rkt script
 ;; now handles all version synchronization. This file remains for backward

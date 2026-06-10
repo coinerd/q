@@ -2,6 +2,7 @@
 
 ;; runtime/context-assembly/rollback-actions.rkt — Bounded rollback action model
 ;; STABILITY: evolving
+;; CONSUMERS: state-aware-builder, step-interpreter, loop
 ;;
 ;; Represents rollback actions as pure data. Actions are prioritized:
 ;; warn-only < expand-context < force-distill < revert-state.

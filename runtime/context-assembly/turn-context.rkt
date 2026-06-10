@@ -2,6 +2,7 @@
 
 ;; runtime/context-assembly/turn-context.rkt — Turn-level context assembly helpers
 ;; STABILITY: internal
+;; CONSUMERS: context-assembly facade, agent-session
 ;;
 ;; Extracted from turn-orchestrator.rkt (v0.96.0 W2) for single-responsibility.
 ;; Contains: symbol->task-state, assemble-context/pure,

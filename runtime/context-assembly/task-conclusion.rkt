@@ -2,6 +2,7 @@
 
 ;; runtime/context-assembly/task-conclusion.rkt — Conclusion type for task-state context optimization
 ;; STABILITY: evolving
+;; CONSUMERS: state-aware-builder, save/record-conclusion tools
 ;;
 ;; A task-conclusion captures a distilled insight from the agent's work,
 ;; tagged with the FSM state when it was recorded and relevance tags for

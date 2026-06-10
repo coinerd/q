@@ -55,7 +55,8 @@
           [bookmarks-path (-> path-string? path?)]))
 
 ;; Counter for generating unique bookmark IDs
-(define bm-counter 0)
+;; M11 (v0.97.15): Replaced bare set! with boxed counter for thread safety
+(define bm-counter (box 0))
 (define bm-counter-mutex (make-semaphore 1))
 
 ;; Local path-only helper (from util/path-helpers.rkt)
@@ -65,8 +66,8 @@
 
 (define (generate-bookmark-id)
   (semaphore-wait bm-counter-mutex)
-  (set! bm-counter (add1 bm-counter))
-  (define id (format "bm-~a-~a" (current-milliseconds) bm-counter))
+  (set-box! bm-counter (add1 (unbox bm-counter)))
+  (define id (format "bm-~a-~a" (current-milliseconds) (unbox bm-counter)))
   (semaphore-post bm-counter-mutex)
   id)
 
@@ -76,11 +77,12 @@
 
 (define (build-index! session-path index-path)
   (define messages (load-session-log session-path))
-  (define by-id (make-hash))
-  (define children (make-hash))
-  (for ([msg (in-list messages)])
-    (hash-set! by-id (message-id msg) msg)
-    (hash-set! children (message-id msg) '()))
+  ;; M11 (v0.97.15): Immutable for/fold replaces mutable make-hash + hash-set!
+  (define-values (by-id-0 children-0)
+    (for/fold ([bid (hash)]
+               [chd (hash)])
+              ([msg (in-list messages)])
+      (values (hash-set bid (message-id msg) msg) (hash-set chd (message-id msg) '()))))
   ;; Infer missing parentIds from log order
   (define fixed-messages
     (for/list ([msg (in-list messages)]
@@ -90,15 +92,24 @@
          (define prev-msg (list-ref messages (sub1 i)))
          (struct-copy message msg [parent-id (message-id prev-msg)])]
         [else msg])))
-  (for ([msg (in-list fixed-messages)])
-    (hash-set! by-id (message-id msg) msg))
-  (for ([msg (in-list fixed-messages)])
-    (define pid (message-parent-id msg))
-    (when (and pid (hash-has-key? children pid))
-      (hash-update! children pid (lambda (lst) (append lst (list msg))))))
+  (define by-id-1
+    (for/fold ([bid by-id-0]) ([msg (in-list fixed-messages)])
+      (hash-set bid (message-id msg) msg)))
+  (define children-final
+    (for/fold ([chd children-0]) ([msg (in-list fixed-messages)])
+      (define pid (message-parent-id msg))
+      (if (and pid (hash-has-key? chd pid))
+          (hash-update chd pid (lambda (lst) (append lst (list msg))))
+          chd)))
+  ;; Convert immutable hashes to mutable for session-index
+  ;; (session-index uses mutable hash-set! for subsequent mutations)
+  (define by-id-mut (make-hash))
+  (hash-for-each by-id-1 (lambda (k v) (hash-set! by-id-mut k v)))
+  (define children-mut (make-hash))
+  (hash-for-each children-final (lambda (k v) (hash-set! children-mut k v)))
   (define idx
-    (session-index by-id
-                   children
+    (session-index by-id-mut
+                   children-mut
                    (list->vector fixed-messages)
                    (make-hash)
                    (box #f)
@@ -134,17 +145,25 @@
            (make-empty-index)]
           [else
            (define entries (map jsexpr->message (cdr raw)))
-           (define by-id (make-hash))
-           (define children (make-hash))
-           (for ([msg (in-list entries)])
-             (hash-set! by-id (message-id msg) msg)
-             (hash-set! children (message-id msg) '()))
-           (for ([msg (in-list entries)])
-             (define pid (message-parent-id msg))
-             (when (and pid (hash-has-key? children pid))
-               (hash-update! children pid (lambda (lst) (append lst (list msg))))))
-           (session-index by-id
-                          children
+           ;; M11 (v0.97.15): Immutable for/fold replaces mutable make-hash + hash-set!
+           (define-values (by-id children-0)
+             (for/fold ([bid (hash)]
+                        [chd (hash)])
+                       ([msg (in-list entries)])
+               (values (hash-set bid (message-id msg) msg) (hash-set chd (message-id msg) '()))))
+           (define children
+             (for/fold ([chd children-0]) ([msg (in-list entries)])
+               (define pid (message-parent-id msg))
+               (if (and pid (hash-has-key? chd pid))
+                   (hash-update chd pid (lambda (lst) (append lst (list msg))))
+                   chd)))
+           ;; Convert immutable hashes to mutable for session-index
+           (define by-id-mut (make-hash))
+           (hash-for-each by-id (lambda (k v) (hash-set! by-id-mut k v)))
+           (define children-mut (make-hash))
+           (hash-for-each children (lambda (k v) (hash-set! children-mut k v)))
+           (session-index by-id-mut
+                          children-mut
                           (list->vector entries)
                           (make-hash)
                           (box #f)

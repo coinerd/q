@@ -2,6 +2,7 @@
 
 ;; runtime/context-assembly/conclusion-ranker.rkt — Deterministic conclusion ranking
 ;; STABILITY: evolving
+;; CONSUMERS: state-aware-builder, tests
 ;;
 ;; Scores conclusions by state match, recency, dependency overlap, category priority,
 ;; and explicit tags. Deterministic — no LLM calls. Used to enforce a hard token budget.

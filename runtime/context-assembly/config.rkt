@@ -1,6 +1,7 @@
 #lang racket/base
 ;; runtime/context-assembly/config.rkt — context-assembly configuration parameters
 ;; STABILITY: internal
+;; CONSUMERS: runtime/context-assembly, agent/loop, wiring/run-modes
 ;;
 ;; Thin config module to break the dependency cycle between
 ;; session-config.rkt and state-aware-builder.rkt.
