@@ -1,3 +1,17 @@
+## [0.97.10] - 2026-06-08
+
+### Fixed
+- GAP-A: Unified ranking — fallback-select-conclusions now delegates to rank-and-budget
+- GAP-B: Removed idle guard — WS evolution correctly runs on idle transitions (any→idle)
+- GAP-C: Added 3 missing FSM transitions (impl→verify, verify→debug, debug→verify)
+- GAP-D: Replaced magic `(* max-count 200)` with `(current-conclusion-token-budget)` parameter
+
+### Tests
+- 3 ranking consistency tests (conclusion-graph)
+- 3 idle-reset regression tests (ws-evolution)
+- 3 FSM transition tests (ws-evolution)
+- 1 unified budget parameter test (state-aware-builder)
+
 ## [0.97.9] - 2026-06-08
 
 ### Fixed
