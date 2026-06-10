@@ -41,6 +41,7 @@
                   current-force-distill-fn
                   current-expand-context-fn
                   current-revert-state-fn
+                  current-rollback-action-execution?
                   current-rollback-action-log
                   rollback-action-reason)
          (only-in "auto-distillation.rkt" current-auto-distillation-enabled?)
@@ -389,22 +390,22 @@
       (log-warning "context-assembly: rollback triggers fired: ~a" warnings))
     (when recommended-action
       ;; v0.77.10 M2: Wire real execution callbacks
-      (parameterize ([current-force-distill-fn
-                      (lambda (a)
-                        (log-warning "context-assembly: force-distill enabling auto-distillation")
-                        (current-auto-distillation-enabled? #t))]
-                     [current-expand-context-fn
-                      (lambda (a)
-                        (define current-budget (current-conclusion-token-budget))
-                        (define expanded (* current-budget 2))
-                        (log-warning "context-assembly: expanding budget ~a \xe2\x86\x92 ~a"
-                                     current-budget
-                                     expanded)
-                        (current-conclusion-token-budget expanded))]
-                     [current-revert-state-fn
-                      (lambda (a)
-                        (log-warning "context-assembly: revert-state action triggered: ~a"
-                                     (rollback-action-reason a)))])
+      (parameterize
+          ([current-rollback-action-execution? #t]
+           [current-force-distill-fn
+            (lambda (a)
+              (log-warning "context-assembly: force-distill enabling auto-distillation")
+              (current-auto-distillation-enabled? #t))]
+           [current-expand-context-fn
+            (lambda (a)
+              (define current-budget (current-conclusion-token-budget))
+              (define expanded (* current-budget 2))
+              (log-warning "context-assembly: expanding budget ~a â ~a" current-budget expanded)
+              (current-conclusion-token-budget expanded))]
+           [current-revert-state-fn
+            (lambda (a)
+              (log-warning "context-assembly: revert-state action triggered: ~a"
+                           (rollback-action-reason a)))])
         (define executed (maybe-execute-action recommended-action))
         (when executed
           (log-warning "context-assembly: executed rollback action: ~a" executed)))))
