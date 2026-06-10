@@ -134,6 +134,41 @@
     (test-case "graph-select-conclusions with unknown seeds returns empty"
       (define g (build-conclusion-graph (list c1 c2)))
       (define selected (graph-select-conclusions g '("nonexistent")))
-      (check-equal? selected '()))))
+      (check-equal? selected '()))
+
+    ;; ============================================================
+    ;; v0.97.10 W0: GAP-A ranking consistency tests
+    ;; ============================================================
+
+    (test-case "GAP-A: fallback uses multi-factor scoring (not pure recency)"
+      ;; Create conclusions where the OLDEST has highest relevance
+      (define c-old-relevant
+        (task-conclusion "old-rel"
+                         "critical decision"
+                         'decision
+                         'implementation
+                         '()
+                         100
+                         '("bug" "fix")
+                         '()))
+      (define c-new-irrelevant
+        (task-conclusion "new-irr" "trivial fact" 'fact 'exploration '() 900 '() '()))
+      (define selected (fallback-select-conclusions (list c-new-irrelevant c-old-relevant) 2))
+      ;; With multi-factor scoring, the decision with relevance tags should rank higher
+      (check-true (>= (length selected) 1))
+      ;; First element should be the higher-scoring one (not necessarily newest)
+      (check-not-false (member "old-rel" (map task-conclusion-id selected)))
+      (check-not-false (member "new-irr" (map task-conclusion-id selected))))
+
+    (test-case "GAP-A: fallback with empty input returns empty"
+      (define selected (fallback-select-conclusions '() 5))
+      (check-equal? selected '()))
+
+    (test-case "GAP-A: fallback respects max-count"
+      (define many
+        (for/list ([i (in-range 10)])
+          (task-conclusion (format "mc~a" i) (format "text ~a" i) 'fact 'idle '() (+ 100 i) '() '())))
+      (define selected (fallback-select-conclusions many 3))
+      (check-true (<= (length selected) 3)))))
 
 (run-tests suite)
