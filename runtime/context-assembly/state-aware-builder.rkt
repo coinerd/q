@@ -32,8 +32,7 @@
          (only-in "conclusion-graph.rkt"
                   build-conclusion-graph
                   graph-select-conclusions
-                  graph-detect-cycles
-                  fallback-select-conclusions)
+                  graph-detect-cycles)
          (only-in "conclusion-ranker.rkt" rank-and-budget)
          (only-in "rollback-actions.rkt"
                   warnings->actions
@@ -49,7 +48,8 @@
                   current-task-state-aware-assembly?
                   current-graph-conclusion-selection?
                   current-conclusion-token-budget
-                  current-ws-evolution-enabled?)
+                  current-ws-evolution-enabled?
+                  compute-conclusion-budget)
          (only-in "memory-builder.rkt"
                   observe-memory-for-context
                   memory-telemetry->jsexpr
@@ -182,16 +182,20 @@
        (define cycles (graph-detect-cycles graph))
        (cond
          [(pair? cycles)
-          ;; Cycles detected — log and fall back to recency selection
-          (log-warning "context-assembly: conclusion graph has ~a cycle(s), falling back"
-                       (length cycles))
-          (fallback-select-conclusions conclusions 20 current-states)]
+          ;; GAP-D v0.97.9: Cycles detected — downgrade to info, use semantic ranking
+          (log-info "context-assembly: conclusion graph has ~a cycle(s), using rank-and-budget"
+                    (length cycles))
+          (rank-and-budget conclusions
+                           #:current-state (and (pair? current-states) (car current-states))
+                           #:max-conclusion-tokens (or (current-conclusion-token-budget) 2000))]
          [else
           ;; Seed-based subgraph selection (v0.77.10 M4: uses convenience wrapper)
           (define selected-conclusions (graph-select-conclusions graph seed-ids))
           (if (null? selected-conclusions)
-              ;; No seeds matched — fall back to recency selection
-              (fallback-select-conclusions conclusions 20 current-states)
+              ;; GAP-D v0.97.9: No seeds matched — use semantic ranking instead of recency
+              (rank-and-budget conclusions
+                               #:current-state (and (pair? current-states) (car current-states))
+                               #:max-conclusion-tokens (or (current-conclusion-token-budget) 2000))
               selected-conclusions)])]))
 
   ;; GAP-4: Extract active tags from working-set messages for tag-based ranking
