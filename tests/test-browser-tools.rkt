@@ -82,10 +82,14 @@
               (check-equal? (hash-ref result 'status) "ok")
               (check-true (string? (hash-ref result 'session-id))))))
 
-(test-case "browser_open: blocked URL raises error"
+(test-case "browser_open: blocked URL returns error result"
   (with-svc (lambda ()
-              (check-exn q-browser-error?
-                         (lambda () (handle-browser-open (hasheq 'url "file:///etc/passwd")))))))
+              (define result (handle-browser-open (hasheq 'url "file:///etc/passwd")))
+              (check-true (tool-result-is-error? result))
+              (define content (tool-result-content result))
+              (check-true (string? (if (string? content)
+                                       content
+                                       (format "~a" content)))))))
 
 (test-case "browser_open: no service returns graceful error"
   (parameterize ([current-browser-service #f])
@@ -248,16 +252,17 @@
   (with-svc (lambda ()
               (define sid (hash-ref (open-session) 'session-id))
               (handle-browser-close (hasheq 'session-id sid))
-              (check-exn q-browser-error?
-                         (lambda () (handle-browser-observe (hasheq 'session-id sid)))))))
+              (define result (handle-browser-observe (hasheq 'session-id sid)))
+              (check-true (tool-result-is-error? result)))))
 
 (test-case "browser_open: missing URL raises error"
   (with-svc (lambda ()
               (check-exn exn:fail? (lambda () (handle-browser-open (hasheq 'session-id "s1")))))))
 
-(test-case "browser_observe: null session-id raises error"
+(test-case "browser_observe: null session-id returns error result"
   (with-svc (lambda ()
-              (check-exn exn:fail? (lambda () (handle-browser-observe (hasheq 'session-id #f)))))))
+              (define result (handle-browser-observe (hasheq 'session-id #f)))
+              (check-true (tool-result-is-error? result)))))
 
 (test-case "browser_check_local_app: returns status"
   (with-svc (lambda ()

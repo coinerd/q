@@ -124,7 +124,7 @@
   (define result-summary
     (hash-ref payload 'resultSummary (lambda () (if (hash-ref payload 'error #f) 'error 'completed))))
   (define result-raw (hash-ref payload 'result #f))
-  (define error-raw (hash-ref payload 'error #f))
+  (define error-raw (or (hash-ref payload 'resultError #f) (hash-ref payload 'error #f)))
   (define ts (event-time evt))
   (if (recent-tool-end? state name)
       (set-pending-tool-name state #f)

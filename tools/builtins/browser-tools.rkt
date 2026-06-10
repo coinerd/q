@@ -94,8 +94,9 @@
     [(not svc) (browser-not-configured-result)]
     [else
      (define url (hash-ref args 'url))
-     (define-values (sid obs) (browser-open! svc url #:options (hash-ref args 'options #f)))
-     (ok-result 'session-id sid 'observation (observation->hash obs))]))
+     (with-handlers ([q-browser-error? (lambda (e) (browser-error-result "browser_open" e))])
+       (define-values (sid obs) (browser-open! svc url #:options (hash-ref args 'options #f)))
+       (ok-result 'session-id sid 'observation (observation->hash obs)))]))
 
 (define (handle-browser-observe args [exec-ctx #f])
   (define svc (get-svc))
@@ -103,8 +104,9 @@
     [(not svc) (browser-not-configured-result)]
     [else
      (define sid (hash-ref args 'session-id))
-     (define obs (browser-observe! svc sid #:selector (hash-ref args 'selector #f)))
-     (ok-result 'observation (observation->hash obs))]))
+     (with-handlers ([q-browser-error? (lambda (e) (browser-error-result "browser_observe" e))])
+       (define obs (browser-observe! svc sid #:selector (hash-ref args 'selector #f)))
+       (ok-result 'observation (observation->hash obs)))]))
 
 (define (handle-browser-click args [exec-ctx #f])
   (define svc (get-svc))
@@ -142,8 +144,9 @@
      (define key (hash-ref args 'key))
      (define modifiers (hash-ref args 'modifiers '()))
      (define action (browser-action-press key modifiers))
-     (define obs (browser-act! svc sid action))
-     (ok-result 'observation (observation->hash obs))]))
+     (with-handlers ([q-browser-error? (lambda (e) (browser-error-result "browser_press" e))])
+       (define obs (browser-act! svc sid action))
+       (ok-result 'observation (observation->hash obs)))]))
 
 (define (handle-browser-extract args [exec-ctx #f])
   (define svc (get-svc))
@@ -153,18 +156,19 @@
      (define sid (hash-ref args 'session-id))
      (define selector (hash-ref args 'selector))
      (define extract-type (hash-ref args 'extract-type "text"))
-     (define obs (browser-observe! svc sid #:selector selector))
-     (make-success-result
-      (hasheq 'status
-              "ok"
-              'extract-type
-              extract-type
-              'data
-              (case (string->symbol extract-type)
-                [(text) (or (browser-observation-visible-text obs) "")]
-                [(html) (or (browser-observation-text-content obs) "")]
-                [(accessibility) (format "~a" (or (browser-observation-accessibility-tree obs) ""))]
-                [else (or (browser-observation-visible-text obs) "")])))]))
+     (with-handlers ([q-browser-error? (lambda (e) (browser-error-result "browser_extract" e))])
+       (define obs (browser-observe! svc sid #:selector selector))
+       (make-success-result
+        (hasheq 'status
+                "ok"
+                'extract-type
+                extract-type
+                'data
+                (case (string->symbol extract-type)
+                  [(text) (or (browser-observation-visible-text obs) "")]
+                  [(html) (or (browser-observation-text-content obs) "")]
+                  [(accessibility) (format "~a" (or (browser-observation-accessibility-tree obs) ""))]
+                  [else (or (browser-observation-visible-text obs) "")]))))]))
 
 (define (handle-browser-screenshot args [exec-ctx #f])
   (define svc (get-svc))
@@ -173,17 +177,18 @@
     [else
      (define sid (hash-ref args 'session-id))
      (define selector (hash-ref args 'selector #f))
-     (define obs (browser-screenshot! svc sid #:selector selector))
-     (define raw-bytes (browser-observation-screenshot-bytes obs))
-     ;; Base64-encode binary data for JSON-safe transport
-     (make-success-result (hasheq 'status
-                                  "ok"
-                                  'mime-type
-                                  (or (browser-observation-screenshot-mime obs) "image/png")
-                                  'data
-                                  (if (bytes? raw-bytes)
-                                      (bytes->base64-string raw-bytes)
-                                      (or raw-bytes ""))))]))
+     (with-handlers ([q-browser-error? (lambda (e) (browser-error-result "browser_screenshot" e))])
+       (define obs (browser-screenshot! svc sid #:selector selector))
+       (define raw-bytes (browser-observation-screenshot-bytes obs))
+       ;; Base64-encode binary data for JSON-safe transport
+       (make-success-result (hasheq 'status
+                                    "ok"
+                                    'mime-type
+                                    (or (browser-observation-screenshot-mime obs) "image/png")
+                                    'data
+                                    (if (bytes? raw-bytes)
+                                        (bytes->base64-string raw-bytes)
+                                        (or raw-bytes "")))))]))
 
 (define (handle-browser-scroll args [exec-ctx #f])
   (define svc (get-svc))
@@ -194,8 +199,9 @@
      (define direction (hash-ref args 'direction "down"))
      (define amount (hash-ref args 'amount 3))
      (define action (browser-action-scroll direction amount))
-     (define obs (browser-act! svc sid action))
-     (ok-result 'observation (observation->hash obs))]))
+     (with-handlers ([q-browser-error? (lambda (e) (browser-error-result "browser_scroll" e))])
+       (define obs (browser-act! svc sid action))
+       (ok-result 'observation (observation->hash obs)))]))
 
 (define (handle-browser-close args [exec-ctx #f])
   (define svc (get-svc))
@@ -203,14 +209,17 @@
     [(not svc) (browser-not-configured-result)]
     [else
      (define sid (hash-ref args 'session-id))
-     (browser-close! svc sid)
-     (ok-result 'session-id sid)]))
+     (with-handlers ([q-browser-error? (lambda (e) (browser-error-result "browser_close" e))])
+       (browser-close! svc sid)
+       (ok-result 'session-id sid))]))
 
 (define (handle-browser-check-local-app args [exec-ctx #f])
   (define svc (get-svc))
   (cond
     [(not svc) (browser-not-configured-result)]
     [else
-     ;; workflow.rkt returns a raw hash — sanitize binary, wrap in tool-result
-     (define raw-result (browser-check-local-app args))
-     (make-success-result (sanitize-binary-values raw-result))]))
+     (with-handlers ([q-browser-error? (lambda (e)
+                                         (browser-error-result "browser_check_local_app" e))])
+       ;; workflow.rkt returns a raw hash — sanitize binary, wrap in tool-result
+       (define raw-result (browser-check-local-app args))
+       (make-success-result (sanitize-binary-values raw-result)))]))
