@@ -35,29 +35,31 @@
          INPUT-PROMPT-WIDTH
          CURSOR_MARKER
 
-         (contract-out
-          ;; Constructor
-          [initial-input-state (-> any/c)]
-          ;; Internal helpers (shared by editing-ops, history-ops)
-          [push-undo (-> any/c any/c any/c)]
-          [push-kill (-> any/c string? any/c)]
-          [strip-for-undo (-> any/c any/c)]
-          ;; Mouse event support
-          [parse-mouse-event (-> any/c any/c)]
-          [decode-mouse-x10 (-> exact-integer? exact-integer? exact-integer? any/c)]
-          [decode-mouse-message (-> any/c any/c)]
-          [normalize-selection-range
-           (-> any/c any/c (values exact-integer? exact-integer? exact-integer? exact-integer?))]
-          ;; IME cursor markers
-          [cursor-marker-string (-> string?)]
-          [strip-cursor-markers (-> string? string?)]
-          [has-cursor-markers? (-> string? boolean?)]
-          [insert-cursor-marker (-> string? exact-nonnegative-integer? string?)]
-          ;; Horizontal scroll
-          [input-visible-window
-           (-> any/c
-               exact-positive-integer?
-               (values string? exact-nonnegative-integer? exact-nonnegative-integer?))]))
+         ;; Constructor
+         (contract-out [initial-input-state (-> input-state?)]
+                       ;; Internal helpers (shared by editing-ops, history-ops)
+                       [push-undo (-> input-state? any/c input-state?)]
+                       [push-kill (-> input-state? string? input-state?)]
+                       [strip-for-undo (-> input-state? input-state?)]
+                       ;; Mouse event support
+                       [parse-mouse-event (-> bytes? (or/c mouse-event? #f))]
+                       [decode-mouse-x10
+                        (-> exact-integer? exact-integer? exact-integer? mouse-event?)]
+                       [decode-mouse-message (-> bytes? (or/c mouse-event? #f))]
+                       [normalize-selection-range
+                        (-> exact-nonnegative-integer?
+                            exact-nonnegative-integer?
+                            (values exact-integer? exact-integer? exact-integer? exact-integer?))]
+                       ;; IME cursor markers
+                       [cursor-marker-string (-> string?)]
+                       [strip-cursor-markers (-> string? string?)]
+                       [has-cursor-markers? (-> string? boolean?)]
+                       [insert-cursor-marker (-> string? exact-nonnegative-integer? string?)]
+                       ;; Horizontal scroll
+                       [input-visible-window
+                        (-> input-state?
+                            exact-positive-integer?
+                            (values string? exact-nonnegative-integer? exact-nonnegative-integer?))]))
 
 ;; Maximum undo stack depth
 (define MAX-UNDO-STACK 100)

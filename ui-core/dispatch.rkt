@@ -12,6 +12,10 @@
 (require racket/contract
          "event-types.rkt")
 
+;; Dispatch function contracts.
+;; All dispatch functions take an opaque dispatch context (tui-ctx or equivalent)
+;; as first argument. The context is intentionally any/c because it varies by
+;; interface (TUI uses tui-ctx, GUI uses different state) and no shared predicate exists.
 (provide (contract-out [dispatch-submit! (-> any/c string? void?)]
                        [dispatch-cancel! (-> any/c void?)]
                        [dispatch-scroll! (-> any/c (or/c 'up 'down 'top 'bottom) void?)]

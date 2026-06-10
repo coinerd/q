@@ -29,9 +29,16 @@
                         (->* (string? (or/c string? #f) (or/c string? #f) string?)
                              ((or/c exact-nonnegative-integer? #f))
                              provider?)]
+                       [make-provider-for-name
+                        (->* (string? (or/c string? #f) (or/c string? #f) string?)
+                             ((or/c exact-nonnegative-integer? #f))
+                             provider?)] ;; F24 alias
                        [provider-is-mock? (-> any/c boolean?)]))
 
 ;; Build the appropriate provider based on provider name.
+;; Deprecated alias: prefer make- prefix (F24 naming convention)
+(define make-provider-for-name create-provider-for-name)
+
 (define (create-provider-for-name prov-name base-url api-key model-name [max-tokens #f])
   ;; Local providers don't need real API keys — use a sentinel to
   ;; pass validation when no credential is available.

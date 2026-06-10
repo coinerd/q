@@ -31,17 +31,35 @@
          "../cli/args.rkt"
          "../extensions/ui-surface.rkt")
 
-(provide (contract-out [run-tui (->* () () any)]
-                       [run-tui-with-runtime (-> any/c any/c any)]
-                       [subscribe-runtime-events! (-> any/c void?)]
-                       [create-tui-session (-> any/c any/c any)]
-                       [load-tui-scrollback (-> any/c any/c any/c any/c any)]
-                       [init-tui-terminal (-> any/c any)]
-                       [run-tui-loop (-> any/c any/c any)]))
+;; TUI entry point contracts.
+;; Most params use any/c because runtime/tui-ctx are opaque structs
+;; without exported predicates (internal-only types).
+;; F24: forward definition for make-tui-session alias
+(define make-tui-session #f)
+
+(provide (contract-out
+          [run-tui (->* () () any)]
+          ;; runtime: agent-session struct (opaque)
+          ;; path-string: session directory
+          [run-tui-with-runtime (-> any/c path-string? any)]
+          ;; ctx: tui-ctx struct (opaque)
+          [subscribe-runtime-events! (-> any/c void?)]
+          ;; runtime + path-string
+          [create-tui-session (-> any/c path-string? any)]
+          [make-tui-session (-> any/c path-string? any)] ;; F24 alias
+          ;; path-string, integer, list, integer
+          [load-tui-scrollback
+           (-> path-string? exact-nonnegative-integer? (listof any/c) exact-nonnegative-integer? any)]
+          ;; terminal-bridge (opaque)
+          [init-tui-terminal (-> any/c any)]
+          ;; terminal-bridge + tui-ctx (both opaque)
+          [run-tui-loop (-> any/c any/c any)]))
 
 ;; ============================================================
 ;; Runtime event subscription
 ;; ============================================================
+
+(set! make-tui-session create-tui-session)
 
 (define (subscribe-runtime-events! ctx)
   (define bus (tui-ctx-event-bus ctx))
@@ -55,6 +73,9 @@
 ;; ============================================================
 
 (define (create-tui-session rt-config cli-cfg)
+  ;; Deprecated alias: prefer make- prefix (F24 naming convention)
+  (define make-tui-session create-tui-session)
+
   ;; Create agent session and TUI context from runtime config.
   ;; Returns (values ctx sess scrollback-path)
   (define bus (dict-ref rt-config 'event-bus #f))

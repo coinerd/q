@@ -143,6 +143,8 @@
 
          ;; Unified factory (#1152)
          create-agent-session
+         ;; Deprecated alias: prefer make- prefix (F24)
+         make-agent-session
 
          ;; Thinking level (#1153) — re-exported from agent-session
          session:thinking-levels
@@ -430,6 +432,9 @@
 ;; ============================================================
 ;; create-agent-session (#1152)
 ;; ============================================================
+
+;; Deprecated: prefer make-agent-session (F24 naming convention)
+(define make-agent-session create-agent-session)
 
 (define (create-agent-session #:provider provider
                               #:session-dir [session-dir (default-session-dir)]
