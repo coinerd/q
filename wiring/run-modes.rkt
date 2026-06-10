@@ -77,7 +77,8 @@
          run-resume
          run-json
          run-rpc
-         run-print-mode)
+         run-print-mode
+         wire-runtime-parameters!)
 
 ;; ============================================================
 ;; build-runtime-from-cli
@@ -227,27 +228,8 @@
             (or effective-model-name "(default)")
             max-ctx-tokens
             (if model-cw "model-registry" "config-default"))
-  (apply-context-assembly-profile! profile max-ctx-tokens)
-
-  ;; v0.97.5 GAP-F: Wire mid-session bridge enabled (default #f, only self-healing/full)
-  (current-mid-session-bridge-enabled (and (memq profile '(self-healing full))
-                                           (setting-ref settings 'mid-session-bridge-enabled #f)))
-
-  ;; v0.95.15 W4: Wire memory injection budget from settings
-  ;; v0.97.4 GAP-D: Default to 5% of context window for self-healing/full profiles
-  ;; v0.97.6 F5: Startup log for auto-budget observability
-  (define settings-budget (setting-memory-injection-budget settings))
-  (cond
-    [settings-budget
-     (current-memory-injection-budget settings-budget)
-     (log-info "memory-injection: using configured budget ~a tokens" settings-budget)]
-    [(memq profile '(self-healing full))
-     (define auto-budget (quotient max-ctx-tokens 20))
-     (current-memory-injection-budget auto-budget)
-     (log-info "memory-injection: auto-budget ~a tokens (5% of ~a context window, profile=~a)"
-               auto-budget
-               max-ctx-tokens
-               profile)])
+  ;; H3a: Wire all runtime parameters via shared function
+  (wire-runtime-parameters! settings profile max-ctx-tokens)
 
   ;; v0.95.16: Wire memory backend from settings (config.json)
   ;; Only applies when --memory CLI flag was NOT passed.
@@ -260,27 +242,12 @@
   ;; v0.95.16 W1: Wire auto-extraction from settings
   (define auto-extract-enabled? (setting-memory-auto-extraction-enabled? settings))
   (define auto-extract-min-conf (setting-memory-auto-extraction-min-confidence settings))
-  (current-auto-extraction-enabled auto-extract-enabled?)
-  (current-auto-extraction-min-confidence auto-extract-min-conf)
   (define final-hash-with-auto-extract
     (hash-set* final-hash-with-memory
                'memory-auto-extraction-enabled
                auto-extract-enabled?
                'memory-auto-extraction-min-confidence
                auto-extract-min-conf))
-
-  ;; v0.95.21 fix: Wire user-scope policy and auto-reflection from settings
-  (update-memory-policy! #:user-scope-enabled? (setting-memory-user-scope-enabled? settings))
-  (current-auto-reflection-enabled (setting-memory-auto-reflection-enabled? settings))
-  (current-auto-reflection-min-items (setting-memory-auto-reflection-min-items settings))
-
-  ;; v0.96.14: Wire reflection-prompt-enabled and auto-distillation from config.
-  ;; Precedence: apply-context-assembly-profile! sets profile-based default first (line 219),
-  ;; then explicit config.json setting overrides it. 'unset sentinel preserves profile default.
-  (current-reflection-prompt-enabled (setting-reflection-prompt-enabled? settings))
-  (let ([ad (setting-auto-distillation-enabled? settings)])
-    (unless (eq? ad 'unset)
-      (current-auto-distillation-enabled? ad)))
 
   ;; LF1 (GAP-1/7): Wire LLM distill function and reflection LLM function
   ;; from provider. These enable LLM-powered conclusion distillation and
@@ -388,6 +355,32 @@
     [else (cli-config-mode cfg)]))
 
 ;; ============================================================
+;; wire-runtime-parameters! — shared parameter wiring
+;; ============================================================
+
+;; Extract shared wiring from build-runtime-from-cli and reload-config!.
+;; Both functions set the same ~12 runtime parameters from settings + profile.
+;; H3a (v0.97.13): pure extraction, no behavioral change.
+(define (wire-runtime-parameters! settings profile max-ctx-tokens)
+  (apply-context-assembly-profile! profile max-ctx-tokens)
+  (wire-security-config! settings)
+  (current-mid-session-bridge-enabled (and (memq profile '(self-healing full))
+                                           (setting-ref settings 'mid-session-bridge-enabled #f)))
+  (define settings-budget (setting-memory-injection-budget settings))
+  (cond
+    [settings-budget (current-memory-injection-budget settings-budget)]
+    [(memq profile '(self-healing full))
+     (current-memory-injection-budget (quotient max-ctx-tokens 20))])
+  (current-auto-extraction-enabled (setting-memory-auto-extraction-enabled? settings))
+  (current-auto-extraction-min-confidence (setting-memory-auto-extraction-min-confidence settings))
+  (update-memory-policy! #:user-scope-enabled? (setting-memory-user-scope-enabled? settings))
+  (current-auto-reflection-enabled (setting-memory-auto-reflection-enabled? settings))
+  (current-auto-reflection-min-items (setting-memory-auto-reflection-min-items settings))
+  (current-reflection-prompt-enabled (setting-reflection-prompt-enabled? settings))
+  (let ([ad (setting-auto-distillation-enabled? settings)])
+    (unless (eq? ad 'unset)
+      (current-auto-distillation-enabled? ad))))
+;; ============================================================
 ;; reload-config! (#1182)
 ;; ============================================================
 
@@ -412,26 +405,8 @@
   (define new-model-name (dict-ref base-config 'model #f))
   (define new-cw (model-registry-context-window new-reg (or new-model-name "")))
   (define new-max-ctx (or new-cw (dict-ref base-config 'max-context-tokens 128000)))
-  (apply-context-assembly-profile! new-profile new-max-ctx)
-  ;; GAP-F v0.97.11: Refresh all memory/context parameters from new settings
-  (wire-security-config! new-settings)
-  (current-mid-session-bridge-enabled (and (memq new-profile '(self-healing full))
-                                           (setting-ref new-settings 'mid-session-bridge-enabled #f)))
-  (define settings-budget (setting-memory-injection-budget new-settings))
-  (cond
-    [settings-budget (current-memory-injection-budget settings-budget)]
-    [(memq new-profile '(self-healing full))
-     (current-memory-injection-budget (quotient new-max-ctx 20))])
-  (current-auto-extraction-enabled (setting-memory-auto-extraction-enabled? new-settings))
-  (current-auto-extraction-min-confidence (setting-memory-auto-extraction-min-confidence
-                                           new-settings))
-  (update-memory-policy! #:user-scope-enabled? (setting-memory-user-scope-enabled? new-settings))
-  (current-auto-reflection-enabled (setting-memory-auto-reflection-enabled? new-settings))
-  (current-auto-reflection-min-items (setting-memory-auto-reflection-min-items new-settings))
-  (current-reflection-prompt-enabled (setting-reflection-prompt-enabled? new-settings))
-  (let ([ad (setting-auto-distillation-enabled? new-settings)])
-    (unless (eq? ad 'unset)
-      (current-auto-distillation-enabled? ad)))
+  ;; H3a: Wire all runtime parameters via shared function
+  (wire-runtime-parameters! new-settings new-profile new-max-ctx)
   ;; Return updated config + registry
   (values
    (hash->session-config
