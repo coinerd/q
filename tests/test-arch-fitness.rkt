@@ -262,6 +262,13 @@
     (define lines (length (string-split (file->string p) "\n")))
     (check-true (< lines 550) (format "tools/tool.rkt has ~a lines (expected < 550)" lines))))
 
+(test-case "RA-5: runtime/layer-adapters.rkt line budget ≤120"
+  (define p (build-path q-dir "runtime" "layer-adapters.rkt"))
+  (when (file-exists? p)
+    (define lines (length (string-split (file->string p) "\n")))
+    (check-true (<= lines 120)
+                (format "runtime/layer-adapters.rkt is ~a lines, budget is 120" lines))))
+
 (test-case "RA-5: agent/event-types.rkt exists as extracted module"
   (define p (build-path q-dir "agent" "event-types.rkt"))
   (check-true (file-exists? p) "agent/event-types.rkt must exist after extraction"))
@@ -677,7 +684,8 @@
       (check-equal? cycles '() "tools layer must have no circular requires"))
 
     (test-case "session-store-tree no longer lazy-requires session-store"
-      (define tree-content (file->string (build-path q-dir "runtime" "session" "session-store-tree.rkt")))
+      (define tree-content
+        (file->string (build-path q-dir "runtime" "session" "session-store-tree.rkt")))
       ;; Strip comment lines before checking
       (define code-lines
         (filter (lambda (l) (not (string-prefix? (string-trim l) ";;")))

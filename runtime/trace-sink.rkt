@@ -10,7 +10,21 @@
          racket/contract
          json)
 
-(provide (contract-out [trace-sink<%> any/c]
+;; Contract type aliases
+;; trace-sink<%> is a Racket interface value — not directly contractable.
+;; Class values (file-trace-sink% etc.) implement this interface.
+;; Use (is-a?/c trace-sink<%>) for instances, (implementation? _ trace-sink<%>) for classes.
+(define trace-sink-instance/c (or/c (is-a?/c trace-sink<%>) #f))
+(define trace-sink-class/c (and/c any/c (λ (v) (implementation? v trace-sink<%>))))
+
+(provide trace-sink-instance/c
+         trace-sink-class/c
+         ;; Interface value — kept as any/c because Racket interface values
+         ;; cannot be directly used as contract predicates for provide/contract.
+         (contract-out [trace-sink<%> any/c]
+                       ;; Class values implementing trace-sink<%>
+                       ;; Using relaxed contract due to class contract limitations;
+                       ;; see trace-sink-class/c for the predicate.
                        [file-trace-sink% any/c]
                        [json-file-trace-sink% any/c]
                        [port-trace-sink% any/c]

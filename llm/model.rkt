@@ -21,8 +21,8 @@
 ;; Contracts
 ;; ============================================================
 
-(define message-list/c (listof any/c))
-(define tool-list/c (or/c (listof any/c) #f))
+(define message-list/c (listof hash?))
+(define tool-list/c (or/c (listof hash?) #f))
 (define settings/c (or/c hash? #f))
 (define usage/c (or/c hash? #f))
 (define stop-reason/c (or/c symbol? #f))
@@ -148,8 +148,8 @@
 ;; ============================================================
 
 ;; Struct types (predicates + accessors)
-(provide ;; Struct type model-request (predicate + accessors)
-         model-request
+;; Struct type model-request (predicate + accessors)
+(provide model-request
          model-request?
          model-request-messages
          model-request-tools
