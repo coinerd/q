@@ -9,10 +9,10 @@
          racket/format
          json
          (only-in "../string-helpers.rkt" truncate-string))
+(require (only-in "../../util/error/error-helpers.rkt" with-safe-fallback))
 
-(provide (contract-out
-          [extract-arg-summary (-> any/c (or/c string? #f))]
-          [format-tool-call-display (-> string? any/c string?)]))
+(provide (contract-out [extract-arg-summary (-> any/c (or/c string? #f))]
+                       [format-tool-call-display (-> string? any/c string?)]))
 
 ;; Extract a short summary string from tool-call arguments.
 ;; Returns #f if no useful detail can be extracted.
@@ -21,17 +21,12 @@
     (cond
       [(hash? args-raw) args-raw]
       [(string? args-raw)
-       (with-handlers ([exn:fail? (lambda (e) #f)])
-         (define parsed (string->jsexpr args-raw))
-         (and (hash? parsed) parsed))]
+       (with-safe-fallback #f (define parsed (string->jsexpr args-raw)) (and (hash? parsed) parsed))]
       [else #f]))
   (cond
     [(and args (hash? args))
      (define cmd
-       (or (hash-ref args 'command #f)
-           (hash-ref args 'path #f)
-           (hash-ref args 'pattern #f)
-           #f))
+       (or (hash-ref args 'command #f) (hash-ref args 'path #f) (hash-ref args 'pattern #f) #f))
      (if cmd
          (truncate-string (~a cmd) 100)
          #f)]

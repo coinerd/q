@@ -7,6 +7,7 @@
          "../agent/event-bus.rkt"
          (only-in "../util/event/event.rkt" event? event->jsexpr)
          (only-in "../util/message/message.rkt" message? message->jsexpr))
+(require (only-in "../util/error/error-helpers.rkt" with-safe-fallback))
 
 (provide intent
          intent?
@@ -79,31 +80,31 @@
 ;; Parse a JSON line from stdin into an intent struct.
 ;; Returns #f on parse error or unrecognized intent.
 (define (parse-json-intent line)
-  (with-handlers ([exn:fail? (λ (_) #f)])
-    (cond
-      [(or (not (string? line)) (string=? (string-trim line) "")) #f]
-      [else
-       (define js (string->jsexpr line))
-       (define intent-str (hash-ref js 'intent #f))
-       (cond
-         [(not intent-str) #f]
-         [(not (member (string->symbol intent-str) VALID-INTENTS)) #f]
-         [else
-          (define intent-sym (string->symbol intent-str))
-          ;; Build payload based on intent type
-          (case intent-sym
-            [(prompt)
-             (define text (hash-ref js 'text #f))
-             (if text
-                 (intent 'prompt (hasheq 'text text))
-                 (intent 'prompt (hasheq)))]
-            [(fork)
-             (define entry-id (hash-ref js 'entryId #f))
-             (if entry-id
-                 (intent 'fork (hasheq 'entryId entry-id))
-                 (intent 'fork (hasheq)))]
-            [(interrupt compact quit) (intent intent-sym #f)]
-            [else #f])])])))
+  (with-safe-fallback #f
+                      (cond
+                        [(or (not (string? line)) (string=? (string-trim line) "")) #f]
+                        [else
+                         (define js (string->jsexpr line))
+                         (define intent-str (hash-ref js 'intent #f))
+                         (cond
+                           [(not intent-str) #f]
+                           [(not (member (string->symbol intent-str) VALID-INTENTS)) #f]
+                           [else
+                            (define intent-sym (string->symbol intent-str))
+                            ;; Build payload based on intent type
+                            (case intent-sym
+                              [(prompt)
+                               (define text (hash-ref js 'text #f))
+                               (if text
+                                   (intent 'prompt (hasheq 'text text))
+                                   (intent 'prompt (hasheq)))]
+                              [(fork)
+                               (define entry-id (hash-ref js 'entryId #f))
+                               (if entry-id
+                                   (intent 'fork (hasheq 'entryId entry-id))
+                                   (intent 'fork (hasheq)))]
+                              [(interrupt compact quit) (intent intent-sym #f)]
+                              [else #f])])])))
 
 ;; ============================================================
 ;; start-json-mode! — subscribe and output

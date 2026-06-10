@@ -57,6 +57,7 @@
          ;; Extracted sub-modules (v0.72.5 W0)
          "../session-store/versioning.rkt"
          "../session-store/in-memory.rkt")
+(require (only-in "../../util/error/error-helpers.rkt" with-safe-fallback))
 
 ;; F11: Consumer/Admin tier split:
 ;;   Consumer tier (always safe): append-entry!, load-session-log,
@@ -452,26 +453,27 @@
       (if (string? content)
           content
           (text-part-text (car content))))
-    (with-handlers ([exn:fail? (lambda (_) #f)])
-      (define raw (string->jsexpr text))
-      ;; Restore symbol values for category/fsm-state-origin fields
-      (define restored
-        (for/hash ([(k v) (in-hash raw)])
-          (values k
-                  (cond
-                    [(and (string? v) (memq k '(category fsm-state-origin))) (string->symbol v)]
-                    ;; v0.76.7 C1: relevance-tags values are symbols,
-                    ;; but origin-message-ids are strings (message IDs).
-                    [(and (list? v) (eq? k 'relevance-tags))
-                     (map (lambda (x)
-                            (if (string? x)
-                                (string->symbol x)
-                                x))
-                          v)]
-                    [(and (list? v) (eq? k 'origin-message-ids))
-                     v] ;; keep as strings — message IDs are strings
-                    [else v]))))
-      (hash->conclusion restored))))
+    (with-safe-fallback
+     #f
+     (define raw (string->jsexpr text))
+     ;; Restore symbol values for category/fsm-state-origin fields
+     (define restored
+       (for/hash ([(k v) (in-hash raw)])
+         (values k
+                 (cond
+                   [(and (string? v) (memq k '(category fsm-state-origin))) (string->symbol v)]
+                   ;; v0.76.7 C1: relevance-tags values are symbols,
+                   ;; but origin-message-ids are strings (message IDs).
+                   [(and (list? v) (eq? k 'relevance-tags))
+                    (map (lambda (x)
+                           (if (string? x)
+                               (string->symbol x)
+                               x))
+                         v)]
+                   [(and (list? v) (eq? k 'origin-message-ids))
+                    v] ;; keep as strings — message IDs are strings
+                   [else v]))))
+     (hash->conclusion restored))))
 
 ;; v0.77.1 W1.4: Append-only archive markers for evicted conclusions.
 ;; Archived conclusions are logged but skipped by load-conclusions by default.
@@ -503,22 +505,23 @@
       (if (string? content)
           content
           (text-part-text (car content))))
-    (with-handlers ([exn:fail? (lambda (_) #f)])
-      (define raw (string->jsexpr text))
-      (define restored
-        (for/hash ([(k v) (in-hash raw)])
-          (values k
-                  (cond
-                    [(and (string? v) (memq k '(category fsm-state-origin))) (string->symbol v)]
-                    [(and (list? v) (eq? k 'relevance-tags))
-                     (map (lambda (x)
-                            (if (string? x)
-                                (string->symbol x)
-                                x))
-                          v)]
-                    [(and (list? v) (eq? k 'origin-message-ids)) v]
-                    [else v]))))
-      (hash->conclusion restored))))
+    (with-safe-fallback
+     #f
+     (define raw (string->jsexpr text))
+     (define restored
+       (for/hash ([(k v) (in-hash raw)])
+         (values k
+                 (cond
+                   [(and (string? v) (memq k '(category fsm-state-origin))) (string->symbol v)]
+                   [(and (list? v) (eq? k 'relevance-tags))
+                    (map (lambda (x)
+                           (if (string? x)
+                               (string->symbol x)
+                               x))
+                         v)]
+                   [(and (list? v) (eq? k 'origin-message-ids)) v]
+                   [else v]))))
+     (hash->conclusion restored))))
 
 ;; ---------------------------------------------------------------------------
 ;; F11: Consumer/Admin submodule split

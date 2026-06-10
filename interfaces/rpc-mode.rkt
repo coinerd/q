@@ -8,6 +8,7 @@
          racket/port
          (only-in "../util/event/event.rkt" event->jsexpr event-ev)
          "../agent/event-bus.rkt")
+(require (only-in "../util/error/error-helpers.rkt" with-safe-fallback))
 
 (define-logger rpc-mode)
 ;;
@@ -123,12 +124,13 @@
 (define (rpc-handshake-valid? line expected-token)
   ;; Check if line is a valid handshake with the expected token.
   ;; Accepts: {"method":"handshake","params":{"token":"<TOKEN>"}}
-  (with-handlers ([exn:fail? (λ (_) #f)])
-    (let ([js (read-json (open-input-string (string-trim line)))])
-      (and (hash? js)
-           (equal? (hash-ref js 'method #f) "handshake")
-           (let ([params (hash-ref js 'params #f)])
-             (and (hash? params) (equal? (hash-ref params 'token #f) expected-token)))))))
+  (with-safe-fallback #f
+                      (let ([js (read-json (open-input-string (string-trim line)))])
+                        (and (hash? js)
+                             (equal? (hash-ref js 'method #f) "handshake")
+                             (let ([params (hash-ref js 'params #f)])
+                               (and (hash? params)
+                                    (equal? (hash-ref params 'token #f) expected-token)))))))
 
 ;; ============================================================
 ;; Error helper
@@ -142,22 +144,22 @@
 ;; ============================================================
 
 (define (parse-rpc-request json-line)
-  (with-handlers ([exn:fail? (λ (_) #f)])
-    (let* ([trimmed (string-trim json-line)])
-      (if (string=? trimmed "")
-          #f
-          (let ([js (read-json (open-input-string trimmed))])
-            (if (not (hash? js))
-                #f
-                (let ([id (hash-ref js 'id #f)]
-                      [method-str (hash-ref js 'method #f)]
-                      [raw-params (hash-ref js 'params #f)])
-                  (if (not (and id method-str (string? method-str)))
-                      #f
-                      (let ([params (if (and raw-params (hash? raw-params))
-                                        raw-params
-                                        (make-immutable-hash))])
-                        (rpc-request id (string->symbol method-str) params))))))))))
+  (with-safe-fallback #f
+                      (let* ([trimmed (string-trim json-line)])
+                        (if (string=? trimmed "")
+                            #f
+                            (let ([js (read-json (open-input-string trimmed))])
+                              (if (not (hash? js))
+                                  #f
+                                  (let ([id (hash-ref js 'id #f)]
+                                        [method-str (hash-ref js 'method #f)]
+                                        [raw-params (hash-ref js 'params #f)])
+                                    (if (not (and id method-str (string? method-str)))
+                                        #f
+                                        (let ([params (if (and raw-params (hash? raw-params))
+                                                          raw-params
+                                                          (make-immutable-hash))])
+                                          (rpc-request id (string->symbol method-str) params))))))))))
 
 ;; ============================================================
 ;; rpc-response->json : rpc-response? -> string?
@@ -304,9 +306,8 @@
                         (unless (eq? (rpc-request-method req) 'shutdown)
                           (loop)))
                       ;; Invalid request — determine error type
-                      (let ([valid-json? (with-handlers ([exn:fail? (λ (_) #f)])
-                                           (read-json (open-input-string trimmed))
-                                           #t)])
+                      (let ([valid-json?
+                             (with-safe-fallback #f (read-json (open-input-string trimmed)) #t)])
                         (if valid-json?
                             (let* ([parsed (read-json (open-input-string trimmed))]
                                    [id (hash-ref parsed 'id #f)])

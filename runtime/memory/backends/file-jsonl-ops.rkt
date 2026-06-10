@@ -19,6 +19,7 @@
          (only-in "helpers.rkt" scope-match? type-match? tag-match? expired? current-iso-8601 pad2)
          (only-in "../search.rkt" content-duplicate? relevance-score post-retrieve-process)
          (only-in "../management.rkt" analyze-items))
+(require (only-in "../../../util/error/error-helpers.rkt" with-safe-fallback))
 
 (provide make-store-record
          make-update-record
@@ -190,8 +191,7 @@
                                 [(= offset 0)
                                  (for/list ([line (in-lines in)]
                                             #:when (non-empty-string? (string-trim line)))
-                                   (with-handlers ([exn:fail? (lambda (_) #f)])
-                                     (string->jsexpr line)))]
+                                   (with-safe-fallback #f (string->jsexpr line)))]
                                 [else
                                  (file-position in (max 0 (sub1 offset)))
                                  (define prev-byte (read-byte in))
@@ -200,8 +200,7 @@
                                    (read-line in))
                                  (for/list ([line (in-lines in)]
                                             #:when (non-empty-string? (string-trim line)))
-                                   (with-handlers ([exn:fail? (lambda (_) #f)])
-                                     (string->jsexpr line)))]))
+                                   (with-safe-fallback #f (string->jsexpr line)))]))
                             #:mode 'text)))
 
 (define (incremental-load-view path old-view old-size)

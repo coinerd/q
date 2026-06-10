@@ -11,6 +11,7 @@
 
 (require racket/string
          racket/contract)
+(require (only-in "../../util/error/error-helpers.rkt" with-safe-fallback))
 
 ;; ============================================================
 ;; Parameters
@@ -94,15 +95,10 @@
        [(and (list? allowed-paths) (not (eq? allowed-paths 'default)))
         (for/or ([ap (in-list allowed-paths)])
           (define resolved-path
-            (or (with-handlers ([exn:fail? (λ (_) #f)])
-                  (resolve-path path))
-                (with-handlers ([exn:fail? (λ (_) #f)])
-                  (simplify-path path))))
+            (or (with-safe-fallback #f (resolve-path path))
+                (with-safe-fallback #f (simplify-path path))))
           (define resolved-ap
-            (or (with-handlers ([exn:fail? (λ (_) #f)])
-                  (resolve-path ap))
-                (with-handlers ([exn:fail? (λ (_) #f)])
-                  (simplify-path ap))))
+            (or (with-safe-fallback #f (resolve-path ap)) (with-safe-fallback #f (simplify-path ap))))
           (and resolved-path
                resolved-ap
                (let* ([path-str (path->string (if (complete-path? resolved-path)
@@ -116,14 +112,10 @@
                                      (string-append ap-str "/"))])
                  (or (string=? path-str ap-str) (string-prefix? path-str ap-prefix)))))]
        [else
-        (and (or (with-handlers ([exn:fail? (λ (_) #f)])
-                   (resolve-path root-path))
-                 (with-handlers ([exn:fail? (λ (_) #f)])
-                   (simplify-path root-path)))
-             (or (with-handlers ([exn:fail? (λ (_) #f)])
-                   (resolve-path path))
-                 (with-handlers ([exn:fail? (λ (_) #f)])
-                   (simplify-path path)))
+        (and (or (with-safe-fallback #f (resolve-path root-path))
+                 (with-safe-fallback #f (simplify-path root-path)))
+             (or (with-safe-fallback #f (resolve-path path))
+                 (with-safe-fallback #f (simplify-path path)))
              (let* ([resolved-root (or (resolve-path root-path) (simplify-path root-path))]
                     [resolved-path (or (resolve-path path) (simplify-path path))]
                     [root-str (path->string (if (complete-path? resolved-root)

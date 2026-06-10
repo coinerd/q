@@ -28,10 +28,10 @@
 (define (credential-backend-capabilities)
   (define runner (current-shell-command-runner))
   (define (cmd-available? cmd)
-    (with-handlers ([exn:fail? (λ (_) #f)])
-      (define out (open-output-string))
-      (runner (format "which ~a 2>/dev/null" cmd) out)
-      (positive? (string-length (get-output-string out)))))
+    (with-safe-fallback #f
+                        (define out (open-output-string))
+                        (runner (format "which ~a 2>/dev/null" cmd) out)
+                        (positive? (string-length (get-output-string out)))))
   (hash 'env
         (backend-available? (make-env-credential-backend))
         'file
@@ -66,8 +66,7 @@
      (define user
        (or (getenv "USER")
            (getenv "LOGNAME")
-           (with-handlers ([exn:fail? (λ (_) #f)])
-             (path->string (find-system-path 'who-am-i)))
+           (with-safe-fallback #f (path->string (find-system-path 'who-am-i)))
            "unknown"))
      (define-values (out ok?)
        (run-security-command (format "add-generic-password -a '~a' -s 'q-credential-~a' -w '~a' -U"
@@ -83,8 +82,7 @@
      (define user
        (or (getenv "USER")
            (getenv "LOGNAME")
-           (with-handlers ([exn:fail? (λ (_) #f)])
-             (path->string (find-system-path 'who-am-i)))
+           (with-safe-fallback #f (path->string (find-system-path 'who-am-i)))
            "unknown"))
      (define-values (out ok?)
        (run-security-command (format "find-generic-password -a '~a' -s 'q-credential-~a' -w"
@@ -98,8 +96,7 @@
      (define user
        (or (getenv "USER")
            (getenv "LOGNAME")
-           (with-handlers ([exn:fail? (λ (_) #f)])
-             (path->string (find-system-path 'who-am-i)))
+           (with-safe-fallback #f (path->string (find-system-path 'who-am-i)))
            "unknown"))
      (define-values (out ok?)
        (run-security-command (format "delete-generic-password -a '~a' -s 'q-credential-~a'"
@@ -110,11 +107,11 @@
    (λ (be) '())
    ;; available?
    (λ (be)
-     (with-handlers ([exn:fail? (λ (_) #f)])
-       (define runner (current-shell-command-runner))
-       (define out (open-output-string))
-       (runner "which security 2>/dev/null" out)
-       (positive? (string-length (get-output-string out)))))))
+     (with-safe-fallback #f
+                         (define runner (current-shell-command-runner))
+                         (define out (open-output-string))
+                         (runner "which security 2>/dev/null" out)
+                         (positive? (string-length (get-output-string out)))))))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Windows Credential Manager backend
@@ -169,8 +166,8 @@
          '()))
    ;; available?
    (λ (be)
-     (with-handlers ([exn:fail? (λ (_) #f)])
-       (define runner (current-shell-command-runner))
-       (define out (open-output-string))
-       (runner "which cmdkey 2>/dev/null || where cmdkey 2>nul" out)
-       (positive? (string-length (get-output-string out)))))))
+     (with-safe-fallback #f
+                         (define runner (current-shell-command-runner))
+                         (define out (open-output-string))
+                         (runner "which cmdkey 2>/dev/null || where cmdkey 2>nul" out)
+                         (positive? (string-length (get-output-string out)))))))

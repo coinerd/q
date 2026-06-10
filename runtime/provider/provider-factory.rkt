@@ -19,6 +19,7 @@
          "../../llm/openrouter.rkt"
          racket/string
          net/url)
+(require (only-in "../../util/error/error-helpers.rkt" with-safe-fallback))
 
 (provide provider-name ;; re-export for tui-init.rkt (A1 fix)
          (contract-out [build-provider (-> hash? q-settings? provider?)]
@@ -66,17 +67,17 @@
 (define (local-provider? base-url)
   (and (string? base-url)
        (> (string-length base-url) 0)
-       (with-handlers ([exn:fail? (λ (_) #f)])
-         (define parsed (string->url base-url))
-         (define host (url-host parsed))
-         (and host
-              (> (string-length host) 0)
-              (or (string=? host "localhost")
-                  (string=? host "127.0.0.1")
-                  (string=? host "::1")
-                  (string-prefix? host "192.168.")
-                  (string-prefix? host "10.")
-                  (rfc1918-172-host? host))))))
+       (with-safe-fallback #f
+                           (define parsed (string->url base-url))
+                           (define host (url-host parsed))
+                           (and host
+                                (> (string-length host) 0)
+                                (or (string=? host "localhost")
+                                    (string=? host "127.0.0.1")
+                                    (string=? host "::1")
+                                    (string-prefix? host "192.168.")
+                                    (string-prefix? host "10.")
+                                    (rfc1918-172-host? host))))))
 
 ;; RFC 1918 172.16.0.0/12 check — only 172.16.x.x through 172.31.x.x
 ;; v0.21.5 (F2): Host-only check (not full URL string)
