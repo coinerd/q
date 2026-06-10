@@ -64,9 +64,26 @@
          "../util/cancellation.rkt"
          (only-in "../util/time.rkt" now-epoch-secs))
 
-(provide (struct-out runtime-config)
-         (struct-out runtime)
+;; C1 v0.97.13: Explicit provides instead of struct-out for stable SDK ABI.
+;; runtime-config: predicate + constructor + all accessors
+(provide runtime-config?
+         runtime-config
+         runtime-config-provider
+         runtime-config-tool-registry
+         runtime-config-extension-registry
+         runtime-config-event-bus
+         runtime-config-session-dir
+         runtime-config-model-name
+         runtime-config-max-iterations
+         runtime-config-system-instructions
+         runtime-config-token-budget-threshold
+         runtime-config-resource-loader
+         runtime-config-session-manager
+         ;; runtime: predicate + all accessors (constructor via contract-out below)
          runtime?
+         runtime-rt-config
+         runtime-rt-session
+         runtime-rt-cancellation-token
 
          cancel-token!
          cancellation-token?

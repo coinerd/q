@@ -34,8 +34,24 @@
          "sdk-core.rkt")
 
 ;; Re-export core types for convenience
-(provide (struct-out runtime-config)
-         (struct-out runtime)
+;; C1 v0.97.13: Explicit re-exports instead of struct-out (matches sdk-core.rkt).
+(provide runtime-config?
+         runtime-config
+         runtime-config-provider
+         runtime-config-tool-registry
+         runtime-config-extension-registry
+         runtime-config-event-bus
+         runtime-config-session-dir
+         runtime-config-model-name
+         runtime-config-max-iterations
+         runtime-config-system-instructions
+         runtime-config-token-budget-threshold
+         runtime-config-resource-loader
+         runtime-config-session-manager
+         runtime?
+         runtime-rt-config
+         runtime-rt-session
+         runtime-rt-cancellation-token
          runtime?
          make-runtime
          open-session
