@@ -202,7 +202,10 @@
       (rationale . "Session lifecycle — wires persistence, config, events, compaction"))
       ("agent/iteration/main-loop.rkt"
       (fan-out . 25)
-      (rationale . "Iteration loop — wires step interpreter, FSM, tool bridge, streaming"))))
+      (rationale . "Iteration loop — wires step interpreter, FSM, tool bridge, streaming"))
+      ("runtime/turn-orchestrator.rkt"
+      (fan-out . 22)
+      (rationale . "Turn orchestration — wires context assembly, LLM streaming, tool execution, memory injection"))))
  ;; R-18: Pure modules — must not gain I/O imports
  ;; Format: ((module-path . allowed-current-impurities) ...)
  (pure-modules (decision . ("runtime/iteration/decision.rkt" . ()))
@@ -267,7 +270,7 @@
        (risk . "Tool scheduler with parallel execution, timeout management, and coordination")
        (owner . "tools"))
       ("runtime/turn-orchestrator.rkt"
-       (risk . "Turn orchestration with streaming integration; high complexity score 25051")
+       (risk . "Composition root — turn orchestration wires context assembly, LLM, tools, memory; high complexity score 25051")
        (owner . "runtime"))
       ("llm/stream.rkt"
        (risk . "LLM streaming abstraction with SSE parsing, chunk accumulation, and provider-specific handling")

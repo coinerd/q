@@ -30,7 +30,8 @@
          extension-ctx-provider-registry
          extension-ctx-session-messages
          extension-ctx-session-token-usage
-         extension-ctx-gsd-ctx)
+         extension-ctx-gsd-ctx
+         extension-ctx-ctx-version)
 
 ;; Extension context struct — bundles all session/runtime state that
 ;; extension handlers may need. All fields are read-only after construction.
@@ -53,5 +54,6 @@
          session-messages ; (or/c (listof hash?) #f) — read-only message history
          session-token-usage ; (or/c hash? #f) — token usage stats
          gsd-ctx ; (or/c any/c #f) — per-session GSD state (C-01 v0.35.1)
+         ctx-version ; exact-positive-integer? — schema version for migration (F13, v0.97.19)
          )
   #:transparent)
