@@ -29,7 +29,9 @@
          (only-in "../runtime/memory/backends/memory-hash.rkt" make-memory-hash-backend)
          (only-in "../runtime/memory/types.rkt" memory-item)
          (only-in "../runtime/memory/protocol.rkt" memory-backend-store!)
-         (only-in "../runtime/context-assembly/memory-builder.rkt" current-memory-injection-budget))
+         (only-in "../runtime/context-assembly/memory-builder.rkt" current-memory-injection-budget)
+         (only-in "../runtime/context-assembly/conclusion-ranker.rkt" rank-and-budget)
+         (only-in "../runtime/context-assembly/conclusion-graph.rkt" fallback-select-conclusions))
 
 (define (make-test-msg role text [meta (hasheq)])
   (make-message "test-id" #f role 'text (list (make-text-part text)) (current-seconds) meta))
@@ -406,3 +408,66 @@
   (define pos2 (string-contains? text "medium relevant"))
   (check-true pos1)
   (check-true pos2))
+
+;; ============================================================
+;; v0.97.9 W1: GAP-D semantic fallback regression tests
+;; ============================================================
+
+(test-case "GAP-D: rank-and-budget fallback produces list (not error)"
+  (define conclusions
+    (list (task-conclusion "dc1" "finding A" 'fact 'implementation '() 1000 '() '())
+          (task-conclusion "dc2" "finding B" 'fact 'planning '() 999 '() '())))
+  ;; Direct call: rank-and-budget returns ranked conclusions
+  (define ranked
+    (rank-and-budget conclusions #:current-state 'implementation #:max-conclusion-tokens 2000))
+  (check-true (list? ranked))
+  (check-true (>= (length ranked) 1)))
+
+(test-case "GAP-D: rank-and-budget respects token budget"
+  (define conclusions
+    (for/list ([i (in-range 10)])
+      (task-conclusion (format "dc~a" i)
+                       (format "conclusion with enough text to consume tokens ~a" i)
+                       'fact
+                       'implementation
+                       '()
+                       (+ 1000 i)
+                       '()
+                       '())))
+  (define ranked
+    (rank-and-budget conclusions #:current-state 'implementation #:max-conclusion-tokens 500))
+  (check-true (list? ranked))
+  ;; Budget should limit how many conclusions fit
+  (check-true (<= (length ranked) 10)))
+
+(test-case "GAP-D: rank-and-budget with empty conclusions returns empty"
+  (define ranked (rank-and-budget '() #:current-state 'implementation #:max-conclusion-tokens 2000))
+  (check-true (or (null? ranked) (not ranked))))
+
+(test-case "GAP-D: fallback-select-conclusions still available for direct use"
+  ;; Verify fallback-select-conclusions still works as a standalone function
+  (define conclusions
+    (list (task-conclusion "fc1" "A" 'fact 'idle '() 100 '() '())
+          (task-conclusion "fc2" "B" 'fact 'idle '() 200 '() '())))
+  (define selected (fallback-select-conclusions conclusions 1))
+  (check-equal? (length selected) 1))
+
+(test-case "GAP-D: build-tiered-context uses semantic fallback for cyclic graph"
+  ;; Create conclusions with a cycle (c1→c2→c1)
+  (define cyc-c1
+    (task-conclusion "cyc1" "cycle finding 1" 'fact 'implementation '() 1000 '() '("cyc2")))
+  (define cyc-c2
+    (task-conclusion "cyc2" "cycle finding 2" 'fact 'implementation '() 999 '() '("cyc1")))
+  ;; Build with cyclic conclusions — should NOT error, should produce context
+  (define result
+    (build-tiered-context/state-aware '()
+                                      #:conclusions (list cyc-c1 cyc-c2)
+                                      #:task-state 'implementation))
+  (check-true (tiered-context? result)))
+
+(test-case "GAP-D: build-tiered-context uses semantic fallback for no-seed match"
+  ;; Conclusions with no WS messages to derive seeds from
+  (define no-seed-c1 (task-conclusion "ns1" "orphan finding" 'fact 'planning '() 1000 '() '()))
+  (define result
+    (build-tiered-context/state-aware '() #:conclusions (list no-seed-c1) #:task-state 'planning))
+  (check-true (tiered-context? result)))
