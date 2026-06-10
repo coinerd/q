@@ -444,6 +444,7 @@
                       (not (equal? (string-trim (task-conclusion-text c)) "[Auto]"))))
                conclusions))
      (define conclusion-count (length visible-conclusions))
+     ;; GAP-A v0.97.7: Cap at 20 (not 10) — budget already controls count
      (define conclusion-section
        (if (> conclusion-count 0)
            (let* ([top (take visible-conclusions (min 20 (length visible-conclusions)))]

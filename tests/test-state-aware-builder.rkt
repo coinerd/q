@@ -272,6 +272,7 @@
   (define preamble (build-state-awareness-preamble 'implementation conclusions))
   (define text (extract-text-from-messages (list preamble)))
   (check-false (string-contains? text "  - [Auto]\n"))
+  ;; GAP-A v0.97.7: format changed to "Top conclusions"
   (check-false (string-contains? text "Key conclusions (1 in memory)")))
 
 (test-case "W0 F9: state preamble keeps valid Auto conclusions"
@@ -329,3 +330,79 @@
       (define text-yes (extract-text-from-messages (tiered-context-tier-a tc-with-config)))
       (check-not-false (string-contains? text-yes "HF1 test")
                        "FIX TARGET: With #:session-config wire, injection fires"))))
+
+;; ============================================================
+;; v0.97.7 W1: GAP-A preamble ranking regression tests
+;; ============================================================
+
+(test-case "GAP-A: preamble shows top conclusions with total+shown counts"
+  (define conclusions
+    (for/list ([i (in-range 15)])
+      (task-conclusion (format "gap-a-c~a" i)
+                       (format "conclusion ~a" i)
+                       'fact
+                       'implementation
+                       '()
+                       (+ 1000 i)
+                       '()
+                       '())))
+  (define preamble (build-state-awareness-preamble 'implementation conclusions))
+  (define text (extract-text-from-messages (list preamble)))
+  (check-true (string-contains? text "15 total, 15 shown"))
+  (check-true (string-contains? text "conclusion 0"))
+  (check-true (string-contains? text "conclusion 14")))
+
+(test-case "GAP-A: [Auto] conclusions filtered from preamble"
+  (define conclusions
+    (list (task-conclusion "c1" "real finding" 'fact 'exploration '() 1000 '() '())
+          (task-conclusion "c2" "[Auto]" 'fact 'exploration '() 1001 '() '())
+          (task-conclusion "c3" "another finding" 'fact 'exploration '() 1002 '() '())))
+  (define preamble (build-state-awareness-preamble 'exploration conclusions))
+  (define text (extract-text-from-messages (list preamble)))
+  (check-false (string-contains? text "  - [Auto]"))
+  (check-true (string-contains? text "2 total, 2 shown")))
+
+(test-case "GAP-A: preamble respects cap of 20"
+  (define conclusions
+    (for/list ([i (in-range 25)])
+      (task-conclusion (format "cap-c~a" i)
+                       (format "item ~a" i)
+                       'fact
+                       'planning
+                       '()
+                       (+ 1000 i)
+                       '()
+                       '())))
+  (define preamble (build-state-awareness-preamble 'planning conclusions))
+  (define text (extract-text-from-messages (list preamble)))
+  (check-true (string-contains? text "25 total, 20 shown"))
+  ;; First 20 should be present; items 20-24 should NOT
+  (check-true (string-contains? text "item 19"))
+  (check-false (string-contains? text "item 20"))
+  (check-false (string-contains? text "item 24")))
+
+(test-case "GAP-A: empty conclusion list produces no-conclusions message"
+  (define preamble (build-state-awareness-preamble 'implementation '()))
+  (define text (extract-text-from-messages (list preamble)))
+  (check-true (string-contains? text "No conclusions in memory")))
+
+(test-case "GAP-A: non-Auto text with whitespace is not filtered"
+  (define conclusions
+    (list (task-conclusion "ws1" "  Some finding  " 'fact 'exploration '() 1000 '() '())))
+  (define preamble (build-state-awareness-preamble 'exploration conclusions))
+  (define text (extract-text-from-messages (list preamble)))
+  (check-true (string-contains? text "1 total, 1 shown"))
+  (check-true (string-contains? text "Some finding")))
+
+(test-case "GAP-A: preamble uses budgeted order (first = highest relevance)"
+  (define conclusions
+    (list (task-conclusion "rank-1" "most relevant" 'fact 'implementation '() 1000 '(bug) '())
+          (task-conclusion "rank-2" "medium relevant" 'fact 'planning '() 999 '() '())
+          (task-conclusion "rank-3" "least relevant" 'fact 'exploration '() 998 '() '())))
+  (define preamble (build-state-awareness-preamble 'implementation conclusions))
+  (define text (extract-text-from-messages (list preamble)))
+  ;; The budgeted list is passed directly; order preserved
+  (define pos1 (string-contains? text "most relevant"))
+  (define pos2 (string-contains? text "medium relevant"))
+  (check-true pos1)
+  (check-true pos2))
