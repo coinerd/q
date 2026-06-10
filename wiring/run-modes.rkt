@@ -26,8 +26,6 @@
          (only-in "../skills/resource-loader.rkt" skills-summary-section)
          "../runtime/provider/model-registry.rkt"
          (only-in "../runtime/provider/provider-factory.rkt" build-provider)
-         (only-in "../llm/model.rkt" make-model-request model-response-content)
-         (only-in "../llm/provider.rkt" provider-send)
          "../tools/tool.rkt"
          (only-in "../tools/registry-defaults.rkt" register-default-tools!)
          "../agent/event-bus.rkt"
@@ -55,8 +53,9 @@
          (only-in "../runtime/context-assembly/auto-distillation.rkt"
                   current-auto-distillation-enabled?
                   current-llm-distill-fn)
-         (only-in "../runtime/context-assembly/task-conclusion.rkt" task-conclusion)
-         (only-in "../util/ids.rkt" generate-id)
+         (only-in "../runtime/context-assembly/llm-callbacks.rkt"
+                  make-distill-callback
+                  make-reflection-callback)
          (only-in "../runtime/memory/reflection.rkt" current-reflection-llm-fn)
          (only-in "../extensions/gsd/state-machine.rkt" gsm-current)
          (only-in "../runtime/gsd-query.rkt" current-gsd-mode-query)
@@ -252,89 +251,10 @@
   ;; LF1 (GAP-1/7): Wire LLM distill function and reflection LLM function
   ;; from provider. These enable LLM-powered conclusion distillation and
   ;; reflection merging when a provider is available. Both default to #f
-  ;; (deterministic fallback) when provider is missing or fails.
+  ;; H3b: Wire LLM callbacks via factory functions
   (when (and prov effective-model-name)
-    ;; GAP-1: LLM distill factory - generates conclusions for uncovered WS entries
-    (current-llm-distill-fn
-     (lambda (uncovered-ids current-state [content-summaries (hash)])
-       (with-handlers
-           ([exn:fail?
-             (lambda (e)
-               (raise
-                e))]) ; re-raise so distill-with-llm's outer handler generates deterministic fallback
-         ;; GAP-6: Include content summaries in prompt for richer distillation
-         (define content-lines
-           (for/list ([id (in-list uncovered-ids)])
-             (define summary (hash-ref content-summaries id ""))
-             (if (string=? summary "")
-                 (format "  ~a: (no content)" id)
-                 (format "  ~a: ~a"
-                         id
-                         (if (> (string-length summary) 300)
-                             (string-append (substring summary 0 300) "...")
-                             summary)))))
-         (define prompt-text
-           (format
-            "For each working set entry, generate a brief conclusion about what was learned.\nState: ~a\nEntries:\n~a\nOutput one conclusion per line."
-            (or current-state 'unknown)
-            (string-join content-lines "\n")))
-         (define resp
-           (provider-send prov
-                          (make-model-request (list (hasheq 'role "user" 'content prompt-text))
-                                              #f
-                                              (hasheq 'model effective-model-name 'max_tokens 1000))))
-         (define resp-parts (model-response-content resp))
-         (define text
-           (string-trim (string-join (for/list ([p (in-list resp-parts)])
-                                       (cond
-                                         [(hash? p) (hash-ref p 'text "")]
-                                         [(string? p) p]
-                                         [else ""]))
-                                     "")))
-         (define llm-lines (string-split text "\n"))
-         (define n-llm-lines (length llm-lines))
-         ;; GAP-A: indexed iteration with fallback for truncated LLM output
-         ;; GAP-B: unique conclusion IDs via generate-id
-         (if (string=? text "")
-             '()
-             (for/list ([id (in-list uncovered-ids)]
-                        [i (in-naturals)])
-               (define line-text
-                 (if (< i n-llm-lines)
-                     (string-trim (list-ref llm-lines i))
-                     (format "[auto] uncovered entry ~a" id)))
-               (task-conclusion (generate-id)
-                                line-text
-                                'fact
-                                (or current-state 'unknown)
-                                (list id)
-                                (current-seconds)
-                                '()
-                                '()))))))
-    ;; GAP-7: Reflection LLM factory - synthesizes merged reflection text
-    (current-reflection-llm-fn
-     (lambda (contents)
-       (with-handlers ([exn:fail? (lambda (e) (string-join (sort contents string<?) "; "))])
-         (define prompt-text
-           (format
-            "Synthesize these related memory items into one concise observation:\n~a\nOutput one synthesized observation."
-            (string-join contents "\n- ")))
-         (define resp
-           (provider-send prov
-                          (make-model-request (list (hasheq 'role "user" 'content prompt-text))
-                                              #f
-                                              (hasheq 'model effective-model-name 'max_tokens 500))))
-         (define resp-parts (model-response-content resp))
-         (define text
-           (string-trim (string-join (for/list ([p (in-list resp-parts)])
-                                       (cond
-                                         [(hash? p) (hash-ref p 'text "")]
-                                         [(string? p) p]
-                                         [else ""]))
-                                     "")))
-         (if (string=? text "")
-             (string-join (sort contents string<?) "; ")
-             text)))))
+    (current-llm-distill-fn (make-distill-callback prov effective-model-name))
+    (current-reflection-llm-fn (make-reflection-callback prov effective-model-name)))
   (hash->session-config final-hash-with-auto-extract))
 
 ;; ============================================================
