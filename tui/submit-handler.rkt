@@ -32,7 +32,7 @@
      ;; Show system notification in transcript
      (define queued-entry
        (make-entry 'system
-                   "[Queued — will run after current task]"
+                   "[Queued — will run after current task. Press Esc to cancel.]"
                    (current-inexact-milliseconds)
                    (hasheq 'queued #t)))
      (set-box! (tui-ctx-ui-state-box ctx) (add-transcript-entry cur-state queued-entry))

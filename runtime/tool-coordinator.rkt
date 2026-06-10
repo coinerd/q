@@ -79,7 +79,8 @@
          (only-in "../agent/event-emitter.rkt" emit-typed-event!)
          (only-in "../agent/event-structs/tool-events.rkt"
                   make-tool-execution-start-event
-                  make-tool-execution-end-event))
+                  make-tool-execution-end-event
+                  make-tool-execution-update-event))
 
 (provide (contract-out [extract-tool-calls-from-messages (-> (listof message?) (listof tool-call?))]
                        [make-tool-result-messages
@@ -221,6 +222,17 @@
      ext-reg
      'tool.execution.started
      (hasheq 'tools (map tool-call-name tool-calls-to-run) 'count (length tool-calls-to-run))))
+  ;; B3 fix: Emit tool.execution.updated event so TUI shows progress
+  ;; during long-running tool batches (e.g. bash commands with 120s timeouts).
+  (when (not (null? tool-calls-to-run))
+    (emit-typed-event!
+     bus
+     (make-tool-execution-update-event
+      #:session-id session-id
+      #:turn-id #f
+      #:timestamp (current-inexact-milliseconds)
+      #:tool-name (format "~a tools starting" (length tool-calls-to-run))
+      #:progress (hasheq 'total (length tool-calls-to-run) 'running (length tool-calls-to-run)))))
   (define sched-result
     (cond
       [(not reg) (scheduler-result '() (hasheq))]
