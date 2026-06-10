@@ -1,3 +1,23 @@
+## [0.97.17] - 2026-06-10
+
+### Changed
+- F1 (CRITICAL): pkg/registry.rkt — replace 24 any/c with typed contracts
+  (package-index/c, package-entry/c, install-result/c, etc.)
+- F2 (CRITICAL): runtime/trace-sink.rkt — add trace-sink-instance/c and
+  trace-sink-class/c predicates, document class contract limitations
+- F8 (HIGH): tui/tui-init.rkt — tighten entry point contracts with path-string?
+  and document opaque runtime/context params
+- F10 (MODERATE): llm/model.rkt — message-list/c → (listof hash?),
+  tool-list/c → (or/c (listof hash?) #f)
+- F21 (LOW): ui-core/dispatch.rkt — document intentional any/c for dispatch context
+- F23 (LOW): Add layer-adapters.rkt size budget test (RA-5a ≤120 lines)
+- F24 (LOW): Add make-* naming aliases (make-agent-session, make-tui-session,
+  make-provider-for-name) alongside create-* originals
+
+### Tests
+- New: tests/test-pkg-registry-contracts.rkt (18 contract-blame tests)
+- Updated: test-arch-fitness.rkt (+1 RA-5a test, 48 total)
+
 ## [0.97.16] - 2026-06-10
 
 ### Fixed
