@@ -1,3 +1,22 @@
+## [0.97.18] - 2026-06-10
+
+### Changed
+- F3 (MODERATE): Extract ui-state protocol to ui-core/ui-state-protocol.rkt,
+  breaking extensions→tui layer dependency. Remove unused tui/state.rkt import
+  from widget-lifecycle.rkt.
+- F4 (MODERATE): Command-registry types verified already extracted — no change
+- F6a (MODERATE): Extract settings loading/merging to runtime/settings-core.rkt
+- F6b (MODERATE): Extract settings query functions to runtime/settings-query.rkt
+- settings.rkt is now a 28-line facade re-exporting both sub-modules
+- Fix: trace-sink.rkt forward reference (contract aliases moved after interface)
+
+### Skipped
+- F7 (CSI extraction): Functions are 1-3 lines, only used in terminal.rkt —
+  doesn't meet Abstraction Gate
+- F14 (event wiring table): 6 subscribers in 1 file — doesn't meet Abstraction Gate
+- F16 (defaults consolidation): Parameters well-scoped to domains — doesn't
+  meet Abstraction Gate
+
 ## [0.97.17] - 2026-06-10
 
 ### Changed
