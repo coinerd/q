@@ -413,6 +413,25 @@
   (define new-cw (model-registry-context-window new-reg (or new-model-name "")))
   (define new-max-ctx (or new-cw (dict-ref base-config 'max-context-tokens 128000)))
   (apply-context-assembly-profile! new-profile new-max-ctx)
+  ;; GAP-F v0.97.11: Refresh all memory/context parameters from new settings
+  (wire-security-config! new-settings)
+  (current-mid-session-bridge-enabled (and (memq new-profile '(self-healing full))
+                                           (setting-ref new-settings 'mid-session-bridge-enabled #f)))
+  (define settings-budget (setting-memory-injection-budget new-settings))
+  (cond
+    [settings-budget (current-memory-injection-budget settings-budget)]
+    [(memq new-profile '(self-healing full))
+     (current-memory-injection-budget (quotient new-max-ctx 20))])
+  (current-auto-extraction-enabled (setting-memory-auto-extraction-enabled? new-settings))
+  (current-auto-extraction-min-confidence (setting-memory-auto-extraction-min-confidence
+                                           new-settings))
+  (update-memory-policy! #:user-scope-enabled? (setting-memory-user-scope-enabled? new-settings))
+  (current-auto-reflection-enabled (setting-memory-auto-reflection-enabled? new-settings))
+  (current-auto-reflection-min-items (setting-memory-auto-reflection-min-items new-settings))
+  (current-reflection-prompt-enabled (setting-reflection-prompt-enabled? new-settings))
+  (let ([ad (setting-auto-distillation-enabled? new-settings)])
+    (unless (eq? ad 'unset)
+      (current-auto-distillation-enabled? ad)))
   ;; Return updated config + registry
   (values
    (hash->session-config
