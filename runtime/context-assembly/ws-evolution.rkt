@@ -87,6 +87,38 @@
      (working-set-reset! ws)
      (filter task-conclusion? conclusions)]
 
+    ;; GAP-B v0.97.8: planning → implementation: clear ws, return conclusions
+    [(and (eq? old-name 'planning) (eq? new-name 'implementation))
+     (working-set-reset! ws)
+     (filter task-conclusion? conclusions)]
+
+    ;; GAP-B v0.97.8: planning → verification: keep spec/test files, return conclusions
+    [(and (eq? old-name 'planning) (eq? new-name 'verification))
+     (working-set-selective-remove! ws
+                                    (lambda (e)
+                                      (define p (ws-entry-path e))
+                                      (and (string? p)
+                                           (or (string-contains? p "test")
+                                               (string-contains? p "spec")
+                                               (string-contains? p "validation")))))
+     (filter task-conclusion? conclusions)]
+
+    ;; GAP-B v0.97.8: planning → debugging: keep error/test files, return conclusions
+    [(and (eq? old-name 'planning) (eq? new-name 'debugging))
+     (working-set-selective-remove! ws
+                                    (lambda (e)
+                                      (define p (ws-entry-path e))
+                                      (and (string? p)
+                                           (or (string-contains? p "test")
+                                               (string-contains? p "error")
+                                               (string-contains? p "spec")))))
+     (filter task-conclusion? conclusions)]
+
+    ;; GAP-B v0.97.8: verification → implementation: clear ws, return conclusions
+    [(and (eq? old-name 'verification) (eq? new-name 'implementation))
+     (working-set-reset! ws)
+     (filter task-conclusion? conclusions)]
+
     ;; any → idle: full reset
     [(eq? new-name 'idle)
      (working-set-reset! ws)
