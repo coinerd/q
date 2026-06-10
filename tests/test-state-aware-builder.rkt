@@ -404,10 +404,11 @@
   (define preamble (build-state-awareness-preamble 'implementation conclusions))
   (define text (extract-text-from-messages (list preamble)))
   ;; The budgeted list is passed directly; order preserved
-  (define pos1 (string-contains? text "most relevant"))
-  (define pos2 (string-contains? text "medium relevant"))
-  (check-true pos1)
-  (check-true pos2))
+  (define pos1 (regexp-match-positions (regexp-quote "most relevant") text))
+  (define pos2 (regexp-match-positions (regexp-quote "medium relevant") text))
+  (check-not-false pos1 "most relevant found in preamble")
+  (check-not-false pos2 "medium relevant found in preamble")
+  (check-true (< (caar pos1) (caar pos2)) "highest-relevance conclusion appears before medium"))
 
 ;; ============================================================
 ;; v0.97.9 W1: GAP-D semantic fallback regression tests
@@ -437,8 +438,9 @@
   (define ranked
     (rank-and-budget conclusions #:current-state 'implementation #:max-conclusion-tokens 500))
   (check-true (list? ranked))
-  ;; Budget should limit how many conclusions fit
-  (check-true (<= (length ranked) 10)))
+  ;; Budget of 500 tokens should limit conclusions: each ~60 chars × 4 ≈ 240 tokens
+  ;; so only ~2 fit, proving truncation occurred
+  (check-true (< (length ranked) 10) "budget truncation occurred"))
 
 (test-case "GAP-D: rank-and-budget with empty conclusions returns empty"
   (define ranked (rank-and-budget '() #:current-state 'implementation #:max-conclusion-tokens 2000))

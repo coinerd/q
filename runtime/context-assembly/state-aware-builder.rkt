@@ -48,8 +48,7 @@
                   current-task-state-aware-assembly?
                   current-graph-conclusion-selection?
                   current-conclusion-token-budget
-                  current-ws-evolution-enabled?
-                  compute-conclusion-budget)
+                  current-ws-evolution-enabled?)
          (only-in "memory-builder.rkt"
                   observe-memory-for-context
                   memory-telemetry->jsexpr
