@@ -59,7 +59,7 @@
          (only-in "render-loop/watchdog.rkt" current-busy-watchdog-ms check-busy-watchdog))
 
 (define (tui-output-port)
-  (or (guarded-real-output-port) (current-output-port)))
+  (or (current-guarded-real-output-port) (current-output-port)))
 
 ;; ── Ubuf/terminal lifecycle ──
 (provide fix-sgr-bg-black

@@ -13,7 +13,7 @@
 (require racket/contract)
 
 ;; Parameter
-(provide guarded-real-output-port
+(provide current-guarded-real-output-port
          ;; Macro
          with-output-guard
          ;; Guarded functions
@@ -27,7 +27,7 @@
 
 ;; Holds the real terminal output port while the guard is active.
 ;; #f when guard is not active.
-(define guarded-real-output-port (make-parameter #f))
+(define current-guarded-real-output-port (make-parameter #f))
 
 ;; ============================================================
 ;; Output guard
@@ -38,12 +38,12 @@
   (open-output-nowhere))
 
 ;; Call `thunk` with current-output-port redirected to a null sink.
-;; The real terminal port is available via (guarded-real-output-port).
+;; The real terminal port is available via (current-guarded-real-output-port).
 (define (call-with-output-guard thunk #:redirect-to [redirect-port #f])
   (define real-port (current-output-port))
   (define sink (or redirect-port (make-null-sink)))
   (parameterize ([current-output-port sink]
-                 [guarded-real-output-port real-port])
+                 [current-guarded-real-output-port real-port])
     (thunk)))
 
 ;; Macro form
@@ -59,7 +59,7 @@
 ;; Call `thunk` with the real terminal output port restored.
 ;; Use this for intentional TUI rendering writes.
 (define (call-with-raw-output thunk)
-  (define real-port (guarded-real-output-port))
+  (define real-port (current-guarded-real-output-port))
   (if real-port
       (parameterize ([current-output-port real-port])
         (thunk))

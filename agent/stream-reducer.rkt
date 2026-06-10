@@ -15,7 +15,7 @@
 ;; Configurable chunk limit (v0.12.3 Wave 0.1)
 ;; ============================================================
 
-(define MAX-STREAM-CHUNKS (make-parameter 10000))
+(define MAX-STREAM-CHUNKS 10000)
 
 (provide classify-chunk
          chunk-has-data?

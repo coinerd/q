@@ -31,20 +31,19 @@
 ;; Re-export everything from safe-mode-state
 ;; ============================================================
 
-(provide (contract-out
-          [current-safe-mode (parameter/c boolean?)]
-          [current-safe-mode-config (parameter/c (or/c safe-mode-config? #f))]
-          [project-root (parameter/c path?)]
-          [safe-mode? (-> boolean?)]
-          [allowed-tool? (-> string? boolean?)]
-          [allowed-path? (-> (or/c path? string?) boolean?)]
-          [safe-mode-project-root (-> path?)]
-          [trust-level (-> (or/c 'full 'restricted))]
-          [safe-mode-active! (-> void?)]
-          [safe-mode-deactivate! (-> void?)]
-          [lock-safe-mode! (-> void?)]
-          [safe-mode-locked? (parameter/c boolean?)]
-          [safe-mode-config-info (-> hash?)])
+(provide (contract-out [current-safe-mode (parameter/c boolean?)]
+                       [current-safe-mode-config (parameter/c (or/c safe-mode-config? #f))]
+                       [project-root (parameter/c path?)]
+                       [safe-mode? (-> boolean?)]
+                       [allowed-tool? (-> string? boolean?)]
+                       [allowed-path? (-> (or/c path? string?) boolean?)]
+                       [safe-mode-project-root (-> path?)]
+                       [trust-level (-> (or/c 'full 'restricted))]
+                       [safe-mode-active! (-> void?)]
+                       [safe-mode-deactivate! (-> void?)]
+                       [lock-safe-mode! (-> void?)]
+                       [current-safe-mode-locked? (parameter/c boolean?)]
+                       [safe-mode-config-info (-> hash?)])
          ;; Struct type + contracted accessors (re-exported from safe-mode-state.rkt)
          safe-mode-config
          safe-mode-config?
@@ -63,13 +62,13 @@
 (define safe-mode-lock-one-shot (box #f))
 ;; Parameter justified: tests use `parameterize` for isolation;
 ;; production sets #t once on lock activation.
-(define safe-mode-locked? (make-parameter #f))
+(define current-safe-mode-locked? (make-parameter #f))
 
 (define (locked?)
   (define cfg (current-safe-mode-config))
   (cond
     [(safe-mode-config? cfg) (safe-mode-config-locked cfg)]
-    [else (or (unbox safe-mode-lock-one-shot) (safe-mode-locked?))]))
+    [else (or (unbox safe-mode-lock-one-shot) (current-safe-mode-locked?))]))
 
 ;; ============================================================
 ;; Actions
@@ -97,7 +96,7 @@
 
 (define (lock-safe-mode!)
   (set-box! safe-mode-lock-one-shot #t)
-  (safe-mode-locked? #t))
+  (current-safe-mode-locked? #t))
 
 ;; ============================================================
 ;; Introspection
