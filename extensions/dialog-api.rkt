@@ -11,7 +11,10 @@
 (require racket/contract
          racket/list
          "ui-surface.rkt"
-         (only-in "../tui/state.rkt" ui-state ui-state-status-message set-status-message))
+         (only-in "../ui-core/ui-state-protocol.rkt"
+                  ui-state
+                  ui-state-status-message
+                  set-status-message))
 
 ;; Notification levels
 (provide NOTIFY-INFO

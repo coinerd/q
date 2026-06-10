@@ -14,8 +14,7 @@
 (require racket/contract
          racket/match
          racket/list
-         "../tui/component.rkt"
-         "../tui/state.rkt")
+         "../tui/component.rkt")
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Struct
