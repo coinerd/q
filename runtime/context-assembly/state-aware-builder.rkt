@@ -446,11 +446,12 @@
      (define conclusion-count (length visible-conclusions))
      (define conclusion-section
        (if (> conclusion-count 0)
-           (let* ([top (take visible-conclusions (min 10 (length visible-conclusions)))]
+           (let* ([top (take visible-conclusions (min 20 (length visible-conclusions)))]
                   [texts (for/list ([c (in-list top)])
                            (format "  - ~a" (task-conclusion-text c)))])
-             (format "\n\nKey conclusions (~a in memory):\n~a"
+             (format "\n\nTop conclusions (~a total, ~a shown):\n~a"
                      conclusion-count
+                     (length top)
                      (string-join texts "\n")))
            "\n\nNo conclusions in memory yet. Use record_conclusion to save findings."))
      (define reflection-reminder
