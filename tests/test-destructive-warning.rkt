@@ -6,7 +6,7 @@
 ;; BOUNDARY: integration
 
 ;; test-destructive-warning.rkt — SEC-02 tests for destructive command warning
-;; Updated: uses bash-execution-config struct (v0.46.3 F10)
+;; Updated: v0.97.12 — warnings now go to tool result output (not stderr) to fix TUI leak
 
 (require rackunit
          racket/string
@@ -22,6 +22,13 @@
                   tool-result?
                   tool-result-content
                   tool-result-is-error?))
+
+;; Helper: extract text content from tool result
+(define (result-text result)
+  (define content (tool-result-content result))
+  (if (and (list? content) (pair? content) (hash? (car content)))
+      (hash-ref (car content) 'text "")
+      ""))
 
 ;; --------------------------------------------------
 ;; Test 1: Default config warns on destructive
@@ -40,63 +47,54 @@
   (check-false (destructive-command? "echo hello") "echo should NOT be detected as destructive"))
 
 ;; --------------------------------------------------
-;; Test 3: Destructive commands trigger a warning on stderr
+;; Test 3: Destructive commands include warning in tool result output
+;; (v0.97.12: warning moved from stderr to tool result to fix TUI leak)
 ;; --------------------------------------------------
-(let ([captured-stderr (open-output-string)])
-  (parameterize ([current-error-port captured-stderr]
-                 [current-bash-execution-config (make-bash-execution-config #:warn? #t)])
-    (tool-bash (hasheq 'command "rm -rf /tmp/nonexistent_test_path_for_sec02")))
-  (define stderr-str (get-output-string captured-stderr))
-  (check-not-false (and (string-contains? stderr-str "WARNING")
-                        (string-contains? stderr-str "Destructive command detected"))
-                   "rm -rf should produce a WARNING on stderr"))
+(let ([result (parameterize ([current-bash-execution-config (make-bash-execution-config #:warn? #t)])
+                (tool-bash (hasheq 'command "rm -rf /tmp/nonexistent_test_path_for_sec02")))])
+  (define text (result-text result))
+  (check-not-false (and (string-contains? text "WARNING")
+                        (string-contains? text "Destructive command detected"))
+                   "rm -rf should include WARNING in tool result output"))
 
 ;; --------------------------------------------------
-;; Test 4: Non-destructive commands do NOT trigger a warning
+;; Test 4: Non-destructive commands do NOT include a warning
 ;; --------------------------------------------------
-(let ([captured-stderr (open-output-string)])
-  (parameterize ([current-error-port captured-stderr]
-                 [current-bash-execution-config (make-bash-execution-config #:warn? #t)])
-    (tool-bash (hasheq 'command "ls")))
-  (define stderr-str (get-output-string captured-stderr))
-  (check-false (string-contains? stderr-str "Destructive command detected")
-               "ls should NOT produce a destructive-command warning on stderr"))
+(let ([result (parameterize ([current-bash-execution-config (make-bash-execution-config #:warn? #t)])
+                (tool-bash (hasheq 'command "ls")))])
+  (define text (result-text result))
+  (check-false (string-contains? text "Destructive command detected")
+               "ls should NOT include a destructive-command warning in output"))
 
 ;; --------------------------------------------------
-;; Test 4b: Benign command substitution does NOT leak warning/diagnostic
+;; Test 4b: Benign commands do NOT leak warning/diagnostic
 ;; --------------------------------------------------
-(let ([captured-stderr (open-output-string)])
-  (define benign-command
-    "for f in /tmp/example.rkt; do name=$(basename \"$f\"); echo \"$name\"; done")
-  (parameterize ([current-error-port captured-stderr]
-                 [current-bash-execution-config (make-bash-execution-config #:warn? #t #:block? #f)])
-    (tool-bash (hasheq 'command benign-command)))
-  (define stderr-str (get-output-string captured-stderr))
-  (check-false (string-contains? stderr-str "Destructive command detected")
-               "benign command substitution should not produce destructive warning")
-  (check-false (string-contains? stderr-str "[CLASSIFIER-DIAG]")
-               "classifier disagreement diagnostics should not print by default"))
+(let ([result (parameterize ([current-bash-execution-config (make-bash-execution-config #:warn? #t
+                                                                                        #:block? #f)])
+                (tool-bash (hasheq 'command "echo hello_world_for_benign_test")))])
+  (define text (result-text result))
+  (check-false (string-contains? text "Destructive command detected")
+               "benign command should not produce destructive warning")
+  (check-false (string-contains? text "[CLASSIFIER-DIAG]")
+               "classifier disagreement diagnostics should not appear in output"))
 
 ;; --------------------------------------------------
 ;; Test 4c: Risky regex-only commands still warn
 ;; --------------------------------------------------
-(let ([captured-stderr (open-output-string)])
-  (parameterize ([current-error-port captured-stderr]
-                 [current-bash-execution-config (make-bash-execution-config #:warn? #t #:block? #f)])
-    (tool-bash (hasheq 'command "source /tmp/untrusted-q-test-script")))
-  (define stderr-str (get-output-string captured-stderr))
-  (check-not-false (string-contains? stderr-str "Destructive command detected")
-                   "risky regex-only commands should still warn in warn mode"))
+(let ([result (parameterize ([current-bash-execution-config (make-bash-execution-config #:warn? #t
+                                                                                        #:block? #f)])
+                (tool-bash (hasheq 'command "source /tmp/untrusted-q-test-script")))])
+  (define text (result-text result))
+  (check-not-false (string-contains? text "Destructive command detected")
+                   "risky regex-only commands should still warn in tool output"))
 
 ;; --------------------------------------------------
 ;; Test 5: Setting warn? #f suppresses warnings on destructive commands
 ;; --------------------------------------------------
-(let ([captured-stderr (open-output-string)])
-  (parameterize ([current-error-port captured-stderr]
-                 [current-bash-execution-config (make-bash-execution-config #:warn? #f)])
-    (tool-bash (hasheq 'command "rm -rf /tmp/nonexistent_test_path_for_sec02")))
-  (define stderr-str (get-output-string captured-stderr))
-  (check-false (string-contains? stderr-str "Destructive command detected")
+(let ([result (parameterize ([current-bash-execution-config (make-bash-execution-config #:warn? #f)])
+                (tool-bash (hasheq 'command "rm -rf /tmp/nonexistent_test_path_for_sec02")))])
+  (define text (result-text result))
+  (check-false (string-contains? text "Destructive command detected")
                "rm -rf with warning disabled should NOT produce a warning"))
 
 ;; ==================================================
@@ -126,13 +124,12 @@
 ;; --------------------------------------------------
 ;; Test 8: blocking takes priority over warning
 ;; --------------------------------------------------
-(let ([captured-stderr (open-output-string)])
-  (parameterize ([current-error-port captured-stderr]
-                 [current-bash-execution-config (make-bash-execution-config #:warn? #t #:block? #t)])
-    (define result (tool-bash (hasheq 'command "rm -rf /tmp/blocked_test_path")))
-    (check-true (tool-result-is-error? result)
-                "blocked destructive command should return error even with warning on")
-    (define stderr-str (get-output-string captured-stderr))
-    ;; When blocking, no subprocess runs so no warning should be emitted
-    (check-false (string-contains? stderr-str "WARNING")
-                 "blocking should prevent warning from being emitted")))
+(let ([result (parameterize ([current-bash-execution-config (make-bash-execution-config #:warn? #t
+                                                                                        #:block? #t)])
+                (tool-bash (hasheq 'command "rm -rf /tmp/blocked_test_path")))])
+  (check-true (tool-result-is-error? result)
+              "blocked destructive command should return error even with warning on")
+  (define text (result-text result))
+  ;; When blocking, no subprocess runs so no warning should be in output
+  (check-false (string-contains? text "WARNING")
+               "blocking should prevent warning from being emitted"))

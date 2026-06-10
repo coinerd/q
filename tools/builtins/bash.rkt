@@ -338,8 +338,12 @@
         (define should-warn?
           (or structured-destructive?
               (and regex-destructive? (not benign-substitution-disagreement?))))
-        (when (and warn-on-destructive? should-warn?)
-          (fprintf warning-port "WARNING: Destructive command detected: ~a~n" command))
+        ;; Track destructive warning for inclusion in tool result (not stderr).
+        ;; Writing to current-error-port in TUI mode corrupts the screen layout.
+        (define destructive-warning
+          (if (and warn-on-destructive? should-warn?)
+              (format "⚠ WARNING: Destructive command detected: ~a\n" command)
+              ""))
         ;; v0.70.3: Shadow diagnostics remain available through
         ;; shell-risk-classifier-diagnostic, but are not printed to stderr/TUI by default.
         (define timeout-arg (hash-ref args 'timeout #f))
@@ -354,8 +358,8 @@
           (if settings
               (sandbox-enabled? settings)
               #t))
-        (when (not use-sandbox?)
-          (fprintf (get-warning-port) "WARNING: Sandbox disabled via settings~n"))
+        (define sandbox-warning
+          (if (not use-sandbox?) "⚠ WARNING: Sandbox disabled via settings\n" ""))
 
         ;; Track process for concurrent process limit (SEC-12)
         (track-process!)
@@ -386,17 +390,21 @@
               (string-append "\n[SECURITY NOTICE] This command matched a high-risk "
                              "destructive pattern. Proceed with extreme caution.\n")
               ""))
+        ;; Combine all warnings + output. Warnings go in tool result (not stderr)
+        ;; to avoid corrupting TUI screen layout.
+        (define all-warnings (string-append destructive-warning sandbox-warning))
         ;; When output is empty, provide diagnostic feedback to the LLM
         ;; so it understands the command produced nothing and can change strategy
         (define combined
           (if (string=? raw-combined "")
-              (string-append high-risk-notice
+              (string-append all-warnings
+                             high-risk-notice
                              "(Command produced no output. "
                              "The command may have completed without producing any output, "
                              "or the output was empty. Consider checking: "
                              "the command syntax, file paths, available tools, "
                              "or try a different approach.)")
-              (string-append high-risk-notice (truncate-output raw-combined))))
+              (string-append all-warnings high-risk-notice (truncate-output raw-combined))))
         (make-success-result (list (hasheq 'type "text" 'text combined))
                              (hasheq 'exit-code
                                      (subprocess-result-exit-code result)
