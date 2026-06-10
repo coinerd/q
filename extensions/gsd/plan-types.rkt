@@ -361,9 +361,6 @@
 ;; ============================================================
 
 (provide (struct-out gsd-task)
-         (struct-out gsd-wave)
-         (struct-out gsd-plan)
-         (struct-out validation-result)
 
          ;; Constructors with defaults
          make-gsd-task
@@ -397,9 +394,6 @@
          gsd-wave-slug
 
          ;; Normalized Plan IR (v0.24.2)
-         (struct-out gsd-normalized-wave)
-         (struct-out gsd-normalized-plan)
-         (struct-out gsd-validated-plan)
          normalize-plan
          validated-plan->normalized
          NormWaveStatus
@@ -410,4 +404,50 @@
          ;; I-18 (v0.35.1): Validated accessors
          expect-natural
          expect-string
-         expect-string-list)
+         expect-string-list
+         gsd-task?
+         gsd-task
+         gsd-task-name
+         gsd-task-files
+         gsd-task-action
+         gsd-task-verify
+         gsd-task-done
+         gsd-task-status
+         gsd-wave?
+         gsd-wave
+         gsd-wave-index
+         gsd-wave-title
+         gsd-wave-status
+         gsd-wave-root-cause
+         gsd-wave-files
+         gsd-wave-tasks
+         gsd-wave-verify
+         gsd-wave-done-criteria
+         gsd-plan?
+         gsd-plan
+         gsd-plan-waves
+         gsd-plan-context-bundle
+         gsd-plan-constraints
+         gsd-plan-must-haves
+         validation-result?
+         validation-result
+         validation-result-errors
+         validation-result-warnings
+         gsd-normalized-wave?
+         gsd-normalized-wave
+         gsd-normalized-wave-index
+         gsd-normalized-wave-title
+         gsd-normalized-wave-tasks
+         gsd-normalized-wave-verify-command
+         gsd-normalized-wave-done-criteria
+         gsd-normalized-wave-files
+         gsd-normalized-wave-status
+         gsd-normalized-plan?
+         gsd-normalized-plan
+         gsd-normalized-plan-waves
+         gsd-normalized-plan-context-bundle
+         gsd-normalized-plan-metadata
+         gsd-normalized-plan-source-path
+         gsd-validated-plan?
+         gsd-validated-plan
+         gsd-validated-plan-plan)
