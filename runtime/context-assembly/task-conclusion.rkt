@@ -50,10 +50,23 @@
         'dependencies
         (task-conclusion-dependencies c)))
 
+;; GAP-J v0.97.12: Added field validation for malformed data.
 (define (hash->conclusion h)
-  (task-conclusion (hash-ref h 'id)
-                   (hash-ref h 'text)
-                   (hash-ref h 'category)
+  (define the-id (hash-ref h 'id))
+  (define the-text (hash-ref h 'text))
+  (define the-category (hash-ref h 'category))
+  (unless (string? the-id)
+    (error 'hash->conclusion "expected string for 'id, got: ~a" the-id))
+  (unless (string? the-text)
+    (error 'hash->conclusion "expected string for 'text, got: ~a" the-text))
+  (unless (task-conclusion-category? the-category)
+    (error 'hash->conclusion
+           "expected valid category symbol for 'category, got: ~a (valid: ~a)"
+           the-category
+           valid-categories))
+  (task-conclusion the-id
+                   the-text
+                   the-category
                    (hash-ref h 'fsm-state-origin)
                    (hash-ref h 'origin-message-ids '())
                    (hash-ref h 'timestamp 0)

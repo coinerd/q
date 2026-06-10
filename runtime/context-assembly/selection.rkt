@@ -210,9 +210,8 @@
                                      #:model-name [model-name #f]
                                      #:cache [cache #f]
                                      #:trace [trace #f])
-  (warn-deprecated! 'build-assembled-context/raw
-                    "v0.47.0"
-                    "Use build-tiered-context from context-assembly/serialization.rkt")
+  ;; GAP-K v0.97.12: Removed spurious deprecation warning.
+  ;; This IS the working implementation (called by build-assembled-context/v2).
   (define (emit-trace phase data)
     (when trace
       (trace phase data)))

@@ -22,7 +22,14 @@
 
 ;; ── Constructor ──
 
+;; GAP-J v0.97.12: Warn on duplicate IDs (for/hash silently overwrites).
 (define (build-conclusion-graph conclusions)
+  (define seen-ids (make-hash))
+  (for ([c (in-list conclusions)])
+    (define cid (task-conclusion-id c))
+    (when (hash-has-key? seen-ids cid)
+      (log-warning "conclusion-graph: duplicate conclusion ID overwritten: ~a" cid))
+    (hash-set! seen-ids cid #t))
   (define nodes
     (for/hash ([c (in-list conclusions)])
       (values (task-conclusion-id c) c)))
