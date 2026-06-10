@@ -47,6 +47,7 @@
     (thunk)))
 
 ;; Macro form
+#| DEPRECATED: with-output-guard is unused. Use call-with-output-guard instead. Will be removed in v1.0.0. |#
 (define-syntax-rule (with-output-guard #:redirect-to port body ...)
   (call-with-output-guard (lambda ()
                             body ...)

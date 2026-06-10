@@ -8,6 +8,7 @@
 ;;
 ;; Coexists with loop.rkt; integration deferred to v0.42.x.
 ;; STABILITY: stable
+;; CONSUMERS: agent/loop, loop-phases
 
 (require racket/contract
          racket/match

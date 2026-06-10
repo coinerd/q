@@ -2,6 +2,7 @@
 
 ;; runtime/context-assembly/task-state.rkt — Task-state FSM for context optimization
 ;; STABILITY: evolving
+;; CONSUMERS: state-inference, state-aware-builder
 ;;
 ;; Defines FSM states for tracking what the agent is doing (exploring,
 ;; planning, implementing, verifying, debugging) and uses that state to

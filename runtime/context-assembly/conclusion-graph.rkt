@@ -2,6 +2,7 @@
 
 ;; runtime/context-assembly/conclusion-graph.rkt — Pure DAG for conclusion dependencies
 ;; STABILITY: evolving
+;; CONSUMERS: state-aware-builder, tests
 ;;
 ;; Builds a directed graph from task-conclusion dependencies.
 ;; Supports cycle detection, topological sort, and seed-based subgraph selection.

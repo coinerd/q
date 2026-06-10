@@ -2,6 +2,7 @@
 
 ;; agent/loop-phases.rkt — Pure phase functions for agent loop (F1)
 ;; STABILITY: evolving
+;; CONSUMERS: agent/loop, tests
 ;;
 ;; Each phase function is a PURE function that returns
 ;; (values result (listof effect?)). Effects describe what should

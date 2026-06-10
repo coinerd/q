@@ -486,47 +486,41 @@
                                  #:after-messages after-messages
                                  #:conclusion-coverage conclusion-coverage
                                  #:repeat-tool-count repeat-tool-count)
-  (define warnings '())
-
-  ;; Trigger 1: Excessive savings (>50% messages cut)
-  ;; R2 risk: context may be too small to work effectively
-  (when (and (> before-messages 0) (> after-messages 0) (< after-messages (* before-messages 0.50)))
-    (set!
-     warnings
-     (cons (list 'excessive-savings
-                 (format "Context reduced by >50%: ~a → ~a messages" before-messages after-messages))
-           warnings)))
-
-  ;; Trigger 2: Low conclusion coverage (amnesia risk)
-  ;; R0 risk: agent forgetting key findings
-  (when (< conclusion-coverage 0.20)
-    (set! warnings
-          (cons (list 'amnesia-risk (format "Conclusion coverage too low: ~a" conclusion-coverage))
-                warnings)))
-
-  ;; Trigger 3: Repeated tool calls (same file re-read > 2x)
-  ;; Indicates agent is re-reading files it should have conclusions for.
-  ;; NOTE: When repeat-tool-count >= 6 AND conclusion-coverage = 0,
-  ;; this trigger AND Trigger 4 (stuck-detected) both fire. This is
-  ;; intentional — Trigger 3 produces task-amnesia warnings that feed
-  ;; the repeat escalation path; Trigger 4 produces stuck warnings that
-  ;; trigger expand-context. The actions from both paths are collected
-  ;; and the highest-priority action wins (see check-rollback-triggers-with-actions).
-  (when (> repeat-tool-count 2)
-    (set! warnings
-          (cons (list 'task-amnesia-detected
-                      (format "Repeated tool calls detected: ~a re-reads" repeat-tool-count))
-                warnings)))
-
-  ;; v0.96.14 F1: Trigger 4 — Stuck detection (≥6 tool calls, 0 conclusions)
-  ;; Agent has done many tool calls but hasn't recorded any conclusions
-  (when (and (>= repeat-tool-count 6) (= conclusion-coverage 0))
-    (set! warnings
-          (cons (list 'stuck-detected
-                      (format "stuck: ~a tool calls without recording conclusions" repeat-tool-count))
-                warnings)))
-
-  (reverse warnings))
+  ;; M6 (v0.97.15): Converted from imperative set! accumulation to
+  ;; pure for/fold. Each trigger conditionally appends a warning tuple.
+  (define warnings
+    (reverse
+     (for/fold ([acc '()])
+               ([trigger
+                 (in-list
+                  ;; Trigger 1: Excessive savings (>50% messages cut)
+                  (list (and (and (> before-messages 0)
+                                  (> after-messages 0)
+                                  (< after-messages (* before-messages 0.50)))
+                             (list 'excessive-savings
+                                   (format "Context reduced by >50%: ~a → ~a messages"
+                                           before-messages
+                                           after-messages)))
+                        ;; Trigger 2: Low conclusion coverage (amnesia risk)
+                        (and (< conclusion-coverage 0.20)
+                             (list 'amnesia-risk
+                                   (format "Conclusion coverage too low: ~a" conclusion-coverage)))
+                        ;; Trigger 3: Repeated tool calls (same file re-read > 2x)
+                        (and (> repeat-tool-count 2)
+                             (list 'task-amnesia-detected
+                                   (format "Repeated tool calls detected: ~a re-reads"
+                                           repeat-tool-count)))
+                        ;; Trigger 4 — Stuck detection (>=6 tool calls, 0 conclusions)
+                        ;; NOTE: this AND Trigger 3 both fire when repeat>=6 and coverage=0.
+                        (and (>= repeat-tool-count 6)
+                             (= conclusion-coverage 0)
+                             (list 'stuck-detected
+                                   (format "stuck: ~a tool calls without recording conclusions"
+                                           repeat-tool-count)))))])
+       (if trigger
+           (cons trigger acc)
+           acc))))
+  warnings)
 
 ;; v0.77.6 W6.2: Extended trigger output with recommended actions.
 ;; Returns (values warnings recommended-action) where recommended-action
