@@ -1,3 +1,13 @@
+## [0.97.9] - 2026-06-08
+
+### Fixed
+- GAP-D: Replaced recency-based fallback-select-conclusions with semantic rank-and-budget
+- GAP-D: Downgraded cycle detection log from warning to info
+- Removed unused fallback-select-conclusions import from state-aware-builder
+
+### Added
+- 6 new semantic fallback regression tests
+
 ## [0.97.8] - 2026-06-08
 
 ### Fixed
