@@ -8,28 +8,78 @@
 (require racket/base
          net/base64)
 
-;; browser-target
-(provide (struct-out browser-target)
+;; browser-target — explicit provides (M2: struct-out → explicit)
+(provide browser-target?
+         browser-target
+         browser-target-url
+         browser-target-tab-selector
+         browser-target-viewport-width
+         browser-target-viewport-height
          browser-target->jsexpr
          jsexpr->browser-target
-         ;; browser-action
-         (struct-out browser-action-navigate)
-         (struct-out browser-action-click)
-         (struct-out browser-action-type)
-         (struct-out browser-action-press)
-         (struct-out browser-action-extract)
-         (struct-out browser-action-screenshot)
-         (struct-out browser-action-scroll)
-         (struct-out browser-action-wait)
+         ;; browser-action structs — explicit provides
+         browser-action-navigate?
+         browser-action-navigate
+         browser-action-navigate-url
+         browser-action-navigate-wait-until?
+         browser-action-click?
+         browser-action-click
+         browser-action-click-selector
+         browser-action-click-button
+         browser-action-type?
+         browser-action-type
+         browser-action-type-selector
+         browser-action-type-text
+         browser-action-type-clear-first?
+         browser-action-press?
+         browser-action-press
+         browser-action-press-key
+         browser-action-press-modifiers
+         browser-action-extract?
+         browser-action-extract
+         browser-action-extract-selector
+         browser-action-extract-extract-type
+         browser-action-screenshot?
+         browser-action-screenshot
+         browser-action-screenshot-selector
+         browser-action-screenshot-full-page?
+         browser-action-scroll?
+         browser-action-scroll
+         browser-action-scroll-direction
+         browser-action-scroll-amount
+         browser-action-wait?
+         browser-action-wait
+         browser-action-wait-selector
+         browser-action-wait-timeout-ms
          browser-action?
          browser-action->jsexpr
          jsexpr->browser-action
-         ;; browser-observation
-         (struct-out browser-observation)
+         ;; browser-observation — explicit provides
+         browser-observation?
+         browser-observation
+         browser-observation-url
+         browser-observation-title
+         browser-observation-text-content
+         browser-observation-visible-text
+         browser-observation-dom-summary
+         browser-observation-accessibility-tree
+         browser-observation-screenshot-mime
+         browser-observation-screenshot-bytes
+         browser-observation-console-errors
+         browser-observation-network-requests
+         browser-observation-viewport-size
+         browser-observation-metadata
          browser-observation->jsexpr
          jsexpr->browser-observation
-         ;; browser-session-info
-         (struct-out browser-session-info)
+         ;; browser-session-info — explicit provides
+         browser-session-info?
+         browser-session-info
+         browser-session-info-id
+         browser-session-info-status
+         browser-session-info-created-at
+         browser-session-info-last-activity
+         browser-session-info-profile-kind
+         browser-session-info-artifact-dir
          browser-session-info->jsexpr
          jsexpr->browser-session-info)
 
