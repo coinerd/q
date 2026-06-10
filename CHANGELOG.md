@@ -1,3 +1,24 @@
+## [0.97.19] - 2026-06-10
+
+### Changed
+- F11 (MODERATE): Declare turn-orchestrator as composition root in dependency-policy.rktd
+- F12 (MODERATE): Document provider factory registry integration path (architecture note)
+- F13 (MODERATE): Add ctx-version field to extension-ctx for schema migration
+- F15 (MODERATE): Create docs/config-schema.rktd documenting all configurable keys
+- F5 (HIGH): Add session facet structs (provider, tool, identity) + extractors
+
+### Added
+- F17a: Provider conformance fitness tests (PC-1, PC-2)
+- F17b: Session recovery invariant tests (SR-1)
+- F17c: Dependency policy completeness tests (CD-1, CD-2)
+- Fitness tests for F6 settings split, F13 ctx-version, F11 composition root
+
+### Skipped
+- F7 (CSI extraction): Functions are 1-3 lines, only used in terminal.rkt
+- F9a/b (error narrowing): Broad catches are defensive wrappers around user callbacks
+- F14 (event wiring table): 6 subscribers in 1 file doesn't justify table abstraction
+- F16 (defaults consolidation): Parameters well-scoped to domains
+
 ## [0.97.18] - 2026-06-10
 
 ### Changed
