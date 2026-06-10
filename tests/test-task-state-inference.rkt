@@ -153,6 +153,32 @@
 
     (test-case "batch inference with multiple turn windows"
       (define-values (state conf) (infer-from-recent-turns '(("read") ("edit" "write"))))
-      (check-equal? state task-implementation))))
+      (check-equal? state task-implementation))
+
+    ;; ============================================================
+    ;; v0.97.8 W3: GAP-C relaxed planning inference tests
+    ;; ============================================================
+
+    (test-case "GAP-C: planning with meta+writes when meta >= writes → planning"
+      ;; Agent writes PLAN.md (1 write) but also saves conclusion (1 meta) → planning
+      (define-values (state conf) (infer-task-state-from-tools '("read" "write" "save-conclusion")))
+      (check-equal? state task-planning)
+      (check-true (>= conf 0.7)))
+
+    (test-case "GAP-C: planning with 2 meta + 2 writes → planning"
+      ;; Multiple plan writes balanced by meta tools → still planning
+      (define-values (state conf)
+        (infer-task-state-from-tools '("read" "write" "write" "save-conclusion" "set-task-state")))
+      (check-equal? state task-planning))
+
+    (test-case "GAP-C: writes exceed meta → implementation (not planning)"
+      ;; 3 writes but only 1 meta → implementation takes priority
+      (define-values (state conf)
+        (infer-task-state-from-tools '("write" "write" "write" "save-conclusion")))
+      (check-equal? state task-implementation))
+
+    (test-case "GAP-C: only meta tools no writes → planning (original behavior)"
+      (define-values (state conf) (infer-task-state-from-tools '("read" "save-conclusion")))
+      (check-equal? state task-planning))))
 
 (run-tests suite)

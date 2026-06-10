@@ -1,3 +1,14 @@
+## [0.97.8] - 2026-06-08
+
+### Fixed
+- GAP-B: Added 4 missing WS transition rules (planning→implementation/verification/debugging, verification→implementation)
+- GAP-C: Relaxed planning inference — now allows writes when meta tool count ≥ write count
+- GAP-C: Reordered inference rules so planning check runs before implementation
+
+### Added
+- 6 new WS transition regression tests
+- 4 new state inference regression tests
+
 ## [0.97.7] - 2026-06-08
 
 ### Fixed
