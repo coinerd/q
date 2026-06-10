@@ -74,15 +74,18 @@
                    (lambda (e)
                      (generate-fallback-conclusions uncovered-ids current-state content-summaries))])
     (define result-ch (make-channel))
+    ;; GAP-P v0.97.12: Use custodian for cleaner thread cleanup.
+    (define thd-cust (make-custodian))
     (define thd
-      (thread (lambda ()
-                (with-handlers ([exn:fail? (lambda (e) (channel-put result-ch 'error))])
-                  (channel-put result-ch
-                               (llm-distill-fn uncovered-ids current-state content-summaries))))))
+      (parameterize ([current-custodian thd-cust])
+        (thread (lambda ()
+                  (with-handlers ([exn:fail? (lambda (e) (channel-put result-ch 'error))])
+                    (channel-put result-ch
+                                 (llm-distill-fn uncovered-ids current-state content-summaries)))))))
     (define result (sync/timeout timeout-secs result-ch))
     (cond
       [(not result)
-       (kill-thread thd)
+       (custodian-shutdown-all thd-cust)
        (generate-fallback-conclusions uncovered-ids current-state content-summaries)]
       [(eq? result 'error)
        (generate-fallback-conclusions uncovered-ids current-state content-summaries)]
