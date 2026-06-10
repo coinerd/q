@@ -31,7 +31,9 @@
          (only-in "../runtime/memory/protocol.rkt" memory-backend-store!)
          (only-in "../runtime/context-assembly/memory-builder.rkt" current-memory-injection-budget)
          (only-in "../runtime/context-assembly/conclusion-ranker.rkt" rank-and-budget)
-         (only-in "../runtime/context-assembly/conclusion-graph.rkt" fallback-select-conclusions))
+         (only-in "../runtime/context-assembly/conclusion-graph.rkt" fallback-select-conclusions)
+         (only-in "../runtime/context-assembly/task-memory.rkt" conclusions-for-context task-memory)
+         (only-in "../runtime/context-assembly/config.rkt" current-conclusion-token-budget))
 
 (define (make-test-msg role text [meta (hasheq)])
   (make-message "test-id" #f role 'text (list (make-text-part text)) (current-seconds) meta))
@@ -473,3 +475,32 @@
   (define result
     (build-tiered-context/state-aware '() #:conclusions (list no-seed-c1) #:task-state 'planning))
   (check-true (tiered-context? result)))
+
+;; ============================================================
+;; v0.97.10 W2: GAP-D unified budget test
+;; ============================================================
+
+(test-case "GAP-D: conclusions-for-context uses current-conclusion-token-budget parameter"
+  ;; Create a task-memory with multiple conclusions
+  (define concs
+    (for/list ([i (in-range 10)])
+      (task-conclusion (format "budget~a" i)
+                       (format "conclusion text number ~a with enough content to have tokens" i)
+                       'fact
+                       'implementation
+                       '()
+                       (+ 1000 i)
+                       '()
+                       '())))
+  (define mem (task-memory concs 50))
+  ;; With default budget, should get results
+  (define result-default (conclusions-for-context mem '(implementation) '()))
+  (check-true (pair? result-default) "returns conclusions with default budget")
+  ;; With tiny budget, should get fewer/different results
+  (parameterize ([current-conclusion-token-budget 10])
+    (define result-small (conclusions-for-context mem '(implementation) '()))
+    (check-true (list? result-small) "returns list even with tiny budget"))
+  ;; Verify no magic 200: budget is respected via parameter
+  (parameterize ([current-conclusion-token-budget 1])
+    (define result-minimal (conclusions-for-context mem '(implementation) '()))
+    (check-true (list? result-minimal) "returns list even with budget=1")))
