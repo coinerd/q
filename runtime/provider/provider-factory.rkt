@@ -5,6 +5,12 @@
 ;;
 ;; Extracted from main.rkt. Contains build-provider, local-provider?,
 ;; and build-mock-provider.
+;;
+;; ARCHITECTURE NOTE (F12): create-provider-for-name uses hardcoded dispatch
+;; for built-in providers (gemini, anthropic, azure, openrouter, openai-compat).
+;; Extensions can register custom providers via provider-registry.rkt and the
+;; extension context's ctx-provider-registry. Future: factory should accept
+;; optional registry parameter and check it before hardcoded fallback.
 
 (require racket/contract
          "../settings.rkt"

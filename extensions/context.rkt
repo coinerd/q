@@ -30,6 +30,10 @@
          ;; M-06: Import struct from pure types module
          "../util/extension/extension-types.rkt")
 
+;; F13 (v0.97.19): Extension context schema version.
+;; Increment when adding non-optional fields. New fields MUST be optional keyword args.
+(define current-extension-ctx-version 1)
+
 ;; Struct and predicate
 (provide extension-ctx
          extension-ctx?
@@ -89,7 +93,8 @@
                             ;; #1223: session state query fields
                             #:session-messages [session-messages #f]
                             #:session-token-usage [session-token-usage #f]
-                            #:gsd-ctx [gsd-ctx #f])
+                            #:gsd-ctx [gsd-ctx #f]
+                            #:ctx-version [ctx-version current-extension-ctx-version])
   (extension-ctx session-id
                  session-dir
                  event-bus
@@ -104,7 +109,8 @@
                  provider-registry
                  session-messages
                  session-token-usage
-                 gsd-ctx))
+                 gsd-ctx
+                 ctx-version))
 
 ;; ============================================================
 ;; Accessor aliases — short, ergonomic names

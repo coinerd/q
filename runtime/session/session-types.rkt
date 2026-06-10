@@ -69,7 +69,25 @@
                        [session-provider (-> agent-session? any/c)]
                        [session-tool-registry (-> agent-session? any/c)]
                        [session-event-bus (-> agent-session? any/c)]
-                       [session-extension-registry (-> agent-session? any/c)]))
+                       [session-extension-registry (-> agent-session? any/c)]
+                       ;; Facets (F5, v0.97.19)
+                       [session->provider-facet (-> agent-session? session-provider-facet?)]
+                       [session->tool-facet (-> agent-session? session-tool-facet?)]
+                       [session->identity-facet (-> agent-session? session-identity-facet?)])
+         ;; Facets (F5, v0.97.19)
+         session-provider-facet
+         session-provider-facet?
+         session-provider-facet-provider
+         session-provider-facet-model-name
+         session-provider-facet-config
+         session-tool-facet
+         session-tool-facet?
+         session-tool-facet-tool-registry
+         session-tool-facet-event-bus
+         session-identity-facet
+         session-identity-facet?
+         session-identity-facet-session-id
+         session-identity-facet-session-dir)
 
 ;; ============================================================
 ;; agent-session struct (16 fields after A1-05 extraction)
@@ -109,6 +127,51 @@
          ;; Lifecycle state (boxed sub-struct, A1-05)
          lifecycle) ; lifecycle-state?
   #:transparent)
+
+;; ============================================================
+;; Session Facets (F5, v0.97.19)
+;;
+;; Facets decompose the agent-session struct into focused views.
+;; Consumers should prefer facet accessors over raw struct accessors
+;; to reduce coupling. New capabilities go into new facets, NOT into
+;; agent-session fields directly.
+;;
+;; Phase 1 (v0.97.19): Define facets, export them. No consumer migration.
+;; Phase 2 (future): Migrate consumers to use facets.
+;; ============================================================
+
+;; Provider facet: everything needed to make LLM calls
+(struct session-provider-facet
+        (provider ; provider?
+         model-name ; string or #f
+         config) ; hash (runtime settings)
+  #:transparent)
+
+;; Tool facet: tool execution context
+(struct session-tool-facet
+        (tool-registry ; tool-registry?
+         event-bus) ; event-bus?
+  #:transparent)
+
+;; Session identity facet: identification and paths
+(struct session-identity-facet
+        (session-id ; string
+         session-dir) ; path
+  #:transparent)
+
+;; Extract provider facet from an agent-session
+(define (session->provider-facet s)
+  (session-provider-facet (agent-session-provider s)
+                          (agent-session-model-name s)
+                          (agent-session-config s)))
+
+;; Extract tool facet from an agent-session
+(define (session->tool-facet s)
+  (session-tool-facet (agent-session-tool-registry s) (agent-session-event-bus s)))
+
+;; Extract identity facet from an agent-session
+(define (session->identity-facet s)
+  (session-identity-facet (agent-session-session-id s) (agent-session-session-dir s)))
 
 ;; ============================================================
 ;; Shared helper: session log path
