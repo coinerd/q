@@ -1,3 +1,16 @@
+## [0.97.16] - 2026-06-10
+
+### Fixed
+- B1: Browser policy now allows common dev ports (3000, 3001, 5173, 8000, 8080, 8443)
+  by default instead of blocking all localhost
+- B2: TUI busy-state watchdog reduced from 30 min to 5 min (matches 120s tool timeouts)
+- B3: Tool execution progress events emitted for long-running tool batches —
+  TUI status bar now shows "N tools running" instead of silent hang
+- B4: Hash truncation now preserves metadata fields (session-id, status, url) —
+  fixes browser_open session-id loss that caused LLM to hallucinate non-existent
+  session IDs, breaking all subsequent browser_screenshot/click calls
+- B5: Steering queue message now includes "Press Esc to cancel" hint
+
 ## [0.97.15] - 2026-06-10
 
 ### Fixed

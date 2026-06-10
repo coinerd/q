@@ -145,6 +145,19 @@
                  [meta (hasheq 'name name 'error err)])
             (set-pending-tool-name (append-entry state (make-entry 'tool-fail text ts meta)) #f)))))
 
+;; B3 fix: Show progress during long-running tool batches
+(define (handle-tool-execution-update state evt)
+  (define payload (event-payload evt))
+  (define tool-name (hash-ref payload 'toolName "?"))
+  (define progress (hash-ref payload 'progress (hasheq)))
+  (define total (hash-ref progress 'total 0))
+  (define running (hash-ref progress 'running 0))
+  (define status-text
+    (if (> total 1)
+        (format "~a tools running (~a pending)" running total)
+        (format "~a running" tool-name)))
+  (set-status-message state status-text))
+
 (define (handle-tool-call-blocked state evt)
   (define payload (event-payload evt))
   (define name (hash-ref payload 'name "?"))
@@ -374,6 +387,7 @@
 (register-event-reducer! "tool.call.started" handle-tool-call-started)
 (register-event-reducer! "tool.execution.started" handle-tool-execution-started)
 (register-event-reducer! "tool.execution.completed" handle-tool-execution-completed)
+(register-event-reducer! "tool.execution.updated" handle-tool-execution-update)
 (register-event-reducer! "runtime.error" handle-runtime-error)
 (register-event-reducer! "session.started" handle-session-started)
 (register-event-reducer! "session.resumed" handle-session-resumed)

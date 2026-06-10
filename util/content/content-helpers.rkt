@@ -35,9 +35,11 @@
         (format "[binary ~a data: ~a bytes]" mime data-len)]
        [(hash-has-key? content 'text) (hash-ref content 'text)]
        [else
+        ;; B4 fix: Preserve metadata fields (session-id, status, url) before truncating.
+        ;; Without this, browser_open results lose session-id → LLM hallucinates ID.
         (let ([s (format "~a" content)])
           (if (> (string-length s) MAX-CONTENT-STRING-LEN)
-              (format "[truncated hash content: ~a chars]" (string-length s))
+              (hash->metadata-summary content)
               s))])]
     [(list? content)
      (string-join (for/list ([part (in-list content)])
@@ -47,6 +49,24 @@
                       [else (format "~a" part)]))
                   "\n")]
     [else (format "~a" content)]))
+
+;; B4 fix: Build a structured summary from a hash, preserving metadata fields
+;; (session-id, status, url, title) while truncating large content fields.
+(define METADATA-KEYS '(session-id status url title))
+
+(define (hash->metadata-summary h)
+  (define meta-parts
+    (for/list ([k (in-list METADATA-KEYS)]
+               #:when (hash-has-key? h k))
+      (format "~a: ~a" k (hash-ref h k))))
+  (define content-parts
+    (for/list ([(k v) (in-hash h)]
+               #:unless (member k METADATA-KEYS))
+      (format "~a: ~a chars" k (min (string-length (format "~a" v)) 999999))))
+  (string-append (if (null? meta-parts)
+                     ""
+                     (format "[~a] " (string-join meta-parts ", ")))
+                 (format "[truncated: ~a]" (string-join content-parts ", "))))
 
 ;; Convert tool-result content to a display string.
 ;; Same as result-content->string but also handles top-level hashes

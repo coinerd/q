@@ -119,7 +119,7 @@
   (check-false result2))
 
 (test-case "watchdog: current-busy-watchdog-ms parameter has correct default"
-  (check-equal? (current-busy-watchdog-ms) (* 30 60 1000)))
+  (check-equal? (current-busy-watchdog-ms) (* 5 60 1000)))
 
 (test-case "watchdog: parameter can be overridden"
   (parameterize ([current-busy-watchdog-ms 1000])
@@ -143,7 +143,7 @@
   (check-not-false watchdog-entry "watchdog transcript entry exists")
   ;; Verify the text content matches expected message
   (check-equal? (transcript-entry-text watchdog-entry)
-                "[Watchdog: busy state timed out — force-cleared after 30 min]")
+                (format "[Watchdog: busy state timed out — force-cleared after ~a min]" (/ (* 30 60 1000) 60000)))
   ;; Verify timestamp matches the 'now' argument passed to check-busy-watchdog
   (check-equal? (transcript-entry-timestamp watchdog-entry) now)
   ;; Verify busy? is cleared

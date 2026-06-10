@@ -21,7 +21,8 @@
 (provide current-busy-watchdog-ms
          check-busy-watchdog)
 
-(define current-busy-watchdog-ms (make-parameter (* 30 60 1000)))
+(define current-busy-watchdog-ms (make-parameter (* 5 60 1000)))
+;; B2 fix: 5 min covers 2-3 bash timeouts (120s each), network delays
 
 (define (check-busy-watchdog state now-ms watchdog-ms)
   (if (and (ui-state-busy? state) (not (ui-state-streaming-text state)))
@@ -33,10 +34,12 @@
                               "watchdog: busy timeout")
                              #f)]
                    [watchdog-entry
-                    (make-entry 'system
-                                "[Watchdog: busy state timed out — force-cleared after 30 min]"
-                                now-ms
-                                (hasheq 'watchdog #t))])
+                    (make-entry
+                     'system
+                     (format "[Watchdog: busy state timed out — force-cleared after ~a min]"
+                             (/ watchdog-ms 60000))
+                     now-ms
+                     (hasheq 'watchdog #t))])
               (add-transcript-entry cleared watchdog-entry))
             #f))
       #f))

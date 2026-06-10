@@ -52,7 +52,8 @@
 
 (define (make-browser-policy-settings #:allowed-schemes [allowed-schemes '("https" "http")]
                                       #:allowed-domains [allowed-domains '()]
-                                      #:allowed-localhost-ports [allowed-localhost-ports '()]
+                                      #:allowed-localhost-ports
+                                      [allowed-localhost-ports '(3000 3001 5173 8000 8080 8443)]
                                       #:blocked-private-networks? [blocked-private-networks? #t]
                                       #:blocked-paths [blocked-paths '()])
   (browser-policy-settings allowed-schemes
