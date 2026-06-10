@@ -11,7 +11,29 @@
          "session-index/mutations.rkt"
          "session-index/query.rkt")
 
-(provide (all-from-out "session-index/schema.rkt")
+;; Explicit re-exports from session-index/schema.rkt — do NOT use all-from-out (ADR-0028)
+(provide session-index
+         session-index?
+         session-index-by-id
+         session-index-children
+         session-index-entry-order
+         session-index-bookmarks
+         session-index-active-leaf-id
+         session-index-bookmark-sem
+         bookmark
+         bookmark?
+         bookmark-id
+         bookmark-entry-id
+         bookmark-label
+         bookmark-timestamp
+         make-bookmark
+         navigate-result
+         navigate-result?
+         navigate-result-entry
+         navigate-result-branch
+         navigate-result-children
+         navigate-result-leaf?
+         make-empty-index
          (contract-out [build-index! (-> path-string? path-string? session-index?)]
                        [load-index (-> path-string? session-index?)]
                        [save-index! (-> path-string? session-index? void?)]
