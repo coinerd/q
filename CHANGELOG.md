@@ -1,3 +1,28 @@
+## [0.97.15] - 2026-06-10
+
+### Fixed
+- Bug fix: browser_screenshot blows up context window (4 root causes)
+  - summarize-tool-result ignores tool-result-part (truncation bypassed)
+  - build-raw-messages missing #:handle-hash? (270K base64 dumped verbatim)
+  - result-content->string has no binary/base64 guard
+  - context.pressure only emitted once per prompt (stale ctx:1% in TUI)
+- M6: check-rollback-triggers imperative set! → pure for/fold
+- M10: Extract message->provider-hash to provider-hash-bridge.rkt
+- M11: session-index builders mutable make-hash → immutable for/fold
+- M11: bm-counter bare set! → boxed counter with semaphore
+- L2: settings-cache thread safety documentation
+- L3: Remove unused define-tool-schema macro + test (87 LOC deleted)
+- L4: Deprecation comment on unused with-output-guard macro
+- L9: Add CONSUMERS docs to 18 internal modules
+- L10: Add v1.0.0 removal timeline to bump-version.rkt
+
+### Skipped
+- M5: Parameter → session-config migration (33 files, zero functional gain)
+- M7: Dual working-set unification (low value for hotfix milestone)
+- L1: event-bus box → #:mutable (moderate risk, low value)
+- L5: with-logged-catch → macro (3 callers, stable code)
+- L7: state-types.rkt responsibility split (3h estimate)
+
 ## [0.97.14] - 2026-06-10
 
 ### Fixed
