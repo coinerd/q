@@ -9,7 +9,8 @@
 
 (require racket/contract
          racket/list
-         "task-conclusion.rkt")
+         "task-conclusion.rkt"
+         (only-in "conclusion-ranker.rkt" rank-and-budget))
 
 ;; ── Struct ──
 
@@ -117,8 +118,10 @@
 
 ;; ── Degraded Fallback ──
 
+;; GAP-A v0.97.10: Unified ranking strategy.
 ;; When graph selection fails (empty seeds, no graph, cycles),
-;; fall back to bounded recency selection from a flat conclusion list.
+;; delegate to rank-and-budget for multi-factor scoring instead of
+;; pure recency. Same conclusions ranked consistently across all paths.
 (define (fallback-select-conclusions conclusions max-count [states '()])
   (define filtered
     (if (null? states)
@@ -127,9 +130,13 @@
                            (values s #t))])
           (filter (λ (c) (hash-has-key? state-set (task-conclusion-fsm-state-origin c)))
                   conclusions))))
-  ;; Sort by timestamp descending, take most recent
-  (define sorted (sort filtered > #:key task-conclusion-timestamp))
-  (take-at-most sorted max-count))
+  ;; Delegate to rank-and-budget for consistent multi-factor scoring
+  (define budget (* max-count 200))
+  (define ranked
+    (rank-and-budget filtered
+                     #:current-state (and (pair? states) (car states))
+                     #:max-conclusion-tokens budget))
+  (take-at-most (or (and (list? ranked) ranked) '()) max-count))
 
 (define (take-at-most lst n)
   (if (> (length lst) n)
