@@ -14,10 +14,8 @@
 ;; trace-sink<%> is a Racket interface value — not directly contractable.
 ;; Class values (file-trace-sink% etc.) implement this interface.
 ;; Use (is-a?/c trace-sink<%>) for instances, (implementation? _ trace-sink<%>) for classes.
-(define trace-sink-instance/c (or/c (is-a?/c trace-sink<%>) #f))
-(define trace-sink-class/c (and/c any/c (λ (v) (implementation? v trace-sink<%>))))
 
-(provide trace-sink-instance/c
+(provide
          trace-sink-class/c
          ;; Interface value — kept as any/c because Racket interface values
          ;; cannot be directly used as contract predicates for provide/contract.
@@ -37,6 +35,10 @@
     trace-write! ; jsexpr -> void
     trace-flush! ; -> void
     trace-close!)) ; -> void
+
+;; Contract type aliases (after interface definition to avoid forward reference)
+(define trace-sink-instance/c (or/c (is-a?/c trace-sink<%>) #f))
+(define trace-sink-class/c (and/c any/c (λ (v) (implementation? v trace-sink<%>))))
 
 ;; File-based trace sink (default)
 (define file-trace-sink%
