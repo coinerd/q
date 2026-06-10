@@ -8,7 +8,9 @@
          (only-in "../runtime/context-assembly/task-conclusion.rkt"
                   task-conclusion
                   task-conclusion-id
-                  task-conclusion-dependencies)
+                  task-conclusion-dependencies
+                  hash->conclusion
+                  valid-categories)
          (only-in "../runtime/context-assembly/conclusion-graph.rkt"
                   build-conclusion-graph
                   conclusion-graph?
@@ -169,6 +171,33 @@
         (for/list ([i (in-range 10)])
           (task-conclusion (format "mc~a" i) (format "text ~a" i) 'fact 'idle '() (+ 100 i) '() '())))
       (define selected (fallback-select-conclusions many 3))
-      (check-true (<= (length selected) 3)))))
+      (check-true (<= (length selected) 3)))
+
+    ;; ============================================================
+    ;; GAP-J v0.97.12: Validation tests
+    ;; ============================================================
+
+    (test-case "GAP-J: hash->conclusion validates id is string"
+      (check-exn exn:fail?
+                 (lambda () (hash->conclusion (hasheq 'id 123 'text "ok" 'category 'fact)))))
+
+    (test-case "GAP-J: hash->conclusion validates text is string"
+      (check-exn exn:fail? (lambda () (hash->conclusion (hasheq 'id "ok" 'text 42 'category 'fact)))))
+
+    (test-case "GAP-J: hash->conclusion validates category is valid symbol"
+      (check-exn exn:fail?
+                 (lambda () (hash->conclusion (hasheq 'id "ok" 'text "ok" 'category 'invalid)))))
+
+    (test-case "GAP-J: hash->conclusion accepts valid data"
+      (define c
+        (hash->conclusion
+         (hasheq 'id "test" 'text "hello" 'category 'decision 'fsm-state-origin 'idle)))
+      (check-equal? (task-conclusion-id c) "test"))
+
+    (test-case "GAP-J: build-conclusion-graph deduplicates by ID"
+      (define c1 (task-conclusion "dup" "first" 'fact 'idle '() 100 '() '()))
+      (define c2 (task-conclusion "dup" "second" 'fact 'idle '() 200 '() '()))
+      (define g (build-conclusion-graph (list c1 c2)))
+      (check-equal? (graph-conclusion-count g) 1))))
 
 (run-tests suite)
