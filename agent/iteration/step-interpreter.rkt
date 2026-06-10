@@ -37,7 +37,7 @@
                   loop-counters-iteration
                   loop-counters-consecutive-tool-count
                   loop-counters-recent-tool-names)
-         (only-in "../../util/message/message.rkt" message-role message-id message-content)
+         (only-in "../../util/message/message.rkt" message? message-role message-id message-content)
          (only-in "../../util/content/content-parts.rkt"
                   tool-result-part?
                   tool-result-part-tool-call-id
@@ -91,15 +91,25 @@
                   step-result-action
                   step-result-new-counters)
          (only-in "../../runtime/iteration/internal.rkt" assert-payload)
-         (only-in "../../runtime/iteration/directive.rkt" directive-recurse directive-stop))
+         (only-in "../../runtime/iteration/directive.rkt"
+                  directive-recurse
+                  directive-recurse?
+                  directive-stop
+                  directive-stop?))
 
 (provide (contract-out
           [interpret-step
-           (-> step-result? loop-result? (listof any/c) loop-infra? iteration-snapshot? any/c)]
+           (-> step-result?
+               loop-result?
+               (listof message?)
+               loop-infra?
+               iteration-snapshot?
+               (or/c directive-recurse? directive-stop?))]
           [handle-stop-action
-           (-> loop-result? (listof any/c) loop-infra? loop-counters? any/c any/c loop-result?)]
-          [execute-pending-tool-calls (-> (listof any/c) loop-infra? any/c any/c (listof any/c))]
-          [sink-append-entries! (->* (loop-infra? (listof any/c)) ((or/c any/c #f)) void?)]
+           (-> loop-result? (listof message?) loop-infra? loop-counters? any/c any/c loop-result?)]
+          [execute-pending-tool-calls
+           (-> (listof message?) loop-infra? any/c any/c (listof message?))]
+          [sink-append-entries! (->* (loop-infra? (listof message?)) ((or/c any/c #f)) void?)]
           [current-reflection-prompt-enabled (parameter/c boolean?)]
           [REFLECTION-THRESHOLD-CHARS exact-positive-integer?]))
 
