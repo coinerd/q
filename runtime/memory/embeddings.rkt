@@ -11,6 +11,8 @@
 (provide current-embedding-provider
          current-embedding-dimension
          current-batch-embedding-provider
+         current-embedding-cache
+         make-embedding-cache-state
          cosine-similarity
          cached-embed
          clear-embedding-cache!
@@ -47,17 +49,29 @@
       (/ dot (* mag-a mag-b))))
 
 ;; ---------------------------------------------------------------------------
-;; GAP-3: Session-scoped embedding cache
+;; GAP-3: Session-scoped embedding cache (thread-safe)
+;; H5 v0.97.13: Replaced bare mutable hash with semaphore-guarded struct.
 ;; ---------------------------------------------------------------------------
 
 ;; Maximum cache entries (LRU eviction when exceeded)
 (define max-cache-entries 500)
 
-;; The cache: mutable hash from text-hash-code -> (vector embedding timestamp)
-;; Using equal-hash-code for O(1) lookup without crypto dependency.
-(define embedding-cache (make-hash))
-(define cache-hits (make-parameter 0))
-(define cache-misses (make-parameter 0))
+;; Thread-safe cache struct
+(struct embedding-cache-state
+        (table ; mutable hash: cache-key -> (vector embedding len timestamp)
+         lock ; semaphore for thread safety
+         hits ; box of exact-nonnegative-integer
+         misses) ; box of exact-nonnegative-integer
+  #:transparent)
+
+(define (make-embedding-cache-state)
+  (embedding-cache-state (make-hash) (make-semaphore 1) (box 0) (box 0)))
+
+;; Module-level cache — parameterized for testability
+(define current-embedding-cache (make-parameter (make-embedding-cache-state)))
+
+(define (with-cache-lock cache thunk)
+  (call-with-semaphore (embedding-cache-state-lock cache) thunk))
 
 ;; Compute a collision-resistant cache key for a string.
 ;; Uses length + hash-code to reduce collision probability.
@@ -66,28 +80,40 @@
 
 ;; Look up embedding in cache. Returns #f if not found.
 (define (cache-lookup text)
-  (define entry (hash-ref embedding-cache (cache-key text) #f))
+  (define cache (current-embedding-cache))
+  (define tbl (embedding-cache-state-table cache))
+  (define entry (with-cache-lock cache (λ () (hash-ref tbl (cache-key text) #f))))
   (if entry
       (begin
-        (cache-hits (+ 1 (cache-hits)))
+        (with-cache-lock cache
+                         (λ ()
+                           (set-box! (embedding-cache-state-hits cache)
+                                     (+ 1 (unbox (embedding-cache-state-hits cache))))))
         entry)
       (begin
-        (cache-misses (+ 1 (cache-misses)))
+        (with-cache-lock cache
+                         (λ ()
+                           (set-box! (embedding-cache-state-misses cache)
+                                     (+ 1 (unbox (embedding-cache-state-misses cache))))))
         #f)))
 
 ;; Store embedding in cache with LRU eviction.
 (define (cache-store! text embedding)
-  (when (> (hash-count embedding-cache) max-cache-entries)
-    ;; Evict oldest 25% of entries (simple eviction, not true LRU)
-    (define entries
-      (sort (hash->list embedding-cache)
-            (lambda (a b) (< (vector-ref (cdr a) 2) (vector-ref (cdr b) 2)))))
-    (define to-evict (max 1 (quotient (length entries) 4)))
-    (for ([e (in-list (take entries to-evict))])
-      (hash-remove! embedding-cache (car e))))
-  (hash-set! embedding-cache
-             (cache-key text)
-             (vector embedding (string-length text) (current-inexact-milliseconds))))
+  (define cache (current-embedding-cache))
+  (define tbl (embedding-cache-state-table cache))
+  (with-cache-lock
+   cache
+   (λ ()
+     (when (> (hash-count tbl) max-cache-entries)
+       ;; Evict oldest 25% of entries (simple eviction, not true LRU)
+       (define entries
+         (sort (hash->list tbl) (lambda (a b) (< (vector-ref (cdr a) 2) (vector-ref (cdr b) 2)))))
+       (define to-evict (max 1 (quotient (length entries) 4)))
+       (for ([e (in-list (take entries to-evict))])
+         (hash-remove! tbl (car e))))
+     (hash-set! tbl
+                (cache-key text)
+                (vector embedding (string-length text) (current-inexact-milliseconds))))))
 
 ;; Get embedding for text, using cache if available.
 ;; Returns #f if provider is not set or provider returns #f.
@@ -107,10 +133,21 @@
 
 ;; Clear the embedding cache (call on session shutdown).
 (define (clear-embedding-cache!)
-  (hash-clear! embedding-cache)
-  (cache-hits 0)
-  (cache-misses 0))
+  (define cache (current-embedding-cache))
+  (with-cache-lock cache
+                   (λ ()
+                     (hash-clear! (embedding-cache-state-table cache))
+                     (set-box! (embedding-cache-state-hits cache) 0)
+                     (set-box! (embedding-cache-state-misses cache) 0))))
 
 ;; Return cache statistics for diagnostics.
 (define (embedding-cache-stats)
-  (hasheq 'size (hash-count embedding-cache) 'hits (cache-hits) 'misses (cache-misses)))
+  (define cache (current-embedding-cache))
+  (with-cache-lock cache
+                   (λ ()
+                     (hasheq 'size
+                             (hash-count (embedding-cache-state-table cache))
+                             'hits
+                             (unbox (embedding-cache-state-hits cache))
+                             'misses
+                             (unbox (embedding-cache-state-misses cache))))))
