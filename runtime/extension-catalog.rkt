@@ -19,6 +19,7 @@
          json
          "../extensions/api.rkt"
          (only-in "../extensions/loader.rkt" get-extension-name-from-path))
+(require (only-in "../util/error/error-helpers.rkt" with-safe-fallback))
 
 (provide ext-info
          ext-info?
@@ -55,15 +56,16 @@
   (define home-dir (find-system-path 'home-dir))
   (define cfg-path (build-path home-dir ".q" "config.json"))
   (and (file-exists? cfg-path)
-       (with-handlers ([exn:fail? (λ (_) #f)])
-         (define cfg (read-json-file cfg-path))
-         (define dir-str (hash-ref cfg 'extensions (hash)))
-         (define source-dir
-           (if (hash? dir-str)
-               (hash-ref dir-str 'source_dir #f)
-               #f))
-         (and (string? source-dir)
-              (let ([p (string->path source-dir)]) (and (directory-exists? p) p))))))
+       (with-safe-fallback #f
+                           (define cfg (read-json-file cfg-path))
+                           (define dir-str (hash-ref cfg 'extensions (hash)))
+                           (define source-dir
+                             (if (hash? dir-str)
+                                 (hash-ref dir-str 'source_dir #f)
+                                 #f))
+                           (and (string? source-dir)
+                                (let ([p (string->path source-dir)])
+                                  (and (directory-exists? p) p))))))
 
 ;; binary-relative-extensions-dir : -> (or/c path? #f)
 ;; Find extensions/ relative to this module's source directory.

@@ -39,8 +39,7 @@
 
 ;; Safe file reading — returns #f on permission/race errors instead of crashing
 (define (safe-file->string path)
-  (with-handlers ([exn:fail:filesystem? (lambda (e) #f)])
-    (file->string path)))
+  (with-safe-fallback #f (file->string path)))
 
 (define (in-skip-dir? p skip-list)
   (define rel (path->string (find-relative-path Q-DIR p)))

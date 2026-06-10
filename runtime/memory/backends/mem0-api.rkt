@@ -18,6 +18,7 @@
          "../types.rkt"
          "../protocol.rkt"
          "external-protocol.rkt")
+(require (only-in "../../../util/error/error-helpers.rkt" with-safe-fallback))
 
 ;; ---------------------------------------------------------------------------
 ;; Mem0 request/response codec
@@ -120,9 +121,7 @@
       (define status-code (parse-http-status status-line))
       (cond
         [(<= 200 status-code 299)
-         (define resp-json
-           (with-handlers ([exn:fail? (lambda (_) #f)])
-             (bytes->jsexpr resp-body)))
+         (define resp-json (with-safe-fallback #f (bytes->jsexpr resp-body)))
          (hash 'ok? #t 'value (or resp-json (hash)))]
         [else
          (hash 'ok?
@@ -243,9 +242,12 @@
             (case method
               [(retrieve)
                (define items (hash-ref raw 'value '()))
-               (hash 'ok? #t 'value (decode-mem0-items items
-                                                           (hash-ref payload 'session-id "unknown")
-                                                           (hash-ref payload 'project-root ".")))]
+               (hash 'ok?
+                     #t
+                     'value
+                     (decode-mem0-items items
+                                        (hash-ref payload 'session-id "unknown")
+                                        (hash-ref payload 'project-root ".")))]
               [else raw])])))
      (make-external-backend (format "mem0(~a)" base-url) mem0-transport #:timeout-ms timeout-ms)]))
 

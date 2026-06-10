@@ -24,6 +24,7 @@
          "../gui/slash-commands.rkt"
          "../gui/state-sync.rkt"
          "../gui/gui-types.rkt")
+(require (only-in "../util/error/error-helpers.rkt" with-safe-fallback))
 
 (provide (contract-out [run-gui-with-runtime (-> any/c any/c void?)]
                        [run-gui (-> void?)]
@@ -34,11 +35,11 @@
 ;; --------------------------------------------------
 (define (gui-available?)
   (and (or (getenv "DISPLAY") (getenv "WAYLAND_DISPLAY"))
-       (with-handlers ([exn:fail? (lambda (e) #f)])
-         (dynamic-require 'racket/gui/easy/observable #f)
-         (dynamic-require 'racket/gui/easy/view #f)
-         (dynamic-require 'racket/gui/easy/renderer #f)
-         #t)))
+       (with-safe-fallback #f
+                           (dynamic-require 'racket/gui/easy/observable #f)
+                           (dynamic-require 'racket/gui/easy/view #f)
+                           (dynamic-require 'racket/gui/easy/renderer #f)
+                           #t)))
 
 ;; --------------------------------------------------
 ;; Internal: launch gui-easy window (blocks until closed)
@@ -231,9 +232,7 @@
     (subscribe! bus (make-gui-event-subscriber state-box notify-callback-box)))
 
   ;; If there's an initial prompt from CLI, run it after GUI starts
-  (define initial-prompt
-    (with-handlers ([exn:fail? (lambda (_) #f)])
-      (dict-ref rt-config 'prompt #f)))
+  (define initial-prompt (with-safe-fallback #f (dict-ref rt-config 'prompt #f)))
 
   ;; Launch the GUI window (blocks until closed)
   (launch-gui-window state-box sess bus theme model-name notify-callback-box)

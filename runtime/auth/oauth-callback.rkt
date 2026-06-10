@@ -14,6 +14,7 @@
          net/base64
          net/uri-codec
          "../../util/error/errors.rkt")
+(require (only-in "../../util/error/error-helpers.rkt" with-safe-fallback))
 
 (provide (contract-out
           [generate-pkce (-> (values string? string?))]
@@ -122,9 +123,7 @@
 ;; One-shot: uses try-complete! for atomic completion — only the first
 ;; handler to call try-complete! wins; all others just close their ports.
 (define (handle-connection in out expected-state try-complete!)
-  (define line
-    (with-handlers ([exn:fail? (lambda (e) #f)])
-      (read-line in)))
+  (define line (with-safe-fallback #f (read-line in)))
   (cond
     [(not line)
      (close-input-port in)
@@ -145,30 +144,30 @@
 
 ;; Extract the authorization code from the callback request line.
 (define (extract-callback-code request-line expected-state)
-  (with-handlers ([exn:fail? (lambda (e) #f)])
-    (define parts (string-split (string-trim request-line) " "))
-    (when (< (length parts) 2)
-      (error "bad request"))
-    (define uri (cadr parts))
-    (define query (parse-query uri))
-    (define received-state
-      (cond
-        [(assoc "state" query)
-         =>
-         cdr]
-        [else ""]))
-    (define code
-      (cond
-        [(assoc "code" query)
-         =>
-         cdr]
-        [else ""]))
-    (define error-param (assoc "error" query))
-    (cond
-      [error-param #f]
-      [(not (equal? received-state expected-state)) #f]
-      [(string=? code "") #f]
-      [else code])))
+  (with-safe-fallback #f
+                      (define parts (string-split (string-trim request-line) " "))
+                      (when (< (length parts) 2)
+                        (error "bad request"))
+                      (define uri (cadr parts))
+                      (define query (parse-query uri))
+                      (define received-state
+                        (cond
+                          [(assoc "state" query)
+                           =>
+                           cdr]
+                          [else ""]))
+                      (define code
+                        (cond
+                          [(assoc "code" query)
+                           =>
+                           cdr]
+                          [else ""]))
+                      (define error-param (assoc "error" query))
+                      (cond
+                        [error-param #f]
+                        [(not (equal? received-state expected-state)) #f]
+                        [(string=? code "") #f]
+                        [else code])))
 
 ;; Parse query string from URI with safe percent-decoding.
 ;; Keys are kept as strings (attacker-controlled) not symbols.

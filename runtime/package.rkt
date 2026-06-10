@@ -15,6 +15,7 @@
          racket/string
          racket/path
          "../extensions/manifest.rkt")
+(require (only-in "../util/error/error-helpers.rkt" with-safe-fallback))
 
 ;; ============================================================
 ;; Provides
@@ -128,12 +129,8 @@
       (define src-file (build-path source-dir rel))
       (define dst-file (build-path target-dir rel))
       ;; Defense-in-depth: verify destination stays under target directory
-      (define resolved-dst
-        (with-handlers ([exn:fail? (λ (_) #f)])
-          (resolve-path dst-file)))
-      (define resolved-target
-        (with-handlers ([exn:fail? (λ (_) #f)])
-          (resolve-path target-dir)))
+      (define resolved-dst (with-safe-fallback #f (resolve-path dst-file)))
+      (define resolved-target (with-safe-fallback #f (resolve-path target-dir)))
       (when (and resolved-dst resolved-target)
         (define dst-str
           (path->string (if (complete-path? resolved-dst)

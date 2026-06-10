@@ -11,6 +11,7 @@
          racket/match
          racket/file
          racket/system)
+(require (only-in "../../util/error/error-helpers.rkt" with-safe-fallback))
 
 ;; Metadata
 (provide get-file-metadata
@@ -196,14 +197,15 @@
       (file-has-suite-tag? f "security")))
 
 (define (file-has-suite-tag? f tag)
-  (with-handlers ([exn:fail? (lambda (_) #f)])
-    (call-with-input-file f
-                          (lambda (port)
-                            (define target (string-append "@suite " tag))
-                            (for/or ([_ (in-range 10)]
-                                     #:break (eof-object? (peek-byte port)))
-                              (define line (read-line port))
-                              (and (string? line) (string-contains? line target)))))))
+  (with-safe-fallback #f
+                      (call-with-input-file f
+                                            (lambda (port)
+                                              (define target (string-append "@suite " tag))
+                                              (for/or ([_ (in-range 10)]
+                                                       #:break (eof-object? (peek-byte port)))
+                                                (define line (read-line port))
+                                                (and (string? line)
+                                                     (string-contains? line target)))))))
 
 (define (smoke-excluded? f)
   (or (slow-file? f) (string-contains? f "/workflows/") (string-contains? f "/interfaces/")))

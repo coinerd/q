@@ -18,6 +18,7 @@
          net/uri-codec
          net/http-client
          net/url)
+(require (only-in "../../util/error/error-helpers.rkt" with-safe-fallback))
 
 ;; OAuth config struct
 (provide oauth-config
@@ -169,33 +170,34 @@
                 '())))
   (define body-str (alist->form-urlencoded body-parts))
   (define body-bytes (string->bytes/utf-8 body-str))
-  (with-handlers ([exn:fail? (lambda (e) #f)])
-    (define u (string->url token-url))
-    (define host (url-host u))
-    (define ssl? (equal? (url-scheme u) "https"))
-    (define path-str
-      (string-append "/" (string-join (map (lambda (p) (path/param-path p)) (url-path u)) "/")))
-    (define-values (status _headers response-in)
-      (oauth-http-post host
-                       path-str
-                       ssl?
-                       (list "Content-Type: application/x-www-form-urlencoded")
-                       body-bytes))
-    (define response-bytes (port->bytes response-in))
-    (close-input-port response-in)
-    (unless (regexp-match? #rx#"^HTTP/1.[01] 2" status)
-      (log-warning "oauth-exchange-code: non-2xx status: ~a" status))
-    (define response-json (bytes->jsexpr response-bytes))
-    (define access-token (hash-ref response-json 'access_token #f))
-    (cond
-      [(not access-token) #f]
-      [else
-       (define expires-in (hash-ref response-json 'expires_in 3600))
-       (oauth-token access-token
-                    (hash-ref response-json 'refresh_token "")
-                    (+ (current-seconds) expires-in)
-                    (hash-ref response-json 'token_type "Bearer")
-                    (hash-ref response-json 'scope ""))])))
+  (with-safe-fallback
+   #f
+   (define u (string->url token-url))
+   (define host (url-host u))
+   (define ssl? (equal? (url-scheme u) "https"))
+   (define path-str
+     (string-append "/" (string-join (map (lambda (p) (path/param-path p)) (url-path u)) "/")))
+   (define-values (status _headers response-in)
+     (oauth-http-post host
+                      path-str
+                      ssl?
+                      (list "Content-Type: application/x-www-form-urlencoded")
+                      body-bytes))
+   (define response-bytes (port->bytes response-in))
+   (close-input-port response-in)
+   (unless (regexp-match? #rx#"^HTTP/1.[01] 2" status)
+     (log-warning "oauth-exchange-code: non-2xx status: ~a" status))
+   (define response-json (bytes->jsexpr response-bytes))
+   (define access-token (hash-ref response-json 'access_token #f))
+   (cond
+     [(not access-token) #f]
+     [else
+      (define expires-in (hash-ref response-json 'expires_in 3600))
+      (oauth-token access-token
+                   (hash-ref response-json 'refresh_token "")
+                   (+ (current-seconds) expires-in)
+                   (hash-ref response-json 'token_type "Bearer")
+                   (hash-ref response-json 'scope ""))])))
 
 ;; Refresh an expired token.
 ;; Returns oauth-token on success, #f on failure.
@@ -210,33 +212,34 @@
                 '())))
   (define body-str (alist->form-urlencoded body-parts))
   (define body-bytes (string->bytes/utf-8 body-str))
-  (with-handlers ([exn:fail? (lambda (e) #f)])
-    (define u (string->url token-url))
-    (define host (url-host u))
-    (define ssl? (equal? (url-scheme u) "https"))
-    (define path-str
-      (string-append "/" (string-join (map (lambda (p) (path/param-path p)) (url-path u)) "/")))
-    (define-values (status _headers response-in)
-      (oauth-http-post host
-                       path-str
-                       ssl?
-                       (list "Content-Type: application/x-www-form-urlencoded")
-                       body-bytes))
-    (define response-bytes (port->bytes response-in))
-    (close-input-port response-in)
-    (unless (regexp-match? #rx#"^HTTP/1.[01] 2" status)
-      (log-warning "oauth-refresh-token: non-2xx status: ~a" status))
-    (define response-json (bytes->jsexpr response-bytes))
-    (define access-token (hash-ref response-json 'access_token #f))
-    (cond
-      [(not access-token) #f]
-      [else
-       (define expires-in (hash-ref response-json 'expires_in 3600))
-       (oauth-token access-token
-                    (hash-ref response-json 'refresh_token (oauth-token-refresh-token tok))
-                    (+ (current-seconds) expires-in)
-                    (hash-ref response-json 'token_type "Bearer")
-                    (hash-ref response-json 'scope ""))])))
+  (with-safe-fallback
+   #f
+   (define u (string->url token-url))
+   (define host (url-host u))
+   (define ssl? (equal? (url-scheme u) "https"))
+   (define path-str
+     (string-append "/" (string-join (map (lambda (p) (path/param-path p)) (url-path u)) "/")))
+   (define-values (status _headers response-in)
+     (oauth-http-post host
+                      path-str
+                      ssl?
+                      (list "Content-Type: application/x-www-form-urlencoded")
+                      body-bytes))
+   (define response-bytes (port->bytes response-in))
+   (close-input-port response-in)
+   (unless (regexp-match? #rx#"^HTTP/1.[01] 2" status)
+     (log-warning "oauth-refresh-token: non-2xx status: ~a" status))
+   (define response-json (bytes->jsexpr response-bytes))
+   (define access-token (hash-ref response-json 'access_token #f))
+   (cond
+     [(not access-token) #f]
+     [else
+      (define expires-in (hash-ref response-json 'expires_in 3600))
+      (oauth-token access-token
+                   (hash-ref response-json 'refresh_token (oauth-token-refresh-token tok))
+                   (+ (current-seconds) expires-in)
+                   (hash-ref response-json 'token_type "Bearer")
+                   (hash-ref response-json 'scope ""))])))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Serialization helpers

@@ -20,6 +20,7 @@
          racket/match
          racket/system
          json)
+(require (only-in "../util/error/error-helpers.rkt" with-safe-fallback))
 
 ;; ── Configuration ──
 
@@ -35,16 +36,17 @@
 (define (git-change-counts)
   ;; Returns hash: relative-path → count of commits touching that file
   (define git-result
-    (with-handlers ([exn:fail? (λ (e) #f)])
-      (define-values (sp out in err)
-        (subprocess #f #f #f (find-executable-path "git") "log" "--format=" "--name-only"))
-      (close-output-port in)
-      (define text (port->string out))
-      (close-input-port out)
-      (close-input-port err)
-      (subprocess-wait sp)
-      (define code (subprocess-status sp))
-      (if (= code 0) text #f)))
+    (with-safe-fallback
+     #f
+     (define-values (sp out in err)
+       (subprocess #f #f #f (find-executable-path "git") "log" "--format=" "--name-only"))
+     (close-output-port in)
+     (define text (port->string out))
+     (close-input-port out)
+     (close-input-port err)
+     (subprocess-wait sp)
+     (define code (subprocess-status sp))
+     (if (= code 0) text #f)))
   (define h (make-hash))
   (when git-result
     (for ([line (in-list (string-split git-result "\n"))])

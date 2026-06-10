@@ -19,6 +19,7 @@
          file/sha1
          net/url
          net/head)
+(require (only-in "../util/error/error-helpers.rkt" with-safe-fallback))
 
 ;; Functions (contracted)
 (provide (contract-out [load-package-index (->* () (any/c) any/c)]
@@ -76,12 +77,12 @@
 ;; Returns the parsed JSON as a hash, or #f on failure.
 (define (fetch-remote-index [url-str #f])
   (define the-url (string->url (or url-str (index-url))))
-  (with-handlers ([exn:fail? (λ (e) #f)])
-    (define in (get-pure-port the-url #:redirections 5))
-    (define content (port->string in))
-    (close-input-port in)
-    (define parsed (string->jsexpr content))
-    parsed))
+  (with-safe-fallback #f
+                      (define in (get-pure-port the-url #:redirections 5))
+                      (define content (port->string in))
+                      (close-input-port in)
+                      (define parsed (string->jsexpr content))
+                      parsed))
 
 ;; Extract the packages list from an index hash.
 (define (index-packages index)
@@ -280,12 +281,12 @@
 ;; ═══════════════════════════════════════════════════════════════════
 
 (define (download-tarball url-str dest)
-  (with-handlers ([exn:fail? (λ (e) #f)])
-    (define the-url (string->url url-str))
-    (define in (get-pure-port the-url #:redirections 5))
-    (call-with-output-file dest (λ (out) (copy-port in out)) #:exists 'truncate)
-    (close-input-port in)
-    #t))
+  (with-safe-fallback #f
+                      (define the-url (string->url url-str))
+                      (define in (get-pure-port the-url #:redirections 5))
+                      (call-with-output-file dest (λ (out) (copy-port in out)) #:exists 'truncate)
+                      (close-input-port in)
+                      #t))
 
 (define (file-sha256 path)
   (bytes->hex-string (sha256-bytes (open-input-file path))))

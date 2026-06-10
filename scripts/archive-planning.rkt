@@ -16,6 +16,7 @@
          racket/match
          racket/path
          racket/string)
+(require (only-in "../util/error/error-helpers.rkt" with-safe-fallback))
 
 (define args (vector->list (current-command-line-arguments)))
 (define dry-run? (member "--dry-run" args))
@@ -48,13 +49,14 @@
 ;; --- Get current milestone version from STATE.md ---
 
 (define (current-milestone planning-dir)
-  (with-handlers ([exn:fail? (λ (_) #f)])
-    (define content (file->string (build-path planning-dir "STATE.md")))
-    (define m (regexp-match #rx"#.*v[0-9]+\\.[0-9]+\\.[0-9]+" content))
-    (and m
-         (let* ([s (car m)]
-                [ver-m (regexp-match #rx"v([0-9]+)\\.([0-9]+)\\.([0-9]+)" s)])
-           (and ver-m (format "v~a~a~a" (cadr ver-m) (caddr ver-m) (cadddr ver-m)))))))
+  (with-safe-fallback #f
+                      (define content (file->string (build-path planning-dir "STATE.md")))
+                      (define m (regexp-match #rx"#.*v[0-9]+\\.[0-9]+\\.[0-9]+" content))
+                      (and m
+                           (let* ([s (car m)]
+                                  [ver-m (regexp-match #rx"v([0-9]+)\\.([0-9]+)\\.([0-9]+)" s)])
+                             (and ver-m
+                                  (format "v~a~a~a" (cadr ver-m) (caddr ver-m) (cadddr ver-m)))))))
 
 ;; --- Collect archive candidates ---
 

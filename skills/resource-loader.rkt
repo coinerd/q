@@ -20,6 +20,7 @@
          json
          "../util/config-paths.rkt"
          (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload))
+(require (only-in "../util/error/error-helpers.rkt" with-safe-fallback))
 
 ;; Structs
 ;; resource struct exports
@@ -72,11 +73,11 @@
 
 ;; Safely parse a JSON file, returning #f on failure
 (define (try-read-json path)
-  (with-handlers ([exn:fail? (λ (_) #f)])
-    (call-with-input-file path
-                          (λ (in)
-                            (define result (read-json in))
-                            (if (hash? result) result #f)))))
+  (with-safe-fallback #f
+                      (call-with-input-file path
+                                            (λ (in)
+                                              (define result (read-json in))
+                                              (if (hash? result) result #f)))))
 
 ;; Note: project-config-dirs is imported from ../util/config-paths.rkt
 

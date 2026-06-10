@@ -21,6 +21,7 @@
          racket/string
          racket/system
          json)
+(require (only-in "../util/error/error-helpers.rkt" with-safe-fallback))
 
 (define args (vector->list (current-command-line-arguments)))
 (define json-output? (member "--json" args))
@@ -48,9 +49,7 @@
   (with-output-to-string (λ () (system cmd))))
 
 (define (gh-api-json path)
-  (with-handlers ([exn:fail? (λ (_) #f)])
-    (define output (gh-api path))
-    (string->jsexpr output)))
+  (with-safe-fallback #f (define output (gh-api path)) (string->jsexpr output)))
 
 ;; --- Gate checks ---
 

@@ -16,6 +16,7 @@
          (only-in "../../util/path/path-filters.rkt" hidden-name? should-skip-entry? skip-dirs))
 
 (require racket/contract)
+(require (only-in "../../util/error/error-helpers.rkt" with-safe-fallback))
 (provide (contract-out [tool-grep (->* (hash?) (any/c) tool-result?)]))
 
 ;; ============================================================
@@ -42,14 +43,14 @@
 
 ;; Compile the regex pattern. Returns #f on invalid regex.
 (define (compile-pattern pattern case-insensitive? exact?)
-  (with-handlers ([exn:fail? (lambda (e) #f)])
-    (define effective-pattern
-      (if exact?
-          (regexp-quote pattern)
-          pattern))
-    (if case-insensitive?
-        (regexp (string-append "(?i:" effective-pattern ")"))
-        (regexp effective-pattern))))
+  (with-safe-fallback #f
+                      (define effective-pattern
+                        (if exact?
+                            (regexp-quote pattern)
+                            pattern))
+                      (if case-insensitive?
+                          (regexp (string-append "(?i:" effective-pattern ")"))
+                          (regexp effective-pattern))))
 
 ;; ============================================================
 ;; Core search in a single file
