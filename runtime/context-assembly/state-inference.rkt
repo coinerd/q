@@ -100,8 +100,7 @@
        ;; GAP-C v0.97.8: planning: meta tools + reads, allow writes when meta ≥ writes
        ;; Must come before implementation rule so plan-file writes aren't misclassified.
        ;; (agent may write PLAN.md while planning)
-       [(and (>= (count-category recent-calls 'meta) 1)
-             (>= (count-category recent-calls 'meta) n-write))
+       [(let ([n-meta (count-category recent-calls 'meta)]) (and (>= n-meta 1) (>= n-meta n-write)))
         (values task-planning 0.75)]
 
        ;; implementation: edit/write tools called

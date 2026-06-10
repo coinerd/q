@@ -179,6 +179,19 @@
 
     (test-case "GAP-C: only meta tools no writes → planning (original behavior)"
       (define-values (state conf) (infer-task-state-from-tools '("read" "save-conclusion")))
-      (check-equal? state task-planning))))
+      (check-equal? state task-planning))
+
+    ;; LF4: meta strictly greater than writes
+    (test-case "GAP-C: meta > writes → planning (2 meta, 1 write)"
+      (define-values (state conf)
+        (infer-task-state-from-tools '("read" "write" "save-conclusion" "set-task-state")))
+      (check-equal? state task-planning))
+
+    ;; LF7: confidence threshold boundary
+    (test-case "GAP-C: planning confidence at threshold (≥ 0.7)"
+      (define-values (state conf) (infer-task-state-from-tools '("read" "save-conclusion")))
+      (check-equal? state task-planning)
+      (check-true (>= conf 0.7) "planning confidence meets threshold")
+      (check-true (<= conf 0.8) "planning confidence below implementation"))))
 
 (run-tests suite)

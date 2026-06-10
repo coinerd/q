@@ -26,7 +26,7 @@
 - GAP-A: Format string shows total+shown counts for transparency
 
 ### Changed
-- state-aware-builder.rkt: `build-state-awareness-preamble` respects ranking order from `rank-and-budget`
+- state-aware-builder.rkt: Raised preamble conclusion cap from 10→20 with improved total/shown count display
 
 ### Added
 - 6 new regression tests for preamble ranking behavior

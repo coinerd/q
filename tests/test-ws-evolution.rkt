@@ -229,6 +229,18 @@
       (check-true (evolution-result? result))
       (check-equal? (length (evolution-result-kept-entries result)) 0 "all cleared")
       (check-equal? (length (evolution-result-archived-entries result)) 2 "both archived")
+      (check-equal? (length (evolution-result-evicted-conclusions result)) 2))
+
+    ;; LF5: planning→exploration falls to else (no WS mutation)
+    (test-case "GAP-B: planning→exploration returns conclusions without WS mutation"
+      (define ws (make-working-set))
+      (populate-ws ws '("plan.md" "src/main.rkt"))
+      (define result
+        (evolve-working-set-for-state/result ws task-planning task-exploration conclusions))
+      (check-true (evolution-result? result))
+      ;; else clause: returns conclusions, keeps WS intact
+      (check-equal? (length (evolution-result-kept-entries result)) 2 "WS unchanged")
+      (check-equal? (length (evolution-result-archived-entries result)) 0 "nothing archived")
       (check-equal? (length (evolution-result-evicted-conclusions result)) 2))))
 
 (run-tests suite)

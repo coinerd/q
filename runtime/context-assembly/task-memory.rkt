@@ -13,8 +13,9 @@
          (only-in "conclusion-graph.rkt"
                   build-conclusion-graph
                   graph-select-by-seeds
-                  graph-detect-cycles
-                  fallback-select-conclusions))
+                  graph-detect-cycles)
+         (only-in "conclusion-ranker.rkt"
+                  rank-and-budget))
 
 ;; ── Struct ──
 
@@ -94,19 +95,26 @@
   (task-memory (map hash->conclusion (hash-ref h 'conclusions '())) (hash-ref h 'max-conclusions 50)))
 
 ;; v0.77.2 W2.2: Graph-aware context selection combining state relevance + graph seeds.
-;; Falls back to bounded recency when graph is empty or has cycles.
+;; v0.97.9: Falls back to semantic rank-and-budget when graph is empty or has cycles.
 (define (conclusions-for-context mem current-states seed-ids [max-count 20])
   (define concs (task-memory-conclusions mem))
+  (define state (and (pair? current-states) (car current-states)))
   (cond
     [(null? concs) '()]
-    ;; Degraded fallback: no seeds, use state-based bounded recency
-    [(null? seed-ids) (fallback-select-conclusions concs max-count current-states)]
+    ;; Degraded fallback: no seeds, use semantic ranking
+    [(null? seed-ids)
+     (take-at-most (rank-and-budget concs #:current-state state
+                                    #:max-conclusion-tokens (* max-count 200))
+                   max-count)]
     [else
      (define g (build-conclusion-graph concs))
      (define cycles (graph-detect-cycles g))
      (cond
-       ;; Degraded fallback: graph has cycles, use state-based bounded recency
-       [(pair? cycles) (fallback-select-conclusions concs max-count current-states)]
+       ;; Degraded fallback: graph has cycles, use semantic ranking
+       [(pair? cycles)
+        (take-at-most (rank-and-budget concs #:current-state state
+                                       #:max-conclusion-tokens (* max-count 200))
+                      max-count)]
        [else
         (define selected-ids (graph-select-by-seeds g seed-ids))
         (define id-set
