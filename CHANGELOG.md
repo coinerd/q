@@ -1,3 +1,14 @@
+## [0.97.13] - 2026-06-10
+
+### Fixed
+- C1: SDK struct-out → explicit provides in sdk-core.rkt, sdk-compat.rkt
+- H4: conclusion-graph mutable → immutable (for/fold patterns)
+- H5: Embedding cache thread safety (semaphore-guarded struct)
+- H1: rollback-actions config struct for snapshot/grouped access
+- H3a: Extracted wire-runtime-parameters! from run-modes (eliminates ~60% duplication)
+- H3b: Extracted LLM callback factories (make-distill-callback, make-reflection-callback)
+- H2a: Migrated ~44 with-handlers silent-swallow sites to with-safe-fallback (logs warnings)
+
 ## [0.97.12] - 2026-06-08
 
 ### Fixed
