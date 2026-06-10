@@ -6,8 +6,10 @@
 (require rackunit
          rackunit/text-ui
          racket/string
+         racket/set
          (only-in "../runtime/session/session-events.rkt"
                   current-mid-session-bridge-enabled
+                  current-mid-session-persisted-ids
                   major-forward-transition?))
 
 (define suite
@@ -69,6 +71,33 @@
 
     ;; F7: Bridge parameter resets after parameterize scope
     (test-case "bridge parameter resets after parameterize scope"
-      (check-equal? (current-mid-session-bridge-enabled) #f))))
+      (check-equal? (current-mid-session-bridge-enabled) #f))
+
+    ;; ============================================================
+    ;; v0.97.11 W0: GAP-E dedup parameter tests
+    ;; ============================================================
+
+    (test-case "GAP-E: current-mid-session-persisted-ids defaults to empty set"
+      (define ids (current-mid-session-persisted-ids))
+      (check-true (set? ids))
+      (check-equal? (set-count ids) 0))
+
+    (test-case "GAP-E: persisted IDs can be accumulated via parameterize"
+      (parameterize ([current-mid-session-persisted-ids (set "c1" "c2")])
+        (define ids (current-mid-session-persisted-ids))
+        (check-true (set-member? ids "c1"))
+        (check-true (set-member? ids "c2"))
+        (check-false (set-member? ids "c3")))
+      ;; Reset after scope
+      (check-equal? (set-count (current-mid-session-persisted-ids)) 0))
+
+    (test-case "GAP-E: dedup set prevents duplicate ID addition"
+      (parameterize ([current-mid-session-persisted-ids (set "c1")])
+        ;; Adding same ID again — set deduplicates
+        (current-mid-session-persisted-ids (set-add (current-mid-session-persisted-ids) "c1"))
+        (check-equal? (set-count (current-mid-session-persisted-ids)) 1 "dedup works")
+        ;; Adding new ID
+        (current-mid-session-persisted-ids (set-add (current-mid-session-persisted-ids) "c2"))
+        (check-equal? (set-count (current-mid-session-persisted-ids)) 2)))))
 
 (run-tests suite)

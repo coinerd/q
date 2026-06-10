@@ -22,7 +22,8 @@
          (only-in "../memory/conclusion-bridge.rkt"
                   current-conclusion-to-memory-bridge-enabled
                   persist-high-value-conclusions!)
-         (only-in "../memory/service.rkt" current-memory-backend))
+         (only-in "../memory/service.rkt" current-memory-backend)
+         racket/set)
 (require "session-mutation.rkt")
 (require (only-in "../context-assembly/state-inference.rkt"
                   infer-task-state-from-tools
@@ -35,6 +36,7 @@
 
 (provide (contract-out [wire-session-event-handlers! (-> agent-session? procedure? void?)])
          current-mid-session-bridge-enabled
+         current-mid-session-persisted-ids
          major-forward-transition?
          maybe-persist-mid-session!)
 
@@ -44,6 +46,10 @@
 
 ;; v0.97.5 GAP-F: Mid-session bridge on major forward transitions
 (define current-mid-session-bridge-enabled (make-parameter #f))
+
+;; GAP-E v0.97.11: Dedup set — tracks conclusion IDs already persisted mid-session
+;; to avoid redundant backend writes on repeated forward transitions.
+(define current-mid-session-persisted-ids (make-parameter (set)))
 
 (define major-forward-transitions
   '((exploration . planning) (planning . implementation) (implementation . verification)))
@@ -62,9 +68,19 @@
     (when backend
       (with-handlers ([exn:fail? (lambda (e)
                                    (log-warning "mid-session bridge failed: ~a" (exn-message e)))])
-        (persist-high-value-conclusions! (agent-session-task-conclusions sess)
-                                         #:backend backend
-                                         #:session-id (agent-session-session-id sess))))))
+        ;; GAP-E v0.97.11: Dedup — only persist conclusions not yet stored
+        (define already-persisted (current-mid-session-persisted-ids))
+        (define all-conclusions (agent-session-task-conclusions sess))
+        (define new-conclusions
+          (filter (lambda (c) (not (set-member? already-persisted (task-conclusion-id c))))
+                  all-conclusions))
+        (when (pair? new-conclusions)
+          (persist-high-value-conclusions! new-conclusions
+                                           #:backend backend
+                                           #:session-id (agent-session-session-id sess))
+          (current-mid-session-persisted-ids (for/fold ([s already-persisted])
+                                                       ([c (in-list new-conclusions)])
+                                               (set-add s (task-conclusion-id c)))))))))
 
 ;; Wire event-bus subscribers for fork.requested, compact.requested,
 ;; tool execution, conclusions, and state transitions.
@@ -256,6 +272,24 @@
     ;; WS evolution is handled inline in turn-orchestrator.rkt's build-assembled-context.
     ;; The event-driven approach was abandoned because the subscriber in session-events
     ;; doesn't have access to the working-set (which lives in session config scope).
+
+    ;; GAP-E v0.97.11: session.ended — persist all session conclusions on shutdown.
+    ;; Belt-and-suspenders with close-session! in agent-session.rkt which also
+    ;; calls persist-high-value-conclusions!. This handler catches cases where
+    ;; close-session! is bypassed or the session ends via event bus.
+    (subscribe!
+     bus
+     (lambda (evt)
+       (when (and (current-mid-session-bridge-enabled) (current-conclusion-to-memory-bridge-enabled))
+         (define backend (current-memory-backend))
+         (when backend
+           (with-handlers ([exn:fail? (lambda (e)
+                                        (log-warning "session.ended bridge failed: ~a"
+                                                     (exn-message e)))])
+             (persist-high-value-conclusions! (agent-session-task-conclusions sess)
+                                              #:backend backend
+                                              #:session-id (agent-session-session-id sess))))))
+     #:filter (lambda (evt) (equal? (event-ev evt) "session.closed")))
 
     (void))
 
