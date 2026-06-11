@@ -37,14 +37,14 @@
 
 (provide (contract-out
           [run-tui (->* () () any)]
-          ;; runtime: agent-session struct (opaque)
-          ;; path-string: session directory
-          [run-tui-with-runtime (-> any/c path-string? any)]
+          ;; runtime: hash table from build-runtime-from-cli
+          ;; cli-cfg: cli-config struct from cli/args
+          [run-tui-with-runtime (-> any/c any/c any)]
           ;; ctx: tui-ctx struct (opaque)
           [subscribe-runtime-events! (-> any/c void?)]
           ;; runtime + path-string
-          [create-tui-session (-> any/c path-string? any)]
-          [make-tui-session (-> any/c path-string? any)] ;; F24 alias
+          [create-tui-session (-> any/c any/c any)]
+          [make-tui-session (-> any/c any/c any)] ;; F24 alias
           ;; path-string, integer, list, integer
           [load-tui-scrollback
            (-> path-string? exact-nonnegative-integer? (listof any/c) exact-nonnegative-integer? any)]
