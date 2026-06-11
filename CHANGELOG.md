@@ -19,6 +19,17 @@
 - F14 (event wiring table): 6 subscribers in 1 file doesn't justify table abstraction
 - F16 (defaults consolidation): Parameters well-scoped to domains
 
+## [0.98.1] — 2026-06-10
+
+### Multimodal Screenshot Pipeline
+
+- **image-part content type**: New `image-part` struct in `content-parts.rkt` with JSON round-trip serialization (#7800)
+- **Provider vision API integration**: `build-raw-messages` produces OpenAI content arrays for image+text user messages (#7801)
+- **Vision settings**: `vision-enabled?` (default OFF), `vision-detail`, `vision-ephemeral-turns` in `browser-settings` (#7801)
+- **Screenshot dual-path**: `browser_screenshot` returns `image-part` when vision enabled, hash otherwise (#7802)
+- **Ephemeral vision context**: `strip-image-parts` replaces old screenshots with text summaries to manage context budget (#7803)
+
+
 ## [0.98.0] — 2026-06-10
 
 ### Browser Robustness
