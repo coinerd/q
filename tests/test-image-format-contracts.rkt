@@ -31,7 +31,9 @@
     (test-case "format-image-gemini with valid inputs returns hash"
       (define result (format-image-gemini "dGVzdA==" "image/webp"))
       (check-true (hash? result))
-      (check-equal? (hash-ref result 'type) "inlineData"))
+      ;; F-04: Canonical Gemini shape has no 'type key.
+      (check-false (hash-has-key? result 'type))
+      (check-true (hash-has-key? result 'inlineData)))
 
     (test-case "format-image-for-provider dispatches correctly"
       (define openai-result (format-image-for-provider 'openai "dGVzdA==" "image/png"))

@@ -19,6 +19,7 @@
          "../../util/error/errors.rkt"
          "../../browser/settings.rkt"
          "../../util/content/content-parts.rkt"
+         "../../util/truncation.rkt"
          "../tool.rkt")
 
 (provide handle-browser-open
@@ -76,9 +77,10 @@
 ;; context budget. 4000 chars preserves the first ~1K tokens.
 (define MAX-OBSERVATION-TEXT 4000)
 
+;; F-03: Delegate to the canonical truncation utility instead of duplicating logic.
 (define (truncate-observation-text text)
-  (if (and (string? text) (> (string-length text) MAX-OBSERVATION-TEXT))
-      (string-append (substring text 0 MAX-OBSERVATION-TEXT) "\n... [truncated]")
+  (if (string? text)
+      (truncate-to-n-chars text MAX-OBSERVATION-TEXT)
       text))
 
 (define (observation->hash obs)
@@ -91,7 +93,7 @@
           'visible-text
           (truncate-observation-text (browser-observation-visible-text obs))
           'dom-summary
-          (browser-observation-dom-summary obs)
+          (truncate-observation-text (browser-observation-dom-summary obs))
           'console-errors
           (browser-observation-console-errors obs)
           'viewport-size

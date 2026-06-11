@@ -32,7 +32,9 @@
 ;; Format an image for Gemini's generateContent API.
 ;; Returns an inlineData block with mimeType.
 (define (format-image-gemini base64-data media-type)
-  (hasheq 'type "inlineData" 'inlineData (hasheq 'mimeType media-type 'data base64-data)))
+  ;; F-04: Canonical Gemini shape is {inlineData: {mimeType, data}}.
+  ;; The 'type discriminator is internal and inconsistent with openai-block->gemini.
+  (hasheq 'inlineData (hasheq 'mimeType media-type 'data base64-data)))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Dispatch
