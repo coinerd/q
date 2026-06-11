@@ -114,6 +114,7 @@
                          '()
                          '()
                          #f
+                         '()
                          (hasheq)))
   (check-equal? (browser-observation-url o) "https://example.com")
   (check-equal? (browser-observation-title o) "Example"))
@@ -131,6 +132,7 @@
                          '()
                          '()
                          (hasheq 'width 1280 'height 720)
+                         '()
                          (hasheq 'key "value")))
   (define rt (jsexpr->browser-observation (browser-observation->jsexpr o)))
   (check-equal? (browser-observation-url rt) "https://example.com")
@@ -150,6 +152,7 @@
                          '()
                          '()
                          #f
+                         '()
                          (hasheq)))
   (define rt (jsexpr->browser-observation (browser-observation->jsexpr o)))
   (check-equal? (browser-observation-url rt) "https://example.com")

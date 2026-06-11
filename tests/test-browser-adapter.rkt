@@ -48,10 +48,10 @@
   #"PNG")
 
 (define (make-observation url)
-  (browser-observation url "Title" "text" "visible" #f #f #f #f '() '() #f (hasheq)))
+  (browser-observation url "Title" "text" "visible" #f #f #f #f '() '() #f '() (hasheq)))
 
 (define (ok-navigate url)
-  (browser-observation url "Title" "text" "visible" #f #f #f #f '() '() #f (hasheq)))
+  (browser-observation url "Title" "text" "visible" #f #f #f #f '() '() #f '() (hasheq)))
 
 ;; ---------------------------------------------------------------------------
 ;; Construction

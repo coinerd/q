@@ -63,6 +63,7 @@
   (tool-result-part "tool-result" tool-call-id content is-error?))
 
 (define (make-image-part mime-type data [detail #f])
+  ;; L5: detail defaults to #f; callers normalize to "auto" at API boundary
   (image-part "image" mime-type data detail))
 
 ;; Serialization
