@@ -50,7 +50,10 @@
                       #f
                       60000
                       'ephemeral
-                      #t))
+                      #t
+                      #f
+                      "auto"
+                      5))
   (make-secure-browser-service adapter #:settings settings #:artifact-dir dir))
 
 (define (make-temp-dir)
@@ -153,7 +156,23 @@
 (test-case "error: adapter error wrapped as q-browser-error"
   (define adapter (make-mock-adapter #:error-mode 'timeout))
   (define settings
-    (browser-settings #t '("https") '() '() #t '() 3 100 30000 524288 #f 60000 'ephemeral #t))
+    (browser-settings #t
+                      '("https")
+                      '()
+                      '()
+                      #t
+                      '()
+                      3
+                      100
+                      30000
+                      524288
+                      #f
+                      60000
+                      'ephemeral
+                      #t
+                      #f
+                      "auto"
+                      5))
   (define svc (make-secure-browser-service adapter #:settings settings))
   (check-exn q-browser-error? (lambda () (browser-open! svc "https://example.com"))))
 
