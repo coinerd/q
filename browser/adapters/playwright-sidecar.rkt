@@ -195,20 +195,22 @@
     (thread (lambda ()
               (let loop ()
                 (sleep heartbeat-interval-secs)
-                ;; NF-03: Read custodian from state each iteration, not at thread creation
-                (define cust (playwright-sidecar-state-custodian state))
-                ;; SEC-05: Read current reader from state, not closure
-                (define rt (playwright-sidecar-state-reader-thread state))
-                (when (and rt (not (thread-running? rt)))
-                  (log-warning "Browser sidecar reader thread died, killing custodian")
-                  (custodian-shutdown-all cust)
-                  (void))
-                (with-handlers ([exn:fail?
-                                 (lambda (e)
-                                   (log-warning "Browser sidecar heartbeat failed, killing custodian")
-                                   (custodian-shutdown-all cust))])
-                  (send-command! state "ping" (hasheq) #:timeout-ms 5000))
-                (loop)))))
+                ;; F-04: Stop looping if sidecar is already dead
+                (unless (playwright-sidecar-state-dead? state)
+                  ;; NF-03: Read custodian from state each iteration, not at thread creation
+                  (define cust (playwright-sidecar-state-custodian state))
+                  ;; SEC-05: Read current reader from state, not closure
+                  (define rt (playwright-sidecar-state-reader-thread state))
+                  (when (and rt (not (thread-running? rt)))
+                    (log-warning "Browser sidecar reader thread died, killing custodian")
+                    (custodian-shutdown-all cust)
+                    (void))
+                  (with-handlers ([exn:fail? (lambda (e)
+                                               (log-warning
+                                                "Browser sidecar heartbeat failed, killing custodian")
+                                               (custodian-shutdown-all cust))])
+                    (send-command! state "ping" (hasheq) #:timeout-ms 5000))
+                  (loop))))))
   (set-playwright-sidecar-state-heartbeat-thread! state ht))
 
 (define (shutdown-sidecar! state #:timeout-ms [timeout-ms 5000])
@@ -253,8 +255,13 @@
     (raise-browser-error "Sidecar is dead (reader EOF)" 'sidecar-crash))
   (define out (playwright-sidecar-state-stdin-port state))
   (define req (hasheq 'id id 'type type 'params params))
-  ;; SEC-09: Wrap port write to convert exn:fail? to q-browser-error
-  (with-handlers ([exn:fail? (lambda (e) (raise-browser-error "Sidecar port closed" 'sidecar-crash))])
+  ;; SEC-09 + F-03: Wrap port write; clean up channel on failure before raising
+  (with-handlers ([exn:fail? (lambda (e)
+                               (call-with-semaphore
+                                sema
+                                (lambda ()
+                                  (hash-remove! (playwright-sidecar-state-pending-box state) id)))
+                               (raise-browser-error "Sidecar port closed" 'sidecar-crash))])
     (write-string (jsexpr->string req) out)
     (newline out)
     (flush-output out))
@@ -459,7 +466,11 @@
     (define raw-data (hash-ref data 'data ""))
     (define screenshot-bytes
       (if (non-empty-string? raw-data)
-          (base64-decode (string->bytes/utf-8 raw-data))
+          (with-handlers ([exn:fail? (lambda (e)
+                                       (raise-browser-error
+                                        (format "Screenshot base64 decode failed: ~a" (exn-message e))
+                                        'adapter-error))])
+            (base64-decode (string->bytes/utf-8 raw-data)))
           #""))
     (browser-observation ""
                          ""

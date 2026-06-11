@@ -25,8 +25,8 @@
       (check-true (regexp-match? #rx"Example Domain" (browser-observation-visible-text obs)))
       (define shot (browser-adapter-screenshot adapter session-id))
       (check-equal? (browser-observation-screenshot-mime shot) "image/png")
-      (check-true (string? (browser-observation-screenshot-bytes shot)))
-      (check-true (> (string-length (browser-observation-screenshot-bytes shot)) 100))
+      (check-true (bytes? (browser-observation-screenshot-bytes shot)))
+      (check-true (> (bytes-length (browser-observation-screenshot-bytes shot)) 100))
       (browser-adapter-close adapter session-id))
     (check-false (regexp-match? #rx"q-playwright-sidecar ready"
                                 (get-output-string captured-stderr)))))
