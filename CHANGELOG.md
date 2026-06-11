@@ -1,3 +1,27 @@
+## [0.98.5] — 2026-06-11
+
+### Test Foundation
+
+- **BTF-01 (MODERATE)**: Fixed 56/59 browser test failures by updating `browser-settings` constructors to the current 17-field struct arity across `test-browser-service.rkt`, `test-browser-service-adapter.rkt`, and `test-browser-tools.rkt` (#7874)
+
+### Browser Context Overflow
+
+- **NF-11a (LOW)**: `observation->hash` now truncates `text-content` and `visible-text` to 4000 characters before returning tool results, preventing oversized browser observations from consuming context budget (#7878)
+- **NF-11b (LOW)**: Fixed double-condition truncation bug in `summarize-tool-result`: any tool result over 8000 characters is now truncated, regardless of line count (#7879)
+- **NF-11c (LOW)**: Added regression tests in `tests/test-context-overflow-browser.rkt` covering observation hash truncation and both single-line and multi-line tool-result truncation (#7880)
+
+### Code Quality
+
+- **F-05 (LOW)**: Changed Gemini image-format discriminator from `"inline_data"` to `"inlineData"` for API consistency (#7882)
+- **F-08 (INFO)**: Added defensive comment in `playwright-sidecar.rkt` documenting that `cfg` capture in `make-reader-body` is safe-by-design (old reader is killed via custodian before new state is created) (#7882)
+- **F-09 (INFO)**: Moved stray `require` after module doc-comments in `llm/anthropic.rkt` and `llm/gemini.rkt` (#7882)
+
+### Test Quality
+
+- **F-06 (LOW)**: Replaced structural `procedure?` check with behavioral test in `tests/test-browser-audit-w1-v0984.rkt`: verifies `start-heartbeat!` reads the custodian from state each iteration by mutating the state's custodian after thread creation (#7886)
+- Made `heartbeat-interval-secs` a parameter in `playwright-sidecar.rkt` to enable the behavioral NF-03 test (#7886)
+- **GAP-V2 (LOW)**: Verified clarifying comment in `extensions/image-pipeline.rkt` documenting that the resize pipeline is scaffold-only and not yet wired to browser screenshots (#7888)
+
 ## [0.98.4] — 2026-06-11
 
 ### Critical Fixes

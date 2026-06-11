@@ -27,6 +27,7 @@
          send-command-with-recovery!
          restart-sidecar!
          start-heartbeat!
+         heartbeat-interval-secs
          max-sidecar-restarts
          uuid-string
          make-playwright-adapter
@@ -191,13 +192,14 @@
 ;; F11: Heartbeat thread — sends ping every 30s, kills custodian on failure
 ;; ---------------------------------------------------------------------------
 
-(define heartbeat-interval-secs 30)
+;; Parameterized for testability (NF-03 behavioral test).
+(define heartbeat-interval-secs (make-parameter 30))
 
 (define (start-heartbeat! state)
   (define ht
     (thread (lambda ()
               (let loop ()
-                (sleep heartbeat-interval-secs)
+                (sleep (heartbeat-interval-secs))
                 ;; F-04: Stop looping if sidecar is already dead
                 (unless (playwright-sidecar-state-dead? state)
                   ;; NF-03: Read custodian from state each iteration, not at thread creation
