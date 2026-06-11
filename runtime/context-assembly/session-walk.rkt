@@ -126,13 +126,20 @@
     [else
      (define lines (string-split text "\n"))
      (cond
-       [(<= (length lines) 40) entry]
-       [else
+       ;; Multi-line tool result: preserve first/last 10 lines.
+       [(> (length lines) 40)
         (define head (take lines 10))
         (define tail (take-right lines 10))
         (define dropped (- (length lines) 20))
         (define summary-text
           (string-join (append head (list (format "... ~a lines truncated ..." dropped)) tail) "\n"))
+        (struct-copy message entry [content (list (make-text-part summary-text))])]
+       ;; Single (or few) very long lines: hard truncate at char limit.
+       [else
+        (define summary-text
+          (string-append (substring text 0 MAX-TOOL-RESULT-CHARS)
+                         (format "\n... ~a chars truncated ..."
+                                 (- (string-length text) MAX-TOOL-RESULT-CHARS))))
         (struct-copy message entry [content (list (make-text-part summary-text))])])]))
 
 ;; ---------------------------------------------------------------------------
