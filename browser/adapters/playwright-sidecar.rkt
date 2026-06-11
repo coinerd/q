@@ -43,7 +43,8 @@
          [reader-thread #:mutable] ; thread?
          [custodian #:mutable] ; custodian?
          [config #:mutable] ; sidecar config
-         [heartbeat-thread #:mutable]) ; (or/c thread? #f) — F11 heartbeat
+         [heartbeat-thread #:mutable] ; (or/c thread? #f) — F11 heartbeat
+         [dead? #:mutable]) ; #t after reader EOF (SEC-15)
   #:transparent)
 
 ;; ---------------------------------------------------------------------------
@@ -114,6 +115,7 @@
                                         headless?
                                         'restart-count
                                         0)
+                                #f
                                 #f)) ; heartbeat-thread initially #f
 
     ;; Reader thread: reads JSONL lines from stdout, routes to pending channels
@@ -123,6 +125,8 @@
         (define line (read-line in 'any))
         (cond
           [(eof-object? line)
+           ;; SEC-15: Mark sidecar as dead
+           (set-playwright-sidecar-state-dead?! state #t)
            ;; stdin EOF — mark all pending as errors
            (with-pending-lock
             (lambda ()
@@ -215,6 +219,9 @@
      (call-with-semaphore sema
                           (lambda () (hash-set! (playwright-sidecar-state-pending-box state) id ch)))]
     [else (hash-set! (playwright-sidecar-state-pending-box state) id ch)])
+  ;; SEC-15: Detect dead sidecar immediately
+  (when (playwright-sidecar-state-dead? state)
+    (raise-browser-error "Sidecar is dead (reader EOF)" 'sidecar-crash))
   (define out (playwright-sidecar-state-stdin-port state))
   (define req (hasheq 'id id 'type type 'params params))
   ;; SEC-09: Wrap port write to convert exn:fail? to q-browser-error
@@ -320,7 +327,10 @@
             (let loop ()
               (define line (read-line in 'any))
               (cond
-                [(eof-object? line) (void)] ; sidecar died again
+                [(eof-object? line)
+                 ;; SEC-15: Mark sidecar as dead
+                 (set-playwright-sidecar-state-dead?! state #t)
+                 (void)] ; sidecar died again
                 [else
                  (with-handlers ([exn:fail? void])
                    (define resp (string->jsexpr line))
@@ -345,7 +355,9 @@
     (set-playwright-sidecar-state-config!
      state
      (hash-set cfg 'restart-count (add1 (hash-ref cfg 'restart-count 0))))
-    (sleep 0.5))
+    ;; SEC-10: Ping-based readiness probe instead of fixed sleep
+    (with-handlers ([exn:fail? void])
+      (send-command! state "ping" (hasheq) #:timeout-ms 5000)))
   (if restart-sema
       (call-with-semaphore restart-sema do-restart)
       (do-restart)))

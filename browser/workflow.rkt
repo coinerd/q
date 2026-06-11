@@ -29,7 +29,10 @@
 
 (define (browser-check-local-app args)
   (define url (hash-ref args 'url))
-  (define timeout-ms (hash-ref args 'timeout_ms 10000))
+  ;; SEC-07: Clamp timeout_ms to [1s, 60s] to prevent unbounded waits
+  (define raw-timeout (hash-ref args 'timeout_ms 10000))
+  (define timeout-ms
+    (max 1000 (min 60000 (if (exact-nonnegative-integer? raw-timeout) raw-timeout 10000))))
   (define selector (hash-ref args 'selector #f))
   (define take-screenshot? (hash-ref args 'screenshot #t))
   (define svc (get-svc))
