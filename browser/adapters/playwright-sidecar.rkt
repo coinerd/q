@@ -29,7 +29,9 @@
          start-heartbeat!
          max-sidecar-restarts
          uuid-string
-         make-playwright-adapter)
+         make-playwright-adapter
+         make-reader-body
+         launch-sidecar-process!)
 
 ;; ---------------------------------------------------------------------------
 ;; Sidecar state struct
@@ -65,18 +67,61 @@
                  (substring bs 20 32)))
 
 ;; ---------------------------------------------------------------------------
-;; Sidecar launch/shutdown
+;; Shared helpers (W2: eliminate duplication)
 ;; ---------------------------------------------------------------------------
 
-(define (launch-sidecar! sidecar-path
-                         #:node-path [node-path "node"]
-                         #:timeout-ms [timeout-ms 10000]
-                         #:headless? [headless? #t])
+;; DUP-01: Shared reader body for launch-sidecar! and restart-sidecar!
+(define (make-reader-body state)
+  (define pending (playwright-sidecar-state-pending-box state))
+  (define cfg (playwright-sidecar-state-config state))
+  (lambda ()
+    (define in (playwright-sidecar-state-stdout-port state))
+    (let loop ()
+      (define line (read-line in 'any))
+      (cond
+        [(eof-object? line)
+         ;; SEC-15: Mark sidecar as dead
+         (set-playwright-sidecar-state-dead?! state #t)
+         ;; stdin EOF — mark all pending as errors
+         (define sema (hash-ref cfg 'pending-sema #f))
+         (define fail-all
+           (lambda ()
+             (for ([(id ch) (in-hash pending)])
+               (async-channel-put ch
+                                  (hasheq 'id
+                                          id
+                                          'success
+                                          #f
+                                          'error
+                                          (hasheq 'code 'sidecar-crash 'message "Sidecar EOF"))))))
+         (if sema
+             (call-with-semaphore sema fail-all)
+             (fail-all))]
+        [else
+         (with-handlers ([exn:fail? (lambda (e)
+                                      (log-warning (format "Browser sidecar reader parse error: ~a"
+                                                           (exn-message e))))])
+           (define resp (string->jsexpr line))
+           (define id (hash-ref resp 'id #f))
+           (when id
+             (define sema (hash-ref cfg 'pending-sema #f))
+             (define deliver
+               (lambda ()
+                 (define ch (hash-ref pending id #f))
+                 (when ch
+                   (hash-remove! pending id)
+                   (async-channel-put ch resp))))
+             (if sema
+                 (call-with-semaphore sema deliver)
+                 (deliver))))
+         (loop)]))))
+
+;; DUP-02: Shared subprocess launch logic
+(define (launch-sidecar-process! state sidecar-path node-path headless?)
+  (define node-exe (or (find-executable-path node-path) node-path))
   (define cust (make-custodian))
+  (set-playwright-sidecar-state-custodian! state cust)
   (parameterize ([current-custodian cust])
-    (define node-exe (or (find-executable-path node-path) node-path))
-    ;; Sidecar logs (for example "q-playwright-sidecar ready") must not leak
-    ;; to the TUI prompt. Keep stderr as a pipe and drain it in this custodian.
     (define-values (sp stdout-in stdin-out stderr-in)
       (subprocess #f
                   #f
@@ -84,78 +129,58 @@
                   node-exe
                   sidecar-path
                   (format "--headless=~a" (if headless? "true" "false"))))
+    ;; Drain stderr
     (thread (lambda ()
               (let loop ()
                 (define line (read-line stderr-in 'any))
                 (unless (eof-object? line)
                   (loop)))))
-    (define pending (make-hash))
-    (define ready-ch (make-async-channel))
-    (define pending-sema (make-semaphore 1))
-    (define (with-pending-lock thunk)
-      (call-with-semaphore pending-sema thunk))
-    (define state
-      (playwright-sidecar-state sp
-                                stdin-out
-                                stdout-in
-                                pending
-                                #f
-                                cust
-                                (hasheq 'timeout-ms
-                                        timeout-ms
-                                        'pending-sema
-                                        pending-sema
-                                        'restart-sema
-                                        (make-semaphore 1)
-                                        'sidecar-path
-                                        sidecar-path
-                                        'node-path
-                                        node-path
-                                        'headless?
-                                        headless?
-                                        'restart-count
-                                        0)
-                                #f
-                                #f)) ; heartbeat-thread initially #f
+    (set-playwright-sidecar-state-process! state sp)
+    (set-playwright-sidecar-state-stdin-port! state stdin-out)
+    (set-playwright-sidecar-state-stdout-port! state stdout-in)
+    cust))
 
-    ;; Reader thread: reads JSONL lines from stdout, routes to pending channels
-    (define (reader-body)
-      (define in (playwright-sidecar-state-stdout-port state))
-      (let loop ()
-        (define line (read-line in 'any))
-        (cond
-          [(eof-object? line)
-           ;; SEC-15: Mark sidecar as dead
-           (set-playwright-sidecar-state-dead?! state #t)
-           ;; stdin EOF — mark all pending as errors
-           (with-pending-lock
-            (lambda ()
-              (for ([(id ch) (in-hash pending)])
-                (async-channel-put ch
-                                   (hasheq 'id
-                                           id
-                                           'success
-                                           #f
-                                           'error
-                                           (hasheq 'code 'sidecar-crash 'message "Sidecar EOF"))))))]
-          [else
-           (with-handlers ([exn:fail? void])
-             (define resp (string->jsexpr line))
-             (define id (hash-ref resp 'id #f))
-             (when id
-               (with-pending-lock (lambda ()
-                                    (define ch (hash-ref pending id #f))
-                                    (when ch
-                                      (hash-remove! pending id)
-                                      (async-channel-put ch resp))))))
-           (loop)])))
-    (define reader (thread reader-body))
-    (set-playwright-sidecar-state-reader-thread! state reader)
+;; ---------------------------------------------------------------------------
+;; Sidecar launch/shutdown
+;; ---------------------------------------------------------------------------
 
-    ;; F11: Start heartbeat thread
-    (start-heartbeat! state)
-
-    state))
+(define (launch-sidecar! sidecar-path
+                         #:node-path [node-path "node"]
+                         #:timeout-ms [timeout-ms 10000]
+                         #:headless? [headless? #t])
+  (define pending (make-hash))
+  (define pending-sema (make-semaphore 1))
+  (define state
+    (playwright-sidecar-state #f ; process
+                              #f ; stdin-port
+                              #f ; stdout-port
+                              pending
+                              #f ; reader-thread
+                              #f ; custodian
+                              (hasheq 'timeout-ms
+                                      timeout-ms
+                                      'pending-sema
+                                      pending-sema
+                                      'restart-sema
+                                      (make-semaphore 1)
+                                      'sidecar-path
+                                      sidecar-path
+                                      'node-path
+                                      node-path
+                                      'headless?
+                                      headless?
+                                      'restart-count
+                                      0)
+                              #f ; heartbeat-thread
+                              #f)) ; dead?
+  ;; DUP-02: Launch subprocess
+  (launch-sidecar-process! state sidecar-path node-path headless?)
+  ;; DUP-01: Start reader thread
+  (define reader (thread (make-reader-body state)))
+  (set-playwright-sidecar-state-reader-thread! state reader)
+  ;; F11: Start heartbeat thread
+  (start-heartbeat! state)
+  state)
 
 ;; ---------------------------------------------------------------------------
 ;; F11: Heartbeat thread — sends ping every 30s, kills custodian on failure
@@ -165,12 +190,12 @@
 
 (define (start-heartbeat! state)
   (define cust (playwright-sidecar-state-custodian state))
-  (define rt (playwright-sidecar-state-reader-thread state))
   (define ht
     (thread (lambda ()
               (let loop ()
                 (sleep heartbeat-interval-secs)
-                ;; M1: Detect reader thread death
+                ;; SEC-05: Read current reader from state, not closure
+                (define rt (playwright-sidecar-state-reader-thread state))
                 (when (and rt (not (thread-running? rt)))
                   (log-warning "Browser sidecar reader thread died, killing custodian")
                   (custodian-shutdown-all cust)
@@ -297,60 +322,18 @@
                                                         'sidecar-crash))])
         (define node-path (hash-ref cfg 'node-path "node"))
         (define headless? (hash-ref cfg 'headless? #t))
-        (define timeout-ms (hash-ref cfg 'timeout-ms 10000))
-        (define node-exe (or (find-executable-path node-path) node-path))
         ;; SEC-04: Validate paths before subprocess creation
         (unless (file-exists? sidecar-path)
           (error (format "Sidecar script not found: ~a" sidecar-path)))
-        (define cust (make-custodian))
-        (set-playwright-sidecar-state-custodian! state cust)
-        (parameterize ([current-custodian cust])
-          (define-values (sp stdout-in stdin-out stderr-in)
-            (subprocess #f
-                        #f
-                        #f
-                        node-exe
-                        sidecar-path
-                        (format "--headless=~a" (if headless? "true" "false"))))
-          ;; Drain stderr
-          (thread (lambda ()
-                    (let loop ()
-                      (define line (read-line stderr-in 'any))
-                      (unless (eof-object? line)
-                        (loop)))))
-          (set-playwright-sidecar-state-process! state sp)
-          (set-playwright-sidecar-state-stdin-port! state stdin-out)
-          (set-playwright-sidecar-state-stdout-port! state stdout-in)
-          ;; H2/H3: Restart reader and heartbeat threads
-          (define (reader-body)
-            (define in (playwright-sidecar-state-stdout-port state))
-            (let loop ()
-              (define line (read-line in 'any))
-              (cond
-                [(eof-object? line)
-                 ;; SEC-15: Mark sidecar as dead
-                 (set-playwright-sidecar-state-dead?! state #t)
-                 (void)] ; sidecar died again
-                [else
-                 (with-handlers ([exn:fail? void])
-                   (define resp (string->jsexpr line))
-                   (define id (hash-ref resp 'id #f))
-                   (when id
-                     (define sema (hash-ref cfg 'pending-sema #f))
-                     (when sema
-                       (call-with-semaphore sema
-                                            (lambda ()
-                                              (define pending
-                                                (playwright-sidecar-state-pending-box state))
-                                              (define ch (hash-ref pending id #f))
-                                              (when ch
-                                                (hash-remove! pending id)
-                                                (async-channel-put ch resp)))))))
-                 (loop)])))
-          (define reader (thread reader-body))
-          (set-playwright-sidecar-state-reader-thread! state reader)
-          ;; Restart heartbeat
-          (start-heartbeat! state))))
+        ;; DUP-02: Launch subprocess
+        (launch-sidecar-process! state sidecar-path node-path headless?)
+        ;; DUP-01: Restart reader thread
+        (define reader (thread (make-reader-body state)))
+        (set-playwright-sidecar-state-reader-thread! state reader)
+        ;; SEC-15: Clear dead flag after successful restart
+        (set-playwright-sidecar-state-dead?! state #f)
+        ;; Restart heartbeat
+        (start-heartbeat! state)))
     ;; H1: Always increment restart count (even without sidecar-path)
     (set-playwright-sidecar-state-config!
      state
