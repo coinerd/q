@@ -37,16 +37,16 @@
   (define h (observation->hash obs))
   (define tc (hash-ref h 'text-content))
   (check-true (string? tc))
-  (check-equal? (string-length tc) 4016) ; 4000 + "\n... [truncated]"
-  (check-true (string-suffix? tc "\n... [truncated]")))
+  (check-equal? (string-length tc) 4015) ; 4000 + "\n...(truncated)"
+  (check-true (string-suffix? tc "\n...(truncated)")))
 
 (test-case "observation->hash truncates visible-text at 4000 chars"
   (define obs (make-big-observation 5000))
   (define h (observation->hash obs))
   (define vt (hash-ref h 'visible-text))
   (check-true (string? vt))
-  (check-equal? (string-length vt) 4016)
-  (check-true (string-suffix? vt "\n... [truncated]")))
+  (check-equal? (string-length vt) 4015)
+  (check-true (string-suffix? vt "\n...(truncated)")))
 
 (test-case "observation->hash preserves short text unchanged"
   (define obs (make-big-observation 100))
@@ -74,6 +74,49 @@
   (define entry (make-tool-result-message small-text))
   (define result (summarize-tool-result entry))
   (check-equal? result entry))
+
+;; ---------------------------------------------------------------------------
+;; NF-11d: dom-summary is also truncated (F-08)
+;; ---------------------------------------------------------------------------
+
+(test-case "observation->hash truncates dom-summary at 4000 chars"
+  (define obs
+    (browser-observation "https://example.com"
+                         "Title"
+                         "short"
+                         "short"
+                         (make-string 5000 #\d)
+                         #f
+                         #f
+                         #f
+                         '()
+                         '()
+                         #f
+                         '()
+                         #f))
+  (define h (observation->hash obs))
+  (define ds (hash-ref h 'dom-summary))
+  (check-true (string? ds))
+  (check-equal? (string-length ds) 4015)
+  (check-true (string-suffix? ds "\n...(truncated)")))
+
+(test-case "observation->hash preserves short dom-summary unchanged"
+  (define obs
+    (browser-observation "https://example.com"
+                         "Title"
+                         "short"
+                         "short"
+                         "small summary"
+                         #f
+                         #f
+                         #f
+                         '()
+                         '()
+                         #f
+                         '()
+                         #f))
+  (define h (observation->hash obs))
+  (check-equal? (hash-ref h 'dom-summary) "small summary"))
 
 (test-case "summarize-tool-result truncates multi-line text > 40 lines"
   ;; 50 lines × 200 chars = 10000 chars, exceeds 8000 limit

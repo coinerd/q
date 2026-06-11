@@ -50,13 +50,15 @@
 
     (test-case "format-image-gemini produces inlineData block"
       (define result (format-image-gemini "abc123" "image/png"))
-      (check-equal? (hash-ref result 'type) "inlineData")
+      ;; F-04: Canonical Gemini shape is {inlineData: {...}} with no 'type key.
+      (check-false (hash-has-key? result 'type))
       (define inline-data (hash-ref result 'inlineData))
       (check-equal? (hash-ref inline-data 'mimeType) "image/png")
       (check-equal? (hash-ref inline-data 'data) "abc123"))
 
     (test-case "format-image-gemini handles webp"
       (define result (format-image-gemini "xyz" "image/webp"))
+      (check-false (hash-has-key? result 'type))
       (check-equal? (hash-ref (hash-ref result 'inlineData) 'mimeType) "image/webp"))
 
     ;; ============================================================
@@ -77,11 +79,13 @@
 
     (test-case "format-image-for-provider gemini"
       (define result (format-image-for-provider 'gemini "abc" "image/png"))
-      (check-equal? (hash-ref result 'type) "inlineData"))
+      (check-false (hash-has-key? result 'type))
+      (check-true (hash-has-key? result 'inlineData)))
 
     (test-case "format-image-for-provider google alias"
       (define result (format-image-for-provider 'google "abc" "image/png"))
-      (check-equal? (hash-ref result 'type) "inlineData"))
+      (check-false (hash-has-key? result 'type))
+      (check-true (hash-has-key? result 'inlineData)))
 
     (test-case "format-image-for-provider azure uses openai format"
       (define result (format-image-for-provider 'azure "abc" "image/png"))
