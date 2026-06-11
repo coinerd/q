@@ -433,9 +433,6 @@
 ;; create-agent-session (#1152)
 ;; ============================================================
 
-;; Deprecated: prefer make-agent-session (F24 naming convention)
-(define make-agent-session create-agent-session)
-
 (define (create-agent-session #:provider provider
                               #:session-dir [session-dir (default-session-dir)]
                               #:session-id [session-id #f]
@@ -466,3 +463,6 @@
   (when (and thinking-level (runtime-rt-session opened))
     (session:set-thinking-level! (runtime-rt-session opened) thinking-level))
   opened)
+
+;; Deprecated: prefer make-agent-session (F24 naming convention)
+(define make-agent-session create-agent-session)

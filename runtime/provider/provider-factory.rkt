@@ -42,9 +42,6 @@
                        [provider-is-mock? (-> any/c boolean?)]))
 
 ;; Build the appropriate provider based on provider name.
-;; Deprecated alias: prefer make- prefix (F24 naming convention)
-(define make-provider-for-name create-provider-for-name)
-
 (define (create-provider-for-name prov-name base-url api-key model-name [max-tokens #f])
   ;; Local providers don't need real API keys — use a sentinel to
   ;; pass validation when no credential is available.
@@ -68,6 +65,9 @@
     [(equal? prov-name "azure") (make-azure-openai-provider config)]
     [(equal? prov-name "openrouter") (make-openrouter-provider config)]
     [else (make-openai-compatible-provider config)]))
+
+;; Deprecated alias: prefer make- prefix (F24 naming convention)
+(define make-provider-for-name create-provider-for-name)
 
 ;; Helper: Check if a provider is a mock provider (name = "mock").
 ;; v0.14.1: Moves mock detection out of tui/tui-init.rkt to avoid tui→llm import.

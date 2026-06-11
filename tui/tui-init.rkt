@@ -34,8 +34,6 @@
 ;; TUI entry point contracts.
 ;; Most params use any/c because runtime/tui-ctx are opaque structs
 ;; without exported predicates (internal-only types).
-;; F24: forward definition for make-tui-session alias
-(define make-tui-session #f)
 
 (provide (contract-out
           [run-tui (->* () () any)]
@@ -59,8 +57,6 @@
 ;; Runtime event subscription
 ;; ============================================================
 
-(set! make-tui-session create-tui-session)
-
 (define (subscribe-runtime-events! ctx)
   (define bus (tui-ctx-event-bus ctx))
   (define ch (tui-ctx-event-ch ctx))
@@ -73,9 +69,6 @@
 ;; ============================================================
 
 (define (create-tui-session rt-config cli-cfg)
-  ;; Deprecated alias: prefer make- prefix (F24 naming convention)
-  (define make-tui-session create-tui-session)
-
   ;; Create agent session and TUI context from runtime config.
   ;; Returns (values ctx sess scrollback-path)
   (define bus (dict-ref rt-config 'event-bus #f))
@@ -138,6 +131,9 @@
       [else (build-path "/tmp" (format "q-scrollback-~a.jsonl" (current-seconds)))]))
 
   (values ctx sess scrollback-path))
+
+;; Deprecated alias: prefer make- prefix (F24 naming convention)
+(define make-tui-session create-tui-session)
 
 ;; ============================================================
 ;; Phase 2: Load scrollback + welcome (W-19)
