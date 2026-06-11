@@ -6,6 +6,8 @@
 ;; All browser operations flow through this service.
 
 (require racket/match
+         (only-in racket/random crypto-random-bytes)
+         (only-in file/sha1 bytes->hex-string)
          "types.rkt"
          "adapter.rkt"
          "policy.rkt"
@@ -22,6 +24,7 @@
 
 (provide secure-browser-service?
          make-secure-browser-service
+         generate-session-id
          browser-open!
          browser-observe!
          browser-act!
@@ -84,7 +87,7 @@
                          (hash 'url url 'reason reason)))
 
   ;; 2. Create session
-  (define session-id (format "bs-~a-~a" (current-milliseconds) (random 100000)))
+  (define session-id (generate-session-id))
   (define info
     (browser-session-info session-id
                           'active
@@ -224,6 +227,21 @@
     [else
      (struct-copy browser-observation obs
                   [screenshot-bytes (subbytes raw 0 max-bytes)])]))
+
+
+;; ---------------------------------------------------------------------------
+;; Session ID generation (W2: crypto-quality entropy)
+;; ---------------------------------------------------------------------------
+
+(define (generate-session-id)
+  ;; Crypto-quality UUID prefixed with "bs-" for browser session
+  (define bs (bytes->hex-string (crypto-random-bytes 16)))
+  (define uuid (string-append (substring bs 0 8) "-"
+                              (substring bs 8 12) "-"
+                              "4" (substring bs 13 16) "-"
+                              (substring bs 16 20) "-"
+                              (substring bs 20 32)))
+  (string-append "bs-" uuid))
 
 ;; ---------------------------------------------------------------------------
 ;; Helpers
