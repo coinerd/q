@@ -19,6 +19,18 @@
 - F14 (event wiring table): 6 subscribers in 1 file doesn't justify table abstraction
 - F16 (defaults consolidation): Parameters well-scoped to domains
 
+## [0.98.0] — 2026-06-10
+
+### Browser Robustness
+
+- **Sidecar auto-recovery**: `send-command-with-recovery!` retries up to 2 times on sidecar crash with automatic restart (#7795)
+- **Crypto-quality session IDs**: Session IDs generated with `crypto-random-bytes` instead of `current-milliseconds` + `random` (#7797)
+- **Screenshot size enforcement**: `enforce-screenshot-max-bytes` truncates oversized screenshots per `screenshot-max-bytes` setting (#7796)
+- **Session manager thread safety**: Semaphore-wrapped mutations prevent concurrent access corruption (#7796)
+- **Workflow try/finally**: `browser-check-local-app` uses `dynamic-wind` to guarantee session cleanup on errors (#7797)
+- **UUID tests**: 6 new tests for sidecar recovery, UUID format/uniqueness/crypto-quality
+
+
 ## [0.97.18] - 2026-06-10
 
 ### Changed
