@@ -14,12 +14,6 @@
          "settings.rkt"
          "../util/error/errors.rkt")
 
-;; Re-export settings for enforce-screenshot-max-bytes
-(require (only-in "settings.rkt"
-                  browser-settings-screenshot-max-bytes
-                  default-browser-settings
-                  current-browser-settings))
-
 (provide secure-browser-service?
          make-secure-browser-service
          generate-session-id

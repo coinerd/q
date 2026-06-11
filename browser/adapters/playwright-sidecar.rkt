@@ -12,7 +12,6 @@
 
 (require racket/match
          racket/async-channel
-         (only-in racket/base make-semaphore call-with-semaphore)
          (only-in file/sha1 bytes->hex-string)
          (only-in racket/random crypto-random-bytes)
          json

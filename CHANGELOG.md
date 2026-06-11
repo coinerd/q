@@ -1,3 +1,27 @@
+## [0.98.4] — 2026-06-11
+
+### Critical Fixes
+
+- **NF-01 (CRITICAL)**: `adapter-screenshot` now decodes base64 string to actual bytes before storing in `screenshot-bytes`, fixing 100% crash rate of `browser_screenshot` (#7858)
+
+### Cross-Provider Vision
+
+- **NF-02 (MODERATE)**: Gemini image block keys changed from snake_case `inline_data`/`mime_type` to camelCase `inlineData`/`mimeType` matching the Gemini REST API (#7858)
+
+### Sidecar Lifecycle Hardening
+
+- **NF-03 (MODERATE)**: `start-heartbeat!` reads custodian from state inside loop instead of capturing at thread creation, preventing stale custodian after restart (#7859)
+- **NF-04 (LOW)**: `send-command!` removes orphaned async-channel from pending hash before raising on dead sidecar (#7859)
+- **NF-05 (LOW)**: `restart-sidecar!` enforces restart semaphore presence, no fallback (#7859)
+- **NF-06 (LOW)**: `make-reader-body` enforces pending semaphore, no unsafe fallbacks (#7859)
+
+### Code Quality
+
+- **NF-07 (LOW)**: Removed dead `(require json)` in `workflow.rkt` (#7860)
+- **NF-08 (LOW)**: Removed redundant duplicate `require "settings.rkt"` in `service.rkt` (#7860)
+- **NF-09 (LOW)**: Removed redundant `(only-in racket/base ...)` import in `playwright-sidecar.rkt` (#7860)
+- **NF-10 (INFO)**: Extracted duplicated `parse-data-url` to shared `llm/vision-helpers.rkt` (#7860)
+
 ## [0.98.3] — 2026-06-11
 
 ### Security & Robustness

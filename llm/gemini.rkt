@@ -25,7 +25,8 @@
          "model.rkt"
          "provider.rkt"
          "stream.rkt"
-         "http-helpers.rkt")
+         "http-helpers.rkt"
+         (only-in "vision-helpers.rkt" parse-data-url))
 
 ;; Provider constructor
 (provide (contract-out [make-gemini-provider (-> hash? provider?)])
@@ -68,13 +69,6 @@
 ;; ============================================================
 ;; Image block conversion (GAP-V1: cross-provider vision)
 ;; ============================================================
-
-;; Parse a data URL "data:<mime>;base64,<data>" and return (values mime data)
-(define (parse-data-url url)
-  (define m (regexp-match #rx"^data:([^;]+);base64,(.*)$" url))
-  (if m
-      (values (cadr m) (caddr m))
-      (values "image/png" url)))
 
 ;; Convert OpenAI-format content blocks to Gemini parts.
 (define (openai-block->gemini block)
