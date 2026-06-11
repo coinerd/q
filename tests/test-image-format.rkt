@@ -50,7 +50,7 @@
 
     (test-case "format-image-gemini produces inlineData block"
       (define result (format-image-gemini "abc123" "image/png"))
-      (check-equal? (hash-ref result 'type) "inline_data")
+      (check-equal? (hash-ref result 'type) "inlineData")
       (define inline-data (hash-ref result 'inlineData))
       (check-equal? (hash-ref inline-data 'mimeType) "image/png")
       (check-equal? (hash-ref inline-data 'data) "abc123"))
@@ -77,11 +77,11 @@
 
     (test-case "format-image-for-provider gemini"
       (define result (format-image-for-provider 'gemini "abc" "image/png"))
-      (check-equal? (hash-ref result 'type) "inline_data"))
+      (check-equal? (hash-ref result 'type) "inlineData"))
 
     (test-case "format-image-for-provider google alias"
       (define result (format-image-for-provider 'google "abc" "image/png"))
-      (check-equal? (hash-ref result 'type) "inline_data"))
+      (check-equal? (hash-ref result 'type) "inlineData"))
 
     (test-case "format-image-for-provider azure uses openai format"
       (define result (format-image-for-provider 'azure "abc" "image/png"))

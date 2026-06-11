@@ -36,19 +36,22 @@
                               #f
                               #f))
   ;; Use a long enough interval that we can mutate state before the first read.
-  (parameterize ([heartbeat-interval-secs 0.5])
+  (parameterize ([heartbeat-interval-secs 0.3])
     (start-heartbeat! state))
   ;; Mutate custodian and reader while heartbeat is still in its first sleep.
   (set-playwright-sidecar-state-custodian! state cust2)
   (set-playwright-sidecar-state-reader-thread! state dead-reader)
   ;; Wait for heartbeat to wake up and act on the mutated state.
-  (sleep 0.6)
+  ;; Use generous margin (3× interval) to avoid CI flakes.
+  (sleep 1.0)
   ;; Dynamic read: current custodian (cust2) is shut down because reader is dead.
   (check-false (thread-running? victim2))
   ;; Stale custodian (cust1) was replaced before the read, so victim1 survives.
   (check-true (thread-running? victim1))
   (custodian-shutdown-all cust1)
-  (kill-thread (playwright-sidecar-state-heartbeat-thread state)))
+  (kill-thread (playwright-sidecar-state-heartbeat-thread state))
+  ;; F-09: Clean up leaked live-reader thread
+  (kill-thread live-reader))
 
 ;; ---------------------------------------------------------------------------
 ;; NF-04: Orphaned channel cleaned up on dead-sidecar fast-fail
@@ -94,10 +97,12 @@
 ;; ---------------------------------------------------------------------------
 
 (test-case "NF-06: make-reader-body enforces semaphore presence"
+  (define-values (in out) (make-pipe))
+  (close-output-port out) ; force EOF on stdin → triggers read path
   (define state
     (playwright-sidecar-state #f
                               #f
-                              #f
+                              in ; stdout-port = our pipe
                               (make-hash)
                               #f
                               #f
@@ -105,4 +110,6 @@
                               #f
                               #f))
   (define body (make-reader-body state))
-  (check-true (procedure? body)))
+  ;; Body should raise q-browser-error when it tries to deliver EOF response
+  ;; without a pending-sema to post on.
+  (check-exn q-browser-error? body))

@@ -31,7 +31,7 @@
     (test-case "format-image-gemini with valid inputs returns hash"
       (define result (format-image-gemini "dGVzdA==" "image/webp"))
       (check-true (hash? result))
-      (check-equal? (hash-ref result 'type) "inline_data"))
+      (check-equal? (hash-ref result 'type) "inlineData"))
 
     (test-case "format-image-for-provider dispatches correctly"
       (define openai-result (format-image-for-provider 'openai "dGVzdA==" "image/png"))

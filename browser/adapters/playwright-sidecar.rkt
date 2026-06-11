@@ -209,6 +209,8 @@
                   (when (and rt (not (thread-running? rt)))
                     (log-warning "Browser sidecar reader thread died, killing custodian")
                     (custodian-shutdown-all cust)
+                    ;; F-06: Mark dead so heartbeat stops looping
+                    (set-playwright-sidecar-state-dead?! state #t)
                     (void))
                   (with-handlers ([exn:fail? (lambda (e)
                                                (log-warning
