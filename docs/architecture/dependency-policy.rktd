@@ -11,7 +11,7 @@
 ;; Layer definitions with max boundary exceptions
 ((layers
   (runtime
-   (max-exceptions . 12)
+   (max-exceptions . 13)
    (forbidden-from . (llm tools extensions))
    (rationale
     . "Runtime should not import upward into tools/extensions except via documented exceptions (includes iteration/ submodules and layer-adapters)"))
@@ -70,6 +70,10 @@
       (extension-catalog.rkt (rationale . "extension loading/discovery")
                              (owner . "extensions")
                              (revisit-by . "2026-08-01"))
+      (command-registry-bridge.rkt
+       (rationale . "bridge re-exports tui/palette+keymap so wiring/ doesn't import tui/ directly")
+       (owner . "tui")
+       (revisit-by . "2026-09-01"))
       (session/session-switch.rkt
        (rationale . "dynamic-require to extensions for lazy loading (avoids circular dependency)")
        (owner . "runtime")

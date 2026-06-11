@@ -38,7 +38,7 @@
          ;; Constructor
          (contract-out [initial-input-state (-> input-state?)]
                        ;; Internal helpers (shared by editing-ops, history-ops)
-                       [push-undo (-> input-state? any/c input-state?)]
+                       [push-undo (-> input-state? input-state? input-state?)]
                        [push-kill (-> input-state? string? input-state?)]
                        [strip-for-undo (-> input-state? input-state?)]
                        ;; Mouse event support

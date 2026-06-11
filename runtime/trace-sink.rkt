@@ -15,19 +15,17 @@
 ;; Class values (file-trace-sink% etc.) implement this interface.
 ;; Use (is-a?/c trace-sink<%>) for instances, (implementation? _ trace-sink<%>) for classes.
 
-(provide
-         trace-sink-class/c
+(provide trace-sink-class/c
          ;; Interface value — kept as any/c because Racket interface values
          ;; cannot be directly used as contract predicates for provide/contract.
          (contract-out [trace-sink<%> any/c]
                        ;; Class values implementing trace-sink<%>
-                       ;; Using relaxed contract due to class contract limitations;
-                       ;; see trace-sink-class/c for the predicate.
-                       [file-trace-sink% any/c]
-                       [json-file-trace-sink% any/c]
-                       [port-trace-sink% any/c]
-                       [null-trace-sink% any/c]
-                       [async-trace-sink% any/c]))
+                       ;; Using trace-sink-class/c predicate for type safety.
+                       [file-trace-sink% trace-sink-class/c]
+                       [json-file-trace-sink% trace-sink-class/c]
+                       [port-trace-sink% trace-sink-class/c]
+                       [null-trace-sink% trace-sink-class/c]
+                       [async-trace-sink% trace-sink-class/c]))
 
 ;; Interface: trace-sink<%>
 (define trace-sink<%>
