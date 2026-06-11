@@ -1,6 +1,5 @@
 #lang racket/base
 
-(require "../util/error/error-helpers.rkt")
 ;; llm/anthropic.rkt — Anthropic provider adapter
 ;;
 ;; Translates normalized model-request structs into Anthropic Messages
@@ -10,6 +9,7 @@
 ;; HTTP calls use net/http-client from Racket stdlib.
 ;; SSE parsing delegates to llm/stream.rkt.
 
+(require "../util/error/error-helpers.rkt")
 (require racket/contract
          "timing.rkt"
          racket/match

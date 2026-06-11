@@ -32,7 +32,7 @@
 ;; Format an image for Gemini's generateContent API.
 ;; Returns an inlineData block with mimeType.
 (define (format-image-gemini base64-data media-type)
-  (hasheq 'type "inline_data" 'inlineData (hasheq 'mimeType media-type 'data base64-data)))
+  (hasheq 'type "inlineData" 'inlineData (hasheq 'mimeType media-type 'data base64-data)))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Dispatch

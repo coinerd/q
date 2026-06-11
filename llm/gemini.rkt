@@ -1,6 +1,5 @@
 #lang racket/base
 
-(require "../util/error/error-helpers.rkt")
 ;; llm/gemini.rkt — Google Gemini provider adapter
 ;;
 ;; Translates normalized model-request structs into Gemini
@@ -11,6 +10,7 @@
 ;; HTTP calls use net/http-client from Racket stdlib.
 ;; SSE parsing delegates to llm/stream.rkt.
 
+(require "../util/error/error-helpers.rkt")
 (require racket/contract
          "timing.rkt"
          racket/match
