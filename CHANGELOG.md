@@ -1,3 +1,28 @@
+## [0.98.6] — 2026-06-12
+
+### Browser Audit Final Closure (13 findings from v0.98.3–v0.98.5 audit chain)
+
+#### Correctness & Dedup (W0)
+- **F-03 (MODERATE)**: Deduplicated `truncate-observation-text` to delegate to `util/truncation.rkt::truncate-to-n-chars` (#7895)
+- **F-04 (MODERATE)**: Removed redundant `'type` key from Gemini image block shape — canonical `{inlineData: {mimeType, data}}` (#7895)
+- **F-08 (LOW)**: Applied `truncate-observation-text` to `dom-summary` field in `observation->hash` for defense-in-depth (#7895)
+- **NF-11d (LOW)**: Added dom-summary truncation test (#7895)
+
+#### Test Quality & Contracts (W1)
+- **F-07 (LOW)**: Added boundary tests for truncation (4000/4001 chars, empty string) (#7900)
+- **F-06 (MODERATE)**: Verified NF-03 behavioral test covers dynamic custodian reading (#7900)
+- **CON-01/02/03 (LOW)**: Added contracts to browser module public functions (#7900)
+
+#### Code Quality & Hygiene (W2)
+- **REP-01 (LOW)**: Replaced `(struct-out browser-adapter)` with explicit provides — no longer exposes internal function slots
+- **ARCH-01 (LOW)**: Documented `browser/settings.rkt→runtime/` upward coupling with migration path to v0.99.x
+- **ARCH-02/F-09 (LOW)**: Merged stray `require` into main require block in `anthropic.rkt` and `gemini.rkt`
+
+### Critical Bugfix
+- **Watchdog→Goal Cancel**: Removed `goal-cancel-box = #t` from watchdog force-clear — watchdog now only clears stale UI state, does NOT kill background goal threads. Fixes autonomous goals being falsely cancelled with "Goal cancelled by user" after 5 minutes. (#W3)
+
+---
+
 ## [0.98.5] — 2026-06-11
 
 ### Test Foundation

@@ -4,6 +4,9 @@
 ;;
 ;; Struct for browser configuration, default values,
 ;; and integration with the q runtime settings system.
+;;
+;; ARCH-01: This module imports from runtime/settings.rkt (upward coupling).
+;; Intended migration: extract `setting-ref` to a util/ module in v0.99.x.
 
 (require "../runtime/settings.rkt")
 

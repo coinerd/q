@@ -9,9 +9,9 @@
 ;; HTTP calls use net/http-client from Racket stdlib.
 ;; SSE parsing delegates to llm/stream.rkt.
 
-(require "../util/error/error-helpers.rkt")
 (require racket/contract
          "timing.rkt"
+         "../util/error/error-helpers.rkt"
          racket/match
          racket/string
          (only-in "model-defaults.rkt" ANTHROPIC-DEFAULT-MODEL ANTHROPIC-DEFAULT-BASE-URL)

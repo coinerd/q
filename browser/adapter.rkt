@@ -9,7 +9,9 @@
 (require racket/contract
          "types.rkt")
 
-(provide (struct-out browser-adapter)
+;; REP-01: Replaced (struct-out browser-adapter) with explicit provides.
+;; Internal function-slot fields are no longer exported.
+(provide browser-adapter? ; predicate only
          (contract-out [make-browser-adapter
                         (-> #:open (-> string? any/c any)
                             #:close (-> string? any)

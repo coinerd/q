@@ -341,15 +341,15 @@
     [else #f]))
 
 ;; Apply the pure watchdog state transition to the live TUI context.
-;; When the watchdog fires, also signal goal cancellation so the UI watchdog
-;; does not leave an autonomous goal thread running behind an idle-looking UI.
+;; The watchdog clears stale UI state only — NOT background goal threads.
+;; Goal cancellation happens only via explicit user action (Esc, /goal clear)
+;; or goal-runner's own limits (max-turns, no-progress detection).
 (define (apply-busy-watchdog! ctx now-ms watchdog-ms)
   (define cur-state (unbox (tui-ctx-ui-state-box ctx)))
   (define watchdog-result (check-busy-watchdog cur-state now-ms watchdog-ms))
   (cond
     [watchdog-result
      (set-box! (tui-ctx-ui-state-box ctx) watchdog-result)
-     (set-box! (tui-ctx-goal-cancel-box ctx) #t)
      (mark-dirty! ctx)
      #t]
     [else #f]))

@@ -60,7 +60,9 @@
   ;; Verify pending-tool-name cleared
   (check-false (ui-state-pending-tool-name result)))
 
-(test-case "watchdog: loop application cancels active goal"
+(test-case "watchdog: loop application does NOT cancel goal (W3 fix)"
+  ;; W3 bugfix: watchdog clears stale UI state but does NOT kill goal thread.
+  ;; Goal cancellation happens only via user action or goal-runner limits.
   (define ctx (make-tui-ctx))
   (define now (current-inexact-milliseconds))
   (define expired-since (- now (* 31 60 1000)))
@@ -68,7 +70,7 @@
   (check-false (unbox (tui-ctx-goal-cancel-box ctx)))
   (define fired? (apply-busy-watchdog! ctx now (* 30 60 1000)))
   (check-true fired?)
-  (check-true (unbox (tui-ctx-goal-cancel-box ctx)))
+  (check-false (unbox (tui-ctx-goal-cancel-box ctx))) ;; NOT cancelled by watchdog
   (check-false (ui-state-busy? (unbox (tui-ctx-ui-state-box ctx)))))
 
 (test-case "watchdog: cleared state has watchdog transcript entry"
@@ -143,7 +145,8 @@
   (check-not-false watchdog-entry "watchdog transcript entry exists")
   ;; Verify the text content matches expected message
   (check-equal? (transcript-entry-text watchdog-entry)
-                (format "[Watchdog: busy state timed out — force-cleared after ~a min]" (/ (* 30 60 1000) 60000)))
+                (format "[Watchdog: busy state timed out — force-cleared after ~a min]"
+                        (/ (* 30 60 1000) 60000)))
   ;; Verify timestamp matches the 'now' argument passed to check-busy-watchdog
   (check-equal? (transcript-entry-timestamp watchdog-entry) now)
   ;; Verify busy? is cleared
