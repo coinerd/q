@@ -25,6 +25,7 @@
          launch-sidecar!
          shutdown-sidecar!
          send-command!
+         send-command-with-recovery!
          uuid-string
          make-playwright-adapter)
 
@@ -206,6 +207,38 @@
                             ["policy-violation" 'policy-violation]
                             [_ 'adapter-error]))]
     [else (hash-ref result 'data)]))
+
+
+;; ---------------------------------------------------------------------------
+;; Send command with auto-recovery (W0: Sidecar auto-restart on crash)
+;; ---------------------------------------------------------------------------
+
+(define max-sidecar-restarts 2)
+
+(define (send-command-with-recovery! state type params
+                                     #:timeout-ms [timeout-ms #f]
+                                     #:max-retries [max-retries max-sidecar-restarts])
+  ;; Retry with restart on sidecar-crash errors.
+  ;; state must have a 'restart-count key in its config hash (or be a hash
+  ;; for testing). Real usage passes playwright-sidecar-state.
+  (let loop ([attempts 0])
+    (with-handlers
+        ([q-browser-error?
+          (lambda (e)
+            (if (and (eq? (q-browser-error-category e) 'sidecar-crash)
+                     (< attempts max-retries))
+                (begin
+                  (restart-sidecar! state)
+                  (loop (add1 attempts)))
+                (raise e)))])
+      (send-command! state type params #:timeout-ms timeout-ms))))
+
+(define (restart-sidecar! state)
+  (with-handlers ([exn:fail? void])
+    (shutdown-sidecar! state #:timeout-ms 3000))
+  ;; Relaunch: for real adapter, state-box holds the live state
+  ;; The adapter's ensure-state will relaunch on next access
+  (sleep 0.5))
 
 ;; ---------------------------------------------------------------------------
 ;; Adapter interface
