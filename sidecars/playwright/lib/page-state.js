@@ -72,11 +72,14 @@ async function extract(page) {
       // Simplified DOM summary: tag counts
       if (!document.body) return { tagCounts: {}, childCount: 0 };
       const tags = {};
+      const MAX_DOM_ELEMENTS = 10000;
+      let count = 0;
       document.querySelectorAll('*').forEach(el => {
+        if (count++ > MAX_DOM_ELEMENTS) return; // SEC-13: bail-out for pathological pages
         const t = el.tagName.toLowerCase();
         tags[t] = (tags[t] || 0) + 1;
       });
-      return { tagCounts: tags, childCount: document.body?.children.length || 0 };
+      return { tagCounts: tags, childCount: document.body?.children.length || 0, scannedCount: count };
     }),
     page.viewportSize()
   ]);

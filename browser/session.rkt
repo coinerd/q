@@ -5,8 +5,7 @@
 ;; Manages browser sessions: creation, lookup, destruction,
 ;; action counting, and artifact directory management.
 
-(require racket/match
-         "types.rkt"
+(require "types.rkt"
          "../util/error/errors.rkt")
 
 ;; Session struct
@@ -143,4 +142,4 @@
 ;; ---------------------------------------------------------------------------
 
 (define (browser-session-manager-count mgr)
-  (hash-count (browser-session-manager-sessions mgr)))
+  (with-session-lock mgr (hash-count (browser-session-manager-sessions mgr))))
