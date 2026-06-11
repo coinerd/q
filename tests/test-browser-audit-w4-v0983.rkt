@@ -41,7 +41,7 @@
 ;; GAP-V1: Gemini image block conversion
 ;; ---------------------------------------------------------------------------
 
-(test-case "GAP-V1: Gemini converts OpenAI image_url block to Gemini inline_data part"
+(test-case "GAP-V1: Gemini converts OpenAI image_url block to Gemini inlineData part"
   (define req
     (make-model-request
      (list (hasheq 'role
@@ -60,7 +60,7 @@
   (define parts (hash-ref (car contents) 'parts))
   (check-equal? (length parts) 2)
   (define img (cadr parts))
-  (check-true (hash-has-key? img 'inline_data))
-  (define inline (hash-ref img 'inline_data))
-  (check-equal? (hash-ref inline 'mime_type) "image/jpeg")
+  (check-true (hash-has-key? img 'inlineData))
+  (define inline (hash-ref img 'inlineData))
+  (check-equal? (hash-ref inline 'mimeType) "image/jpeg")
   (check-equal? (hash-ref inline 'data) "XYZ789"))
