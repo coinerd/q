@@ -5,6 +5,9 @@
 ;; Subprocess-based image resizing for multimodal LLM input.
 ;; SECURITY: All subprocess calls use argv lists (never shell strings).
 ;; Tool paths resolved via find-executable-path. No shell injection possible.
+;;
+;; GAP-V2 (v0.99.x): This resize pipeline is not yet wired to browser screenshots.
+;; Future work: decode base64 → bytes → resize → re-encode → inject into context.
 
 (require racket/file
          racket/path
@@ -44,7 +47,7 @@
 
 (define (delete-file* p)
   (with-handlers ([exn:fail? (lambda (e)
-                              (log-debug "image-pipeline: delete-file failed: ~a" (exn-message e)))])
+                               (log-debug "image-pipeline: delete-file failed: ~a" (exn-message e)))])
     (when (file-exists? p)
       (delete-file p))))
 
@@ -97,11 +100,13 @@
   (close-output-port stdin-out)
   (define timeout-thread
     (and timeout-secs
-         (thread (lambda ()
-                   (sleep timeout-secs)
-                   (with-handlers ([exn:fail? (lambda (e)
-                                               (log-debug "image-pipeline: subprocess-kill failed: ~a" (exn-message e)))])
-                     (subprocess-kill sp #t))))))
+         (thread
+          (lambda ()
+            (sleep timeout-secs)
+            (with-handlers ([exn:fail? (lambda (e)
+                                         (log-debug "image-pipeline: subprocess-kill failed: ~a"
+                                                    (exn-message e)))])
+              (subprocess-kill sp #t))))))
   (subprocess-wait sp)
   (when timeout-thread
     (kill-thread timeout-thread))
@@ -213,7 +218,8 @@
        (thread (lambda ()
                  (sleep (image-metadata-timeout))
                  (with-handlers ([exn:fail? (lambda (e)
-                                             (log-debug "image-pipeline: ffmpeg kill failed: ~a" (exn-message e)))])
+                                              (log-debug "image-pipeline: ffmpeg kill failed: ~a"
+                                                         (exn-message e)))])
                    (subprocess-kill sp #t)))))
      (subprocess-wait sp)
      (kill-thread timeout-thread)
