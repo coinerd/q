@@ -5,8 +5,7 @@
 ;; Higher-level browser operations that compose multiple primitives
 ;; into a single atomic workflow for common use cases.
 
-(require json
-         "types.rkt"
+(require "types.rkt"
          "service.rkt"
          "../util/error/errors.rkt")
 

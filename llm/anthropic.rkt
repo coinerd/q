@@ -24,7 +24,8 @@
          "provider.rkt"
          "stream.rkt"
          "http-helpers.rkt"
-         (only-in "../util/error/errors.rkt" with-logged-catch))
+         (only-in "../util/error/errors.rkt" with-logged-catch)
+         (only-in "vision-helpers.rkt" parse-data-url))
 
 ;; Provider constructor
 (provide (contract-out [make-anthropic-provider (-> hash? provider?)])
@@ -51,13 +52,6 @@
 ;; ============================================================
 ;; Image block conversion (GAP-V1: cross-provider vision)
 ;; ============================================================
-
-;; Parse a data URL "data:<mime>;base64,<data>" and return (values mime data)
-(define (parse-data-url url)
-  (define m (regexp-match #rx"^data:([^;]+);base64,(.*)$" url))
-  (if m
-      (values (cadr m) (caddr m))
-      (values "image/png" url)))
 
 ;; Convert OpenAI-format content blocks to Anthropic content blocks.
 (define (openai-block->anthropic block)
