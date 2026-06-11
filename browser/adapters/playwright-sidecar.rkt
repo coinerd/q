@@ -12,6 +12,7 @@
 
 (require racket/match
          racket/async-channel
+         (only-in racket/base make-semaphore call-with-semaphore)
          (only-in file/sha1 bytes->hex-string)
          (only-in racket/random crypto-random-bytes)
          json
@@ -19,13 +20,14 @@
          "../types.rkt"
          "../../util/error/errors.rkt")
 
-(provide playwright-sidecar-state?
-         playwright-sidecar-state
-         playwright-sidecar-state-process
+(provide (struct-out playwright-sidecar-state)
          launch-sidecar!
          shutdown-sidecar!
          send-command!
          send-command-with-recovery!
+         restart-sidecar!
+         start-heartbeat!
+         max-sidecar-restarts
          uuid-string
          make-playwright-adapter)
 
@@ -34,12 +36,12 @@
 ;; ---------------------------------------------------------------------------
 
 (struct playwright-sidecar-state
-        (process ; subprocess?
-         stdin-port ; output-port (write to sidecar stdin)
-         stdout-port ; input-port (read from sidecar stdout)
+        ([process #:mutable] ; subprocess?
+         [stdin-port #:mutable] ; output-port (write to sidecar stdin)
+         [stdout-port #:mutable] ; input-port (read from sidecar stdout)
          pending-box ; (hash/c string? async-channel?) — pending responses
          [reader-thread #:mutable] ; thread?
-         custodian ; custodian?
+         [custodian #:mutable] ; custodian?
          [config #:mutable] ; sidecar config
          [heartbeat-thread #:mutable]) ; (or/c thread? #f) — F11 heartbeat
   #:transparent)
@@ -88,6 +90,9 @@
                   (loop)))))
     (define pending (make-hash))
     (define ready-ch (make-async-channel))
+    (define pending-sema (make-semaphore 1))
+    (define (with-pending-lock thunk)
+      (call-with-semaphore pending-sema thunk))
     (define state
       (playwright-sidecar-state sp
                                 stdin-out
@@ -95,19 +100,30 @@
                                 pending
                                 #f
                                 cust
-                                (hasheq 'timeout-ms timeout-ms)
+                                (hasheq 'timeout-ms
+                                        timeout-ms
+                                        'pending-sema
+                                        pending-sema
+                                        'sidecar-path
+                                        sidecar-path
+                                        'node-path
+                                        node-path
+                                        'headless?
+                                        headless?
+                                        'restart-count
+                                        0)
                                 #f)) ; heartbeat-thread initially #f
 
     ;; Reader thread: reads JSONL lines from stdout, routes to pending channels
-    (define reader
-      (thread
-       (lambda ()
-         (define in (playwright-sidecar-state-stdout-port state))
-         (let loop ()
-           (define line (read-line in 'any))
-           (cond
-             [(eof-object? line)
-              ;; stdin EOF — mark all pending as errors
+    (define (reader-body)
+      (define in (playwright-sidecar-state-stdout-port state))
+      (let loop ()
+        (define line (read-line in 'any))
+        (cond
+          [(eof-object? line)
+           ;; stdin EOF — mark all pending as errors
+           (with-pending-lock
+            (lambda ()
               (for ([(id ch) (in-hash pending)])
                 (async-channel-put ch
                                    (hasheq 'id
@@ -115,18 +131,19 @@
                                            'success
                                            #f
                                            'error
-                                           (hasheq 'code 'sidecar-crash 'message "Sidecar EOF"))))]
-             [else
-              (with-handlers ([exn:fail? void])
-                (define resp (string->jsexpr line))
-                (define id (hash-ref resp 'id #f))
-                (when id
-                  (define ch (hash-ref pending id #f))
-                  (when ch
-                    (hash-remove! pending id)
-                    (async-channel-put ch resp))))
-              (loop)])))))
-
+                                           (hasheq 'code 'sidecar-crash 'message "Sidecar EOF"))))))]
+          [else
+           (with-handlers ([exn:fail? void])
+             (define resp (string->jsexpr line))
+             (define id (hash-ref resp 'id #f))
+             (when id
+               (with-pending-lock (lambda ()
+                                    (define ch (hash-ref pending id #f))
+                                    (when ch
+                                      (hash-remove! pending id)
+                                      (async-channel-put ch resp))))))
+           (loop)])))
+    (define reader (thread reader-body))
     (set-playwright-sidecar-state-reader-thread! state reader)
 
     ;; F11: Start heartbeat thread
@@ -142,10 +159,16 @@
 
 (define (start-heartbeat! state)
   (define cust (playwright-sidecar-state-custodian state))
+  (define rt (playwright-sidecar-state-reader-thread state))
   (define ht
     (thread (lambda ()
               (let loop ()
                 (sleep heartbeat-interval-secs)
+                ;; M1: Detect reader thread death
+                (when (and rt (not (thread-running? rt)))
+                  (log-warning "Browser sidecar reader thread died, killing custodian")
+                  (custodian-shutdown-all cust)
+                  (void))
                 (with-handlers ([exn:fail?
                                  (lambda (e)
                                    (log-warning "Browser sidecar heartbeat failed, killing custodian")
@@ -183,7 +206,13 @@
 (define (send-command! state type params #:timeout-ms [timeout-ms #f])
   (define id (uuid-string))
   (define ch (make-async-channel))
-  (hash-set! (playwright-sidecar-state-pending-box state) id ch)
+  ;; C2: Use pending semaphore for thread-safe hash mutation
+  (define sema (hash-ref (playwright-sidecar-state-config state) 'pending-sema #f))
+  (cond
+    [sema
+     (call-with-semaphore sema
+                          (lambda () (hash-set! (playwright-sidecar-state-pending-box state) id ch)))]
+    [else (hash-set! (playwright-sidecar-state-pending-box state) id ch)])
   (define out (playwright-sidecar-state-stdin-port state))
   (define req (hasheq 'id id 'type type 'params params))
   (write-string (jsexpr->string req) out)
@@ -191,7 +220,11 @@
   (flush-output out)
   (define tmout (or timeout-ms (hash-ref (playwright-sidecar-state-config state) 'timeout-ms 10000)))
   (define result (sync/timeout (/ tmout 1000.0) ch))
-  (hash-remove! (playwright-sidecar-state-pending-box state) id)
+  (cond
+    [sema
+     (call-with-semaphore sema
+                          (lambda () (hash-remove! (playwright-sidecar-state-pending-box state) id)))]
+    [else (hash-remove! (playwright-sidecar-state-pending-box state) id)])
   (cond
     [(not result)
      (raise-browser-error (format "Sidecar command '~a' timed out after ~ams" type tmout) 'timeout)]
@@ -208,36 +241,91 @@
                             [_ 'adapter-error]))]
     [else (hash-ref result 'data)]))
 
-
 ;; ---------------------------------------------------------------------------
 ;; Send command with auto-recovery (W0: Sidecar auto-restart on crash)
 ;; ---------------------------------------------------------------------------
 
 (define max-sidecar-restarts 2)
 
-(define (send-command-with-recovery! state type params
+(define (send-command-with-recovery! state
+                                     type
+                                     params
                                      #:timeout-ms [timeout-ms #f]
                                      #:max-retries [max-retries max-sidecar-restarts])
   ;; Retry with restart on sidecar-crash errors.
   ;; state must have a 'restart-count key in its config hash (or be a hash
   ;; for testing). Real usage passes playwright-sidecar-state.
   (let loop ([attempts 0])
-    (with-handlers
-        ([q-browser-error?
-          (lambda (e)
-            (if (and (eq? (q-browser-error-category e) 'sidecar-crash)
-                     (< attempts max-retries))
-                (begin
-                  (restart-sidecar! state)
-                  (loop (add1 attempts)))
-                (raise e)))])
+    (with-handlers ([q-browser-error? (lambda (e)
+                                        (if (and (eq? (q-browser-error-category e) 'sidecar-crash)
+                                                 (< attempts max-retries))
+                                            (begin
+                                              (restart-sidecar! state)
+                                              (loop (add1 attempts)))
+                                            (raise e)))])
       (send-command! state type params #:timeout-ms timeout-ms))))
 
 (define (restart-sidecar! state)
   (with-handlers ([exn:fail? void])
     (shutdown-sidecar! state #:timeout-ms 3000))
-  ;; Relaunch: for real adapter, state-box holds the live state
-  ;; The adapter's ensure-state will relaunch on next access
+  ;; C1: Actually relaunch the sidecar process
+  (define cfg (playwright-sidecar-state-config state))
+  (define sidecar-path (hash-ref cfg 'sidecar-path #f))
+  (when sidecar-path
+    (define node-path (hash-ref cfg 'node-path "node"))
+    (define headless? (hash-ref cfg 'headless? #t))
+    (define timeout-ms (hash-ref cfg 'timeout-ms 10000))
+    (define node-exe (or (find-executable-path node-path) node-path))
+    (define cust (make-custodian))
+    (set-playwright-sidecar-state-custodian! state cust)
+    (parameterize ([current-custodian cust])
+      (define-values (sp stdout-in stdin-out stderr-in)
+        (subprocess #f
+                    #f
+                    #f
+                    node-exe
+                    sidecar-path
+                    (format "--headless=~a" (if headless? "true" "false"))))
+      ;; Drain stderr
+      (thread (lambda ()
+                (let loop ()
+                  (define line (read-line stderr-in 'any))
+                  (unless (eof-object? line)
+                    (loop)))))
+      (set-playwright-sidecar-state-process! state sp)
+      (set-playwright-sidecar-state-stdin-port! state stdin-out)
+      (set-playwright-sidecar-state-stdout-port! state stdout-in)
+      ;; H2/H3: Restart reader and heartbeat threads
+      (define (reader-body)
+        (define in (playwright-sidecar-state-stdout-port state))
+        (let loop ()
+          (define line (read-line in 'any))
+          (cond
+            [(eof-object? line) (void)] ; sidecar died again
+            [else
+             (with-handlers ([exn:fail? void])
+               (define resp (string->jsexpr line))
+               (define id (hash-ref resp 'id #f))
+               (when id
+                 (define sema (hash-ref cfg 'pending-sema #f))
+                 (when sema
+                   (call-with-semaphore sema
+                                        (lambda ()
+                                          (define pending
+                                            (playwright-sidecar-state-pending-box state))
+                                          (define ch (hash-ref pending id #f))
+                                          (when ch
+                                            (hash-remove! pending id)
+                                            (async-channel-put ch resp)))))))
+             (loop)])))
+      (define reader (thread reader-body))
+      (set-playwright-sidecar-state-reader-thread! state reader)
+      ;; Restart heartbeat
+      (start-heartbeat! state)))
+  ;; H1: Always increment restart count (even without sidecar-path)
+  (set-playwright-sidecar-state-config!
+   state
+   (hash-set cfg 'restart-count (add1 (hash-ref cfg 'restart-count 0))))
   (sleep 0.5))
 
 ;; ---------------------------------------------------------------------------
@@ -280,6 +368,18 @@
       [_ (error 'playwright-adapter "Unknown action: ~a" action)]))
 
   ;; Helper to build observation from sidecar response
+  ;; H8: Normalize string-keyed hashes from sidecar JSON to symbol-keyed
+  (define (normalize-interactive-elements elems)
+    (for/list ([e (in-list elems)])
+      (cond
+        [(hash? e)
+         (for/hasheq ([(k v) (in-hash e)])
+           (values (if (string? k)
+                       (string->symbol k)
+                       k)
+                   v))]
+        [else e])))
+
   (define (data->obs data)
     (browser-observation (hash-ref data 'url "")
                          (hash-ref data 'title "")
@@ -292,7 +392,7 @@
                          (hash-ref data 'consoleErrors '())
                          '() ; network-requests
                          (hash-ref data 'viewportSize (hasheq 'width 1280 'height 720))
-                         (hash-ref data 'interactiveElements '())
+                         (normalize-interactive-elements (hash-ref data 'interactiveElements '()))
                          #f)) ; metadata
 
   ;; Adapter callback implementations
@@ -341,8 +441,9 @@
                          (hash-ref data 'data "")
                          '()
                          '()
-                         #f
-                         #f))
+                         #f ; viewport-size
+                         '() ; interactive-elements
+                         #f)) ; metadata
 
   (make-browser-adapter #:open adapter-open
                         #:close adapter-close

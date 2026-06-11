@@ -11,12 +11,17 @@
 async function injectQIds(page) {
   return page.evaluate(() => {
     const INTERACTIVE_SELECTOR =
-      'a, button, input, select, textarea, [role="button"], [role="link"], [role="tab"], [onclick]';
+      'a, button, input, select, textarea, details, summary, [contenteditable], ' +
+      '[role="button"], [role="link"], [role="tab"], [role="menuitem"], [role="option"], ' +
+      '[role="checkbox"], [role="radio"], [role="switch"], [onclick]';
     const MAX_ELEMENTS = 200;
-    const elements = Array.from(document.querySelectorAll(INTERACTIVE_SELECTOR)).slice(0, MAX_ELEMENTS);
+    const elements = Array.from(document.querySelectorAll(INTERACTIVE_SELECTOR));
+    // M9: Track if we hit the cap
+    const truncated = elements.length > MAX_ELEMENTS;
+    const selected = elements.slice(0, MAX_ELEMENTS);
     let counter = 0;
     const items = [];
-    for (const el of elements) {
+    for (const el of selected) {
       const qId = String(counter++);
       el.setAttribute('q-id', qId);
       items.push({
@@ -29,6 +34,10 @@ async function injectQIds(page) {
         type: el.getAttribute('type') || null,
         ariaLabel: el.getAttribute('aria-label') || null
       });
+    }
+    // M9: Add truncation indicator
+    if (truncated) {
+      items.push({ qId: '__truncated__', tag: 'meta', text: `Elements truncated: ${elements.length} total, showing ${MAX_ELEMENTS}` });
     }
     return items;
   });

@@ -45,6 +45,10 @@
      (string-join (for/list ([part (in-list content)])
                     (cond
                       [(string? part) part]
+                      [(and (hash? part) (equal? (hash-ref part 'type #f) "image"))
+                       (format "[image: ~a, ~a chars]"
+                               (hash-ref part 'mimeType "unknown")
+                               (string-length (hash-ref part 'data "")))]
                       [(hash? part) (hash-ref part 'text (format "~a" part))]
                       [else (format "~a" part)]))
                   "\n")]

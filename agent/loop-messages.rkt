@@ -127,15 +127,28 @@
 ;; Merge consecutive messages with the same role.
 ;; Some providers (GLM, some OpenAI-compatible) reject consecutive same-role messages.
 (define (merge-consecutive-roles msgs)
-  (reverse (for/fold ([acc '()]) ([msg (in-list msgs)])
-             (cond
-               [(null? acc) (list msg)]
-               [(equal? (hash-ref msg 'role #f) (hash-ref (car acc) 'role #f))
-                ;; Same role: merge content
-                (define new-content
-                  (string-append (hash-ref (car acc) 'content "") "\n\n" (hash-ref msg 'content "")))
-                (cons (hash-set (car acc) 'content new-content) (cdr acc))]
-               [else (cons msg acc)]))))
+  (reverse
+   (for/fold ([acc '()]) ([msg (in-list msgs)])
+     (cond
+       [(null? acc) (list msg)]
+       [(equal? (hash-ref msg 'role #f) (hash-ref (car acc) 'role #f))
+        ;; Same role: merge content
+        ;; M6: handle both string content and list content (image blocks)
+        (define prev-content (hash-ref (car acc) 'content ""))
+        (define this-content (hash-ref msg 'content ""))
+        (define new-content
+          (cond
+            [(and (string? prev-content) (string? this-content))
+             (string-append prev-content "\n\n" this-content)]
+            [(list? prev-content)
+             (append prev-content
+                     (if (list? this-content)
+                         this-content
+                         (list this-content)))]
+            [(list? this-content) (append (list prev-content) this-content)]
+            [else (string-append (format "~a" prev-content) "\n\n" (format "~a" this-content))]))
+        (cons (hash-set (car acc) 'content new-content) (cdr acc))]
+       [else (cons msg acc)]))))
 
 ;; ============================================================
 ;; collect-system-messages-front
@@ -189,10 +202,7 @@
                                                              (image-part-data ip))
                                                      'detail
                                                      (or (image-part-detail ip) "auto"))))])
-                (list (hasheq 'role
-                              "user"
-                              'content
-                              (cons text-block image-blocks)))))]
+                (list (hasheq 'role "user" 'content (cons text-block image-blocks)))))]
 
          ;; assistant -> text + optional tool_calls
          [(eq? role 'assistant)

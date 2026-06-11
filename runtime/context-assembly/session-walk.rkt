@@ -78,28 +78,30 @@
 ;; Preserves first and last lines with a [... N lines truncated ...] indicator.
 (define MAX-TOOL-RESULT-CHARS 8000)
 
-
 ;; ---------------------------------------------------------------------------
 ;; Ephemeral vision context management (W3: strip old image-parts)
 ;; ---------------------------------------------------------------------------
 
+;; L8: Maximum age (turns) before stripping images from context
 (define default-vision-ephemeral-turns 5)
 
 (define (strip-image-parts msg [max-age default-vision-ephemeral-turns])
   ;; Replace image-part content with text summary when age exceeds threshold.
   ;; Non-image content is preserved unchanged.
   (define content (message-content msg))
-  (define has-images? (for/or ([p (in-list content)]) (image-part? p)))
+  (define has-images?
+    (for/or ([p (in-list content)])
+      (image-part? p)))
   (if (not has-images?)
       msg
-      (struct-copy message msg
+      (struct-copy message
+                   msg
                    [content
                     (for/list ([p (in-list content)])
                       (if (image-part? p)
-                          (make-text-part
-                           (format "[screenshot: ~a, ~a bytes expired]"
-                                   (image-part-mime-type p)
-                                   (string-length (image-part-data p))))
+                          (make-text-part (format "[screenshot: ~a, ~a bytes expired]"
+                                                  (image-part-mime-type p)
+                                                  (string-length (image-part-data p))))
                           p))])))
 
 (define (summarize-tool-result entry)
@@ -108,9 +110,13 @@
   ;; Without this, large binary/hash tool results bypass truncation entirely.
   (define text
     (string-join (for/list ([part (in-list content)]
-                            #:when (or (text-part? part) (tool-result-part? part)))
+                            #:when (or (text-part? part) (tool-result-part? part) (image-part? part)))
                    (cond
                      [(text-part? part) (text-part-text part)]
+                     [(image-part? part)
+                      (format "[image: ~a, ~a chars]"
+                              (image-part-mime-type part)
+                              (string-length (image-part-data part)))]
                      [(tool-result-part? part)
                       (result-content->string (tool-result-part-content part) #:handle-hash? #t)]
                      [else ""]))
@@ -136,7 +142,7 @@
 (define (entry->context-message entry)
   (define kind (message-kind entry))
   (match kind
-    [(or 'message) entry]
+    [(or 'message) (strip-image-parts entry)]
     ['compaction-summary (struct-copy message entry [role 'user])]
     ['branch-summary (struct-copy message entry [role 'user])]
     [(or 'session-info 'model-change 'thinking-level-change) #f]

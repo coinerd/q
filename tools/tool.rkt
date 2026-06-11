@@ -23,6 +23,7 @@
          (only-in "../util/cancellation.rkt" cancellation-token?)
          (only-in "../runtime/settings.rkt" q-settings?)
          (only-in "../tools/permission-gate.rkt" permission-config?)
+         (only-in "../util/content/content-parts.rkt" image-part? content-part->jsexpr)
          (only-in "../util/tool/tool-types.rkt"
                   tool-call
                   tool-call?
@@ -74,7 +75,7 @@
          (contract-out
           [make-tool-result (-> (or/c string? hash? list?) (or/c hash? #f) boolean? tool-result?)]
           [make-error-result (-> string? tool-result?)]
-          [make-success-result (->* ((or/c string? hash? list?)) ((or/c hash? #f)) tool-result?)])
+          [make-success-result (->* ((or/c string? hash? list? image-part?)) ((or/c hash? #f)) tool-result?)])
          tool-result-content
          tool-result-details
          tool-result-is-error?
@@ -217,9 +218,13 @@
   (make-tool-result (list (hasheq 'type "text" 'text message)) (hasheq) #t))
 
 (define (make-success-result content [details (hasheq)])
-  (unless (json-serializable? content)
-    (raise-argument-error 'make-success-result "JSON-serializable content" content))
-  (make-tool-result content details #f))
+  (define serializable-content
+    (cond
+      [(image-part? content) (content-part->jsexpr content)]
+      [else content]))
+  (unless (json-serializable? serializable-content)
+    (raise-argument-error 'make-success-result "JSON-serializable content" serializable-content))
+  (make-tool-result serializable-content details #f))
 
 ;; ============================================================
 ;; Tool result validation

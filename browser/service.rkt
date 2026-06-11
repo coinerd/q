@@ -9,6 +9,7 @@
          (only-in racket/random crypto-random-bytes)
          (only-in file/sha1 bytes->hex-string)
          "types.rkt"
+         (only-in "adapters/playwright-sidecar.rkt" uuid-string)
          "adapter.rkt"
          "policy.rkt"
          "session.rkt"
@@ -196,6 +197,13 @@
   (define enforced-result (enforce-screenshot-max-bytes result max-bytes))
 
   (log-browser-action! session-id 'screenshot enforced-result artifact-dir)
+  ;; M2: Emit screenshot-captured event
+  (define bus (secure-browser-service-event-bus svc))
+  (emit-browser-event! bus 'browser.screenshot-captured session-id
+                       (hash 'size (if (browser-observation-screenshot-bytes enforced-result)
+                                       (bytes-length (browser-observation-screenshot-bytes enforced-result))
+                                       0)
+                             'mime (or (browser-observation-screenshot-mime enforced-result) "unknown")))
   enforced-result)
 
 ;; ---------------------------------------------------------------------------
@@ -225,8 +233,10 @@
     [(not raw) obs] ; no screenshot bytes
     [(<= (bytes-length raw) max-bytes) obs] ; within limit
     [else
+     ;; H4: Return #f (no screenshot) instead of corrupt truncated bytes
      (struct-copy browser-observation obs
-                  [screenshot-bytes (subbytes raw 0 max-bytes)])]))
+                  [screenshot-bytes #f]
+                  [screenshot-mime #f])]))
 
 
 ;; ---------------------------------------------------------------------------
@@ -234,14 +244,9 @@
 ;; ---------------------------------------------------------------------------
 
 (define (generate-session-id)
+  ;; L1: Use uuid-string from playwright-sidecar.rkt (DRY)
   ;; Crypto-quality UUID prefixed with "bs-" for browser session
-  (define bs (bytes->hex-string (crypto-random-bytes 16)))
-  (define uuid (string-append (substring bs 0 8) "-"
-                              (substring bs 8 12) "-"
-                              "4" (substring bs 13 16) "-"
-                              (substring bs 16 20) "-"
-                              (substring bs 20 32)))
-  (string-append "bs-" uuid))
+  (string-append "bs-" (uuid-string)))
 
 ;; ---------------------------------------------------------------------------
 ;; Helpers

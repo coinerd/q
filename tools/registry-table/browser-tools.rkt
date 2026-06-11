@@ -80,7 +80,7 @@
    ;; browser_click (HIGH risk)
    (tool-spec
     "browser_click"
-    "Click an element on the page. Use [q-id=\"N\"] selector from the interactiveElements in the most recent browser_observe result."
+    "Click an element on the page. Use [q-id=\"N\"] selector from the interactiveElements in the most recent browser_observe result (e.g. [q-id=\"3\"])."
     (hasheq 'type
             "object"
             'required
@@ -96,7 +96,7 @@
     "Clicking may trigger side effects. Prefer observe before click.")
    ;; browser_type (HIGH risk)
    (tool-spec "browser_type"
-              "Type text into an input element. Use [q-id=\"N\"] selector from the interactiveElements in the most recent browser_observe result."
+              "Type text into an input element. Use [q-id=\"N\"] selector from the interactiveElements in the most recent browser_observe result (e.g. [q-id=\"3\"])."
               (hasheq 'type
                       "object"
                       'required
@@ -132,7 +132,7 @@
    ;; browser_extract (LOW risk)
    (tool-spec
     "browser_extract"
-    "Extract structured data from a page element. Use [q-id=\"N\"] selector from interactiveElements for precise targeting."
+    "Extract structured data from a page element. Use [q-id=\"N\"] selector from interactiveElements for precise targeting (e.g. [q-id=\"3\"])."
     (hasheq
      'type
      "object"
@@ -160,7 +160,7 @@
      (hasheq 'session-id
              (hasheq 'type "string" 'description "Browser session ID")
              'selector
-             (hasheq 'type "string" 'description "CSS selector to screenshot specific element")))
+             (hasheq 'type "string" 'description "CSS selector or [q-id=\"N\"] to screenshot specific element (e.g. [q-id=\"3\"])")))
     handle-browser-screenshot
     #f)
    ;; browser_scroll (LOW risk)
