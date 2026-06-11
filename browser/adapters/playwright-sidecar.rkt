@@ -74,6 +74,9 @@
 (define (make-reader-body state)
   (define pending (playwright-sidecar-state-pending-box state))
   (define cfg (playwright-sidecar-state-config state))
+  ;; F-08: cfg is captured at thread creation. During restart, the old reader
+  ;; is killed via custodian-shutdown-all before launch-sidecar-process! creates
+  ;; a new state, so this closure always refers to the live config.
   (lambda ()
     (define in (playwright-sidecar-state-stdout-port state))
     (let loop ()
