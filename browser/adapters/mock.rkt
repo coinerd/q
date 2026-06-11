@@ -47,6 +47,7 @@
 (define (make-default-observation #:url [url "about:blank"])
   (browser-observation url "Mock Page" "mock text content" "visible mock text"
                        #f #f #f #f '() '() (hash 'width 1280 'height 720)
+                       '() ; interactive-elements
                        (hash 'mock #t)))
 
 ;; ---------------------------------------------------------------------------
@@ -106,7 +107,7 @@
   (define resp (hash-ref (mock-browser-adapter-responses adapter) 'screenshot #f))
   (or resp (browser-observation "mock://screenshot" "Screenshot" "" ""
                                  #f #f format (make-bytes 10 0) '() '()
-                                 (hash 'width 1280 'height 720) (hash 'mock #t))))
+                                 (hash 'width 1280 'height 720) '() (hash 'mock #t))))
 
 ;; ---------------------------------------------------------------------------
 ;; Helpers

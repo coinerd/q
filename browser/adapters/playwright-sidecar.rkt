@@ -292,6 +292,7 @@
                          (hash-ref data 'consoleErrors '())
                          '() ; network-requests
                          (hash-ref data 'viewportSize (hasheq 'width 1280 'height 720))
+                         (hash-ref data 'interactiveElements '())
                          #f)) ; metadata
 
   ;; Adapter callback implementations
