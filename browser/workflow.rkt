@@ -7,9 +7,10 @@
 
 (require "types.rkt"
          "service.rkt"
+         racket/contract
          "../util/error/errors.rkt")
 
-(provide browser-check-local-app)
+(provide (contract-out [browser-check-local-app (-> hash? hash?)]))
 
 ;; ---------------------------------------------------------------------------
 ;; browser-check-local-app — Quick local app health check

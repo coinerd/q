@@ -118,6 +118,34 @@
   (define h (observation->hash obs))
   (check-equal? (hash-ref h 'dom-summary) "small summary"))
 
+;; ---------------------------------------------------------------------------
+;; F-07: Boundary tests for truncation
+;; ---------------------------------------------------------------------------
+
+(test-case "observation->hash: exact boundary — 4000 chars unchanged"
+  (define obs (make-big-observation 4000))
+  (define h (observation->hash obs))
+  (check-equal? (string-length (hash-ref h 'text-content)) 4000)
+  (check-false (string-contains? (hash-ref h 'text-content) "truncated")))
+
+(test-case "observation->hash: exact boundary — 4001 chars triggers truncation"
+  (define obs (make-big-observation 4001))
+  (define h (observation->hash obs))
+  (define tc (hash-ref h 'text-content))
+  (check-true (< (string-length tc) 4020))
+  (check-true (string-contains? tc "(truncated)")))
+
+(test-case "observation->hash: empty string preserved"
+  (define obs (make-big-observation 0))
+  (define h (observation->hash obs))
+  (check-equal? (hash-ref h 'text-content) ""))
+
+(test-case "observation->hash: dom-summary #f preserved"
+  (define obs
+    (browser-observation "https://example.com" "Title" "short" "short" #f #f #f #f '() '() #f '() #f))
+  (define h (observation->hash obs))
+  (check-false (hash-ref h 'dom-summary)))
+
 (test-case "summarize-tool-result truncates multi-line text > 40 lines"
   ;; 50 lines × 200 chars = 10000 chars, exceeds 8000 limit
   (define many-lines
