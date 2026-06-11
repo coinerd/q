@@ -104,6 +104,8 @@
                                         timeout-ms
                                         'pending-sema
                                         pending-sema
+                                        'restart-sema
+                                        (make-semaphore 1)
                                         'sidecar-path
                                         sidecar-path
                                         'node-path
@@ -215,9 +217,11 @@
     [else (hash-set! (playwright-sidecar-state-pending-box state) id ch)])
   (define out (playwright-sidecar-state-stdin-port state))
   (define req (hasheq 'id id 'type type 'params params))
-  (write-string (jsexpr->string req) out)
-  (newline out)
-  (flush-output out)
+  ;; SEC-09: Wrap port write to convert exn:fail? to q-browser-error
+  (with-handlers ([exn:fail? (lambda (e) (raise-browser-error "Sidecar port closed" 'sidecar-crash))])
+    (write-string (jsexpr->string req) out)
+    (newline out)
+    (flush-output out))
   (define tmout (or timeout-ms (hash-ref (playwright-sidecar-state-config state) 'timeout-ms 10000)))
   (define result (sync/timeout (/ tmout 1000.0) ch))
   (cond
@@ -266,67 +270,85 @@
       (send-command! state type params #:timeout-ms timeout-ms))))
 
 (define (restart-sidecar! state)
-  (with-handlers ([exn:fail? void])
-    (shutdown-sidecar! state #:timeout-ms 3000))
-  ;; C1: Actually relaunch the sidecar process
+  ;; SEC-01: Guard concurrent restart with semaphore
   (define cfg (playwright-sidecar-state-config state))
-  (define sidecar-path (hash-ref cfg 'sidecar-path #f))
-  (when sidecar-path
-    (define node-path (hash-ref cfg 'node-path "node"))
-    (define headless? (hash-ref cfg 'headless? #t))
-    (define timeout-ms (hash-ref cfg 'timeout-ms 10000))
-    (define node-exe (or (find-executable-path node-path) node-path))
-    (define cust (make-custodian))
-    (set-playwright-sidecar-state-custodian! state cust)
-    (parameterize ([current-custodian cust])
-      (define-values (sp stdout-in stdin-out stderr-in)
-        (subprocess #f
-                    #f
-                    #f
-                    node-exe
-                    sidecar-path
-                    (format "--headless=~a" (if headless? "true" "false"))))
-      ;; Drain stderr
-      (thread (lambda ()
-                (let loop ()
-                  (define line (read-line stderr-in 'any))
-                  (unless (eof-object? line)
-                    (loop)))))
-      (set-playwright-sidecar-state-process! state sp)
-      (set-playwright-sidecar-state-stdin-port! state stdin-out)
-      (set-playwright-sidecar-state-stdout-port! state stdout-in)
-      ;; H2/H3: Restart reader and heartbeat threads
-      (define (reader-body)
-        (define in (playwright-sidecar-state-stdout-port state))
-        (let loop ()
-          (define line (read-line in 'any))
-          (cond
-            [(eof-object? line) (void)] ; sidecar died again
-            [else
-             (with-handlers ([exn:fail? void])
-               (define resp (string->jsexpr line))
-               (define id (hash-ref resp 'id #f))
-               (when id
-                 (define sema (hash-ref cfg 'pending-sema #f))
-                 (when sema
-                   (call-with-semaphore sema
-                                        (lambda ()
-                                          (define pending
-                                            (playwright-sidecar-state-pending-box state))
-                                          (define ch (hash-ref pending id #f))
-                                          (when ch
-                                            (hash-remove! pending id)
-                                            (async-channel-put ch resp)))))))
-             (loop)])))
-      (define reader (thread reader-body))
-      (set-playwright-sidecar-state-reader-thread! state reader)
-      ;; Restart heartbeat
-      (start-heartbeat! state)))
-  ;; H1: Always increment restart count (even without sidecar-path)
-  (set-playwright-sidecar-state-config!
-   state
-   (hash-set cfg 'restart-count (add1 (hash-ref cfg 'restart-count 0))))
-  (sleep 0.5))
+  (define restart-sema (hash-ref cfg 'restart-sema #f))
+  (define (do-restart)
+    (with-handlers ([exn:fail? void])
+      (shutdown-sidecar! state #:timeout-ms 3000))
+    ;; C1: Actually relaunch the sidecar process
+    (define sidecar-path (hash-ref cfg 'sidecar-path #f))
+    (when sidecar-path
+      (with-handlers ([exn:fail? (lambda (e)
+                                   ;; SEC-04: Clear state on launch failure for clear error messages
+                                   (set-playwright-sidecar-state-process! state #f)
+                                   (set-playwright-sidecar-state-stdin-port! state #f)
+                                   (set-playwright-sidecar-state-stdout-port! state #f)
+                                   (set-playwright-sidecar-state-reader-thread! state #f)
+                                   (raise-browser-error (format "Sidecar restart failed: ~a"
+                                                                (exn-message e))
+                                                        'sidecar-crash))])
+        (define node-path (hash-ref cfg 'node-path "node"))
+        (define headless? (hash-ref cfg 'headless? #t))
+        (define timeout-ms (hash-ref cfg 'timeout-ms 10000))
+        (define node-exe (or (find-executable-path node-path) node-path))
+        ;; SEC-04: Validate paths before subprocess creation
+        (unless (file-exists? sidecar-path)
+          (error (format "Sidecar script not found: ~a" sidecar-path)))
+        (define cust (make-custodian))
+        (set-playwright-sidecar-state-custodian! state cust)
+        (parameterize ([current-custodian cust])
+          (define-values (sp stdout-in stdin-out stderr-in)
+            (subprocess #f
+                        #f
+                        #f
+                        node-exe
+                        sidecar-path
+                        (format "--headless=~a" (if headless? "true" "false"))))
+          ;; Drain stderr
+          (thread (lambda ()
+                    (let loop ()
+                      (define line (read-line stderr-in 'any))
+                      (unless (eof-object? line)
+                        (loop)))))
+          (set-playwright-sidecar-state-process! state sp)
+          (set-playwright-sidecar-state-stdin-port! state stdin-out)
+          (set-playwright-sidecar-state-stdout-port! state stdout-in)
+          ;; H2/H3: Restart reader and heartbeat threads
+          (define (reader-body)
+            (define in (playwright-sidecar-state-stdout-port state))
+            (let loop ()
+              (define line (read-line in 'any))
+              (cond
+                [(eof-object? line) (void)] ; sidecar died again
+                [else
+                 (with-handlers ([exn:fail? void])
+                   (define resp (string->jsexpr line))
+                   (define id (hash-ref resp 'id #f))
+                   (when id
+                     (define sema (hash-ref cfg 'pending-sema #f))
+                     (when sema
+                       (call-with-semaphore sema
+                                            (lambda ()
+                                              (define pending
+                                                (playwright-sidecar-state-pending-box state))
+                                              (define ch (hash-ref pending id #f))
+                                              (when ch
+                                                (hash-remove! pending id)
+                                                (async-channel-put ch resp)))))))
+                 (loop)])))
+          (define reader (thread reader-body))
+          (set-playwright-sidecar-state-reader-thread! state reader)
+          ;; Restart heartbeat
+          (start-heartbeat! state))))
+    ;; H1: Always increment restart count (even without sidecar-path)
+    (set-playwright-sidecar-state-config!
+     state
+     (hash-set cfg 'restart-count (add1 (hash-ref cfg 'restart-count 0))))
+    (sleep 0.5))
+  (if restart-sema
+      (call-with-semaphore restart-sema do-restart)
+      (do-restart)))
 
 ;; ---------------------------------------------------------------------------
 ;; Adapter interface
@@ -337,15 +359,20 @@
                                  #:timeout-ms [timeout-ms 10000]
                                  #:headless? [headless? #t])
   (define state-box (box #f))
+  (define launch-sema (make-semaphore 1))
 
   (define (ensure-state)
+    ;; SEC-02: Double-checked locking prevents TOCTOU race
     (or (unbox state-box)
-        (let ([s (launch-sidecar! sidecar-path
-                                  #:node-path node-path
-                                  #:timeout-ms timeout-ms
-                                  #:headless? headless?)])
-          (set-box! state-box s)
-          s)))
+        (call-with-semaphore launch-sema
+                             (lambda ()
+                               (or (unbox state-box)
+                                   (let ([s (launch-sidecar! sidecar-path
+                                                             #:node-path node-path
+                                                             #:timeout-ms timeout-ms
+                                                             #:headless? headless?)])
+                                     (set-box! state-box s)
+                                     s))))))
 
   ;; Helper: map action to sidecar command
   (define (action->command action)
@@ -365,7 +392,7 @@
        (list "screenshot" (hasheq 'selector selector 'fullPage full-page?))]
       ;; wait is just observe with a selector
       [(browser-action-wait selector timeout-ms) (list "observe" (hasheq 'selector selector))]
-      [_ (error 'playwright-adapter "Unknown action: ~a" action)]))
+      [_ (raise-browser-error (format "Unknown action: ~a" action) 'adapter-error)]))
 
   ;; Helper to build observation from sidecar response
   ;; H8: Normalize string-keyed hashes from sidecar JSON to symbol-keyed
