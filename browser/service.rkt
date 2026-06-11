@@ -14,6 +14,12 @@
          "settings.rkt"
          "../util/error/errors.rkt")
 
+;; Re-export settings for enforce-screenshot-max-bytes
+(require (only-in "settings.rkt"
+                  browser-settings-screenshot-max-bytes
+                  default-browser-settings
+                  current-browser-settings))
+
 (provide secure-browser-service?
          make-secure-browser-service
          browser-open!
@@ -22,6 +28,7 @@
          browser-close!
          browser-navigate!
          browser-screenshot!
+         enforce-screenshot-max-bytes
          current-browser-service)
 
 ;; ---------------------------------------------------------------------------
@@ -180,8 +187,13 @@
     (with-browser-error-wrap
      (browser-adapter-screenshot adapter session-id #:selector selector #:full-page? #f)))
 
-  (log-browser-action! session-id 'screenshot result artifact-dir)
-  result)
+  ;; W1: enforce screenshot-max-bytes from policy settings
+  (define max-bytes (browser-settings-screenshot-max-bytes
+                     (or (current-browser-settings) (default-browser-settings))))
+  (define enforced-result (enforce-screenshot-max-bytes result max-bytes))
+
+  (log-browser-action! session-id 'screenshot enforced-result artifact-dir)
+  enforced-result)
 
 ;; ---------------------------------------------------------------------------
 ;; Close session
@@ -198,6 +210,20 @@
   (browser-session-manager-destroy! mgr session-id)
   (log-browser-action! session-id 'close 'ok artifact-dir)
   (emit-browser-event! bus 'browser.session-closed session-id (hash)))
+
+
+;; ---------------------------------------------------------------------------
+;; Screenshot size enforcement (W1: settings enforcement)
+;; ---------------------------------------------------------------------------
+
+(define (enforce-screenshot-max-bytes obs max-bytes)
+  (define raw (browser-observation-screenshot-bytes obs))
+  (cond
+    [(not raw) obs] ; no screenshot bytes
+    [(<= (bytes-length raw) max-bytes) obs] ; within limit
+    [else
+     (struct-copy browser-observation obs
+                  [screenshot-bytes (subbytes raw 0 max-bytes)])]))
 
 ;; ---------------------------------------------------------------------------
 ;; Helpers
