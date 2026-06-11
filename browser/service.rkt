@@ -5,10 +5,7 @@
 ;; Security chokepoint composing policy + session + adapter + audit.
 ;; All browser operations flow through this service.
 
-(require racket/match
-         (only-in racket/random crypto-random-bytes)
-         (only-in file/sha1 bytes->hex-string)
-         "types.rkt"
+(require "types.rkt"
          (only-in "adapters/playwright-sidecar.rkt" uuid-string)
          "adapter.rkt"
          "policy.rkt"
@@ -192,18 +189,23 @@
      (browser-adapter-screenshot adapter session-id #:selector selector #:full-page? #f)))
 
   ;; W1: enforce screenshot-max-bytes from policy settings
-  (define max-bytes (browser-settings-screenshot-max-bytes
-                     (or (current-browser-settings) (default-browser-settings))))
+  (define max-bytes
+    (browser-settings-screenshot-max-bytes (or (current-browser-settings)
+                                               (default-browser-settings))))
   (define enforced-result (enforce-screenshot-max-bytes result max-bytes))
 
   (log-browser-action! session-id 'screenshot enforced-result artifact-dir)
   ;; M2: Emit screenshot-captured event
   (define bus (secure-browser-service-event-bus svc))
-  (emit-browser-event! bus 'browser.screenshot-captured session-id
-                       (hash 'size (if (browser-observation-screenshot-bytes enforced-result)
-                                       (bytes-length (browser-observation-screenshot-bytes enforced-result))
-                                       0)
-                             'mime (or (browser-observation-screenshot-mime enforced-result) "unknown")))
+  (emit-browser-event! bus
+                       'browser.screenshot-captured
+                       session-id
+                       (hash 'size
+                             (if (browser-observation-screenshot-bytes enforced-result)
+                                 (bytes-length (browser-observation-screenshot-bytes enforced-result))
+                                 0)
+                             'mime
+                             (or (browser-observation-screenshot-mime enforced-result) "unknown")))
   enforced-result)
 
 ;; ---------------------------------------------------------------------------
@@ -222,7 +224,6 @@
   (log-browser-action! session-id 'close 'ok artifact-dir)
   (emit-browser-event! bus 'browser.session-closed session-id (hash)))
 
-
 ;; ---------------------------------------------------------------------------
 ;; Screenshot size enforcement (W1: settings enforcement)
 ;; ---------------------------------------------------------------------------
@@ -232,12 +233,8 @@
   (cond
     [(not raw) obs] ; no screenshot bytes
     [(<= (bytes-length raw) max-bytes) obs] ; within limit
-    [else
-     ;; H4: Return #f (no screenshot) instead of corrupt truncated bytes
-     (struct-copy browser-observation obs
-                  [screenshot-bytes #f]
-                  [screenshot-mime #f])]))
-
+    ;; H4: Return #f (no screenshot) instead of corrupt truncated bytes
+    [else (struct-copy browser-observation obs [screenshot-bytes #f] [screenshot-mime #f])]))
 
 ;; ---------------------------------------------------------------------------
 ;; Session ID generation (W2: crypto-quality entropy)

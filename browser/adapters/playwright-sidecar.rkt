@@ -237,13 +237,12 @@
 (define (send-command! state type params #:timeout-ms [timeout-ms #f])
   (define id (uuid-string))
   (define ch (make-async-channel))
-  ;; C2: Use pending semaphore for thread-safe hash mutation
+  ;; C2 + SEC-08: Require pending semaphore; no unsafe fallback
   (define sema (hash-ref (playwright-sidecar-state-config state) 'pending-sema #f))
-  (cond
-    [sema
-     (call-with-semaphore sema
-                          (lambda () (hash-set! (playwright-sidecar-state-pending-box state) id ch)))]
-    [else (hash-set! (playwright-sidecar-state-pending-box state) id ch)])
+  (unless sema
+    (raise-browser-error "Sidecar missing pending semaphore" 'adapter-error))
+  (call-with-semaphore sema
+                       (lambda () (hash-set! (playwright-sidecar-state-pending-box state) id ch)))
   ;; SEC-15: Detect dead sidecar immediately
   (when (playwright-sidecar-state-dead? state)
     (raise-browser-error "Sidecar is dead (reader EOF)" 'sidecar-crash))
@@ -256,11 +255,8 @@
     (flush-output out))
   (define tmout (or timeout-ms (hash-ref (playwright-sidecar-state-config state) 'timeout-ms 10000)))
   (define result (sync/timeout (/ tmout 1000.0) ch))
-  (cond
-    [sema
-     (call-with-semaphore sema
-                          (lambda () (hash-remove! (playwright-sidecar-state-pending-box state) id)))]
-    [else (hash-remove! (playwright-sidecar-state-pending-box state) id)])
+  (call-with-semaphore sema
+                       (lambda () (hash-remove! (playwright-sidecar-state-pending-box state) id)))
   (cond
     [(not result)
      (raise-browser-error (format "Sidecar command '~a' timed out after ~ams" type tmout) 'timeout)]
