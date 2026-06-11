@@ -3,6 +3,37 @@
 // Returns: { url, title, textContent, visibleText, domSummary,
 //            accessibilityTree, consoleErrors, viewportSize }
 
+
+// ---------------------------------------------------------------------------
+// q-id injection: annotate interactive elements for LLM targeting
+// ---------------------------------------------------------------------------
+
+async function injectQIds(page) {
+  return page.evaluate(() => {
+    const INTERACTIVE_SELECTOR =
+      'a, button, input, select, textarea, [role="button"], [role="link"], [role="tab"], [onclick]';
+    const MAX_ELEMENTS = 200;
+    const elements = Array.from(document.querySelectorAll(INTERACTIVE_SELECTOR)).slice(0, MAX_ELEMENTS);
+    let counter = 0;
+    const items = [];
+    for (const el of elements) {
+      const qId = String(counter++);
+      el.setAttribute('q-id', qId);
+      items.push({
+        qId,
+        tag: el.tagName.toLowerCase(),
+        role: el.getAttribute('role') || null,
+        text: (el.textContent || '').substring(0, 100).trim(),
+        href: el.getAttribute('href') || null,
+        placeholder: el.getAttribute('placeholder') || null,
+        type: el.getAttribute('type') || null,
+        ariaLabel: el.getAttribute('aria-label') || null
+      });
+    }
+    return items;
+  });
+}
+
 async function extract(page) {
   const [url, title, textContent, visibleText, domSummary, viewportSize] = await Promise.all([
     page.url(),
@@ -41,15 +72,19 @@ async function extract(page) {
     page.viewportSize()
   ]);
 
+  // Inject q-id annotations on interactive elements (W0: DOM tagging)
+  const interactiveElements = await injectQIds(page);
+
   return {
     url,
     title,
     textContent: textContent.substring(0, 50000),
     visibleText: visibleText.substring(0, 50000),
     domSummary,
+    interactiveElements,
     viewportSize,
     consoleErrors: [] // Filled by caller if console listener attached
   };
 }
 
-module.exports = { extract };
+module.exports = { extract, injectQIds };
