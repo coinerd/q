@@ -10,7 +10,11 @@
 (require racket/list
          racket/match
          racket/string
-         (only-in "../../util/content/content-parts.rkt" make-text-part)
+         (only-in "../../util/content/content-parts.rkt"
+                  make-text-part
+                  image-part?
+                  image-part-mime-type
+                  image-part-data)
          (only-in "../../util/message/message.rkt"
                   message
                   message-id
@@ -29,7 +33,8 @@
          assemble-context
          split-at-compaction
          entry->context-message
-         summarize-tool-result)
+         summarize-tool-result
+         strip-image-parts)
 
 ;; ---------------------------------------------------------------------------
 ;; Session tree walk
@@ -72,6 +77,30 @@
 ;; Truncates tool/bash results exceeding max-chars to a summary.
 ;; Preserves first and last lines with a [... N lines truncated ...] indicator.
 (define MAX-TOOL-RESULT-CHARS 8000)
+
+
+;; ---------------------------------------------------------------------------
+;; Ephemeral vision context management (W3: strip old image-parts)
+;; ---------------------------------------------------------------------------
+
+(define default-vision-ephemeral-turns 5)
+
+(define (strip-image-parts msg [max-age default-vision-ephemeral-turns])
+  ;; Replace image-part content with text summary when age exceeds threshold.
+  ;; Non-image content is preserved unchanged.
+  (define content (message-content msg))
+  (define has-images? (for/or ([p (in-list content)]) (image-part? p)))
+  (if (not has-images?)
+      msg
+      (struct-copy message msg
+                   [content
+                    (for/list ([p (in-list content)])
+                      (if (image-part? p)
+                          (make-text-part
+                           (format "[screenshot: ~a, ~a bytes expired]"
+                                   (image-part-mime-type p)
+                                   (string-length (image-part-data p))))
+                          p))])))
 
 (define (summarize-tool-result entry)
   (define content (message-content entry))
