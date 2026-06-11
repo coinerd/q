@@ -36,7 +36,8 @@
                                                            '()
                                                            '()
                                                            #f
-                                                           (hash)))
+                                                           (hash)
+                                                           #f))
                           #:act (lambda (sid action) 'ok)
                           #:screenshot (lambda (sid sel fp) 'ok)))
   (define svc
@@ -54,7 +55,10 @@
                                                               #f
                                                               60000
                                                               'ephemeral
-                                                              #t)))
+                                                              #t
+                                                              #f
+                                                              "auto"
+                                                              5)))
   (define-values (sid result) (browser-open! svc "https://example.com"))
   (check-equal? result 'ok)
   (check-not-false opened-with)
@@ -81,14 +85,29 @@
                                                            '()
                                                            '()
                                                            #f
-                                                           (hash)))
+                                                           (hash)
+                                                           #f))
                           #:act (lambda (sid action) 'ok)
                           #:screenshot (lambda (sid sel fp) 'ok)))
   (define svc
-    (make-secure-browser-service
-     test-adapter
-     #:settings
-     (browser-settings #t '("https") '() '(3000) #t '() 3 100 30000 524288 #f 60000 'ephemeral #t)))
+    (make-secure-browser-service test-adapter
+                                 #:settings (browser-settings #t
+                                                              '("https")
+                                                              '()
+                                                              '(3000)
+                                                              #t
+                                                              '()
+                                                              3
+                                                              100
+                                                              30000
+                                                              524288
+                                                              #f
+                                                              60000
+                                                              'ephemeral
+                                                              #t
+                                                              #f
+                                                              "auto"
+                                                              5)))
   (define-values (sid _) (browser-open! svc "https://example.com"))
   (define obs (browser-observe! svc sid #:selector "h1"))
   (check-not-false observed-with)
@@ -113,16 +132,31 @@
                                                            '()
                                                            '()
                                                            #f
-                                                           (hash)))
+                                                           (hash)
+                                                           #f))
                           #:act (lambda (sid action)
                                   (set! acted-with (list sid action))
                                   'clicked)
                           #:screenshot (lambda (sid sel fp) 'ok)))
   (define svc
-    (make-secure-browser-service
-     test-adapter
-     #:settings
-     (browser-settings #t '("https") '() '(3000) #t '() 3 100 30000 524288 #f 60000 'ephemeral #t)))
+    (make-secure-browser-service test-adapter
+                                 #:settings (browser-settings #t
+                                                              '("https")
+                                                              '()
+                                                              '(3000)
+                                                              #t
+                                                              '()
+                                                              3
+                                                              100
+                                                              30000
+                                                              524288
+                                                              #f
+                                                              60000
+                                                              'ephemeral
+                                                              #t
+                                                              #f
+                                                              "auto"
+                                                              5)))
   (define-values (sid _) (browser-open! svc "https://example.com"))
   (define result (browser-act! svc sid (browser-action-click "btn" "click")))
   (check-not-false acted-with)
@@ -149,14 +183,29 @@
                                                            '()
                                                            '()
                                                            #f
-                                                           (hash)))
+                                                           (hash)
+                                                           #f))
                           #:act (lambda (sid action) 'ok)
                           #:screenshot (lambda (sid sel fp) 'ok)))
   (define svc
-    (make-secure-browser-service
-     test-adapter
-     #:settings
-     (browser-settings #t '("https") '() '(3000) #t '() 3 100 30000 524288 #f 60000 'ephemeral #t)))
+    (make-secure-browser-service test-adapter
+                                 #:settings (browser-settings #t
+                                                              '("https")
+                                                              '()
+                                                              '(3000)
+                                                              #t
+                                                              '()
+                                                              3
+                                                              100
+                                                              30000
+                                                              524288
+                                                              #f
+                                                              60000
+                                                              'ephemeral
+                                                              #t
+                                                              #f
+                                                              "auto"
+                                                              5)))
   (define-values (sid _) (browser-open! svc "https://example.com"))
   (browser-navigate! svc sid "https://example.com/page2")
   (check-equal? navigated-with "https://example.com/page2"))
@@ -164,31 +213,47 @@
 (test-case "service browser-screenshot! dispatches via adapter interface"
   (define screenshot-args #f)
   (define test-adapter
-    (make-browser-adapter #:open (lambda (sid target) 'ok)
-                          #:close (lambda (sid) 'ok)
-                          #:navigate (lambda (sid url) 'ok)
-                          #:observe (lambda (sid selector)
-                                      (browser-observation "https://example.com"
-                                                           "Test"
-                                                           "text"
-                                                           "vis"
-                                                           "dom"
-                                                           #f
-                                                           #f
-                                                           #f
-                                                           '()
-                                                           '()
-                                                           #f
-                                                           (hash)))
-                          #:act (lambda (sid action) 'ok)
-                          #:screenshot (lambda (sid sel fp)
-                                         (set! screenshot-args (list sid sel fp))
-                                         'png-bytes)))
+    (make-browser-adapter
+     #:open (lambda (sid target) 'ok)
+     #:close (lambda (sid) 'ok)
+     #:navigate (lambda (sid url) 'ok)
+     #:observe (lambda (sid selector)
+                 (browser-observation "https://example.com"
+                                      "Test"
+                                      "text"
+                                      "vis"
+                                      "dom"
+                                      #f
+                                      #f
+                                      #f
+                                      '()
+                                      '()
+                                      #f
+                                      (hash)
+                                      #f))
+     #:act (lambda (sid action) 'ok)
+     #:screenshot (lambda (sid sel fp)
+                    (set! screenshot-args (list sid sel fp))
+                    (browser-observation "" "" "" "" #f #f "image/png" #"" '() '() #f '() #f))))
   (define svc
-    (make-secure-browser-service
-     test-adapter
-     #:settings
-     (browser-settings #t '("https") '() '(3000) #t '() 3 100 30000 524288 #f 60000 'ephemeral #t)))
+    (make-secure-browser-service test-adapter
+                                 #:settings (browser-settings #t
+                                                              '("https")
+                                                              '()
+                                                              '(3000)
+                                                              #t
+                                                              '()
+                                                              3
+                                                              100
+                                                              30000
+                                                              524288
+                                                              #f
+                                                              60000
+                                                              'ephemeral
+                                                              #t
+                                                              #f
+                                                              "auto"
+                                                              5)))
   (define-values (sid _) (browser-open! svc "https://example.com"))
   (browser-screenshot! svc sid #:selector "body")
   (check-not-false screenshot-args)
@@ -215,14 +280,29 @@
                                                            '()
                                                            '()
                                                            #f
-                                                           (hash)))
+                                                           (hash)
+                                                           #f))
                           #:act (lambda (sid action) 'ok)
                           #:screenshot (lambda (sid sel fp) 'ok)))
   (define svc
-    (make-secure-browser-service
-     test-adapter
-     #:settings
-     (browser-settings #t '("https") '() '(3000) #t '() 3 100 30000 524288 #f 60000 'ephemeral #t)))
+    (make-secure-browser-service test-adapter
+                                 #:settings (browser-settings #t
+                                                              '("https")
+                                                              '()
+                                                              '(3000)
+                                                              #t
+                                                              '()
+                                                              3
+                                                              100
+                                                              30000
+                                                              524288
+                                                              #f
+                                                              60000
+                                                              'ephemeral
+                                                              #t
+                                                              #f
+                                                              "auto"
+                                                              5)))
   (define-values (sid _) (browser-open! svc "https://example.com"))
   (browser-close! svc sid)
   (check-equal? closed-sid sid))
@@ -238,10 +318,24 @@
                           #:act (lambda (sid action) (mock-act mock sid action))
                           #:screenshot (lambda (sid sel fp) (mock-screenshot mock sid sel "png"))))
   (define svc
-    (make-secure-browser-service
-     wrapped-adapter
-     #:settings
-     (browser-settings #t '("https") '() '(3000) #t '() 3 100 30000 524288 #f 60000 'ephemeral #t)))
+    (make-secure-browser-service wrapped-adapter
+                                 #:settings (browser-settings #t
+                                                              '("https")
+                                                              '()
+                                                              '(3000)
+                                                              #t
+                                                              '()
+                                                              3
+                                                              100
+                                                              30000
+                                                              524288
+                                                              #f
+                                                              60000
+                                                              'ephemeral
+                                                              #t
+                                                              #f
+                                                              "auto"
+                                                              5)))
   (define-values (sid result) (browser-open! svc "https://example.com"))
   (check-true (string? sid))
   (check-not-false result))

@@ -43,23 +43,44 @@
                       #f
                       60000
                       'ephemeral
-                      #t))
+                      #t
+                      #f
+                      "auto"
+                      5))
   (make-secure-browser-service adapter #:settings settings))
 
 (define (make-empty-observation [url "https://example.com"])
-  (browser-observation url "Example" "" "" (hasheq) #f #f #f '() '() (hasheq) (hasheq)))
+  (browser-observation url "Example" "" "" (hasheq) #f #f #f '() '() (hasheq) (hasheq) #f))
 
 (define (make-error-act-svc)
   (define adapter
-    (make-browser-adapter #:open (lambda (sid target) (make-empty-observation))
-                          #:close (lambda (sid) (void))
-                          #:navigate (lambda (sid url) (make-empty-observation url))
-                          #:observe (lambda (sid selector) (make-empty-observation))
-                          #:act (lambda (sid action)
-                                  (raise-browser-error "simulated browser action failure"
-                                                       'adapter-error))
-                          #:screenshot (lambda (sid sel fp) #"png")))
-  (make-secure-browser-service adapter))
+    (make-browser-adapter
+     #:open (lambda (sid target) (make-empty-observation))
+     #:close (lambda (sid) (void))
+     #:navigate (lambda (sid url) (make-empty-observation url))
+     #:observe (lambda (sid selector) (make-empty-observation))
+     #:act (lambda (sid action)
+             (raise-browser-error "simulated browser action failure" 'adapter-error))
+     #:screenshot (lambda (sid sel fp)
+                    (browser-observation "" "" "" "" #f #f "image/png" #"" '() '() #f '() #f))))
+  (make-secure-browser-service adapter
+                               #:settings (browser-settings #t
+                                                            '("https" "http")
+                                                            '()
+                                                            '(3000 8080)
+                                                            #t
+                                                            '()
+                                                            3
+                                                            100
+                                                            30000
+                                                            524288
+                                                            #f
+                                                            60000
+                                                            'ephemeral
+                                                            #t
+                                                            #f
+                                                            "auto"
+                                                            5)))
 
 (define (with-svc thunk)
   (parameterize ([current-browser-service (make-test-svc)])
