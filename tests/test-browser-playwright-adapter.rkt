@@ -29,7 +29,7 @@
 ;; ---------------------------------------------------------------------------
 
 (test-case "playwright-sidecar-state struct is transparent"
-  (define st (playwright-sidecar-state #f #f #f (make-hash) #f #f (hasheq) #f))
+  (define st (playwright-sidecar-state #f #f #f (make-hash) #f #f (hasheq) #f #f))
   (check-true (playwright-sidecar-state? st))
   (check-false (playwright-sidecar-state-process st)))
 

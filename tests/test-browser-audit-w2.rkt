@@ -17,7 +17,7 @@
 ;; ---------------------------------------------------------------------------
 
 (test-case "C1: playwright-sidecar-state is transparent with accessors"
-  (define state (playwright-sidecar-state #f #f #f (make-hash) #f #f (hasheq) #f))
+  (define state (playwright-sidecar-state #f #f #f (make-hash) #f #f (hasheq) #f #f))
   (check-true (playwright-sidecar-state? state))
   (check-false (playwright-sidecar-state-process state)))
 
@@ -35,14 +35,14 @@
             0
             'pending-sema
             (make-semaphore 1)))
-  (define state (playwright-sidecar-state #f #f #f (make-hash) #f #f config #f))
+  (define state (playwright-sidecar-state #f #f #f (make-hash) #f #f config #f #f))
   (restart-sidecar! state)
   (check-equal? (hash-ref (playwright-sidecar-state-config state) 'restart-count) 1))
 
 (test-case "H1: double restart increments count twice"
   (define config
     (hasheq 'timeout-ms 5000 'sidecar-path #f 'restart-count 0 'pending-sema (make-semaphore 1)))
-  (define state (playwright-sidecar-state #f #f #f (make-hash) #f #f config #f))
+  (define state (playwright-sidecar-state #f #f #f (make-hash) #f #f config #f #f))
   (restart-sidecar! state)
   (restart-sidecar! state)
   (check-equal? (hash-ref (playwright-sidecar-state-config state) 'restart-count) 2))
@@ -72,7 +72,7 @@
             "node"
             'headless?
             #t))
-  (define state (playwright-sidecar-state #f #f #f pending #f #f config #f))
+  (define state (playwright-sidecar-state #f #f #f pending #f #f config #f #f))
   (restart-sidecar! state)
   (check-equal? (hash-ref (playwright-sidecar-state-config state) 'restart-count) 1))
 
@@ -89,6 +89,7 @@
                               #f
                               #f
                               (hasheq 'sidecar-path #f 'restart-count 0)
+                              #f
                               #f))
   (restart-sidecar! state)
   (check-equal? (hash-ref (playwright-sidecar-state-config state) 'restart-count) 1))
@@ -108,6 +109,7 @@
                               dead-thread
                               (make-custodian)
                               (hasheq 'timeout-ms 5000)
+                              #f
                               #f))
   (start-heartbeat! state)
   (check-not-false (playwright-sidecar-state-heartbeat-thread state)))
