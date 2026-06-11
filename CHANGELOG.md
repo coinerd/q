@@ -1,3 +1,35 @@
+## [0.98.3] — 2026-06-11
+
+### Security & Robustness
+
+- **SEC-09 (CRITICAL)**: Port write errors in `send-command!` now raise `q-browser-error` with category `'sidecar-crash` instead of propagating raw `exn:fail:port` (#7824)
+- **SEC-01 (CRITICAL)**: `restart-sidecar!` guarded by `restart-sema` to prevent concurrent restart races (#7824)
+- **SEC-04 (CRITICAL)**: Subprocess launch failures in `restart-sidecar!` revert state fields to `#f` and raise structured `q-browser-error` (#7824)
+- **SEC-02 (MODERATE)**: `ensure-state` uses double-checked locking with `launch-sema` to prevent TOCTOU orphaned sidecars (#7824)
+- **ERR-01 (MODERATE)**: Bare `(error ...)` in adapter dispatch replaced with `raise-browser-error` (#7824)
+- **SEC-07 (MODERATE)**: `browser-check-local-app` clamps `timeout_ms` to `[1000, 60000]` (#7826)
+- **SEC-10 (MODERATE)**: `restart-sidecar!` readiness probe uses `send-command!` `"ping"` instead of fixed `(sleep 0.5)` (#7826)
+- **SEC-15 (MODERATE)**: Mutable `dead?` flag on `playwright-sidecar-state` detects reader EOF before commands are sent (#7826)
+- **SEC-05 (MODERATE)**: Heartbeat thread reads `reader-thread` from current state each cycle, avoiding stale closure after restart (#7828)
+- **SEC-03 (LOW)**: `browser-session-manager-count` wrapped in `with-session-lock` (#7829)
+- **SEC-06 (LOW)**: Workflow cleanup thunk only swallows `session-expired` errors; real errors re-raised (#7829)
+- **SEC-08 (LOW)**: Removed semaphore fallback in `send-command!`; missing `'pending-sema` now raises `q-browser-error` (#7829)
+- **SEC-13 (LOW)**: DOM traversal in `page-state.js` bails out after 10k elements, returning `scannedCount` (#7829)
+
+### Code Quality
+
+- **DUP-01/02**: Extracted `make-reader-body` and `launch-sidecar-process!` helpers, eliminating ~85 LOC duplication between `launch-sidecar!` and `restart-sidecar!` (#7828)
+- **DEAD-01–05**: Removed unused `ready-ch`, `racket/match` imports, `crypto-random-bytes`, and `bytes->hex-string` (#7829)
+
+### Cross-Provider Vision (GAP-V1)
+
+- **Anthropic**: `anthropic-build-request-body` converts OpenAI-format `image_url` content blocks to Anthropic `image` + `source` blocks (#7830)
+- **Gemini**: `gemini-build-request-body` converts OpenAI-format `image_url` content blocks to Gemini `inline_data` parts (#7830)
+
+### Deferred
+
+- **GAP-V2**: `extensions/image-pipeline.rkt` resize pipeline not yet wired to browser screenshots; documented for v0.99.x (#7830)
+
 ## [0.97.19] - 2026-06-10
 
 ### Changed
