@@ -19,6 +19,17 @@
 - F14 (event wiring table): 6 subscribers in 1 file doesn't justify table abstraction
 - F16 (defaults consolidation): Parameters well-scoped to domains
 
+## [0.98.2] — 2026-06-10
+
+### DOM Tagging & Element Targeting
+
+- **q-id injection**: `injectQIds()` annotates interactive elements with unique `q-id` attributes (#7806)
+- **Accessibility tree**: `extract()` returns `interactiveElements` array (qId, tag, text, href, etc.) (#7806)
+- **Observation parser**: `browser-observation` struct extended with `interactive-elements` field + serialization (#7807)
+- **Tool descriptions**: `browser_click/type/extract` descriptions guide LLMs to use `[q-id="N"]` selectors (#7808)
+- **Regression tests**: Full round-trip and backward compatibility verified (#7809)
+
+
 ## [0.98.1] — 2026-06-10
 
 ### Multimodal Screenshot Pipeline
