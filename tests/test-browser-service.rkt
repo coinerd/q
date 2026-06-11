@@ -154,7 +154,8 @@
 ;; ---------------------------------------------------------------------------
 
 (test-case "error: adapter error wrapped as q-browser-error"
-  (define adapter (make-mock-adapter #:error-mode 'timeout))
+  (define mock (make-mock-adapter #:error-mode 'timeout))
+  (define adapter (wrap-mock-adapter mock))
   (define settings
     (browser-settings #t
                       '("https")

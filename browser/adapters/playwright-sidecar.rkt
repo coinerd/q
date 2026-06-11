@@ -12,6 +12,7 @@
 
 (require racket/match
          racket/async-channel
+         racket/contract
          (only-in file/sha1 bytes->hex-string)
          (only-in racket/random crypto-random-bytes)
          json
@@ -21,18 +22,36 @@
          net/base64)
 
 (provide (struct-out playwright-sidecar-state)
-         launch-sidecar!
-         shutdown-sidecar!
-         send-command!
-         send-command-with-recovery!
-         restart-sidecar!
-         start-heartbeat!
-         heartbeat-interval-secs
-         max-sidecar-restarts
-         uuid-string
-         make-playwright-adapter
-         make-reader-body
-         launch-sidecar-process!)
+         (contract-out
+          [launch-sidecar!
+           (->* [path-string?]
+                [#:node-path string? #:timeout-ms exact-nonnegative-integer? #:headless? boolean?]
+                playwright-sidecar-state?)]
+          [shutdown-sidecar!
+           (->* [playwright-sidecar-state?] [#:timeout-ms exact-nonnegative-integer?] void?)]
+          [send-command!
+           (->* [playwright-sidecar-state? string? hash?]
+                [#:timeout-ms (or/c #f exact-nonnegative-integer?)]
+                any/c)]
+          [send-command-with-recovery!
+           (->* [playwright-sidecar-state? string? hash?]
+                [#:timeout-ms (or/c #f exact-nonnegative-integer?)
+                 #:max-retries exact-nonnegative-integer?]
+                any/c)]
+          [restart-sidecar! (-> playwright-sidecar-state? void?)]
+          [start-heartbeat! (-> playwright-sidecar-state? void?)]
+          [heartbeat-interval-secs (parameter/c real?)]
+          [max-sidecar-restarts exact-nonnegative-integer?]
+          [uuid-string (-> string?)]
+          [make-playwright-adapter
+           (->* [path-string?]
+                [#:node-path string? #:timeout-ms exact-nonnegative-integer? #:headless? boolean?]
+                browser-adapter?)]
+          [make-reader-body (-> playwright-sidecar-state? (-> any))]
+          [launch-sidecar-process!
+           (-> playwright-sidecar-state? path-string? string? boolean? custodian?)])
+         ;; Re-export for adapter.rkt reference
+         browser-adapter?)
 
 ;; ---------------------------------------------------------------------------
 ;; Sidecar state struct

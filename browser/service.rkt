@@ -12,18 +12,32 @@
          "session.rkt"
          "audit.rkt"
          "settings.rkt"
+         racket/contract
          "../util/error/errors.rkt")
 
 (provide secure-browser-service?
-         make-secure-browser-service
-         generate-session-id
-         browser-open!
-         browser-observe!
-         browser-act!
-         browser-close!
-         browser-navigate!
-         browser-screenshot!
-         enforce-screenshot-max-bytes
+         (contract-out
+          [make-secure-browser-service
+           (->*
+            [browser-adapter?]
+            [#:settings browser-settings? #:event-bus any/c #:artifact-dir (or/c #f string? path?)]
+            secure-browser-service?)]
+          [generate-session-id (-> string?)]
+          [browser-open!
+           (->* [secure-browser-service? string?]
+                [#:options any/c]
+                any)] ; returns (values string? any) — adapter determines result type
+          [browser-observe!
+           (->* [secure-browser-service? (or/c #f string?)] [#:selector (or/c #f string?)] any)]
+          [browser-act! (-> secure-browser-service? (or/c #f string?) browser-action? any)]
+          [browser-close! (-> secure-browser-service? (or/c #f string?) void?)]
+          [browser-navigate! (-> secure-browser-service? (or/c #f string?) string? any)]
+          [browser-screenshot!
+           (->* [secure-browser-service? (or/c #f string?)]
+                [#:selector (or/c #f string?) #:format string?]
+                any)]
+          [enforce-screenshot-max-bytes
+           (-> browser-observation? exact-nonnegative-integer? browser-observation?)])
          current-browser-service)
 
 ;; ---------------------------------------------------------------------------
