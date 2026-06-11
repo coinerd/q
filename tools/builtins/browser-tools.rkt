@@ -17,6 +17,8 @@
          "../../browser/service.rkt"
          "../../browser/workflow.rkt"
          "../../util/error/errors.rkt"
+         "../../browser/settings.rkt"
+         "../../util/content/content-parts.rkt"
          "../tool.rkt")
 
 (provide handle-browser-open
@@ -180,15 +182,17 @@
      (with-handlers ([q-browser-error? (lambda (e) (browser-error-result "browser_screenshot" e))])
        (define obs (browser-screenshot! svc sid #:selector selector))
        (define raw-bytes (browser-observation-screenshot-bytes obs))
-       ;; Base64-encode binary data for JSON-safe transport
-       (make-success-result (hasheq 'status
-                                    "ok"
-                                    'mime-type
-                                    (or (browser-observation-screenshot-mime obs) "image/png")
-                                    'data
-                                    (if (bytes? raw-bytes)
-                                        (bytes->base64-string raw-bytes)
-                                        (or raw-bytes "")))))]))
+       (define b64 (if (bytes? raw-bytes)
+                       (bytes->base64-string raw-bytes)
+                       (or raw-bytes "")))
+       (define mime (or (browser-observation-screenshot-mime obs) "image/png"))
+       ;; W2: dual-path — return image-part when vision enabled
+       (define settings (or (current-browser-settings) (default-browser-settings)))
+       (if (browser-settings-vision-enabled? settings)
+           (make-success-result (make-image-part mime b64
+                                                  (browser-settings-vision-detail settings)))
+           ;; Legacy path: hash with base64 data
+           (make-success-result (hasheq 'status "ok" 'mime-type mime 'data b64))))]))
 
 (define (handle-browser-scroll args [exec-ctx #f])
   (define svc (get-svc))
