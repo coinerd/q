@@ -342,7 +342,7 @@
 
 ;; Apply the pure watchdog state transition to the live TUI context.
 ;; The watchdog clears stale UI state only — NOT background goal threads.
-;; Goal cancellation happens only via explicit user action (Esc, /goal clear)
+;; Goal cancellation happens only via explicit user action (/goal clear)
 ;; or goal-runner's own limits (max-turns, no-progress detection).
 (define (apply-busy-watchdog! ctx now-ms watchdog-ms)
   (define cur-state (unbox (tui-ctx-ui-state-box ctx)))
@@ -359,8 +359,8 @@
     ;; Drain all pending events from the channel (non-blocking)
     (drain-events! ctx)
 
-    ;; Busy-state watchdog — force-clear stale busy state (v0.45.12 L3+L4)
-    ;; and cancel any active goal thread so work does not continue behind an idle UI.
+    ;; Busy-state watchdog — force-clear stale busy state (v0.45.12 L3+L4).
+    ;; Does NOT cancel goal threads (W3 fix).
     (apply-busy-watchdog! ctx (current-inexact-milliseconds) (current-busy-watchdog-ms))
 
     ;; Poll for terminal resize only on a coarse fallback interval. Resize

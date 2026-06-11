@@ -12,11 +12,11 @@
 ;;
 ;; #1195: Additional LLM Provider Adapters
 
-(require "../util/error/error-helpers.rkt")
-(require "../util/error/errors.rkt")
-(require "provider-errors.rkt")
 (require racket/contract
          "timing.rkt"
+         "../util/error/error-helpers.rkt"
+         "../util/error/errors.rkt"
+         "provider-errors.rkt"
          (only-in "model-defaults.rkt" OPENAI-DEFAULT-MODEL)
          racket/string
          racket/port

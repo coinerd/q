@@ -24,7 +24,6 @@
          "provider.rkt"
          "stream.rkt"
          "http-helpers.rkt"
-         (only-in "../util/error/errors.rkt" with-logged-catch)
          (only-in "vision-helpers.rkt" parse-data-url))
 
 ;; Provider constructor
