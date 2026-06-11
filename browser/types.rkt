@@ -69,6 +69,7 @@
          browser-observation-network-requests
          browser-observation-viewport-size
          browser-observation-metadata
+         browser-observation-interactive-elements
          browser-observation->jsexpr
          jsexpr->browser-observation
          ;; browser-session-info — explicit provides
@@ -219,6 +220,7 @@
              console-errors
              network-requests
              viewport-size
+             interactive-elements ; (listof hash?) — q-id annotated elements
              metadata)
   #:transparent)
 
@@ -246,6 +248,8 @@
           (browser-observation-network-requests o)
           'viewport-size
           (browser-observation-viewport-size o)
+          'interactive-elements
+          (browser-observation-interactive-elements o)
           'metadata
           (browser-observation-metadata o)))
 
@@ -262,6 +266,7 @@
                        (hash-ref j 'console-errors '())
                        (hash-ref j 'network-requests '())
                        (hash-ref j 'viewport-size #f)
+                       (hash-ref j 'interactive-elements '())
                        (hash-ref j 'metadata (hasheq))))
 
 ;; ---------------------------------------------------------------------------
