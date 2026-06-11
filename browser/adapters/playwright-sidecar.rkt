@@ -84,7 +84,10 @@
          ;; SEC-15: Mark sidecar as dead
          (set-playwright-sidecar-state-dead?! state #t)
          ;; stdin EOF — mark all pending as errors
+         ;; NF-06: Enforce pending semaphore; no unsafe fallback
          (define sema (hash-ref cfg 'pending-sema #f))
+         (unless sema
+           (raise-browser-error "Reader missing pending semaphore" 'adapter-error))
          (define fail-all
            (lambda ()
              (for ([(id ch) (in-hash pending)])
@@ -95,9 +98,7 @@
                                           #f
                                           'error
                                           (hasheq 'code 'sidecar-crash 'message "Sidecar EOF"))))))
-         (if sema
-             (call-with-semaphore sema fail-all)
-             (fail-all))]
+         (call-with-semaphore sema fail-all)]
         [else
          (with-handlers ([exn:fail? (lambda (e)
                                       (log-warning (format "Browser sidecar reader parse error: ~a"
@@ -105,16 +106,17 @@
            (define resp (string->jsexpr line))
            (define id (hash-ref resp 'id #f))
            (when id
+             ;; NF-06: Enforce pending semaphore; no unsafe fallback
              (define sema (hash-ref cfg 'pending-sema #f))
+             (unless sema
+               (raise-browser-error "Reader missing pending semaphore" 'adapter-error))
              (define deliver
                (lambda ()
                  (define ch (hash-ref pending id #f))
                  (when ch
                    (hash-remove! pending id)
                    (async-channel-put ch resp))))
-             (if sema
-                 (call-with-semaphore sema deliver)
-                 (deliver))))
+             (call-with-semaphore sema deliver)))
          (loop)]))))
 
 ;; DUP-02: Shared subprocess launch logic
@@ -190,11 +192,12 @@
 (define heartbeat-interval-secs 30)
 
 (define (start-heartbeat! state)
-  (define cust (playwright-sidecar-state-custodian state))
   (define ht
     (thread (lambda ()
               (let loop ()
                 (sleep heartbeat-interval-secs)
+                ;; NF-03: Read custodian from state each iteration, not at thread creation
+                (define cust (playwright-sidecar-state-custodian state))
                 ;; SEC-05: Read current reader from state, not closure
                 (define rt (playwright-sidecar-state-reader-thread state))
                 (when (and rt (not (thread-running? rt)))
@@ -244,8 +247,10 @@
     (raise-browser-error "Sidecar missing pending semaphore" 'adapter-error))
   (call-with-semaphore sema
                        (lambda () (hash-set! (playwright-sidecar-state-pending-box state) id ch)))
-  ;; SEC-15: Detect dead sidecar immediately
+  ;; SEC-15 + NF-04: Detect dead sidecar; clean up orphaned channel before raising
   (when (playwright-sidecar-state-dead? state)
+    (call-with-semaphore sema
+                         (lambda () (hash-remove! (playwright-sidecar-state-pending-box state) id)))
     (raise-browser-error "Sidecar is dead (reader EOF)" 'sidecar-crash))
   (define out (playwright-sidecar-state-stdin-port state))
   (define req (hasheq 'id id 'type type 'params params))
@@ -338,9 +343,10 @@
     ;; SEC-10: Ping-based readiness probe instead of fixed sleep
     (with-handlers ([exn:fail? void])
       (send-command! state "ping" (hasheq) #:timeout-ms 5000)))
-  (if restart-sema
-      (call-with-semaphore restart-sema do-restart)
-      (do-restart)))
+  ;; NF-05: Enforce restart semaphore; no fallback bypassing mutual exclusion
+  (unless restart-sema
+    (raise-browser-error "Sidecar missing restart semaphore" 'adapter-error))
+  (call-with-semaphore restart-sema do-restart))
 
 ;; ---------------------------------------------------------------------------
 ;; Adapter interface
