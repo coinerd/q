@@ -65,7 +65,7 @@
    ;; browser_observe (LOW risk)
    (tool-spec
     "browser_observe"
-    "Observe current page state: URL, title, text content, console errors"
+    "Observe current page state: URL, title, text content, console errors, interactiveElements list with q-id selectors"
     (hasheq 'type
             "object"
             'required
@@ -80,7 +80,7 @@
    ;; browser_click (HIGH risk)
    (tool-spec
     "browser_click"
-    "Click an element on the page"
+    "Click an element on the page. Use [q-id=\"N\"] selector from the interactiveElements in the most recent browser_observe result."
     (hasheq 'type
             "object"
             'required
@@ -89,14 +89,14 @@
             (hasheq 'session-id
                     (hasheq 'type "string" 'description "Browser session ID")
                     'selector
-                    (hasheq 'type "string" 'description "CSS selector of element to click")
+                    (hasheq 'type "string" 'description "CSS selector or [q-id=\"N\"] selector from interactiveElements")
                     'button
                     (hasheq 'type "string" 'description "Mouse button: left, right, middle")))
     handle-browser-click
     "Clicking may trigger side effects. Prefer observe before click.")
    ;; browser_type (HIGH risk)
    (tool-spec "browser_type"
-              "Type text into an input element"
+              "Type text into an input element. Use [q-id=\"N\"] selector from the interactiveElements in the most recent browser_observe result."
               (hasheq 'type
                       "object"
                       'required
@@ -105,7 +105,7 @@
                       (hasheq 'session-id
                               (hasheq 'type "string" 'description "Browser session ID")
                               'selector
-                              (hasheq 'type "string" 'description "CSS selector of input element")
+                              (hasheq 'type "string" 'description "CSS selector or [q-id=\"N\"] selector from interactiveElements")
                               'text
                               (hasheq 'type "string" 'description "Text to type")
                               'clear-first?
@@ -132,7 +132,7 @@
    ;; browser_extract (LOW risk)
    (tool-spec
     "browser_extract"
-    "Extract structured data from a page element"
+    "Extract structured data from a page element. Use [q-id=\"N\"] selector from interactiveElements for precise targeting."
     (hasheq
      'type
      "object"
@@ -142,7 +142,7 @@
      (hasheq 'session-id
              (hasheq 'type "string" 'description "Browser session ID")
              'selector
-             (hasheq 'type "string" 'description "CSS selector of element to extract from")
+             (hasheq 'type "string" 'description "CSS selector or [q-id=\"N\"] selector from interactiveElements")
              'extract-type
              (hasheq 'type "string" 'description "Extraction type: text, html, accessibility")))
     handle-browser-extract
