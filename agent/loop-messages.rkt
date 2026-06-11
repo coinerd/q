@@ -15,6 +15,10 @@
          (only-in "../util/content/content-parts.rkt"
                   text-part
                   text-part-text
+                  image-part?
+                  image-part-mime-type
+                  image-part-data
+                  image-part-detail
                   text-part?
                   tool-call-part
                   tool-call-part-arguments
@@ -166,8 +170,29 @@
        (define role (message-role msg))
        (define parts (message-content msg))
        (cond
-         ;; user -> simple text message
-         [(eq? role 'user) (list (hasheq 'role "user" 'content (parts->text-string parts)))]
+         ;; user -> text message, possibly with image parts (v0.98.1 vision)
+         [(eq? role 'user)
+          (define img-parts (filter image-part? parts))
+          (if (null? img-parts)
+              ;; text-only user message
+              (list (hasheq 'role "user" 'content (parts->text-string parts)))
+              ;; mixed text+image: produce OpenAI content array
+              (let* ([text-str (parts->text-string parts)]
+                     [text-block (hasheq 'type "text" 'text text-str)]
+                     [image-blocks (for/list ([ip (in-list img-parts)])
+                                     (hasheq 'type
+                                             "image_url"
+                                             'image_url
+                                             (hasheq 'url
+                                                     (format "data:~a;base64,~a"
+                                                             (image-part-mime-type ip)
+                                                             (image-part-data ip))
+                                                     'detail
+                                                     (or (image-part-detail ip) "auto"))))])
+                (list (hasheq 'role
+                              "user"
+                              'content
+                              (cons text-block image-blocks)))))]
 
          ;; assistant -> text + optional tool_calls
          [(eq? role 'assistant)
