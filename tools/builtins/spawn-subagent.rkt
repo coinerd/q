@@ -303,14 +303,23 @@
     (define-values (result-messages final-status)
       (run-subagent-loop provider registry (list system-msg user-msg) child-ctx max-turns))
 
-    ;; Extract final text from result
+    ;; Extract final text from result — ONLY text content, not tool-call-parts.
+    ;; Bug fix: (format "~a" content) on mixed lists containing tool-call-part
+    ;; structs produces #hasheq() / #(struct:...) garbage that the parent LLM
+    ;; cannot parse. Only extract string items from assistant message content.
     (define result-text
       (string-join (for/list ([m (in-list result-messages)]
                               #:when (eq? (message-role m) 'assistant))
                      (define content (message-content m))
-                     (if (string? content)
-                         content
-                         (format "~a" content)))
+                     (cond
+                       [(string? content) content]
+                       [(list? content)
+                        ;; Extract only string items — skip tool-call-parts
+                        (string-join (for/list ([c (in-list content)]
+                                                #:when (string? c))
+                                       c)
+                                     "\n")]
+                       [else (format "~a" content)]))
                    "\n"))
 
     (make-success-result
@@ -545,9 +554,11 @@
   (define full-text
     (string-join (for/list ([c (in-list (if (list? content)
                                             content
-                                            '()))]
-                            #:when (and (hash? c) (hash-ref c 'text #f)))
-                   (hash-ref c 'text ""))
+                                            '()))])
+                   (cond
+                     [(and (hash? c) (hash-ref c 'text #f)) (hash-ref c 'text "")]
+                     [(string? c) c]
+                     [else ""]))
                  "\n"))
   ;; Truncate to 200 chars for summary
   (if (> (string-length full-text) 200)
