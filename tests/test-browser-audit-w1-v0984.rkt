@@ -13,8 +13,42 @@
 ;; NF-03: Heartbeat reads custodian from state (not captured at creation)
 ;; ---------------------------------------------------------------------------
 
-(test-case "NF-03: start-heartbeat! reads custodian dynamically from state"
-  (check-true (procedure? start-heartbeat!)))
+(test-case "NF-03: heartbeat reads custodian dynamically from state"
+  (define cust1 (make-custodian))
+  (define cust2 (make-custodian))
+  (define victim1
+    (parameterize ([current-custodian cust1])
+      (thread (lambda () (sleep 1000)))))
+  (define victim2
+    (parameterize ([current-custodian cust2])
+      (thread (lambda () (sleep 1000)))))
+  (define live-reader (thread (lambda () (sleep 1000))))
+  (define dead-reader (thread (lambda () (void))))
+  (thread-wait dead-reader)
+  (define state
+    (playwright-sidecar-state #f
+                              #f
+                              #f
+                              (make-hash)
+                              live-reader
+                              cust1
+                              (hasheq 'pending-sema (make-semaphore 1) 'timeout-ms 5000)
+                              #f
+                              #f))
+  ;; Use a long enough interval that we can mutate state before the first read.
+  (parameterize ([heartbeat-interval-secs 0.5])
+    (start-heartbeat! state))
+  ;; Mutate custodian and reader while heartbeat is still in its first sleep.
+  (set-playwright-sidecar-state-custodian! state cust2)
+  (set-playwright-sidecar-state-reader-thread! state dead-reader)
+  ;; Wait for heartbeat to wake up and act on the mutated state.
+  (sleep 0.6)
+  ;; Dynamic read: current custodian (cust2) is shut down because reader is dead.
+  (check-false (thread-running? victim2))
+  ;; Stale custodian (cust1) was replaced before the read, so victim1 survives.
+  (check-true (thread-running? victim1))
+  (custodian-shutdown-all cust1)
+  (kill-thread (playwright-sidecar-state-heartbeat-thread state)))
 
 ;; ---------------------------------------------------------------------------
 ;; NF-04: Orphaned channel cleaned up on dead-sidecar fast-fail
