@@ -18,7 +18,8 @@
          json
          "../adapter.rkt"
          "../types.rkt"
-         "../../util/error/errors.rkt")
+         "../../util/error/errors.rkt"
+         net/base64)
 
 (provide (struct-out playwright-sidecar-state)
          launch-sidecar!
@@ -449,6 +450,12 @@
       (send-command! st
                      "screenshot"
                      (hasheq 'sessionId session-id 'selector (or selector #f) 'fullPage full-page?)))
+    ;; NF-01: Decode base64 string to actual bytes
+    (define raw-data (hash-ref data 'data ""))
+    (define screenshot-bytes
+      (if (non-empty-string? raw-data)
+          (base64-decode (string->bytes/utf-8 raw-data))
+          #""))
     (browser-observation ""
                          ""
                          ""
@@ -456,7 +463,7 @@
                          #f
                          #f
                          (hash-ref data 'mimeType "image/png")
-                         (hash-ref data 'data "")
+                         screenshot-bytes
                          '()
                          '()
                          #f ; viewport-size

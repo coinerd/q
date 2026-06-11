@@ -85,7 +85,7 @@
      (define image-url-hash (hash-ref block 'image_url (hasheq)))
      (define url (hash-ref image-url-hash 'url ""))
      (define-values (mime data) (parse-data-url url))
-     (hasheq 'inline_data (hasheq 'mime_type mime 'data data))]
+     (hasheq 'inlineData (hasheq 'mimeType mime 'data data))]
     [else block]))
 
 ;; Convert normalized model-request to Gemini generateContent API body.
