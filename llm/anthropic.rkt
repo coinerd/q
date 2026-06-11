@@ -48,6 +48,29 @@
 ;; Request body construction
 ;; ============================================================
 
+;; ============================================================
+;; Image block conversion (GAP-V1: cross-provider vision)
+;; ============================================================
+
+;; Parse a data URL "data:<mime>;base64,<data>" and return (values mime data)
+(define (parse-data-url url)
+  (define m (regexp-match #rx"^data:([^;]+);base64,(.*)$" url))
+  (if m
+      (values (cadr m) (caddr m))
+      (values "image/png" url)))
+
+;; Convert OpenAI-format content blocks to Anthropic content blocks.
+(define (openai-block->anthropic block)
+  (define btype (hash-ref block 'type "text"))
+  (cond
+    [(equal? btype "text") block]
+    [(equal? btype "image_url")
+     (define image-url-hash (hash-ref block 'image_url (hasheq)))
+     (define url (hash-ref image-url-hash 'url ""))
+     (define-values (mime data) (parse-data-url url))
+     (hasheq 'type "image" 'source (hasheq 'type "base64" 'media_type mime 'data data))]
+    [else block]))
+
 ;; Convert normalized model-request to Anthropic Messages API body.
 (define (anthropic-build-request-body req #:stream? [stream? #f])
   (define settings (model-request-settings req))
@@ -78,6 +101,13 @@
           "user"
           'content
           (list (hasheq 'type "tool_result" 'tool_use_id tool-call-id 'content tool-result-content)))]
+        ;; User with list content (text + images) (GAP-V1)
+        [(and (equal? role "user") (list? content))
+         (hasheq 'role
+                 role
+                 'content
+                 (for/list ([block (in-list content)])
+                   (openai-block->anthropic block)))]
         ;; Assistant with list content (tool calls)
         [(and (equal? role "assistant") (list? content))
          (hasheq 'role

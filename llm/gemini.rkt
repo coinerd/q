@@ -65,6 +65,29 @@
 ;; Request body construction
 ;; ============================================================
 
+;; ============================================================
+;; Image block conversion (GAP-V1: cross-provider vision)
+;; ============================================================
+
+;; Parse a data URL "data:<mime>;base64,<data>" and return (values mime data)
+(define (parse-data-url url)
+  (define m (regexp-match #rx"^data:([^;]+);base64,(.*)$" url))
+  (if m
+      (values (cadr m) (caddr m))
+      (values "image/png" url)))
+
+;; Convert OpenAI-format content blocks to Gemini parts.
+(define (openai-block->gemini block)
+  (define btype (hash-ref block 'type "text"))
+  (cond
+    [(equal? btype "text") (hasheq 'text (hash-ref block 'text ""))]
+    [(equal? btype "image_url")
+     (define image-url-hash (hash-ref block 'image_url (hasheq)))
+     (define url (hash-ref image-url-hash 'url ""))
+     (define-values (mime data) (parse-data-url url))
+     (hasheq 'inline_data (hasheq 'mime_type mime 'data data))]
+    [else block]))
+
 ;; Convert normalized model-request to Gemini generateContent API body.
 (define (gemini-build-request-body req #:stream? [stream? #f])
   (define settings (model-request-settings req))
@@ -115,6 +138,10 @@
            (define tool-name (hash-ref call-id->name tool-call-id ""))
            (list (hasheq 'functionResponse
                          (hasheq 'name tool-name 'response (hasheq 'content tool-result-content))))]
+          ;; User with list content (text + images) (GAP-V1)
+          [(and (equal? role "user") (list? content))
+           (for/list ([block (in-list content)])
+             (openai-block->gemini block))]
           ;; Assistant with list content (tool calls + text)
           [(and (equal? role "assistant") (list? content))
            (for/list ([block (in-list content)])
