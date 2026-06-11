@@ -30,7 +30,8 @@
          handle-browser-screenshot
          handle-browser-scroll
          handle-browser-close
-         handle-browser-check-local-app)
+         handle-browser-check-local-app
+         observation->hash)
 
 ;; ---------------------------------------------------------------------------
 ;; Helper: get service from exec context or parameter
@@ -70,15 +71,25 @@
 (define (browser-error-result tool-name e)
   (make-error-result (format "~a failed: ~a" tool-name (exn-message e))))
 
+;; Truncate observation text to avoid context overflow (NF-11).
+;; Pages with 50K+ chars of text-content would consume the entire
+;; context budget. 4000 chars preserves the first ~1K tokens.
+(define MAX-OBSERVATION-TEXT 4000)
+
+(define (truncate-observation-text text)
+  (if (and (string? text) (> (string-length text) MAX-OBSERVATION-TEXT))
+      (string-append (substring text 0 MAX-OBSERVATION-TEXT) "\n... [truncated]")
+      text))
+
 (define (observation->hash obs)
   (hasheq 'url
           (browser-observation-url obs)
           'title
           (browser-observation-title obs)
           'text-content
-          (browser-observation-text-content obs)
+          (truncate-observation-text (browser-observation-text-content obs))
           'visible-text
-          (browser-observation-visible-text obs)
+          (truncate-observation-text (browser-observation-visible-text obs))
           'dom-summary
           (browser-observation-dom-summary obs)
           'console-errors
@@ -182,15 +193,15 @@
      (with-handlers ([q-browser-error? (lambda (e) (browser-error-result "browser_screenshot" e))])
        (define obs (browser-screenshot! svc sid #:selector selector))
        (define raw-bytes (browser-observation-screenshot-bytes obs))
-       (define b64 (if (bytes? raw-bytes)
-                       (bytes->base64-string raw-bytes)
-                       (or raw-bytes "")))
+       (define b64
+         (if (bytes? raw-bytes)
+             (bytes->base64-string raw-bytes)
+             (or raw-bytes "")))
        (define mime (or (browser-observation-screenshot-mime obs) "image/png"))
        ;; W2: dual-path — return image-part when vision enabled
        (define settings (or (current-browser-settings) (default-browser-settings)))
        (if (browser-settings-vision-enabled? settings)
-           (make-success-result (make-image-part mime b64
-                                                  (browser-settings-vision-detail settings)))
+           (make-success-result (make-image-part mime b64 (browser-settings-vision-detail settings)))
            ;; Legacy path: hash with base64 data
            (make-success-result (hasheq 'status "ok" 'mime-type mime 'data b64))))]))
 
