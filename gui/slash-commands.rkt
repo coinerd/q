@@ -291,6 +291,20 @@
                            gui-state-lock
                            notify!)
           #t]
+         ;; G-CR2 (v0.98.12): Explicit stubs for TUI-only session management commands.
+         [(branches tree leaves fork switch children history name sessions deactivate reload)
+          (define cmd-str (symbol->string cmd))
+          (define reg (ui-registry-lookup the-canonical-registry (format "/~a" cmd-str)))
+          (add-system-msg!
+           (format "[/~a] ~a — available in TUI mode. Use --tui flag for full session management."
+                   cmd-str
+                   (if reg
+                       (ui-command-summary reg)
+                       "Session management"))
+           state-box
+           gui-state-lock
+           notify!)
+          #t]
          [else
           ;; GAP-CR (v0.98.8 W1): Try dynamic command registry lookup before falling back.
           ;; Hardcoded commands still work via case above; this is a FALLBACK for commands
