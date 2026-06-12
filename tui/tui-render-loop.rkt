@@ -30,7 +30,7 @@
                   component-invalidate!
                   component-state-ref
                   component-state-update)
-         (only-in "../tui/context.rkt" tui-ctx-component-registry-box)
+         (only-in "../tui/context.rkt" tui-ctx-component-registry-box atomic-state-update!)
          (only-in "../tui/render.rkt"
                   render-transcript
                   render-status-bar
@@ -253,7 +253,7 @@
                       #:italic (cell-italic? cursor-cell)
                       #:blink (cell-blink? cursor-cell)))
 
-  (set-box! (tui-ctx-ui-state-box ctx) state*)
+  (atomic-state-update! (tui-ctx-ui-state-box ctx) (lambda (_) state*))
 
   ;; Cell-level incremental diff with synchronized output.
   ;; Hardware cursor remains hidden; we draw the cursor in the cell buffer.
@@ -358,7 +358,7 @@
   (define watchdog-result (check-busy-watchdog cur-state now-ms watchdog-ms))
   (cond
     [watchdog-result
-     (set-box! (tui-ctx-ui-state-box ctx) watchdog-result)
+     (atomic-state-update! (tui-ctx-ui-state-box ctx) (lambda (_) watchdog-result))
      (mark-dirty! ctx)
      #t]
     [else #f]))
@@ -426,6 +426,6 @@
       (define state (unbox (tui-ctx-ui-state-box ctx)))
       (with-handlers ([exn:fail? (lambda (e)
                                    (log-warning "TUI: error processing event: ~a" (exn-message e)))])
-        (set-box! (tui-ctx-ui-state-box ctx) (apply-event-to-state state evt)))
+        (atomic-state-update! (tui-ctx-ui-state-box ctx) (lambda (s) (apply-event-to-state s evt))))
       (set-box! (tui-ctx-needs-redraw-box ctx) #t)
       (loop))))

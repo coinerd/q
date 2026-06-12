@@ -84,7 +84,8 @@
          ;; Goal runner + bridge
          (only-in "../runtime/goal/goal-runner.rkt" goal-run!)
          (only-in "commands/goal-bridge.rkt" make-goal-event-bridge make-goal-run-prompt!)
-         (only-in "commands/context.rkt" cmd-ctx-agent-session-box cmd-ctx-goal-cancel-box))
+         (only-in "commands/context.rkt" cmd-ctx-agent-session-box cmd-ctx-goal-cancel-box)
+         (only-in "context.rkt" atomic-state-update!))
 
 ;; Re-export all public APIs
 (provide cmd-ctx

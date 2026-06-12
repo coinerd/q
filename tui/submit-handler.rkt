@@ -35,7 +35,8 @@
                    "[Queued — will run after current task. Press Esc to cancel.]"
                    (current-inexact-milliseconds)
                    (hasheq 'queued #t)))
-     (set-box! (tui-ctx-ui-state-box ctx) (add-transcript-entry cur-state queued-entry))
+     (atomic-state-update! (tui-ctx-ui-state-box ctx)
+                           (lambda (s) (add-transcript-entry s queued-entry)))
      (mark-dirty! ctx)]
     [else
      ;; Not busy (or no queue) — submit to runtime (non-blocking)
@@ -51,19 +52,21 @@
        [is-duplicate
         (define dup-entry
           (make-entry 'system "[Duplicate input ignored]" (current-inexact-milliseconds) (hash)))
-        (set-box! (tui-ctx-ui-state-box ctx) (add-transcript-entry cur-state dup-entry))
+        (atomic-state-update! (tui-ctx-ui-state-box ctx)
+                              (lambda (s) (add-transcript-entry s dup-entry)))
         (mark-dirty! ctx)]
        [else
         ;; F1: Immediately set busy? so status bar shows [thinking...]
         ;; before the LLM responds (was waiting for turn.started event)
-        (set-box! (tui-ctx-ui-state-box ctx)
-                  (clear-streaming (set-pending-tool-name (set-busy cur-state #t) #f)))
+        (atomic-state-update! (tui-ctx-ui-state-box ctx)
+                              (lambda (s)
+                                (clear-streaming (set-pending-tool-name (set-busy s #t) #f))))
         (mark-dirty! ctx)
         ;; F1: Show user message in transcript immediately
         ;; (don't wait for JSONL events — the TUI transcript is display-only)
         (define user-entry (make-entry 'user text (current-inexact-milliseconds) (hash)))
-        (set-box! (tui-ctx-ui-state-box ctx)
-                  (add-transcript-entry (unbox (tui-ctx-ui-state-box ctx)) user-entry))
+        (atomic-state-update! (tui-ctx-ui-state-box ctx)
+                              (lambda (s) (add-transcript-entry s user-entry)))
         (mark-dirty! ctx)
         (define runner (tui-ctx-session-runner ctx))
         ;; Wrap runner thread with exception handler to prevent TUI hang

@@ -93,6 +93,21 @@
 (define (tui-ctx-set-focused-component! ctx id)
   (set-box! (tui-ctx-focused-component-id-box ctx) id))
 
+;; AXIS2-F05 (v0.98.14 W1): State update semaphore for thread-safe ui-state-box updates.
+;; Uses weak-hasheq keyed by the box identity itself.
+;; Both tui-ctx and cmd-ctx share the same box object, so this works for both paths.
+(define state-sema-table (make-weak-hasheq))
+
+(define (ensure-state-sema! state-box)
+  (or (hash-ref state-sema-table state-box #f)
+      (let ([sema (make-semaphore 1)])
+        (hash-set! state-sema-table state-box sema)
+        sema)))
+
+(define (atomic-state-update! state-box update-fn)
+  (call-with-semaphore (ensure-state-sema! state-box)
+                       (lambda () (set-box! state-box (update-fn (unbox state-box))))))
+
 (provide tui-ctx
          tui-ctx?
          tui-ctx-ui-state-box
@@ -132,4 +147,6 @@
                        [tui-ctx-set-focused-component! (-> tui-ctx? (or/c symbol? #f) void?)]
                        ;; MF-06 (v0.98.9 W0): contract-out for layout breakpoint accessors
                        [tui-ctx-layout-breakpoints (-> tui-ctx? (listof symbol?))]
-                       [tui-ctx-set-layout-breakpoints! (-> tui-ctx? (listof symbol?) void?)]))
+                       [tui-ctx-set-layout-breakpoints! (-> tui-ctx? (listof symbol?) void?)]
+                       ;; AXIS2-F05 (v0.98.14 W1): thread-safe state update
+                       [atomic-state-update! (-> (box/c any/c) (-> any/c any/c) void?)]))
