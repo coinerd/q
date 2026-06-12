@@ -126,4 +126,4 @@
   (dependencies "array" "List of conclusion IDs or file paths this depends on")]
  record-conclusion-handler)
 
-(provide (contract-out [record_conclusion any/c]))
+(provide (contract-out [record_conclusion tool?]))

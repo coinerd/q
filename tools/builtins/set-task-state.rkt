@@ -132,4 +132,4 @@
    "Transition event: begin-explore, begin-plan, begin-implement, begin-verify, begin-debug, task-complete, revisit, force-transition")]
  set-task-state-handler)
 
-(provide (contract-out [set-task-state any/c]))
+(provide (contract-out [set-task-state tool?]))

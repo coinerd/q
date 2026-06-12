@@ -114,3 +114,48 @@
 (test-case "enqueue-steering! rejects non-string"
   (define q (make-queue))
   (check-exn exn:fail:contract? (lambda () (enqueue-steering! q 42))))
+
+;; ── v0.98.14 W2: tool definition + extension context contract tightening ──
+(require "../tools/tool.rkt"
+         "../tools/builtins/record-conclusion.rkt"
+         "../tools/builtins/set-task-state.rkt"
+         "../tools/builtins/date.rkt"
+         "../tools/builtins/save-conclusion.rkt"
+         "../extensions/context.rkt")
+
+(test-case "record_conclusion: tool? instead of any/c"
+  (check-pred tool? record_conclusion))
+
+(test-case "set-task-state: tool? instead of any/c"
+  (check-pred tool? set-task-state))
+
+(test-case "date: tool? instead of any/c"
+  (check-pred tool? date))
+
+(test-case "save-conclusion: tool? instead of any/c"
+  (check-pred tool? save-conclusion))
+
+(test-case "make-extension-ctx: returns extension-ctx? with required args"
+  (check-pred extension-ctx?
+              (make-extension-ctx #:session-id "test-session"
+                                  #:session-dir "/tmp/test"
+                                  #:event-bus #f
+                                  #:extension-registry #f)))
+
+(test-case "make-extension-ctx: returns extension-ctx? with optional args"
+  (check-pred extension-ctx?
+              (make-extension-ctx #:session-id "test-session"
+                                  #:session-dir "/tmp/test"
+                                  #:event-bus #f
+                                  #:extension-registry #f
+                                  #:model-name "gpt-4"
+                                  #:working-directory "/home/user"
+                                  #:ctx-version 1)))
+
+(test-case "make-extension-ctx: rejects bad session-id type"
+  (check-exn exn:fail:contract?
+             (lambda ()
+               (make-extension-ctx #:session-id 123
+                                   #:session-dir "/tmp"
+                                   #:event-bus #f
+                                   #:extension-registry #f))))

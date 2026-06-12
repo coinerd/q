@@ -54,7 +54,24 @@
          ctx-provider-registry
          ctx-gsd-ctx
          ;; Constructor
-         (contract-out [make-extension-ctx any/c]
+         (contract-out [make-extension-ctx
+                        (->* (#:session-id string?
+                                           #:session-dir (or/c path-string? #f)
+                                           #:event-bus (or/c any/c #f)
+                                           #:extension-registry (or/c any/c #f))
+                             (#:model-name (or/c string? #f)
+                                           #:cancellation-token (or/c any/c #f)
+                                           #:working-directory (or/c path-string? #f)
+                                           #:session-store (or/c any/c #f)
+                                           #:tool-registry (or/c any/c #f)
+                                           #:command-registry (or/c any/c #f)
+                                           #:ui-channel (or/c any/c #f)
+                                           #:provider-registry (or/c any/c #f)
+                                           #:session-messages (or/c (listof hash?) #f)
+                                           #:session-token-usage (or/c hash? #f)
+                                           #:gsd-ctx (or/c any/c #f)
+                                           #:ctx-version exact-nonnegative-integer?)
+                             extension-ctx?)]
                        ;; #1220: Provider convenience methods
                        [ctx-register-provider!
                         (->* (extension-ctx? string? provider?) (#:config any/c) any/c)]

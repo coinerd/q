@@ -75,4 +75,4 @@
   (tags "array" "List of relevance tags (symbols) for state-aware filtering")]
  save-conclusion-handler)
 
-(provide (contract-out [save-conclusion any/c]))
+(provide (contract-out [save-conclusion tool?]))

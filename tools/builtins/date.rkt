@@ -62,4 +62,4 @@
  #:properties [(format "string" "Output format: iso, date, time, unix, weekday, iso-full")]
  date-handler)
 
-(provide (contract-out [date any/c]))
+(provide (contract-out [date tool?]))
