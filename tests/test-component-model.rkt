@@ -14,7 +14,10 @@
                   make-tui-ctx
                   tui-ctx-focused-component-id
                   tui-ctx-set-focused-component!
-                  tui-ctx-component-registry-box)
+                  tui-ctx-component-registry-box
+                  tui-ctx?
+                  tui-ctx-layout-breakpoints
+                  tui-ctx-set-layout-breakpoints!)
          (only-in "../tui/keybindings/key-dispatch.rkt" handle-key))
 
 (define-test-suite
@@ -297,5 +300,25 @@
    (handle-key ctx 'shift-tab)
    (check-equal? (tui-ctx-focused-component-id ctx) 'comp-b)))
 
+;; ═══════════════════════════════════════════════════════════
+;; MF-06 (v0.98.9 W0): Layout breakpoint contract tests
+;; ═══════════════════════════════════════════════════════════
+(define-test-suite
+ layout-breakpoint-contract-tests
+ (test-case "MF-06: tui-ctx-set-layout-breakpoints! rejects non-list"
+   (define ctx (make-tui-ctx))
+   (check-exn exn:fail:contract? (lambda () (tui-ctx-set-layout-breakpoints! ctx "not-a-list"))))
+ (test-case "MF-06: tui-ctx-set-layout-breakpoints! rejects list with non-symbols"
+   (define ctx (make-tui-ctx))
+   (check-exn exn:fail:contract? (lambda () (tui-ctx-set-layout-breakpoints! ctx '(narrow 42)))))
+ (test-case "MF-06: tui-ctx-set-layout-breakpoints! accepts valid symbol list"
+   (define ctx (make-tui-ctx))
+   (tui-ctx-set-layout-breakpoints! ctx '(narrow compact))
+   (check-equal? (tui-ctx-layout-breakpoints ctx) '(narrow compact)))
+ (test-case "MF-06: tui-ctx-layout-breakpoints returns empty list by default"
+   (define ctx (make-tui-ctx))
+   (check-equal? (tui-ctx-layout-breakpoints ctx) '())))
+
+(run-tests layout-breakpoint-contract-tests)
 (run-tests focus-tracking-tests)
 (run-tests test-component-model)

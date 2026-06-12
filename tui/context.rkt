@@ -51,9 +51,6 @@
 (define (tui-ctx-set-layout-breakpoints! ctx breakpoints)
   (hash-set! layout-breakpoints-table ctx breakpoints))
 
-(provide tui-ctx-layout-breakpoints
-         tui-ctx-set-layout-breakpoints!)
-
 (define (make-tui-ctx #:event-bus [bus #f]
                       #:session-runner [runner (lambda (prompt) (void))]
                       #:session-dir [sess-dir #f]
@@ -132,4 +129,7 @@
                              tui-ctx?)]
                        [mark-dirty! (-> tui-ctx? void?)]
                        [tui-ctx-focused-component-id (-> tui-ctx? (or/c symbol? #f))]
-                       [tui-ctx-set-focused-component! (-> tui-ctx? (or/c symbol? #f) void?)]))
+                       [tui-ctx-set-focused-component! (-> tui-ctx? (or/c symbol? #f) void?)]
+                       ;; MF-06 (v0.98.9 W0): contract-out for layout breakpoint accessors
+                       [tui-ctx-layout-breakpoints (-> tui-ctx? (listof symbol?))]
+                       [tui-ctx-set-layout-breakpoints! (-> tui-ctx? (listof symbol?) void?)]))
