@@ -10,10 +10,8 @@
 (require racket/contract
          (only-in "../ui-core/ui-delta.rkt" ui-delta? ui-action->deltas)
          (only-in "../ui-core/ui-reducer.rkt"
-                  delta-handler-table?
                   apply-delta-with
                   apply-deltas-with
-                  apply-action-with
                   delta-handlers->table)
          (only-in "../tui/state-types.rkt"
                   ui-state
