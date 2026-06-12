@@ -23,7 +23,9 @@
          "../gui/components/rich-transcript-view.rkt"
          "../gui/slash-commands.rkt"
          "../gui/state-sync.rkt"
-         "../gui/gui-types.rkt")
+         "../gui/gui-types.rkt"
+         (only-in "../ui-core/ui-actions.rkt" current-ui-event-actions-enabled?)
+         (only-in "../runtime/settings-query.rkt" setting-ref*))
 (require (only-in "../util/error/error-helpers.rkt" with-safe-fallback))
 
 (provide (contract-out [run-gui-with-runtime (-> any/c any/c void?)]
@@ -214,6 +216,14 @@
     (eprintf "No display server available. Cannot start GUI.\n")
     (eprintf "Install gui-easy-lib: raco pkg install gui-easy-lib\n")
     (exit 1))
+
+  ;; GAP-EA (v0.98.7 W0): Wire UI event actions flag from config.json.
+  ;; Reads "ui.event-actions.enabled" from settings; default #f = zero behavior change.
+  (define settings (dict-ref rt-config 'settings #f))
+  (when settings
+    (define ui-actions-enabled? (setting-ref* settings '(ui event-actions enabled) #f))
+    (when ui-actions-enabled?
+      (current-ui-event-actions-enabled? #t)))
 
   ;; Create agent session (wires provider, tools, extensions, event bus)
   (define sess (make-agent-session rt-config))

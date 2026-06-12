@@ -29,7 +29,9 @@
          "../tui/tui-keybindings.rkt"
          "../tui/tui-render-loop.rkt"
          "../cli/args.rkt"
-         "../extensions/ui-surface.rkt")
+         "../extensions/ui-surface.rkt"
+         (only-in "../ui-core/ui-actions.rkt" current-ui-event-actions-enabled?)
+         (only-in "../runtime/settings-query.rkt" setting-ref*))
 
 ;; TUI entry point contracts.
 ;; Most params use any/c because runtime/tui-ctx are opaque structs
@@ -278,6 +280,13 @@
 
 ;; Full TUI run with runtime config -- 4-phase orchestrator (W-19)
 (define (run-tui-with-runtime rt-config cli-cfg)
+  ;; GAP-EA (v0.98.7 W0): Wire UI event actions flag from config.json.
+  ;; Reads "ui.event-actions.enabled" from settings; default #f = zero behavior change.
+  (define settings (dict-ref rt-config 'settings #f))
+  (when settings
+    (define ui-actions-enabled? (setting-ref* settings '(ui event-actions enabled) #f))
+    (when ui-actions-enabled?
+      (current-ui-event-actions-enabled? #t)))
   (define-values (ctx sess scrollback-path) (create-tui-session rt-config cli-cfg))
   (load-tui-scrollback ctx sess rt-config scrollback-path)
   (init-tui-terminal ctx)
