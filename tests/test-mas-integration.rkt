@@ -1,0 +1,87 @@
+#lang racket/base
+
+;; @speed fast
+;; @suite default
+
+;; tests/test-mas-integration.rkt — End-to-end MAS integration tests
+;; STABILITY: evolving
+
+(require rackunit
+         rackunit/text-ui
+         (only-in "../agent/roles/supervisor.rkt"
+                  make-supervisor-role
+                  supervisor-role?
+                  supervisor-dispatch)
+         (only-in "../agent/roles/base.rkt"
+                  agent-role?
+                  agent-role-capabilities
+                  agent-role-system-prompt
+                  agent-role-handle-envelope)
+         (only-in "../util/message/mas-envelope.rkt"
+                  make-mas-envelope
+                  mas-envelope?
+                  mas-envelope-target-agent
+                  mas-envelope-capability)
+         (only-in "../agent/capability.rkt" current-session-capabilities role-has-capability?)
+         (only-in "../tools/tool.rkt"
+                  make-tool-registry
+                  list-tools
+                  tools-for-capability
+                  tool-name
+                  tool-required-capability)
+         (only-in "../tools/registry-table.rkt" register-tools-from-specs! tool-specs))
+
+(define suite
+  (test-suite "MAS Integration"
+
+    ;; ── Supervisor dispatch chain ──
+
+    (test-case "supervisor dispatches to planner"
+      (define sup (make-supervisor-role))
+      (define env (make-mas-envelope 'supervisor 'planner 'read-only (hasheq 'action "plan")))
+      (define result (agent-role-handle-envelope sup env))
+      (check-equal? (hash-ref result 'status) 'ok)
+      (check-equal? (hash-ref result 'role) 'planner))
+
+    (test-case "supervisor dispatches to verifier"
+      (define sup (make-supervisor-role))
+      (define env (make-mas-envelope 'supervisor 'verifier 'read-only (hasheq 'action "verify")))
+      (define result (agent-role-handle-envelope sup env))
+      (check-equal? (hash-ref result 'status) 'ok)
+      (check-equal? (hash-ref result 'role) 'verifier))
+
+    (test-case "supervisor dispatches to tool-gateway via direct dispatch"
+      ;; Note: Full dispatch chain (supervisor→tool-gateway) requires envelope
+      ;; capability re-writing (Schritt 2). Here we test direct dispatch.
+      (define sup (make-supervisor-role))
+      (define env (make-mas-envelope 'orchestrator 'tool-gateway 'shell-exec (hasheq 'cmd "ls")))
+      (define result (supervisor-dispatch sup env))
+      (check-equal? (hash-ref result 'status) 'ok)
+      (check-equal? (hash-ref result 'role) 'tool-gateway))
+
+    (test-case "supervisor rejects unknown target"
+      (define sup (make-supervisor-role))
+      (define env (make-mas-envelope 'supervisor 'nonexistent 'read-only (hasheq)))
+      (define result (supervisor-dispatch sup env))
+      (check-equal? (hash-ref result 'status) 'error))
+
+    ;; ── Capability filtering end-to-end ──
+
+    (test-case "tools-for-capability 'read-only returns only read tools"
+      (define reg (make-tool-registry))
+      (register-tools-from-specs! reg tool-specs)
+      (define read-tools (tools-for-capability reg 'read-only))
+      (for ([t (in-list read-tools)])
+        (define cap (tool-required-capability t))
+        (check-true (or (eq? cap 'read-only) (eq? cap 'any))
+                    (format "tool ~a should be read-only, got ~a" (tool-name t) cap))))
+
+    (test-case "role capability alignment: planner can access planner tools"
+      (check-true (role-has-capability? 'planner 'read-only))
+      (check-true (role-has-capability? 'planner 'plan-write))
+      (check-true (role-has-capability? 'planner 'memory-write))
+      ;; planner cannot access shell or browser
+      (check-false (role-has-capability? 'planner 'shell-exec))
+      (check-false (role-has-capability? 'planner 'browser)))))
+
+(run-tests suite)
