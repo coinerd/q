@@ -43,7 +43,7 @@
 ;; GAP-LB (v0.98.8 W0): Layout breakpoints storage per tui-ctx.
 ;; Uses a module-level hasheq keyed by ctx identity to avoid changing
 ;; the tui-ctx struct definition (additive, no constructor breakage).
-(define layout-breakpoints-table (make-hasheq))
+(define layout-breakpoints-table (make-weak-hasheq))
 
 (define (tui-ctx-layout-breakpoints ctx)
   (hash-ref layout-breakpoints-table ctx '()))

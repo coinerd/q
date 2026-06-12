@@ -13,10 +13,14 @@
 ;; widget, overlay, theme, layout, and focus.
 
 (require racket/contract
-         "event-types.rkt")
+         "event-types.rkt"
+         (only-in "../runtime/settings-query.rkt" setting-ref*))
 
 ;; Feature flag
 (provide current-ui-event-actions-enabled?
+
+         ;; Helper: wire flag from config settings
+         wire-ui-event-actions-from-config!
 
          ;; Action name constants (for reference/testing)
          UI-ACTION-HEADER-SET
@@ -46,6 +50,14 @@
 ;; ── Feature flag ───────────────────────────────────────────
 
 (define current-ui-event-actions-enabled? (make-parameter #f))
+
+;; GAP-EA (v0.98.7+hotfix): Shared helper to enable UI event actions from config.
+;; Both TUI and GUI call this — avoids copy-paste wiring block.
+(define (wire-ui-event-actions-from-config! settings)
+  (when settings
+    (define enabled? (setting-ref* settings '(ui event-actions enabled) #f))
+    (when enabled?
+      (current-ui-event-actions-enabled? #t))))
 
 ;; ── Action name constants ──────────────────────────────────
 

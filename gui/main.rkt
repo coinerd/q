@@ -15,7 +15,6 @@
          "../ui-core/observable-bridge.rkt"
          "../ui-core/dispatch.rkt"
          "../ui-core/theme-protocol.rkt"
-         "../ui-core/layout-protocol.rkt"
          "../util/event/event.rkt"
          "../util/version.rkt"
          "../extensions/hooks.rkt"
@@ -24,7 +23,9 @@
          "../gui/slash-commands.rkt"
          "../gui/state-sync.rkt"
          "../gui/gui-types.rkt"
-         (only-in "../ui-core/ui-actions.rkt" current-ui-event-actions-enabled?)
+         (only-in "../ui-core/ui-actions.rkt"
+                  current-ui-event-actions-enabled?
+                  wire-ui-event-actions-from-config!)
          (only-in "../runtime/settings-query.rkt" setting-ref*)
          (only-in "lifecycle-hooks.rkt" dispatch-gui-hook! current-gui-event-runtime)
          (only-in "theme-manager.rkt" make-theme-manager theme-manager?))
@@ -47,6 +48,7 @@
 
 ;; GAP-TM (v0.98.8 W1): Theme manager parameter for cross-frontend synchronization.
 ;; Instantiated in run-gui-with-runtime; available to state-sync and action adapters.
+;; #;TODO(v0.99.x): Wire DELTA-SET-THEME handler to read this parameter and apply changes.
 (define current-gui-theme-manager (make-parameter #f))
 
 (provide current-gui-theme-manager)
@@ -233,10 +235,7 @@
   ;; GAP-EA (v0.98.7 W0): Wire UI event actions flag from config.json.
   ;; Reads "ui.event-actions.enabled" from settings; default #f = zero behavior change.
   (define settings (dict-ref rt-config 'settings #f))
-  (when settings
-    (define ui-actions-enabled? (setting-ref* settings '(ui event-actions enabled) #f))
-    (when ui-actions-enabled?
-      (current-ui-event-actions-enabled? #t)))
+  (wire-ui-event-actions-from-config! settings)
 
   ;; Create agent session (wires provider, tools, extensions, event bus)
   (define sess (make-agent-session rt-config))

@@ -30,7 +30,9 @@
          "../tui/tui-render-loop.rkt"
          "../cli/args.rkt"
          "../extensions/ui-surface.rkt"
-         (only-in "../ui-core/ui-actions.rkt" current-ui-event-actions-enabled?)
+         (only-in "../ui-core/ui-actions.rkt"
+                  current-ui-event-actions-enabled?
+                  wire-ui-event-actions-from-config!)
          (only-in "../runtime/settings-query.rkt" setting-ref*))
 
 ;; TUI entry point contracts.
@@ -283,10 +285,7 @@
   ;; GAP-EA (v0.98.7 W0): Wire UI event actions flag from config.json.
   ;; Reads "ui.event-actions.enabled" from settings; default #f = zero behavior change.
   (define settings (dict-ref rt-config 'settings #f))
-  (when settings
-    (define ui-actions-enabled? (setting-ref* settings '(ui event-actions enabled) #f))
-    (when ui-actions-enabled?
-      (current-ui-event-actions-enabled? #t)))
+  (wire-ui-event-actions-from-config! settings)
   (define-values (ctx sess scrollback-path) (create-tui-session rt-config cli-cfg))
   (load-tui-scrollback ctx sess rt-config scrollback-path)
   (init-tui-terminal ctx)

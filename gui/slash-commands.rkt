@@ -27,6 +27,9 @@
                   make-ui-command-registry)
          "gui-types.rkt")
 
+;; GAP-CR (v0.98.8 W1): Cache command registry at module level instead of rebuilding per invocation.
+(define the-canonical-registry (make-ui-command-registry canonical-commands))
+
 (provide make-slash-command-handler
          add-system-msg!
          try-extension-dispatch)
@@ -288,12 +291,11 @@
           ;; GAP-CR (v0.98.8 W1): Try dynamic command registry lookup before falling back.
           ;; Hardcoded commands still work via case above; this is a FALLBACK for commands
           ;; NOT in the hardcoded list. Unknown commands get "Unknown command" message.
-          (define cmd-registry (make-ui-command-registry canonical-commands))
-          (define registered-cmd (ui-registry-lookup cmd-registry (format "/~a" cmd)))
+          (define registered-cmd (ui-registry-lookup the-canonical-registry (format "/~a" cmd)))
           (or (and registered-cmd
                    (ui-command-gui? registered-cmd)
                    (begin
-                     (add-system-msg! (format "Command /~a executed."
+                     (add-system-msg! (format "Command /~a registered (not yet implemented in GUI)."
                                               (ui-command-name registered-cmd))
                                       state-box
                                       gui-state-lock
