@@ -9,15 +9,7 @@
 ;; W4.1 (v0.94.4): Extract from tui/palette.rkt to make command metadata
 ;; available to both frontends without TUI dependency.
 
-(require racket/contract
-         (only-in "../util/command-types.rkt"
-                  cmd-entry
-                  cmd-entry?
-                  cmd-entry-name
-                  cmd-entry-summary
-                  cmd-entry-category
-                  cmd-entry-args-spec
-                  cmd-entry-aliases))
+(require racket/contract)
 
 ;; Extended command entry with frontend availability
 (provide ui-command

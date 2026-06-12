@@ -30,7 +30,13 @@
 
 (define gui-delta-handlers
   (delta-handlers->table #:set-status (lambda (payload state)
-                                        (struct-copy gui-state state [status payload]))
+                                        ;; TEST-03 (v0.98.13): Guard against string payloads.
+                                        ;; gui-state-status is symbol?; coerce if needed.
+                                        (define sym
+                                          (if (string? payload)
+                                              (string->symbol payload)
+                                              payload))
+                                        (struct-copy gui-state state [status sym]))
                          ;; GUI doesn't have custom-header/custom-footer fields yet — skip
                          #:set-header (lambda (payload state) state)
                          #:clear-header (lambda (payload state) state)
