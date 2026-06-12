@@ -21,9 +21,9 @@
                   render-hook?
                   render-hook-phase))
 
-;; Struct
-(provide q-component
-         q-component?
+;; M-03 (v0.98.10 W1): Hide raw q-component constructor.
+;; Only make-q-component (contracted) and q-component? / accessors are public.
+(provide q-component?
          q-component-render-fn
          q-component-invalidate-fn
          q-component-cache-box
@@ -34,7 +34,7 @@
          q-component-state-box
          (contract-out
           [make-q-component
-           (->* (procedure?)
+           (->* ((-> ui-state? exact-nonnegative-integer? (listof any/c)))
                 (#:id symbol?
                       #:invalidate-fn procedure?
                       #:handle-input (or/c procedure? #f)
@@ -73,7 +73,8 @@
          wants-focus? ; boolean — whether this component can receive focus
          vdom? ; boolean — #t when render-fn returns vnodes
          state-box) ; (boxof hash?) — per-component local state
-  #:transparent)
+  #:transparent
+  #:extra-constructor-name make-raw-q-component)
 
 ;; GAP-RH (v0.98.7 W2): Parameter for registered render hooks.
 ;; Default empty list — no hooks applied unless registered.
@@ -87,13 +88,25 @@
 (define (unregister-render-hook! hook)
   (current-render-hooks (filter (lambda (h) (not (eq? h hook))) (current-render-hooks))))
 
-(provide current-render-hooks
-         (contract-out [register-render-hook! (-> render-hook? void?)]
-                       [unregister-render-hook! (-> render-hook? void?)]))
+;; L-01 (v0.98.10 W1): current-render-hooks is a typed parameter.
+;; M-02 (v0.98.10 W1): Expose invalidate-all-hooks! for explicit cache invalidation.
+(provide (contract-out [current-render-hooks (parameter/c (listof render-hook?))]
+                       [register-render-hook! (-> render-hook? void?)]
+                       [unregister-render-hook! (-> render-hook? void?)]
+                       [invalidate-all-hooks! (-> void?)]))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Constructor
 ;; ═══════════════════════════════════════════════════════════════════
+
+;; M-02 (v0.98.10 W1): Component registry for hook-change invalidation.
+(define all-components-registry (box '()))
+
+(define (register-component! comp)
+  (set-box! all-components-registry (cons comp (unbox all-components-registry))))
+
+(define (invalidate-all-hooks!)
+  (for-each component-invalidate! (unbox all-components-registry)))
 
 (define (make-q-component render-fn
                           #:id [id 'anonymous]
@@ -101,7 +114,17 @@
                           #:handle-input [handle-input-fn #f]
                           #:wants-focus? [wants-focus? #f]
                           #:vdom? [vdom? #f])
-  (q-component render-fn invalidate-fn (box #f) id handle-input-fn wants-focus? vdom? (box (hash))))
+  (define comp
+    (make-raw-q-component render-fn
+                          invalidate-fn
+                          (box #f)
+                          id
+                          handle-input-fn
+                          wants-focus?
+                          vdom?
+                          (box (hash))))
+  (register-component! comp)
+  comp)
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Operations

@@ -22,6 +22,7 @@
          (only-in "../tui/component.rkt"
                   register-render-hook!
                   unregister-render-hook!
+                  invalidate-all-hooks!
                   current-render-hooks)
          (only-in "../tui/keybindings/key-dispatch.rkt" handle-key))
 
@@ -352,7 +353,15 @@
                    (test-case "MF-07: register-render-hook! rejects non-hook"
                      (check-exn exn:fail:contract? (lambda () (register-render-hook! "not-a-hook"))))
                    (test-case "MF-07: unregister-render-hook! rejects non-hook"
-                     (check-exn exn:fail:contract? (lambda () (unregister-render-hook! 42)))))
+                     (check-exn exn:fail:contract? (lambda () (unregister-render-hook! 42))))
+                   ;; L-01 (v0.98.10 W1): current-render-hooks is a typed parameter
+                   (test-case "L-01: current-render-hooks rejects non-list"
+                     (check-exn exn:fail:contract? (lambda () (current-render-hooks 42))))
+                   (test-case "L-01: current-render-hooks accepts empty list"
+                     (check-not-exn (lambda () (current-render-hooks '()))))
+                   ;; M-03 (v0.98.10 W1): raw constructor is not exported
+                   (test-case "M-03: raw q-component constructor is not exported"
+                     (check-exn exn:fail? (lambda () (eval 'q-component)))))
 
 ;; ═══════════════════════════════════════════════════════════
 ;; LF-02 (v0.98.9 W2): Pre-render dispatch tests
@@ -392,8 +401,50 @@
      (check-equal? (length result) 1)
      (check-equal? (caar result) 'post))))
 
+;; ═══════════════════════════════════════════════════════════
+;; W1 (v0.98.10): Component contract tightening + hook invalidation tests
+;; ═══════════════════════════════════════════════════════════
+(define-test-suite component-contract-tests
+                   ;; L-02: render-fn contract tightening
+                   (test-case "L-02: make-q-component rejects non-procedure render-fn"
+                     (check-exn exn:fail:contract? (lambda () (make-q-component 42))))
+                   (test-case "L-02: make-q-component rejects wrong-arity render-fn"
+                     (check-exn exn:fail:contract? (lambda () (make-q-component (lambda () '())))))
+                   (test-case "L-02: make-q-component accepts valid render-fn"
+                     (check-not-exn (lambda () (make-q-component (lambda (state width) '())))))
+                   ;; M-02: invalidate-all-hooks! invalidates all registered components
+                   (test-case "M-02: invalidate-all-hooks! clears all component caches"
+                     (define call-count (box 0))
+                     (define comp1
+                       (make-q-component (lambda (s w)
+                                           (set-box! call-count (add1 (unbox call-count)))
+                                           '(("A")))
+                                         #:id 'one))
+                     (define comp2
+                       (make-q-component (lambda (s w)
+                                           (set-box! call-count (add1 (unbox call-count)))
+                                           '(("B")))
+                                         #:id 'two))
+                     ;; Render both to populate cache
+                     (component-render comp1 (initial-ui-state) 80)
+                     (component-render comp2 (initial-ui-state) 80)
+                     (check-equal? (unbox call-count) 2)
+                     ;; Cache hits
+                     (component-render comp1 (initial-ui-state) 80)
+                     (component-render comp2 (initial-ui-state) 80)
+                     (check-equal? (unbox call-count) 2)
+                     ;; Invalidate all via hook-change helper
+                     (invalidate-all-hooks!)
+                     (check-false (component-cached-width comp1))
+                     (check-false (component-cached-width comp2))
+                     ;; Re-renders happen again
+                     (component-render comp1 (initial-ui-state) 80)
+                     (component-render comp2 (initial-ui-state) 80)
+                     (check-equal? (unbox call-count) 4)))
+
 (run-tests layout-breakpoint-contract-tests)
 (run-tests focus-tracking-tests)
 (run-tests test-component-model)
 (run-tests render-hook-registration-tests)
 (run-tests pre-render-dispatch-tests)
+(run-tests component-contract-tests)
