@@ -25,7 +25,8 @@
          "../gui/state-sync.rkt"
          "../gui/gui-types.rkt"
          (only-in "../ui-core/ui-actions.rkt" current-ui-event-actions-enabled?)
-         (only-in "../runtime/settings-query.rkt" setting-ref*))
+         (only-in "../runtime/settings-query.rkt" setting-ref*)
+         (only-in "lifecycle-hooks.rkt" dispatch-gui-hook! current-gui-event-runtime))
 (require (only-in "../util/error/error-helpers.rkt" with-safe-fallback))
 
 (provide (contract-out [run-gui-with-runtime (-> any/c any/c void?)]
@@ -182,6 +183,9 @@
         (m b))))
 
   ;; Build and render the window (blocks until closed)
+  ;; GAP-LH (v0.98.7 W1): Dispatch gui.window.opened lifecycle hook.
+  ;; dispatch-gui-hook! has built-in error isolation (handlers wrapped in with-handlers).
+  (dispatch-gui-hook! 'gui.window.opened (hasheq 'session-id (session-id sess) 'model model-name))
   (render #:wait? #t
           (window #:title (format "q v~a - ~a" q-version (or model-name "q"))
                   #:size '(860 640)
@@ -193,6 +197,8 @@
                                               #:mixin (compose-mixins (editor-canvas-clipboard-mixin)
                                                                       (editor-canvas-bg-mixin bg-c)))
                           (input-view input-obs on-input #:stretch '(#t #f)))))
+  ;; GAP-LH (v0.98.7 W1): Dispatch gui.window.closed lifecycle hook after window closes.
+  (dispatch-gui-hook! 'gui.window.closed (hasheq 'session-id (session-id sess)))
 
   ;; Cleanup after window closes
   (void))
@@ -230,6 +236,9 @@
   (define bus (dict-ref rt-config 'event-bus #f))
   (define theme (default-theme))
   (define model-name (dict-ref rt-config 'model-name #f))
+
+  ;; GAP-LH (v0.98.7 W1): Set runtime parameter for lifecycle hook event emission.
+  (current-gui-event-runtime rt-config)
 
   ;; GUI state: accumulated messages + status
   (define state-box (box (make-gui-state #:model model-name)))
