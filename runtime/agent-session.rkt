@@ -28,7 +28,6 @@
          racket/string
          racket/file
          racket/list
-         racket/runtime-path
          racket/path
          racket/dict
          (only-in "../util/error/errors.rkt" raise-session-error)
@@ -92,28 +91,12 @@
          ;; LF2 (GAP-10): conclusion-to-memory bridge
          (only-in "memory/conclusion-bridge.rkt" persist-high-value-conclusions!)
          (only-in "memory/service.rkt" current-memory-backend)
-         ;; F8: browser service lifecycle
-         (only-in "../browser/service.rkt"
-                  make-secure-browser-service
-                  current-browser-service
-                  secure-browser-service?)
-         (only-in "../browser/settings.rkt"
-                  load-browser-settings
-                  default-browser-settings
-                  browser-settings-enabled?
-                  browser-settings-sidecar-path
-                  browser-settings-sidecar-timeout-ms
-                  browser-settings-headless?)
-         (only-in "../browser/adapters/mock.rkt"
-                  make-mock-adapter
-                  mock-open
-                  mock-close
-                  mock-navigate
-                  mock-observe
-                  mock-act
-                  mock-screenshot)
-         (only-in "../browser/adapters/playwright-sidecar.rkt" make-playwright-adapter)
-         (only-in "../browser/adapter.rkt" make-browser-adapter)
+         ;; F8: browser service lifecycle (extracted to browser-integration.rkt, v0.98.16 W1)
+         (only-in "browser-integration.rkt"
+                  try-make-playwright-adapter
+                  make-mock-browser-adapter
+                  configure-session-browser!)
+         (only-in "../browser/service.rkt" current-browser-service)
          (only-in "../runtime/memory/service.rkt" initialize-memory-backend!))
 (require "session/session-mutation.rkt")
 
@@ -251,48 +234,6 @@
            (< (modulo (equal-hash-code sid) 100) (inexact->exact (round (* rate 100)))))))
 
 ;; ============================================================
-;; Browser adapter auto-detection
-;; ============================================================
-
-;; Default sidecar path, resolved relative to q/runtime/agent-session.rkt.
-(define-runtime-path default-playwright-sidecar-path "../sidecars/playwright/q-playwright-sidecar.js")
-
-;; Try to create a Playwright adapter; fall back to mock.
-;; Returns (values adapter sidecar-state-or-#f)
-(define (try-make-playwright-adapter browser-cfg)
-  (define sidecar-path (browser-settings-sidecar-path browser-cfg))
-  (define timeout-ms (browser-settings-sidecar-timeout-ms browser-cfg))
-  (define headless? (browser-settings-headless? browser-cfg))
-  (define sidecar-js
-    (if sidecar-path
-        (string->path sidecar-path)
-        default-playwright-sidecar-path))
-  (cond
-    [(and (file-exists? sidecar-js) (find-executable-path "node"))
-     (with-handlers ([exn:fail? (lambda (e)
-                                  (log-warning "Playwright adapter failed, falling back to mock: ~a"
-                                               (exn-message e))
-                                  (values (make-mock-browser-adapter) #f))])
-       (define adapter
-         (make-playwright-adapter (path->string sidecar-js)
-                                  #:timeout-ms timeout-ms
-                                  #:headless? headless?))
-       (values adapter #f))]
-    [else
-     (log-warning "Browser: Node.js or sidecar not found, using mock adapter")
-     (values (make-mock-browser-adapter) #f)]))
-
-;; Build a mock adapter inline (avoids circular dependency issues)
-(define (make-mock-browser-adapter)
-  (define mock (make-mock-adapter))
-  (make-browser-adapter #:open (lambda (sid target) (mock-open mock target #f))
-                        #:close (lambda (sid) (mock-close mock sid))
-                        #:navigate (lambda (sid url) (mock-navigate mock sid url))
-                        #:observe (lambda (sid selector) (mock-observe mock sid selector))
-                        #:act (lambda (sid action) (mock-act mock sid action))
-                        #:screenshot (lambda (sid sel fp) (mock-screenshot mock sid sel "png"))))
-
-;; ============================================================
 ;; make-agent-session
 ;; ============================================================
 
@@ -355,18 +296,8 @@
                                      '()))))
 
   ;; F8: Browser service initialization (feature-flagged)
-  ;; Uses Playwright sidecar when Node.js + sidecar are available,
-  ;; falls back to mock adapter otherwise.
-  (let ([q-cfg (config-settings cfg-with-rollout)])
-    (when q-cfg
-      (let ([browser-cfg (load-browser-settings q-cfg)])
-        (when (browser-settings-enabled? browser-cfg)
-          (define-values (adapter _sidecar-state) (try-make-playwright-adapter browser-cfg))
-          (define browser-svc
-            (make-secure-browser-service adapter
-                                         #:settings browser-cfg
-                                         #:event-bus (agent-session-event-bus sess)))
-          (current-browser-service browser-svc)))))
+  ;; Extracted to browser-integration.rkt (v0.98.16 W1)
+  (configure-session-browser! (config-settings cfg-with-rollout) (agent-session-event-bus sess))
 
   ;; v0.95.15 W2: Initialize memory backend from session config
   (when (config-memory-enabled? cfg-with-rollout)
