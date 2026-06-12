@@ -50,7 +50,8 @@
       'timeout
       (hasheq 'type "integer" 'description "Timeout in seconds for crawl polling (default 30)")))
     tool-firecrawl
-    #f)
+    #f
+    'network)
    ;; browser_open (MEDIUM risk)
    (make-tool-spec* "browser_open"
                     "Open a browser session to a URL"
@@ -61,7 +62,8 @@
                             'properties
                             (hasheq 'url (hasheq 'type "string" 'description "URL to open")))
                     handle-browser-open
-                    "Use browser_open to open web pages. Always close sessions when done.")
+                    "Use browser_open to open web pages. Always close sessions when done."
+                    'browser)
    ;; browser_observe (LOW risk)
    (make-tool-spec*
     "browser_observe"
@@ -76,7 +78,8 @@
                     'selector
                     (hasheq 'type "string" 'description "CSS selector to focus observation")))
     handle-browser-observe
-    #f)
+    #f
+    'browser)
    ;; browser_click (HIGH risk)
    (make-tool-spec*
     "browser_click"
@@ -96,7 +99,8 @@
                     'button
                     (hasheq 'type "string" 'description "Mouse button: left, right, middle")))
     handle-browser-click
-    "Clicking may trigger side effects. Prefer observe before click.")
+    "Clicking may trigger side effects. Prefer observe before click."
+    'browser)
    ;; browser_type (HIGH risk)
    (make-tool-spec*
     "browser_type"
@@ -118,7 +122,8 @@
                     'clear-first?
                     (hasheq 'type "boolean" 'description "Clear existing text first")))
     handle-browser-type
-    "Typing submits form data. Verify the correct input before typing.")
+    "Typing submits form data. Verify the correct input before typing."
+    'browser)
    ;; browser_press (HIGH risk)
    (make-tool-spec*
     "browser_press"
@@ -135,7 +140,8 @@
                     'modifiers
                     (hasheq 'type "array" 'description "Modifier keys (ctrl, alt, shift, meta)")))
     handle-browser-press
-    "Pressing keys may trigger form submissions or page navigation.")
+    "Pressing keys may trigger form submissions or page navigation."
+    'browser)
    ;; browser_extract (LOW risk)
    (make-tool-spec*
     "browser_extract"
@@ -156,7 +162,8 @@
              'extract-type
              (hasheq 'type "string" 'description "Extraction type: text, html, accessibility")))
     handle-browser-extract
-    #f)
+    #f
+    'browser)
    ;; browser_screenshot (LOW risk)
    (make-tool-spec*
     "browser_screenshot"
@@ -176,7 +183,8 @@
               'description
               "CSS selector or [q-id=\"N\"] to screenshot specific element (e.g. [q-id=\"3\"])")))
     handle-browser-screenshot
-    #f)
+    #f
+    'browser)
    ;; browser_scroll (LOW risk)
    (make-tool-spec*
     "browser_scroll"
@@ -193,7 +201,8 @@
                     'amount
                     (hasheq 'type "integer" 'description "Number of viewport heights to scroll")))
     handle-browser-scroll
-    #f)
+    #f
+    'browser)
    ;; browser_close (LOW risk)
    (make-tool-spec*
     "browser_close"
@@ -205,7 +214,8 @@
             'properties
             (hasheq 'session-id (hasheq 'type "string" 'description "Browser session ID to close")))
     handle-browser-close
-    "Always close browser sessions when done to free resources.")
+    "Always close browser sessions when done to free resources."
+    'browser)
    ;; browser_check_local_app (MEDIUM risk — read-only navigation)
    (make-tool-spec* "browser_check_local_app"
                     "Quick health check for a local web app: open, screenshot, extract, close."
@@ -223,4 +233,5 @@
                                     'screenshot
                                     (hasheq 'type "boolean" 'description "Capture screenshot")))
                     handle-browser-check-local-app
-                    "Quick local app health check.")))
+                    "Quick local app health check."
+                    'browser)))

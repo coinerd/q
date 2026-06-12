@@ -37,7 +37,8 @@
                     'limit
                     (hasheq 'type "integer" 'description "Max lines to return")))
     tool-read
-    "When making parallel read calls, include the 'path' parameter in EVERY call. Never pass a bare line number without a path.")
+    "When making parallel read calls, include the 'path' parameter in EVERY call. Never pass a bare line number without a path."
+    'read-only)
    ;; write
    (make-tool-spec* "write"
                     "Write content to a file"
@@ -51,7 +52,8 @@
                                     'content
                                     (hasheq 'type "string" 'description "Content to write")))
                     tool-write
-                    #f)
+                    #f
+                    'file-write)
    ;; edit
    (make-tool-spec*
     "edit"
@@ -77,7 +79,8 @@
      "IMPORTANT: old-text must match the file content exactly. Copy it verbatim from a prior "
      "read tool result. If edit fails, re-read the file first. "
      "Keep old-text short — ideally under 500 chars (~20 lines). "
-     "If you need to change a large block, split into multiple smaller edits."))
+     "If you need to change a large block, split into multiple smaller edits.")
+    'file-write)
    ;; bash
    (make-tool-spec* "bash"
                     "Execute a shell command"
@@ -93,7 +96,8 @@
                                     'working-directory
                                     (hasheq 'type "string" 'description "Working directory")))
                     tool-bash
-                    #f)
+                    #f
+                    'shell-exec)
    ;; grep
    (make-tool-spec*
     "grep"
@@ -116,7 +120,8 @@
                     'context-lines
                     (hasheq 'type "integer" 'description "Context lines around match")))
     tool-grep
-    #f)
+    #f
+    'read-only)
    ;; find
    (make-tool-spec*
     "find"
@@ -137,7 +142,8 @@
                     'max-results
                     (hasheq 'type "integer" 'description "Max results")))
     tool-find
-    #f)
+    #f
+    'read-only)
    ;; ls
    (make-tool-spec*
     "ls"
@@ -156,7 +162,8 @@
                     'sort-by
                     (hasheq 'type "string" 'description "\"name\", \"size\", or \"date\"")))
     tool-ls
-    #f)
+    #f
+    'read-only)
    ;; date
    (make-tool-spec*
     "date"
@@ -172,4 +179,5 @@
                             'description
                             "Output format: iso (default), date, time, unix, weekday, iso-full")))
     tool-date
-    #f)))
+    #f
+    'read-only)))

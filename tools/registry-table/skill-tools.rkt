@@ -41,7 +41,8 @@
                      'description
                      "List of relevance tags (symbols) for state-aware filtering")))
     tool-save-conclusion
-    #f)
+    #f
+    'file-write)
    ;; record_conclusion
    (make-tool-spec*
     "record_conclusion"
@@ -67,7 +68,8 @@
              'tags
              (hasheq 'type "array" 'description "List of relevance tags for state-aware filtering")))
     tool-record_conclusion
-    #f)
+    #f
+    'read-only)
    ;; set-task-state
    (make-tool-spec*
     "set-task-state"
@@ -91,7 +93,8 @@
        'description
        "Transition event: begin-explore, begin-plan, begin-implement, begin-verify, begin-debug, task-complete, revisit, force-transition")))
     tool-set-task-state
-    #f)
+    #f
+    'read-only)
    ;; spawn-subagent
    (make-tool-spec*
     "spawn-subagent"
@@ -117,7 +120,8 @@
                             'description
                             "Allowed tool names for child")))
     tool-spawn-subagent
-    #f)
+    #f
+    'subagent)
    ;; spawn-subagents
    (make-tool-spec*
     "spawn-subagents"
@@ -141,7 +145,8 @@
       'aggregate
       (hasheq 'type "boolean" 'description "Include aggregated summary in response (default true)")))
     tool-spawn-subagents
-    #f)
+    #f
+    'subagent)
    ;; session_recall
    (make-tool-spec*
     "session_recall"
@@ -175,7 +180,8 @@
                             'description
                             "Retrieve a range of entries by ID (inclusive)")))
     tool-session-recall
-    #f)
+    #f
+    'read-only)
    ;; skill-route
    (make-tool-spec*
     "skill-route"
@@ -197,7 +203,8 @@
       'name
       (hasheq 'type "string" 'description "Skill name for load action")))
     tool-skill-route
-    #f)
+    #f
+    'read-only)
    ;; delete-lines
    (make-tool-spec*
     "delete-lines"
@@ -214,4 +221,5 @@
                     'end-line
                     (hasheq 'type "integer" 'description "1-based end line (inclusive)")))
     tool-delete-lines
-    "Prefer delete-lines over edit for removing 3+ consecutive lines. Read the file first to identify exact line numbers.")))
+    "Prefer delete-lines over edit for removing 3+ consecutive lines. Read the file first to identify exact line numbers."
+    'file-write)))

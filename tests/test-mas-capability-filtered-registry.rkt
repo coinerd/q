@@ -118,11 +118,19 @@
 
     ;; ── tool-spec required-capability ──
 
-    (test-case "tool-specs: all specs have 'any default"
+    (test-case "tool-specs: all specs have valid capabilities"
       (for ([spec (in-list tool-specs)])
-        (check-equal? (tool-spec-required-capability spec)
-                      'any
-                      (format "spec ~a should default to 'any" (tool-spec-name spec)))))
+        (check-true (valid-capability? (tool-spec-required-capability spec))
+                    (format "spec ~a should have valid capability, got ~a"
+                            (tool-spec-name spec)
+                            (tool-spec-required-capability spec)))))
+
+    (test-case "tool-specs: no spec has 'any default anymore"
+      (for ([spec (in-list tool-specs)])
+        (check-not-equal? (tool-spec-required-capability spec)
+                          'any
+                          (format "spec ~a should not have 'any (should be specific)"
+                                  (tool-spec-name spec)))))
 
     ;; ── Integration: register-tools-from-specs! ──
 
@@ -130,9 +138,40 @@
       (define reg (make-tool-registry))
       (register-tools-from-specs! reg tool-specs)
       (define tools (list-tools reg))
+      ;; All tools should have valid capabilities (not 'any)
       (for ([t (in-list tools)])
-        (check-equal? (tool-required-capability t)
-                      'any
-                      (format "tool ~a should have 'any capability" (tool-name t)))))))
+        (check-true (valid-capability? (tool-required-capability t))
+                    (format "tool ~a should have valid capability, got ~a"
+                            (tool-name t)
+                            (tool-required-capability t)))))
+
+    (test-case "capability annotation: read tool requires 'read-only"
+      (define reg (make-tool-registry))
+      (register-tools-from-specs! reg tool-specs)
+      (define read-tool (findf (lambda (t) (equal? (tool-name t) "read")) (list-tools reg)))
+      (when read-tool
+        (check-equal? (tool-required-capability read-tool) 'read-only)))
+
+    (test-case "capability annotation: write tool requires 'file-write"
+      (define reg (make-tool-registry))
+      (register-tools-from-specs! reg tool-specs)
+      (define write-tool (findf (lambda (t) (equal? (tool-name t) "write")) (list-tools reg)))
+      (when write-tool
+        (check-equal? (tool-required-capability write-tool) 'file-write)))
+
+    (test-case "capability annotation: bash tool requires 'shell-exec"
+      (define reg (make-tool-registry))
+      (register-tools-from-specs! reg tool-specs)
+      (define bash-tool (findf (lambda (t) (equal? (tool-name t) "bash")) (list-tools reg)))
+      (when bash-tool
+        (check-equal? (tool-required-capability bash-tool) 'shell-exec)))
+
+    (test-case "capability annotation: spawn-subagent requires 'subagent"
+      (define reg (make-tool-registry))
+      (register-tools-from-specs! reg tool-specs)
+      (define spawn-tool
+        (findf (lambda (t) (equal? (tool-name t) "spawn-subagent")) (list-tools reg)))
+      (when spawn-tool
+        (check-equal? (tool-required-capability spawn-tool) 'subagent)))))
 
 (run-tests suite)
