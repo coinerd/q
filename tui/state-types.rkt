@@ -5,6 +5,13 @@
 ;; TUI state types, render cache management, and entry helpers.
 ;; Contains both data definitions and cache/entry utility logic.
 ;; Split from state.rkt (v0.22.6 W2) to keep each module under 400 lines.
+;;
+;; ARCHITECTURE NOTE (v0.98.16 AXIS1-F05): Render cache and streaming helper
+;; functions cannot be extracted to separate modules because they use
+;; `struct-copy ui-state` which requires the ui-state struct definition
+;; at compile time. Any extraction would create a circular dependency
+;; (new module → state-types for ui-state → new module for functions).
+;; The functions are individually tested in tests/test-state-types.rkt.
 
 (require racket/contract
          racket/set
