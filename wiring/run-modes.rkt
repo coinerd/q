@@ -33,7 +33,8 @@
          (only-in "../runtime/session/session-config.rkt"
                   hash->session-config
                   session-config?
-                  session-config->hash)
+                  session-config->hash
+                  current-goal-loop-enabled?)
          (only-in "mode-helpers.rkt"
                   wire-security-config!
                   wire-timeouts!
@@ -49,7 +50,8 @@
          (only-in "../runtime/memory/service.rkt"
                   update-memory-policy!
                   current-auto-reflection-enabled
-                  current-auto-reflection-min-items)
+                  current-auto-reflection-min-items
+                  current-memory-backend)
          (only-in "../agent/iteration/step-interpreter.rkt" current-reflection-prompt-enabled)
          (only-in "../runtime/context-assembly/auto-distillation.rkt"
                   current-auto-distillation-enabled?
@@ -308,7 +310,12 @@
   (current-reflection-prompt-enabled (setting-reflection-prompt-enabled? settings))
   (let ([ad (setting-auto-distillation-enabled? settings)])
     (unless (eq? ad 'unset)
-      (current-auto-distillation-enabled? ad))))
+      (current-auto-distillation-enabled? ad)))
+  ;; AXIS2-F08 (v0.98.14): Warn when memory backend active but reflection LLM missing
+  (when (and (current-memory-backend) (not (current-reflection-llm-fn)))
+    (log-warning "memory: reflection LLM not available — auto-reflection disabled"))
+  ;; AXIS2-F13 (v0.98.14): Wire goal-loop from settings (default #t)
+  (current-goal-loop-enabled? (setting-ref* settings '(goal-loop-enabled?) #t)))
 ;; ============================================================
 ;; reload-config! (#1182)
 ;; ============================================================
