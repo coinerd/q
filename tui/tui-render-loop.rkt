@@ -56,7 +56,10 @@
                   clip-visible-lines
                   compute-pad-count
                   clip-overlay-content)
-         (only-in "render-loop/watchdog.rkt" current-busy-watchdog-ms check-busy-watchdog))
+         (only-in "render-loop/watchdog.rkt" current-busy-watchdog-ms check-busy-watchdog)
+         ;; GAP-LB (v0.98.8 W0): Layout breakpoint classification
+         (only-in "../ui-core/layout-protocol.rkt" classify-layout-breakpoint make-gui-layout)
+         (only-in "../tui/context.rkt" tui-ctx-set-layout-breakpoints!))
 
 (define (tui-output-port)
   (or (current-guarded-real-output-port) (current-output-port)))
@@ -172,7 +175,13 @@
   (define-values (cols rows) (tui-screen-size))
   (define ubuf (make-cell-buffer cols rows))
   (set-box! (tui-ctx-ubuf-box ctx) ubuf)
-  (set-box! (tui-ctx-previous-frame-box ctx) #f))
+  (set-box! (tui-ctx-previous-frame-box ctx) #f)
+  ;; GAP-LB (v0.98.8 W0): Classify layout breakpoints after resize.
+  ;; classify-layout-breakpoint is a pure function — returns (listof symbol).
+  ;; Components can query breakpoints via tui-ctx-layout-breakpoints for responsive layout.
+  (define layout (make-gui-layout #:width cols #:height rows))
+  (define breakpoints (classify-layout-breakpoint layout))
+  (tui-ctx-set-layout-breakpoints! ctx breakpoints))
 
 (define (tui-ctx-ubuf ctx)
   (unbox (tui-ctx-ubuf-box ctx)))

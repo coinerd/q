@@ -40,6 +40,20 @@
          goal-cancel-box) ; (boxof boolean?) — #t signals goal thread to stop
   #:transparent)
 
+;; GAP-LB (v0.98.8 W0): Layout breakpoints storage per tui-ctx.
+;; Uses a module-level hasheq keyed by ctx identity to avoid changing
+;; the tui-ctx struct definition (additive, no constructor breakage).
+(define layout-breakpoints-table (make-hasheq))
+
+(define (tui-ctx-layout-breakpoints ctx)
+  (hash-ref layout-breakpoints-table ctx '()))
+
+(define (tui-ctx-set-layout-breakpoints! ctx breakpoints)
+  (hash-set! layout-breakpoints-table ctx breakpoints))
+
+(provide tui-ctx-layout-breakpoints
+         tui-ctx-set-layout-breakpoints!)
+
 (define (make-tui-ctx #:event-bus [bus #f]
                       #:session-runner [runner (lambda (prompt) (void))]
                       #:session-dir [sess-dir #f]
