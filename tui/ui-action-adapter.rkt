@@ -15,7 +15,9 @@
                   apply-deltas-with
                   apply-action-with
                   delta-handlers->table)
-         (only-in "../tui/state-types.rkt" ui-state ui-state? ui-state-extension-widgets))
+         (only-in "../tui/state-types.rkt" ui-state ui-state? ui-state-extension-widgets)
+         ;; G-TM2 (v0.98.11): theme sync wiring
+         (only-in "../tui/theme.rkt" current-tui-theme registered-themes))
 
 ;; Shared handler table for TUI
 (provide tui-delta-handlers
@@ -37,7 +39,11 @@
                   ;; TUI ui-state doesn't have a direct status field — skip for now
                   state)
    #:set-theme (lambda (payload state)
-                 ;; TUI theme is handled via tui/theme.rkt parameter, not ui-state.
+                 ;; G-TM2 (v0.98.11): wire DELTA-SET-THEME to current-tui-theme parameter.
+                 (when (symbol? payload)
+                   (define theme (hash-ref registered-themes payload #f))
+                   (when theme
+                     (current-tui-theme theme)))
                  state)
    #:set-layout (lambda (payload state)
                   ;; TUI layout is handled via terminal resize, not ui-state.

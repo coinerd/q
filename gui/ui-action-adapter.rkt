@@ -14,7 +14,10 @@
                   apply-delta-with
                   apply-deltas-with
                   delta-handlers->table)
-         (only-in "../gui/gui-types.rkt" gui-state gui-state? gui-state-status))
+         (only-in "../gui/gui-types.rkt" gui-state gui-state? gui-state-status)
+         ;; G-TM1 (v0.98.11): theme sync wiring
+         (only-in "../gui/main.rkt" current-gui-theme-manager)
+         (only-in "../gui/theme-manager.rkt" tm-switch-theme! theme-manager?))
 
 ;; Shared handler table for GUI
 (provide gui-delta-handlers
@@ -38,7 +41,10 @@
                          #:register-widget (lambda (payload state) state)
                          #:unregister-widget (lambda (payload state) state)
                          #:set-theme (lambda (payload state)
-                                       ;; GUI theme is handled via theme-manager.rkt
+                                       ;; G-TM1 (v0.98.11): wire DELTA-SET-THEME to theme-manager.
+                                       (define mgr (current-gui-theme-manager))
+                                       (when (and (theme-manager? mgr) (symbol? payload))
+                                         (tm-switch-theme! mgr payload))
                                        state)
                          #:set-layout (lambda (payload state) state)
                          #:set-focus (lambda (payload state) state)))

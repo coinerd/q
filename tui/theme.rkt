@@ -60,7 +60,8 @@
                        [validate-color-value (-> any/c any/c)]
                        [load-theme-from-json (-> any/c (or/c tui-theme? #f))]
                        [json-hash->theme (-> hash? tui-theme?)]
-                       [theme-field-accessor (-> symbol? procedure?)]))
+                       [theme-field-accessor (-> symbol? procedure?)])
+         registered-themes)
 
 ;; ============================================================
 ;; Theme struct — all fields are ANSI color names or #f for default
