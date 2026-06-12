@@ -15,7 +15,11 @@
                   apply-deltas-with
                   apply-action-with
                   delta-handlers->table)
-         (only-in "../tui/state-types.rkt" ui-state ui-state? ui-state-extension-widgets)
+         (only-in "../tui/state-types.rkt"
+                  ui-state
+                  ui-state?
+                  ui-state-extension-widgets
+                  set-status-message)
          ;; G-TM2 (v0.98.11): theme sync wiring
          (only-in "../tui/theme.rkt" current-tui-theme registered-themes))
 
@@ -36,8 +40,10 @@
    #:set-footer (lambda (payload state) (struct-copy ui-state state [custom-footer payload]))
    #:clear-footer (lambda (payload state) (struct-copy ui-state state [custom-footer #f]))
    #:set-status (lambda (payload state)
-                  ;; TUI ui-state doesn't have a direct status field — skip for now
-                  state)
+                  ;; G-STAT (v0.98.11): wire DELTA-SET-STATUS to set-status-message.
+                  (if (string? payload)
+                      (set-status-message state payload)
+                      state))
    #:set-theme (lambda (payload state)
                  ;; G-TM2 (v0.98.11): wire DELTA-SET-THEME to current-tui-theme parameter.
                  (when (symbol? payload)
