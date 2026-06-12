@@ -379,9 +379,17 @@
 ;; JSON format: {"text": "white", "accent": "cyan", ...}
 ;; Color values: "white", "bright-black", "38;5;202", or null for default.
 (define (load-theme-from-json path)
-  (with-handlers ([exn:fail:filesystem? (lambda (e) #f)]
-                  [exn:fail:read? (lambda (e) #f)]
-                  [exn:fail? (lambda (e) #f)])
+  (with-handlers ([exn:fail:filesystem?
+                   (lambda (e)
+                     (log-debug "theme: filesystem error loading ~a: ~a" path (exn-message e))
+                     #f)]
+                  [exn:fail:read?
+                   (lambda (e)
+                     (log-debug "theme: read error loading ~a: ~a" path (exn-message e))
+                     #f)]
+                  [exn:fail? (lambda (e)
+                               (log-debug "theme: error loading ~a: ~a" path (exn-message e))
+                               #f)])
     (if (not (file-exists? path))
         #f
         (call-with-input-file path

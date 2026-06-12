@@ -96,7 +96,11 @@
             [else
              (define q-home (build-path (find-system-path 'home-dir) ".q"))
              (define target-dir (build-path q-home "extensions"))
-             (with-handlers ([exn:fail? (λ (e) (list (make-entry 'error (exn-message e) 0 (hash))))])
+             (with-handlers ([exn:fail? (λ (e)
+                                          (log-warning "extension activate failed for ~a: ~a"
+                                                       name
+                                                       (exn-message e))
+                                          (list (make-entry 'error (exn-message e) 0 (hash))))])
                (activate-extension! name target-dir)
                (define hot-load-entry (try-hot-load-extension cctx name target-dir))
                (if hot-load-entry
@@ -117,7 +121,11 @@
              (list (make-entry 'error (format "Invalid extension name: ~a" name) 0 (hash)))]
             [else
              (define target-dir (build-path project-dir ".q" "extensions"))
-             (with-handlers ([exn:fail? (λ (e) (list (make-entry 'error (exn-message e) 0 (hash))))])
+             (with-handlers ([exn:fail? (λ (e)
+                                          (log-warning "extension activate failed for ~a: ~a"
+                                                       name
+                                                       (exn-message e))
+                                          (list (make-entry 'error (exn-message e) 0 (hash))))])
                (activate-extension! name target-dir)
                (define hot-load-entry (try-hot-load-extension cctx name target-dir))
                (if hot-load-entry
@@ -207,7 +215,11 @@
             [else
              (define q-home (build-path (find-system-path 'home-dir) ".q"))
              (define target-dir (build-path q-home "extensions"))
-             (with-handlers ([exn:fail? (λ (e) (list (make-entry 'error (exn-message e) 0 (hash))))])
+             (with-handlers ([exn:fail? (λ (e)
+                                          (log-warning "extension deactivate failed for ~a: ~a"
+                                                       name
+                                                       (exn-message e))
+                                          (list (make-entry 'error (exn-message e) 0 (hash))))])
                (deactivate-extension! name target-dir)
                (list (make-entry 'system
                                  (format "Extension '~a' deactivated globally (~a)" name target-dir)
@@ -220,7 +232,11 @@
              (list (make-entry 'error (format "Invalid extension name: ~a" name) 0 (hash)))]
             [else
              (define target-dir (build-path project-dir ".q" "extensions"))
-             (with-handlers ([exn:fail? (λ (e) (list (make-entry 'error (exn-message e) 0 (hash))))])
+             (with-handlers ([exn:fail? (λ (e)
+                                          (log-warning "extension deactivate failed for ~a: ~a"
+                                                       name
+                                                       (exn-message e))
+                                          (list (make-entry 'error (exn-message e) 0 (hash))))])
                (deactivate-extension! name target-dir)
                (list (make-entry 'system
                                  (format "Extension '~a' deactivated locally (~a)" name target-dir)

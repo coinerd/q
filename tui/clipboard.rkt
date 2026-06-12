@@ -167,7 +167,9 @@
   (cond
     [(eq? mode 'off) 'disabled]
     [(eq? mode 'osc52)
-     (with-handlers ([exn:fail? (lambda (e) 'failed)])
+     (with-handlers ([exn:fail? (lambda (e)
+                                  (log-debug "clipboard: OSC 52 copy failed: ~a" (exn-message e))
+                                  'failed)])
        (osc-52-copy text out)
        'ok-osc52)]
     [(eq? mode 'system)
@@ -182,13 +184,16 @@
      (cond
        [(and tool (clipboard-copy-via-tool (car tool) (cadr tool) text))
         ;; System tool succeeded — also emit OSC 52 for SSH sessions
-        (with-handlers ([exn:fail? (lambda (e)
-                                    (log-debug "clipboard: OSC 52 copy failed: ~a" (exn-message e)))])
+        (with-handlers
+            ([exn:fail? (lambda (e) (log-debug "clipboard: OSC 52 copy failed: ~a" (exn-message e)))])
           (osc-52-copy text out))
         'ok-system]
        [else
         ;; No system tool or it failed — OSC 52 fallback
-        (with-handlers ([exn:fail? (lambda (e) 'failed)])
+        (with-handlers ([exn:fail? (lambda (e)
+                                     (log-debug "clipboard: OSC 52 fallback failed: ~a"
+                                                (exn-message e))
+                                     'failed)])
           (osc-52-copy text out)
           'ok-osc52)])]))
 
@@ -242,31 +247,33 @@
   (define tool (detect-paste-tool))
   (if (not tool)
       #f
-      (with-safe-fallback #f
-                          (define tool-path (car tool))
-                          (define tool-name (cadr tool))
-                          (define args
-                            (case tool-name
-                              [(pbcopy pbpaste) '()]
-                              [(wl-copy wl-paste) '()]
-                              [(xclip) '("-selection" "clipboard" "-o")]
-                              [(xsel) '("--clipboard" "--output")]
-                              [else '()]))
-                          (define-values (sp out in err) (apply subprocess #f #f #f tool-path args))
-                          (dynamic-wind (lambda () (void))
-                                        (lambda ()
-                                          (close-output-port in)
-                                          (define result (port->string out))
-                                          (close-input-port out)
-                                          (close-input-port err)
-                                          (subprocess-wait sp)
-                                          (if (= (subprocess-status sp) 0)
-                                              (string-trim result "\r\n")
-                                              #f))
-                                        (lambda ()
-                                          (with-handlers ([exn:fail? (lambda (e)
-                                                                      (log-debug "clipboard: close out failed: ~a" (exn-message e)))])
-                                            (close-input-port out))
-                                          (with-handlers ([exn:fail? (lambda (e)
-                                                                      (log-debug "clipboard: close err failed: ~a" (exn-message e)))])
-                                            (close-input-port err)))))))
+      (with-safe-fallback
+       #f
+       (define tool-path (car tool))
+       (define tool-name (cadr tool))
+       (define args
+         (case tool-name
+           [(pbcopy pbpaste) '()]
+           [(wl-copy wl-paste) '()]
+           [(xclip) '("-selection" "clipboard" "-o")]
+           [(xsel) '("--clipboard" "--output")]
+           [else '()]))
+       (define-values (sp out in err) (apply subprocess #f #f #f tool-path args))
+       (dynamic-wind
+        (lambda () (void))
+        (lambda ()
+          (close-output-port in)
+          (define result (port->string out))
+          (close-input-port out)
+          (close-input-port err)
+          (subprocess-wait sp)
+          (if (= (subprocess-status sp) 0)
+              (string-trim result "\r\n")
+              #f))
+        (lambda ()
+          (with-handlers
+              ([exn:fail? (lambda (e) (log-debug "clipboard: close out failed: ~a" (exn-message e)))])
+            (close-input-port out))
+          (with-handlers
+              ([exn:fail? (lambda (e) (log-debug "clipboard: close err failed: ~a" (exn-message e)))])
+            (close-input-port err)))))))

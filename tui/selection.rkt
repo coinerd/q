@@ -27,7 +27,9 @@
 ;; Uses rendered lines to map screen coordinates to text.
 (define (selection-text ctx state)
   ;; Bounds validation (#1121): guard against out-of-range indices
-  (with-handlers ([exn:fail? (lambda (e) "")])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-debug "selection: bounds validation failed: ~a" (exn-message e))
+                               "")])
     (define sel (ui-state-selection state))
     (define anchor (selection-state-anchor sel))
     (define end (selection-state-end sel))
