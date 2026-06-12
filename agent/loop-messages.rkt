@@ -150,7 +150,8 @@
                                this-content
                                (list this-content)))]
                   [(list? this-content) (append (list prev-content) this-content)]
-                  [else (string-append (format "~a" prev-content) "\n\n" (format "~a" this-content))]))
+                  [else
+                   (string-append (format "~a" prev-content) "\n\n" (format "~a" this-content))]))
               (cons (hash-set (car acc) 'content new-content) (cdr acc))))]
        [else (cons msg acc)]))))
 
@@ -257,15 +258,43 @@
   ;; Safety net: merge consecutive user messages.
   ;; Some providers (GLM) reject consecutive same-role messages.
   (define merged (collect-system-messages-front (merge-consecutive-roles raw-msgs)))
+  ;; Safety: remove orphaned tool messages whose tool_call_id doesn't match
+  ;; any preceding assistant tool_call. Context assembly may drop assistant
+  ;; messages while keeping tool results, creating orphans that cause API errors.
+  (define merged-clean
+    (let loop ([msgs merged]
+               [seen-ids (set)]
+               [acc '()])
+      (if (null? msgs)
+          (reverse acc)
+          (let* ([m (car msgs)]
+                 [role (hash-ref m 'role #f)])
+            (cond
+              [(equal? role "assistant")
+               (define tcs (hash-ref m 'tool_calls #f))
+               (define new-ids
+                 (if tcs
+                     (for/fold ([s seen-ids]) ([tc (in-list tcs)])
+                       (set-add s (hash-ref tc 'id #f)))
+                     seen-ids))
+               (loop (cdr msgs) new-ids (cons m acc))]
+              [(equal? role "tool")
+               (define tcid (hash-ref m 'tool_call_id #f))
+               (if (and tcid (set-member? seen-ids tcid))
+                   (loop (cdr msgs) seen-ids (cons m acc))
+                   (begin
+                     (log-warning "BUILD-RAW: dropping orphaned tool msg with tool_call_id=~a" tcid)
+                     (loop (cdr msgs) seen-ids acc)))]
+              [else (loop (cdr msgs) seen-ids (cons m acc))])))))
   ;; Safety net: providers with enable_thinking (qwen3/llama.cpp) reject
   ;; assistant-last messages as "prefill". Strip trailing assistant messages.
   (define merged-trimmed
-    (if (and (pair? merged) (equal? (hash-ref (last merged) 'role #f) "assistant"))
+    (if (and (pair? merged-clean) (equal? (hash-ref (last merged-clean) 'role #f) "assistant"))
         (begin
           (log-warning "DIAG: build-raw-messages: trimming trailing assistant message (~a total)"
-                       (length merged))
-          (drop-right merged 1))
-        merged))
+                       (length merged-clean))
+          (drop-right merged-clean 1))
+        merged-clean))
   merged-trimmed)
 
 ;; ============================================================

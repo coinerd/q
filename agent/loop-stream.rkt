@@ -243,9 +243,17 @@
 
   (define tool-call-parts
     (for/list ([tc (in-list accumulated-tcs)])
-      (make-tool-call-part (hash-ref tc 'id "")
-                           (hash-ref tc 'name "")
-                           (hash-ref tc 'arguments "{}"))))
+      (define raw-id (hash-ref tc 'id #f))
+      (define raw-name (hash-ref tc 'name #f))
+      (define raw-args (hash-ref tc 'arguments #f))
+      ;; Safety: generate ID if provider didn't send one (e.g., streaming chunk missing id)
+      (define tcid
+        (if (and (string? raw-id) (> (string-length raw-id) 0))
+            raw-id
+            (begin
+              (log-warning "LOOP-STREAM: tool call missing id, generating one. tc=~v" tc)
+              (format "tc_~a" (gensym)))))
+      (make-tool-call-part tcid (or raw-name "unknown") (or raw-args "{}"))))
 
   (define content-parts (append (list text-part) tool-call-parts))
 

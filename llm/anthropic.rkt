@@ -14,6 +14,7 @@
          "../util/error/error-helpers.rkt"
          racket/match
          racket/string
+         racket/set
          (only-in "model-defaults.rkt" ANTHROPIC-DEFAULT-MODEL ANTHROPIC-DEFAULT-BASE-URL)
          racket/port
          racket/generator
@@ -90,7 +91,14 @@
          ;; OpenAI-format tool messages have:
          ;;   tool_call_id at message level, content as string
          ;; Anthropic needs user+tool_result format with tool_use_id
-         (define tool-call-id (hash-ref msg 'tool_call_id ""))
+         (define raw-tcid (hash-ref msg 'tool_call_id #f))
+         ;; Safety: never send blank/missing tool_call_id to Anthropic API
+         (unless (and (string? raw-tcid) (> (string-length raw-tcid) 0))
+           (log-warning "ANTHROPIC: tool message has blank/missing tool_call_id: ~v" msg))
+         (define tool-call-id
+           (if (and (string? raw-tcid) (> (string-length raw-tcid) 0))
+               raw-tcid
+               (format "tc_fallback_~a" (gensym))))
          (define tool-result-content
            (if (string? content)
                content
@@ -184,8 +192,52 @@
                  [else (loop remaining (cons (hasheq 'role "user" 'content blocks) acc))]))
              (loop (cdr msgs) (cons cur acc)))])))
 
+  ;; Filter orphaned tool_results: context assembly may drop assistant tool_use
+  ;; messages while keeping tool results. These orphaned tool_results cause
+  ;; Anthropic API 400 errors. Filter them out here.
+  (define filtered-messages
+    (let loop ([msgs merged-messages]
+               [seen-use-ids (set)]
+               [acc '()])
+      (if (null? msgs)
+          (reverse acc)
+          (let* ([m (car msgs)]
+                 [m-role (hash-ref m 'role #f)]
+                 [m-content (hash-ref m 'content #f)])
+            (cond
+              [(equal? m-role "assistant")
+               (define new-ids
+                 (if (list? m-content)
+                     (for/fold ([s seen-use-ids]) ([block (in-list m-content)])
+                       (if (equal? (hash-ref block 'type #f) "tool_use")
+                           (set-add s (hash-ref block 'id #f))
+                           s))
+                     seen-use-ids))
+               (loop (cdr msgs) new-ids (cons m acc))]
+              [(and (equal? m-role "user") (list? m-content))
+               ;; Filter tool_result blocks, keep only those with matching tool_use
+               (define filtered-content
+                 (for/list ([block (in-list m-content)])
+                   (cond
+                     [(equal? (hash-ref block 'type #f) "tool_result")
+                      (define tuid (hash-ref block 'tool_use_id #f))
+                      (cond
+                        [(not (and (string? tuid) (> (string-length tuid) 0)))
+                         (log-warning "ANTHROPIC: dropping tool_result with blank tool_use_id")
+                         #f]
+                        [(not (set-member? seen-use-ids tuid))
+                         (log-warning "ANTHROPIC: dropping orphaned tool_result tuid=~a" tuid)
+                         #f]
+                        [else block])]
+                     [else block])))
+               (define kept (filter identity filtered-content))
+               (if (null? kept)
+                   (loop (cdr msgs) seen-use-ids acc) ; drop empty user message
+                   (loop (cdr msgs) seen-use-ids (cons (hash-set m 'content kept) acc)))]
+              [else (loop (cdr msgs) seen-use-ids (cons m acc))])))))
+
   (define base
-    (hasheq 'model model-name 'max_tokens max-tokens 'messages merged-messages 'stream stream?))
+    (hasheq 'model model-name 'max_tokens max-tokens 'messages filtered-messages 'stream stream?))
 
   ;; Add optional temperature
   (define with-temp
@@ -254,7 +306,10 @@
            (hasheq 'type
                    "tool-call"
                    'id
-                   (hash-ref block 'id "")
+                   (let ([raw-id (hash-ref block 'id #f)])
+                     (if (and (string? raw-id) (> (string-length raw-id) 0))
+                         raw-id
+                         (format "tc_~a" (gensym))))
                    'name
                    (hash-ref block 'name "")
                    'arguments
@@ -459,6 +514,13 @@
                     (cons (make-stream-chunk (hash-ref part 'text) #f #f #f) (unbox chunks-box)))]
          [(equal? (hash-ref part 'type #f) "tool-call")
           ;; Tool call — emit as tool-call delta with full arguments
+          (define raw-id (hash-ref part 'id #f))
+          (define tcid
+            (if (and (string? raw-id) (> (string-length raw-id) 0))
+                raw-id
+                (begin
+                  (log-warning "KIMI: tool-call block missing id, generating one")
+                  (format "tc_~a" (gensym)))))
           (define args-str (jsexpr->string (hash-ref part 'arguments (hasheq))))
           (set-box! chunks-box
                     (cons (make-stream-chunk
@@ -466,7 +528,7 @@
                            (hasheq 'index
                                    idx
                                    'id
-                                   (hash-ref part 'id "")
+                                   tcid
                                    'function
                                    (hasheq 'name (hash-ref part 'name "") 'arguments args-str))
                            #f
