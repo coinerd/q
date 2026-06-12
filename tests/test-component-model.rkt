@@ -18,6 +18,11 @@
                   tui-ctx?
                   tui-ctx-layout-breakpoints
                   tui-ctx-set-layout-breakpoints!)
+         (only-in "../ui-core/render-hooks.rkt" make-render-hook render-hook? render-hook-phase)
+         (only-in "../tui/component.rkt"
+                  register-render-hook!
+                  unregister-render-hook!
+                  current-render-hooks)
          (only-in "../tui/keybindings/key-dispatch.rkt" handle-key))
 
 (define-test-suite
@@ -319,6 +324,71 @@
    (define ctx (make-tui-ctx))
    (check-equal? (tui-ctx-layout-breakpoints ctx) '())))
 
+;; ═══════════════════════════════════════════════════════════
+;; MF-07 (v0.98.9 W2): Render hook registration API tests
+;; ═══════════════════════════════════════════════════════════
+(define-test-suite render-hook-registration-tests
+                   (test-case "MF-07: register-render-hook! adds hook to current-render-hooks"
+                     (parameterize ([current-render-hooks '()])
+                       (define h (make-render-hook 'test 'post-render identity))
+                       (register-render-hook! h)
+                       (check-equal? (length (current-render-hooks)) 1)
+                       (check-eq? (car (current-render-hooks)) h)))
+                   (test-case "MF-07: unregister-render-hook! removes specific hook"
+                     (parameterize ([current-render-hooks '()])
+                       (define h1 (make-render-hook 'a 'post-render identity))
+                       (define h2 (make-render-hook 'b 'post-render identity))
+                       (register-render-hook! h1)
+                       (register-render-hook! h2)
+                       (check-equal? (length (current-render-hooks)) 2)
+                       (unregister-render-hook! h1)
+                       (check-equal? (length (current-render-hooks)) 1)
+                       (check-eq? (car (current-render-hooks)) h2)))
+                   (test-case "MF-07: register-render-hook! rejects non-hook"
+                     (check-exn exn:fail:contract? (lambda () (register-render-hook! "not-a-hook"))))
+                   (test-case "MF-07: unregister-render-hook! rejects non-hook"
+                     (check-exn exn:fail:contract? (lambda () (unregister-render-hook! 42)))))
+
+;; ═══════════════════════════════════════════════════════════
+;; LF-02 (v0.98.9 W2): Pre-render dispatch tests
+;; ═══════════════════════════════════════════════════════════
+(define-test-suite
+ pre-render-dispatch-tests
+ (test-case "LF-02: pre-render hook transforms lines before post-render"
+   (define pre-hook (make-render-hook 'prefix 'pre-render (lambda (lines) (cons '("PRE") lines))))
+   (define post-hook
+     (make-render-hook 'suffix 'post-render (lambda (lines) (append lines '(("POST"))))))
+   (parameterize ([current-render-hooks (list pre-hook post-hook)])
+     (define comp (make-q-component (lambda (state width) '(("BODY")))))
+     (define result (component-render comp (initial-ui-state) 80))
+     ;; Pre-render adds ("PRE") before body, post-render adds ("POST") after
+     (check-equal? (length result) 3)
+     (check-equal? (car result) '("PRE"))
+     (check-equal? (cadr result) '("BODY"))
+     (check-equal? (caddr result) '("POST"))))
+ (test-case "LF-02: pre-render hook error doesn't corrupt output"
+   (define bad-pre (make-render-hook 'bad 'pre-render (lambda (lines) (error "pre-fail"))))
+   (parameterize ([current-render-hooks (list bad-pre)])
+     (define comp (make-q-component (lambda (state width) '(("ORIGINAL")))))
+     (define result (component-render comp (initial-ui-state) 80))
+     ;; Error caught by apply-render-hook-safe, original lines returned
+     (check-equal? (length result) 1)
+     (check-equal? (car result) '("ORIGINAL"))))
+ (test-case "LF-02: full lifecycle — pre → render → post pipeline"
+   (define step1
+     (make-render-hook 'step1 'pre-render (lambda (lines) (map (lambda (l) (cons 'pre l)) lines))))
+   (define step2
+     (make-render-hook 'step2 'post-render (lambda (lines) (map (lambda (l) (cons 'post l)) lines))))
+   (parameterize ([current-render-hooks (list step1 step2)])
+     (define comp (make-q-component (lambda (state width) '(("BODY")))))
+     (define result (component-render comp (initial-ui-state) 42))
+     ;; pre-render wraps: (("BODY")) → (("pre" . ("BODY")))
+     ;; post-render wraps: (("pre" . ("BODY"))) → (("post" "pre" . ("BODY")))
+     (check-equal? (length result) 1)
+     (check-equal? (caar result) 'post))))
+
 (run-tests layout-breakpoint-contract-tests)
 (run-tests focus-tracking-tests)
 (run-tests test-component-model)
+(run-tests render-hook-registration-tests)
+(run-tests pre-render-dispatch-tests)

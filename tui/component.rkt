@@ -79,7 +79,17 @@
 ;; Default empty list — no hooks applied unless registered.
 (define current-render-hooks (make-parameter '()))
 
-(provide current-render-hooks)
+;; MF-07 (v0.98.9 W2): Public API for extensions to register/unregister render hooks.
+;; Without these helpers, extensions would need to know the internal parameter protocol.
+(define (register-render-hook! hook)
+  (current-render-hooks (cons hook (current-render-hooks))))
+
+(define (unregister-render-hook! hook)
+  (current-render-hooks (filter (lambda (h) (not (eq? h hook))) (current-render-hooks))))
+
+(provide current-render-hooks
+         (contract-out [register-render-hook! (-> render-hook? void?)]
+                       [unregister-render-hook! (-> render-hook? void?)]))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Constructor
@@ -110,13 +120,23 @@
     [else
      ;; Cache miss — compute, apply hooks, cache, return
      (define lines ((q-component-render-fn comp) state width))
+     ;; LF-02 (v0.98.9 W2): Apply pre-render hooks (symmetric with post-render).
+     ;; Pre-render hooks transform the output before post-render hooks see it.
+     (define pre-hooks
+       (filter (lambda (h) (eq? (render-hook-phase h) 'pre-render)) (current-render-hooks)))
+     (define pre-lines
+       (if (null? pre-hooks)
+           lines
+           (for/fold ([acc lines]) ([hook (in-list pre-hooks)])
+             (define-values (result ok?) (apply-render-hook-safe hook acc))
+             (if ok? result acc))))
      ;; Apply post-render hooks if any are registered
      (define post-hooks
        (filter (lambda (h) (eq? (render-hook-phase h) 'post-render)) (current-render-hooks)))
      (define final-lines
        (if (null? post-hooks)
-           lines
-           (for/fold ([acc lines]) ([hook (in-list post-hooks)])
+           pre-lines
+           (for/fold ([acc pre-lines]) ([hook (in-list post-hooks)])
              (define-values (result ok?) (apply-render-hook-safe hook acc))
              (if ok? result acc))))
      (set-box! (q-component-cache-box comp) (cons width final-lines))
