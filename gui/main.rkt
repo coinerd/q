@@ -28,7 +28,8 @@
                   wire-ui-event-actions-from-config!)
          (only-in "../runtime/settings-query.rkt" setting-ref*)
          (only-in "lifecycle-hooks.rkt" dispatch-gui-hook! current-gui-event-runtime)
-         (only-in "theme-manager.rkt" make-theme-manager theme-manager?))
+         (only-in "theme-manager.rkt" make-theme-manager theme-manager?)
+         (only-in "../extensions/ui-surface.rkt" install-ui-callbacks!))
 (require (only-in "../util/error/error-helpers.rkt" with-safe-fallback))
 
 (provide (contract-out [run-gui-with-runtime (-> any/c any/c void?)]
@@ -48,7 +49,7 @@
 
 ;; GAP-TM (v0.98.8 W1): Theme manager parameter for cross-frontend synchronization.
 ;; Instantiated in run-gui-with-runtime; available to state-sync and action adapters.
-;; #;TODO(v0.99.x): Wire DELTA-SET-THEME handler to read this parameter and apply changes.
+;; DELTA-SET-THEME is wired via gui/ui-action-adapter.rkt since v0.98.11 W0.
 (define current-gui-theme-manager (make-parameter #f))
 
 (provide current-gui-theme-manager)
@@ -253,6 +254,35 @@
 
   ;; GUI state: accumulated messages + status
   (define state-box (box (make-gui-state #:model model-name)))
+
+  ;; PIPE-02 (v0.98.13): Install UI extension callbacks for GUI.
+  ;; Most callbacks are no-ops (GUI lacks footer/header/extension-widget primitives).
+  ;; set-status-message is the critical callback — updates the status bar observable.
+  (install-ui-callbacks! (hasheq 'set-footer
+                                 (lambda (box lines) (void))
+                                 'set-header
+                                 (lambda (box lines) (void))
+                                 'clear-footer
+                                 (lambda (box) (void))
+                                 'clear-header
+                                 (lambda (box) (void))
+                                 'make-styled-line
+                                 (lambda (segments) segments)
+                                 'make-styled-segment
+                                 (lambda (text style) (cons text style))
+                                 'set-status-message
+                                 (lambda (box msg)
+                                   (set-box! box
+                                             (gui-state-set-status (unbox box)
+                                                                   (if (string? msg)
+                                                                       (string->symbol msg)
+                                                                       msg))))
+                                 'set-extension-widget
+                                 (lambda args (void))
+                                 'remove-extension-widget
+                                 (lambda args (void))
+                                 'remove-all-extension-widgets
+                                 (lambda args (void))))
 
   ;; Notify callback box — set by launch-gui-window after GUI thread starts
   (define notify-callback-box (box #f))
