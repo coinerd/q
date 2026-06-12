@@ -133,21 +133,25 @@
        [(null? acc) (list msg)]
        [(equal? (hash-ref msg 'role #f) (hash-ref (car acc) 'role #f))
         ;; Same role: merge content
-        ;; M6: handle both string content and list content (image blocks)
-        (define prev-content (hash-ref (car acc) 'content ""))
-        (define this-content (hash-ref msg 'content ""))
-        (define new-content
-          (cond
-            [(and (string? prev-content) (string? this-content))
-             (string-append prev-content "\n\n" this-content)]
-            [(list? prev-content)
-             (append prev-content
-                     (if (list? this-content)
-                         this-content
-                         (list this-content)))]
-            [(list? this-content) (append (list prev-content) this-content)]
-            [else (string-append (format "~a" prev-content) "\n\n" (format "~a" this-content))]))
-        (cons (hash-set (car acc) 'content new-content) (cdr acc))]
+        ;; BUT: never merge tool messages — each has its own tool_call_id
+        (if (equal? (hash-ref msg 'role #f) "tool")
+            (cons msg acc) ; keep separate
+            (let ()
+              ;; M6: handle both string content and list content (image blocks)
+              (define prev-content (hash-ref (car acc) 'content ""))
+              (define this-content (hash-ref msg 'content ""))
+              (define new-content
+                (cond
+                  [(and (string? prev-content) (string? this-content))
+                   (string-append prev-content "\n\n" this-content)]
+                  [(list? prev-content)
+                   (append prev-content
+                           (if (list? this-content)
+                               this-content
+                               (list this-content)))]
+                  [(list? this-content) (append (list prev-content) this-content)]
+                  [else (string-append (format "~a" prev-content) "\n\n" (format "~a" this-content))]))
+              (cons (hash-set (car acc) 'content new-content) (cdr acc))))]
        [else (cons msg acc)]))))
 
 ;; ============================================================

@@ -154,7 +154,38 @@
         ;; Fallback: pass through
         [else msg])))
 
-  (define base (hasheq 'model model-name 'max_tokens max-tokens 'messages messages 'stream stream?))
+  ;; Anthropic requires all tool_results from the same assistant turn to be
+  ;; in a SINGLE user message. OpenAI format has separate tool messages.
+  ;; Merge consecutive user messages containing tool_result blocks.
+  (define merged-messages
+    (let loop ([msgs messages]
+               [acc '()])
+      (cond
+        [(null? msgs) (reverse acc)]
+        [else
+         (define cur (car msgs))
+         (define cur-role (hash-ref cur 'role #f))
+         (define cur-content (hash-ref cur 'content '()))
+         ;; Check if this is a user message with tool_result blocks
+         (define (has-tool-results? msg)
+           (and (equal? (hash-ref msg 'role #f) "user")
+                (list? (hash-ref msg 'content '()))
+                (not (null? (hash-ref msg 'content '())))
+                (andmap (lambda (b) (equal? (hash-ref b 'type #f) "tool_result"))
+                        (hash-ref msg 'content '()))))
+         (if (has-tool-results? cur)
+             ;; Collect consecutive tool-result user messages
+             (let gather ([remaining (cdr msgs)]
+                          [blocks (hash-ref cur 'content)])
+               (cond
+                 [(null? remaining) (loop '() (cons (hasheq 'role "user" 'content blocks) acc))]
+                 [(has-tool-results? (car remaining))
+                  (gather (cdr remaining) (append blocks (hash-ref (car remaining) 'content '())))]
+                 [else (loop remaining (cons (hasheq 'role "user" 'content blocks) acc))]))
+             (loop (cdr msgs) (cons cur acc)))])))
+
+  (define base
+    (hasheq 'model model-name 'max_tokens max-tokens 'messages merged-messages 'stream stream?))
 
   ;; Add optional temperature
   (define with-temp
