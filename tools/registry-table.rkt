@@ -24,7 +24,8 @@
          tool-spec-description
          tool-spec-schema
          tool-spec-handler
-         tool-spec-prompt-guidelines)
+         tool-spec-prompt-guidelines
+         tool-spec-required-capability)
 
 ;; ============================================================
 ;; Combined tool spec table
@@ -44,6 +45,7 @@
        (define name (tool-spec-name spec))
        (when (or (not only) (member name only))
          (define pg (tool-spec-prompt-guidelines spec))
+         (define rc (tool-spec-required-capability spec))
          (define dangerous? (and (member name dangerous-tool-names) #t))
          (if pg
              (register-tool! registry
@@ -52,11 +54,13 @@
                                         (tool-spec-schema spec)
                                         (tool-spec-handler spec)
                                         #:prompt-guidelines pg
-                                        #:dangerous? dangerous?))
+                                        #:dangerous? dangerous?
+                                        #:required-capability rc))
              (register-tool! registry
                              (make-tool name
                                         (tool-spec-description spec)
                                         (tool-spec-schema spec)
                                         (tool-spec-handler spec)
-                                        #:dangerous? dangerous?))))]))
+                                        #:dangerous? dangerous?
+                                        #:required-capability rc))))]))
   (void))

@@ -15,7 +15,8 @@
                        [tool-dangerous? (-> tool? boolean?)]
                        [tool-render-call (-> tool? (or/c procedure? #f))]
                        [tool-render-result (-> tool? (or/c procedure? #f))]
-                       [tool-timeout-seconds (-> tool? (or/c exact-nonnegative-integer? #f))])
+                       [tool-timeout-seconds (-> tool? (or/c exact-nonnegative-integer? #f))]
+                       [tool-required-capability (-> tool? symbol?)])
          ;; Raw struct constructor -- ONLY for use by tools/tool.rkt make-tool.
          ;; All external construction MUST use make-tool from tools/tool.rkt.
          tool)
@@ -29,5 +30,6 @@
               render-call
               render-result
               dangerous?
-              timeout-seconds)
+              timeout-seconds
+              required-capability)
   #:transparent)

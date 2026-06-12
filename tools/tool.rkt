@@ -49,13 +49,11 @@
          tool-prompt-snippet
          tool-prompt-guidelines
          tool-dangerous?
-         ;; Tool execution accessor (re-exported from tool-struct.rkt)
-         ;; NOTE: tool-execute is for test/internal use only.
-         ;;       Production code should use tools/scheduler.rkt for invocation.
          tool-execute
          tool-render-call
          tool-render-result
          tool-timeout-seconds
+         tool-required-capability
          (contract-out [make-tool
                         (->* (string? string? hash? procedure?)
                              (#:prompt-snippet (or/c string? #f)
@@ -63,7 +61,8 @@
                                                #:render-result (or/c procedure? #f)
                                                #:prompt-guidelines (or/c string? #f)
                                                #:dangerous? boolean?
-                                               #:timeout-seconds (or/c exact-nonnegative-integer? #f))
+                                               #:timeout-seconds (or/c exact-nonnegative-integer? #f)
+                                               #:required-capability symbol?)
                              tool?)]
                        [validate-tool-args (-> tool? hash? boolean?)])
          merge-tool-lists
@@ -75,7 +74,8 @@
          (contract-out
           [make-tool-result (-> (or/c string? hash? list?) (or/c hash? #f) boolean? tool-result?)]
           [make-error-result (-> string? tool-result?)]
-          [make-success-result (->* ((or/c string? hash? list? image-part?)) ((or/c hash? #f)) tool-result?)])
+          [make-success-result
+           (->* ((or/c string? hash? list? image-part?)) ((or/c hash? #f)) tool-result?)])
          tool-result-content
          tool-result-details
          tool-result-is-error?
@@ -135,7 +135,8 @@
          list-active-tools
          list-active-tools-jsexpr
          list-tools-jsexpr
-         tool-names)
+         tool-names
+         tools-for-capability)
 
 ;; ============================================================
 ;; Tool constructor
@@ -150,7 +151,8 @@
                    #:render-result [render-result #f]
                    #:prompt-guidelines [prompt-guidelines #f]
                    #:dangerous? [dangerous? #f]
-                   #:timeout-seconds [timeout-seconds #f])
+                   #:timeout-seconds [timeout-seconds #f]
+                   #:required-capability [required-capability 'any])
   (unless (string? name)
     (raise-argument-error 'make-tool "string?" name))
   (unless (string? description)
@@ -173,7 +175,8 @@
         render-call
         render-result
         dangerous?
-        timeout-seconds))
+        timeout-seconds
+        required-capability))
 
 ;; ============================================================
 ;; Progress emission

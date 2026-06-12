@@ -17,7 +17,7 @@
 (define browser-tool-specs
   (list
    ;; firecrawl
-   (tool-spec
+   (make-tool-spec*
     "firecrawl"
     (string-append "Search the web, scrape/crawl/map websites via Firecrawl. "
                    "Actions: search (web search with query), scrape (extract content from URL), "
@@ -52,18 +52,18 @@
     tool-firecrawl
     #f)
    ;; browser_open (MEDIUM risk)
-   (tool-spec "browser_open"
-              "Open a browser session to a URL"
-              (hasheq 'type
-                      "object"
-                      'required
-                      '("url")
-                      'properties
-                      (hasheq 'url (hasheq 'type "string" 'description "URL to open")))
-              handle-browser-open
-              "Use browser_open to open web pages. Always close sessions when done.")
+   (make-tool-spec* "browser_open"
+                    "Open a browser session to a URL"
+                    (hasheq 'type
+                            "object"
+                            'required
+                            '("url")
+                            'properties
+                            (hasheq 'url (hasheq 'type "string" 'description "URL to open")))
+                    handle-browser-open
+                    "Use browser_open to open web pages. Always close sessions when done.")
    ;; browser_observe (LOW risk)
-   (tool-spec
+   (make-tool-spec*
     "browser_observe"
     "Observe current page state: URL, title, text content, console errors, interactiveElements list with q-id selectors"
     (hasheq 'type
@@ -78,7 +78,7 @@
     handle-browser-observe
     #f)
    ;; browser_click (HIGH risk)
-   (tool-spec
+   (make-tool-spec*
     "browser_click"
     "Click an element on the page. Use [q-id=\"N\"] selector from the interactiveElements in the most recent browser_observe result (e.g. [q-id=\"3\"])."
     (hasheq 'type
@@ -89,31 +89,38 @@
             (hasheq 'session-id
                     (hasheq 'type "string" 'description "Browser session ID")
                     'selector
-                    (hasheq 'type "string" 'description "CSS selector or [q-id=\"N\"] selector from interactiveElements")
+                    (hasheq 'type
+                            "string"
+                            'description
+                            "CSS selector or [q-id=\"N\"] selector from interactiveElements")
                     'button
                     (hasheq 'type "string" 'description "Mouse button: left, right, middle")))
     handle-browser-click
     "Clicking may trigger side effects. Prefer observe before click.")
    ;; browser_type (HIGH risk)
-   (tool-spec "browser_type"
-              "Type text into an input element. Use [q-id=\"N\"] selector from the interactiveElements in the most recent browser_observe result (e.g. [q-id=\"3\"])."
-              (hasheq 'type
-                      "object"
-                      'required
-                      '("session-id" "selector" "text")
-                      'properties
-                      (hasheq 'session-id
-                              (hasheq 'type "string" 'description "Browser session ID")
-                              'selector
-                              (hasheq 'type "string" 'description "CSS selector or [q-id=\"N\"] selector from interactiveElements")
-                              'text
-                              (hasheq 'type "string" 'description "Text to type")
-                              'clear-first?
-                              (hasheq 'type "boolean" 'description "Clear existing text first")))
-              handle-browser-type
-              "Typing submits form data. Verify the correct input before typing.")
+   (make-tool-spec*
+    "browser_type"
+    "Type text into an input element. Use [q-id=\"N\"] selector from the interactiveElements in the most recent browser_observe result (e.g. [q-id=\"3\"])."
+    (hasheq 'type
+            "object"
+            'required
+            '("session-id" "selector" "text")
+            'properties
+            (hasheq 'session-id
+                    (hasheq 'type "string" 'description "Browser session ID")
+                    'selector
+                    (hasheq 'type
+                            "string"
+                            'description
+                            "CSS selector or [q-id=\"N\"] selector from interactiveElements")
+                    'text
+                    (hasheq 'type "string" 'description "Text to type")
+                    'clear-first?
+                    (hasheq 'type "boolean" 'description "Clear existing text first")))
+    handle-browser-type
+    "Typing submits form data. Verify the correct input before typing.")
    ;; browser_press (HIGH risk)
-   (tool-spec
+   (make-tool-spec*
     "browser_press"
     "Press a keyboard key"
     (hasheq 'type
@@ -130,7 +137,7 @@
     handle-browser-press
     "Pressing keys may trigger form submissions or page navigation.")
    ;; browser_extract (LOW risk)
-   (tool-spec
+   (make-tool-spec*
     "browser_extract"
     "Extract structured data from a page element. Use [q-id=\"N\"] selector from interactiveElements for precise targeting (e.g. [q-id=\"3\"])."
     (hasheq
@@ -142,13 +149,16 @@
      (hasheq 'session-id
              (hasheq 'type "string" 'description "Browser session ID")
              'selector
-             (hasheq 'type "string" 'description "CSS selector or [q-id=\"N\"] selector from interactiveElements")
+             (hasheq 'type
+                     "string"
+                     'description
+                     "CSS selector or [q-id=\"N\"] selector from interactiveElements")
              'extract-type
              (hasheq 'type "string" 'description "Extraction type: text, html, accessibility")))
     handle-browser-extract
     #f)
    ;; browser_screenshot (LOW risk)
-   (tool-spec
+   (make-tool-spec*
     "browser_screenshot"
     "Take a screenshot of the current page"
     (hasheq
@@ -157,14 +167,18 @@
      'required
      '("session-id")
      'properties
-     (hasheq 'session-id
-             (hasheq 'type "string" 'description "Browser session ID")
-             'selector
-             (hasheq 'type "string" 'description "CSS selector or [q-id=\"N\"] to screenshot specific element (e.g. [q-id=\"3\"])")))
+     (hasheq
+      'session-id
+      (hasheq 'type "string" 'description "Browser session ID")
+      'selector
+      (hasheq 'type
+              "string"
+              'description
+              "CSS selector or [q-id=\"N\"] to screenshot specific element (e.g. [q-id=\"3\"])")))
     handle-browser-screenshot
     #f)
    ;; browser_scroll (LOW risk)
-   (tool-spec
+   (make-tool-spec*
     "browser_scroll"
     "Scroll the page"
     (hasheq 'type
@@ -181,32 +195,32 @@
     handle-browser-scroll
     #f)
    ;; browser_close (LOW risk)
-   (tool-spec "browser_close"
-              "Close a browser session"
-              (hasheq 'type
-                      "object"
-                      'required
-                      '("session-id")
-                      'properties
-                      (hasheq 'session-id
-                              (hasheq 'type "string" 'description "Browser session ID to close")))
-              handle-browser-close
-              "Always close browser sessions when done to free resources.")
+   (make-tool-spec*
+    "browser_close"
+    "Close a browser session"
+    (hasheq 'type
+            "object"
+            'required
+            '("session-id")
+            'properties
+            (hasheq 'session-id (hasheq 'type "string" 'description "Browser session ID to close")))
+    handle-browser-close
+    "Always close browser sessions when done to free resources.")
    ;; browser_check_local_app (MEDIUM risk — read-only navigation)
-   (tool-spec "browser_check_local_app"
-              "Quick health check for a local web app: open, screenshot, extract, close."
-              (hasheq 'type
-                      "object"
-                      'required
-                      '("url")
-                      'properties
-                      (hasheq 'url
-                              (hasheq 'type "string" 'description "Local app URL")
-                              'timeout_ms
-                              (hasheq 'type "integer" 'description "Timeout ms")
-                              'selector
-                              (hasheq 'type "string" 'description "CSS selector")
-                              'screenshot
-                              (hasheq 'type "boolean" 'description "Capture screenshot")))
-              handle-browser-check-local-app
-              "Quick local app health check.")))
+   (make-tool-spec* "browser_check_local_app"
+                    "Quick health check for a local web app: open, screenshot, extract, close."
+                    (hasheq 'type
+                            "object"
+                            'required
+                            '("url")
+                            'properties
+                            (hasheq 'url
+                                    (hasheq 'type "string" 'description "Local app URL")
+                                    'timeout_ms
+                                    (hasheq 'type "integer" 'description "Timeout ms")
+                                    'selector
+                                    (hasheq 'type "string" 'description "CSS selector")
+                                    'screenshot
+                                    (hasheq 'type "boolean" 'description "Capture screenshot")))
+                    handle-browser-check-local-app
+                    "Quick local app health check.")))

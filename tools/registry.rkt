@@ -3,7 +3,6 @@
 ;; Extracted from tools/tool.rkt (v0.30.8 W0)
 ;; STABILITY: stable
 
-
 (define-logger q-tool-registry)
 (require racket/contract
          racket/set
@@ -15,7 +14,9 @@
                   tool-schema
                   tool-prompt-snippet
                   tool-prompt-guidelines
-                  tool-timeout-seconds))
+                  tool-timeout-seconds
+                  tool-required-capability)
+         (only-in "../agent/capability.rkt" valid-capability?))
 
 (provide (contract-out [make-tool-registry (-> tool-registry?)]
                        [tool-registry-tools (-> tool-registry? (listof tool?))]
@@ -30,7 +31,8 @@
                        [list-tools-jsexpr (-> tool-registry? (listof hash?))]
                        [set-active-tools! (-> tool-registry? (or/c (listof string?) #f) void?)]
                        [tool-active? (-> tool-registry? string? boolean?)]
-                       [with-registry-snapshot (-> tool-registry? procedure? any)])
+                       [with-registry-snapshot (-> tool-registry? procedure? any)]
+                       [tools-for-capability (-> tool-registry? symbol? (listof tool?))])
          tool-registry?)
 
 ;; ============================================================
@@ -140,3 +142,16 @@
 
 (define (tool-names reg)
   (with-registry-lock reg (lambda () (hash-keys (tool-registry-tools-box reg)))))
+
+;; ── Capability-based filtering ──
+
+;; tools-for-capability : tool-registry? symbol? -> (listof tool?)
+;; Returns tools whose required-capability matches the given capability
+;; or is 'any (the permissive wildcard).
+(define (tools-for-capability reg cap)
+  (unless (valid-capability? cap)
+    (raise-argument-error 'tools-for-capability "valid capability symbol" cap))
+  (filter (lambda (t)
+            (define rc (tool-required-capability t))
+            (or (eq? rc 'any) (eq? rc cap)))
+          (list-active-tools reg)))

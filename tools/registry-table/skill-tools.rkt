@@ -19,7 +19,7 @@
 (define skill-tool-specs
   (list
    ;; save-conclusion
-   (tool-spec
+   (make-tool-spec*
     "save-conclusion"
     "Save a distilled insight or conclusion about the current task. Use after discovering important facts, making decisions, identifying patterns, finding error causes, or getting test results."
     (hasheq
@@ -43,7 +43,7 @@
     tool-save-conclusion
     #f)
    ;; record_conclusion
-   (tool-spec
+   (make-tool-spec*
     "record_conclusion"
     (string-append
      "Record a distilled insight or conclusion about the current task. "
@@ -69,7 +69,7 @@
     tool-record_conclusion
     #f)
    ;; set-task-state
-   (tool-spec
+   (make-tool-spec*
     "set-task-state"
     "Transition the current task state. Valid states: idle, exploration, planning, implementation, verification, debugging."
     (hasheq
@@ -93,7 +93,7 @@
     tool-set-task-state
     #f)
    ;; spawn-subagent
-   (tool-spec
+   (make-tool-spec*
     "spawn-subagent"
     "Spawn an isolated child agent to execute a delegated task"
     (hasheq 'type
@@ -119,7 +119,7 @@
     tool-spawn-subagent
     #f)
    ;; spawn-subagents
-   (tool-spec
+   (make-tool-spec*
     "spawn-subagents"
     "Run multiple subagent tasks in parallel with bounded concurrency."
     (hasheq
@@ -143,7 +143,7 @@
     tool-spawn-subagents
     #f)
    ;; session_recall
-   (tool-spec
+   (make-tool-spec*
     "session_recall"
     (string-append
      "Retrieve earlier session entries that are not in your current context. "
@@ -177,7 +177,7 @@
     tool-session-recall
     #f)
    ;; skill-route
-   (tool-spec
+   (make-tool-spec*
     "skill-route"
     "Discover, search, and load skill instructions by name or description."
     (hasheq
@@ -199,7 +199,7 @@
     tool-skill-route
     #f)
    ;; delete-lines
-   (tool-spec
+   (make-tool-spec*
     "delete-lines"
     "Delete a range of lines from a file by line number. Use instead of edit for removing 3+ consecutive lines."
     (hasheq 'type
