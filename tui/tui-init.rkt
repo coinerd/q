@@ -310,6 +310,10 @@
   ;; Reads "ui.event-actions.enabled" from settings; default #f = zero behavior change.
   (define settings (dict-ref rt-config 'settings #f))
   (wire-ui-event-actions-from-config! settings)
+  ;; F1/EMIT-01 (v0.98.13 audit fix): Set the event runtime parameter so that
+  ;; extensions/ui-surface.rkt can emit ui.* events to the bus. The 'emit-event
+  ;; key was added to the runtime hash by build-runtime-from-cli.
+  (current-ui-event-runtime rt-config)
   (define-values (ctx sess scrollback-path) (create-tui-session rt-config cli-cfg))
   (load-tui-scrollback ctx sess rt-config scrollback-path)
   (init-tui-terminal ctx)

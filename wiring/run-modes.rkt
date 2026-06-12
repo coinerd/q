@@ -29,6 +29,7 @@
          "../tools/tool.rkt"
          (only-in "../tools/registry-defaults.rkt" register-default-tools!)
          "../agent/event-bus.rkt"
+         (only-in "../util/event/event.rkt" make-event)
          (only-in "../runtime/session/session-config.rkt"
                   hash->session-config
                   session-config?
@@ -202,7 +203,15 @@
                'verbose?
                (cli-config-verbose? cfg)
                'trace-logger
-               trace-log))
+               trace-log
+               ;; F1/EMIT-01 (v0.98.13 audit fix): Wire emit-event function so
+               ;; extensions/ui-surface.rkt can publish ui.* events to the bus.
+               ;; Takes a hash (from ui-event->hash) → creates event struct → publish!.
+               'emit-event
+               (lambda (h)
+                 (define ev-type (hash-ref h 'type "ui.unknown"))
+                 (define evt (make-event ev-type (current-inexact-milliseconds) #f #f h))
+                 (publish! bus evt))))
 
   ;; v0.14.2 Wave 3: Set per-model timeouts from settings
   (wire-timeouts! settings)
