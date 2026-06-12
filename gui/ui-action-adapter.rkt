@@ -24,7 +24,7 @@
          ;; Convenience functions using the shared reducer
          (contract-out [gui-apply-delta (-> ui-delta? gui-state? gui-state?)]
                        [gui-apply-deltas (-> (listof ui-delta?) gui-state? gui-state?)]
-                       [make-gui-action-handler (-> box? (-> hash? void?))]))
+                       [make-gui-action-handler (->* (box?) ((or/c box? #f)) (-> hash? void?))]))
 
 ;; ── GUI handler table ──────────────────────────────────────
 
@@ -32,10 +32,12 @@
   (delta-handlers->table #:set-status (lambda (payload state)
                                         ;; TEST-03 (v0.98.13): Guard against string payloads.
                                         ;; gui-state-status is symbol?; coerce if needed.
+                                        ;; F6 (v0.98.13 audit): Fallback to 'idle for invalid types.
                                         (define sym
-                                          (if (string? payload)
-                                              (string->symbol payload)
-                                              payload))
+                                          (cond
+                                            [(string? payload) (string->symbol payload)]
+                                            [(symbol? payload) payload]
+                                            [else 'idle]))
                                         (struct-copy gui-state state [status sym]))
                          ;; GUI doesn't have custom-header/custom-footer fields yet — skip
                          #:set-header (lambda (payload state) state)
@@ -64,12 +66,17 @@
 
 ;; ── Event handler factory ──────────────────────────────────
 
-(define (make-gui-action-handler state-box)
+(define (make-gui-action-handler state-box [notify-box #f])
   (lambda (event-hash)
     (define action-type (hash-ref event-hash 'type #f))
-    (when (and action-type (string-prefix? action-type "ui."))
+    (when (and (string? action-type) (string-prefix? action-type "ui."))
       (define deltas (ui-action->deltas action-type event-hash))
       (define old-state (unbox state-box))
       (when (gui-state? old-state)
         (define new-state (gui-apply-deltas deltas old-state))
-        (set-box! state-box new-state)))))
+        (set-box! state-box new-state)
+        ;; GUI-03 (v0.98.13 audit): Trigger observable sync after state update.
+        ;; Without notify!, GUI widgets (status bar, etc.) don't re-render.
+        (define notify (and notify-box (unbox notify-box)))
+        (when (procedure? notify)
+          (notify))))))

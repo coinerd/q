@@ -39,9 +39,11 @@
    #:clear-footer (lambda (payload state) (struct-copy ui-state state [custom-footer #f]))
    #:set-status (lambda (payload state)
                   ;; G-STAT (v0.98.11): wire DELTA-SET-STATUS to set-status-message.
-                  (if (string? payload)
-                      (set-status-message state payload)
-                      state))
+                  ;; F7 (v0.98.13 audit): Handle both string and symbol payloads.
+                  (cond
+                    [(string? payload) (set-status-message state payload)]
+                    [(symbol? payload) (set-status-message state (symbol->string payload))]
+                    [else state]))
    #:set-theme (lambda (payload state)
                  ;; G-TM2 (v0.98.11): wire DELTA-SET-THEME to current-tui-theme parameter.
                  (when (symbol? payload)
@@ -87,7 +89,7 @@
 (define (make-tui-action-handler state-box)
   (lambda (event-hash)
     (define action-type (hash-ref event-hash 'type #f))
-    (when (and action-type (string-prefix? action-type "ui."))
+    (when (and (string? action-type) (string-prefix? action-type "ui."))
       (define deltas (ui-action->deltas action-type event-hash))
       (define old-state (unbox state-box))
       (when (ui-state? old-state)

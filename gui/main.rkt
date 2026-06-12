@@ -272,11 +272,12 @@
                                  (lambda (text style) (cons text style))
                                  'set-status-message
                                  (lambda (box msg)
-                                   (set-box! box
-                                             (gui-state-set-status (unbox box)
-                                                                   (if (string? msg)
-                                                                       (string->symbol msg)
-                                                                       msg))))
+                                   (define safe-msg
+                                     (cond
+                                       [(string? msg) (string->symbol msg)]
+                                       [(symbol? msg) msg]
+                                       [else 'idle]))
+                                   (set-box! box (gui-state-set-status (unbox box) safe-msg)))
                                  'set-extension-widget
                                  (lambda args (void))
                                  'remove-extension-widget
@@ -294,15 +295,22 @@
     ;; Converts event structs to hashes, then dispatches to gui-delta-handlers.
     ;; Events only emitted when ui.event-actions.enabled is #t in config.
     ;; Uses dynamic-require to avoid circular dependency (ui-action-adapter imports from this module).
-    (define gui-action-handler
-      ((dynamic-require "../gui/ui-action-adapter.rkt" 'make-gui-action-handler) state-box))
-    (subscribe! bus
-                (lambda (evt)
-                  (define ev (event-ev evt))
-                  (define payload (event-payload evt))
-                  (gui-action-handler (if (hash? payload)
-                                          (hash-set payload 'type ev)
-                                          (hasheq 'type ev 'payload payload))))))
+    ;; F2 (v0.98.13 audit): Wrapped in with-handlers to prevent GUI crash on load failure.
+    (with-handlers ([exn:fail? (lambda (e)
+                                 (fprintf (current-error-port)
+                                          "v0.98.13: GUI action handler load failed: ~a\n"
+                                          (exn-message e)))])
+      (define gui-action-handler
+        ((dynamic-require "../gui/ui-action-adapter.rkt" 'make-gui-action-handler)
+         state-box
+         notify-callback-box))
+      (subscribe! bus
+                  (lambda (evt)
+                    (define ev (event-ev evt))
+                    (define payload (event-payload evt))
+                    (gui-action-handler (if (hash? payload)
+                                            (hash-set payload 'type ev)
+                                            (hasheq 'type ev 'payload payload)))))))
 
   ;; If there's an initial prompt from CLI, run it after GUI starts
   (define initial-prompt (with-safe-fallback #f (dict-ref rt-config 'prompt #f)))
