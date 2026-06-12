@@ -1,6 +1,8 @@
 #lang racket/base
 ;; tui-init.rkt — TUI initialization and setup
-(require racket/contract)
+(require racket/contract
+         (only-in "../tui/ui-action-adapter.rkt" make-tui-action-handler)
+         (only-in "../util/event/event.rkt" event-ev event-payload))
 
 (require racket/dict)
 
@@ -58,6 +60,20 @@
           [run-tui-loop (-> any/c any/c any)]))
 
 ;; ============================================================
+;; PIPE-01 (v0.98.13): Bridge event struct → hash for action handler.
+;; The event bus delivers `event` structs, but make-tui-action-handler
+;; expects hashes with 'type key (as produced by ui-event->hash).
+;; This bridge performs that conversion.
+;; ============================================================
+
+(define (event->action-hash evt)
+  (define ev (event-ev evt))
+  (define payload (event-payload evt))
+  (if (hash? payload)
+      (hash-set payload 'type ev)
+      (hasheq 'type ev 'payload payload)))
+
+;; ============================================================
 ;; Runtime event subscription
 ;; ============================================================
 
@@ -65,7 +81,13 @@
   (define bus (tui-ctx-event-bus ctx))
   (define ch (tui-ctx-event-ch ctx))
   (when bus
-    (subscribe! bus (lambda (evt) (async-channel-put ch evt))))
+    (subscribe! bus (lambda (evt) (async-channel-put ch evt)))
+    ;; PIPE-01 (v0.98.13): Subscribe action handler to event bus.
+    ;; Converts event structs to hashes via event->action-hash bridge,
+    ;; then dispatches to tui-delta-handlers via make-tui-action-handler.
+    ;; Events are only emitted when ui.event-actions.enabled is #t in config.
+    (subscribe! bus
+                (compose (make-tui-action-handler (tui-ctx-ui-state-box ctx)) event->action-hash)))
   (void))
 
 ;; ============================================================
