@@ -184,9 +184,38 @@
       (define lock (make-semaphore 1))
       (check-true (try-extension-dispatch mock-sess state-box lock "/test-submit")))))
 
+;; ═══════════════════════════════════════════════════════════
+;; MF-08 (v0.98.9 W1): Contract-rejection tests
+;; ═══════════════════════════════════════════════════════════
+(define test-contract-rejection
+  (test-suite "MF-08: contract rejection"
+    (test-case "add-system-msg! rejects non-string first arg"
+      (define state-box (box (make-gui-state)))
+      (define lock (make-semaphore 1))
+      (check-exn exn:fail:contract? (lambda () (add-system-msg! 42 state-box lock))))
+
+    (test-case "add-system-msg! rejects non-box state"
+      (check-exn exn:fail:contract?
+                 (lambda () (add-system-msg! "hello" "not-a-box" (make-semaphore 1)))))
+
+    (test-case "make-slash-command-handler rejects non-semaphore"
+      (check-exn exn:fail:contract?
+                 (lambda ()
+                   (make-slash-command-handler #f (box (make-gui-state)) "not-a-semaphore"))))
+
+    (test-case "try-extension-dispatch rejects non-string input"
+      (define state-box (box (make-gui-state)))
+      (define lock (make-semaphore 1))
+      (check-exn exn:fail:contract? (lambda () (try-extension-dispatch #f state-box lock 12345))))
+
+    (test-case "try-extension-dispatch rejects non-box state"
+      (check-exn exn:fail:contract?
+                 (lambda () (try-extension-dispatch #f "not-a-box" (make-semaphore 1) "/foo"))))))
+
 (run-tests (test-suite "gui-slash-commands"
              test-add-system-msg
              test-make-slash-command-handler
              test-known-commands
              test-extension-dispatch
-             test-new-session-dispatch))
+             test-new-session-dispatch
+             test-contract-rejection))
