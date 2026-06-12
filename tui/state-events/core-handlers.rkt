@@ -89,9 +89,7 @@
              [arg-summary (if args-raw
                               (extract-arg-summary args-raw)
                               "")]
-             [text (if (string=? arg-summary "")
-                       (format "[TOOL: ~a]" name)
-                       (format "[TOOL: ~a] ~a" name arg-summary))]
+             [text arg-summary]
              [ts (event-time evt)]
              [meta (hasheq 'name name 'arguments (or args-raw ""))]
              [new-state (append-entry state (make-entry 'tool-start text ts meta))])
@@ -108,9 +106,7 @@
              [arg-summary (if args-raw
                               (extract-arg-summary args-raw)
                               "")]
-             [text (if (string=? arg-summary "")
-                       (format "[TOOL: ~a]" name)
-                       (format "[TOOL: ~a] ~a" name arg-summary))]
+             [text arg-summary]
              [ts (event-time evt)]
              [meta (hasheq 'name name 'arguments (or args-raw ""))]
              [new-state (append-entry state (make-entry 'tool-start text ts meta))])
@@ -135,13 +131,11 @@
                                       "\n"
                                       " | ")
                       "")]
-                 [text (if (string=? result-text "")
-                           (format "[OK: ~a]" name)
-                           (format "[OK: ~a] ~a" name result-text))]
+                 [text result-text]
                  [meta (hasheq 'name name 'result (or result-raw ""))])
             (set-pending-tool-name (append-entry state (make-entry 'tool-end text ts meta)) #f))
           (let* ([err (or error-raw "tool failed")]
-                 [text (string-replace (format "[FAIL: ~a] ~a" name err) "\n" " | ")]
+                 [text (string-replace err "\n" " | ")]
                  [meta (hasheq 'name name 'error err)])
             (set-pending-tool-name (append-entry state (make-entry 'tool-fail text ts meta)) #f)))))
 
