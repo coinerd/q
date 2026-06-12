@@ -25,7 +25,7 @@
          (only-in "../extensions/image-input.rkt" image-input-extension)
          (only-in "../extensions/ext-package-manager.rkt" ext-package-manager-extension)
          "../tools/tool.rkt"
-         "../agent/event-bus.rkt")
+         "../util/event/event-bus.rkt")
 
 ;; Helper: create a test extension-ctx with a real tool-registry
 (define (make-test-ext-ctx reg)

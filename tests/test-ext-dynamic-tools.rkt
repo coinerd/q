@@ -20,7 +20,7 @@
          "../extensions/hooks.rkt"
          "../extensions/api.rkt"
          "../tools/tool.rkt"
-         "../agent/event-bus.rkt")
+         "../util/event/event-bus.rkt")
 
 ;; ============================================================
 ;; ext-register-tool!

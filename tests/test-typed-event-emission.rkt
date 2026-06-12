@@ -41,7 +41,7 @@
                   context-event
                   context-event?)
          (only-in "../util/event/event.rkt" event-ev)
-         (only-in "../agent/event-bus.rkt" make-event-bus event-bus? subscribe!)
+         (only-in "../util/event/event-bus.rkt" make-event-bus event-bus? subscribe!)
          (only-in "../agent/event-emitter.rkt" emit-typed-event! event-struct->hasheq))
 
 ;; ── Helper: capture events ──

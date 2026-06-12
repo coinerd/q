@@ -14,7 +14,7 @@
          racket/path
          "../runtime/extension-catalog.rkt"
          "../extensions/api.rkt"
-         "../agent/event-bus.rkt")
+         "../util/event/event-bus.rkt")
 
 ;; ============================================================
 ;; known-extensions-dir

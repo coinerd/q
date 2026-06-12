@@ -8,10 +8,10 @@
 (require rackunit
          racket/match
          "../util/message/protocol-types.rkt"
-         "../agent/event-bus.rkt")
+         "../util/event/event-bus.rkt")
 
 ;; ============================================================
-;; Test suite: agent/event-bus.rkt — publish/subscribe event bus
+;; Test suite: util/event/event-bus.rkt — publish/subscribe event bus
 ;; ============================================================
 
 ;; Helper: create a simple test event

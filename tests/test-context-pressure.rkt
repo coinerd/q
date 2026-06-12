@@ -10,7 +10,7 @@
          (only-in "helpers/temp-fs.rkt" with-temp-dir)
          "../runtime/context/context-pressure.rkt"
          "../llm/token-budget.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../agent/event-structs/base.rkt"
          "../agent/event-structs/context-pressure-events.rkt"
          "../runtime/session/session-types.rkt"

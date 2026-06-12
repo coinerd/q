@@ -15,7 +15,7 @@
 (require rackunit
          rackunit/text-ui
          "../agent/loop.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../llm/provider.rkt"
          "../llm/model.rkt"
          "../util/message/protocol-types.rkt"

@@ -19,7 +19,7 @@
          "../extensions/api.rkt"
          "../extensions/gsd-planning.rkt"
          "../extensions/hooks.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../tools/tool.rkt"
          "helpers/mock-provider.rkt"
          "helpers/temp-fs.rkt")

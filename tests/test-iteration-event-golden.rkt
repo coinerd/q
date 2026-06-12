@@ -18,7 +18,7 @@
          racket/list
          "../llm/provider.rkt"
          "../llm/model.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../agent/loop.rkt"
          "../util/message/protocol-types.rkt"
          (only-in "../tools/tool.rkt" make-tool-registry register-tool! make-tool make-exec-context make-success-result)

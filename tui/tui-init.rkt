@@ -23,7 +23,7 @@
          "../tui/scrollback.rkt"
          "../tui/render.rkt"
          (only-in "../util/message/message.rkt" message)
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../runtime/agent-session.rkt"
          "../runtime/provider/provider-factory.rkt"
          "../runtime/session-index.rkt"

@@ -13,7 +13,7 @@
          racket/string
          "../runtime/iteration/retry-policy.rkt"
          "../runtime/runtime-helpers.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../util/event/event.rkt")
 
 (define suite

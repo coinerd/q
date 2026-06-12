@@ -31,7 +31,7 @@
                   tool-result?
                   tool-result-is-error?)
          "../tools/scheduler.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          (only-in "../util/message/protocol-types.rkt"
                   make-event
                   event?
@@ -46,7 +46,7 @@
          "helpers/mock-provider.rkt")
 
 (require (only-in "../tools/registry-defaults.rkt" register-default-tools!)
-         (only-in "../agent/event-bus.rkt" make-event-bus))
+         (only-in "../util/event/event-bus.rkt" make-event-bus))
 
 ;; ============================================================
 ;; Failure injection helpers

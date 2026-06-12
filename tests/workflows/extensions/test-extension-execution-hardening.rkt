@@ -24,7 +24,7 @@
          "../../../extensions/ext-commands.rkt"
          "../../../extensions/hooks.rkt"
          "../../../tools/tool.rkt"
-         "../../../agent/event-bus.rkt"
+         "../../../util/event/event-bus.rkt"
          "../../../runtime/compaction/compactor.rkt"
          "../../../runtime/session/session-store.rkt"
          "../../../util/json/jsonl.rkt"

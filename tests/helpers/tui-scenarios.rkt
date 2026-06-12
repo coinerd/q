@@ -16,7 +16,7 @@
 ;; - Frame snapshot capture for rendering integrity checks
 
 (require racket/match
-         "../../agent/event-bus.rkt")
+         "../../util/event/event-bus.rkt")
 
 (provide make-synchronized-capture
          sync-capture-events

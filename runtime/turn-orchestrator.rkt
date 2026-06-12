@@ -24,7 +24,7 @@
          racket/contract
          (only-in "../util/loop-result.rkt" loop-result?)
          (only-in "../util/error/errors.rkt" raise-extension-error)
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          (only-in "../util/cancellation.rkt" cancellation-token?)
          (only-in "../llm/provider.rkt" provider?)
          (only-in "layer-adapters.rkt"

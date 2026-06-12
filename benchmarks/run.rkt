@@ -20,7 +20,7 @@
          "../llm/model.rkt"
          "../llm/provider.rkt"
          (only-in "../tools/tool.rkt" make-tool-registry)
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          (only-in "../util/content/content-parts.rkt" text-part text-part-text text-part?)
          (only-in "../util/event/event.rkt" event-event event-payload make-event)
          (only-in "../util/loop-result.rkt" loop-result loop-result-messages loop-result?)

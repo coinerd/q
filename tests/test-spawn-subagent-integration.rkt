@@ -21,7 +21,7 @@
          "../tools/tool.rkt"
          "../llm/provider.rkt"
          "../llm/model.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          (only-in "../agent/event-emitter.rkt" emit-session-event!)
          (only-in "../util/event/event.rkt" event-ev event-payload)
          "../util/ids.rkt")

@@ -10,7 +10,7 @@
          rackunit/text-ui
          racket/file
          "../util/message/protocol-types.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../extensions/api.rkt"
          "../extensions/loader.rkt"
          (only-in "../runtime/context/context-assembly.rkt"

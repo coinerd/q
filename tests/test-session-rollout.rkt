@@ -14,7 +14,7 @@
                   current-task-state-aware-rollout-rate
                   config-task-state-aware?)
          (only-in "../runtime/agent-session.rkt" make-agent-session session-rollout-enabled?)
-         (only-in "../agent/event-bus.rkt" make-event-bus)
+         (only-in "../util/event/event-bus.rkt" make-event-bus)
          (only-in "../tools/tool.rkt" make-tool-registry)
          (only-in "../runtime/session/session-types.rkt" agent-session-config))
 

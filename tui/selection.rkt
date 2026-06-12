@@ -17,7 +17,7 @@
          "char-width.rkt"
          "terminal.rkt"
          "tree-view.rkt"
-         "../agent/event-bus.rkt")
+         "../util/event/event-bus.rkt")
 
 ;; ============================================================
 ;; Selection math

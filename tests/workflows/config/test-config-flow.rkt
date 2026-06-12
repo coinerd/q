@@ -15,7 +15,7 @@
          rackunit/text-ui
          "../../../runtime/settings.rkt"
          "../../../tools/tool.rkt"
-         "../../../agent/event-bus.rkt")
+         "../../../util/event/event-bus.rkt")
 
 ;; ============================================================
 ;; Suite

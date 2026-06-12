@@ -187,7 +187,7 @@
 (require "../extensions/dynamic-tools.rkt"
          "../extensions/context.rkt"
          "../extensions/api.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../tools/tool.rkt")
 
 (define (make-test-ctx)

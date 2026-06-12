@@ -14,7 +14,7 @@
          "../tui/commands.rkt"
          "../tui/state.rkt"
          "../extensions/api.rkt"
-         "../agent/event-bus.rkt")
+         "../util/event/event-bus.rkt")
 
 ;; ============================================================
 ;; Helpers

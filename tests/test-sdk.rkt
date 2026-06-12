@@ -16,7 +16,7 @@
          "../llm/model.rkt"
          "../llm/provider.rkt"
          (only-in "../tools/tool.rkt" make-tool-registry tool-registry? register-tool! list-tools)
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../util/message/protocol-types.rkt"
          (only-in "../extensions/api.rkt"
                   make-extension-registry

@@ -13,7 +13,7 @@
          racket/match
          racket/port
          (prefix-in sdk: "../../../interfaces/sdk.rkt")
-         "../../../agent/event-bus.rkt"
+         "../../../util/event/event-bus.rkt"
          (only-in "../../../util/message/protocol-types.rkt"
                   message?
                   message-role

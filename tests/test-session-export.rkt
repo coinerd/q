@@ -16,7 +16,7 @@
          "../extensions/api.rkt"
          "../extensions/hooks.rkt"
          "../tools/tool.rkt"
-         "../agent/event-bus.rkt")
+         "../util/event/event-bus.rkt")
 
 ;; ============================================================
 ;; Tool registration test

@@ -4,7 +4,7 @@
 
 (require json
          "types.rkt"
-         (only-in "../agent/event-bus.rkt" event-bus?)
+         (only-in "../util/event/event-bus.rkt" event-bus?)
          (only-in "../agent/event-emitter.rkt" emit-session-event!))
 
 (provide

@@ -18,7 +18,7 @@
          "../extensions/context.rkt"
          "../extensions/hooks.rkt"
          "../extensions/api.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../util/cancellation.rkt")
 
 ;; ============================================================

@@ -10,7 +10,7 @@
 ;; Provides filtered access by event name and sequence matching.
 
 (require racket/list
-         "../../../agent/event-bus.rkt"
+         "../../../util/event/event-bus.rkt"
          "../../../util/message/protocol-types.rkt")
 
 (provide make-event-recorder

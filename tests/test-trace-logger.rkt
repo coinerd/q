@@ -14,7 +14,7 @@
          racket/port
          racket/string
          json
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../runtime/trace-logger.rkt"
          "../util/message/protocol-types.rkt")
 

@@ -13,7 +13,7 @@
 (require rackunit
          rackunit/text-ui
          racket/file
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../tools/tool.rkt"
          "../runtime/agent-session.rkt"
          (only-in "helpers/mock-provider.rkt" make-simple-mock-provider))

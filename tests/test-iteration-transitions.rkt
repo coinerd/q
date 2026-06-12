@@ -14,7 +14,7 @@
          racket/list
          "../util/message/protocol-types.rkt"
          "../util/hook-types.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../agent/queue.rkt"
          (only-in "../agent/iteration/main-loop.rkt" run-iteration-loop)
          "../llm/model.rkt"

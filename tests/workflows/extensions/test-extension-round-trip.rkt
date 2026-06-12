@@ -14,7 +14,7 @@
          racket/runtime-path
          "../../workflows/fixtures/mock-provider.rkt"
          "../../workflows/fixtures/workflow-runner.rkt"
-         "../../../agent/event-bus.rkt"
+         "../../../util/event/event-bus.rkt"
          "../../../util/message/protocol-types.rkt"
          (only-in "../../../extensions/api.rkt" make-extension-registry extension-registry?)
          (only-in "../../../extensions/loader.rkt" load-extension!))

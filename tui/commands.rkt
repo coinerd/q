@@ -22,7 +22,7 @@
                   parsed-command-args
                   parsed-command-arg-kind)
          "palette.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../extensions/hooks.rkt"
          "../extensions/api.rkt"
          "../runtime/goal/goal-checks.rkt"

@@ -371,7 +371,7 @@
 
 (require "../llm/provider.rkt"
          "../util/event/event.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../agent/state.rkt")
 
 (test-case "NF3: runtime.warning emitted for thinking-only response"

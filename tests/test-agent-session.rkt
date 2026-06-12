@@ -14,7 +14,7 @@
          "../runtime/agent-session.rkt"
          "../runtime/session/session-types.rkt"
          (only-in "../runtime/session/session-mutation.rkt" guarded-set-prompt-running!)
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../tools/tool.rkt"
          (only-in "helpers/temp-fs.rkt" with-temp-dir))
 

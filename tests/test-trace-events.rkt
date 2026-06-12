@@ -12,7 +12,7 @@
 (require rackunit
          racket/list
          racket/generator
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../agent/state.rkt"
          "../agent/loop.rkt"
          "../llm/model.rkt"

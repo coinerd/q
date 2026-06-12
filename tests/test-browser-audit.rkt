@@ -10,7 +10,7 @@
          json
          "../browser/audit.rkt"
          "../browser/types.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../util/event/event.rkt")
 
 (define (make-temp-dir)

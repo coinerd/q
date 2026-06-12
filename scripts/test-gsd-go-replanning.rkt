@@ -9,7 +9,7 @@
          racket/string
          racket/list
          "../llm/provider.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          (only-in "../tools/tool.rkt" make-tool-registry tool-registry?)
          (only-in "../tools/registry-defaults.rkt" register-default-tools!)
          (only-in "../extensions/gsd/state-machine.rkt"

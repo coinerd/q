@@ -8,7 +8,7 @@
 
 (require rackunit
          rackunit/text-ui
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../util/event/event.rkt")
 
 ;; Helper: create the same emit-fn that build-runtime-from-cli puts in the hash.

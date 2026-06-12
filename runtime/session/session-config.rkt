@@ -28,7 +28,7 @@
          (only-in "../working-set.rkt" working-set?)
          (only-in "../../llm/provider.rkt" provider?)
          (only-in "../layer-adapters.rkt" tool-registry?)
-         (only-in "../../agent/event-bus.rkt" event-bus?)
+         (only-in "../../util/event/event-bus.rkt" event-bus?)
          (only-in "../layer-adapters.rkt" extension-registry?)
          (only-in "../provider/model-registry.rkt" model-registry?)
          (only-in "../trace-logger.rkt" trace-logger?)

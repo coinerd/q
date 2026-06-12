@@ -11,7 +11,7 @@
          (only-in "../extensions/dynamic-tools.rkt" ext-register-tool!)
          (only-in "../extensions/context.rkt" make-extension-ctx)
          (only-in "../tools/tool.rkt" make-tool-registry lookup-tool tool-execute tool?)
-         (only-in "../agent/event-bus.rkt" make-event-bus))
+         (only-in "../util/event/event-bus.rkt" make-event-bus))
 
 (define (make-test-ctx reg)
   (make-extension-ctx #:session-id "test-session"

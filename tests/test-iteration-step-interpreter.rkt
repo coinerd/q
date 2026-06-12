@@ -14,7 +14,7 @@
          rackunit/text-ui
          "../agent/iteration/main-loop.rkt"
          "../agent/iteration/loop-state.rkt"
-         (only-in "../agent/event-bus.rkt" make-event-bus)
+         (only-in "../util/event/event-bus.rkt" make-event-bus)
          (only-in "../llm/provider.rkt" make-provider)
          (only-in "../llm/model.rkt" make-model-response make-stream-chunk)
          (only-in "../util/message/protocol-types.rkt"

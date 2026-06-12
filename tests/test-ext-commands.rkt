@@ -12,7 +12,7 @@
          "../extensions/ext-commands.rkt"
          "../extensions/api.rkt"
          "../tui/palette.rkt"
-         "../agent/event-bus.rkt")
+         "../util/event/event-bus.rkt")
 
 ;; Helper: create a context with a boxed command registry
 (define (make-ctx-with-cmd-reg)

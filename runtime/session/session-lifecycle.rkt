@@ -33,7 +33,7 @@
                   build-user-message
                   compute-parent-id
                   inject-system-instructions)
-         "../../agent/event-bus.rkt"
+         "../../util/event/event-bus.rkt"
          (only-in "../../util/hook-types.rkt" hook-result-action hook-result-payload)
          (only-in "../../util/error/errors.rkt" raise-session-error)
          "session-store.rkt"

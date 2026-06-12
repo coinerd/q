@@ -7,7 +7,7 @@
 ;; tests/test-runtime-helpers.rkt — QUAL-01: runtime helper extraction
 
 (require rackunit
-         (only-in "../agent/event-bus.rkt" make-event-bus subscribe!)
+         (only-in "../util/event/event-bus.rkt" make-event-bus subscribe!)
          (only-in "../util/message/protocol-types.rkt" event-ev event-payload)
          (only-in "../runtime/runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks))
 

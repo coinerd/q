@@ -17,7 +17,7 @@
          (only-in "../util/ids.rkt" generate-id)
          (only-in "../util/event/event.rkt" event-event event-payload)
          (only-in "../tools/permission-gate.rkt" make-default-permission-config permission-config?)
-         "../agent/event-bus.rkt")
+         "../util/event/event-bus.rkt")
 
 (define (make-echo-tool)
   (make-tool "echo"

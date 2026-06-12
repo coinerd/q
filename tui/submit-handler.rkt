@@ -12,7 +12,7 @@
          racket/hash
          "context.rkt"
          "state.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../util/event/event.rkt"
          "../agent/queue.rkt"
          (only-in "../runtime/session/session-lifecycle.rkt" write-crash-log!))

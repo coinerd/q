@@ -8,7 +8,7 @@
 ;; tests/test-iteration-steering.rkt — steering queue normalization contracts
 
 (require rackunit
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../agent/queue.rkt"
          "../agent/iteration/loop-phases.rkt"
          "../util/message/message.rkt"

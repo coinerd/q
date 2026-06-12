@@ -7,7 +7,7 @@
 
 (require "../state.rkt"
          (only-in "../../util/event/event.rkt" make-event)
-         "../../agent/event-bus.rkt"
+         "../../util/event/event-bus.rkt"
          "../../runtime/provider/model-registry.rkt"
          "context.rkt")
 (require racket/contract)

@@ -20,7 +20,7 @@
          "../../../extensions/gsd-planning.rkt"
          "../../../extensions/api.rkt"
          "../../../tools/tool.rkt"
-         "../../../agent/event-bus.rkt")
+         "../../../util/event/event-bus.rkt")
 
 ;; ── Helpers ──
 

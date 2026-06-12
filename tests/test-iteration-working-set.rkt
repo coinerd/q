@@ -12,7 +12,7 @@
          "../runtime/working-set.rkt"
          (only-in "../agent/iteration/main-loop.rkt" run-iteration-loop)
          "../util/message/protocol-types.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../util/ids.rkt"
          (only-in "../llm/provider.rkt" make-mock-provider)
          (only-in "../llm/model.rkt" make-model-response))

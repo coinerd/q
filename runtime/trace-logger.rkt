@@ -11,7 +11,7 @@
          json
          racket/file
          racket/class
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          (only-in "../util/event/event.rkt"
                   event
                   event-ev

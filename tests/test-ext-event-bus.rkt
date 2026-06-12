@@ -15,7 +15,7 @@
 ;;   - Multi-extension isolation
 
 (require rackunit
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../util/message/protocol-types.rkt"
          "../extensions/api.rkt"
          "../extensions/events.rkt"

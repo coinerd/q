@@ -8,7 +8,7 @@
 (require rackunit
          rackunit/text-ui
          "../ui-core/observable-bridge.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../util/event/event.rkt")
 
 ;; Helper: create a simple event for testing

@@ -9,7 +9,7 @@
 (require racket/contract
          racket/string
          racket/format
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../runtime/agent-session.rkt"
          "../extensions/hooks.rkt"
          "../tui/command-parse.rkt"

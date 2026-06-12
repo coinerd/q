@@ -14,7 +14,7 @@
          rackunit/text-ui
          "../runtime/tool-coordinator.rkt"
          "../tools/scheduler.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../agent/event-emitter.rkt"
          "../util/message/protocol-types.rkt")
 

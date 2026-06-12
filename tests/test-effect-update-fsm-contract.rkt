@@ -13,7 +13,7 @@
 (require rackunit
          "../agent/loop-phases.rkt"
          "../agent/loop-fsm.rkt"
-         (only-in "../agent/event-bus.rkt" make-event-bus)
+         (only-in "../util/event/event-bus.rkt" make-event-bus)
          "../agent/effect-types.rkt"
          (only-in "../agent/state.rkt" make-loop-state loop-state?)
          (only-in "../util/fsm/fsm.rkt" fsm-state? fsm-event?))

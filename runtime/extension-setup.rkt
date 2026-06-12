@@ -7,7 +7,7 @@
 (require racket/contract
          (only-in "layer-adapters.rkt" tool-registry? extension-registry? make-extension-ctx)
          (only-in "layer-adapters.rkt" current-gsd-ctx)
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload)
          (only-in "runtime-helpers.rkt" maybe-dispatch-hooks))
 

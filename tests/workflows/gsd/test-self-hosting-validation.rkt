@@ -16,7 +16,7 @@
          "../../../extensions/api.rkt"
          (only-in "../../../extensions/loader.rkt" load-extension!)
          "../../../tools/tool.rkt"
-         "../../../agent/event-bus.rkt"
+         "../../../util/event/event-bus.rkt"
          "../../../util/event/event.rkt"
          (only-in "../../../tools/builtins/skill-router.rkt" tool-skill-route)
          "../fixtures/mock-provider.rkt"

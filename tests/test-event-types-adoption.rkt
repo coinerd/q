@@ -14,7 +14,7 @@
 ;;   4. Backward compatibility — raw events still work
 
 (require rackunit
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../agent/event-types.rkt"
          "../util/message/protocol-types.rkt")
 

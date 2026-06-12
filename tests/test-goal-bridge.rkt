@@ -8,7 +8,7 @@
          (only-in "../tui/commands/goal-bridge.rkt"
                   make-goal-event-bridge
                   make-goal-run-prompt!)
-         (only-in "../agent/event-bus.rkt"
+         (only-in "../util/event/event-bus.rkt"
                   make-event-bus subscribe! publish!)
          (only-in "../util/event/event.rkt" event-ev event?))
 

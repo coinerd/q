@@ -9,7 +9,7 @@
 ;; Convenience functions for loading extensions in workflow tests.
 ;; Provides a simple API to create a registry and load one or more extensions.
 
-(require "../../../agent/event-bus.rkt"
+(require "../../../util/event/event-bus.rkt"
          "../../../extensions/api.rkt"
          (only-in "../../../extensions/loader.rkt" load-extension!)
          (only-in "../../../wiring/run-modes.rkt" load-extensions-from-dir!))

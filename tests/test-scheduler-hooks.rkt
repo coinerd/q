@@ -15,7 +15,7 @@
          rackunit/text-ui
          "../util/message/protocol-types.rkt"
          "../util/hook-types.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          (only-in "../tools/tool.rkt"
                   make-tool
                   make-tool-registry

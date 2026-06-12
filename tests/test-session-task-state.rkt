@@ -22,7 +22,7 @@
                   task-conclusion?
                   task-conclusion-text)
          (only-in "helpers/session-fixture.rkt" make-test-session)
-         (only-in "../agent/event-bus.rkt" make-event-bus publish! subscribe!)
+         (only-in "../util/event/event-bus.rkt" make-event-bus publish! subscribe!)
          (only-in "../util/event/event.rkt" make-event event-ev event-payload)
          (only-in "../runtime/session/session-events.rkt"
                   wire-session-event-handlers!)

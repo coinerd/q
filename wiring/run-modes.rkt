@@ -28,7 +28,7 @@
          (only-in "../runtime/provider/provider-factory.rkt" build-provider)
          "../tools/tool.rkt"
          (only-in "../tools/registry-defaults.rkt" register-default-tools!)
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          (only-in "../util/event/event.rkt" make-event)
          (only-in "../runtime/session/session-config.rkt"
                   hash->session-config

@@ -16,7 +16,7 @@
          (only-in "../util/message/protocol-types.rkt" make-message make-tool-call-part)
          (only-in "../util/ids.rkt" generate-id)
          (only-in "../util/event/event.rkt" event-event event-payload)
-         "../agent/event-bus.rkt")
+         "../util/event/event-bus.rkt")
 
 ;; ============================================================
 ;; Helpers

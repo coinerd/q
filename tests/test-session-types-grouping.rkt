@@ -20,7 +20,7 @@
          "../runtime/session/session-config.rkt"
          "../runtime/session/lifecycle-state.rkt"
          "../agent/queue.rkt"
-         "../agent/event-bus.rkt")
+         "../util/event/event-bus.rkt")
 
 (define-runtime-path here ".")
 

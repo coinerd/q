@@ -4,7 +4,7 @@
 ;;
 ;; Provides a synchronization primitive that blocks until the agent
 ;; loop completes an iteration (idle state). Uses event bus subscription.
-;; Lives in agent/ because it depends on agent/event-bus.
+;; Lives in agent/ because it depends on util/event/event-bus.
 
 (require racket/contract
          (only-in "../util/event/event.rkt" event-ev event-session-id)

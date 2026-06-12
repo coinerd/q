@@ -21,7 +21,7 @@
          racket/port
          json
          "../../q/util/message/protocol-types.rkt"
-         "../../q/agent/event-bus.rkt"
+         "../../q/util/event/event-bus.rkt"
          "../../q/interfaces/json-mode.rkt")
 
 ;; ============================================================

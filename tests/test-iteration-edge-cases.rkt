@@ -15,7 +15,7 @@
 (require rackunit
          (only-in "../agent/iteration/tool-turn-bridge.rkt" update-seen-paths)
          (only-in "../util/json/json-helpers.rkt" ensure-hash-args)
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../util/message/protocol-types.rkt"
          (only-in "../runtime/iteration/retry-policy.rkt" check-mid-turn-budget!)
          (only-in "../runtime/runtime-helpers.rkt" emit-session-event!))

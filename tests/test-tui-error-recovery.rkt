@@ -12,7 +12,7 @@
          rackunit/text-ui
          "../tui/state.rkt"
          "../util/message/protocol-types.rkt"
-         "../agent/event-bus.rkt")
+         "../util/event/event-bus.rkt")
 
 (define (make-test-event ev-type
                          payload

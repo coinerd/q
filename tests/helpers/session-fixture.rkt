@@ -9,7 +9,7 @@
 
 (require "../../runtime/agent-session.rkt"
          "../../runtime/session/session-config.rkt"
-         "../../agent/event-bus.rkt"
+         "../../util/event/event-bus.rkt"
          (only-in "../../tools/tool.rkt" make-tool-registry)
          (only-in "../../llm/provider.rkt" make-provider)
          (only-in "../../llm/model.rkt" make-model-response make-stream-chunk))

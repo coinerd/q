@@ -16,7 +16,7 @@
          "../tools/tool.rkt"
          "../llm/provider.rkt"
          "../llm/model.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../util/ids.rkt")
 
 ;; ============================================================

@@ -10,7 +10,7 @@
          racket/system
          "../state.rkt"
          (only-in "../../util/event/event.rkt" make-event)
-         "../../agent/event-bus.rkt"
+         "../../util/event/event-bus.rkt"
          "../../runtime/auth/oauth.rkt"
          "../../runtime/auth/oauth-callback.rkt"
          "../../runtime/auth/auth-store.rkt"

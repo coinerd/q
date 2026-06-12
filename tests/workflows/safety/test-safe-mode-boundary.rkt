@@ -15,7 +15,7 @@
          json
          racket/file
          (prefix-in sdk: "../../../interfaces/sdk.rkt")
-         "../../../agent/event-bus.rkt"
+         "../../../util/event/event-bus.rkt"
          "../../../util/message/protocol-types.rkt"
          (only-in "../../../tools/tool.rkt"
                   make-tool-registry

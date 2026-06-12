@@ -10,7 +10,7 @@
          racket/format
          racket/class
          racket/string
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../runtime/agent-session.rkt"
          "../ui-core/observable-bridge.rkt"
          "../ui-core/dispatch.rkt"

@@ -104,7 +104,7 @@
          "../extensions/dynamic-tools.rkt"
          "../extensions/api.rkt"
          "../extensions/hooks.rkt"
-         "../agent/event-bus.rkt")
+         "../util/event/event-bus.rkt")
 
 (test-case "remote-collab extension registers remote-q tool"
   (define reg (make-tool-registry))

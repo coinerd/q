@@ -7,7 +7,7 @@
          json
          racket/port
          (only-in "../util/event/event.rkt" event->jsexpr event-ev)
-         "../agent/event-bus.rkt")
+         "../util/event/event-bus.rkt")
 (require (only-in "../util/error/error-helpers.rkt" with-safe-fallback))
 
 (define-logger rpc-mode)

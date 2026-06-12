@@ -9,7 +9,7 @@
          "../tui/commands/runtime-control.rkt"
          "../tui/commands/context.rkt"
          "../tui/state.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../util/message/protocol-types.rkt")
 
 (define (make-test-cctx [bus #f])

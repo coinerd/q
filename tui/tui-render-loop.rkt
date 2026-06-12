@@ -40,7 +40,7 @@
                   plain-line
                   apply-selection-highlight)
          (only-in "../util/event/event.rkt" event)
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../tui/tui-keybindings.rkt"
          "../tui/terminal-input.rkt"
          "../util/error/output-guard.rkt"

@@ -107,7 +107,7 @@
 
 (define LAYERS
   '(("foundation" . ("util/" "agent/types.rkt"))
-    ("core" . ("llm/" "agent/event-bus.rkt" "agent/loop.rkt" "agent/queue.rkt"))
+    ("core" . ("llm/" "util/event/event-bus.rkt" "agent/loop.rkt" "agent/queue.rkt"))
     ("tools" . ("tools/" "sandbox/"))
     ("runtime" . ("runtime/" "extensions/" "agent/iteration.rkt"))
     ("interfaces" . ("interfaces/" "cli/" "tui/"))))

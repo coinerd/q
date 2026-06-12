@@ -16,7 +16,7 @@
                   tiered-context?
                   tiered-context->message-list)
          "../runtime/session-index.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../util/message/protocol-types.rkt"
          "../util/ids.rkt")
 

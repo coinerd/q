@@ -13,7 +13,7 @@
          "../agent/queue.rkt"
          (only-in "../runtime/agent-session.rkt" agent-session-queue)
          "../tools/tool.rkt"
-         "../agent/event-bus.rkt")
+         "../util/event/event-bus.rkt")
 
 ;; Mock provider that returns a simple response
 (require (only-in "../llm/provider.rkt" make-provider))

@@ -29,7 +29,7 @@
          (only-in "../extensions/gsd/core.rkt" reset-all-gsd-state!)
          (only-in "../extensions/gsd/runtime-state-types.rkt" gsd-runtime-state-mode)
          (prefix-in store: "../runtime/session/session-store.rkt")
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          ;; Core SDK types
          "sdk-core.rkt")
 

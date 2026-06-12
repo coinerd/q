@@ -20,7 +20,7 @@
          racket/string
          json
          (only-in "../util/event/event.rkt" make-event)
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "api.rkt"
          "../util/json/checksum.rkt"
          "../util/version.rkt"

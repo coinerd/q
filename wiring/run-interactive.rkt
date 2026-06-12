@@ -25,7 +25,7 @@
          "../runtime/provider/model-registry.rkt"
 
          "../tools/tool.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          (only-in "../util/content/content-parts.rkt" text-part?)
          (only-in "../util/event/event.rkt" event-ev)
          (only-in "../util/message/message.rkt" message-role message-content)

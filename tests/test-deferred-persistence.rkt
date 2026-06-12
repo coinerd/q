@@ -14,7 +14,7 @@
          rackunit/text-ui
          (only-in "helpers/temp-fs.rkt" with-temp-dir)
          "../util/message/protocol-types.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../runtime/agent-session.rkt")
 
 (test-case "session directory IS created at construction (eager persist)"

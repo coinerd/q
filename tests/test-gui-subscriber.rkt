@@ -6,7 +6,7 @@
 (require rackunit
          rackunit/text-ui
          "../gui/state-sync.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../util/event/event.rkt"
          "../gui/gui-types.rkt")
 

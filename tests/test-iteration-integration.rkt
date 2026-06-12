@@ -69,7 +69,7 @@
                   directive-recurse-new-ctx
                   directive-recurse-new-counters
                   directive-stop-result)
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../runtime/working-set.rkt")
 
 ;; ============================================================

@@ -11,7 +11,7 @@
          "../tui/state.rkt"
          "../tui/commands/context.rkt"
          "../tui/context.rkt"
-         "../agent/event-bus.rkt")
+         "../util/event/event-bus.rkt")
 
 ;; ============================================================
 ;; cmd-ctx has goal-cancel-box field

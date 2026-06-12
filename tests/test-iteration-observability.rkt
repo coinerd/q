@@ -16,7 +16,7 @@
          "../runtime/agent-session.rkt"
          "../runtime/session/session-types.rkt"
          "../util/message/protocol-types.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../llm/model.rkt"
          "../llm/provider.rkt"
          "../util/ids.rkt"

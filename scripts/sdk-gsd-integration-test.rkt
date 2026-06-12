@@ -10,7 +10,7 @@
          "../extensions/api.rkt"
          "../extensions/hooks.rkt"
          "../runtime/agent-session.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../tools/registry-defaults.rkt"
          "../tools/tool.rkt"
          (only-in "../interfaces/sdk.rkt" make-runtime open-session)

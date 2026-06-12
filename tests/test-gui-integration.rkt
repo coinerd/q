@@ -9,7 +9,7 @@
          rackunit/text-ui
          "../gui/main.rkt"
          "../ui-core/observable-bridge.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../util/event/event.rkt")
 
 (define (test-event type payload)

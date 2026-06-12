@@ -16,7 +16,7 @@
          "../agent/loop-phases.rkt"
          "../util/cancellation.rkt"
          "../util/message/message.rkt"
-         "../agent/event-bus.rkt")
+         "../util/event/event-bus.rkt")
 
 (test-case "stream-from-provider: procedure exists with tightened contract"
   (check-pred procedure? stream-from-provider))

@@ -16,7 +16,7 @@
 ;;   - Extension-to-extension message injection
 
 (require rackunit
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../util/message/protocol-types.rkt"
          "../util/message/protocol-types.rkt"
          "../extensions/message-inject.rkt")

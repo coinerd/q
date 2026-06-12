@@ -9,7 +9,7 @@
          racket/async-channel
          "state.rkt"
          "input.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          (only-in "../runtime/provider/model-registry.rkt" model-registry?)
          (only-in "../extensions/api.rkt" extension-registry?)
          (only-in "../agent/queue.rkt" queue?))

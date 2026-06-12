@@ -13,7 +13,7 @@
 ;;   - #707: Full atomic lifecycle
 
 (require rackunit
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../extensions/hooks.rkt"
          "../extensions/context.rkt"
          "../extensions/api.rkt"

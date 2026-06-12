@@ -11,7 +11,7 @@
          rackunit/text-ui
          racket/file
          "../util/message/protocol-types.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../agent/loop.rkt"
          "../agent/state.rkt"
          "../extensions/hooks.rkt"

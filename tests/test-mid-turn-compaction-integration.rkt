@@ -21,7 +21,7 @@
          "../runtime/runtime-helpers.rkt"
          "../runtime/iteration/retry-policy.rkt"
          "../llm/token-budget.rkt"
-         "../agent/event-bus.rkt")
+         "../util/event/event-bus.rkt")
 
 (define integration-suite
   (test-suite "Mid-turn compaction integration"

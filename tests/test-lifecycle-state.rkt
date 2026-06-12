@@ -29,7 +29,7 @@
                   set-lifecycle-state-recent-tool-calls!)
          (only-in "../runtime/agent-session.rkt" make-agent-session)
          (only-in "../runtime/session/session-types.rkt" agent-session-lifecycle)
-         (only-in "../agent/event-bus.rkt" make-event-bus))
+         (only-in "../util/event/event-bus.rkt" make-event-bus))
 
 ;; ============================================================
 ;; Construction

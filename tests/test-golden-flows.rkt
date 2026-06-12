@@ -29,7 +29,7 @@
                   stream-chunk-usage
                   stream-chunk-done?
                   make-stream-chunk)
-         (only-in "../agent/event-bus.rkt" make-event-bus event-bus? subscribe! unsubscribe! publish!)
+         (only-in "../util/event/event-bus.rkt" make-event-bus event-bus? subscribe! unsubscribe! publish!)
          (only-in "../util/message/protocol-types.rkt"
                   make-event
                   event-event

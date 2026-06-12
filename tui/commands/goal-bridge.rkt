@@ -9,7 +9,7 @@
 (require racket/match
          (only-in "../../runtime/agent-session.rkt" agent-session?)
          (only-in "../../runtime/session/session-lifecycle.rkt" run-prompt!)
-         "../../agent/event-bus.rkt"
+         "../../util/event/event-bus.rkt"
          "../../runtime/runtime-helpers.rkt")
 
 (provide make-goal-event-bridge

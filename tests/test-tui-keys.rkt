@@ -19,7 +19,7 @@
          "../tui/input.rkt"
          "../tui/state.rkt"
          "../tui/terminal.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../util/message/protocol-types.rkt")
 
 ;; Helper: create a tui-ctx for testing

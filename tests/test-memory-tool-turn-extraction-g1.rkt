@@ -9,7 +9,7 @@
          "../llm/provider.rkt"
          "../agent/loop-stream.rkt"
          "../agent/state.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../runtime/memory/auto-extraction.rkt"
          "../runtime/memory/backends/memory-hash.rkt"
          "../runtime/memory/policy.rkt"

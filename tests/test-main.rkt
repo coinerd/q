@@ -41,7 +41,7 @@
          ;; Settings — was re-exported via all-from-out
          (only-in "../runtime/settings.rkt" load-settings)
          ;; Event bus — was re-exported via all-from-out
-         (only-in "../agent/event-bus.rkt" event-bus?)
+         (only-in "../util/event/event-bus.rkt" event-bus?)
          ;; Session config
          "../runtime/session/session-config.rkt"
          ;; Extensions

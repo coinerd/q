@@ -14,7 +14,7 @@
          racket/file
          racket/path
          "../util/message/protocol-types.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../agent/queue.rkt"
          "../llm/model.rkt"
          "../llm/provider.rkt"

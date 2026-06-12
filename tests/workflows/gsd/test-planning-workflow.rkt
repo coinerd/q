@@ -21,7 +21,7 @@
          (only-in "../../../extensions/loader.rkt" load-extension!)
          "../../../extensions/hooks.rkt"
          "../../../tools/tool.rkt"
-         "../../../agent/event-bus.rkt"
+         "../../../util/event/event-bus.rkt"
          "../fixtures/mock-provider.rkt"
          "../fixtures/workflow-runner.rkt")
 

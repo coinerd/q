@@ -21,7 +21,7 @@
                ;; agent/
                "util/message/protocol-types.rkt"
                "agent/state.rkt"
-               "agent/event-bus.rkt"
+               "util/event/event-bus.rkt"
                "agent/queue.rkt"
                "agent/loop.rkt"
                ;; runtime/

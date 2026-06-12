@@ -14,7 +14,7 @@
 (require racket/contract
          racket/match
          racket/list
-         "../../agent/event-bus.rkt"
+         "../../util/event/event-bus.rkt"
          "compactor.rkt"
          "compaction-hooks.rkt"
          (only-in "../../util/content/content-parts.rkt" make-text-part)

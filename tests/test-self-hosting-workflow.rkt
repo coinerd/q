@@ -22,7 +22,7 @@
          "../tools/registry-defaults.rkt"
          "../extensions/api.rkt"
          "../extensions/loader.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../skills/resource-loader.rkt"
          "../runtime/settings.rkt")
 

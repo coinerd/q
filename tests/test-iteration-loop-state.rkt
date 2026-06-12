@@ -9,7 +9,7 @@
 (require rackunit
          rackunit/text-ui
          "../agent/iteration/loop-state.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          racket/set)
 
 (define suite

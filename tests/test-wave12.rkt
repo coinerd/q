@@ -18,7 +18,7 @@
          racket/file
          "../tui/image.rkt"
          "../skills/frontmatter.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../tools/tool.rkt"
          "../runtime/agent-session.rkt"
          (only-in "helpers/mock-provider.rkt" make-simple-mock-provider))

@@ -9,7 +9,7 @@
 
 (require rackunit
          rackunit/text-ui
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../util/message/protocol-types.rkt"
          "../agent/wait-idle.rkt")
 

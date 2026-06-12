@@ -14,7 +14,7 @@
          rackunit/text-ui
          (only-in "helpers/temp-fs.rkt" with-temp-dir)
          "../util/message/protocol-types.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../runtime/agent-session.rkt"
          "../runtime/session/session-types.rkt"
          (only-in "../runtime/session/session-mutation.rkt" guarded-set-last-compaction-time!))

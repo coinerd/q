@@ -12,7 +12,7 @@
          racket/runtime-path
          "../../workflows/fixtures/mock-provider.rkt"
          "../../workflows/fixtures/workflow-runner.rkt"
-         "../../../agent/event-bus.rkt"
+         "../../../util/event/event-bus.rkt"
          "../../../extensions/api.rkt"
          (only-in "../../../extensions/loader.rkt" load-extension!)
          "../../../tools/tool.rkt")

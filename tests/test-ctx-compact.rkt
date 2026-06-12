@@ -12,7 +12,7 @@
 ;;   - #709: Parent feature
 
 (require rackunit
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../runtime/compaction/compactor.rkt"
          "../runtime/compaction/ctx-compact.rkt"
          "../util/message/protocol-types.rkt")

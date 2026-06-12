@@ -58,7 +58,7 @@
                   make-event
                   content-part->jsexpr)
          (only-in "../util/event/event-payloads.rkt" payload->hash)
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../llm/model.rkt"
          "../llm/provider.rkt"
          (only-in "../tools/tool.rkt" make-tool make-tool-registry register-tool! make-success-result)

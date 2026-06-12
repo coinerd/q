@@ -10,7 +10,7 @@
 ;;; events when the context grows past 90% of max-context-tokens.
 
 (require rackunit
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../util/message/protocol-types.rkt"
          (only-in "../runtime/iteration/retry-policy.rkt"
                   call-with-overflow-recovery

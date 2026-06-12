@@ -7,7 +7,7 @@
 ;; between the main dispatcher and sub-module handlers.
 
 (require "../state.rkt"
-         "../../agent/event-bus.rkt"
+         "../../util/event/event-bus.rkt"
          "../../runtime/provider/model-registry.rkt")
 
 (provide cmd-ctx

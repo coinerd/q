@@ -16,7 +16,7 @@
          racket/generator
          "../llm/model.rkt"
          "../llm/provider.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../agent/state.rkt"
          "../agent/loop.rkt"
          "../util/message/protocol-types.rkt")

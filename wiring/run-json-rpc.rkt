@@ -21,7 +21,7 @@
                   fork-session
                   close-session!
                   agent-session-queue)
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../extensions/api.rkt"
          "./rpc-methods.rkt"
          "./rpc-ui-adapter.rkt"

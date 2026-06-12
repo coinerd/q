@@ -23,7 +23,7 @@
          "../extensions/hooks.rkt"
          "../extensions/telemetry.rkt"
          "../wiring/provider-rpc.rkt"
-         "../agent/event-bus.rkt")
+         "../util/event/event-bus.rkt")
 
 ;; ============================================================
 ;; Helpers

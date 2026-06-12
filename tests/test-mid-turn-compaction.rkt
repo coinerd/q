@@ -18,7 +18,7 @@
          "../runtime/iteration/retry-policy.rkt"
          "../runtime/runtime-helpers.rkt"
          "../llm/token-budget.rkt"
-         "../agent/event-bus.rkt")
+         "../util/event/event-bus.rkt")
 
 ;; Helper: build a mock message with text content
 (define (make-mock-msg role text)

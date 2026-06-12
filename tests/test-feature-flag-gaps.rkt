@@ -5,7 +5,7 @@
 
 (require rackunit
          "../runtime/session/session-config.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../tui/tui-init.rkt")
 
 ;; AXIS2-F13: current-goal-loop-enabled? exists and defaults to #t

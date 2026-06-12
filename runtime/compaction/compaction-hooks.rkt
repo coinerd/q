@@ -19,7 +19,7 @@
          (only-in "../../util/event/event.rkt" event?)
          (only-in "../../util/event/event.rkt" event event? make-event)
          "../../util/hook-types.rkt"
-         "../../agent/event-bus.rkt"
+         "../../util/event/event-bus.rkt"
          "compactor.rkt"
          "../split-turn.rkt"
          "token-compaction.rkt")

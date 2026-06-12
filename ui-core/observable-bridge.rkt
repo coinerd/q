@@ -14,7 +14,7 @@
 
 (require racket/contract
          racket/match
-         "../agent/event-bus.rkt")
+         "../util/event/event-bus.rkt")
 
 (provide gui-state-bridge?
          (contract-out [make-gui-state-bridge

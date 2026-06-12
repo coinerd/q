@@ -13,7 +13,7 @@
 
 (require racket/contract
          (only-in "../agent/event-emitter.rkt" emit-session-event!)
-         (only-in "../agent/event-bus.rkt" make-event-bus)
+         (only-in "../util/event/event-bus.rkt" make-event-bus)
          (only-in "layer-adapters.rkt" dispatch-hooks)
          (only-in "../util/hook-types.rkt" hook-result-payload))
 

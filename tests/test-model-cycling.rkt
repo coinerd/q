@@ -10,7 +10,7 @@
 (require rackunit
          "../runtime/agent-session.rkt"
          "../runtime/provider/model-registry.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../tools/tool.rkt")
 
 (define (make-test-session [model #f])

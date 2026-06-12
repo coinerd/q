@@ -10,7 +10,7 @@
 (require rackunit
          rackunit/text-ui
          "../agent/iteration/loop-phases.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../agent/queue.rkt")
 
 (define loop-phases-suite

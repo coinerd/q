@@ -10,7 +10,7 @@
          "../state.rkt"
          (only-in "../../util/event/event.rkt" make-event)
          (only-in "../../util/message/message.rkt" message-role)
-         "../../agent/event-bus.rkt"
+         "../../util/event/event-bus.rkt"
          "../../runtime/session-index.rkt"
          "../../interfaces/sessions.rkt"
          (only-in "../../runtime/settings.rkt" default-session-dir)

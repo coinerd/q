@@ -8,7 +8,7 @@
 (require "../../runtime/session/session-manager.rkt"
          (only-in "../../interfaces/sdk-core.rkt" create-agent-session session-info)
          (only-in "../../tools/tool.rkt" make-tool-registry)
-         (only-in "../../agent/event-bus.rkt" make-event-bus))
+         (only-in "../../util/event/event-bus.rkt" make-event-bus))
 
 (define bus (make-event-bus))
 (define registry (make-tool-registry))

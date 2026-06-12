@@ -22,7 +22,7 @@
          "../extensions/api.rkt"
          "../extensions/loader.rkt"
          "../extensions/define-extension.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../util/message/protocol-types.rkt")
 
 (define-runtime-path here ".")

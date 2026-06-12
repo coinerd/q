@@ -51,7 +51,7 @@
                   tool-call-part-name
                   tool-call-part-arguments)
          (only-in "../util/tool/tool-types.rkt" tool-result-is-error?)
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          ;; ARCH-01 upward import — runtime→tools
          (only-in "layer-adapters.rkt" make-exec-context make-error-result list-tools-jsexpr)
          ;; Permission gate via adapter
@@ -60,7 +60,7 @@
          (only-in "layer-adapters.rkt" run-tool-batch scheduler-result scheduler-result-results)
          ;; Hooks + extension registry via adapter
          (only-in "layer-adapters.rkt" dispatch-hooks extension-registry?)
-         (only-in "../agent/event-bus.rkt" event-bus?)
+         (only-in "../util/event/event-bus.rkt" event-bus?)
          (only-in "session/session-store.rkt" append-entries!)
          (only-in "../runtime/settings.rkt"
                   q-settings

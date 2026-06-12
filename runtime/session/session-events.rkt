@@ -7,7 +7,7 @@
 ;; Handles fork.requested and compact.requested events from TUI/CLI.
 
 (require racket/contract
-         "../../agent/event-bus.rkt"
+         "../../util/event/event-bus.rkt"
          "session-store.rkt"
          "../compaction/compactor.rkt"
          "../session-index/schema.rkt"

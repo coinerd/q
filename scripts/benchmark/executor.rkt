@@ -15,7 +15,7 @@
          racket/string
          json
          (prefix-in sdk: "../../interfaces/sdk.rkt")
-         (only-in "../../agent/event-bus.rkt" make-event-bus)
+         (only-in "../../util/event/event-bus.rkt" make-event-bus)
          (only-in "../../tools/tool.rkt" make-tool-registry)
          (only-in "../../tools/registry-defaults.rkt" register-default-tools!)
          (only-in "../../extensions/api.rkt" make-extension-registry)

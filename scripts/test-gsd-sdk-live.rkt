@@ -17,7 +17,7 @@
          "../runtime/provider/provider-factory.rkt"
          "../extensions/loader.rkt"
          "../extensions/gsd-planning.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          (only-in "../util/event/event.rkt" event-ev event-payload)
          "../tools/tool.rkt"
          "../interfaces/sdk.rkt"

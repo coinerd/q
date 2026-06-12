@@ -35,7 +35,7 @@
          (only-in "../util/loop-result.rkt" make-loop-result)
          (only-in "../util/message/message.rkt" message-id message-kind message?)
          "../agent/queue.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload)
          "session/session-store.rkt"
          "../runtime/session-index.rkt"

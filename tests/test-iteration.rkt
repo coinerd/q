@@ -10,7 +10,7 @@
          rackunit/text-ui
          "../util/message/protocol-types.rkt"
          "../agent/queue.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../util/ids.rkt"
          (only-in "../agent/iteration/main-loop.rkt" run-iteration-loop)
          (only-in "../util/json/json-helpers.rkt" ensure-hash-args)

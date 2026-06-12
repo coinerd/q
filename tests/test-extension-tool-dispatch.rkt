@@ -22,7 +22,7 @@
          "../extensions/loader.rkt"
          "../extensions/api.rkt"
          "../extensions/gsd-planning.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../tools/tool.rkt"
          "../tools/scheduler.rkt"
          "../runtime/settings.rkt")

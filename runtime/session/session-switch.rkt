@@ -17,7 +17,7 @@
 (require racket/contract
          racket/match
          racket/runtime-path
-         "../../agent/event-bus.rkt"
+         "../../util/event/event-bus.rkt"
          "../../agent/event-emitter.rkt"
          "../../agent/event-structs/session-events.rkt"
          (only-in "../../util/error/errors.rkt" raise-extension-error))

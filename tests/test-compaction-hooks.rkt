@@ -14,7 +14,7 @@
 (require rackunit
          "../util/message/protocol-types.rkt"
          "../util/hook-types.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../runtime/compaction/compactor.rkt"
          "../runtime/compaction/compaction-hooks.rkt")
 

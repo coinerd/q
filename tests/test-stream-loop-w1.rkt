@@ -12,7 +12,7 @@
          "../agent/loop.rkt"
          "../agent/loop-phases.rkt"
          "../agent/loop-fsm.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../agent/state.rkt"
          "../util/message/message.rkt")
 

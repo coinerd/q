@@ -16,7 +16,7 @@
          "../command-parse.rkt"
          "binding-resolver.rkt"
          "../selection.rkt"
-         "../../agent/event-bus.rkt"
+         "../../util/event/event-bus.rkt"
          "../../util/event/event.rkt"
          "../keymap.rkt"
          (only-in "../component.rkt"

@@ -22,7 +22,7 @@
          "../tools/registry-defaults.rkt"
          "../extensions/api.rkt"
          "../extensions/loader.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../runtime/settings.rkt")
 (define tmp-base (make-temporary-file "q-self-host-~a" 'directory))
 
@@ -139,7 +139,7 @@
 ;; ============================================================
 (test-case "DEEP-6: core agent modules exist"
   (define core-modules
-    '("agent/loop.rkt" "agent/event-bus.rkt"
+    '("agent/loop.rkt" "util/event/event-bus.rkt"
                        "agent/state.rkt"
                        "runtime/iteration/main-loop.rkt"
                        "runtime/auto-retry.rkt"

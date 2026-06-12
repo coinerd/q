@@ -14,7 +14,7 @@
 (require rackunit
          rackunit/text-ui
          (only-in "../interfaces/sdk-public.rkt" make-runtime runtime? publish!)
-         (only-in "../agent/event-bus.rkt" make-event-bus subscribe! unsubscribe!)
+         (only-in "../util/event/event-bus.rkt" make-event-bus subscribe! unsubscribe!)
          (only-in "../extensions/events.rkt" ext-publish!)
          (only-in "../llm/provider.rkt" make-mock-provider)
          (only-in "../llm/model.rkt" make-model-response))

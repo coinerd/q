@@ -17,7 +17,7 @@
          "../llm/provider.rkt"
          (only-in "../tools/tool.rkt" make-tool-registry tool-registry?)
          (only-in "../tools/registry-defaults.rkt" register-default-tools!)
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          (only-in "../util/loop-result.rkt" loop-result)
          (only-in "../util/event/event.rkt" make-event)
          (only-in "../util/message/message.rkt" message?)

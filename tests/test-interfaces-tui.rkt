@@ -37,7 +37,7 @@
                   wrap-styled-line)
          "../tui/layout.rkt"
          "../util/message/protocol-types.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../interfaces/tui.rkt"
          (only-in "../tui/command-parse.rkt" parsed-command? parsed-command-canonical-name))
 

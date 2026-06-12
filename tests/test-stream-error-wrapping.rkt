@@ -16,7 +16,7 @@
          "../util/message/protocol-types.rkt"
          (only-in "../util/content/content-parts.rkt" text-part?)
          "../agent/state.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../util/event/event-access.rkt"
          "../llm/provider.rkt"
          "../llm/model.rkt"

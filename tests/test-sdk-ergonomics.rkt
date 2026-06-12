@@ -17,7 +17,7 @@
          "../llm/model.rkt"
          "../llm/provider.rkt"
          (only-in "../tools/tool.rkt" make-tool-registry)
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          (only-in "../runtime/agent-session.rkt"
                   make-agent-session
                   agent-session?

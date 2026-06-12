@@ -7,7 +7,7 @@
 ;;   - Subscribing and inspecting both typed and raw events
 ;;   - Using typed-event->jsexpr for structured JSON logging
 
-(require "../../agent/event-bus.rkt"
+(require "../../util/event/event-bus.rkt"
          "../../agent/event-types.rkt"
          (only-in "../../util/event/event.rkt" event event-ev event-payload))
 

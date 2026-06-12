@@ -10,7 +10,7 @@
          rackunit/text-ui
          "../tools/builtins/record-conclusion.rkt"
          "../tools/tool.rkt"
-         (only-in "../agent/event-bus.rkt" make-event-bus publish!)
+         (only-in "../util/event/event-bus.rkt" make-event-bus publish!)
          (only-in "../util/event/event.rkt" make-event)
          "../runtime/session/session-events.rkt"
          "../runtime/session/session-types.rkt"

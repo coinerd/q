@@ -16,7 +16,7 @@
          (only-in "../../../tools/tool.rkt" make-tool-registry)
          "../../../util/message/protocol-types.rkt"
          (prefix-in sdk: "../../../interfaces/sdk.rkt")
-         "../../../agent/event-bus.rkt")
+         "../../../util/event/event-bus.rkt")
 
 ;; ============================================================
 ;; Test suite

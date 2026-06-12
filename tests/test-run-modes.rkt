@@ -16,7 +16,7 @@
          "../wiring/run-modes.rkt"
          "../extensions/api.rkt"
          "../extensions/loader.rkt"
-         "../agent/event-bus.rkt")
+         "../util/event/event-bus.rkt")
 
 ;; ============================================================
 ;; Helpers

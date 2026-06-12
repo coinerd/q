@@ -18,7 +18,7 @@
          json
          "../llm/model.rkt"
          "../llm/provider.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          (only-in "../util/message/protocol-types.rkt"
                   make-event
                   event?

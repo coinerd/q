@@ -4,7 +4,7 @@
 (require racket/contract
          racket/string
          json
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          (only-in "../util/event/event.rkt" event? event->jsexpr)
          (only-in "../util/message/message.rkt" message? message->jsexpr))
 (require (only-in "../util/error/error-helpers.rkt" with-safe-fallback))

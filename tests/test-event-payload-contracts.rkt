@@ -14,7 +14,7 @@
 (require rackunit
          rackunit/text-ui
          "../util/event/event-contracts.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../runtime/runtime-helpers.rkt")
 
 (define event-contract-tests

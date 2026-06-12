@@ -22,7 +22,7 @@
          "../extensions/hooks.rkt"
          "../tools/tool.rkt"
          "../util/hook-types.rkt"
-         "../agent/event-bus.rkt")
+         "../util/event/event-bus.rkt")
 
 ;; ============================================================
 ;; Helpers

@@ -21,7 +21,7 @@
          "../runtime/runtime-helpers.rkt"
          "../runtime/compaction/compactor.rkt"
          "../runtime/auto-retry.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../llm/provider.rkt"
          "../llm/model.rkt"
          (only-in "../tools/tool.rkt" make-tool-registry)

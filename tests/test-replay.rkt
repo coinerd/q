@@ -30,7 +30,7 @@
          "../runtime/compaction/compactor.rkt"
          (only-in "../runtime/compaction/token-compaction.rkt" token-compaction-config)
          "helpers/compaction-helpers.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../llm/model.rkt"
          "../llm/provider.rkt"
          (only-in "../tools/tool.rkt" make-tool-registry))

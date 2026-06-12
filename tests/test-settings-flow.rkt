@@ -17,7 +17,7 @@
          "../tools/tool.rkt"
          "../tools/builtins/bash.rkt"
          "../sandbox/limits.rkt"
-         "../agent/event-bus.rkt"
+         "../util/event/event-bus.rkt"
          "../extensions/api.rkt")
 
 ;; ============================================================
