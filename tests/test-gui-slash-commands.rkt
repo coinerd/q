@@ -53,11 +53,12 @@
       (define handler (make-slash-command-handler #f (box (make-gui-state)) (make-semaphore 1)))
       (check-equal? (handler "") #f))
 
-    (test-case "handler accepts string input"
+    (test-case "L-05: handler returns #f for non-slash plain text"
       (define state-box (box (make-gui-state)))
       (define lock (make-semaphore 1))
       (define handler (make-slash-command-handler #f state-box lock))
-      (check-false (handler "")))
+      (check-false (handler "hello world"))
+      (check-equal? (length (gui-state-messages (unbox state-box))) 0))
 
     (test-case "handler /help calls notify"
       (define state-box (box (make-gui-state)))
@@ -151,8 +152,12 @@
       (define state-box (box (make-gui-state)))
       (define lock (make-semaphore 1))
       (check-true (try-extension-dispatch mock-sess state-box lock "/test-new-session"))
+      ;; L-06: yield to let background thread finish; incomplete session produces captured error message
+      (sync (system-idle-evt))
       (define msgs (gui-state-messages (unbox state-box)))
-      (check-equal? (length msgs) 0))
+      (check-equal? (length msgs) 1)
+      (check-equal? (gui-message-role (car msgs)) "system")
+      (check-true (string-contains? (gui-message-text (car msgs)) "[ERROR] /go failed:")))
 
     (test-case "try-extension-dispatch handles submit hook result"
       (define ext-reg (make-extension-registry))
@@ -182,7 +187,9 @@
                        (make-lifecycle-state)))
       (define state-box (box (make-gui-state)))
       (define lock (make-semaphore 1))
-      (check-true (try-extension-dispatch mock-sess state-box lock "/test-submit")))))
+      (check-true (try-extension-dispatch mock-sess state-box lock "/test-submit"))
+      ;; L-06: yield to let background thread finish before assertions
+      (sync (system-idle-evt)))))
 
 ;; ═══════════════════════════════════════════════════════════
 ;; MF-08 (v0.98.9 W1): Contract-rejection tests
@@ -224,10 +231,46 @@
       (check-exn exn:fail:contract?
                  (lambda () (try-extension-dispatch #f "not-a-box" (make-semaphore 1) "/foo"))))))
 
+;; ═══════════════════════════════════════════════════════════
+;; L-07 (v0.98.10 W2): Document session-less command paths
+;; ═══════════════════════════════════════════════════════════
+(define test-session-less-commands
+  (test-suite "session-less command paths"
+    (test-case "/status with sess=#f raises contract error"
+      (define state-box (box (make-gui-state)))
+      (define lock (make-semaphore 1))
+      (define handler (make-slash-command-handler #f state-box lock))
+      (check-exn exn:fail:contract? (lambda () (handler "/status"))))
+
+    (test-case "/model with sess=#f raises contract error"
+      (define state-box (box (make-gui-state)))
+      (define lock (make-semaphore 1))
+      (define handler (make-slash-command-handler #f state-box lock))
+      (check-exn exn:fail:contract? (lambda () (handler "/model"))))
+
+    (test-case "/goal status with sess=#f returns no-active-goal message"
+      (define state-box (box (make-gui-state)))
+      (define lock (make-semaphore 1))
+      (define handler (make-slash-command-handler #f state-box lock))
+      (check-true (handler "/goal status"))
+      (define msgs (gui-state-messages (unbox state-box)))
+      (check-equal? (length msgs) 1)
+      (check-true (string-contains? (gui-message-text (car msgs)) "No active goal")))
+
+    (test-case "/goal clear with sess=#f works without session access"
+      (define state-box (box (make-gui-state)))
+      (define lock (make-semaphore 1))
+      (define handler (make-slash-command-handler #f state-box lock))
+      (check-true (handler "/goal clear"))
+      (define msgs (gui-state-messages (unbox state-box)))
+      (check-equal? (length msgs) 1)
+      (check-true (string-contains? (gui-message-text (car msgs)) "cancelled")))))
+
 (run-tests (test-suite "gui-slash-commands"
              test-add-system-msg
              test-make-slash-command-handler
              test-known-commands
              test-extension-dispatch
              test-new-session-dispatch
-             test-contract-rejection))
+             test-contract-rejection
+             test-session-less-commands))
