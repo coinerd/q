@@ -306,7 +306,8 @@
     ;; Extract final text from result — ONLY text content, not tool-call-parts.
     ;; Bug fix: (format "~a" content) on mixed lists containing tool-call-part
     ;; structs produces #hasheq() / #(struct:...) garbage that the parent LLM
-    ;; cannot parse. Only extract string items from assistant message content.
+    ;; cannot parse. Extract string items + text-parts from content.
+    ;; When no text is present (tool-call-only message), summarize tool names.
     (define result-text
       (string-join (for/list ([m (in-list result-messages)]
                               #:when (eq? (message-role m) 'assistant))
@@ -314,11 +315,24 @@
                      (cond
                        [(string? content) content]
                        [(list? content)
-                        ;; Extract only string items — skip tool-call-parts
-                        (string-join (for/list ([c (in-list content)]
-                                                #:when (string? c))
-                                       c)
-                                     "\n")]
+                        (define strings-only
+                          (for/list ([c (in-list content)]
+                                     #:when (string? c))
+                            c))
+                        (define text-parts
+                          (for/list ([c (in-list content)]
+                                     #:when (text-part? c))
+                            (text-part-text c)))
+                        (define tool-parts
+                          (for/list ([c (in-list content)]
+                                     #:when (tool-call-part? c))
+                            (tool-call-part-name c)))
+                        (define all-text (append strings-only text-parts))
+                        (cond
+                          [(pair? all-text) (string-join all-text "\n")]
+                          ;; No text — summarize what tools were called
+                          [(pair? tool-parts) (format "[called: ~a]" (string-join tool-parts ", "))]
+                          [else ""])]
                        [else (format "~a" content)]))
                    "\n"))
 
@@ -549,8 +563,12 @@
                                     'jobs
                                     job-results)))]))
 
-;; Extract a short text summary from tool result content
-(define (extract-text-summary content)
+;; Extract a text summary from tool result content.
+;; Bug fix: Raised from 200→4000 chars — the old 200-char limit destroyed
+;; nearly all useful content from subagent tasks.
+(define SUBAGENT-SUMMARY-MAX-CHARS 4000)
+
+(define (extract-text-summary content [max-chars SUBAGENT-SUMMARY-MAX-CHARS])
   (define full-text
     (string-join (for/list ([c (in-list (if (list? content)
                                             content
@@ -560,9 +578,8 @@
                      [(string? c) c]
                      [else ""]))
                  "\n"))
-  ;; Truncate to 200 chars for summary
-  (if (> (string-length full-text) 200)
-      (string-append (substring full-text 0 200) "...")
+  (if (> (string-length full-text) max-chars)
+      (string-append (substring full-text 0 (- max-chars 3)) "...")
       full-text))
 
 ;; Run jobs in parallel with bounded concurrency using threads + channel
@@ -601,3 +618,14 @@
                          "mock-model"
                          'stop))
   (make-mock-provider mock-response #:name "subagent-mock"))
+
+;; Test submodule — exports private helpers for unit testing
+(module+ test
+  (require rackunit)
+  (provide extract-text-summary
+           SUBAGENT-SUMMARY-MAX-CHARS)
+  ;; Truncation limit test
+  (check-equal? SUBAGENT-SUMMARY-MAX-CHARS 4000)
+  (check-true
+   (>= (string-length (extract-text-summary (list (hasheq 'type "text" 'text (make-string 500 #\X)))))
+       497)))

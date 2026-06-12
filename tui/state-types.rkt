@@ -483,6 +483,24 @@
   (define (summarize-hash h)
     ;; For tools with large text content, show a brief description instead
     (cond
+      [(hash-has-key? h 'jobs)
+       ;; spawn-subagents: show job count + first task
+       (define jobs (hash-ref h 'jobs '()))
+       (define n
+         (if (list? jobs)
+             (length jobs)
+             0))
+       (define first-task (and (pair? jobs) (hash? (car jobs)) (hash-ref (car jobs) 'task #f)))
+       (if (string? first-task)
+           (format "~a job~a: \"~a\""
+                   n
+                   (if (= n 1) "" "s")
+                   (substring first-task 0 (min 40 (string-length first-task))))
+           (format "~a job~a" n (if (= n 1) "" "s")))]
+      [(hash-has-key? h 'task)
+       ;; spawn-subagent (single): show task text
+       (define t (hash-ref h 'task ""))
+       (format "\"~a\"" (substring t 0 (min 50 (string-length t))))]
       [(hash-has-key? h 'content)
        (define c (hash-ref h 'content ""))
        (format "content: \"~a\"~a"
