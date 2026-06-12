@@ -230,7 +230,8 @@
 
   (browser-session-manager-destroy! mgr session-id)
   (log-browser-action! session-id 'close 'ok artifact-dir)
-  (emit-browser-event! bus 'browser.session-closed session-id (hash)))
+  (emit-browser-event! bus 'browser.session-closed session-id (hash))
+  (void))
 
 ;; ---------------------------------------------------------------------------
 ;; Screenshot size enforcement (W1: settings enforcement)
