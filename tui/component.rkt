@@ -16,7 +16,11 @@
          "render.rkt"
          "state.rkt"
          (only-in "render/message-layout.rkt" styled-line?)
-         "vdom.rkt")
+         "vdom.rkt"
+         (only-in "../ui-core/render-hooks.rkt"
+                  apply-render-hook-safe
+                  render-hook?
+                  render-hook-phase))
 
 ;; Struct
 (provide q-component
@@ -72,6 +76,12 @@
          state-box) ; (boxof hash?) — per-component local state
   #:transparent)
 
+;; GAP-RH (v0.98.7 W2): Parameter for registered render hooks.
+;; Default empty list — no hooks applied unless registered.
+(define current-render-hooks (make-parameter '()))
+
+(provide current-render-hooks)
+
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Constructor
 ;; ═══════════════════════════════════════════════════════════════════
@@ -90,17 +100,28 @@
 
 ;; Render a component with caching by width.
 ;; If cached and width matches, return cached lines.
-;; Otherwise call render-fn, cache result, return it.
+;; Otherwise call render-fn, apply post-render hooks, cache result, return it.
+;; GAP-RH (v0.98.7 W2): Apply post-render hooks after normal rendering.
+;; apply-render-hook-safe catches all exceptions, returns input unchanged on error.
 (define (component-render comp state width)
   (define cache (unbox (q-component-cache-box comp)))
   (cond
     ;; Cache hit — same width, return cached lines
     [(and cache (= (car cache) width)) (cdr cache)]
     [else
-     ;; Cache miss — compute, cache, return
+     ;; Cache miss — compute, apply hooks, cache, return
      (define lines ((q-component-render-fn comp) state width))
-     (set-box! (q-component-cache-box comp) (cons width lines))
-     lines]))
+     ;; Apply post-render hooks if any are registered
+     (define post-hooks
+       (filter (lambda (h) (eq? (render-hook-phase h) 'post-render)) (current-render-hooks)))
+     (define final-lines
+       (if (null? post-hooks)
+           lines
+           (for/fold ([acc lines]) ([hook (in-list post-hooks)])
+             (define-values (result ok?) (apply-render-hook-safe hook acc))
+             (if ok? result acc))))
+     (set-box! (q-component-cache-box comp) (cons width final-lines))
+     final-lines]))
 
 ;; Invalidate component cache.
 (define (component-invalidate! comp)
