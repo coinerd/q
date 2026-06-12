@@ -259,7 +259,20 @@
 
   ;; Subscribe our event handler to the bus (with notify-callback-box)
   (when bus
-    (subscribe! bus (make-gui-event-subscriber state-box notify-callback-box)))
+    (subscribe! bus (make-gui-event-subscriber state-box notify-callback-box))
+    ;; PIPE-01 (v0.98.13): Subscribe action handler for ui.* events.
+    ;; Converts event structs to hashes, then dispatches to gui-delta-handlers.
+    ;; Events only emitted when ui.event-actions.enabled is #t in config.
+    ;; Uses dynamic-require to avoid circular dependency (ui-action-adapter imports from this module).
+    (define gui-action-handler
+      ((dynamic-require "../gui/ui-action-adapter.rkt" 'make-gui-action-handler) state-box))
+    (subscribe! bus
+                (lambda (evt)
+                  (define ev (event-ev evt))
+                  (define payload (event-payload evt))
+                  (gui-action-handler (if (hash? payload)
+                                          (hash-set payload 'type ev)
+                                          (hasheq 'type ev 'payload payload))))))
 
   ;; If there's an initial prompt from CLI, run it after GUI starts
   (define initial-prompt (with-safe-fallback #f (dict-ref rt-config 'prompt #f)))
