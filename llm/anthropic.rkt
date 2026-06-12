@@ -230,7 +230,7 @@
                          #f]
                         [else block])]
                      [else block])))
-               (define kept (filter identity filtered-content))
+               (define kept (filter (lambda (x) x) filtered-content))
                (if (null? kept)
                    (loop (cdr msgs) seen-use-ids acc) ; drop empty user message
                    (loop (cdr msgs) seen-use-ids (cons (hash-set m 'content kept) acc)))]
