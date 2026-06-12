@@ -18,7 +18,8 @@
          "state-machine.rkt"
          "command-types.rkt"
          (only-in "shared.rkt" extract-plan-title)
-         "wave-status.rkt")
+         "wave-status.rkt"
+         (only-in "session-state.rkt" current-gsd-ctx))
 
 (provide (contract-out [archive-completed-plan!
                         (->* ((or/c path-string? #f)) (boolean?) gsd-command-result?)]
@@ -120,7 +121,7 @@
 (define (archive-completed-plan! base-dir [force? #f])
   (define planning-dir (build-path base-dir ".planning"))
   (define plan-path (build-path planning-dir "PLAN.md"))
-  (define current-mode (gsm-current))
+  (define current-mode (gsm-ctx-current (current-gsd-ctx)))
   (cond
     [(not (file-exists? plan-path)) (gsd-err #:mode current-mode #:message "No PLAN.md found")]
     [else
@@ -177,8 +178,8 @@
 ;; were marked complete (via /wave-done) but PLAN.md might have mixed-case
 ;; "Done" or still show [Inbox]. This normalizes everything to [DONE].
 (define (sync-executor-to-plan! base-dir)
-  ;; Source 1: gsm-completed-waves (updated by /wave-done calls)
-  (define completed (gsm-completed-waves))
+  ;; Source 1: gsm-ctx-completed-waves (updated by /wave-done calls)
+  (define completed (gsm-ctx-completed-waves (current-gsd-ctx)))
   (for ([idx (set->list completed)])
     (mark-wave-status! base-dir idx STATUS-DONE))
   ;; Source 2: Normalize any mixed-case status markers in PLAN.md
@@ -220,9 +221,9 @@
     (wave-exists? base-dir (wave-index-entry-idx e) (wave-index-entry-slug e))))
 
 (define (auto-complete-inbox-waves! base-dir)
-  (define mode (gsm-current))
-  (define completed (gsm-completed-waves))
-  (define exec (gsm-wave-executor))
+  (define mode (gsm-ctx-current (current-gsd-ctx)))
+  (define completed (gsm-ctx-completed-waves (current-gsd-ctx)))
+  (define exec (gsm-ctx-wave-executor (current-gsd-ctx)))
   (define plan-path (build-path base-dir ".planning" "PLAN.md"))
   (cond
     [(not (file-exists? plan-path)) (void)]
@@ -261,7 +262,8 @@
       (define sub-path (build-path planning-dir sub))
       (when (and (directory-exists? sub-path) (not (string=? (path->string sub) "archive")))
         (with-handlers ([exn:fail? (lambda (e)
-                                    (log-debug "gsd: cleanup-empty-subdirs failed: ~a" (exn-message e)))])
+                                     (log-debug "gsd: cleanup-empty-subdirs failed: ~a"
+                                                (exn-message e)))])
           (when (null? (directory-list sub-path))
             (delete-directory sub-path)))))))
 

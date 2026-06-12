@@ -118,7 +118,7 @@
   (define sess-dir (or (dict-ref rt-config 'session-dir #f) (dict-ref rt-config 'store-dir #f)))
 
   ;; Wire GSD mode query callback — defaults to 'idle
-  ;; Caller (main.rkt) sets current-gsd-mode-query to gsm-current if GSD is loaded
+  ;; Caller (main.rkt) sets current-gsd-mode-query to gsm-ctx-current (via current-gsd-mode-query) if GSD is loaded
 
   (define ctx
     (make-tui-ctx

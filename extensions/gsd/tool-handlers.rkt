@@ -244,7 +244,7 @@
 
 ;; Legacy mode wrappers (DEBT-01: migrated from gsd-planning-state.rkt)
 (define (gsd-mode)
-  (let ([s (gsm-current)])
+  (let ([s (gsm-ctx-current (current-gsd-ctx))])
     (cond
       [(eq? s 'idle) #f]
       [(eq? s 'exploring) 'planning]

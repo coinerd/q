@@ -70,7 +70,7 @@
 
 ;; Legacy mode wrappers (DEBT-01: migrated from gsd-planning-state.rkt)
 (define (gsd-mode)
-  (let ([s (gsm-current)])
+  (let ([s (gsm-ctx-current (current-gsd-ctx))])
     (match s
       ['idle #f]
       ['exploring 'planning]
@@ -97,23 +97,23 @@
 (define (set-current-max-old-text-len! v)
   (set-edit-limit! v))
 (define (completed-waves)
-  (gsm-completed-waves))
+  (gsm-ctx-completed-waves (current-gsd-ctx)))
 (define (total-waves)
-  (gsm-total-waves))
+  (gsm-ctx-total-waves (current-gsd-ctx)))
 (define (set-total-waves! n)
   (gsm-set-total-waves! n))
 (define (mark-wave-complete! idx)
   (gsm-mark-wave-complete! idx))
 (define (wave-complete? idx)
-  (gsm-wave-complete? idx))
+  (gsm-ctx-wave-complete? (current-gsd-ctx) idx))
 (define (next-pending-wave)
-  (gsm-next-pending-wave))
+  (gsm-ctx-next-pending-wave (current-gsd-ctx)))
 (define (current-wave-index)
-  (gsm-current-wave))
+  (gsm-ctx-current-wave (current-gsd-ctx)))
 (define (set-current-wave-index! n)
   (gsm-set-current-wave! n))
 (define (gsd-snapshot)
-  (gsm-snapshot))
+  (gsm-ctx-snapshot (current-gsd-ctx)))
 (define (gsd-event-bus)
   (current-gsd-event-bus))
 

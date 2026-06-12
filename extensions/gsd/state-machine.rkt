@@ -120,6 +120,8 @@
           [gsm-ctx-set-current-wave! (-> gsd-session-ctx? exact-nonnegative-integer? void?)]
           [gsm-ctx-completed-waves (-> gsd-session-ctx? set?)]
           [gsm-ctx-mark-wave-complete! (-> gsd-session-ctx? exact-nonnegative-integer? void?)]
+          [gsm-ctx-wave-complete? (-> gsd-session-ctx? exact-nonnegative-integer? boolean?)]
+          [gsm-ctx-next-pending-wave (-> gsd-session-ctx? (or/c exact-nonnegative-integer? #f))]
           [gsm-ctx-state-restore! (-> gsd-session-ctx? gsd-runtime-state? void?)]))
 
 ;; ============================================================
@@ -514,6 +516,16 @@
                                         state
                                         [completed-waves
                                          (set-add (gsd-runtime-state-completed-waves state) idx)]))))
+
+(define (gsm-ctx-wave-complete? ctx idx)
+  (set-member? (gsm-ctx-completed-waves ctx) idx))
+
+(define (gsm-ctx-next-pending-wave ctx)
+  (define tw (gsm-ctx-total-waves ctx))
+  (define cw (gsm-ctx-completed-waves ctx))
+  (for/first ([i (in-range tw)]
+              #:when (not (set-member? cw i)))
+    i))
 
 ;; State restore (ctx-aware)
 (define (gsm-ctx-state-restore! ctx snapshot)

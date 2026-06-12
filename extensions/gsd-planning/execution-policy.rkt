@@ -5,12 +5,13 @@
 ;; Mode-based tool access control and state machine guard logic.
 
 (require "../gsd/state-machine.rkt"
-         "../hooks.rkt")
+         "../hooks.rkt"
+         (only-in "../gsd/session-state.rkt" current-gsd-ctx))
 
 (provide gsd-tool-guard)
 
 (define (gsd-tool-guard payload)
-  (define mode (gsm-current))
+  (define mode (gsm-ctx-current (current-gsd-ctx)))
   (define tool-name (hash-ref payload 'tool-name #f))
   (define allowed (gsm-tool-allowed? tool-name))
   (cond

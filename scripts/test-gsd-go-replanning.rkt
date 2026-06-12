@@ -13,10 +13,10 @@
          (only-in "../tools/tool.rkt" make-tool-registry tool-registry?)
          (only-in "../tools/registry-defaults.rkt" register-default-tools!)
          (only-in "../extensions/gsd/state-machine.rkt"
-                  gsm-current
-                  gsm-reset!
-                  gsm-transition-to!
-                  gsm-transition!)
+                  gsm-ctx-current
+                  gsm-ctx-reset!
+                  gsm-ctx-transition-to!
+                  gsm-ctx-transition!)
          (only-in "../extensions/gsd/core.rkt" reset-all-gsd-state!)
          (only-in "../extensions/api.rkt" make-extension-registry extension-registry?)
          (only-in "../extensions/loader.rkt" load-extension! discover-extension-files)

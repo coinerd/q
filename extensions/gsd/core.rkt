@@ -113,7 +113,7 @@
 ;; Blocks ALL writes to .planning/ directory during execution.
 
 (define (gsd-write-guard target-path planning-dir)
-  (define mode (gsm-current))
+  (define mode (gsm-ctx-current (current-gsd-ctx)))
   (define planning-dir-str
     (if (path? planning-dir)
         (path->string planning-dir)
@@ -134,7 +134,7 @@
 ;; Execute a multi-step command with rollback on failure.
 ;; Captures snapshot before execution, restores on error.
 (define (with-gsd-transaction label thunk on-rollback)
-  (define snapshot (gsm-snapshot))
+  (define snapshot (gsm-ctx-snapshot (current-gsd-ctx)))
   (with-handlers ([exn:fail? (lambda (e)
                                ;; Rollback to snapshot
                                (gsd-state-restore! snapshot)
@@ -177,7 +177,7 @@
                        #:message (if (non-empty-string? wave-arg)
                                      (format "Executing from wave ~a" wave-arg)
                                      "Execution started. Follow the plan."))
-               (gsd-err #:mode (gsm-current)
+               (gsd-err #:mode (gsm-ctx-current (current-gsd-ctx))
                         #:message (format "Cannot start execution: ~a" (err-reason result)))))]
         [(replan) (cmd-replan)]
         [(skip) (cmd-skip args)]
@@ -210,7 +210,7 @@
               #:message (if (non-empty-string? user-text)
                             (format "Planning: ~a" user-text)
                             "Planning phase started. Explore freely."))
-      (gsd-err #:mode (gsm-current)
+      (gsd-err #:mode (gsm-ctx-current (current-gsd-ctx))
                #:message (format "Cannot enter planning: ~a" (err-reason result)))))
 
 ;; /go [wave] → executing
@@ -222,19 +222,20 @@
 
 ;; /replan → exploring from plan-written or executing
 (define (cmd-replan)
-  (define current (gsm-current))
+  (define current (gsm-ctx-current (current-gsd-ctx)))
   (cond
     [(or (eq? current 'plan-written) (eq? current 'executing))
      ;; FF-01: Auto-routing transition handles multi-step paths automatically.
      (define result (gsm-transition-to! 'exploring))
      (if (ok? result)
          (gsd-ok #:mode 'exploring #:message "Re-planning. Modify the plan freely.")
-         (gsd-err #:mode (gsm-current) #:message (format "Cannot re-plan: ~a" (err-reason result))))]
+         (gsd-err #:mode (gsm-ctx-current (current-gsd-ctx))
+                  #:message (format "Cannot re-plan: ~a" (err-reason result))))]
     [else (gsd-err #:mode current #:message (format "Cannot re-plan from ~a state" current))]))
 
 ;; /skip <wave> → mark wave as skipped
 (define (cmd-skip args)
-  (define current (gsm-current))
+  (define current (gsm-ctx-current (current-gsd-ctx)))
   (if (not (eq? current 'executing))
       (gsd-err #:mode current #:message "/skip only works during execution")
       (let ([wave-num (if (string? args)
@@ -251,12 +252,17 @@
         (string-trim args)
         ""))
   (cond
-    [(string=? idx-str "") (gsd-err #:mode (gsm-current) #:message "Usage: /wave-done <wave-number>")]
+    [(string=? idx-str "")
+     (gsd-err #:mode (gsm-ctx-current (current-gsd-ctx)) #:message "Usage: /wave-done <wave-number>")]
     [else
      (define idx (string->number idx-str))
      (cond
-       [(not idx) (gsd-err #:mode (gsm-current) #:message (format "Invalid wave number: ~a" idx-str))]
-       [(< idx 0) (gsd-err #:mode (gsm-current) #:message "Wave number must be non-negative")]
+       [(not idx)
+        (gsd-err #:mode (gsm-ctx-current (current-gsd-ctx))
+                 #:message (format "Invalid wave number: ~a" idx-str))]
+       [(< idx 0)
+        (gsd-err #:mode (gsm-ctx-current (current-gsd-ctx))
+                 #:message "Wave number must be non-negative")]
        [else
         (with-gsd-transaction
          (format "wave-done ~a" idx)
@@ -267,7 +273,8 @@
            (let ([dir (or base-dir (current-pinned-dir))])
              (when dir
                (with-handlers ([exn:fail? (lambda (e)
-                                           (log-debug "gsd: mark-wave-status failed: ~a" (exn-message e)))])
+                                            (log-debug "gsd: mark-wave-status failed: ~a"
+                                                       (exn-message e)))])
                  (mark-wave-status! dir idx "DONE"))))
            ;; Update STATE.md with wave completion
            (let ([dir (or base-dir (current-pinned-dir))])
@@ -276,7 +283,7 @@
                                             (log-warning (format "cmd-wave-done/state-update: ~a"
                                                                  (exn-message e))))])
                  (update-state-with-wave! dir idx))))
-           (gsd-ok #:mode (gsm-current)
+           (gsd-ok #:mode (gsm-ctx-current (current-gsd-ctx))
                    #:message (format "Wave ~a marked complete. PLAN.md and STATE.md updated." idx)
                    #:data (hasheq 'wave idx)))
          (lambda (e snapshot)
@@ -341,9 +348,12 @@
 ;; ============================================================
 
 (define (gsd-show-status)
-  (define mode (gsm-current))
-  (define valid-next (gsm-valid-next-states))
+  (define mode (gsm-ctx-current (current-gsd-ctx)))
+  (define valid-next (gsm-ctx-valid-next-states (current-gsd-ctx)))
   (gsd-ok #:mode mode
           #:message
           (format "GSD Status: ~a | Next: ~a" mode (string-join (map symbol->string valid-next) ", "))
-          #:data (hasheq 'valid-next-states valid-next 'history-length (length (gsm-history)))))
+          #:data (hasheq 'valid-next-states
+                         valid-next
+                         'history-length
+                         (length (gsm-ctx-history (current-gsd-ctx))))))

@@ -60,7 +60,8 @@
                   make-distill-callback
                   make-reflection-callback)
          (only-in "../runtime/memory/reflection.rkt" current-reflection-llm-fn)
-         (only-in "../extensions/gsd/state-machine.rkt" gsm-current)
+         (only-in "../extensions/gsd/state-machine.rkt" gsm-ctx-current)
+         (only-in "../extensions/gsd/session-state.rkt" current-gsd-ctx)
          (only-in "../runtime/gsd-query.rkt" current-gsd-mode-query)
          (only-in "../runtime/session/session-events.rkt" current-mid-session-bridge-enabled))
 
@@ -150,7 +151,7 @@
 
   ;; T3-5: Wire GSD mode query — moved from tui/tui-init.rkt to fix layer violation.
   ;; TUI imports are clean; GSD state is queried via parameter set here in wiring layer.
-  (current-gsd-mode-query (lambda () (gsm-current)))
+  (current-gsd-mode-query (lambda () (gsm-ctx-current (current-gsd-ctx))))
 
   ;; Model name from CLI --model flag
   (define model-name (hash-ref base-config 'model #f))

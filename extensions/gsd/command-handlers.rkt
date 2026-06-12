@@ -80,7 +80,7 @@
 
 ;; Legacy mode wrappers (DEBT-01: migrated from gsd-planning-state.rkt)
 (define (gsd-mode)
-  (match (gsm-current)
+  (match (gsm-ctx-current (current-gsd-ctx))
     ['idle #f]
     ['exploring 'planning]
     [s s]))
@@ -167,7 +167,7 @@
        (define idx (and (string->number (string-trim args-text))))
        (when idx
          (mark-wave-status! base-dir idx "DEFERRED")
-         (define exec (gsm-wave-executor))
+         (define exec (gsm-ctx-wave-executor (current-gsd-ctx)))
          (when exec
            (wave-skip! exec idx))))
      (hook-amend (hasheq 'text (or (gsd-command-result-message skip-result) "")))]
@@ -269,23 +269,24 @@
 ;; Configure state machine and create wave executor inside a transaction.
 (define (launch-wave-executor validation plan base-dir)
   (define result
-    (with-gsd-transaction
-     "go"
-     (lambda ()
-       (set-gsd-mode! 'executing)
-       (emit-mode-change! 'executing)
-       (set-edit-limit! 1200)
-       (define wis
-         (for/list ([w (gsd-plan-waves plan)])
-           (gsd-wave-index w)))
-       (when (not (null? wis))
-         (gsm-set-total-waves! (add1 (apply max wis))))
-       (gsm-set-current-wave! 0)
-       (define exec (make-wave-executor-from-validated validation))
-       (gsm-set-wave-executor! exec)
-       (list exec wis))
-     (lambda (e snap)
-       (emit-mode-change! (gsm-current) #:reason "transaction-rollback" #:error (exn-message e)))))
+    (with-gsd-transaction "go"
+                          (lambda ()
+                            (set-gsd-mode! 'executing)
+                            (emit-mode-change! 'executing)
+                            (set-edit-limit! 1200)
+                            (define wis
+                              (for/list ([w (gsd-plan-waves plan)])
+                                (gsd-wave-index w)))
+                            (when (not (null? wis))
+                              (gsm-set-total-waves! (add1 (apply max wis))))
+                            (gsm-set-current-wave! 0)
+                            (define exec (make-wave-executor-from-validated validation))
+                            (gsm-set-wave-executor! exec)
+                            (list exec wis))
+                          (lambda (e snap)
+                            (emit-mode-change! (gsm-ctx-current (current-gsd-ctx))
+                                               #:reason "transaction-rollback"
+                                               #:error (exn-message e)))))
   (cond
     [(gsd-failed? result) (list 'error (gsd-command-result-message result))]
     [else
@@ -364,8 +365,8 @@
 
 (define (handle-gsd-status)
   (define mode (gsd-mode))
-  (define tw (gsm-total-waves))
-  (define cw (gsm-completed-waves))
+  (define tw (gsm-ctx-total-waves (current-gsd-ctx)))
+  (define cw (gsm-ctx-completed-waves (current-gsd-ctx)))
   (define parts
     (list (format "Mode: ~a" (or mode "inactive"))
           (if (> tw 0)

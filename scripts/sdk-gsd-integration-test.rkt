@@ -74,13 +74,13 @@
 ;; Test 2: State machine
 ;; ============================================================
 (printf "--- Test 2: State machine ---\n")
-(printf "  initial: ~a (gsm: ~a)\n" (gsd-mode) (gsm-current))
+(printf "  initial: ~a (gsm: ~a)\n" (gsd-mode) (gsm-ctx-current (current-gsd-ctx)))
 (set-gsd-mode! 'planning)
-(printf "  planning: ~a (gsm: ~a)\n" (gsd-mode) (gsm-current))
+(printf "  planning: ~a (gsm: ~a)\n" (gsd-mode) (gsm-ctx-current (current-gsd-ctx)))
 (set-gsd-mode! 'executing)
-(printf "  executing: ~a (gsm: ~a)\n" (gsd-mode) (gsm-current))
+(printf "  executing: ~a (gsm: ~a)\n" (gsd-mode) (gsm-ctx-current (current-gsd-ctx)))
 (reset-all-gsd-state!)
-(printf "  reset: ~a (gsm: ~a)\n" (gsd-mode) (gsm-current))
+(printf "  reset: ~a (gsm: ~a)\n" (gsd-mode) (gsm-ctx-current (current-gsd-ctx)))
 (printf "\n")
 
 ;; ============================================================
@@ -124,7 +124,7 @@
   (printf "  submit: ~a\n" (if s "present" "missing"))
   (when s
     (printf "  stale warning: ~a\n" (string-contains? s "existing PLAN.md"))
-    (printf "  mode: ~a (gsm: ~a)\n" (gsd-mode) (gsm-current))))
+    (printf "  mode: ~a (gsm: ~a)\n" (gsd-mode) (gsm-ctx-current (current-gsd-ctx)))))
 (printf "\n")
 
 ;; ============================================================
@@ -144,7 +144,7 @@
     (printf "  Wave 1: ~a\n" (string-contains? s "Wave 1"))
     (printf "  Error recovery: ~a\n" (string-contains? s "Failed waves do NOT block")))
   (printf "  total-waves: ~a\n" (total-waves))
-  (printf "  mode: ~a (gsm: ~a)\n" (gsd-mode) (gsm-current)))
+  (printf "  mode: ~a (gsm: ~a)\n" (gsd-mode) (gsm-ctx-current (current-gsd-ctx))))
 (printf "\n")
 
 ;; ============================================================
