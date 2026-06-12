@@ -203,6 +203,18 @@
                  (lambda ()
                    (make-slash-command-handler #f (box (make-gui-state)) "not-a-semaphore"))))
 
+    ;; M-01 (v0.98.10 W0): Tightened sess from any/c to (or/c agent-session? #f)
+    (test-case "make-slash-command-handler rejects non-session, non-#f sess"
+      (check-exn exn:fail:contract?
+                 (lambda ()
+                   (make-slash-command-handler 42 (box (make-gui-state)) (make-semaphore 1)))))
+
+    (test-case "try-extension-dispatch rejects non-session, non-#f sess"
+      (check-exn
+       exn:fail:contract?
+       (lambda ()
+         (try-extension-dispatch "not-a-session" (box (make-gui-state)) (make-semaphore 1) "/foo"))))
+
     (test-case "try-extension-dispatch rejects non-string input"
       (define state-box (box (make-gui-state)))
       (define lock (make-semaphore 1))

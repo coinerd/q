@@ -322,7 +322,12 @@
    (check-equal? (tui-ctx-layout-breakpoints ctx) '(narrow compact)))
  (test-case "MF-06: tui-ctx-layout-breakpoints returns empty list by default"
    (define ctx (make-tui-ctx))
-   (check-equal? (tui-ctx-layout-breakpoints ctx) '())))
+   (check-equal? (tui-ctx-layout-breakpoints ctx) '()))
+ ;; L-03 (v0.98.10 W0): session-runner contract tightening
+ (test-case "L-03: make-tui-ctx rejects non-procedure session-runner"
+   (check-exn exn:fail:contract? (lambda () (make-tui-ctx #:session-runner 42))))
+ (test-case "L-03: make-tui-ctx rejects wrong-arity session-runner"
+   (check-exn exn:fail:contract? (lambda () (make-tui-ctx #:session-runner (lambda () 99))))))
 
 ;; ═══════════════════════════════════════════════════════════
 ;; MF-07 (v0.98.9 W2): Render hook registration API tests

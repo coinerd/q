@@ -30,14 +30,15 @@
 ;; GAP-CR (v0.98.8 W1): Cache command registry at module level instead of rebuilding per invocation.
 (define the-canonical-registry (make-ui-command-registry canonical-commands))
 
-;; MF-08 (v0.98.9 W1): Contract-out for public API — type safety at module boundary.
+;; M-01 (v0.98.10 W0): Tighten sess from any/c to (or/c agent-session? #f).
 (provide (contract-out
           [make-slash-command-handler
-           (->* (any/c (box/c gui-state?) semaphore?)
+           (->* ((or/c agent-session? #f) (box/c gui-state?) semaphore?)
                 (procedure? #:goal-cancel-box (box/c boolean?))
                 (-> string? boolean?))]
           [add-system-msg! (->* (string? (box/c gui-state?) semaphore?) (procedure?) void?)]
-          [try-extension-dispatch (-> any/c (box/c gui-state?) semaphore? string? boolean?)]))
+          [try-extension-dispatch
+           (-> (or/c agent-session? #f) (box/c gui-state?) semaphore? string? boolean?)]))
 
 ;; --------------------------------------------------
 ;; Helper: add a system message to the transcript

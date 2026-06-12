@@ -119,7 +119,7 @@
          (contract-out [make-tui-ctx
                         (->* ()
                              (#:event-bus (or/c event-bus? #f)
-                                          #:session-runner procedure?
+                                          #:session-runner (-> string? void?)
                                           #:session-dir (or/c path-string? #f)
                                           #:model-registry (or/c model-registry? #f)
                                           #:extension-registry (or/c extension-registry? #f)
