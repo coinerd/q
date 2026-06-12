@@ -17,6 +17,14 @@
          (only-in "../tui/commands/goal-bridge.rkt" make-goal-event-bridge make-goal-run-prompt!)
          (only-in "../runtime/session/session-config.rkt" current-goal-loop-enabled?)
          (only-in "../runtime/goal/goal-state.rkt" goal-state-turns-used goal-state-status)
+         ;; GAP-CR (v0.98.8 W1): Dynamic command registry lookup
+         (only-in "../ui-core/command-registry.rkt"
+                  ui-registry-lookup
+                  ui-command?
+                  ui-command-name
+                  ui-command-gui?
+                  canonical-commands
+                  make-ui-command-registry)
          "gui-types.rkt")
 
 (provide make-slash-command-handler
@@ -277,7 +285,21 @@
                            notify!)
           #t]
          [else
-          (or (try-extension-dispatch sess state-box gui-state-lock input-text)
+          ;; GAP-CR (v0.98.8 W1): Try dynamic command registry lookup before falling back.
+          ;; Hardcoded commands still work via case above; this is a FALLBACK for commands
+          ;; NOT in the hardcoded list. Unknown commands get "Unknown command" message.
+          (define cmd-registry (make-ui-command-registry canonical-commands))
+          (define registered-cmd (ui-registry-lookup cmd-registry (format "/~a" cmd)))
+          (or (and registered-cmd
+                   (ui-command-gui? registered-cmd)
+                   (begin
+                     (add-system-msg! (format "Command /~a executed."
+                                              (ui-command-name registered-cmd))
+                                      state-box
+                                      gui-state-lock
+                                      notify!)
+                     #t))
+              (try-extension-dispatch sess state-box gui-state-lock input-text)
               (begin
                 (add-system-msg! (format "Unknown command: ~a. Type /help for available commands."
                                          input-text)

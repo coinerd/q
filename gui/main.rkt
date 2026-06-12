@@ -26,7 +26,8 @@
          "../gui/gui-types.rkt"
          (only-in "../ui-core/ui-actions.rkt" current-ui-event-actions-enabled?)
          (only-in "../runtime/settings-query.rkt" setting-ref*)
-         (only-in "lifecycle-hooks.rkt" dispatch-gui-hook! current-gui-event-runtime))
+         (only-in "lifecycle-hooks.rkt" dispatch-gui-hook! current-gui-event-runtime)
+         (only-in "theme-manager.rkt" make-theme-manager theme-manager?))
 (require (only-in "../util/error/error-helpers.rkt" with-safe-fallback))
 
 (provide (contract-out [run-gui-with-runtime (-> any/c any/c void?)]
@@ -43,6 +44,12 @@
                            (dynamic-require 'racket/gui/easy/view #f)
                            (dynamic-require 'racket/gui/easy/renderer #f)
                            #t)))
+
+;; GAP-TM (v0.98.8 W1): Theme manager parameter for cross-frontend synchronization.
+;; Instantiated in run-gui-with-runtime; available to state-sync and action adapters.
+(define current-gui-theme-manager (make-parameter #f))
+
+(provide current-gui-theme-manager)
 
 ;; --------------------------------------------------
 ;; Internal: launch gui-easy window (blocks until closed)
@@ -239,6 +246,11 @@
 
   ;; GAP-LH (v0.98.7 W1): Set runtime parameter for lifecycle hook event emission.
   (current-gui-event-runtime rt-config)
+
+  ;; GAP-TM (v0.98.8 W1): Instantiate theme manager for cross-frontend theme sync.
+  ;; make-theme-manager is a pure constructor — no side effects.
+  (define tm (make-theme-manager theme))
+  (current-gui-theme-manager tm)
 
   ;; GUI state: accumulated messages + status
   (define state-box (box (make-gui-state #:model model-name)))
