@@ -14,6 +14,7 @@
          racket/list
          racket/string
          "../../tools/tool.rkt"
+         (only-in "../../agent/capability.rkt" current-session-capabilities)
          (only-in "../../runtime/runtime-helpers.rkt" emit-session-event! make-event-bus)
          (only-in "../../runtime/settings.rkt" q-settings? setting-ref)
          "../model-bridge.rkt"
@@ -61,6 +62,9 @@
          ;; Tool entries (direct — used by scheduler)
          tool-spawn-subagent
          tool-spawn-subagents
+         ;; Child-safe tool list (for testing and capability facade)
+         child-safe-tools
+         capability-filtered-child-tools
          ;; Struct (direct for match compatibility)
          subagent-config
          subagent-config?
@@ -175,6 +179,7 @@
       "mock-model"))
 
 ;; Child-safe tools: read-only + safe write/edit/bash for subagent children.
+;; Each tool is annotated with required-capability for MAS filtering.
 ;; Schemas match those in registry-defaults.rkt.
 (define (child-safe-tools)
   (list (make-tool "read"
@@ -190,7 +195,8 @@
                                    (hasheq 'type "integer" 'description "Line offset")
                                    'limit
                                    (hasheq 'type "integer" 'description "Max lines")))
-                   tool-read)
+                   tool-read
+                   #:required-capability 'read-only)
         (make-tool "write"
                    "Write content to a file"
                    (hasheq 'type
@@ -202,7 +208,8 @@
                                    (hasheq 'type "string" 'description "Path to file")
                                    'content
                                    (hasheq 'type "string" 'description "Content to write")))
-                   tool-write)
+                   tool-write
+                   #:required-capability 'file-write)
         (make-tool "edit"
                    "Edit a file with exact text replacement"
                    (hasheq 'type
@@ -214,7 +221,8 @@
                                    (hasheq 'type "string" 'description "Path to file")
                                    'edits
                                    (hasheq 'type "array" 'description "Edit operations")))
-                   tool-edit)
+                   tool-edit
+                   #:required-capability 'file-write)
         (make-tool "bash"
                    "Execute a bash command"
                    (hasheq 'type
@@ -226,7 +234,8 @@
                                    (hasheq 'type "string" 'description "Bash command")
                                    'timeout
                                    (hasheq 'type "integer" 'description "Timeout in seconds")))
-                   tool-bash)
+                   tool-bash
+                   #:required-capability 'shell-exec)
         (make-tool "grep"
                    "Search file contents with regex"
                    (hasheq 'type
@@ -238,7 +247,8 @@
                                    (hasheq 'type "string" 'description "Regex pattern")
                                    'path
                                    (hasheq 'type "string" 'description "File or directory path")))
-                   tool-grep)
+                   tool-grep
+                   #:required-capability 'read-only)
         (make-tool "find"
                    "Find files by name pattern"
                    (hasheq 'type
@@ -250,7 +260,8 @@
                                    (hasheq 'type "string" 'description "Name pattern")
                                    'path
                                    (hasheq 'type "string" 'description "Search directory")))
-                   tool-find)
+                   tool-find
+                   #:required-capability 'read-only)
         (make-tool "ls"
                    "List directory contents"
                    (hasheq 'type
@@ -259,7 +270,22 @@
                            '("path")
                            'properties
                            (hasheq 'path (hasheq 'type "string" 'description "Directory path")))
-                   tool-ls)))
+                   tool-ls
+                   #:required-capability 'read-only)))
+
+;; Capability-filtered child tools: returns only tools matching session capabilities.
+;; Uses current-session-capabilities parameter. If '(any), returns all.
+;; Otherwise, filters by matching required-capability against granted set.
+(define (capability-filtered-child-tools)
+  (define caps (current-session-capabilities))
+  (define all (child-safe-tools))
+  (cond
+    [(member 'any caps) all]
+    [else
+     (filter (lambda (t)
+               (define req (tool-required-capability t))
+               (or (eq? req 'any) (member req caps)))
+             all)]))
 
 ;; Internal: run the subagent
 (define (run-subagent args role-prompt max-turns allowed-tools exec-ctx)

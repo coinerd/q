@@ -139,6 +139,14 @@
 ;; If the GSD state machine grows more complex (e.g., conditional transitions,
 ;; entry/exit actions), the table should be enriched with a proper FSM library.
 ;; Current design is sufficient for the 5-state GSD lifecycle.
+;;
+;; MAS Schritt 1 Integration Point:
+;; The executing→verifying transition ((executing . verify) . verifying)
+;; is where the verifier agent role (agent/roles/verifier.rkt) will be
+;; activated in Schritt 2. The verifier role has '(read-only) capability
+;; and will review wave results before transitioning to 'idle.
+;; Currently this transition is triggered by the GSD executor;
+;; in Schritt 2 it will route through the supervisor dispatch.
 (define TRANSITIONS
   ;; Enriched transition table (F4): ((from . event) . to)
   ;; Events name the trigger for each transition, enabling event-driven dispatch.
