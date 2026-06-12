@@ -87,14 +87,14 @@
         [(equal? role "system") msg]
         ;; Tool role: convert to Anthropic user+tool_result format
         [(equal? role "tool")
-         (define tool-call-id
-           (if (hash? content)
-               (hash-ref content 'toolCallId "")
-               ""))
+         ;; OpenAI-format tool messages have:
+         ;;   tool_call_id at message level, content as string
+         ;; Anthropic needs user+tool_result format with tool_use_id
+         (define tool-call-id (hash-ref msg 'tool_call_id ""))
          (define tool-result-content
-           (if (hash? content)
-               (hash-ref content 'content "")
-               (if (string? content) content "")))
+           (if (string? content)
+               content
+               (format "~a" content)))
          (hasheq
           'role
           "user"
@@ -107,6 +107,29 @@
                  'content
                  (for/list ([block (in-list content)])
                    (openai-block->anthropic block)))]
+        ;; Assistant with tool_calls at message level (OpenAI format)
+        [(and (equal? role "assistant") (hash-ref msg 'tool_calls #f))
+         (define tc-list (hash-ref msg 'tool_calls '()))
+         (define text-blocks
+           (if (and (string? content) (not (string=? content "")))
+               (list (hasheq 'type "text" 'text content))
+               '()))
+         (define tool-blocks
+           (for/list ([tc (in-list tc-list)])
+             (define fn (hash-ref tc 'function (hasheq)))
+             (hasheq 'type
+                     "tool_use"
+                     'id
+                     (hash-ref tc 'id "")
+                     'name
+                     (hash-ref fn 'name "")
+                     'input
+                     (let ([args (hash-ref fn 'arguments "")])
+                       (if (string? args)
+                           (with-handlers ([exn:fail? (lambda (e) (hasheq))])
+                             (string->jsexpr args))
+                           args)))))
+         (hasheq 'role "assistant" 'content (append text-blocks tool-blocks))]
         ;; Assistant with list content (tool calls)
         [(and (equal? role "assistant") (list? content))
          (hasheq 'role
