@@ -13,10 +13,9 @@
 
 (require racket/contract
          racket/list
-         "render.rkt"
          "state.rkt"
-         (only-in "render/message-layout.rkt" styled-line?)
-         "vdom.rkt"
+         ;; LF-07 (v0.98.9 W0): Removed dead imports — render.rkt, vdom.rkt, render/message-layout.rkt
+         ;; were imported but no identifiers from them were used in this module body.
          (only-in "../ui-core/render-hooks.rkt"
                   apply-render-hook-safe
                   render-hook?
