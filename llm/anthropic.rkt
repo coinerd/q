@@ -41,7 +41,7 @@
 ;; ============================================================
 
 ;; model defaults in llm/model-defaults.rkt
-(define ANTHROPIC-DEFAULT-MAX-TOKENS 4096)
+(define ANTHROPIC-DEFAULT-MAX-TOKENS 16384)
 (define ANTHROPIC-VERSION "2023-06-01")
 
 ;; ============================================================
@@ -331,6 +331,117 @@
 ;; ============================================================
 ;; Provider constructor
 ;; ============================================================
+;; Kimi eager-stream helper: reads full HTTP response inside
+;; dynamic-wind, parses as JSON, replays as stream chunks.
+;; ============================================================
+
+(define (kimi-eager-stream-chunks req base-url api-key provider-name default-model)
+  (define chunks-box (box '()))
+  (define merged-req (ensure-model-setting req default-model))
+  ;; Non-streaming request — response is pure JSON, easier to parse
+  (define body (anthropic-build-request-body merged-req #:stream? #f))
+  (define url-str (string-append (string-trim base-url "/") "/v1/messages"))
+  (define uri (string->url url-str))
+  (define host (url-host uri))
+  (define path-str
+    (string-append "/"
+                   (string-join (for/list ([p (in-list (url-path uri))])
+                                  (path/param-path p))
+                                "/")))
+  (define ssl? (and (url-scheme uri) (not (equal? (url-scheme uri) "http"))))
+  (define port-num (or (url-port uri) (if ssl? 443 80)))
+  (define headers
+    (list (format "x-api-key: ~a" api-key)
+          (format "anthropic-version: ~a" ANTHROPIC-VERSION)
+          "Content-Type: application/json"
+          "User-Agent: KimiCLI/1.5"))
+  (define body-bytes (jsexpr->bytes body))
+  (define response-port-box (box #f))
+  (dynamic-wind
+   (lambda () (void))
+   (lambda ()
+     (define result-vec
+       (call-with-request-timeout #:cleanup (lambda ()
+                                              (define rp (unbox response-port-box))
+                                              (when rp
+                                                (with-logged-error "port cleanup"
+                                                                   (close-input-port rp))))
+                                  (lambda ()
+                                    (define-values (sl rh rp)
+                                      (http-sendrecv host
+                                                     path-str
+                                                     #:port port-num
+                                                     #:ssl? ssl?
+                                                     #:method #"POST"
+                                                     #:headers headers
+                                                     #:data body-bytes))
+                                    (set-box! response-port-box rp)
+                                    (vector sl rh rp))))
+     (define status-line (vector-ref result-vec 0))
+     (define response-port (vector-ref result-vec 2))
+     (define status-code
+       (let ([parts (regexp-match #rx"^HTTP/[^ ]+ ([0-9]+)" (bytes->string/utf-8 status-line))])
+         (if parts
+             (string->number (cadr parts))
+             0)))
+     (when (>= status-code 400)
+       (define resp-body (port->bytes response-port))
+       (check-provider-status! "Anthropic" status-line (bytes->string/utf-8 resp-body)))
+     ;; Read full response body inside dynamic-wind (port is still open)
+     (define full-body
+       (if (>= status-code 400)
+           #""
+           (port->bytes response-port)))
+     ;; Parse as non-streaming JSON response
+     (define resp-json (string->jsexpr (bytes->string/utf-8 full-body)))
+     (define resp (anthropic-parse-response resp-json))
+     ;; Emit chunks for each content block
+     (for ([part (in-list (model-response-content resp))]
+           [idx (in-naturals)])
+       (cond
+         [(hash-ref part 'text #f)
+          ;; Text content block
+          (set-box! chunks-box
+                    (cons (make-stream-chunk (hash-ref part 'text) #f #f #f) (unbox chunks-box)))]
+         [(equal? (hash-ref part 'type #f) "tool-call")
+          ;; Tool call — emit as tool-call delta with full arguments
+          (define args-str (jsexpr->string (hash-ref part 'arguments (hasheq))))
+          (set-box! chunks-box
+                    (cons (make-stream-chunk
+                           #f
+                           (hasheq 'index
+                                   idx
+                                   'id
+                                   (hash-ref part 'id "")
+                                   'function
+                                   (hasheq 'name (hash-ref part 'name "") 'arguments args-str))
+                           #f
+                           #f)
+                          (unbox chunks-box)))]))
+     ;; Collect done chunk with usage
+     (when (model-response-usage resp)
+       (set-box! chunks-box
+                 (cons (make-stream-chunk #f
+                                          #f
+                                          (model-response-usage resp)
+                                          #t
+                                          #:finish-reason
+                                          (symbol->string (model-response-stop-reason resp)))
+                       (unbox chunks-box)))))
+   (lambda ()
+     (define rp (unbox response-port-box))
+     (when rp
+       (with-logged-error "port cleanup" (close-input-port rp)))))
+  ;; Replay collected chunks from an in-memory generator
+  (define all-chunks (reverse (unbox chunks-box)))
+  (generator ()
+             (for ([c (in-list all-chunks)])
+               (yield c))
+             (let loop ()
+               (yield #f)
+               (loop))))
+
+;; ============================================================
 
 (define (make-anthropic-provider config)
   (validate-api-key! "Anthropic" "ANTHROPIC_API_KEY" config)
@@ -347,25 +458,14 @@
 
   ;; W10.1 (Q-19): dynamic-wind ensures response port cleanup on timeout/exception
   (define (stream req)
-    ;; Kimi coding plan: streaming hangs because dynamic-wind closes the
-    ;; response port before the generator is consumed. Use non-streaming
-    ;; under the hood and emit the response as a single stream.
+    ;; Kimi coding plan: dynamic-wind closes the response port before the
+    ;; SSE generator is consumed. Eagerly collect all SSE chunks inside
+    ;; dynamic-wind, then replay from an in-memory list.
     (if (equal? provider-name "kimi-coding")
-        (generator ()
-                   (define resp (send req))
-                   (for ([part (in-list (model-response-content resp))])
-                     (when (equal? (hash-ref part 'type #f) "text")
-                       (yield (make-stream-chunk (hash-ref part 'text "") #f #f #f))))
-                   (yield (make-stream-chunk #f
-                                             #f
-                                             (model-response-usage resp)
-                                             #t
-                                             #:finish-reason
-                                             (symbol->string (model-response-stop-reason resp))))
-                   ;; Match stream-sse-events behavior: yield #f forever on EOF
-                   (let loop ()
-                     (yield #f)
-                     (loop)))
+        ;; Kimi: dynamic-wind closes port before generator is consumed.
+        ;; Send a streaming request, read the full body inside dynamic-wind,
+        ;; parse as non-streaming JSON, and replay chunks from memory.
+        (kimi-eager-stream-chunks req base-url api-key provider-name default-model)
         (let ()
           (define _stream-t0 (current-inexact-milliseconds))
           (define merged-req (ensure-model-setting req default-model))
