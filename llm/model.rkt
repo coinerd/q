@@ -48,7 +48,7 @@
       h))
 
 (define (jsexpr->model-request h)
-  (define msgs (hash-ref h 'messages))
+  (define msgs (hash-ref h 'messages #f))
   (unless (list? msgs)
     (error 'jsexpr->model-request "messages must be a list, got: ~a" msgs))
   (define tools (hash-ref h 'tools #f))
@@ -82,10 +82,10 @@
                 ""))))
 
 (define (jsexpr->model-response h)
-  (define content (hash-ref h 'content))
+  (define content (hash-ref h 'content #f))
   (unless (list? content)
     (error 'jsexpr->model-response "content must be a list, got: ~a" content))
-  (define model-val (hash-ref h 'model))
+  (define model-val (hash-ref h 'model #f))
   (unless (string? model-val)
     (error 'jsexpr->model-response "model must be a string, got: ~a" model-val))
   (make-model-response content

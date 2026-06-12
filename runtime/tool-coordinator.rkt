@@ -252,17 +252,18 @@
                           (lambda (event-type payload)
                             (cond
                               [(equal? event-type "tool.execution.started")
-                               (define tcid (hash-ref payload 'tool-call-id))
+                               (define tcid (hash-ref payload 'tool-call-id #f))
                                (define start-ms
                                  (hash-ref payload 'start-ms (current-inexact-milliseconds)))
-                               (hash-set! per-tool-start-ms tcid start-ms)
+                               (when tcid
+                                 (hash-set! per-tool-start-ms tcid start-ms))
                                (emit-typed-event! bus
                                                   (make-tool-execution-start-event
                                                    #:session-id session-id
                                                    #:turn-id #f
                                                    #:timestamp (current-inexact-milliseconds)
-                                                   #:tool-name (hash-ref payload 'tool-name)
-                                                   #:tool-call-id tcid))]
+                                                   #:tool-name (hash-ref payload 'tool-name "unknown")
+                                                   #:tool-call-id (or tcid "unknown")))]
                               [else (emit-session-event! bus session-id event-type payload)]))
                           #:runtime-settings (settings-for-tool-execution config)
                           #:call-id (generate-id)

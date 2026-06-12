@@ -230,7 +230,7 @@
                    'api-mismatch))])
         ;; Compatibility check: warn if extension declares incompatible range
         (when (hash-has-key? raw 'compatibility)
-          (define compat-hash (hash-ref raw 'compatibility))
+          (define compat-hash (hash-ref raw 'compatibility #f))
           (when (hash? compat-hash)
             (define ext-name (hash-ref raw 'name "unknown"))
             (define min-v (hash-ref compat-hash 'min-q-version #f))

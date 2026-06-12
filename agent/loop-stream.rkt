@@ -214,7 +214,7 @@
                              tools
                              provider
                              hook-dispatcher)
-  (define all-chunks (reverse (hash-ref stream-data 'all-chunks)))
+  (define all-chunks (reverse (hash-ref stream-data 'all-chunks '())))
   (define acc (accumulate-stream-chunks all-chunks))
   (define accumulated-text (hash-ref acc 'text))
 
@@ -257,7 +257,7 @@
 
   (define content-parts (append (list text-part) tool-call-parts))
 
-  (define stream-usage (hash-ref acc 'usage))
+  (define stream-usage (hash-ref acc 'usage (hasheq)))
 
   (define effective-usage
     (if (usage-empty? stream-usage)
