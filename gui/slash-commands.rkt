@@ -20,8 +20,10 @@
          ;; GAP-CR (v0.98.8 W1): Dynamic command registry lookup
          (only-in "../ui-core/command-registry.rkt"
                   ui-registry-lookup
+                  ui-registry-all
                   ui-command?
                   ui-command-name
+                  ui-command-summary
                   ui-command-gui?
                   canonical-commands
                   make-ui-command-registry)
@@ -138,17 +140,13 @@
                                  (notify!)))
           #t]
          [(help)
-          (add-system-msg! (string-append "Available commands:\n"
-                                          "  /help, /h, /?    Show this help\n"
-                                          "  /quit, /q, /exit Quit\n"
-                                          "  /clear, /cls     Clear transcript\n"
-                                          "  /status, /st     Show session status\n"
-                                          "  /model, /m       Show or change model\n"
-                                          "  /compact         Run context compaction\n"
-                                          "  /plan            GSD plan command\n"
-                                          "  /go              GSD execute command\n"
-                                          "  /activate, /a    Activate extensions\n"
-                                          "  /goal            Set/show/clear autonomous goal\n")
+          ;; G-CR1 (v0.98.12): Generate help from command registry.
+          (define all-cmds (ui-registry-all the-canonical-registry))
+          (define gui-cmds (filter ui-command-gui? all-cmds))
+          (define help-lines
+            (for/list ([c (in-list gui-cmds)])
+              (format "  /~a    ~a" (ui-command-name c) (ui-command-summary c))))
+          (add-system-msg! (string-append "Available commands:\n" (string-join help-lines "\n"))
                            state-box
                            gui-state-lock
                            notify!)
