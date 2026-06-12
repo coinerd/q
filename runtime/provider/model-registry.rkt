@@ -196,7 +196,7 @@
     (cond
       [default-model-name default-model-name]
       [default-provider-name
-       (define prov-cfg (hash-ref provider-map default-provider-name #f))
+       (define prov-cfg (hash-ref provider-map (key->string default-provider-name) #f))
        (and prov-cfg (let ([dm (flex-ref prov-cfg 'default-model #f)]) (if (eq? dm #f) #f dm)))]
       [else #f]))
 

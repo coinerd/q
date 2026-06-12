@@ -93,7 +93,9 @@
   (define ctx
     (make-tui-ctx
      #:event-bus bus
-     #:session-runner (lambda (prompt) (run-prompt! sess prompt))
+     #:session-runner (lambda (prompt)
+                        (run-prompt! sess prompt)
+                        (void))
      #:session-dir sess-dir
      #:model-registry (dict-ref rt-config 'model-registry #f)
      #:extension-registry (dict-ref rt-config 'extension-registry #f)

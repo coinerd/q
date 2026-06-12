@@ -61,7 +61,8 @@
         config-with-url))
   (cond
     [(equal? prov-name "gemini") (make-gemini-provider config)]
-    [(equal? prov-name "anthropic") (make-anthropic-provider config)]
+    [(or (equal? prov-name "anthropic") (equal? prov-name "kimi-coding"))
+     (make-anthropic-provider (hash-set config 'provider-name prov-name))]
     [(equal? prov-name "azure") (make-azure-openai-provider config)]
     [(equal? prov-name "openrouter") (make-openrouter-provider config)]
     [else (make-openai-compatible-provider config)]))
