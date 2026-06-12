@@ -15,7 +15,12 @@
          racket/port
          "plan-types.rkt"
          "../gsd/wave-docs.rkt"
-         (only-in "shared.rkt" extract-plan-title))
+         (only-in "shared.rkt" extract-plan-title)
+         (only-in "state-machine.rkt"
+                  gsd-wave-gate-counter
+                  gsd-wave-gate-interval
+                  gsd-wave-gate-blocked?
+                  gsd-wave-gate-increment!))
 
 (provide wave-status
          wave-status?
@@ -54,11 +59,9 @@
 ;; Wave executor (mutable struct with plan + statuses)
 ;; ============================================================
 
-;; Wave gate interval: max consecutive waves without broad-gate check
-(define wave-gate-interval (make-parameter 5))
-
-;; Wave gate state: tracks consecutive waves since last gate clear
-(define wave-gate-counter (make-parameter 0))
+;; Wave gate — re-exported from state-machine.rkt (canonical source, AXIS1-F28)
+(define wave-gate-interval gsd-wave-gate-interval)
+(define wave-gate-counter gsd-wave-gate-counter)
 
 (struct wave-executor (plan statuses) #:transparent #:mutable)
 
@@ -122,17 +125,17 @@
   (set-executor-statuses! exec new-statuses))
 
 (define (wave-gate-blocked?)
-  (>= (wave-gate-counter) (wave-gate-interval)))
+  (gsd-wave-gate-blocked?))
 
 (define (wave-gate-clear!)
-  (wave-gate-counter 0))
+  (gsd-wave-gate-counter 0))
 
 (define (wave-start! exec idx)
-  (when (wave-gate-blocked?)
+  (when (gsd-wave-gate-blocked?)
     (error 'wave-start!
            "wave gate blocked: ~a consecutive waves without broad-gate. Clear with wave-gate-clear!"
-           (wave-gate-counter)))
-  (wave-gate-counter (add1 (wave-gate-counter)))
+           (gsd-wave-gate-counter)))
+  (gsd-wave-gate-increment!)
   (update-status!
    exec
    idx
