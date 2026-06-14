@@ -161,6 +161,10 @@
 ;; Defaults to gsd-default-ctx. Tests can parameterize to isolated contexts.
 (define current-gsd-ctx (make-parameter gsd-default-ctx))
 
+;; v0.99.6 H1: Active session ID for event correlation.
+;; Set during runtime init, used by verification events and other GSD events.
+(define current-gsd-session-id (make-parameter ""))
+
 ;; H-05: gsd-state-sem removed — collapsed into per-ctx semaphore.
 
 ;; ============================================================
@@ -249,7 +253,7 @@
          ;; Global default context (plain)
          gsd-default-ctx
          current-gsd-ctx
-         ;; Functions (contracted)
+         current-gsd-session-id
          (contract-out [make-gsd-context (-> gsd-session-ctx?)]
                        [ctx-read (-> gsd-session-ctx? procedure? any)]
                        [ctx-write! (-> gsd-session-ctx? procedure? any/c void?)]

@@ -11,6 +11,7 @@
 (require racket/contract
          racket/dict
          racket/file
+         racket/path
          racket/string
          "../interfaces/cli.rkt"
          (only-in "../runtime/agent-session.rkt"
@@ -61,7 +62,7 @@
                   make-reflection-callback)
          (only-in "../runtime/memory/reflection.rkt" current-reflection-llm-fn)
          (only-in "../extensions/gsd/state-machine.rkt" gsm-ctx-current)
-         (only-in "../extensions/gsd/session-state.rkt" current-gsd-ctx)
+         (only-in "../extensions/gsd/session-state.rkt" current-gsd-ctx current-gsd-session-id)
          (only-in "../runtime/gsd-query.rkt" current-gsd-mode-query)
          (only-in "../runtime/session/session-events.rkt" current-mid-session-bridge-enabled)
          (only-in "../sandbox/gateway-bridge.rkt"
@@ -156,6 +157,9 @@
               (path->string sd)
               sd))))
   (make-directory* session-dir)
+
+  ;; v0.99.6 H1: Set session ID from session-dir basename for event correlation.
+  (current-gsd-session-id (path->string (file-name-from-path (string->path session-dir))))
 
   ;; Extension registry -- discover from global + project dirs
   ;; Load order: global (~/.q/extensions/) first, then project-local.

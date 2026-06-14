@@ -23,7 +23,8 @@
          (only-in "../../extensions/gsd/session-state.rkt"
                   gsd-session-ctx?
                   gsd-ctx-state-snapshot
-                  gsd-ctx-state-update!)
+                  gsd-ctx-state-update!
+                  current-gsd-session-id)
          (only-in "../../extensions/gsd/state-machine.rkt"
                   gsd-runtime-state-mode
                   gsm-ctx-current
@@ -90,7 +91,7 @@
      ;; 1. Emit verification-started event
      (ctx-emit-gsd-event! ctx
                           'gsd.verification.started
-                          (make-verification-started-event #:session-id ""
+                          (make-verification-started-event #:session-id (current-gsd-session-id)
                                                            #:turn-id 0
                                                            #:artifact-count (length files-changed)))
 
@@ -107,7 +108,7 @@
      (ctx-emit-gsd-event! ctx
                           'gsd.verification.completed
                           (make-verification-completed-event
-                           #:session-id ""
+                           #:session-id (current-gsd-session-id)
                            #:turn-id 0
                            #:verdict (verifier-decision-verdict decision)
                            #:reason (verifier-decision-reason decision)
@@ -127,7 +128,7 @@
         (ctx-emit-gsd-event! ctx
                              'gsd.verification.escalated
                              (make-verification-escalated-event
-                              #:session-id ""
+                              #:session-id (current-gsd-session-id)
                               #:turn-id 0
                               #:reason (verifier-decision-reason decision)
                               #:risk-level (verifier-decision-risk-level decision)

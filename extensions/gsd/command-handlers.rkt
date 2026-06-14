@@ -61,7 +61,8 @@
                   set-edit-limit!
                   current-gsd-event-bus
                   set-gsd-event-bus!
-                  current-gsd-ctx)
+                  current-gsd-ctx
+                  current-gsd-session-id)
          (only-in "../../agent/verification/verifier-gate.rkt" execute-verification-gate)
          (only-in "../../agent/verification/verifier-core.rkt" current-verifier-enabled)
          racket/file)
@@ -104,12 +105,12 @@
    (current-gsd-ctx)
    'gsd.mode.changed
    (if reason
-       (make-gsd-mode-changed-event #:session-id ""
+       (make-gsd-mode-changed-event #:session-id (current-gsd-session-id)
                                     #:turn-id 0
                                     #:mode mode
                                     #:reason reason
                                     #:error (or err ""))
-       (make-gsd-mode-changed-event #:session-id "" #:turn-id 0 #:mode mode))))
+       (make-gsd-mode-changed-event #:session-id (current-gsd-session-id) #:turn-id 0 #:mode mode))))
 
 ;; R6: Iterate gsd-command-specs for registration (single source of truth)
 (define (register-gsd-commands ctx)
@@ -202,10 +203,12 @@
        (define data (gsd-command-result-data cmd-result))
        (define wave-idx (and (hash? data) (hash-ref data 'wave #f)))
        (when wave-idx
-         (events:ctx-emit-gsd-event!
-          (current-gsd-ctx)
-          'gsd.wave.completed
-          (make-gsd-wave-completed-event #:session-id "" #:turn-id 0 #:wave wave-idx))))
+         (events:ctx-emit-gsd-event! (current-gsd-ctx)
+                                     'gsd.wave.completed
+                                     (make-gsd-wave-completed-event #:session-id
+                                                                    (current-gsd-session-id)
+                                                                    #:turn-id 0
+                                                                    #:wave wave-idx))))
      ;; Build message: include verification result if relevant
      (define final-msg
        (cond
@@ -221,7 +224,7 @@
        (define data (gsd-command-result-data cmd-result))
        (events:ctx-emit-gsd-event! (current-gsd-ctx)
                                    'gsd.plan.archived
-                                   (make-gsd-plan-archived-event #:session-id ""
+                                   (make-gsd-plan-archived-event #:session-id (current-gsd-session-id)
                                                                  #:turn-id 0
                                                                  #:path
                                                                  (if (hash? data)
@@ -250,7 +253,7 @@
            (let ([waves (parse-waves-from-markdown plan-content)]) (gsd-plan waves "" '() '()))))
      (events:ctx-emit-gsd-event! (current-gsd-ctx)
                                  'gsd.plan.parsed
-                                 (make-gsd-plan-parsed-event #:session-id ""
+                                 (make-gsd-plan-parsed-event #:session-id (current-gsd-session-id)
                                                              #:turn-id 0
                                                              #:wave-count
                                                              (length (gsd-plan-waves plan))))
@@ -265,7 +268,7 @@
         (events:ctx-emit-gsd-event! (current-gsd-ctx)
                                     'gsd.plan.normalized
                                     (make-gsd-plan-normalized-event
-                                     #:session-id ""
+                                     #:session-id (current-gsd-session-id)
                                      #:turn-id 0
                                      #:wave-count (length (gsd-normalized-plan-waves norm-result))))
         (define validation (validate-normalized-plan norm-result))
@@ -273,7 +276,7 @@
         (events:ctx-emit-gsd-event! (current-gsd-ctx)
                                     'gsd.plan.validated
                                     (make-gsd-plan-validated-event
-                                     #:session-id ""
+                                     #:session-id (current-gsd-session-id)
                                      #:turn-id 0
                                      #:wave-count 0
                                      #:valid? validated-plan?
