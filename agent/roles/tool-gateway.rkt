@@ -7,21 +7,28 @@
 ;; git operations, network access, and browser automation.
 ;; It acts as the execution agent for tool calls delegated by the supervisor.
 ;;
-;; When current-execution-plane-enabled is #t (feature flag), tool calls
-;; are routed through the isolated worker process via JSON-RPC.
-;; When #f (default), a stub response is returned (backward compat).
+;; H2 (v0.99.3): No longer imports from sandbox/ directly.
+;; The execution function is injected via current-tool-executor parameter.
+;; The wiring layer (run-modes.rkt) sets the real executor when enabled.
 
 (require racket/generic
          (only-in "base.rkt" gen:agent-role agent-role-capabilities make-capability-guarded-handler)
          (only-in "../../util/capability.rkt" ROLE-CAPABILITIES)
-         (only-in "../../util/message/mas-envelope.rkt"
-                  mas-envelope?
-                  mas-envelope-payload
-                  mas-envelope-trace-id)
-         (only-in "../../sandbox/gateway-bridge.rkt"
-                  execute-via-worker
-                  current-execution-plane-enabled
-                  shutdown-worker!))
+         (only-in "../../util/message/mas-envelope.rkt" mas-envelope? mas-envelope-payload))
+
+;; H2: Default executor — returns stub response (backward compat)
+(define (default-tool-executor envelope)
+  (hasheq 'status
+          'ok
+          'role
+          'tool-gateway
+          'payload
+          (mas-envelope-payload envelope)
+          'message
+          "tool-gateway acknowledged envelope (execution plane disabled)"))
+
+;; H2: The active executor — set by wiring layer when feature flag is ON
+(define current-tool-executor (make-parameter default-tool-executor))
 
 ;; ============================================================
 ;; Struct Definition
@@ -38,35 +45,21 @@
                     "You have access to shell execution, file operations, git, "
                     "network requests, and browser automation."))
    (define agent-role-handle-envelope
-     (make-capability-guarded-handler
-      (lambda (self) (agent-role-capabilities self))
-      (lambda (self envelope)
-        (cond
-          ;; Route through the execution plane (isolated worker)
-          [(current-execution-plane-enabled) (execute-via-worker envelope)]
-          [else
-           ;; Stub: acknowledge the envelope (backward compat)
-           (hasheq 'status
-                   'ok
-                   'role
-                   'tool-gateway
-                   'payload
-                   (mas-envelope-payload envelope)
-                   'message
-                   "tool-gateway acknowledged envelope (execution plane disabled)")]))))])
+     (make-capability-guarded-handler (lambda (self) (agent-role-capabilities self))
+                                      ;; H2: Use injected executor instead of direct sandbox import
+                                      (lambda (self envelope) ((current-tool-executor) envelope))))])
 
 ;; ============================================================
 ;; Convenience Functions
 ;; ============================================================
 
 (define (gateway-start!)
-  ;; Enable the execution plane for this role
-  (current-execution-plane-enabled #t))
+  ;; H2: No-op — the wiring layer sets the executor via current-tool-executor
+  (void))
 
 (define (gateway-stop!)
-  ;; Disable the execution plane and shut down any running worker
-  (current-execution-plane-enabled #f)
-  (shutdown-worker!))
+  ;; H2: Reset to default stub executor
+  (current-tool-executor default-tool-executor))
 
 ;; ============================================================
 ;; Provides
@@ -75,7 +68,9 @@
 (provide tool-gateway-role?
          make-tool-gateway-role
          gateway-start!
-         gateway-stop!)
+         gateway-stop!
+         current-tool-executor
+         default-tool-executor)
 
 (define (make-tool-gateway-role)
   (tool-gateway-role))

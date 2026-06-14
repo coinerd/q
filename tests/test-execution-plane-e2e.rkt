@@ -21,7 +21,7 @@
                   execute-via-worker
                   ensure-worker!
                   shutdown-worker!)
-         (only-in "../agent/roles/tool-gateway.rkt" make-tool-gateway-role)
+         (only-in "../agent/roles/tool-gateway.rkt" make-tool-gateway-role current-tool-executor)
          (only-in "../agent/roles/base.rkt" agent-role-handle-envelope agent-role-capabilities)
          (only-in "../tools/tool.rkt"
                   make-tool
@@ -144,7 +144,8 @@
     ;; ── Tool-Gateway Role: execute-via-worker ──
 
     (test-case "tool-gateway role dispatches via worker when enabled"
-      (parameterize ([current-execution-plane-enabled #t])
+      (parameterize ([current-execution-plane-enabled #t]
+                     [current-tool-executor execute-via-worker])
         (define gw (make-tool-gateway-role))
         (define envelope
           (make-mas-envelope

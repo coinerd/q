@@ -65,24 +65,12 @@
          (only-in "../sandbox/gateway-bridge.rkt"
                   current-execution-plane-enabled
                   ensure-worker!
-                  shutdown-worker!)
-         (only-in "../sandbox/gateway-ipc.rkt" send-request! generate-request-id)
-         (only-in "../sandbox/ipc-protocol.rkt"
-                  ipc-request
-                  ipc-request?
-                  ipc-request-request-id
-                  ipc-request-tool-name
-                  ipc-request-arguments
-                  ipc-request-timeout-ms
-                  ipc-request-capability
-                  ipc-response
-                  ipc-response?
+                  shutdown-worker!
+                  execute-tool-via-worker
                   ipc-response-status
                   ipc-response-content
                   ipc-response-details
-                  ipc-response-error-message
-                  IPC-SCHEMA-VERSION
-                  IPC-DEFAULT-TIMEOUT-MS))
+                  ipc-response-error-message))
 
 ;; ── Result struct ──
 (provide scheduler-result
@@ -289,6 +277,8 @@
 ;; ============================================================
 
 ;; Translate ipc-response to tool-result for the scheduler.
+;; H4: The actual IPC request building is now in gateway-bridge.rkt
+;; via execute-tool-via-worker, so this function only handles translation.
 (define (ipc-response->tool-result resp)
   (define status (ipc-response-status resp))
   (define content (ipc-response-content resp))
@@ -299,23 +289,6 @@
     [(timeout) (make-error-result (format "tool execution timed out: ~a" (or err-msg "")))]
     [(crashed) (make-error-result (format "worker crashed: ~a" (or err-msg "")))]
     [else (make-error-result (format "execution plane error: ~a" (or err-msg "unknown")))]))
-
-;; Execute a tool via the external worker process.
-(define (execute-via-scheduler-bridge tool-name args required-capability)
-  (with-handlers ([exn:fail? (lambda (e)
-                               (make-error-result (format "execution plane error: ~a"
-                                                          (exn-message e))))])
-    (define req-id (generate-request-id))
-    (define timeout-ms
-      (let ([t (hash-ref args 'timeout #f)])
-        (if (and t (positive? t))
-            (inexact->exact (* t 1000))
-            IPC-DEFAULT-TIMEOUT-MS)))
-    (define req
-      (ipc-request req-id tool-name args timeout-ms #f required-capability IPC-SCHEMA-VERSION))
-    (define gw (ensure-worker!))
-    (define resp (send-request! gw req timeout-ms))
-    (ipc-response->tool-result resp)))
 
 ;; ============================================================
 ;; Execute a single tool call (with exception handling)
@@ -383,8 +356,9 @@
         (define exec-result
           (cond
             [(and (current-execution-plane-enabled) (tool-dangerous? t) (tool-externalizable? t))
-             ;; Route through the execution plane (isolated worker)
-             (execute-via-scheduler-bridge tc-name args (tool-required-capability t))]
+             ;; H4: Route through gateway-bridge facade (consolidated IPC logic)
+             (define resp (execute-tool-via-worker tc-name args (tool-required-capability t)))
+             (ipc-response->tool-result resp)]
             [else
              ;; Existing in-process execution (unchanged)
              (with-handlers ([exn:fail? (lambda (e)

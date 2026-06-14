@@ -160,21 +160,20 @@
         (define result (agent-role-handle-envelope role env))
         (check-equal? (hash-ref result 'status) 'ok)))
 
-    ;; ── Feature Flag Toggle ──
+    ;; ── H2: Feature Flag Toggle (parameterized executor) ──
 
-    (test-case "gateway-start! enables execution plane"
-      (check-false (current-execution-plane-enabled))
+    (test-case "gateway-start! is a no-op (H2: wiring sets executor)"
+      ;; H2: gateway-start! is now a no-op; the wiring layer sets current-tool-executor
+      (define before (current-tool-executor))
       (gateway-start!)
-      (check-true (current-execution-plane-enabled))
+      (check-equal? (current-tool-executor) before)
       ;; Reset for other tests
-      (gateway-stop!)
-      (check-false (current-execution-plane-enabled)))
+      (gateway-stop!))
 
-    (test-case "gateway-stop! disables execution plane"
-      (gateway-start!)
-      (check-true (current-execution-plane-enabled))
+    (test-case "gateway-stop! resets executor to default"
+      ;; H2: gateway-stop! resets current-tool-executor to default-tool-executor
       (gateway-stop!)
-      (check-false (current-execution-plane-enabled)))
+      (check-equal? (current-tool-executor) default-tool-executor))
 
     ;; ── execute-via-worker with non-envelope ──
 
@@ -186,7 +185,8 @@
     ;; ── Full Integration: execute via real worker ──
 
     (test-case "full integration: gateway role executes bash via worker"
-      (parameterize ([current-execution-plane-enabled #t])
+      ;; H2: Inject executor via parameter instead of feature flag
+      (parameterize ([current-tool-executor execute-via-worker])
         (define role (make-tool-gateway-role))
         (define env
           (make-mas-envelope 'supervisor

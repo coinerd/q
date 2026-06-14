@@ -197,6 +197,26 @@
     ;; Translate response to result hash
     (ipc-response->result-hash resp envelope)))
 
+;; ── H4: Scheduler Entry Point ───────────────────────────────────
+
+;; Execute a tool via the worker, returning ipc-response directly.
+;; This is the scheduler's single entry point — it bypasses the envelope layer.
+;; The scheduler then translates the ipc-response to tool-result.
+(define (execute-tool-via-worker tool-name args required-capability)
+  (with-handlers ([exn:fail?
+                   (lambda (e)
+                     (make-error-response #f (format "execution plane error: ~a" (exn-message e))))])
+    (define req-id (generate-request-id))
+    (define timeout-ms
+      (let ([t (hash-ref args 'timeout #f)])
+        (if (and t (positive? t))
+            (inexact->exact (* t 1000))
+            (current-execution-plane-timeout-ms))))
+    (define req
+      (ipc-request req-id tool-name args timeout-ms #f required-capability IPC-SCHEMA-VERSION))
+    (define gw (ensure-worker!))
+    (send-request! gw req timeout-ms)))
+
 ;; ── Provides ────────────────────────────────────────────────────
 
 (provide current-execution-plane-enabled
@@ -207,6 +227,27 @@
          shutdown-worker!
          envelope->ipc-request
          ipc-response->result-hash
-         extract-tool-call)
+         extract-tool-call
+         execute-tool-via-worker
+         ;; H1/M3: Re-export IPC items so scheduler has a single import
+         IPC-SCHEMA-VERSION
+         IPC-DEFAULT-TIMEOUT-MS
+         ipc-request
+         ipc-request?
+         ipc-request-request-id
+         ipc-request-tool-name
+         ipc-request-arguments
+         ipc-request-timeout-ms
+         ipc-request-capability
+         ipc-response
+         ipc-response?
+         ipc-response-status
+         ipc-response-content
+         ipc-response-details
+         ipc-response-error-message
+         send-request!
+         generate-request-id
+         gateway-worker?
+         gateway-alive?)
 
 (provide (contract-out [ensure-worker! (-> gateway-worker?)] [execute-via-worker (-> any/c hash?)]))

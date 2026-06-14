@@ -68,7 +68,10 @@
                   current-execution-plane-enabled
                   current-execution-plane-timeout-ms
                   current-worker-command
-                  current-worker-args))
+                  current-worker-args
+                  execute-via-worker
+                  shutdown-worker!)
+         (only-in "../agent/roles/tool-gateway.rkt" current-tool-executor))
 
 ;; Re-export mode runners from sub-modules
 (require "run-interactive.rkt"
@@ -323,13 +326,15 @@
   ;; AXIS2-F13 (v0.98.14): Wire goal-loop from settings (default #t)
   (current-goal-loop-enabled? (setting-ref* settings '(goal-loop-enabled?) #t))
   ;; v0.99.2: Wire execution plane from settings (default #f = disabled)
+  ;; H2 (v0.99.3): Inject executor into tool-gateway via parameter
   (when (execution-plane-enabled? settings)
     (current-execution-plane-enabled #t)
     (current-execution-plane-timeout-ms (execution-plane-timeout-ms settings))
     (let ([cmd (execution-plane-command settings)])
       (when cmd
         (current-worker-command cmd)))
-    (current-worker-args (execution-plane-worker-args settings))))
+    (current-worker-args (execution-plane-worker-args settings))
+    (current-tool-executor execute-via-worker)))
 ;; ============================================================
 ;; reload-config! (#1182)
 ;; ============================================================
