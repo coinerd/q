@@ -329,6 +329,64 @@
   (define path (hash-ref payload 'path "?"))
   (append-entry state (make-entry 'system (format "[archived] ~a" path) (event-time evt) (hash))))
 
+;; ============================================================
+;; Verification event handlers (W6 v0.99.5)
+;; ============================================================
+
+;; Helper: extract a field from the event payload, handling both the
+;; direct typed-event hash format (from emit-typed-event!) and the
+;; GSD-wrapped format (from ctx-emit-gsd-event! with 'data sub-hash).
+(define (verification-payload-ref evt key [default #f])
+  (define payload (event-payload evt))
+  (cond
+    [(not (hash? payload)) default]
+    ;; GSD-wrapped format: data is under 'data key
+    [(and (hash-has-key? payload 'data) (hash? (hash-ref payload 'data)))
+     (hash-ref (hash-ref payload 'data) key default)]
+    ;; Direct typed-event hash format
+    [else (hash-ref payload key default)]))
+
+(define (handle-verification-started state evt)
+  (define artifact-count (verification-payload-ref evt 'artifact-count 0))
+  (set-status-message state (format "Verifying ~a artifacts..." artifact-count)))
+
+(define (handle-verification-completed state evt)
+  (define verdict (verification-payload-ref evt 'verdict "unknown"))
+  (define reason (verification-payload-ref evt 'reason #f))
+  (match verdict
+    ;; Approval: clear status message
+    [(or "approve" 'approve) (set-status-message state #f)]
+    [(or "reject" 'reject)
+     ;; Rejection: add transcript entry with reason
+     (append-entry state
+                   (make-entry 'system
+                               (format "[Verification: REJECTED~a]"
+                                       (if reason
+                                           (format " — ~a" reason)
+                                           ""))
+                               (event-time evt)
+                               (hasheq 'verification #t 'rejected #t)))]
+    [else
+     ;; Escalate or unknown: add generic transcript entry
+     (append-entry state
+                   (make-entry 'system
+                               (format "[Verification: ~a~a]"
+                                       verdict
+                                       (if reason
+                                           (format " — ~a" reason)
+                                           ""))
+                               (event-time evt)
+                               (hasheq 'verification #t)))]))
+
+(define (handle-verification-escalated state evt)
+  (define reason (verification-payload-ref evt 'reason "unknown"))
+  (define risk-level (verification-payload-ref evt 'risk-level "unknown"))
+  (append-entry (set-status-message state "Verification requires approval")
+                (make-entry 'system
+                            (format "[Verification: ~a — risk: ~a]" reason risk-level)
+                            (event-time evt)
+                            (hasheq 'verification #t 'escalation #t))))
+
 (define (handle-context-pressure state evt)
   (define payload (event-payload evt))
   (struct-copy ui-state
@@ -422,3 +480,6 @@
 (register-event-reducer! "model.stream.completed" handle-model-stream-completed)
 (register-event-reducer! "stream.turn.completed" handle-stream-turn-completed)
 (register-event-reducer! "context.pressure" handle-context-pressure)
+(register-event-reducer! "gsd.verification.started" handle-verification-started)
+(register-event-reducer! "gsd.verification.completed" handle-verification-completed)
+(register-event-reducer! "gsd.verification.escalated" handle-verification-escalated)
