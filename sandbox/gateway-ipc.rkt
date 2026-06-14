@@ -3,8 +3,16 @@
 ;; sandbox/gateway-ipc.rkt — Async IPC manager for gateway ↔ worker communication
 ;;
 ;; Spawns and manages a worker subprocess. Reads newline-delimited JSON on
-;; stdout, dispatches responses to waiting requestors via sync channels.
-;; Stderr is drained and accumulated for diagnostics.
+;; stdout, dispatches responses to waiting requestors via async channels.
+;; Stderr is drained and accumulated (capped) for diagnostics.
+;;
+;; v0.99.3 Audit Remediation:
+;;   C1: Module-level request-id semaphore (was fresh per call)
+;;   C2: async-channel instead of channel (prevents drain thread deadlock)
+;;   C3: stdin-write-lock prevents concurrent write interleaving
+;;   C4: EOF handler notifies all pending requests on worker exit
+;;   L1: stderr accumulation capped at 64KB
+;;   L8: working-directory parameter wired to subprocess
 ;;
 ;; Architecture:
 ;;   ┌──────────┐    stdin ──→     ┌──────────┐
@@ -13,14 +21,15 @@
 ;;   └──────────┘                  └──────────┘
 ;;
 ;; Each request gets a unique id. Response drain thread matches by id
-;; and puts the response on a per-request channel. send-request! blocks
-;; on that channel with a timeout via sync/timeout.
+;; and puts the response on a per-request async-channel. send-request!
+;; blocks on that channel with a timeout via sync/timeout.
 
 (require racket/contract
          racket/match
          racket/string
          racket/port
          racket/system
+         racket/async-channel
          (only-in racket/file make-directory*)
          "ipc-protocol.rkt")
 
@@ -31,22 +40,31 @@
 
 (define-logger gateway-ipc)
 
+;; ── Constants (v0.99.3 L1) ──────────────────────────────────────
+
+(define IPC-STDERR-MAX-CHARS 65536) ; 64KB cap
+
+;; ── C1: Module-level semaphore for request-id generation ────────
+
+(define request-id-lock (make-semaphore 1))
+
 ;; ── Gateway Worker Struct ───────────────────────────────────────
 
 (struct gateway-worker
         (process ; subprocess? or #f
          custodian ; custodian?
-         stdin ; input-port? (our write end)
-         stdout ; output-port? (our read end)
-         stderr ; output-port? (our read end)
+         stdin ; output-port? (write to child stdin)
+         stdout ; input-port? (read from child stdout)
+         stderr ; input-port? (read from child stderr)
          drain-stdout ; thread?
          drain-stderr ; thread?
-         response-channel ; channel? — responses from drain thread
+         response-channel ; async-channel? — responses from drain thread (C2)
          stderr-log ; (boxof string)
          active? ; (boxof boolean)
          started-ms ; exact-nonnegative-integer?
-         pending-requests ; (boxof (hash/c string? channel?)) — req-id → channel
-         lock) ; semaphore? — serializes access to pending
+         pending-requests ; (boxof (hash/c string? async-channel?)) — req-id → channel (C2)
+         lock ; semaphore? — serializes access to pending
+         stdin-write-lock) ; semaphore? — serializes stdin writes (C3)
   #:transparent)
 
 ;; ── Response Wrapper ────────────────────────────────────────────
@@ -74,12 +92,13 @@
                          (define current (unbox (gateway-worker-pending-requests gw)))
                          (hash-ref current req-id #f))))
 
+;; C2: Use async-channel-put instead of channel-put — never blocks
 (define (clear-all-pending! gw reason)
   (call-with-semaphore (gateway-worker-lock gw)
                        (lambda ()
                          (define current (unbox (gateway-worker-pending-requests gw)))
                          (for ([(id ch) (in-hash current)])
-                           (channel-put ch (response-packet id (cons 'worker-error reason))))
+                           (async-channel-put ch (response-packet id (cons 'worker-error reason))))
                          (hash-clear! current))))
 
 ;; ── Stdout Drain Thread ─────────────────────────────────────────
@@ -94,25 +113,32 @@
                                   (clear-all-pending! gw 'drain-crash))])
        (let loop ()
          (define line (read-line port 'any))
-         (unless (eof-object? line)
-           (define trimmed (string-trim line))
-           (unless (string=? trimmed "")
-             (with-handlers ([exn:fail? (lambda (e)
-                                          (log-gateway-ipc-warning "failed to parse response line: ~a"
-                                                                   (exn-message e)))])
-               (define jsexpr (with-input-from-string trimmed read-json/string))
-               (define resp (and jsexpr (jsexpr->ipc-response jsexpr)))
-               (when (and resp (ipc-response? resp))
-                 (define ch (get-pending-request-channel gw (ipc-response-request-id resp)))
-                 (when ch
-                   (channel-put ch (response-packet (ipc-response-request-id resp) resp))))))
-           (loop)))))))
+         (cond
+           ;; C4: EOF means worker closed stdout or crashed — notify all pending
+           [(eof-object? line)
+            (log-gateway-ipc-warning "worker stdout EOF — worker may have crashed")
+            (clear-all-pending! gw 'worker-exit)]
+           [else
+            (define trimmed (string-trim line))
+            (unless (string=? trimmed "")
+              (with-handlers ([exn:fail? (lambda (e)
+                                           (log-gateway-ipc-warning
+                                            "failed to parse response line: ~a"
+                                            (exn-message e)))])
+                (define jsexpr (with-input-from-string trimmed read-json/string))
+                (define resp (and jsexpr (jsexpr->ipc-response jsexpr)))
+                (when (and resp (ipc-response? resp))
+                  (define ch (get-pending-request-channel gw (ipc-response-request-id resp)))
+                  (when ch
+                    ;; C2: async-channel-put never blocks
+                    (async-channel-put ch (response-packet (ipc-response-request-id resp) resp))))))
+            (loop)]))))))
 
 ;; Read JSON from string using string-port
 (define (read-json/string)
   (read-json (current-input-port)))
 
-;; ── Stderr Drain Thread ─────────────────────────────────────────
+;; ── Stderr Drain Thread (L1: capped accumulation) ───────────────
 
 (define (start-stderr-drain! gw)
   (thread (lambda ()
@@ -122,13 +148,21 @@
                                                                   (exn-message e)))])
               (let loop ()
                 (define line (read-line port 'any))
-                (unless (eof-object? line)
-                  (define current-log (unbox (gateway-worker-stderr-log gw)))
-                  (set-box! (gateway-worker-stderr-log gw) (string-append current-log line "\n"))
-                  (loop)))))))
+                (cond
+                  [(eof-object? line) (void)]
+                  [else
+                   ;; L1: Cap stderr accumulation to prevent unbounded memory growth
+                   (define current-log (unbox (gateway-worker-stderr-log gw)))
+                   (define new-log (string-append current-log line "\n"))
+                   (set-box! (gateway-worker-stderr-log gw)
+                             (if (> (string-length new-log) IPC-STDERR-MAX-CHARS)
+                                 (substring new-log (- (string-length new-log) IPC-STDERR-MAX-CHARS))
+                                 new-log))
+                   (loop)]))))))
 
 ;; ── Worker Lifecycle ────────────────────────────────────────────
 
+;; L8: working-directory parameter now wired to subprocess
 (define (start-worker! command [args '()] [working-directory #f])
   ;; Normalize command to a string
   (define cmd-str
@@ -138,18 +172,13 @@
   ;; Create a custodian for the worker subprocess + drain threads
   (define worker-custodian (make-custodian))
   (parameterize ([current-custodian worker-custodian])
+    ;; L8: Wire working-directory to subprocess spawn
     (define-values (proc sub-out sub-in sub-err)
-      (apply subprocess
-             (append (list #f ; don't redirect — use ports
-                           #f
-                           #f
-                           (find-executable-path cmd-str))
-                     args)))
-    ;; proc is the subprocess, sub-out is our stdout read, sub-in is our stdin write,
-    ;; sub-err is our stderr read
-    ;; Wait — subprocess returns: (values subprocess stdout stdin stderr)
-    ;; where stdout = child's stdout, stdin = child's stdin, stderr = child's stderr
-    ;; So: sub-out = read child stdout, sub-in = write child stdin, sub-err = read child stderr
+      (if working-directory
+          (parameterize ([current-directory working-directory])
+            (apply subprocess (append (list #f #f #f (find-executable-path cmd-str)) args)))
+          (apply subprocess (append (list #f #f #f (find-executable-path cmd-str)) args))))
+    ;; sub-out = read child stdout, sub-in = write child stdin, sub-err = read child stderr
     (define gw
       (gateway-worker proc
                       worker-custodian
@@ -158,12 +187,13 @@
                       sub-err ; our stderr (read from child)
                       #f ; drain threads started below
                       #f
-                      (make-channel)
+                      (make-async-channel) ; C2: async-channel instead of channel
                       (box "")
                       (box #t)
                       (current-inexact-milliseconds)
                       (box (make-hash))
-                      (make-semaphore 1)))
+                      (make-semaphore 1)
+                      (make-semaphore 1))) ; C3: stdin-write-lock
     ;; Start drain threads under the custodian
     (define stdout-thread
       (parameterize ([current-custodian worker-custodian])
@@ -181,8 +211,9 @@
 
 (define request-counter (box 0))
 
+;; C1: Use module-level semaphore (was creating fresh one per call)
 (define (generate-request-id)
-  (call-with-semaphore (make-semaphore 1) ; not ideal but safe
+  (call-with-semaphore request-id-lock
                        (lambda ()
                          (set-box! request-counter (add1 (unbox request-counter)))
                          (format "req-~a-~a"
@@ -196,19 +227,21 @@
   ;; Check size
   (when (ipc-request-too-large? req)
     (raise (exn:fail:gateway "request too large" (current-continuation-marks))))
-  ;; Register response channel
+  ;; Register response channel (C2: async-channel)
   (define req-id (ipc-request-request-id req))
-  (define resp-ch (make-channel))
+  (define resp-ch (make-async-channel))
   (register-pending-request! gw req-id resp-ch)
-  ;; Serialize and write
+  ;; Serialize and write (C3: protect with stdin-write-lock)
   (define jsexpr (ipc-request->jsexpr req))
   (define json-str (jsexpr->string jsexpr))
   (define out (gateway-worker-stdin gw))
-  ;; Write with newline delimiter
-  (display json-str out)
-  (newline out)
-  (flush-output out)
-  ;; Wait for response with timeout
+  ;; C3: Wrap write sequence with lock to prevent concurrent interleaving
+  (call-with-semaphore (gateway-worker-stdin-write-lock gw)
+                       (lambda ()
+                         (display json-str out)
+                         (newline out)
+                         (flush-output out)))
+  ;; Wait for response with timeout (C2: sync works on async-channel)
   (define result (sync/timeout (/ timeout-ms 1000.0) resp-ch))
   ;; Unregister
   (unregister-pending-request! gw req-id)
@@ -274,12 +307,14 @@
          gateway-worker-active?
          gateway-worker-started-ms
          gateway-worker-pending-requests
-         gateway-worker-lock)
+         gateway-worker-lock
+         gateway-worker-stdin-write-lock)
 
 (provide response-packet
          response-packet?
          response-packet-id
-         response-packet-response)
+         response-packet-response
+         register-pending-request!)
 
 (provide exn:fail:gateway
          exn:fail:gateway?)
