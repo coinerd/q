@@ -34,8 +34,20 @@
 (define current-verifier-model (make-parameter #f))
 
 ;; Risk threshold: if risk-level >= threshold, force requires-human? #t.
-;; Ordering: low < medium < high.
-(define current-verifier-risk-threshold (make-parameter 'medium))
+;; L3 fix (v0.99.7): validated parameter — only accepts valid risk levels.
+(define valid-risk-levels '(low medium high critical))
+
+(define (valid-risk-level? v)
+  (and (memq v valid-risk-levels) #t))
+
+(define current-verifier-risk-threshold
+  (make-parameter 'medium
+                  (lambda (v)
+                    (if (valid-risk-level? v)
+                        v
+                        (raise-argument-error 'current-verifier-risk-threshold
+                                              "(or/c 'low 'medium 'high 'critical)"
+                                              v)))))
 
 ;; H2 fix (v0.99.6): Provider for verifier LLM calls.
 ;; Set from build-runtime-from-cli (wiring/run-modes.rkt).
@@ -50,7 +62,8 @@
 ;; ============================================================
 
 ;; Ordering for risk levels.
-(define RISK-ORDER '(low medium high))
+;; L3 fix (v0.99.7): includes 'critical for complete hierarchy.
+(define RISK-ORDER '(low medium high critical))
 
 (define (risk-level->rank level)
   (or (for/or ([r (in-list RISK-ORDER)]
@@ -195,7 +208,9 @@
          current-verifier-model
          current-verifier-risk-threshold
          current-verifier-provider
-         current-verifier-timeout-ms)
+         current-verifier-timeout-ms
+         valid-risk-level?
+         valid-risk-levels)
 
 (provide (contract-out [run-verification
                         (->* (provider? string? string? (listof string?) string?)

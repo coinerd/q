@@ -15,6 +15,7 @@
          racket/string
          "../agent/verification/verifier-core.rkt"
          "../agent/verification/verifier-types.rkt"
+         "../agent/verification/verifier-prompt.rkt"
          "../llm/provider.rkt"
          "../llm/model.rkt"
          (only-in "../util/event/event.rkt" make-event)
@@ -97,6 +98,61 @@
 
     (test-case "M2: non-hash payload returns default"
       (define evt (make-event 'test 0 #f #f "not-a-hash"))
-      (check-equal? (verification-payload-ref evt 'any-key 'def) 'def))))
+      (check-equal? (verification-payload-ref evt 'any-key 'def) 'def))
+
+    ;; ── L1 (v0.99.7): Parameterized prompt limits ──
+
+    (test-case "L1: current-verifier-max-files-shown has default 30"
+      (check-equal? (current-verifier-max-files-shown) 30))
+
+    (test-case "L1: current-verifier-max-diff-chars has default 8000"
+      (check-equal? (current-verifier-max-diff-chars) 8000))
+
+    (test-case "L1: current-verifier-max-file-lines has default 3"
+      (check-equal? (current-verifier-max-file-lines) 3))
+
+    (test-case "L1: parameterized max-files-shown controls truncation"
+      (parameterize ([current-verifier-max-files-shown 2])
+        (define msg
+          (build-verifier-user-message #:plan-summary ""
+                                       #:wave-name "W0"
+                                       #:files-changed '("a.rkt" "b.rkt" "c.rkt")
+                                       #:test-summary ""))
+        (check-true (string-contains? msg "... and 1 more file(s) not shown"))))
+
+    (test-case "L1: parameterized max-diff-chars controls truncation"
+      (parameterize ([current-verifier-max-diff-chars 10])
+        (define msg
+          (build-verifier-user-message #:plan-summary ""
+                                       #:wave-name "W0"
+                                       #:files-changed '()
+                                       #:test-summary ""
+                                       #:diff-excerpt "0123456789ABCDE"))
+        (check-true (string-contains? msg "[truncated]"))))
+
+    ;; ── L3 (v0.99.7): Risk threshold validation ──
+
+    (test-case "L3: valid-risk-levels includes critical"
+      (check-true (and (member 'critical valid-risk-levels) #t) "critical is in valid-risk-levels"))
+
+    (test-case "L3: valid-risk-level? accepts low/medium/high/critical"
+      (for ([v '(low medium high critical)])
+        (check-true (valid-risk-level? v) "~a should be valid")))
+
+    (test-case "L3: valid-risk-level? rejects invalid values"
+      (check-false (valid-risk-level? 'extreme))
+      (check-false (valid-risk-level? 42))
+      (check-false (valid-risk-level? "medium")))
+
+    (test-case "L3: setting invalid risk threshold raises argument error"
+      (check-exn (lambda (e)
+                   (and (exn:fail:contract? e)
+                        (string-contains? (exn-message e) "current-verifier-risk-threshold")))
+                 (lambda () (current-verifier-risk-threshold 'extreme))))
+
+    (test-case "L3: valid risk thresholds accepted"
+      (for ([v '(low medium high critical)])
+        (parameterize ([current-verifier-risk-threshold v])
+          (check-equal? (current-verifier-risk-threshold) v))))))
 
 (run-tests suite)

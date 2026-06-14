@@ -20,17 +20,17 @@
          (only-in racket/list take))
 
 ;; ============================================================
-;; Constants
+;; Configurable Parameters (L1 fix v0.99.7)
 ;; ============================================================
 
 ;; Maximum number of files shown in the user message before truncation.
-(define MAX-FILES-SHOWN 30)
+(define current-verifier-max-files-shown (make-parameter 30))
 
 ;; Maximum length of the diff excerpt in characters.
-(define MAX-DIFF-CHARS 8000)
+(define current-verifier-max-diff-chars (make-parameter 8000))
 
 ;; Maximum number of lines shown for each file entry.
-(define MAX-FILE-LINES 3)
+(define current-verifier-max-file-lines (make-parameter 3))
 
 ;; ============================================================
 ;; System Prompt
@@ -74,10 +74,11 @@
 
 ;; Format the files-changed list, truncating if too many files.
 (define (format-files-changed files)
+  (define max-files (current-verifier-max-files-shown))
   (define count (length files))
-  (if (> count MAX-FILES-SHOWN)
-      (string-append (string-join (take files MAX-FILES-SHOWN) "\n")
-                     (format "\n... and ~a more file(s) not shown" (- count MAX-FILES-SHOWN)))
+  (if (> count max-files)
+      (string-append (string-join (take files max-files) "\n")
+                     (format "\n... and ~a more file(s) not shown" (- count max-files)))
       (string-join files "\n")))
 
 ;; Build the user message for the verifier LLM.
@@ -95,7 +96,7 @@
   (define diff-str
     (if (or (not diff-excerpt) (string=? diff-excerpt ""))
         "(no diff provided)"
-        (truncate-string diff-excerpt MAX-DIFF-CHARS)))
+        (truncate-string diff-excerpt (current-verifier-max-diff-chars))))
   (string-append (format "Wave: ~a\n" wave-name)
                  (format "Plan Summary: ~a\n" plan-summary)
                  (format "\nFiles Changed (~a):\n~a\n" (length files-changed) file-list-str)
@@ -105,6 +106,11 @@
 ;; ============================================================
 ;; Provides
 ;; ============================================================
+
+;; L1 fix: Export configurable parameters
+(provide current-verifier-max-files-shown
+         current-verifier-max-diff-chars
+         current-verifier-max-file-lines)
 
 (provide (contract-out [build-verifier-system-prompt (-> string?)]
                        [build-verifier-user-message
