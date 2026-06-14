@@ -51,7 +51,10 @@
           [execution-plane-enabled? (-> q-settings? boolean?)]
           [execution-plane-timeout-ms (-> q-settings? exact-positive-integer?)]
           [execution-plane-command (-> q-settings? (or/c string? #f))]
-          [execution-plane-worker-args (-> q-settings? (listof string?))]))
+          [execution-plane-worker-args (-> q-settings? (listof string?))]
+          [verifier-enabled? (-> q-settings? boolean?)]
+          [verifier-model (-> q-settings? (or/c string? #f))]
+          [verifier-risk-threshold (-> q-settings? symbol?)]))
 
 ;; Query
 ;; ============================================================
@@ -369,3 +372,36 @@
 ;; Config key: mas.execution-plane.worker-args (default '("-tm" "sandbox/worker-main.rkt"))
 (define (execution-plane-worker-args settings)
   (setting-ref* settings '(mas execution-plane worker-args) '("-tm" "sandbox/worker-main.rkt")))
+
+;; ============================================================
+;; Verifier Agent Settings (v0.99.5 MAS Schritt 3)
+;; ============================================================
+
+;; Config key: mas.verifier.enabled (default #f — inert by default)
+;; When #t, verification gate runs between executing and idle/done.
+(define (verifier-enabled? settings)
+  (define raw (setting-ref* settings '(mas verifier enabled) #f))
+  (cond
+    [(boolean? raw) raw]
+    [(string? raw) (and (member (string-downcase raw) '("true" "1" "yes")) #t)]
+    [else #f]))
+
+;; Config key: mas.verifier.model (default #f = use session model)
+;; When set, verification uses a specific model instead of the session default.
+(define (verifier-model settings)
+  (define raw (setting-ref* settings '(mas verifier model) #f))
+  (cond
+    [(string? raw) raw]
+    [(symbol? raw) (symbol->string raw)]
+    [else #f]))
+
+;; Config key: mas.verifier.risk-threshold (default 'medium)
+;; Valid values: 'low, 'medium, 'high.
+;; Decisions with risk-level >= threshold are forced to require human review.
+(define (verifier-risk-threshold settings)
+  (define raw (setting-ref* settings '(mas verifier risk-threshold) "medium"))
+  (define sym
+    (if (symbol? raw)
+        raw
+        (string->symbol raw)))
+  (if (memq sym '(low medium high)) sym 'medium))

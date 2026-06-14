@@ -71,7 +71,11 @@
                   current-worker-args
                   execute-via-worker
                   shutdown-worker!)
-         (only-in "../agent/roles/tool-gateway.rkt" current-tool-executor))
+         (only-in "../agent/roles/tool-gateway.rkt" current-tool-executor)
+         (only-in "../agent/verification/verifier-core.rkt"
+                  current-verifier-enabled
+                  current-verifier-model
+                  current-verifier-risk-threshold))
 
 ;; Re-export mode runners from sub-modules
 (require "run-interactive.rkt"
@@ -334,7 +338,12 @@
       (when cmd
         (current-worker-command cmd)))
     (current-worker-args (execution-plane-worker-args settings))
-    (current-tool-executor execute-via-worker)))
+    (current-tool-executor execute-via-worker))
+  ;; v0.99.5: Wire verifier agent from settings (default #f = disabled)
+  ;; When enabled, verification gate runs between executing and idle/done.
+  (current-verifier-enabled (verifier-enabled? settings))
+  (let ([vmodel (verifier-model settings)]) (current-verifier-model vmodel))
+  (current-verifier-risk-threshold (verifier-risk-threshold settings)))
 ;; ============================================================
 ;; reload-config! (#1182)
 ;; ============================================================
