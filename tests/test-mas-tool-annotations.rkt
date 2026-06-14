@@ -38,6 +38,7 @@
       (define names '("read" "grep" "find" "ls" "date"))
       (for ([name (in-list names)])
         (define spec (findf (lambda (s) (equal? (tool-spec-name s) name)) tool-specs))
+        (check-not-false spec (format "spec for ~a should exist" name))
         (when spec
           (check-equal? (tool-spec-required-capability spec)
                         'read-only
@@ -47,6 +48,7 @@
       (define names '("session_recall" "skill-route"))
       (for ([name (in-list names)])
         (define spec (findf (lambda (s) (equal? (tool-spec-name s) name)) tool-specs))
+        (check-not-false spec (format "spec for ~a should exist" name))
         (when spec
           (check-equal? (tool-spec-required-capability spec)
                         'read-only
@@ -56,6 +58,7 @@
 
     (test-case "set-task-state requires 'plan-write"
       (define spec (findf (lambda (s) (equal? (tool-spec-name s) "set-task-state")) tool-specs))
+      (check-not-false spec "spec for set-task-state should exist")
       (when spec
         (check-equal? (tool-spec-required-capability spec) 'plan-write)))
 
@@ -65,6 +68,7 @@
       (define names '("write" "edit" "delete-lines"))
       (for ([name (in-list names)])
         (define spec (findf (lambda (s) (equal? (tool-spec-name s) name)) tool-specs))
+        (check-not-false spec (format "spec for ~a should exist" name))
         (when spec
           (check-equal? (tool-spec-required-capability spec)
                         'file-write
@@ -74,6 +78,7 @@
 
     (test-case "bash requires 'shell-exec"
       (define spec (findf (lambda (s) (equal? (tool-spec-name s) "bash")) tool-specs))
+      (check-not-false spec "spec for bash should exist")
       (when spec
         (check-equal? (tool-spec-required-capability spec) 'shell-exec)))
 
@@ -81,6 +86,7 @@
 
     (test-case "firecrawl requires 'network"
       (define spec (findf (lambda (s) (equal? (tool-spec-name s) "firecrawl")) tool-specs))
+      (check-not-false spec "spec for firecrawl should exist")
       (when spec
         (check-equal? (tool-spec-required-capability spec) 'network)))
 
@@ -99,6 +105,7 @@
                          "browser_check_local_app"))
       (for ([name (in-list names)])
         (define spec (findf (lambda (s) (equal? (tool-spec-name s) name)) tool-specs))
+        (check-not-false spec (format "spec for ~a should exist" name))
         (when spec
           (check-equal? (tool-spec-required-capability spec)
                         'browser
@@ -119,6 +126,7 @@
                          "save-conclusion"))
       (for ([name (in-list names)])
         (define spec (findf (lambda (s) (equal? (tool-spec-name s) name)) tool-specs))
+        (check-not-false spec (format "spec for ~a should exist" name))
         (when spec
           (check-equal? (tool-spec-required-capability spec)
                         'memory-write
@@ -130,6 +138,7 @@
       (define names '("spawn-subagent" "spawn-subagents"))
       (for ([name (in-list names)])
         (define spec (findf (lambda (s) (equal? (tool-spec-name s) name)) tool-specs))
+        (check-not-false spec (format "spec for ~a should exist" name))
         (when spec
           (check-equal? (tool-spec-required-capability spec)
                         'subagent

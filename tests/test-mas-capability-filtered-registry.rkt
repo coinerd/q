@@ -149,6 +149,7 @@
       (define reg (make-tool-registry))
       (register-tools-from-specs! reg tool-specs)
       (define read-tool (findf (lambda (t) (equal? (tool-name t) "read")) (list-tools reg)))
+      (check-not-false read-tool "read tool should be registered")
       (when read-tool
         (check-equal? (tool-required-capability read-tool) 'read-only)))
 
@@ -156,6 +157,7 @@
       (define reg (make-tool-registry))
       (register-tools-from-specs! reg tool-specs)
       (define write-tool (findf (lambda (t) (equal? (tool-name t) "write")) (list-tools reg)))
+      (check-not-false write-tool "write tool should be registered")
       (when write-tool
         (check-equal? (tool-required-capability write-tool) 'file-write)))
 
@@ -163,6 +165,7 @@
       (define reg (make-tool-registry))
       (register-tools-from-specs! reg tool-specs)
       (define bash-tool (findf (lambda (t) (equal? (tool-name t) "bash")) (list-tools reg)))
+      (check-not-false bash-tool "bash tool should be registered")
       (when bash-tool
         (check-equal? (tool-required-capability bash-tool) 'shell-exec)))
 
@@ -171,6 +174,7 @@
       (register-tools-from-specs! reg tool-specs)
       (define spawn-tool
         (findf (lambda (t) (equal? (tool-name t) "spawn-subagent")) (list-tools reg)))
+      (check-not-false spawn-tool "spawn-subagent tool should be registered")
       (when spawn-tool
         (check-equal? (tool-required-capability spawn-tool) 'subagent)))))
 

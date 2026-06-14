@@ -151,12 +151,20 @@
 
     ;; ── envelope capability check ──
 
+    ;; H5 fix: Assert actual rejection, not just non-false result
     (test-case "handle-envelope rejects envelope exceeding role capability"
       (define v (make-verifier-role))
       (define env (make-mas-envelope 'supervisor 'verifier 'shell-exec "run this"))
       ;; verifier only has read-only; shell-exec should be rejected
       (define result (agent-role-handle-envelope v env))
-      ;; Should return error indication, not crash
-      (check-not-false result))))
+      ;; Should return error indication
+      (check-equal? (hash-ref result 'status) 'error)
+      (check-true (regexp-match? #rx"denied" (hash-ref result 'message ""))))
+
+    (test-case "handle-envelope accepts envelope within role capability"
+      (define v (make-verifier-role))
+      (define env (make-mas-envelope 'supervisor 'verifier 'read-only "check this"))
+      (define result (agent-role-handle-envelope v env))
+      (check-equal? (hash-ref result 'status) 'ok))))
 
 (run-tests suite)

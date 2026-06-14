@@ -420,20 +420,20 @@
       (check-not-false (lookup-tool reg "date") "date should be registered")
       (check-false (lookup-tool reg "ls") "ls should NOT be registered when not in #:only"))
 
-    (test-case "tool-registry: #:only '(\ (2)"firecrawl\") registers firecrawl but not ls"
+    (test-case "tool-registry: #:only '(\"firecrawl\") registers firecrawl but not ls"
       (define reg (make-tool-registry))
       (register-default-tools! reg #:only '("firecrawl"))
       (check-not-false (lookup-tool reg "firecrawl") "firecrawl should be registered")
       (check-false (lookup-tool reg "ls") "ls should NOT be registered when not in #:only"))
 
-    (test-case "tool-registry: #:only '(\ (3)"date\") — lookup-tool returns a tool"
+    (test-case "tool-registry: #:only '(\"date\") — lookup-tool returns a tool"
       (define reg (make-tool-registry))
       (register-default-tools! reg #:only '("date"))
       (define t (lookup-tool reg "date"))
       (check-pred tool? t)
       (check-equal? (tool-name t) "date"))
 
-    (test-case "tool-registry: #:only '(\ (4)"ls\") registers ls but not date or firecrawl"
+    (test-case "tool-registry: #:only '(\"ls\") registers ls but not date or firecrawl"
       (define reg (make-tool-registry))
       (register-default-tools! reg #:only '("ls"))
       (check-not-false (lookup-tool reg "ls"))
