@@ -54,7 +54,8 @@
           [execution-plane-worker-args (-> q-settings? (listof string?))]
           [verifier-enabled? (-> q-settings? boolean?)]
           [verifier-model (-> q-settings? (or/c string? #f))]
-          [verifier-risk-threshold (-> q-settings? symbol?)]))
+          [verifier-risk-threshold (-> q-settings? symbol?)]
+          [blackboard-enabled? (-> q-settings? boolean?)]))
 
 ;; Query
 ;; ============================================================
@@ -405,3 +406,17 @@
         raw
         (string->symbol raw)))
   (if (memq sym '(low medium high)) sym 'medium))
+
+;; ============================================================
+;; Blackboard Settings (v0.99.7 MAS Schritt 4)
+;; ============================================================
+
+;; Config key: mas.blackboard.enabled (default #f — inert by default)
+;; When #t, blackboard subscriber starts on session startup,
+;; context injection is enabled, and crash recovery runs from trace.jsonl.
+(define (blackboard-enabled? settings)
+  (define raw (setting-ref* settings '(mas blackboard enabled) #f))
+  (cond
+    [(boolean? raw) raw]
+    [(string? raw) (and (member (string-downcase raw) '("true" "1" "yes")) #t)]
+    [else #f]))

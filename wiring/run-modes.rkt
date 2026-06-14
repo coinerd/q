@@ -77,7 +77,13 @@
                   current-verifier-enabled
                   current-verifier-model
                   current-verifier-risk-threshold
-                  current-verifier-provider))
+                  current-verifier-provider)
+         (only-in "../agent/blackboard.rkt" make-blackboard current-blackboard)
+         (only-in "../agent/blackboard-subscriber.rkt"
+                  start-blackboard-subscriber!
+                  rebuild-blackboard-from-log!)
+         (only-in "../runtime/context-assembly/state-aware-builder.rkt"
+                  current-blackboard-injection-enabled))
 
 ;; Re-export mode runners from sub-modules
 (require "run-interactive.rkt"
@@ -190,6 +196,22 @@
       (define tl (make-trace-logger bus session-dir #:enabled? #t))
       (start-trace-logger! tl)
       tl))
+
+  ;; v0.99.7 W6: Wire blackboard subscriber if enabled in config.
+  ;; When mas.blackboard.enabled is true:
+  ;;   1. Create blackboard container and set current-blackboard parameter
+  ;;   2. Enable context injection into system prompt preamble
+  ;;   3. Start event bus subscriber for live updates
+  ;;   4. If trace.jsonl exists, rebuild state from it (crash recovery)
+  (when (blackboard-enabled? settings)
+    (define bb (make-blackboard))
+    (current-blackboard bb)
+    (current-blackboard-injection-enabled #t)
+    (start-blackboard-subscriber! bus bb)
+    ;; Crash recovery: replay from trace.jsonl if it exists from a prior run
+    (define trace-path (build-path session-dir "trace.jsonl"))
+    (when (file-exists? trace-path)
+      (rebuild-blackboard-from-log! trace-path bb)))
 
   ;; Build final config: immutable hash -> session-config (W-03)
   (define final-hash
