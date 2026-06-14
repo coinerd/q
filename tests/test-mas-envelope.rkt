@@ -129,9 +129,9 @@
       (define h (envelope->hash env))
       (check-equal? (hash-ref h 'message-id) "msg-1")
       (check-equal? (hash-ref h 'trace-id) "trace-1")
-      (check-equal? (hash-ref h 'source-agent) 'supervisor)
-      (check-equal? (hash-ref h 'target-agent) 'planner)
-      (check-equal? (hash-ref h 'capability) 'read-only)
+      (check-equal? (hash-ref h 'source-agent) "supervisor")
+      (check-equal? (hash-ref h 'target-agent) "planner")
+      (check-equal? (hash-ref h 'capability) "read-only")
       (check-equal? (hash-ref h 'payload) "payload"))
 
     (test-case "hash->envelope: roundtrip"

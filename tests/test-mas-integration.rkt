@@ -59,6 +59,26 @@
       (check-equal? (hash-ref result 'status) 'ok)
       (check-equal? (hash-ref result 'role) 'tool-gateway))
 
+    ;; C1 regression: supervisor must NOT block file-write/shell-exec/browser
+    ;; envelopes. The supervisor is a pure router.
+    (test-case "C1: supervisor dispatches file-write envelope via handle-envelope"
+      (define sup (make-supervisor-role))
+      (define env (make-mas-envelope 'supervisor 'tool-gateway 'file-write (hasheq)))
+      (define result (agent-role-handle-envelope sup env))
+      (check-equal? (hash-ref result 'status) 'ok))
+
+    (test-case "C1: supervisor dispatches shell-exec envelope via handle-envelope"
+      (define sup (make-supervisor-role))
+      (define env (make-mas-envelope 'supervisor 'tool-gateway 'shell-exec (hasheq)))
+      (define result (agent-role-handle-envelope sup env))
+      (check-equal? (hash-ref result 'status) 'ok))
+
+    (test-case "C1: supervisor dispatches browser envelope via handle-envelope"
+      (define sup (make-supervisor-role))
+      (define env (make-mas-envelope 'supervisor 'tool-gateway 'browser (hasheq)))
+      (define result (agent-role-handle-envelope sup env))
+      (check-equal? (hash-ref result 'status) 'ok))
+
     (test-case "supervisor rejects unknown target"
       (define sup (make-supervisor-role))
       (define env (make-mas-envelope 'supervisor 'nonexistent 'read-only (hasheq)))

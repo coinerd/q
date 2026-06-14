@@ -42,7 +42,7 @@
                      "List of relevance tags (symbols) for state-aware filtering")))
     tool-save-conclusion
     #f
-    'file-write)
+    'memory-write)
    ;; record_conclusion
    (make-tool-spec*
     "record_conclusion"
@@ -69,7 +69,7 @@
              (hasheq 'type "array" 'description "List of relevance tags for state-aware filtering")))
     tool-record_conclusion
     #f
-    'read-only)
+    'memory-write)
    ;; set-task-state
    (make-tool-spec*
     "set-task-state"
@@ -94,7 +94,7 @@
        "Transition event: begin-explore, begin-plan, begin-implement, begin-verify, begin-debug, task-complete, revisit, force-transition")))
     tool-set-task-state
     #f
-    'read-only)
+    'plan-write)
    ;; spawn-subagent
    (make-tool-spec*
     "spawn-subagent"

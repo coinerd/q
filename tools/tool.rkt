@@ -36,6 +36,8 @@
                   tool-result-content
                   tool-result-details)
          (only-in "../util/tool/tool-types.rkt" tool-result-is-error?)
+         ;; H3 fix: capability validation
+         (only-in "../agent/capability.rkt" valid-capability?)
          ;; Submodule imports
          "tool-struct.rkt"
          "exec-context.rkt"
@@ -161,6 +163,11 @@
     (raise-argument-error 'make-tool "hash?" schema))
   (unless (procedure? execute)
     (raise-argument-error 'make-tool "procedure?" execute))
+  ;; H3 fix: Validate capability
+  (unless (valid-capability? required-capability)
+    (raise-argument-error 'make-tool
+                          "valid capability symbol from VALID-CAPABILITIES"
+                          required-capability))
   ;; W-16: Arity check -- validate handler accepts 1 or 2 args (args [exec-ctx])
   (unless (or (procedure-arity-includes? execute 1) (procedure-arity-includes? execute 2))
     (raise-arguments-error 'make-tool

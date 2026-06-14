@@ -21,7 +21,8 @@
         #f
         #f
         #f
-        #f))
+        #f
+        'any))
 
 (define snapshot-tests
   (test-suite "registry-snapshot"

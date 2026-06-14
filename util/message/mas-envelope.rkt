@@ -87,7 +87,8 @@
                 target-agent
                 capability
                 payload
-                (or deadline (+ (current-inexact-milliseconds) DEFAULT-DEADLINE-MS))
+                (or deadline
+                    (inexact->exact (round (+ (current-inexact-milliseconds) DEFAULT-DEADLINE-MS))))
                 risk-level
                 schema-version))
 
@@ -101,34 +102,46 @@
           'trace-id
           (mas-envelope-trace-id env)
           'source-agent
-          (mas-envelope-source-agent env)
+          (symbol->string (mas-envelope-source-agent env))
           'target-agent
-          (mas-envelope-target-agent env)
+          (symbol->string (mas-envelope-target-agent env))
           'capability
-          (mas-envelope-capability env)
+          (symbol->string (mas-envelope-capability env))
           'payload
           (mas-envelope-payload env)
           'deadline
           (mas-envelope-deadline env)
           'risk-level
-          (mas-envelope-risk-level env)
+          (symbol->string (mas-envelope-risk-level env))
           'schema-version
           (mas-envelope-schema-version env)))
+
+;; Coerce a value to symbol, accepting both symbols and strings.
+(define (coerce->symbol v [default 'unknown])
+  (cond
+    [(symbol? v) v]
+    [(string? v) (string->symbol v)]
+    [else default]))
+
+;; Coerce risk-level string/symbol to symbol.
+(define (coerce->risk-level v)
+  (coerce->symbol v 'low))
 
 (define (hash->envelope h)
   (cond
     [(not (hash? h)) #f]
     [else
      (with-handlers ([exn:fail? (lambda (_) #f)])
-       (mas-envelope (hash-ref h 'message-id "")
-                     (hash-ref h 'trace-id "")
-                     (hash-ref h 'source-agent 'unknown)
-                     (hash-ref h 'target-agent 'unknown)
-                     (hash-ref h 'capability 'any)
-                     (hash-ref h 'payload #f)
-                     (hash-ref h 'deadline #f)
-                     (hash-ref h 'risk-level 'low)
-                     (hash-ref h 'schema-version SCHEMA-VERSION)))]))
+       ;; H4 fix: delegate to make-mas-envelope for validation
+       (make-mas-envelope (coerce->symbol (hash-ref h 'source-agent 'unknown))
+                          (coerce->symbol (hash-ref h 'target-agent 'unknown))
+                          (coerce->symbol (hash-ref h 'capability 'any) 'any)
+                          (hash-ref h 'payload #f)
+                          #:message-id (hash-ref h 'message-id #f)
+                          #:trace-id (hash-ref h 'trace-id #f)
+                          #:deadline (hash-ref h 'deadline #f)
+                          #:risk-level (coerce->risk-level (hash-ref h 'risk-level 'low))
+                          #:schema-version (hash-ref h 'schema-version SCHEMA-VERSION)))]))
 
 ;; ============================================================
 ;; ID Generation

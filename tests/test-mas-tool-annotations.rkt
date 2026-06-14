@@ -44,7 +44,7 @@
                         (format "~a should require read-only" name)))))
 
     (test-case "session/state tools require 'read-only"
-      (define names '("session_recall" "skill-route" "record_conclusion" "set-task-state"))
+      (define names '("session_recall" "skill-route"))
       (for ([name (in-list names)])
         (define spec (findf (lambda (s) (equal? (tool-spec-name s) name)) tool-specs))
         (when spec
@@ -52,10 +52,17 @@
                         'read-only
                         (format "~a should require read-only" name)))))
 
+    ;; ── Plan-write tools ──
+
+    (test-case "set-task-state requires 'plan-write"
+      (define spec (findf (lambda (s) (equal? (tool-spec-name s) "set-task-state")) tool-specs))
+      (when spec
+        (check-equal? (tool-spec-required-capability spec) 'plan-write)))
+
     ;; ── File-write tools ──
 
     (test-case "file tools require 'file-write"
-      (define names '("write" "edit" "delete-lines" "save-conclusion"))
+      (define names '("write" "edit" "delete-lines"))
       (for ([name (in-list names)])
         (define spec (findf (lambda (s) (equal? (tool-spec-name s) name)) tool-specs))
         (when spec
@@ -107,7 +114,9 @@
                          "clear-memory"
                          "update-memory"
                          "cleanup-expired-memory"
-                         "consolidate-memory"))
+                         "consolidate-memory"
+                         "record_conclusion"
+                         "save-conclusion"))
       (for ([name (in-list names)])
         (define spec (findf (lambda (s) (equal? (tool-spec-name s) name)) tool-specs))
         (when spec

@@ -8,11 +8,7 @@
 ;; to the appropriate sub-role based on target-agent.
 
 (require racket/generic
-         (only-in "base.rkt"
-                  gen:agent-role
-                  agent-role-capabilities
-                  agent-role-handle-envelope
-                  make-capability-guarded-handler)
+         (only-in "base.rkt" gen:agent-role agent-role-capabilities agent-role-handle-envelope)
          (only-in "planner.rkt" make-planner-role)
          (only-in "verifier.rkt" make-verifier-role)
          (only-in "tool-gateway.rkt" make-tool-gateway-role)
@@ -35,9 +31,11 @@
                     "Your role is to orchestrate sub-agents: planner, verifier, "
                     "and tool-gateway. You dispatch work based on capability "
                     "requirements and coordinate results."))
-   (define agent-role-handle-envelope
-     (make-capability-guarded-handler (lambda (_) '(read-only plan-write memory-write subagent))
-                                      (lambda (self envelope) (supervisor-dispatch self envelope))))])
+   ;; C1 fix: Supervisor is a pure router. Each sub-role enforces its own
+   ;; capability guard. Wrapping the supervisor with a guard blocks all
+   ;; dispatch since the supervisor lacks execution capabilities.
+   (define (agent-role-handle-envelope self envelope)
+     (supervisor-dispatch self envelope))])
 
 ;; ============================================================
 ;; Dispatch
