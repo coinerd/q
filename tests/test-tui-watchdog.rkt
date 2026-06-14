@@ -15,7 +15,8 @@
          (only-in "../tui/tui-render-loop.rkt"
                   apply-busy-watchdog!
                   check-busy-watchdog
-                  current-busy-watchdog-ms)
+                  current-busy-watchdog-ms
+                  current-streaming-watchdog-ms)
          (only-in "../tui/context.rkt" make-tui-ctx tui-ctx-goal-cancel-box tui-ctx-ui-state-box)
          ;; v0.45.14: event constructor for apply-event-to-state tests
          (only-in "tui/event-simulator.rkt" make-test-event))
@@ -303,3 +304,92 @@
   ;; Second check on cleared state — must NOT add another entry
   (define result2 (check-busy-watchdog result1 now (* 30 60 1000)))
   (check-false result2))
+
+;; ============================================================
+;; v0.99.4 BF1b: Streaming stall watchdog tests
+;; ============================================================
+
+(test-case "BF1b: streaming stall detected when last-delta-ms is stale"
+  ;; When busy and streaming-text exists but last-delta is old (>3 min),
+  ;; the watchdog should force-clear the stalled streaming state.
+  (parameterize ([current-busy-watchdog-ms (* 5 60 1000)]
+                 [current-streaming-watchdog-ms (* 3 60 1000)])
+    (define now (* 10 60 1000))
+    (define last-delta (* 5 60 1000))
+    (define base (set-busy (set-busy-since (initial-ui-state) 0) #t))
+    (define st (set-last-delta-ms (set-streaming-text base "stalled text...") last-delta))
+    (define result (check-busy-watchdog st now (* 5 60 1000)))
+    (check-not-false result "Should fire for stale streaming")
+    (check-false (ui-state-busy? result))
+    (check-false (ui-state-streaming-text result))))
+
+(test-case "BF1b: streaming stall NOT triggered when deltas are recent"
+  ;; When last-delta-ms is recent (<3 min), watchdog should not fire.
+  (parameterize ([current-busy-watchdog-ms (* 5 60 1000)]
+                 [current-streaming-watchdog-ms (* 3 60 1000)])
+    (define now (* 5 60 1000))
+    (define last-delta (* 4 60 1000))
+    (define base (set-busy (initial-ui-state) #t))
+    (define st (set-last-delta-ms (set-streaming-text base "active stream") last-delta))
+    (define result (check-busy-watchdog st now (* 5 60 1000)))
+    (check-false result "Should NOT fire for active stream")))
+
+(test-case "BF1b: streaming stall NOT triggered when last-delta-ms is #f"
+  ;; When last-delta-ms is #f (no delta events yet), should NOT fire.
+  ;; This preserves backward compatibility with the v0.45.14 test above.
+  (parameterize ([current-busy-watchdog-ms (* 5 60 1000)]
+                 [current-streaming-watchdog-ms (* 3 60 1000)])
+    (define now (* 10 60 1000))
+    (define base (set-busy (set-busy-since (initial-ui-state) 0) #t))
+    (define st (set-streaming-text base "streaming but no delta yet"))
+    (check-false (ui-state-last-delta-ms st))
+    (define result (check-busy-watchdog st now (* 5 60 1000)))
+    (check-false result "Should NOT fire when last-delta-ms is #f")))
+
+(test-case "BF1b: current-streaming-watchdog-ms default is 3 minutes"
+  (check-equal? (current-streaming-watchdog-ms) (* 3 60 1000)))
+
+(test-case "BF1b: custom streaming watchdog timeout via parameter"
+  (parameterize ([current-streaming-watchdog-ms (* 1 60 1000)])
+    (define now (* 3 60 1000))
+    (define last-delta (* 1 60 1000))
+    (define base (set-busy (initial-ui-state) #t))
+    (define st (set-last-delta-ms (set-streaming-text base "text") last-delta))
+    (define result (check-busy-watchdog st now (* 5 60 1000)))
+    (check-not-false result)
+    (check-false (ui-state-busy? result))))
+
+(test-case "BF1b: stall transcript entry has stall marker"
+  ;; The streaming stall watchdog entry should have 'stall #t in its meta.
+  (parameterize ([current-streaming-watchdog-ms (* 3 60 1000)])
+    (define now (* 10 60 1000))
+    (define last-delta (* 5 60 1000))
+    (define base (set-busy (set-busy-since (initial-ui-state) 0) #t))
+    (define st (set-last-delta-ms (set-streaming-text base "stalled") last-delta))
+    (define result (check-busy-watchdog st now (* 5 60 1000)))
+    (check-not-false result)
+    (define entries (ui-state-transcript result))
+    (define stall-entry
+      (findf (lambda (e)
+               (and (eq? (transcript-entry-kind e) 'system)
+                    (hash-ref (transcript-entry-meta e) 'stall #f)))
+             entries))
+    (check-not-false stall-entry "Should have stall-marked entry")
+    (check-true (string-contains? (transcript-entry-text stall-entry) "streaming"))))
+
+(test-case "BF1b: last-delta-ms field is #f by default"
+  (check-false (ui-state-last-delta-ms (initial-ui-state))))
+
+(test-case "BF1b: clear-streaming resets last-delta-ms"
+  (define s0 (set-busy (initial-ui-state) #t))
+  (define s1 (set-streaming-text s0 "text"))
+  (define s2 (set-last-delta-ms s1 12345.0))
+  (check-equal? (ui-state-last-delta-ms s2) 12345.0)
+  (define cleared (clear-streaming s2))
+  (check-false (ui-state-last-delta-ms cleared)))
+
+(test-case "BF1b: set-busy #f clears last-delta-ms"
+  (define s0 (set-busy (initial-ui-state) #t))
+  (define s1 (set-last-delta-ms s0 99999.0))
+  (define cleared (set-busy s1 #f))
+  (check-false (ui-state-last-delta-ms cleared)))

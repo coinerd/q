@@ -56,7 +56,10 @@
                   clip-visible-lines
                   compute-pad-count
                   clip-overlay-content)
-         (only-in "render-loop/watchdog.rkt" current-busy-watchdog-ms check-busy-watchdog)
+         (only-in "render-loop/watchdog.rkt"
+                  current-busy-watchdog-ms
+                  current-streaming-watchdog-ms
+                  check-busy-watchdog)
          ;; GAP-LB (v0.98.8 W0): Layout breakpoint classification
          (only-in "../ui-core/layout-protocol.rkt" classify-layout-breakpoint make-gui-layout)
          (only-in "../tui/context.rkt" tui-ctx-set-layout-breakpoints!))
@@ -69,6 +72,7 @@
          decode-mouse-x10
          decode-mouse-message
          current-busy-watchdog-ms
+         current-streaming-watchdog-ms
          current-resize-poll-interval-ms
          resize-poll-due?
          reset-idle-render-state!

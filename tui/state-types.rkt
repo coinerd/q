@@ -61,6 +61,7 @@
          streaming-state-streaming-text
          streaming-state-streaming-thinking
          streaming-state-busy-since
+         streaming-state-last-delta-ms
          overlay-state
          overlay-state?
          overlay-state-type
@@ -142,6 +143,7 @@
           [ui-state-streaming-thinking (-> ui-state? (or/c string? #f))]
           [ui-state-streaming-phase (-> ui-state? symbol?)]
           [ui-state-busy-since (-> ui-state? (or/c real? #f))]
+          [ui-state-last-delta-ms (-> ui-state? (or/c real? #f))]
           ;; Streaming update helpers
           [update-streaming (-> ui-state? (-> streaming-state? streaming-state?) ui-state?)]
           [set-busy (-> ui-state? boolean? ui-state?)]
@@ -151,6 +153,7 @@
           [set-streaming-thinking (-> ui-state? (or/c string? #f) ui-state?)]
           [set-streaming-phase (-> ui-state? symbol? ui-state?)]
           [set-busy-since (-> ui-state? (or/c real? #f) ui-state?)]
+          [set-last-delta-ms (-> ui-state? (or/c real? #f) ui-state?)]
           [clear-streaming (-> ui-state? ui-state?)]
           ;; String helpers
           [truncate-string (-> string? exact-nonnegative-integer? string?)]
@@ -202,7 +205,8 @@
          streaming-text ; string or #f — partial streaming text
          streaming-thinking ; string or #f — accumulated thinking text
          busy-since ; any/c — timestamp when busy started
-         streaming-phase) ; symbol: idle | thinking | streaming | tool-pending (T2-8)
+         streaming-phase ; symbol: idle | thinking | streaming | tool-pending (T2-8)
+         last-delta-ms) ; (or/c real? #f) — BF1b: timestamp of last stream delta (v0.99.4)
   #:transparent)
 
 ;; The complete UI state (21 fields, grouped by domain)
@@ -383,7 +387,7 @@
             session-id
             model-name
             mode
-            (streaming-state #f #f #f #f #f #f 'idle) ; streaming
+            (streaming-state #f #f #f #f #f #f 'idle #f) ; streaming
             #f ; current-branch
             '() ; visible-branches
             (selection-state #f #f)
@@ -428,6 +432,9 @@
 (define (ui-state-streaming-phase state)
   (streaming-state-streaming-phase (ui-state-streaming state)))
 
+(define (ui-state-last-delta-ms state)
+  (streaming-state-last-delta-ms (ui-state-streaming state)))
+
 ;; ============================================================
 ;; Streaming update helpers
 ;; ============================================================
@@ -458,7 +465,12 @@
                    (cond
                      [(not busy?) #f]
                      [(not (streaming-state-busy-since s)) (current-inexact-milliseconds)]
-                     [else (streaming-state-busy-since s)])]))))
+                     [else (streaming-state-busy-since s)])]
+                  ;; BF1b (v0.99.4): Clear last-delta-ms when leaving busy state
+                  [last-delta-ms
+                   (if busy?
+                       (streaming-state-last-delta-ms s)
+                       #f)]))))
 
 (define (set-status-message state msg)
   (update-streaming state (lambda (s) (struct-copy streaming-state s [status-message msg]))))
@@ -475,10 +487,14 @@
 (define (set-busy-since state since)
   (update-streaming state (lambda (s) (struct-copy streaming-state s [busy-since since]))))
 
+(define (set-last-delta-ms state ms)
+  (update-streaming state (lambda (s) (struct-copy streaming-state s [last-delta-ms ms]))))
+
 (define (clear-streaming state)
-  (update-streaming state
-                    (lambda (s)
-                      (struct-copy streaming-state s [streaming-text #f] [streaming-thinking #f]))))
+  (update-streaming
+   state
+   (lambda (s)
+     (struct-copy streaming-state s [streaming-text #f] [streaming-thinking #f] [last-delta-ms #f]))))
 
 ;; ============================================================
 ;; String helpers

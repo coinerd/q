@@ -42,14 +42,20 @@
   (define delta (hash-ref payload 'delta ""))
   (define current-streaming (ui-state-streaming-text state))
   (define new-streaming (string-append (or current-streaming "") delta))
-  (set-streaming-phase (set-streaming-text (set-busy state #t) new-streaming) 'streaming))
+  ;; BF1b (v0.99.4): Record delta timestamp for streaming stall watchdog
+  (define now (current-inexact-milliseconds))
+  (set-last-delta-ms (set-streaming-phase (set-streaming-text (set-busy state #t) new-streaming)
+                                          'streaming)
+                     now))
 
 (define (handle-model-stream-thinking state evt)
   (define payload (event-payload evt))
   (define delta (hash-ref payload 'delta ""))
   (define current-thinking (ui-state-streaming-thinking state))
   (define new-thinking (string-append (or current-thinking "") delta))
-  (set-streaming-thinking (set-busy state #t) new-thinking))
+  ;; BF1b (v0.99.4): Record thinking timestamp for streaming stall watchdog
+  (define now (current-inexact-milliseconds))
+  (set-last-delta-ms (set-streaming-thinking (set-busy state #t) new-thinking) now))
 
 (define (handle-model-stream-completed state evt)
   (define payload (event-payload evt))
