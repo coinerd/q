@@ -105,13 +105,13 @@
 
     ;; ── Tool Struct: externalizable? field ──
 
-    (test-case "make-tool defaults externalizable? to #t"
+    (test-case "make-tool defaults externalizable? to #f (M2)"
       (define t
         (make-tool "test"
                    "desc"
                    (hasheq 'type "function" 'function (hasheq 'name "test"))
                    (lambda args (void))))
-      (check-true (tool-externalizable? t)))
+      (check-false (tool-externalizable? t)))
 
     (test-case "make-tool with #:externalizable? #f"
       (define t

@@ -17,6 +17,7 @@
 
 (provide register-tools-from-specs!
          dangerous-tool-names
+         externalizable-tool-names
          tool-specs
          tool-spec
          tool-spec?
@@ -37,6 +38,12 @@
 (define dangerous-tool-names
   '("write" "edit" "bash" "delete-lines" "browser_click" "browser_type" "browser_press"))
 
+;; M2: Tools explicitly marked as externalizable (safe to run in worker process).
+;; The worker process supports: bash, write, edit (plus git via worker-tools.rkt).
+;; All other tools default to #:externalizable? #f (run in-process even when
+;; execution plane is enabled).
+(define externalizable-tool-names '("bash" "write" "edit"))
+
 ;; Register tools from tool-spec structs.
 (define (register-tools-from-specs! registry specs #:only [only #f])
   (for ([spec (in-list specs)])
@@ -47,6 +54,7 @@
          (define pg (tool-spec-prompt-guidelines spec))
          (define rc (tool-spec-required-capability spec))
          (define dangerous? (and (member name dangerous-tool-names) #t))
+         (define externalizable? (and (member name externalizable-tool-names) #t))
          (if pg
              (register-tool! registry
                              (make-tool name
@@ -55,12 +63,14 @@
                                         (tool-spec-handler spec)
                                         #:prompt-guidelines pg
                                         #:dangerous? dangerous?
-                                        #:required-capability rc))
+                                        #:required-capability rc
+                                        #:externalizable? externalizable?))
              (register-tool! registry
                              (make-tool name
                                         (tool-spec-description spec)
                                         (tool-spec-schema spec)
                                         (tool-spec-handler spec)
                                         #:dangerous? dangerous?
-                                        #:required-capability rc))))]))
+                                        #:required-capability rc
+                                        #:externalizable? externalizable?))))]))
   (void))

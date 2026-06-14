@@ -160,20 +160,17 @@
         (define result (agent-role-handle-envelope role env))
         (check-equal? (hash-ref result 'status) 'ok)))
 
-    ;; ── H2: Feature Flag Toggle (parameterized executor) ──
+    ;; ── M8: gateway-start!/gateway-stop! removed ──
 
-    (test-case "gateway-start! is a no-op (H2: wiring sets executor)"
-      ;; H2: gateway-start! is now a no-op; the wiring layer sets current-tool-executor
-      (define before (current-tool-executor))
-      (gateway-start!)
-      (check-equal? (current-tool-executor) before)
-      ;; Reset for other tests
-      (gateway-stop!))
-
-    (test-case "gateway-stop! resets executor to default"
-      ;; H2: gateway-stop! resets current-tool-executor to default-tool-executor
-      (gateway-stop!)
+    (test-case "current-tool-executor defaults to stub executor"
+      ;; M8: gateway-start!/gateway-stop! removed — parameter is wired by config
       (check-equal? (current-tool-executor) default-tool-executor))
+
+    (test-case "current-tool-executor can be overridden via parameterize"
+      ;; M8: Execution plane is controlled exclusively by config
+      (define custom-exec (lambda (env) 'custom-result))
+      (parameterize ([current-tool-executor custom-exec])
+        (check-eq? (current-tool-executor) custom-exec)))
 
     ;; ── execute-via-worker with non-envelope ──
 

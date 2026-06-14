@@ -103,7 +103,7 @@
      (define timeout
        (if (and (number? timeout-ms) (positive? timeout-ms))
            (inexact->exact (floor timeout-ms))
-           IPC-DEFAULT-TIMEOUT-MS))
+           (current-execution-plane-timeout-ms))) ; L7: use parameter
      (ipc-request req-id
                   (if (symbol? tool-name)
                       (symbol->string tool-name)
@@ -176,26 +176,33 @@
 ;;
 ;; Returns a result hash suitable for agent-role-handle-envelope.
 (define (execute-via-worker envelope)
-  (unless (mas-envelope? envelope)
-    (hasheq 'status 'error 'message "execute-via-worker: expected mas-envelope?"))
-  (with-handlers ([exn:fail? (lambda (e)
-                               (hasheq 'status
-                                       'error
-                                       'role
-                                       'tool-gateway
-                                       'error-message
-                                       (format "execution plane error: ~a" (exn-message e))
-                                       'trace-id
-                                       (and (mas-envelope? envelope)
-                                            (mas-envelope-trace-id envelope))))])
-    ;; Build the request
-    (define req (envelope->ipc-request envelope))
-    ;; Ensure worker is running
-    (define gw (ensure-worker!))
-    ;; Send the request and get response
-    (define resp (send-request! gw req (ipc-request-timeout-ms req)))
-    ;; Translate response to result hash
-    (ipc-response->result-hash resp envelope)))
+  (if (not (mas-envelope? envelope))
+      (hasheq 'status
+              'error
+              'role
+              'tool-gateway
+              'error-message
+              "execute-via-worker: expected mas-envelope?"
+              'trace-id
+              #f)
+      (with-handlers ([exn:fail? (lambda (e)
+                                   (hasheq 'status
+                                           'error
+                                           'role
+                                           'tool-gateway
+                                           'error-message
+                                           (format "execution plane error: ~a" (exn-message e))
+                                           'trace-id
+                                           (and (mas-envelope? envelope)
+                                                (mas-envelope-trace-id envelope))))])
+        ;; Build the request
+        (define req (envelope->ipc-request envelope))
+        ;; Ensure worker is running
+        (define gw (ensure-worker!))
+        ;; Send the request and get response
+        (define resp (send-request! gw req (ipc-request-timeout-ms req)))
+        ;; Translate response to result hash
+        (ipc-response->result-hash resp envelope))))
 
 ;; ── H4: Scheduler Entry Point ───────────────────────────────────
 

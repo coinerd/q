@@ -53,22 +53,16 @@
 ;; Convenience Functions
 ;; ============================================================
 
-(define (gateway-start!)
-  ;; H2: No-op — the wiring layer sets the executor via current-tool-executor
-  (void))
-
-(define (gateway-stop!)
-  ;; H2: Reset to default stub executor
-  (current-tool-executor default-tool-executor))
-
 ;; ============================================================
 ;; Provides
 ;; ============================================================
 
+;; M8: gateway-start!/gateway-stop! removed — execution plane is
+;; controlled exclusively by config in wiring/run-modes.rkt.
+;; The parameter current-tool-executor is set by the wiring layer.
+
 (provide tool-gateway-role?
          make-tool-gateway-role
-         gateway-start!
-         gateway-stop!
          current-tool-executor
          default-tool-executor)
 

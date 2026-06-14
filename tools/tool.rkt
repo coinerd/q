@@ -157,7 +157,7 @@
                    #:dangerous? [dangerous? #f]
                    #:timeout-seconds [timeout-seconds #f]
                    #:required-capability [required-capability 'any]
-                   #:externalizable? [externalizable? #t])
+                   #:externalizable? [externalizable? #f])
   (unless (string? name)
     (raise-argument-error 'make-tool "string?" name))
   (unless (string? description)
