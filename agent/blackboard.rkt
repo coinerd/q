@@ -52,7 +52,7 @@
                     '() ; open-hypotheses
                     '() ; test-results
                     '() ; artifact-refs
-                    (hasheq) ; wave-status
+                    (hash) ; wave-status — equal?-based for string keys
                     '() ; verifier-decisions
                     '() ; agent-activities
                     0)) ; last-updated
