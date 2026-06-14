@@ -152,7 +152,78 @@
 
     (test-case "write to path outside allowed dir rejected"
       (define resp (execute-write (hash 'path "/tmp/worker-security-evil" 'content "hello")))
-      (check-equal? (ipc-response-status resp) 'error))))
+      (check-equal? (ipc-response-status resp) 'error))
+
+    ;; ── LF3 (v0.99.4): Symlink in path with non-existent subdirs ──
+
+    (test-case "LF3: symlink + non-existent subdir rejected"
+      ;; Create a symlink inside allowed-dir pointing to /tmp, then try
+      ;; to access a non-existent file under it: allowed/evil-link/newdir/file.txt
+      ;; The old code would resolve via simplify-path only (no symlink
+      ;; resolution), allowing the path. LF3 fix walks components to resolve
+      ;; the symlink on the longest existing prefix.
+      (define symlink-path (build-path allowed-dir "lf3-link"))
+      (with-handlers ([exn:fail? void])
+        (make-file-or-directory-link (string->path (find-system-path 'temp-dir)) symlink-path))
+      (when (link-exists? symlink-path)
+        (define target-path (build-path (path->string symlink-path) "nonexistent-subdir" "file.txt"))
+        (check-false (path-allowed? (path->string target-path))
+                     "LF3: symlink + non-existent subdir should be rejected")
+        (delete-file symlink-path)))
+
+    (test-case "LF3: deeply nested symlink escape rejected"
+      ;; Symlink at root level, multiple non-existent dirs after it
+      (define symlink-path (build-path allowed-dir "deep-evil"))
+      (with-handlers ([exn:fail? void])
+        (make-file-or-directory-link (string->path "/etc") symlink-path))
+      (when (link-exists? symlink-path)
+        (define target-path (build-path (path->string symlink-path) "a" "b" "c" "escape.txt"))
+        (check-false (path-allowed? (path->string target-path))
+                     "LF3: deeply nested symlink escape should be rejected")
+        (delete-file symlink-path)))
+
+    (test-case "LF3: valid symlink inside allowed dir accepted"
+      ;; A symlink that points to another location inside allowed-dir
+      ;; should be accepted for non-existent files under it
+      (define inner-dir (build-path allowed-dir "inner"))
+      (make-directory* inner-dir)
+      (define symlink-path (build-path allowed-dir "good-link"))
+      (with-handlers ([exn:fail? void])
+        (make-file-or-directory-link inner-dir symlink-path))
+      (when (link-exists? symlink-path)
+        (define target-path (build-path (path->string symlink-path) "newfile.txt"))
+        (check-true (path-allowed? (path->string target-path))
+                    "LF3: symlink within allowed dir should be accepted")
+        (delete-file symlink-path))
+      (when (directory-exists? inner-dir)
+        (delete-directory/files inner-dir)))
+
+    (test-case "LF3: resolve-longest-prefix resolves symlink in middle of path"
+      ;; Test the helper directly: /allowed/symlink-to-allowed/sub/file
+      ;; should resolve the symlink and the result should be allowed
+      (define sub-dir (build-path allowed-dir "sub"))
+      (make-directory* sub-dir)
+      (define symlink-path (build-path allowed-dir "mid-link"))
+      (with-handlers ([exn:fail? void])
+        (make-file-or-directory-link sub-dir symlink-path))
+      (when (link-exists? symlink-path)
+        ;; Non-existent file under symlink to allowed dir
+        (define target (build-path (path->string symlink-path) "deep" "file.txt"))
+        (check-true (path-allowed? (path->string target))
+                    "LF3: symlink to allowed dir + non-existent path should be accepted")
+        (delete-file symlink-path))
+      (when (directory-exists? sub-dir)
+        (delete-directory/files sub-dir)))
+
+    (test-case "LF3: broken symlink rejected"
+      ;; A broken symlink (target doesn't exist) should be rejected
+      (define symlink-path (build-path allowed-dir "broken-link"))
+      (with-handlers ([exn:fail? void])
+        (make-file-or-directory-link (string->path "/nonexistent/broken-target") symlink-path))
+      (when (link-exists? symlink-path)
+        (define target (build-path (path->string symlink-path) "file.txt"))
+        (check-false (path-allowed? (path->string target)) "LF3: broken symlink should be rejected")
+        (delete-file symlink-path)))))
 
 ;; ── Run ─────────────────────────────────────────────────────────
 

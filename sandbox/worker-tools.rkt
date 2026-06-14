@@ -27,10 +27,42 @@
 ;; Allowed root directories for file operations
 (define current-allowed-roots (make-parameter (list (current-directory))))
 
+;; LF3 (v0.99.4): Walk path components to resolve symlinks on the longest
+;; existing prefix. Prevents symlink-based escapes when non-existent
+;; directories exist after a symlink in the path chain. For example,
+;; /allowed-root/symlink→/etc/a/b/file.txt would previously pass the check
+;; because the else branch only called simplify-path (no symlink resolution).
+(define (resolve-longest-prefix p)
+  (define parts (explode-path p))
+  (let loop ([remaining parts]
+             [resolved-prefix #f])
+    (cond
+      [(null? remaining) (or resolved-prefix (simplify-path p #f))]
+      [else
+       (define candidate
+         (if resolved-prefix
+             (build-path resolved-prefix (car remaining))
+             (car remaining)))
+       (cond
+         [(or (file-exists? candidate) (directory-exists? candidate))
+          ;; Component exists — resolve symlinks and continue
+          (loop (cdr remaining) (simplify-path (resolve-path candidate) #f))]
+         [(link-exists? candidate)
+          ;; Broken symlink — reject (resolve-path would raise, caught by outer handler → #f)
+          (raise (exn:fail (format "broken symlink: ~a" candidate) (current-continuation-marks)))]
+         [else
+          ;; Non-existent component — append remaining to resolved prefix
+          (if resolved-prefix
+              (for/fold ([acc resolved-prefix]) ([part (in-list remaining)])
+                (build-path acc part))
+              (simplify-path p #f))])])))
+
 ;; H3: Resolve symlinks before checking — simplify-path alone does NOT resolve symlinks.
 ;; A symlink inside the allowed root pointing to /etc would pass the old check.
 ;; resolve-path follows symlinks and raises exn on broken links → we reject those.
 ;; For non-existent files (new writes), resolve the parent directory instead.
+;; LF3 (v0.99.4): When neither file nor parent dir exists, walk path components
+;; to resolve symlinks on the longest existing prefix.
 (define (resolve-path-safely p)
   (define complete (path->complete-path (expand-user-path p) (current-directory)))
   (with-handlers ([exn:fail? (lambda (_) #f)])
@@ -44,8 +76,9 @@
          (if name
              (build-path parent-resolved name)
              parent-resolved))]
-      ;; Neither file nor parent dir exists — resolve what we can
-      [else (simplify-path complete #f)])))
+      ;; LF3 (v0.99.4): Neither file nor parent dir exists — walk path
+      ;; components to resolve symlinks on the longest existing prefix.
+      [else (resolve-longest-prefix complete)])))
 
 ;; H3: Normalize a root directory at comparison time (resolve symlinks)
 (define (normalize-root r)
