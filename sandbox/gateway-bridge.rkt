@@ -255,6 +255,7 @@
          send-request!
          generate-request-id
          gateway-worker?
-         gateway-alive?)
+         gateway-alive?
+         gateway-worker-process)
 
 (provide (contract-out [ensure-worker! (-> gateway-worker?)] [execute-via-worker (-> any/c hash?)]))

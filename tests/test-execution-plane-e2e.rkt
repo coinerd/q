@@ -20,7 +20,10 @@
                   current-worker-args
                   execute-via-worker
                   ensure-worker!
-                  shutdown-worker!)
+                  shutdown-worker!
+                  gateway-alive?
+                  gateway-worker-process
+                  gateway-worker?)
          (only-in "../agent/roles/tool-gateway.rkt" make-tool-gateway-role current-tool-executor)
          (only-in "../agent/roles/base.rkt" agent-role-handle-envelope agent-role-capabilities)
          (only-in "../tools/tool.rkt"
@@ -255,6 +258,54 @@
         (define result (run-tool-batch (list (make-tool-call-from-name "nonexistent" (hasheq))) reg))
         (define results (scheduler-result-results result))
         (check-true (tool-result-is-error? (car results)))
+        (shutdown-worker!)))
+
+    ;; ── H5: Crash Recovery ──
+
+    (test-case "H5: worker crash → ensure-worker! auto-restarts"
+      (parameterize ([current-execution-plane-enabled #t])
+        ;; Force start a worker
+        (define gw1 (ensure-worker!))
+        (check-true (gateway-alive? gw1))
+        ;; Kill the worker process directly (simulate crash)
+        (define proc (gateway-worker-process gw1))
+        (subprocess-kill proc #t)
+        ;; Wait for OS to reap
+        (sleep 0.3)
+        (check-false (gateway-alive? gw1))
+        ;; Next call should auto-restart
+        (define gw2 (ensure-worker!))
+        (check-true (gateway-alive? gw2))
+        (check-false (eq? gw1 gw2) "should be a new worker instance")
+        ;; Verify new worker works
+        (define envelope
+          (make-mas-envelope
+           'supervisor
+           'tool-gateway
+           'shell-exec
+           (hasheq 'tool-name "bash" 'arguments (hasheq 'command "echo recovered"))))
+        (define result (execute-via-worker envelope))
+        (check-equal? (hash-ref result 'status) 'ok)
+        (shutdown-worker!)))
+
+    (test-case "H5: crashed worker auto-restarts on next request"
+      (parameterize ([current-execution-plane-enabled #t])
+        (define reg (make-tool-registry))
+        (register-tool! reg (make-dangerous-bash-tool))
+        ;; Start worker with a normal request
+        (run-tool-batch (list (make-tool-call-from-name "bash" (hasheq 'command "echo start"))) reg)
+        ;; Now kill the worker
+        (define gw (ensure-worker!))
+        (subprocess-kill (gateway-worker-process gw) #t)
+        (sleep 0.2)
+        ;; Next request should fail fast (auto-restart + request)
+        (define result
+          (run-tool-batch (list (make-tool-call-from-name "bash"
+                                                          (hasheq 'command "echo after-crash")))
+                          reg))
+        (define results (scheduler-result-results result))
+        ;; Should still work (auto-restart)
+        (check-false (tool-result-is-error? (car results)))
         (shutdown-worker!)))))
 
 ;; ── Helper ──────────────────────────────────────────────────────

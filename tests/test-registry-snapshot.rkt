@@ -9,21 +9,16 @@
 (require rackunit
          rackunit/text-ui
          "../tools/registry.rkt"
-         "../tools/tool-struct.rkt")
+         (only-in "../tools/tool.rkt" make-tool))
 
+;; L4: Use make-tool instead of raw tool constructor
 (define (make-test-tool name)
-  (tool name
-        (string-append "Test tool " name)
-        (hasheq 'type "function" 'function (hasheq 'name name 'parameters (hasheq)))
-        (lambda args (void))
-        #f
-        #f
-        #f
-        #f
-        #f
-        #f
-        'any
-        #t))
+  (make-tool name
+             (string-append "Test tool " name)
+             (hasheq 'type "function" 'function (hasheq 'name name 'parameters (hasheq)))
+             (lambda args (void))
+             #:required-capability 'any
+             #:externalizable? #t))
 
 (define snapshot-tests
   (test-suite "registry-snapshot"

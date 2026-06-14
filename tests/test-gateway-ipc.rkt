@@ -188,6 +188,28 @@
       (check-pred real? (gateway-worker-started-ms gw))
       (check-pred box? (gateway-worker-pending-requests gw))
       (check-pred semaphore? (gateway-worker-lock gw))
+      (gateway-shutdown! gw))
+
+    ;; ── M6: Real dispatch mode ──
+
+    (test-case "M6: real dispatch mode returns actual bash output"
+      (define gw (start-mock-worker "real"))
+      (sleep 0.1)
+      (define req
+        (ipc-request "m6-real-1" "bash" (hasheq 'command "echo m6test") 5000 #f 'shell-exec 1))
+      (define resp (send-request! gw req 5000))
+      (check-equal? (ipc-response-status resp) 'ok)
+      ;; Real dispatch produces actual output, not just echo of tool-name
+      (define content (ipc-response-content resp))
+      (check-not-false (string-contains? content "m6test"))
+      (gateway-shutdown! gw))
+
+    (test-case "M6: real dispatch with missing command returns error"
+      (define gw (start-mock-worker "real"))
+      (sleep 0.1)
+      (define req (ipc-request "m6-real-2" "bash" (hasheq) 5000 #f 'shell-exec 1))
+      (define resp (send-request! gw req 5000))
+      (check-equal? (ipc-response-status resp) 'error)
       (gateway-shutdown! gw))))
 
 (run-tests suite)
