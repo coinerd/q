@@ -233,7 +233,9 @@
       (define ctx (make-verifying-ctx))
       (define plan-ctx (make-plan-context))
 
-      (define result (execute-verification-gate ctx prov plan-ctx))
+      (define result
+        (parameterize ([current-verifier-provider prov])
+          (execute-verification-gate ctx plan-ctx)))
       (check-equal? result 'approved)
       (check-equal? (gsm-ctx-current ctx) 'idle)
 
@@ -249,7 +251,9 @@
       (define ctx (make-verifying-ctx))
       (define plan-ctx (make-plan-context))
 
-      (define result (execute-verification-gate ctx prov plan-ctx))
+      (define result
+        (parameterize ([current-verifier-provider prov])
+          (execute-verification-gate ctx plan-ctx)))
       (check-equal? result 'rejected)
       (check-equal? (gsm-ctx-current ctx) 'executing)
 
@@ -265,7 +269,9 @@
       (define ctx (make-verifying-ctx))
       (define plan-ctx (make-plan-context))
 
-      (define result (execute-verification-gate ctx prov plan-ctx))
+      (define result
+        (parameterize ([current-verifier-provider prov])
+          (execute-verification-gate ctx plan-ctx)))
       (check-equal? result 'escalated)
       ;; Escalation stays in verifying (HITL pause)
       (check-equal? (gsm-ctx-current ctx) 'verifying)
@@ -283,7 +289,9 @@
       (define ctx (make-verifying-ctx))
       (define plan-ctx (make-plan-context))
 
-      (define result (execute-verification-gate ctx prov plan-ctx))
+      (define result
+        (parameterize ([current-verifier-provider prov])
+          (execute-verification-gate ctx plan-ctx)))
       (check-equal? result 'approved)
       (check-equal? (gsm-ctx-current ctx) 'idle)
 
@@ -306,7 +314,9 @@
       (define ctx (make-verifying-ctx))
       (define plan-ctx (make-plan-context))
 
-      (define result (execute-verification-gate ctx prov plan-ctx))
+      (define result
+        (parameterize ([current-verifier-provider prov])
+          (execute-verification-gate ctx plan-ctx)))
       ;; Error → escalate (safe default from verifier-core)
       (check-equal? result 'escalated)
 
@@ -324,7 +334,9 @@
       (define ctx (make-verifying-ctx))
       (define plan-ctx (make-plan-context))
 
-      (define result (execute-verification-gate ctx prov plan-ctx))
+      (define result
+        (parameterize ([current-verifier-provider prov])
+          (execute-verification-gate ctx plan-ctx)))
       (check-equal? result 'rejected)
 
       (restore-params!))
@@ -343,7 +355,9 @@
       (define plan-ctx (make-plan-context))
 
       ;; First verification: rejected
-      (define r1 (execute-verification-gate ctx reject-prov plan-ctx))
+      (define r1
+        (parameterize ([current-verifier-provider reject-prov])
+          (execute-verification-gate ctx plan-ctx)))
       (check-equal? r1 'rejected)
       (check-equal? (gsm-ctx-current ctx) 'executing)
 
@@ -351,7 +365,9 @@
       (gsm-ctx-transition! ctx 'verifying)
 
       ;; Second verification: approved
-      (define r2 (execute-verification-gate ctx approve-prov plan-ctx))
+      (define r2
+        (parameterize ([current-verifier-provider approve-prov])
+          (execute-verification-gate ctx plan-ctx)))
       (check-equal? r2 'approved)
       (check-equal? (gsm-ctx-current ctx) 'idle)
 
@@ -421,17 +437,23 @@
 
       ;; Cycle 1
       (define ctx1 (make-verifying-ctx))
-      (define r1 (execute-verification-gate ctx1 prov (make-plan-context)))
+      (define r1
+        (parameterize ([current-verifier-provider prov])
+          (execute-verification-gate ctx1 (make-plan-context))))
       (check-equal? r1 'approved)
 
       ;; Cycle 2 (fresh context)
       (define ctx2 (make-verifying-ctx))
-      (define r2 (execute-verification-gate ctx2 prov (make-plan-context)))
+      (define r2
+        (parameterize ([current-verifier-provider prov])
+          (execute-verification-gate ctx2 (make-plan-context))))
       (check-equal? r2 'approved)
 
       ;; Cycle 3 (fresh context)
       (define ctx3 (make-verifying-ctx))
-      (define r3 (execute-verification-gate ctx3 prov (make-plan-context)))
+      (define r3
+        (parameterize ([current-verifier-provider prov])
+          (execute-verification-gate ctx3 (make-plan-context))))
       (check-equal? r3 'approved)
 
       (restore-params!))

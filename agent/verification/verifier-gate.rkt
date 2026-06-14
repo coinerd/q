@@ -20,7 +20,6 @@
          "verifier-core.rkt"
          "verifier-types.rkt"
          "../event-structs/verification-events.rkt"
-         (only-in "../../llm/provider.rkt" provider?)
          (only-in "../../extensions/gsd/session-state.rkt"
                   gsd-session-ctx?
                   gsd-ctx-state-snapshot
@@ -71,11 +70,16 @@
 ;;      approve  → transition verifying→idle via 'done, return 'approved
 ;;      reject   → transition verifying→executing via 'rework, return 'rejected
 ;;      escalate → emit verification-escalated event, return 'escalated (HITL pause)
-(define (execute-verification-gate ctx provider plan-context)
+(define (execute-verification-gate ctx plan-context)
+  (define provider (current-verifier-provider))
   (cond
     ;; Feature flag OFF → skip verification entirely
     [(not (current-verifier-enabled))
      ;; Auto-transition to idle (preserve existing behavior)
+     (gsm-ctx-transition! ctx 'idle #:event 'done)
+     'approved]
+    ;; No provider available → auto-approve (safe default)
+    [(not provider)
      (gsm-ctx-transition! ctx 'idle #:event 'done)
      'approved]
     [else
@@ -147,7 +151,7 @@
          GATE-RESULTS
          gate-result?)
 
-(provide (contract-out [execute-verification-gate (-> gsd-session-ctx? provider? hash? gate-result?)]
+(provide (contract-out [execute-verification-gate (-> gsd-session-ctx? hash? gate-result?)]
                        [should-run-verification-gate? (-> gsd-session-ctx? boolean?)]
                        [extract-plan-context
                         (-> hash? (values string? string? (listof string?) string? string?))]))

@@ -37,6 +37,10 @@
 ;; Ordering: low < medium < high.
 (define current-verifier-risk-threshold (make-parameter 'medium))
 
+;; H2 fix (v0.99.6): Provider for verifier LLM calls.
+;; Set from build-runtime-from-cli (wiring/run-modes.rkt).
+(define current-verifier-provider (make-parameter #f))
+
 ;; ============================================================
 ;; Risk Level Utilities
 ;; ============================================================
@@ -160,7 +164,8 @@
 
 (provide current-verifier-enabled
          current-verifier-model
-         current-verifier-risk-threshold)
+         current-verifier-risk-threshold
+         current-verifier-provider)
 
 (provide (contract-out [run-verification
                         (->* (provider? string? string? (listof string?) string?)

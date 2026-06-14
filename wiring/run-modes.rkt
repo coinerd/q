@@ -75,7 +75,8 @@
          (only-in "../agent/verification/verifier-core.rkt"
                   current-verifier-enabled
                   current-verifier-model
-                  current-verifier-risk-threshold))
+                  current-verifier-risk-threshold
+                  current-verifier-provider))
 
 ;; Re-export mode runners from sub-modules
 (require "run-interactive.rkt"
@@ -254,6 +255,10 @@
   ;; H3a: Wire all runtime parameters via shared function
   (wire-runtime-parameters! settings profile max-ctx-tokens)
 
+  ;; v0.99.6 C1/H2: Wire verifier provider for gate calls.
+  ;; Must be here (not in wire-runtime-parameters!) because prov is local.
+  (current-verifier-provider prov)
+
   ;; v0.95.16: Wire memory backend from settings (config.json)
   ;; Only applies when --memory CLI flag was NOT passed.
   (define settings-backend (setting-memory-backend settings))
@@ -371,6 +376,9 @@
   (define new-max-ctx (or new-cw (dict-ref base-config 'max-context-tokens 128000)))
   ;; H3a: Wire all runtime parameters via shared function
   (wire-runtime-parameters! new-settings new-profile new-max-ctx)
+  ;; v0.99.6: Re-wire verifier provider from session config
+  (when (dict-ref base-config 'provider #f)
+    (current-verifier-provider (dict-ref base-config 'provider)))
   ;; Return updated config + registry
   (values
    (hash->session-config

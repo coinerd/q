@@ -174,9 +174,8 @@
       (parameterize ([current-verifier-enabled #f])
         (define ctx (make-verifying-ctx))
         (define result
-          (execute-verification-gate ctx
-                                     (make-json-response-provider approve-json)
-                                     (make-test-plan-context)))
+          (parameterize ([current-verifier-provider (make-json-response-provider approve-json)])
+            (execute-verification-gate ctx (make-test-plan-context))))
         (check-equal? result 'approved)
         (check-equal? (gsm-ctx-current ctx) 'idle)))
 
@@ -184,7 +183,9 @@
       (parameterize ([current-verifier-enabled #f])
         (define ctx (make-verifying-ctx))
         ;; Even an error provider should succeed when flag is off
-        (define result (execute-verification-gate ctx (make-error-provider) (make-test-plan-context)))
+        (define result
+          (parameterize ([current-verifier-provider (make-error-provider)])
+            (execute-verification-gate ctx (make-test-plan-context))))
         (check-equal? result 'approved)))
 
     ;; ── Feature Flag ON + Approve ──
@@ -193,9 +194,8 @@
       (parameterize ([current-verifier-enabled #t])
         (define ctx (make-verifying-ctx))
         (define result
-          (execute-verification-gate ctx
-                                     (make-json-response-provider approve-json)
-                                     (make-test-plan-context)))
+          (parameterize ([current-verifier-provider (make-json-response-provider approve-json)])
+            (execute-verification-gate ctx (make-test-plan-context))))
         (check-equal? result 'approved)
         (check-equal? (gsm-ctx-current ctx) 'idle)))
 
@@ -205,9 +205,8 @@
       (parameterize ([current-verifier-enabled #t])
         (define ctx (make-verifying-ctx))
         (define result
-          (execute-verification-gate ctx
-                                     (make-json-response-provider reject-json)
-                                     (make-test-plan-context)))
+          (parameterize ([current-verifier-provider (make-json-response-provider reject-json)])
+            (execute-verification-gate ctx (make-test-plan-context))))
         (check-equal? result 'rejected)
         (check-equal? (gsm-ctx-current ctx) 'executing)))
 
@@ -217,9 +216,8 @@
       (parameterize ([current-verifier-enabled #t])
         (define ctx (make-verifying-ctx))
         (define result
-          (execute-verification-gate ctx
-                                     (make-json-response-provider escalate-json)
-                                     (make-test-plan-context)))
+          (parameterize ([current-verifier-provider (make-json-response-provider escalate-json)])
+            (execute-verification-gate ctx (make-test-plan-context))))
         (check-equal? result 'escalated)
         ;; Escalation pauses — state stays verifying
         (check-equal? (gsm-ctx-current ctx) 'verifying)))
@@ -229,7 +227,9 @@
     (test-case "gate ON + provider error: escalates (safe default)"
       (parameterize ([current-verifier-enabled #t])
         (define ctx (make-verifying-ctx))
-        (define result (execute-verification-gate ctx (make-error-provider) (make-test-plan-context)))
+        (define result
+          (parameterize ([current-verifier-provider (make-error-provider)])
+            (execute-verification-gate ctx (make-test-plan-context))))
         (check-equal? result 'escalated)
         (check-equal? (gsm-ctx-current ctx) 'verifying)))
 
@@ -241,7 +241,9 @@
         (define provider
           (make-mock-provider
            (make-model-response (list (hasheq 'text "not json")) (hasheq) "mock" 'end_turn)))
-        (define result (execute-verification-gate ctx provider (make-test-plan-context)))
+        (define result
+          (parameterize ([current-verifier-provider provider])
+            (execute-verification-gate ctx (make-test-plan-context))))
         (check-equal? result 'rejected)
         (check-equal? (gsm-ctx-current ctx) 'executing)))
 
@@ -255,9 +257,8 @@
                                 (lambda (event-name wrapped-event)
                                   (set-box! events-collected
                                             (append (unbox events-collected) (list event-name)))))
-        (execute-verification-gate ctx
-                                   (make-json-response-provider approve-json)
-                                   (make-test-plan-context))
+        (parameterize ([current-verifier-provider (make-json-response-provider approve-json)])
+          (execute-verification-gate ctx (make-test-plan-context)))
         (define events (unbox events-collected))
         (check-true (and (member 'gsd.verification.started events) #t) "started event emitted")
         (check-true (and (member 'gsd.verification.completed events) #t) "completed event emitted")))
@@ -270,9 +271,8 @@
                                 (lambda (event-name wrapped-event)
                                   (set-box! events-collected
                                             (append (unbox events-collected) (list event-name)))))
-        (execute-verification-gate ctx
-                                   (make-json-response-provider escalate-json)
-                                   (make-test-plan-context))
+        (parameterize ([current-verifier-provider (make-json-response-provider escalate-json)])
+          (execute-verification-gate ctx (make-test-plan-context)))
         (define events (unbox events-collected))
         (check-true (and (member 'gsd.verification.started events) #t) "started event emitted")
         (check-true (and (member 'gsd.verification.completed events) #t) "completed event emitted")
@@ -286,9 +286,8 @@
                                 (lambda (event-name wrapped-event)
                                   (set-box! events-collected
                                             (append (unbox events-collected) (list event-name)))))
-        (execute-verification-gate ctx
-                                   (make-json-response-provider approve-json)
-                                   (make-test-plan-context))
+        (parameterize ([current-verifier-provider (make-json-response-provider approve-json)])
+          (execute-verification-gate ctx (make-test-plan-context)))
         (define events (unbox events-collected))
         (check-false (member 'gsd.verification.started events) "no started event")))
 
@@ -298,17 +297,15 @@
       (parameterize ([current-verifier-enabled #t])
         (define ctx (make-verifying-ctx))
         ;; First wave: reject → executing
-        (execute-verification-gate ctx
-                                   (make-json-response-provider reject-json)
-                                   (make-test-plan-context))
+        (parameterize ([current-verifier-provider (make-json-response-provider reject-json)])
+          (execute-verification-gate ctx (make-test-plan-context)))
         (check-equal? (gsm-ctx-current ctx) 'executing)
         ;; Re-enter verifying state
         (gsm-ctx-transition! ctx 'verifying)
         (check-equal? (gsm-ctx-current ctx) 'verifying)
         ;; Second wave: approve → idle
-        (execute-verification-gate ctx
-                                   (make-json-response-provider approve-json)
-                                   (make-test-plan-context))
+        (parameterize ([current-verifier-provider (make-json-response-provider approve-json)])
+          (execute-verification-gate ctx (make-test-plan-context)))
         (check-equal? (gsm-ctx-current ctx) 'idle)))
 
     ;; ── Multiple waves ──
@@ -317,9 +314,8 @@
       (parameterize ([current-verifier-enabled #t])
         (define ctx (make-verifying-ctx))
         ;; First approval
-        (execute-verification-gate ctx
-                                   (make-json-response-provider approve-json)
-                                   (make-test-plan-context))
+        (parameterize ([current-verifier-provider (make-json-response-provider approve-json)])
+          (execute-verification-gate ctx (make-test-plan-context)))
         (check-equal? (gsm-ctx-current ctx) 'idle)
         ;; Walk back to verifying for second wave
         (gsm-ctx-transition! ctx 'exploring)
@@ -327,9 +323,8 @@
         (gsm-ctx-transition! ctx 'executing)
         (gsm-ctx-transition! ctx 'verifying)
         ;; Second approval
-        (execute-verification-gate ctx
-                                   (make-json-response-provider approve-json)
-                                   (make-test-plan-context))
+        (parameterize ([current-verifier-provider (make-json-response-provider approve-json)])
+          (execute-verification-gate ctx (make-test-plan-context)))
         (check-equal? (gsm-ctx-current ctx) 'idle)))
 
     ;; ── Empty files list ──
@@ -338,9 +333,8 @@
       (parameterize ([current-verifier-enabled #t])
         (define ctx (make-verifying-ctx))
         (define result
-          (execute-verification-gate ctx
-                                     (make-json-response-provider approve-json)
-                                     (make-test-plan-context #:files '())))
+          (parameterize ([current-verifier-provider (make-json-response-provider approve-json)])
+            (execute-verification-gate ctx (make-test-plan-context #:files '()))))
         (check-equal? result 'approved)))))
 
 (run-tests suite)

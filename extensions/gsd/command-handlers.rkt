@@ -62,6 +62,8 @@
                   current-gsd-event-bus
                   set-gsd-event-bus!
                   current-gsd-ctx)
+         (only-in "../../agent/verification/verifier-gate.rkt" execute-verification-gate)
+         (only-in "../../agent/verification/verifier-core.rkt" current-verifier-enabled)
          racket/file)
 
 (provide (contract-out
@@ -178,7 +180,25 @@
     [(wave-done)
      (define wd-args (gsd-cmd-wave-done-wave-arg parsed))
      (define cmd-result (cmd-wave-done base-dir wd-args))
-     (when (gsd-success? cmd-result)
+     ;; v0.99.6 C1: If verifier enabled, run verification gate after wave-done
+     (define gate-result
+       (if (and (gsd-success? cmd-result) (current-verifier-enabled))
+           (let ([ctx (current-gsd-ctx)])
+             (define plan-ctx
+               (hasheq 'plan-summary
+                       ""
+                       'wave-name
+                       (format "W~a" (or wd-args ""))
+                       'files-changed
+                       '()
+                       'test-summary
+                       ""
+                       'diff-excerpt
+                       ""))
+             (execute-verification-gate ctx plan-ctx))
+           'approved))
+     ;; Only emit wave.completed if verification approved (or was not run)
+     (when (and (gsd-success? cmd-result) (eq? gate-result 'approved))
        (define data (gsd-command-result-data cmd-result))
        (define wave-idx (and (hash? data) (hash-ref data 'wave #f)))
        (when wave-idx
@@ -186,8 +206,14 @@
           (current-gsd-ctx)
           'gsd.wave.completed
           (make-gsd-wave-completed-event #:session-id "" #:turn-id 0 #:wave wave-idx))))
+     ;; Build message: include verification result if relevant
+     (define final-msg
+       (cond
+         [(eq? gate-result 'rejected) "Verification REJECTED -- wave requires rework."]
+         [(eq? gate-result 'escalated) "Verification ESCALATED -- human review required."]
+         [else (or (gsd-command-result-message cmd-result) "")]))
      ;; SAL-06: Set gsd-pin so progress messages survive context assembly
-     (hook-amend (hasheq 'text (or (gsd-command-result-message cmd-result) "") 'gsd-pin #t))]
+     (hook-amend (hasheq 'text final-msg 'gsd-pin #t))]
     [(done)
      (define force? (gsd-cmd-done-force? parsed))
      (define cmd-result (cmd-done base-dir force?))
