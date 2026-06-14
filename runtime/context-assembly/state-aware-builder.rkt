@@ -54,7 +54,8 @@
                   observe-memory-for-context
                   memory-telemetry->jsexpr
                   current-memory-injection-budget
-                  inject-memory-for-context))
+                  inject-memory-for-context)
+         (only-in "blackboard-context.rkt" build-blackboard-context-snippet))
 
 (provide current-task-state-aware-assembly?
          build-tiered-context/state-aware
@@ -66,10 +67,14 @@
          current-ws-evolution-enabled?
          check-rollback-triggers-with-actions
          extract-recent-text
-         current-reflection-event)
+         current-reflection-event
+         current-blackboard-injection-enabled)
 
 ;; v0.96.13 W3: Latest reflection event (set by step-interpreter, checked in preamble)
 (define current-reflection-event (make-parameter #f))
+
+;; v0.99.7 W5: Blackboard context injection into system prompt preamble
+(define current-blackboard-injection-enabled (make-parameter #f))
 
 ;; v0.96.13 WP-1: Extract recent assistant message text for memory query context.
 ;; Takes a list of messages and count N, returns concatenated text of the last N
@@ -456,11 +461,17 @@
            ""))
      (define preamble-text
        (format
-        "You are currently in the ~a phase.~a~a~a\n\nWorkflow: Use record_conclusion to persist findings. Use set_task_state to transition: exploration→planning→implementation→verification→debugging."
+        "You are currently in the ~a phase.~a~a~a~a\n\nWorkflow: Use record_conclusion to persist findings. Use set_task_state to transition: exploration→planning→implementation→verification→debugging."
         label
         guidance
         conclusion-section
-        reflection-reminder))
+        reflection-reminder
+        (if (current-blackboard-injection-enabled)
+            (let ([snippet (build-blackboard-context-snippet)])
+              (if snippet
+                  (string-append "\n\n" snippet)
+                  ""))
+            "")))
      ;; Clear reflection event after consuming it
      (current-reflection-event #f)
      (make-message "state-awareness-preamble"
