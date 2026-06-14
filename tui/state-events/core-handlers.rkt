@@ -336,15 +336,30 @@
 ;; Helper: extract a field from the event payload, handling both the
 ;; direct typed-event hash format (from emit-typed-event!) and the
 ;; GSD-wrapped format (from ctx-emit-gsd-event! with 'data sub-hash).
+;; M2 fix (v0.99.6): Handle both kebab-case and camelCase keys.
+;; Event serialization may convert artifact-count → artifactCount etc.
+(define (kebab->camel sym)
+  (define str (symbol->string sym))
+  (define parts (string-split str #rx"-"))
+  (if (null? (cdr parts))
+      sym
+      (string->symbol (string-append (car parts)
+                                     (apply string-append
+                                            (map (lambda (p) (string-titlecase p)) (cdr parts)))))))
+
+(define (hash-ref-multi h key camel-key [default #f])
+  (or (hash-ref h key #f) (hash-ref h camel-key #f) default))
+
 (define (verification-payload-ref evt key [default #f])
   (define payload (event-payload evt))
+  (define camel-key (kebab->camel key))
   (cond
     [(not (hash? payload)) default]
     ;; GSD-wrapped format: data is under 'data key
     [(and (hash-has-key? payload 'data) (hash? (hash-ref payload 'data)))
-     (hash-ref (hash-ref payload 'data) key default)]
+     (hash-ref-multi (hash-ref payload 'data) key camel-key default)]
     ;; Direct typed-event hash format
-    [else (hash-ref payload key default)]))
+    [else (hash-ref-multi payload key camel-key default)]))
 
 (define (handle-verification-started state evt)
   (define artifact-count (verification-payload-ref evt 'artifact-count 0))
@@ -444,6 +459,9 @@
 ;; ============================================================
 ;; Register all core handlers at module load time
 ;; ============================================================
+
+;; M2 fix (v0.99.6): Exported for testing.
+(provide verification-payload-ref)
 
 (register-event-reducer! "assistant.message.completed" handle-assistant-message-completed)
 (register-event-reducer! "tool.call.started" handle-tool-call-started)

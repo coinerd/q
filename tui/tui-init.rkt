@@ -100,6 +100,10 @@
                   (set-box! channel-approx-depth n)
                   (when (> n 5000)
                     (log-warning "q-tui: event channel approx depth ~a exceeds 5000" n)
+                    (set-box! channel-approx-depth 0))
+                  ;; M1 fix (v0.99.6): Also reset at 10000 to prevent unbounded growth
+                  ;; even when warnings are suppressed.
+                  (when (> n 10000)
                     (set-box! channel-approx-depth 0))))
     ;; PIPE-01 (v0.98.13): Subscribe action handler to event bus.
     ;; Converts event structs to hashes via event->action-hash bridge,

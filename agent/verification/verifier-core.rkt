@@ -41,6 +41,10 @@
 ;; Set from build-runtime-from-cli (wiring/run-modes.rkt).
 (define current-verifier-provider (make-parameter #f))
 
+;; M4 fix (v0.99.6): Timeout for verifier LLM calls in milliseconds.
+;; Default 120000 (2 min). Timeout exception → escalate.
+(define current-verifier-timeout-ms (make-parameter 120000))
+
 ;; ============================================================
 ;; Risk Level Utilities
 ;; ============================================================
@@ -69,7 +73,8 @@
                  (cond
                    [(hash? part) (hash-ref part 'text "")]
                    [(string? part) part]
-                   [else (format "~a" part)]))
+                   ;; M3 fix: silently skip unknown types instead of producing garbage
+                   [else ""]))
                ""))
 
 ;; ============================================================
@@ -93,7 +98,17 @@
   (define risk (verifier-decision-risk-level decision))
   (define threshold (current-verifier-risk-threshold))
   (if (risk-at-or-above-threshold? risk threshold)
-      (struct-copy verifier-decision decision [requires-human? #t])
+      ;; L2 fix: update reason text to explain the override
+      (struct-copy verifier-decision
+                   decision
+                   [requires-human? #t]
+                   [reason
+                    (string-append (verifier-decision-reason decision)
+                                   " [risk threshold override: "
+                                   (symbol->string risk)
+                                   " >= "
+                                   (symbol->string threshold)
+                                   "]")])
       decision))
 
 ;; ============================================================
@@ -137,8 +152,22 @@
                                 (hasheq 'role "user" 'content user-msg))
                           #f
                           settings))
-    ;; 3. Call LLM
-    (define resp (provider-send provider req))
+    ;; 3. Call LLM (M4: with timeout via channel)
+    (define timeout-ms (current-verifier-timeout-ms))
+    (define resp
+      (let ([ch (make-channel)])
+        (define thd
+          (thread (lambda ()
+                    (with-handlers ([exn:fail? (lambda (e) (channel-put ch (cons 'error e)))])
+                      (channel-put ch (cons 'ok (provider-send provider req)))))))
+        (define result (sync/timeout (/ timeout-ms 1000.0) ch))
+        (cond
+          [(not result)
+           (kill-thread thd)
+           (raise (exn:fail:network (format "verifier LLM timed out after ~a ms" timeout-ms)
+                                    (current-continuation-marks)))]
+          [(eq? (car result) 'error) (raise (cdr result))]
+          [else (cdr result)])))
     ;; 4. Extract and parse response
     (define raw-text (extract-response-text resp))
     (define parsed (parse-verifier-response raw-text))
@@ -165,7 +194,8 @@
 (provide current-verifier-enabled
          current-verifier-model
          current-verifier-risk-threshold
-         current-verifier-provider)
+         current-verifier-provider
+         current-verifier-timeout-ms)
 
 (provide (contract-out [run-verification
                         (->* (provider? string? string? (listof string?) string?)
