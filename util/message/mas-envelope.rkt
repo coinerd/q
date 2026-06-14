@@ -131,9 +131,11 @@
     [(string? v) (string->symbol v)]
     [else default]))
 
-;; Coerce risk-level string/symbol to symbol.
+;; Coerce risk-level string/symbol to symbol, defaulting to 'low for unknown values.
+;; R5: Validate against known set to prevent silent envelope rejection.
 (define (coerce->risk-level v)
-  (coerce->symbol v 'low))
+  (define sym (coerce->symbol v 'low))
+  (if (memq sym '(low medium high critical)) sym 'low))
 
 (define (hash->envelope h)
   (cond
@@ -147,7 +149,10 @@
                           (hash-ref h 'payload #f)
                           #:message-id (hash-ref h 'message-id #f)
                           #:trace-id (hash-ref h 'trace-id #f)
-                          #:deadline (hash-ref h 'deadline #f)
+                          #:deadline (let ([d (hash-ref h 'deadline #f)])
+                                       (cond
+                                         [(and (number? d) (real? d)) (inexact->exact (round d))]
+                                         [else d]))
                           #:risk-level (coerce->risk-level (hash-ref h 'risk-level 'low))
                           #:schema-version (hash-ref h 'schema-version SCHEMA-VERSION)))]))
 

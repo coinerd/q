@@ -75,5 +75,5 @@
                        [make-capability-guarded-handler
                         (-> (-> agent-role? (listof symbol?))
                             (-> agent-role? mas-envelope? hash?)
-                            (-> agent-role? mas-envelope? hash?))])
+                            (-> agent-role? any/c hash?))])
          agent-role-handle-envelope)

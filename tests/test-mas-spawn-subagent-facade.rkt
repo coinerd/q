@@ -51,19 +51,22 @@
       (define tools (child-safe-tools))
       (define read-tool (findf (lambda (t) (equal? (tool-name t) "read")) tools))
       (check-not-false read-tool)
-      (check-equal? (tool-required-capability read-tool) 'read-only))
+      (when read-tool
+        (check-equal? (tool-required-capability read-tool) 'read-only)))
 
     (test-case "child-safe-tools: write has 'file-write capability"
       (define tools (child-safe-tools))
       (define write-tool (findf (lambda (t) (equal? (tool-name t) "write")) tools))
       (check-not-false write-tool)
-      (check-equal? (tool-required-capability write-tool) 'file-write))
+      (when write-tool
+        (check-equal? (tool-required-capability write-tool) 'file-write)))
 
     (test-case "child-safe-tools: bash has 'shell-exec capability"
       (define tools (child-safe-tools))
       (define bash-tool (findf (lambda (t) (equal? (tool-name t) "bash")) tools))
       (check-not-false bash-tool)
-      (check-equal? (tool-required-capability bash-tool) 'shell-exec))
+      (when bash-tool
+        (check-equal? (tool-required-capability bash-tool) 'shell-exec)))
 
     (test-case "child-safe-tools: all tools have valid capability annotations"
       (define tools (child-safe-tools))

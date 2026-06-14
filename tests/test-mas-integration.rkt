@@ -118,7 +118,10 @@
                            #:trace-id test-trace))
       (define result (agent-role-handle-envelope sup env))
       (check-equal? (hash-ref result 'status) 'ok)
-      ;; The envelope carries trace-id; dispatch succeeded
+      ;; Verify dispatch actually processed the envelope (not just construction)
+      (check-equal? (hash-ref result 'role) 'planner)
+      (check-equal? (hash-ref (hash-ref result 'payload) 'action) "plan")
+      ;; Verify trace-id was available on the envelope during dispatch
       (check-equal? (mas-envelope-trace-id env) test-trace))
 
     ;; ── M4: Source/target validation ──

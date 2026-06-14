@@ -27,7 +27,7 @@
                     "You have access to shell execution, file operations, git, "
                     "network requests, and browser automation."))
    (define agent-role-handle-envelope
-     (make-capability-guarded-handler (lambda (_) '(shell-exec file-write git-write network browser))
+     (make-capability-guarded-handler (lambda (self) (agent-role-capabilities self))
                                       (lambda (self envelope)
                                         (hasheq 'status
                                                 'ok

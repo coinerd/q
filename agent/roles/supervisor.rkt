@@ -44,13 +44,22 @@
 
 ;; Routes an envelope to the appropriate sub-role based on target-agent.
 (define (supervisor-dispatch supervisor envelope)
-  (define target (mas-envelope-target-agent envelope))
-  (define sub-roles (supervisor-role-sub-roles supervisor))
-  (define target-role (hash-ref sub-roles target #f))
   (cond
-    [target-role (agent-role-handle-envelope target-role envelope)]
+    [(not (mas-envelope? envelope))
+     (hasheq 'status 'error 'message (format "expected mas-envelope?, got ~a" envelope))]
     [else
-     (hasheq 'status 'error 'message (format "unknown target agent: ~a" target) 'target target)]))
+     (define target (mas-envelope-target-agent envelope))
+     (define sub-roles (supervisor-role-sub-roles supervisor))
+     (define target-role (hash-ref sub-roles target #f))
+     (cond
+       [target-role (agent-role-handle-envelope target-role envelope)]
+       [else
+        (hasheq 'status
+                'error
+                'message
+                (format "unknown target agent: ~a" target)
+                'target
+                target)])]))
 
 ;; ============================================================
 ;; Constructor

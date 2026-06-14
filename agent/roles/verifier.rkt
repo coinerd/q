@@ -26,7 +26,7 @@
                     "from other agents. You have read-only access — "
                     "you cannot modify files or execute commands."))
    (define agent-role-handle-envelope
-     (make-capability-guarded-handler (lambda (_) '(read-only))
+     (make-capability-guarded-handler (lambda (self) (agent-role-capabilities self))
                                       (lambda (self envelope)
                                         (hasheq 'status
                                                 'ok

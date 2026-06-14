@@ -376,34 +376,38 @@
 
     (test-case "list-tools-jsexpr returns empty list for empty registry"
       (define reg (make-tool-registry))
-      (check-equal? (list-tools-jsexpr reg) '()))))
+      (check-equal? (list-tools-jsexpr reg) '()))
 
-(test-case "tool-registry-tools returns empty list for empty registry"
-  (define reg (make-tool-registry))
-  (check-equal? (tool-registry-tools reg) '()))
+    ;; ============================================================
+    ;; 6a. Registry accessors and active-tools filter
+    ;; ============================================================
 
-(test-case "tool-registry-tools returns registered tools"
-  (define reg (make-tool-registry))
-  (register-tool! reg t)
-  (check-equal? (length (tool-registry-tools reg)) 1)
-  (check-equal? (tool-name (car (tool-registry-tools reg))) "read_file"))
+    (test-case "tool-registry-tools returns empty list for empty registry"
+      (define reg (make-tool-registry))
+      (check-equal? (tool-registry-tools reg) '()))
 
-(test-case "tool-active? returns #t when all tools active (no filter)"
-  (define reg (make-tool-registry))
-  (register-tool! reg t)
-  (check-true (tool-active? reg "read_file")))
+    (test-case "tool-registry-tools returns registered tools"
+      (define reg (make-tool-registry))
+      (register-tool! reg t)
+      (check-equal? (length (tool-registry-tools reg)) 1)
+      (check-equal? (tool-name (car (tool-registry-tools reg))) "read_file"))
 
-(test-case "tool-active? returns #f for inactive tool when filter set"
-  (define reg (make-tool-registry))
-  (register-tool! reg t)
-  (set-active-tools! reg '("other"))
-  (check-false (tool-active? reg "read_file")))
+    (test-case "tool-active? returns #t when all tools active (no filter)"
+      (define reg (make-tool-registry))
+      (register-tool! reg t)
+      (check-true (tool-active? reg "read_file")))
 
-(test-case "tool-active? returns #t for active tool when filter set"
-  (define reg (make-tool-registry))
-  (register-tool! reg t)
-  (set-active-tools! reg '("read_file"))
-  (check-true (tool-active? reg "read_file")))
+    (test-case "tool-active? returns #f for inactive tool when filter set"
+      (define reg (make-tool-registry))
+      (register-tool! reg t)
+      (set-active-tools! reg '("other"))
+      (check-false (tool-active? reg "read_file")))
+
+    (test-case "tool-active? returns #t for active tool when filter set"
+      (define reg (make-tool-registry))
+      (register-tool! reg t)
+      (set-active-tools! reg '("read_file"))
+      (check-true (tool-active? reg "read_file")))))
 
 (run-tests tool-reg-tests)
 
@@ -449,14 +453,15 @@
 (define memory-registration-tests
   (test-suite "Memory Tool Registration"
 
-    (test-case "all 7 memory tools appear in tool-specs"
+    (test-case "all 8 memory tools appear in tool-specs"
       (define memory-names
         '("store-memory" "search-memory"
                          "delete-memory"
                          "list-memory"
                          "clear-memory"
                          "update-memory"
-                         "cleanup-expired-memory"))
+                         "cleanup-expired-memory"
+                         "consolidate-memory"))
       (define spec-names (map tool-spec-name tool-specs))
       (for ([name memory-names])
         (check-not-false (member name spec-names) (format "~a should be in tool-specs" name))))

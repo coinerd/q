@@ -17,7 +17,7 @@
         (hasheq 'type "function" 'function (hasheq 'name name 'parameters (hasheq)))
         (lambda args (void))
         #f
-        '()
+        #f
         #f
         #f
         #f

@@ -28,7 +28,7 @@
                     "You can read files and modify plans, but cannot execute "
                     "shell commands or edit source files."))
    (define agent-role-handle-envelope
-     (make-capability-guarded-handler (lambda (_) '(read-only plan-write memory-write))
+     (make-capability-guarded-handler (lambda (self) (agent-role-capabilities self))
                                       (lambda (self envelope)
                                         (hasheq 'status
                                                 'ok
