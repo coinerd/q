@@ -34,6 +34,10 @@
 ;; Worker script arguments — the worker main entry point.
 (define current-worker-args (make-parameter '("-tm" "sandbox/worker-main.rkt")))
 
+;; Timeout for execution plane requests (ms).
+;; Default: 120000 (2 minutes).
+(define current-execution-plane-timeout-ms (make-parameter 120000))
+
 ;; ── Worker Lifecycle (memoized) ─────────────────────────────────
 
 ;; Box holding the current worker (or #f).
@@ -198,6 +202,7 @@
 (provide current-execution-plane-enabled
          current-worker-command
          current-worker-args
+         current-execution-plane-timeout-ms
          current-worker
          shutdown-worker!
          envelope->ipc-request

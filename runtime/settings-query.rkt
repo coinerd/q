@@ -47,7 +47,11 @@
           [setting-memory-auto-reflection-min-items
            (-> q-settings? (and/c exact-positive-integer? (>=/c 2)))]
           [setting-reflection-prompt-enabled? (-> q-settings? boolean?)]
-          [setting-auto-distillation-enabled? (-> q-settings? (or/c boolean? 'unset))]))
+          [setting-auto-distillation-enabled? (-> q-settings? (or/c boolean? 'unset))]
+          [execution-plane-enabled? (-> q-settings? boolean?)]
+          [execution-plane-timeout-ms (-> q-settings? exact-positive-integer?)]
+          [execution-plane-command (-> q-settings? (or/c string? #f))]
+          [execution-plane-worker-args (-> q-settings? (listof string?))]))
 
 ;; Query
 ;; ============================================================
@@ -345,3 +349,23 @@
 ;; Config key: security.shell-risk-classifier
 (define (shell-risk-classifier settings)
   (setting-ref* settings '(security shell-risk-classifier) 'regex))
+
+;; ============================================================
+;; Execution Plane Settings (v0.99.2 MAS Schritt 2)
+;; ============================================================
+
+;; Config key: mas.execution-plane.enabled (default #f)
+(define (execution-plane-enabled? settings)
+  (setting-ref* settings '(mas execution-plane enabled) #f))
+
+;; Config key: mas.execution-plane.timeout-ms (default 120000)
+(define (execution-plane-timeout-ms settings)
+  (setting-ref* settings '(mas execution-plane timeout-ms) 120000))
+
+;; Config key: mas.execution-plane.command (default #f = use "racket")
+(define (execution-plane-command settings)
+  (setting-ref* settings '(mas execution-plane command) #f))
+
+;; Config key: mas.execution-plane.worker-args (default '("-tm" "sandbox/worker-main.rkt"))
+(define (execution-plane-worker-args settings)
+  (setting-ref* settings '(mas execution-plane worker-args) '("-tm" "sandbox/worker-main.rkt")))

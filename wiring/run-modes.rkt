@@ -63,7 +63,12 @@
          (only-in "../extensions/gsd/state-machine.rkt" gsm-ctx-current)
          (only-in "../extensions/gsd/session-state.rkt" current-gsd-ctx)
          (only-in "../runtime/gsd-query.rkt" current-gsd-mode-query)
-         (only-in "../runtime/session/session-events.rkt" current-mid-session-bridge-enabled))
+         (only-in "../runtime/session/session-events.rkt" current-mid-session-bridge-enabled)
+         (only-in "../sandbox/gateway-bridge.rkt"
+                  current-execution-plane-enabled
+                  current-execution-plane-timeout-ms
+                  current-worker-command
+                  current-worker-args))
 
 ;; Re-export mode runners from sub-modules
 (require "run-interactive.rkt"
@@ -316,7 +321,15 @@
   (when (and (current-memory-backend) (not (current-reflection-llm-fn)))
     (log-warning "memory: reflection LLM not available — auto-reflection disabled"))
   ;; AXIS2-F13 (v0.98.14): Wire goal-loop from settings (default #t)
-  (current-goal-loop-enabled? (setting-ref* settings '(goal-loop-enabled?) #t)))
+  (current-goal-loop-enabled? (setting-ref* settings '(goal-loop-enabled?) #t))
+  ;; v0.99.2: Wire execution plane from settings (default #f = disabled)
+  (when (execution-plane-enabled? settings)
+    (current-execution-plane-enabled #t)
+    (current-execution-plane-timeout-ms (execution-plane-timeout-ms settings))
+    (let ([cmd (execution-plane-command settings)])
+      (when cmd
+        (current-worker-command cmd)))
+    (current-worker-args (execution-plane-worker-args settings))))
 ;; ============================================================
 ;; reload-config! (#1182)
 ;; ============================================================
