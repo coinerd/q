@@ -12,7 +12,10 @@
 
 (require racket/contract
          racket/string
-         (only-in "../../agent/capability.rkt" valid-capability? VALID-CAPABILITIES))
+         (only-in "../../agent/capability.rkt"
+                  valid-capability?
+                  VALID-CAPABILITIES
+                  ROLE-CAPABILITIES))
 
 ;; ============================================================
 ;; Struct Definition
@@ -78,6 +81,11 @@
     (raise-argument-error 'make-mas-envelope
                           (format "capability from ~a" VALID-CAPABILITIES)
                           capability))
+  ;; M4: Validate source and target agents are known roles
+  (unless (hash-has-key? ROLE-CAPABILITIES source-agent)
+    (raise-argument-error 'make-mas-envelope "valid role symbol" source-agent))
+  (unless (hash-has-key? ROLE-CAPABILITIES target-agent)
+    (raise-argument-error 'make-mas-envelope "valid role symbol" target-agent))
   ;; Validate risk-level
   (unless (memq risk-level '(low medium high critical))
     (raise-argument-error 'make-mas-envelope "(or/c 'low 'medium 'high 'critical)" risk-level))
@@ -133,8 +141,8 @@
     [else
      (with-handlers ([exn:fail? (lambda (_) #f)])
        ;; H4 fix: delegate to make-mas-envelope for validation
-       (make-mas-envelope (coerce->symbol (hash-ref h 'source-agent 'unknown))
-                          (coerce->symbol (hash-ref h 'target-agent 'unknown))
+       (make-mas-envelope (coerce->symbol (hash-ref h 'source-agent 'supervisor))
+                          (coerce->symbol (hash-ref h 'target-agent 'supervisor))
                           (coerce->symbol (hash-ref h 'capability 'any) 'any)
                           (hash-ref h 'payload #f)
                           #:message-id (hash-ref h 'message-id #f)

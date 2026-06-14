@@ -9,6 +9,7 @@
 
 (require racket/generic
          (only-in "base.rkt" gen:agent-role agent-role-capabilities agent-role-handle-envelope)
+         (only-in "../../agent/capability.rkt" ROLE-CAPABILITIES)
          (only-in "planner.rkt" make-planner-role)
          (only-in "verifier.rkt" make-verifier-role)
          (only-in "tool-gateway.rkt" make-tool-gateway-role)
@@ -25,7 +26,7 @@
   #:transparent
   #:methods gen:agent-role
   [(define (agent-role-capabilities self)
-     '(read-only plan-write memory-write subagent))
+     (hash-ref ROLE-CAPABILITIES 'supervisor))
    (define (agent-role-system-prompt self)
      (string-append "You are the Supervisor agent in a multi-agent system. "
                     "Your role is to orchestrate sub-agents: planner, verifier, "

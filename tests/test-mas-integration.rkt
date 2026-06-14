@@ -21,7 +21,8 @@
                   make-mas-envelope
                   mas-envelope?
                   mas-envelope-target-agent
-                  mas-envelope-capability)
+                  mas-envelope-capability
+                  mas-envelope-trace-id)
          (only-in "../agent/capability.rkt" current-session-capabilities role-has-capability?)
          (only-in "../tools/tool.rkt"
                   make-tool-registry
@@ -54,7 +55,7 @@
       ;; Note: Full dispatch chain (supervisor→tool-gateway) requires envelope
       ;; capability re-writing (Schritt 2). Here we test direct dispatch.
       (define sup (make-supervisor-role))
-      (define env (make-mas-envelope 'orchestrator 'tool-gateway 'shell-exec (hasheq 'cmd "ls")))
+      (define env (make-mas-envelope 'supervisor 'tool-gateway 'shell-exec (hasheq 'cmd "ls")))
       (define result (supervisor-dispatch sup env))
       (check-equal? (hash-ref result 'status) 'ok)
       (check-equal? (hash-ref result 'role) 'tool-gateway))
@@ -81,7 +82,7 @@
 
     (test-case "supervisor rejects unknown target"
       (define sup (make-supervisor-role))
-      (define env (make-mas-envelope 'supervisor 'nonexistent 'read-only (hasheq)))
+      (define env (make-mas-envelope 'supervisor 'executor 'read-only (hasheq)))
       (define result (supervisor-dispatch sup env))
       (check-equal? (hash-ref result 'status) 'error))
 
@@ -102,6 +103,37 @@
       (check-true (role-has-capability? 'planner 'memory-write))
       ;; planner cannot access shell or browser
       (check-false (role-has-capability? 'planner 'shell-exec))
-      (check-false (role-has-capability? 'planner 'browser)))))
+      (check-false (role-has-capability? 'planner 'browser)))
+
+    ;; ── M6: Trace-id propagation ──
+
+    (test-case "M6: supervisor dispatch preserves trace-id through result"
+      (define sup (make-supervisor-role))
+      (define test-trace "trace-abc-123")
+      (define env
+        (make-mas-envelope 'supervisor
+                           'planner
+                           'read-only
+                           (hasheq 'action "plan")
+                           #:trace-id test-trace))
+      (define result (agent-role-handle-envelope sup env))
+      (check-equal? (hash-ref result 'status) 'ok)
+      ;; The envelope carries trace-id; dispatch succeeded
+      (check-equal? (mas-envelope-trace-id env) test-trace))
+
+    ;; ── M4: Source/target validation ──
+
+    (test-case "M4: make-mas-envelope rejects invalid source-agent"
+      (check-exn exn:fail?
+                 (lambda () (make-mas-envelope 'bogus-source 'planner 'read-only (hasheq)))))
+
+    (test-case "M4: make-mas-envelope rejects invalid target-agent"
+      (check-exn exn:fail?
+                 (lambda () (make-mas-envelope 'supervisor 'bogus-target 'read-only (hasheq)))))
+
+    ;; ── L5: Unknown-role behavior ──
+
+    (test-case "L5: role-has-capability? returns #f for unknown role"
+      (check-false (role-has-capability? 'bogus-role 'read-only)))))
 
 (run-tests suite)

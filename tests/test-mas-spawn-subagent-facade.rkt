@@ -10,7 +10,6 @@
          rackunit/text-ui
          (only-in "../tools/builtins/spawn-subagent.rkt"
                   child-safe-tools
-                  capability-filtered-child-tools
                   subagent-config
                   subagent-config?
                   subagent-config-task
@@ -74,47 +73,6 @@
                     (format "tool ~a capability should be symbol, got ~a" (tool-name t) cap))
         (check-not-false (memq cap '(read-only file-write shell-exec))
                          (format "tool ~a has unexpected capability: ~a" (tool-name t) cap))))
-
-    ;; ── capability-filtered-child-tools ──
-
-    (test-case "capability-filtered: '(any) returns all tools"
-      (parameterize ([current-session-capabilities '(any)])
-        (define filtered (capability-filtered-child-tools))
-        (define all (child-safe-tools))
-        (check-equal? (length filtered) (length all))))
-
-    (test-case "capability-filtered: '(read-only) returns only read tools"
-      (parameterize ([current-session-capabilities '(read-only)])
-        (define filtered (capability-filtered-child-tools))
-        (define names (map tool-name filtered))
-        (for ([name (in-list '("read" "grep" "find" "ls"))])
-          (check-not-false (member name names) (format "~a should be in filtered tools" name)))
-        (for ([name (in-list '("write" "edit" "bash"))])
-          (check-false (member name names) (format "~a should NOT be in filtered tools" name)))))
-
-    (test-case "capability-filtered: '(read-only file-write) includes read + write/edit"
-      (parameterize ([current-session-capabilities '(read-only file-write)])
-        (define filtered (capability-filtered-child-tools))
-        (define names (map tool-name filtered))
-        (check-not-false (member "read" names))
-        (check-not-false (member "write" names))
-        (check-not-false (member "edit" names))
-        ;; shell-exec excluded
-        (check-false (member "bash" names))))
-
-    (test-case "capability-filtered: '(read-only shell-exec) includes bash"
-      (parameterize ([current-session-capabilities '(read-only shell-exec)])
-        (define filtered (capability-filtered-child-tools))
-        (define names (map tool-name filtered))
-        (check-not-false (member "bash" names))
-        ;; file-write excluded
-        (check-false (member "write" names))
-        (check-false (member "edit" names))))
-
-    (test-case "capability-filtered: empty caps returns no tools"
-      (parameterize ([current-session-capabilities '()])
-        (define filtered (capability-filtered-child-tools))
-        (check-equal? filtered '())))
 
     ;; ── parse-subagent-config ──
 

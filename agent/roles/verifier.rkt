@@ -8,6 +8,7 @@
 
 (require racket/generic
          (only-in "base.rkt" gen:agent-role agent-role-capabilities make-capability-guarded-handler)
+         (only-in "../../agent/capability.rkt" ROLE-CAPABILITIES)
          (only-in "../../util/message/mas-envelope.rkt" mas-envelope-payload))
 
 ;; ============================================================
@@ -18,7 +19,7 @@
   #:transparent
   #:methods gen:agent-role
   [(define (agent-role-capabilities self)
-     '(read-only))
+     (hash-ref ROLE-CAPABILITIES 'verifier))
    (define (agent-role-system-prompt self)
      (string-append "You are the Verifier agent in a multi-agent system. "
                     "Your role is to review, validate, and test outputs "

@@ -9,6 +9,7 @@
 
 (require racket/generic
          (only-in "base.rkt" gen:agent-role agent-role-capabilities make-capability-guarded-handler)
+         (only-in "../../agent/capability.rkt" ROLE-CAPABILITIES)
          (only-in "../../util/message/mas-envelope.rkt" mas-envelope-payload))
 
 ;; ============================================================
@@ -19,7 +20,7 @@
   #:transparent
   #:methods gen:agent-role
   [(define (agent-role-capabilities self)
-     '(shell-exec file-write git-write network browser))
+     (hash-ref ROLE-CAPABILITIES 'tool-gateway))
    (define (agent-role-system-prompt self)
      (string-append "You are the Tool Gateway agent in a multi-agent system. "
                     "Your role is to execute tool calls on behalf of the supervisor. "

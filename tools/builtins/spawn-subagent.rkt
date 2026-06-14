@@ -14,7 +14,7 @@
          racket/list
          racket/string
          "../../tools/tool.rkt"
-         (only-in "../../agent/capability.rkt" current-session-capabilities)
+         (only-in "../../agent/capability.rkt" current-session-capabilities valid-capability?)
          (only-in "../../runtime/runtime-helpers.rkt" emit-session-event! make-event-bus)
          (only-in "../../runtime/settings.rkt" q-settings? setting-ref)
          "../model-bridge.rkt"
@@ -64,7 +64,6 @@
          tool-spawn-subagents
          ;; Child-safe tool list (for testing and capability facade)
          child-safe-tools
-         capability-filtered-child-tools
          ;; Struct (direct for match compatibility)
          subagent-config
          subagent-config?
@@ -273,19 +272,14 @@
                    tool-ls
                    #:required-capability 'read-only)))
 
-;; Capability-filtered child tools: returns only tools matching session capabilities.
-;; Uses current-session-capabilities parameter. If '(any), returns all.
-;; Otherwise, filters by matching required-capability against granted set.
-(define (capability-filtered-child-tools)
-  (define caps (current-session-capabilities))
-  (define all (child-safe-tools))
-  (cond
-    [(member 'any caps) all]
-    [else
-     (filter (lambda (t)
-               (define req (tool-required-capability t))
-               (or (eq? req 'any) (member req caps)))
-             all)]))
+;; M5: Validate all child-safe tools have valid capability annotations.
+;; Runs at module load to catch annotation bugs early.
+(for ([t (in-list (child-safe-tools))])
+  (unless (valid-capability? (tool-required-capability t))
+    (error 'child-safe-tools
+           "tool ~a has invalid capability: ~a"
+           (tool-name t)
+           (tool-required-capability t))))
 
 ;; Internal: run the subagent
 (define (run-subagent args role-prompt max-turns allowed-tools exec-ctx)

@@ -9,6 +9,7 @@
 
 (require racket/generic
          (only-in "base.rkt" gen:agent-role agent-role-capabilities make-capability-guarded-handler)
+         (only-in "../../agent/capability.rkt" ROLE-CAPABILITIES)
          (only-in "../../util/message/mas-envelope.rkt" mas-envelope-payload))
 
 ;; ============================================================
@@ -19,7 +20,7 @@
   #:transparent
   #:methods gen:agent-role
   [(define (agent-role-capabilities self)
-     '(read-only plan-write memory-write))
+     (hash-ref ROLE-CAPABILITIES 'planner))
    (define (agent-role-system-prompt self)
      (string-append "You are the Planner agent in a multi-agent system. "
                     "Your role is to analyze tasks, create structured plans, "

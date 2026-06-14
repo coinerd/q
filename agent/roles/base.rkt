@@ -10,6 +10,7 @@
 ;;   - handle-envelope: process an incoming mas-envelope
 
 (require racket/generic
+         racket/contract
          (only-in "../../util/message/mas-envelope.rkt"
                   mas-envelope?
                   mas-envelope-capability
@@ -20,16 +21,21 @@
 ;; Generic Interface
 ;; ============================================================
 
-(define-generics agent-role
-                 (agent-role-capabilities agent-role)
-                 (agent-role-system-prompt agent-role)
-                 (agent-role-handle-envelope agent-role envelope)
-                 #:fallbacks [(define (agent-role-handle-envelope agent-role envelope)
-                                (hasheq 'status
-                                        'error
-                                        'message
-                                        (format "unhandled envelope for role ~a"
-                                                (object-name agent-role))))])
+(define-generics
+ agent-role
+ (agent-role-capabilities agent-role)
+ (agent-role-system-prompt agent-role)
+ (agent-role-handle-envelope agent-role envelope)
+ #:fallbacks
+ [(define (agent-role-handle-envelope agent-role envelope)
+    (cond
+      [(not (mas-envelope? envelope))
+       (hasheq 'status 'error 'message (format "expected mas-envelope?, got ~a" envelope))]
+      [else
+       (hasheq 'status
+               'error
+               'message
+               (format "unhandled envelope for role ~a" (object-name agent-role)))]))])
 
 ;; ============================================================
 ;; Capability Guard for handle-envelope
@@ -37,21 +43,26 @@
 
 ;; Wraps a handler with capability checking.
 ;; Returns error hash if the envelope's capability exceeds the role's grant.
+;; M7: Returns error hash for non-envelope input instead of crashing.
 (define (make-capability-guarded-handler role-getter handler)
   (lambda (self envelope)
-    (define required (mas-envelope-capability envelope))
-    (define granted (role-getter self))
     (cond
-      [(or (eq? required 'any) (member required granted)) (handler self envelope)]
+      [(not (mas-envelope? envelope))
+       (hasheq 'status 'error 'message (format "expected mas-envelope?, got ~a" envelope))]
       [else
-       (hasheq 'status
-               'error
-               'message
-               (format "capability denied: ~a not in ~a" required granted)
-               'required
-               required
-               'granted
-               granted)])))
+       (define required (mas-envelope-capability envelope))
+       (define granted (role-getter self))
+       (cond
+         [(or (eq? required 'any) (member required granted)) (handler self envelope)]
+         [else
+          (hasheq 'status
+                  'error
+                  'message
+                  (format "capability denied: ~a not in ~a" required granted)
+                  'required
+                  required
+                  'granted
+                  granted)])])))
 
 ;; ============================================================
 ;; Provides
@@ -59,7 +70,10 @@
 
 (provide gen:agent-role
          agent-role?
-         agent-role-capabilities
-         agent-role-system-prompt
-         agent-role-handle-envelope
-         make-capability-guarded-handler)
+         (contract-out [agent-role-capabilities (-> agent-role? (listof symbol?))]
+                       [agent-role-system-prompt (-> agent-role? string?)]
+                       [make-capability-guarded-handler
+                        (-> (-> agent-role? (listof symbol?))
+                            (-> agent-role? mas-envelope? hash?)
+                            (-> agent-role? mas-envelope? hash?))])
+         agent-role-handle-envelope)

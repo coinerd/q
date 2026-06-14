@@ -59,8 +59,8 @@
           '(shell-exec file-write)))
 
 (define (role-has-capability? role cap)
-  (define granted (hash-ref ROLE-CAPABILITIES role '()))
-  (and (or (eq? cap 'any) (memq cap granted)) #t))
+  (define granted (hash-ref ROLE-CAPABILITIES role #f))
+  (and granted (or (eq? cap 'any) (memq cap granted)) #t))
 
 ;; ============================================================
 ;; Session-level capability parameter
