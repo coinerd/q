@@ -80,16 +80,13 @@
 (define (subscribe-runtime-events! ctx)
   (define bus (tui-ctx-event-bus ctx))
   (define ch (tui-ctx-event-ch ctx))
-  ;; AXIS2-F14 (v0.98.14): Bounded event channel to prevent unbounded growth.
-  ;; Counter tracks pending events; drops when over threshold.
-  (define MAX-EVENT-CHANNEL-SIZE 1000)
-  (define pending-box (box 0))
+  ;; BF1-ROOT (v0.99.4): Removed bounded event channel counter.
+  ;; The counter was never decremented when events were drained, causing
+  ;; event starvation after 1000 events (TUI permanently frozen on long
+  ;; responses). The async-channel is drained every 50ms by the TUI main
+  ;; loop, so unbounded growth is not a practical concern.
   (when bus
-    (subscribe! bus
-                (lambda (evt)
-                  (when (< (unbox pending-box) MAX-EVENT-CHANNEL-SIZE)
-                    (set-box! pending-box (add1 (unbox pending-box)))
-                    (async-channel-put ch evt))))
+    (subscribe! bus (lambda (evt) (async-channel-put ch evt)))
     ;; PIPE-01 (v0.98.13): Subscribe action handler to event bus.
     ;; Converts event structs to hashes via event->action-hash bridge,
     ;; then dispatches to tui-delta-handlers via make-tui-action-handler.
