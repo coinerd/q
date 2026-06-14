@@ -27,20 +27,48 @@
 ;; Allowed root directories for file operations
 (define current-allowed-roots (make-parameter (list (current-directory))))
 
+;; H3: Resolve symlinks before checking — simplify-path alone does NOT resolve symlinks.
+;; A symlink inside the allowed root pointing to /etc would pass the old check.
+;; resolve-path follows symlinks and raises exn on broken links → we reject those.
+;; For non-existent files (new writes), resolve the parent directory instead.
+(define (resolve-path-safely p)
+  (define complete (path->complete-path (expand-user-path p) (current-directory)))
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (cond
+      [(file-exists? complete) (simplify-path (resolve-path complete) #f)]
+      ;; File doesn't exist yet (e.g. new write) — resolve parent dir, then append filename
+      [(let-values ([(base name must-be-dir?) (split-path complete)])
+         (and base (directory-exists? base)))
+       (let-values ([(base name must-be-dir?) (split-path complete)])
+         (define parent-resolved (simplify-path (resolve-path base) #f))
+         (if name
+             (build-path parent-resolved name)
+             parent-resolved))]
+      ;; Neither file nor parent dir exists — resolve what we can
+      [else (simplify-path complete #f)])))
+
+;; H3: Normalize a root directory at comparison time (resolve symlinks)
+(define (normalize-root r)
+  (with-handlers ([exn:fail? (lambda (_) r)])
+    (simplify-path (resolve-path (path->complete-path r (current-directory))) #f)))
+
 ;; Check if a path is within allowed roots
 (define (path-allowed? p)
-  (define resolved (simplify-path (path->complete-path (expand-user-path p) (current-directory)) #f))
-  (define resolved-str (path->string resolved))
-  (for/or ([root (in-list (current-allowed-roots))])
-    (define root-str (path->string (path->complete-path root (current-directory))))
-    ;; Ensure root ends with a single slash for prefix comparison
-    (define root-dir
-      (if (string-suffix? root-str "/")
-          root-str
-          (string-append root-str "/")))
-    (or (string=? resolved-str root-str)
-        (string=? resolved-str root-dir)
-        (string-prefix? resolved-str root-dir))))
+  (define resolved (resolve-path-safely p))
+  ;; If resolve-path failed (broken symlink or missing file), reject
+  (and resolved
+       (let ([resolved-str (path->string resolved)])
+         (for/or ([root (in-list (current-allowed-roots))])
+           (define normalized-root (normalize-root root))
+           (define root-str (path->string (path->complete-path normalized-root (current-directory))))
+           ;; Ensure root ends with a single slash for prefix comparison
+           (define root-dir
+             (if (string-suffix? root-str "/")
+                 root-str
+                 (string-append root-str "/")))
+           (or (string=? resolved-str root-str)
+               (string=? resolved-str root-dir)
+               (string-prefix? resolved-str root-dir))))))
 
 ;; ── Tool Execution Functions ────────────────────────────────────
 

@@ -22,6 +22,7 @@
 (define (process-request-line line)
   ;; Parse JSON → ipc-request → dispatch → ipc-response
   ;; Returns ipc-response
+  ;; M5: Use parameterize for CWD so changes don't leak across requests
   (with-handlers ([exn:fail? (lambda (e)
                                (make-error-response #f (format "worker error: ~a" (exn-message e))))])
     (define req-data
@@ -34,11 +35,13 @@
        (define req-id (ipc-request-request-id request))
        (define tool-name (ipc-request-tool-name request))
        (define arguments (ipc-request-arguments request))
-       ;; Set working directory if specified
-       (when (ipc-request-working-dir request)
-         (current-directory (ipc-request-working-dir request)))
-       ;; Dispatch the tool
-       (define response (dispatch-tool tool-name arguments))
+       ;; M5: parameterize restores CWD after dispatch (no leak)
+       (define response
+         (let ([wd (ipc-request-working-dir request)])
+           (if wd
+               (parameterize ([current-directory wd])
+                 (dispatch-tool tool-name arguments))
+               (dispatch-tool tool-name arguments))))
        ;; Stamp the request-id into the response
        (ipc-response req-id
                      (ipc-response-status response)
@@ -72,9 +75,21 @@
                             (ipc-response-error-message response)
                             (ipc-response-schema-version response))
               response))
-        ;; Serialize and write response
+        ;; M4: Enforce IPC-MAX-RESPONSE-BYTES — prevent oversized responses from crashing
         (define json-str (jsexpr->string (ipc-response->jsexpr clean-response)))
-        (display json-str (current-output-port))
+        (define final-json-str
+          (if (> (string-length json-str) IPC-MAX-RESPONSE-BYTES)
+              (let ([truncated (ipc-response (ipc-response-request-id clean-response)
+                                             'error
+                                             (format "response too large (~a bytes, max ~a)"
+                                                     (string-length json-str)
+                                                     IPC-MAX-RESPONSE-BYTES)
+                                             (hasheq 'original-bytes (string-length json-str))
+                                             "response exceeded size limit"
+                                             (ipc-response-schema-version clean-response))])
+                (jsexpr->string (ipc-response->jsexpr truncated)))
+              json-str))
+        (display final-json-str (current-output-port))
         (newline (current-output-port))
         (flush-output (current-output-port))
         (worker-loop)])]))
