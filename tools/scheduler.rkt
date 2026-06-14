@@ -43,7 +43,12 @@
                   tool-call-id
                   tool-call-name
                   tool-call-arguments)
-         (only-in "tool-struct.rkt" tool-execute tool-dangerous? tool-timeout-seconds)
+         (only-in "tool-struct.rkt"
+                  tool-execute
+                  tool-dangerous?
+                  tool-timeout-seconds
+                  tool-externalizable?
+                  tool-required-capability)
          (only-in "scheduler-strategy.rkt"
                   scheduler-strategy?
                   scheduler-strategy-preflight-filter
@@ -56,7 +61,28 @@
                   allowed-path?
                   safe-mode-project-root)
          (only-in "file-mutation-queue.rkt" with-file-mutation-queue)
-         (only-in "permission-gate.rkt" permission-config? tool-needs-approval? request-approval))
+         (only-in "permission-gate.rkt" permission-config? tool-needs-approval? request-approval)
+         (only-in "../sandbox/gateway-bridge.rkt"
+                  current-execution-plane-enabled
+                  ensure-worker!
+                  shutdown-worker!)
+         (only-in "../sandbox/gateway-ipc.rkt" send-request! generate-request-id)
+         (only-in "../sandbox/ipc-protocol.rkt"
+                  ipc-request
+                  ipc-request?
+                  ipc-request-request-id
+                  ipc-request-tool-name
+                  ipc-request-arguments
+                  ipc-request-timeout-ms
+                  ipc-request-capability
+                  ipc-response
+                  ipc-response?
+                  ipc-response-status
+                  ipc-response-content
+                  ipc-response-details
+                  ipc-response-error-message
+                  IPC-SCHEMA-VERSION
+                  IPC-DEFAULT-TIMEOUT-MS))
 
 ;; ── Result struct ──
 (provide scheduler-result
@@ -114,12 +140,13 @@
                        [max-parallel-tools (parameter/c exact-positive-integer?)]
                        ;; I11 (v0.72.7): Contracts on internal exports
                        [plan-tool-batch (-> scheduler-problem? scheduler-plan?)]
-                       [execute-tool-plan (-> scheduler-plan?
-                                              exec-context?
-                                              (or/c procedure? #f)
-                                              boolean?
-                                              (or/c procedure? #f)
-                                              scheduler-result?)]))
+                       [execute-tool-plan
+                        (-> scheduler-plan?
+                            exec-context?
+                            (or/c procedure? #f)
+                            boolean?
+                            (or/c procedure? #f)
+                            scheduler-result?)]))
 
 ;; ============================================================
 ;; Scheduler result struct
@@ -258,6 +285,39 @@
       [else (preflight-entry 'error tc #f (format "unexpected hook return: ~v" tc-after-hook))])))
 
 ;; ============================================================
+;; Execution-plane bridge: route dangerous tools through worker
+;; ============================================================
+
+;; Translate ipc-response to tool-result for the scheduler.
+(define (ipc-response->tool-result resp)
+  (define status (ipc-response-status resp))
+  (define content (ipc-response-content resp))
+  (define details (ipc-response-details resp))
+  (define err-msg (ipc-response-error-message resp))
+  (case status
+    [(ok) (make-success-result (or content "ok") details)]
+    [(timeout) (make-error-result (format "tool execution timed out: ~a" (or err-msg "")))]
+    [(crashed) (make-error-result (format "worker crashed: ~a" (or err-msg "")))]
+    [else (make-error-result (format "execution plane error: ~a" (or err-msg "unknown")))]))
+
+;; Execute a tool via the external worker process.
+(define (execute-via-scheduler-bridge tool-name args required-capability)
+  (with-handlers ([exn:fail? (lambda (e)
+                               (make-error-result (format "execution plane error: ~a"
+                                                          (exn-message e))))])
+    (define req-id (generate-request-id))
+    (define timeout-ms
+      (let ([t (hash-ref args 'timeout #f)])
+        (if (and t (positive? t))
+            (inexact->exact (* t 1000))
+            IPC-DEFAULT-TIMEOUT-MS)))
+    (define req
+      (ipc-request req-id tool-name args timeout-ms #f required-capability IPC-SCHEMA-VERSION))
+    (define gw (ensure-worker!))
+    (define resp (send-request! gw req timeout-ms))
+    (ipc-response->tool-result resp)))
+
+;; ============================================================
 ;; Execute a single tool call (with exception handling)
 ;; Includes tool-call-pre and tool-result-post hooks (R2-7)
 ;; ============================================================
@@ -321,11 +381,17 @@
               (hash-set raw-args 'timeout (tool-timeout-seconds t))
               raw-args))
         (define exec-result
-          (with-handlers ([exn:fail? (lambda (e)
-                                       (make-error-result
-                                        (format "tool '~a' raised: ~a" tc-name (exn-message e))))])
-            (define path-arg (and (tool-dangerous? t) (hash? args) (hash-ref args 'path #f)))
-            (with-file-mutation-queue path-arg (lambda () ((tool-execute t) args exec-ctx)))))
+          (cond
+            [(and (current-execution-plane-enabled) (tool-dangerous? t) (tool-externalizable? t))
+             ;; Route through the execution plane (isolated worker)
+             (execute-via-scheduler-bridge tc-name args (tool-required-capability t))]
+            [else
+             ;; Existing in-process execution (unchanged)
+             (with-handlers ([exn:fail? (lambda (e)
+                                          (make-error-result
+                                           (format "tool '~a' raised: ~a" tc-name (exn-message e))))])
+               (define path-arg (and (tool-dangerous? t) (hash? args) (hash-ref args 'path #f)))
+               (with-file-mutation-queue path-arg (lambda () ((tool-execute t) args exec-ctx))))]))
 
         ;; Dispatch 'tool-result-post hook
         (define post-payload (tool-post-hook-payload tc-name exec-result tc-id args))

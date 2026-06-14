@@ -56,6 +56,7 @@
          tool-render-result
          tool-timeout-seconds
          tool-required-capability
+         tool-externalizable?
          (contract-out [make-tool
                         (->* (string? string? hash? procedure?)
                              (#:prompt-snippet (or/c string? #f)
@@ -64,7 +65,8 @@
                                                #:prompt-guidelines (or/c string? #f)
                                                #:dangerous? boolean?
                                                #:timeout-seconds (or/c exact-nonnegative-integer? #f)
-                                               #:required-capability symbol?)
+                                               #:required-capability symbol?
+                                               #:externalizable? boolean?)
                              tool?)]
                        [validate-tool-args (-> tool? hash? boolean?)])
          merge-tool-lists
@@ -154,7 +156,8 @@
                    #:prompt-guidelines [prompt-guidelines #f]
                    #:dangerous? [dangerous? #f]
                    #:timeout-seconds [timeout-seconds #f]
-                   #:required-capability [required-capability 'any])
+                   #:required-capability [required-capability 'any]
+                   #:externalizable? [externalizable? #t])
   (unless (string? name)
     (raise-argument-error 'make-tool "string?" name))
   (unless (string? description)
@@ -183,7 +186,8 @@
         render-result
         dangerous?
         timeout-seconds
-        required-capability))
+        required-capability
+        externalizable?))
 
 ;; ============================================================
 ;; Progress emission
