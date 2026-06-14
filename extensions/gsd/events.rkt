@@ -10,10 +10,7 @@
          (only-in "../../util/error/errors.rkt" raise-extension-error)
          (only-in "../../agent/event-structs/base.rkt" typed-event?)
          (only-in "../../agent/event-emitter.rkt" event-struct->hasheq)
-         (only-in "session-state.rkt"
-                  gsd-session-ctx?
-                  gsd-default-ctx
-                  gsd-ctx-event-bus))
+         (only-in "session-state.rkt" gsd-session-ctx? gsd-default-ctx gsd-ctx-event-bus))
 
 (provide gsd-event-names
          emit-gsd-event!
@@ -48,7 +45,10 @@
                          gsd.plan.normalized
                          gsd.plan.validated
                          gsd.plan.archived
-                         gsd.archive.failed))
+                         gsd.archive.failed
+                         gsd.verification.started
+                         gsd.verification.completed
+                         gsd.verification.escalated))
 
 ;; ============================================================
 ;; Correlation ID parameter
