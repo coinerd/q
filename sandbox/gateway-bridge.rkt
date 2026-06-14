@@ -216,7 +216,7 @@
     (define req-id (generate-request-id))
     (define timeout-ms
       (let ([t (hash-ref args 'timeout #f)])
-        (if (and t (positive? t))
+        (if (and (real? t) (positive? t))
             (inexact->exact (* t 1000))
             (current-execution-plane-timeout-ms))))
     (define req

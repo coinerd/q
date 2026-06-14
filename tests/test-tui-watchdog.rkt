@@ -360,6 +360,7 @@
     (check-false (ui-state-busy? result))))
 
 (test-case "BF1b: stall transcript entry has stall marker"
+  ;; MF4 (v0.99.5): Strengthened assertions — exact text, timestamp, full metadata.
   ;; The streaming stall watchdog entry should have 'stall #t in its meta.
   (parameterize ([current-streaming-watchdog-ms (* 3 60 1000)])
     (define now (* 10 60 1000))
@@ -375,7 +376,19 @@
                     (hash-ref (transcript-entry-meta e) 'stall #f)))
              entries))
     (check-not-false stall-entry "Should have stall-marked entry")
-    (check-true (string-contains? (transcript-entry-text stall-entry) "streaming"))))
+    ;; MF4: Exact text match
+    (check-equal? (transcript-entry-text stall-entry)
+                  "[Watchdog: streaming stalled — force-cleared after 3 min]")
+    ;; MF4: Exact timestamp match
+    (check-equal? (transcript-entry-timestamp stall-entry) now)
+    ;; MF4: Full metadata verification
+    (define meta (transcript-entry-meta stall-entry))
+    (check-true (hash-ref meta 'watchdog #f) "meta should have 'watchdog #t")
+    (check-true (hash-ref meta 'stall #f) "meta should have 'stall #t")
+    ;; MF4: Verify cleared state
+    (check-false (ui-state-busy? result) "busy? should be cleared")
+    (check-false (ui-state-streaming-text result) "streaming-text should be cleared")
+    (check-false (ui-state-busy-since result) "busy-since should be cleared")))
 
 (test-case "BF1b: last-delta-ms field is #f by default"
   (check-false (ui-state-last-delta-ms (initial-ui-state))))
@@ -393,3 +406,40 @@
   (define s1 (set-last-delta-ms s0 99999.0))
   (define cleared (set-busy s1 #f))
   (check-false (ui-state-last-delta-ms cleared)))
+
+;; ============================================================
+;; v0.99.5 HF1: Thinking-only stream watchdog tests
+;; ============================================================
+
+(test-case "HF1: thinking-only stream does NOT trigger busy timeout"
+  ;; Previously, a thinking-only stream (no text) would trigger the
+  ;; non-streaming busy timeout because Case 1 only checked streaming-text.
+  ;; HF1 fix also checks streaming-thinking.
+  (parameterize ([current-busy-watchdog-ms (* 5 60 1000)])
+    (define now (* 10 60 1000))
+    (define base (set-busy (set-busy-since (initial-ui-state) 0) #t))
+    ;; Thinking stream is active, no text stream
+    (define st (set-streaming-thinking base "extended thinking..."))
+    (define result (check-busy-watchdog st now (* 5 60 1000)))
+    ;; Should NOT fire busy timeout (should fall through to Case 2)
+    ;; Case 2 won't fire either because last-delta-ms is #f
+    (check-false result "HF1: thinking-only stream should not trigger busy timeout")))
+
+(test-case "HF1: thinking-only stream stall IS detected"
+  ;; When thinking stream stalls (no delta for 3+ min), watchdog should fire.
+  (parameterize ([current-streaming-watchdog-ms (* 3 60 1000)])
+    (define now (* 10 60 1000))
+    (define last-delta (* 5 60 1000))
+    (define base (set-busy (set-busy-since (initial-ui-state) 0) #t))
+    (define st (set-last-delta-ms (set-streaming-thinking base "thinking...") last-delta))
+    (define result (check-busy-watchdog st now (* 5 60 1000)))
+    (check-not-false result "HF1: thinking-only stall should be detected")
+    (check-false (ui-state-busy? result))))
+
+(test-case "HF1: both text and thinking stream active does not false-trigger busy timeout"
+  (parameterize ([current-busy-watchdog-ms (* 5 60 1000)])
+    (define now (* 10 60 1000))
+    (define base (set-busy (set-busy-since (initial-ui-state) 0) #t))
+    (define st (set-streaming-thinking (set-streaming-text base "text") "thinking"))
+    (define result (check-busy-watchdog st now (* 5 60 1000)))
+    (check-false result "HF1: both streams active should not trigger busy timeout")))

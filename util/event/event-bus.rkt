@@ -171,6 +171,12 @@
 
 ;; ============================================================
 ;; publish!
+;; LF4-new (v0.99.5): Documented behavior — publish! does NOT guarantee
+;; ordering of subscriber callbacks under concurrent publish! calls from
+;; multiple threads. Subscribers are dispatched in subscription-order
+;; (reversed to approximate FIFO), but concurrent publishers may interleave.
+;; If strict ordering is required, publish from a single thread or serialize
+;; via an external queue.
 ;; ============================================================
 
 (define (publish! bus evt)

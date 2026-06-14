@@ -89,8 +89,12 @@
 (define (handle-tool-call-started state evt)
   (define payload (event-payload evt))
   (define name (hash-ref payload 'name "?"))
+  ;; MF2 (v0.99.5): Clear stale streaming text when transitioning to tool
+  ;; execution. Without this, old streaming-text triggers false watchdog
+  ;; stall detection during tool calls.
+  (define cleared-stream (clear-streaming state))
   (if (recent-tool-start? state name)
-      (set-streaming-phase (set-pending-tool-name (set-busy state #t) name) 'tool-pending)
+      (set-streaming-phase (set-pending-tool-name (set-busy cleared-stream #t) name) 'tool-pending)
       (let* ([args-raw (hash-ref payload 'arguments #f)]
              [arg-summary (if args-raw
                               (extract-arg-summary args-raw)
@@ -98,7 +102,7 @@
              [text arg-summary]
              [ts (event-time evt)]
              [meta (hasheq 'name name 'arguments (or args-raw ""))]
-             [new-state (append-entry state (make-entry 'tool-start text ts meta))])
+             [new-state (append-entry cleared-stream (make-entry 'tool-start text ts meta))])
         (if (ui-state-pending-tool-name state)
             (set-busy new-state #t)
             (set-pending-tool-name (set-busy new-state #t) name)))))

@@ -11,7 +11,10 @@
          racket/async-channel
          (only-in racket/list last)
          "../util/event/event.rkt"
-         "../util/event/event-bus.rkt")
+         "../util/event/event-bus.rkt"
+         ;; MF1 (v0.99.5): Production-path test imports
+         (only-in "../tui/context.rkt" make-tui-ctx tui-ctx-event-ch)
+         (only-in "../tui/tui-init.rkt" subscribe-runtime-events!))
 
 ;; Helper: Subscribe to bus, putting all events into an async-channel
 ;; (mirrors the fix in tui/tui-init.rkt subscribe-runtime-events!)
@@ -142,6 +145,32 @@
         (publish! bus (make-test-event i)))
       (sleep 0.3)
       (define events (drain-channel ch))
-      (check-equal? (length events) 10000))))
+      (check-equal? (length events) 10000))
+
+    ;; ── MF1 (v0.99.5): Production-path test ──
+
+    (test-case "MF1: subscribe-runtime-events! delivers 2000+ events"
+      ;; Test the actual production function from tui-init.rkt
+      (define bus (make-event-bus))
+      (define ctx (make-tui-ctx #:event-bus bus))
+      (define ch (tui-ctx-event-ch ctx))
+      ;; Call the production function
+      (subscribe-runtime-events! ctx)
+      ;; Publish 2000 events
+      (for ([i (in-range 2000)])
+        (publish! bus (make-test-event i)))
+      (sleep 0.5)
+      ;; Drain and verify all events arrived
+      (define events
+        (let loop ([acc '()])
+          (define evt (async-channel-try-get ch))
+          (if evt
+              (loop (cons evt acc))
+              (reverse acc))))
+      ;; Should have received all 2000 events (or close to it — the action
+      ;; handler subscriber also gets events, but the main channel should
+      ;; receive everything)
+      (check-true (>= (length events) 2000)
+                  (format "Expected >= 2000 events, got ~a" (length events))))))
 
 (run-tests suite)

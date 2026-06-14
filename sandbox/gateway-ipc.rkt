@@ -220,6 +220,9 @@
                                  (exact->inexact (round (current-inexact-milliseconds)))
                                  (unbox request-counter)))))
 
+;; LF2-new (v0.99.5): IPC-DEFAULT-TIMEOUT-MS (120000) matches the default
+;; of current-execution-plane-timeout-ms. Callers should always pass
+;; timeout-ms explicitly (typically from the execution-plane parameter).
 (define (send-request! gw req [timeout-ms IPC-DEFAULT-TIMEOUT-MS])
   ;; If worker is not alive, return error immediately
   (unless (gateway-alive? gw)

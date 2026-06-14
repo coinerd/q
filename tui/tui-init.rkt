@@ -77,6 +77,8 @@
 ;; Runtime event subscription
 ;; ============================================================
 
+(define channel-approx-depth (box 0))
+
 (define (subscribe-runtime-events! ctx)
   (define bus (tui-ctx-event-bus ctx))
   (define ch (tui-ctx-event-ch ctx))
@@ -86,7 +88,19 @@
   ;; responses). The async-channel is drained every 50ms by the TUI main
   ;; loop, so unbounded growth is not a practical concern.
   (when bus
-    (subscribe! bus (lambda (evt) (async-channel-put ch evt)))
+    (subscribe! bus
+                (lambda (evt)
+                  (async-channel-put ch evt)
+                  ;; LF1-new (v0.99.5): Soft warning for high channel depth.
+                  ;; Diagnostic only — does not drop events.
+                  ;; async-channel has no length API, so we use a counter
+                  ;; that approximates depth (incremented on put, reset on
+                  ;; each warning to avoid spam).
+                  (define n (add1 (unbox channel-approx-depth)))
+                  (set-box! channel-approx-depth n)
+                  (when (> n 5000)
+                    (log-warning "q-tui: event channel approx depth ~a exceeds 5000" n)
+                    (set-box! channel-approx-depth 0))))
     ;; PIPE-01 (v0.98.13): Subscribe action handler to event bus.
     ;; Converts event structs to hashes via event->action-hash bridge,
     ;; then dispatches to tui-delta-handlers via make-tui-action-handler.

@@ -199,7 +199,19 @@
         (check-equal? (hash-ref result 'status) 'ok)
         (check-equal? (hash-ref result 'result) "integration-ok")
         (check-equal? (hash-ref result 'role) 'tool-gateway)
-        (shutdown-worker!)))))
+        (shutdown-worker!)))
+
+    ;; ── MF5 (v0.99.5): Contract violation tests ──
+
+    (test-case "MF5: execute-tool-via-worker rejects non-string tool-name"
+      (check-exn exn:fail:contract? (lambda () (execute-tool-via-worker 123 (hash) 'any))))
+
+    (test-case "MF5: execute-tool-via-worker rejects non-hash arguments"
+      (check-exn exn:fail:contract? (lambda () (execute-tool-via-worker "read" "not-a-hash" 'any))))
+
+    (test-case "MF5: execute-tool-via-worker rejects non-symbol capability"
+      (check-exn exn:fail:contract?
+                 (lambda () (execute-tool-via-worker "read" (hash) "not-a-symbol"))))))
 
 ;; ── Requires for string-contains? ───────────────────────────────
 
