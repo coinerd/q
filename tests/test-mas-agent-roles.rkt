@@ -21,7 +21,7 @@
                   make-supervisor-role
                   supervisor-role?
                   supervisor-dispatch)
-         (only-in "../agent/capability.rkt" valid-capability? role-has-capability?)
+         (only-in "../util/capability.rkt" valid-capability? role-has-capability?)
          (only-in "../util/message/mas-envelope.rkt" make-mas-envelope mas-envelope?))
 
 (define suite

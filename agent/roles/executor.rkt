@@ -1,10 +1,15 @@
 #lang racket/base
 
-;; agent/roles/verifier.rkt — Verifier agent role (stub for Schritt 3)
+;; agent/roles/executor.rkt — Executor agent role
 ;; STABILITY: evolving
 ;;
-;; The verifier role has read-only access. It reviews plans,
-;; code, and outputs without modification capability.
+;; The executor role runs INSIDE the worker process.
+;; It has shell-exec and file-write capabilities but no
+;; network, git-write, or browser access.
+;;
+;; This resolves A5 finding: 'executor is no longer vestigial —
+;; it has a struct, capabilities, and a purpose (validate requests
+;; inside the execution plane worker).
 
 (require racket/generic
          (only-in "base.rkt" gen:agent-role agent-role-capabilities make-capability-guarded-handler)
@@ -15,34 +20,35 @@
 ;; Struct Definition
 ;; ============================================================
 
-(struct verifier-role ()
+(struct executor-role ()
   #:transparent
   #:methods gen:agent-role
   [(define (agent-role-capabilities self)
-     (hash-ref ROLE-CAPABILITIES 'verifier))
+     (hash-ref ROLE-CAPABILITIES 'executor))
    (define (agent-role-system-prompt self)
-     (string-append "You are the Verifier agent in a multi-agent system. "
-                    "Your role is to review, validate, and test outputs "
-                    "from other agents. You have read-only access — "
-                    "you cannot modify files or execute commands."))
+     (string-append "You are the Executor agent running inside the execution plane worker. "
+                    "Your role is to execute dangerous tool operations (shell commands, "
+                    "file writes) in an isolated process. You have shell-exec and file-write "
+                    "capabilities only. You cannot perform network requests, git operations, "
+                    "or browser automation."))
    (define agent-role-handle-envelope
      (make-capability-guarded-handler (lambda (self) (agent-role-capabilities self))
                                       (lambda (self envelope)
                                         (hasheq 'status
                                                 'ok
                                                 'role
-                                                'verifier
+                                                'executor
                                                 'payload
                                                 (mas-envelope-payload envelope)
                                                 'message
-                                                "verifier acknowledged envelope"))))])
+                                                "executor acknowledged envelope"))))])
 
 ;; ============================================================
 ;; Provides
 ;; ============================================================
 
-(provide verifier-role?
-         make-verifier-role)
+(provide executor-role?
+         make-executor-role)
 
-(define (make-verifier-role)
-  (verifier-role))
+(define (make-executor-role)
+  (executor-role))

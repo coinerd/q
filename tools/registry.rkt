@@ -16,7 +16,7 @@
                   tool-prompt-guidelines
                   tool-timeout-seconds
                   tool-required-capability)
-         (only-in "../agent/capability.rkt" valid-capability?))
+         (only-in "../util/capability.rkt" valid-capability?))
 
 (provide (contract-out [make-tool-registry (-> tool-registry?)]
                        [tool-registry-tools (-> tool-registry? (listof tool?))]

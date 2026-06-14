@@ -12,10 +12,7 @@
 
 (require racket/contract
          racket/string
-         (only-in "../../agent/capability.rkt"
-                  valid-capability?
-                  VALID-CAPABILITIES
-                  ROLE-CAPABILITIES))
+         (only-in "../capability.rkt" valid-capability? VALID-CAPABILITIES ROLE-CAPABILITIES))
 
 ;; ============================================================
 ;; Struct Definition

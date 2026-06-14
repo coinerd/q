@@ -19,7 +19,7 @@
                   subagent-config-model
                   parse-subagent-config)
          (only-in "../tools/tool.rkt" tool? tool-name tool-required-capability)
-         (only-in "../agent/capability.rkt" current-session-capabilities))
+         (only-in "../util/capability.rkt" current-session-capabilities))
 
 (define suite
   (test-suite "MAS spawn-subagent Facade"

@@ -14,7 +14,7 @@
          racket/list
          racket/string
          "../../tools/tool.rkt"
-         (only-in "../../agent/capability.rkt" valid-capability?)
+         (only-in "../../util/capability.rkt" valid-capability?)
          (only-in "../../runtime/runtime-helpers.rkt" emit-session-event! make-event-bus)
          (only-in "../../runtime/settings.rkt" q-settings? setting-ref)
          "../model-bridge.rkt"

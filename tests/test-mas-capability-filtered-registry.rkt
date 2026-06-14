@@ -23,7 +23,7 @@
                   tool-specs
                   tool-spec-required-capability
                   tool-spec-name)
-         (only-in "../agent/capability.rkt" valid-capability?))
+         (only-in "../util/capability.rkt" valid-capability?))
 
 (define suite
   (test-suite "MAS Capability Filtered Registry"

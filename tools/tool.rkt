@@ -37,7 +37,7 @@
                   tool-result-details)
          (only-in "../util/tool/tool-types.rkt" tool-result-is-error?)
          ;; H3 fix: capability validation
-         (only-in "../agent/capability.rkt" valid-capability?)
+         (only-in "../util/capability.rkt" valid-capability?)
          ;; Submodule imports
          "tool-struct.rkt"
          "exec-context.rkt"

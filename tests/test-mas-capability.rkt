@@ -8,7 +8,7 @@
 
 (require rackunit
          rackunit/text-ui
-         (only-in "../agent/capability.rkt"
+         (only-in "../util/capability.rkt"
                   VALID-CAPABILITIES
                   ROLE-CAPABILITIES
                   valid-capability?

@@ -13,7 +13,7 @@
 
 (require racket/generic
          (only-in "base.rkt" gen:agent-role agent-role-capabilities make-capability-guarded-handler)
-         (only-in "../../agent/capability.rkt" ROLE-CAPABILITIES)
+         (only-in "../../util/capability.rkt" ROLE-CAPABILITIES)
          (only-in "../../util/message/mas-envelope.rkt"
                   mas-envelope?
                   mas-envelope-payload

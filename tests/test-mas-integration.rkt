@@ -23,7 +23,7 @@
                   mas-envelope-target-agent
                   mas-envelope-capability
                   mas-envelope-trace-id)
-         (only-in "../agent/capability.rkt" current-session-capabilities role-has-capability?)
+         (only-in "../util/capability.rkt" current-session-capabilities role-has-capability?)
          (only-in "../tools/tool.rkt"
                   make-tool-registry
                   list-tools

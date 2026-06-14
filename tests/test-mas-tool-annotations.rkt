@@ -19,7 +19,7 @@
                   tool-required-capability
                   tool?)
          (only-in "../tools/registry-table.rkt" register-tools-from-specs!)
-         (only-in "../agent/capability.rkt" valid-capability?))
+         (only-in "../util/capability.rkt" valid-capability?))
 
 (define suite
   (test-suite "MAS Tool Annotations"

@@ -5,7 +5,7 @@
 (require rackunit
          rackunit/text-ui
          racket/match
-         (only-in "../agent/capability.rkt" ROLE-CAPABILITIES)
+         (only-in "../util/capability.rkt" ROLE-CAPABILITIES)
          (only-in "../util/message/mas-envelope.rkt"
                   make-mas-envelope
                   mas-envelope?

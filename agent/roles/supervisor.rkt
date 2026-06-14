@@ -9,7 +9,7 @@
 
 (require racket/generic
          (only-in "base.rkt" gen:agent-role agent-role-capabilities agent-role-handle-envelope)
-         (only-in "../../agent/capability.rkt" ROLE-CAPABILITIES)
+         (only-in "../../util/capability.rkt" ROLE-CAPABILITIES)
          (only-in "planner.rkt" make-planner-role)
          (only-in "verifier.rkt" make-verifier-role)
          (only-in "tool-gateway.rkt" make-tool-gateway-role)
