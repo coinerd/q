@@ -10,7 +10,7 @@
          "../sandbox/ipc-protocol.rkt"
          "../sandbox/gateway-ipc.rkt")
 
-(define mock-path "tests/mock-worker.rkt")
+(define mock-path (path->string (path->complete-path "tests/mock-worker.rkt")))
 
 (define (start-mock [mode "echo"])
   (start-worker! "racket" (list "-tm" mock-path mode) #f))

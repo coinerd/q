@@ -85,7 +85,7 @@
     [else
      (define tool-name (hash-ref payload 'tool-name #f))
      (define arguments (hash-ref payload 'arguments (hasheq)))
-     (define timeout-ms (hash-ref payload 'timeout-ms IPC-DEFAULT-TIMEOUT-MS))
+     (define timeout-ms (hash-ref payload 'timeout-ms #f)) ; LF1: fall through to parameter
      (values tool-name arguments timeout-ms)]))
 
 ;; ── Envelope → IPC Translation ──────────────────────────────────
@@ -235,7 +235,6 @@
          envelope->ipc-request
          ipc-response->result-hash
          extract-tool-call
-         execute-tool-via-worker
          ;; H1/M3: Re-export IPC items so scheduler has a single import
          IPC-SCHEMA-VERSION
          IPC-DEFAULT-TIMEOUT-MS
@@ -258,4 +257,6 @@
          gateway-alive?
          gateway-worker-process)
 
-(provide (contract-out [ensure-worker! (-> gateway-worker?)] [execute-via-worker (-> any/c hash?)]))
+(provide (contract-out [ensure-worker! (-> gateway-worker?)]
+                       [execute-via-worker (-> any/c hash?)]
+                       [execute-tool-via-worker (-> string? hash? symbol? ipc-response?)]))

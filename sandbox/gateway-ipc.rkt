@@ -313,8 +313,7 @@
 (provide response-packet
          response-packet?
          response-packet-id
-         response-packet-response
-         register-pending-request!)
+         response-packet-response)
 
 (provide exn:fail:gateway
          exn:fail:gateway?)
@@ -329,4 +328,5 @@
            (->* (gateway-worker? (or/c string? path?)) ((listof string?)) gateway-worker?)]
           [gateway-stderr (-> gateway-worker? string?)]
           [gateway-pid (-> gateway-worker? (or/c exact-nonnegative-integer? #f))]
-          [generate-request-id (-> string?)]))
+          [generate-request-id (-> string?)]
+          [register-pending-request! (-> gateway-worker? string? async-channel? void?)]))
