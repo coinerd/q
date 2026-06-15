@@ -228,6 +228,25 @@
 (define (handle-blackboard-sync state evt)
   (struct-copy blackboard-state state [last-updated (event-timestamp evt)]))
 
+;; v0.99.8 W4: Agent version pinned handler.
+;; Records version pin as an agent activity entry.
+;; ============================================================
+
+(define (handle-agent-version-pinned state evt)
+  (define activity
+    (hasheq 'agent-name
+            (data-ref evt 'role-name 'unknown)
+            'action
+            'version-pinned
+            'version
+            (data-ref evt 'version "unknown")
+            'timestamp
+            (event-timestamp evt)))
+  (struct-copy blackboard-state
+               state
+               [agent-activities (capped-append (blackboard-state-agent-activities state) activity)]
+               [last-updated (event-timestamp evt)]))
+
 ;; ============================================================
 ;; Main Reducer
 ;; ============================================================
@@ -254,6 +273,8 @@
     [(eq? ev-name 'mas.hypothesis.resolved) (handle-hypothesis-resolved state evt)]
     ;; MAS sync (heartbeat)
     [(eq? ev-name 'mas.blackboard.sync) (handle-blackboard-sync state evt)]
+    ;; v0.99.8 W4: Agent version pinning
+    [(eq? ev-name 'mas.agent.version.pinned) (handle-agent-version-pinned state evt)]
     ;; Unknown event → unchanged
     [else state]))
 

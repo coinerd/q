@@ -86,6 +86,7 @@
                   current-blackboard-injection-enabled)
          ;; v0.99.8: Registry + hot-swap
          (only-in "../agent/registry-defaults.rkt" register-default-agents!)
+         (only-in "../agent/registry.rkt" pin-current-versions)
          (only-in "../agent/roles/supervisor.rkt" current-use-registry))
 
 ;; Re-export mode runners from sub-modules
@@ -221,7 +222,10 @@
   ;; Enable hot-swap only when mas.hot-swap.enabled is true.
   (register-default-agents!)
   (when (hot-swap-enabled? settings)
-    (current-use-registry #t))
+    (current-use-registry #t)
+    ;; v0.99.8 W4: Pin agent versions at session start.
+    ;; Pinned versions ensure mid-session consistency.
+    (pin-current-versions))
 
   ;; Build final config: immutable hash -> session-config (W-03)
   (define final-hash

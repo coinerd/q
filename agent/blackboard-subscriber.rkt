@@ -42,7 +42,8 @@
                      mas.test.result
                      mas.hypothesis.opened
                      mas.hypothesis.resolved
-                     mas.blackboard.sync))
+                     mas.blackboard.sync
+                     mas.agent.version.pinned))
 
 ;; Check if an event is relevant to the blackboard.
 ;; Accepts both event? structs (from the bus) and hashes (from JSONL).

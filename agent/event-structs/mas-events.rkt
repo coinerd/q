@@ -74,3 +74,18 @@
                     (state-snapshot)
                     #:optional ([source-agent #f])
                     #:schema-version 1)
+
+;; ============================================================
+;; Agent Version Pinning (v0.99.8)
+;; ============================================================
+
+;; Emitted when agent versions are pinned for a session.
+;; This ensures mid-session consistency — once pinned, the session
+;; uses the pinned versions even if new versions are activated
+;; mid-session for future sessions.
+;; role-name: symbol identifying the agent role
+;; version: string version that was pinned
+(define-typed-event mas-agent-version-pinned-event
+                    "mas.agent.version.pinned"
+                    (role-name version)
+                    #:schema-version 1)
