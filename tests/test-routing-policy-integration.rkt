@@ -54,15 +54,16 @@
         (check-equal? (hash-ref result 'route #f) 'local)
         (check-equal? (hash-ref result 'executed-locally? #f) #t)))
 
-    (test-case "M4 FIXED: risk-based high/critical route is explicit but executed locally in phase 1"
+    (test-case "M4 FIXED: risk-based high/critical route is now real remote in phase 2"
       (define role (make-tool-gateway-role))
       (define env (make-test-envelope 'critical))
       (parameterize ([current-routing-policy 'risk-based])
         (define result (agent-role-handle-envelope role env))
         (check-true (hash? result) "handler returns a hash")
         (check-equal? (hash-ref result 'routing-decision #f) 'remote)
-        (check-equal? (hash-ref result 'route #f) 'remote-tagged-but-executed-local)
-        (check-equal? (hash-ref result 'executed-locally? #f) #t)
+        ;; W3 (v0.99.12): remote routing is now real, not tagged-but-local
+        (check-equal? (hash-ref result 'route #f) 'remote)
+        (check-equal? (hash-ref result 'executed-locally? #f) #f)
         (check-equal? (hash-ref result 'risk-level #f) 'critical)))
 
     (test-case "M4 FIXED: routing policy changes execution metadata"
@@ -76,7 +77,8 @@
           (agent-role-handle-envelope role env)))
       (check-not-equal? result-local result-risk "routing policy affects gateway result")
       (check-equal? (hash-ref result-local 'route #f) 'local)
-      (check-equal? (hash-ref result-risk 'route #f) 'remote-tagged-but-executed-local))
+      ;; W3 (v0.99.12): remote routing is now real
+      (check-equal? (hash-ref result-risk 'route #f) 'remote))
 
     (test-case "M4 FIXED: injected executor output is preserved and annotated"
       (define role (make-tool-gateway-role))

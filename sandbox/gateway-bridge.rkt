@@ -19,7 +19,11 @@
                   mas-envelope-trace-id
                   mas-envelope-deadline)
          "ipc-protocol.rkt"
-         "gateway-ipc.rkt")
+         "gateway-ipc.rkt"
+         (only-in "../agent/distributed/remote-executor.rkt"
+                  remote-executor?
+                  execute-via-remote
+                  remote-executor-alive?))
 
 ;; ── Feature Flags ───────────────────────────────────────────────
 
@@ -37,6 +41,13 @@
 ;; Timeout for execution plane requests (ms).
 ;; Default: 120000 (2 minutes).
 (define current-execution-plane-timeout-ms (make-parameter 120000))
+
+;; ── Remote Executor (W3 v0.99.12) ─────────────────────────────
+
+;; Holds the current remote-executor? or #f (default).
+;; Set by wiring layer when broker is enabled.
+;; When #f, execute-via-remote-envelope returns a clear error.
+(define current-remote-executor (make-parameter #f))
 
 ;; ── Worker Lifecycle (memoized) ─────────────────────────────────
 
@@ -224,17 +235,74 @@
     (define gw (ensure-worker!))
     (send-request! gw req timeout-ms)))
 
+;; ── W3 (v0.99.12): Remote Execution via mTLS Broker ───────────
+
+;; Execute a tool call via the remote executor node.
+;; Uses current-remote-executor parameter (set by wiring layer).
+;; Returns a result hash suitable for agent-role-handle-envelope.
+(define (execute-via-remote-envelope envelope)
+  (define trace-id (and (mas-envelope? envelope) (mas-envelope-trace-id envelope)))
+  (define executor (current-remote-executor))
+  (cond
+    [(not (mas-envelope? envelope))
+     (hasheq 'status
+             'error
+             'role
+             'tool-gateway
+             'error-message
+             "execute-via-remote-envelope: expected mas-envelope?"
+             'trace-id
+             #f)]
+    [(not executor)
+     (hasheq 'status
+             'error
+             'role
+             'tool-gateway
+             'error-message
+             "remote executor not configured: mas.broker.enabled is #t but no executor connected"
+             'trace-id
+             trace-id)]
+    [(not (remote-executor-alive? executor))
+     (hasheq 'status
+             'error
+             'role
+             'tool-gateway
+             'error-message
+             "remote executor connection is not alive"
+             'trace-id
+             trace-id)]
+    [else
+     (with-handlers ([exn:fail? (lambda (e)
+                                  (hasheq 'status
+                                          'error
+                                          'role
+                                          'tool-gateway
+                                          'error-message
+                                          (format "remote execution error: ~a" (exn-message e))
+                                          'trace-id
+                                          trace-id))])
+       (define-values (tool-name arguments timeout-ms) (extract-tool-call envelope))
+       (define capability (mas-envelope-capability envelope))
+       (define timeout
+         (if (and (number? timeout-ms) (positive? timeout-ms))
+             (inexact->exact (floor timeout-ms))
+             (current-execution-plane-timeout-ms)))
+       (define resp (execute-via-remote executor tool-name arguments capability timeout))
+       (ipc-response->result-hash resp envelope))]))
+
 ;; ── Provides ────────────────────────────────────────────────────
 
 (provide current-execution-plane-enabled
          current-worker-command
          current-worker-args
          current-execution-plane-timeout-ms
+         current-remote-executor
          current-worker
          shutdown-worker!
          envelope->ipc-request
          ipc-response->result-hash
          extract-tool-call
+         execute-via-remote-envelope
          ;; H1/M3: Re-export IPC items so scheduler has a single import
          IPC-SCHEMA-VERSION
          IPC-DEFAULT-TIMEOUT-MS

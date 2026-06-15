@@ -49,15 +49,33 @@
           'message
           "tool-gateway acknowledged envelope (execution plane disabled)"))
 
+;; W3 (v0.99.12): Default remote executor — returns clear error.
+;; When broker is disabled (default), no remote executor is configured.
+;; This produces a fail-closed error if routing tries 'remote without one.
+(define (default-remote-tool-executor envelope)
+  (hasheq 'status
+          'error
+          'role
+          'tool-gateway
+          'error-message
+          "remote executor not configured: mas.broker.enabled is #f or no executor connected"
+          'trace-id
+          #f))
+
 ;; H2: The active executor — set by wiring layer when feature flag is ON
 (define current-tool-executor (make-parameter default-tool-executor))
+
+;; W3 (v0.99.12): The active remote executor — set by wiring layer when broker is ON.
+;; When routing decision is 'remote, this function handles the request.
+;; Default: fail-closed error (no remote executor configured).
+(define current-remote-tool-executor (make-parameter default-remote-tool-executor))
 
 (define (routing-decision->execution-route decision)
   (match decision
     ['local 'local]
-    ;; W4/M4 phase 1: no remote executor exists yet, so high/critical risk
-    ;; requests are explicitly tagged but still executed locally.
-    ['remote 'remote-tagged-but-executed-local]
+    ;; W3 (v0.99.12): remote routing is now real — the wiring layer
+    ;; sets current-remote-tool-executor to the actual remote bridge.
+    ['remote 'remote]
     [_ 'local]))
 
 (define (annotate-routing-result result decision envelope)
@@ -71,13 +89,16 @@
              'route
              (routing-decision->execution-route decision)
              'executed-locally?
-             #t
+             (eq? decision 'local)
              'risk-level
              (mas-envelope-risk-level envelope)))
 
 (define (execute-tool-gateway-with-routing envelope)
   (define decision (route-execution-request envelope))
-  (define result ((current-tool-executor) envelope))
+  (define result
+    (match decision
+      ['remote ((current-remote-tool-executor) envelope)]
+      [_ ((current-tool-executor) envelope)]))
   (annotate-routing-result result decision envelope))
 
 ;; ============================================================
@@ -118,9 +139,12 @@
          make-tool-gateway-role
          current-tool-executor
          default-tool-executor
+         current-remote-tool-executor
+         default-remote-tool-executor
          current-routing-policy
          route-execution-request
-         execute-tool-gateway-with-routing)
+         execute-tool-gateway-with-routing
+         routing-decision->execution-route)
 
 (define (make-tool-gateway-role)
   (tool-gateway-role))

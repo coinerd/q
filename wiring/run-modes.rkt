@@ -71,8 +71,13 @@
                   current-worker-command
                   current-worker-args
                   execute-via-worker
-                  shutdown-worker!)
-         (only-in "../agent/roles/tool-gateway.rkt" current-tool-executor)
+                  shutdown-worker!
+                  current-remote-executor
+                  execute-via-remote-envelope)
+         (only-in "../agent/roles/tool-gateway.rkt"
+                  current-tool-executor
+                  current-remote-tool-executor
+                  current-routing-policy)
          (only-in "../agent/verification/verifier-core.rkt"
                   current-verifier-enabled
                   current-verifier-model
@@ -92,7 +97,12 @@
          (only-in "../runtime/settings-query.rkt"
                   mcp-enabled?
                   mcp-server-enabled?
-                  mcp-server-transport)
+                  mcp-server-transport
+                  broker-enabled?
+                  broker-remote-host
+                  broker-remote-port
+                  broker-capability-secret
+                  broker-cert-dir)
          (only-in "../extensions/mcp-adapter.rkt" run-mcp-stdio-server! current-mcp-execute-fn)
          (only-in "../tools/scheduler.rkt" run-tool-batch scheduler-result-results))
 
@@ -446,6 +456,27 @@
         (current-worker-command cmd)))
     (current-worker-args (execution-plane-worker-args settings))
     (current-tool-executor execute-via-worker))
+  ;; v0.99.12 W3: Wire broker routing (remote executor).
+  ;; When broker is enabled AND capability secret is set:
+  ;;   - Enable risk-based routing (high/critical → remote)
+  ;;   - Wire remote executor function into tool-gateway
+  ;; When broker is enabled but secret is unset: fail fast.
+  (when (broker-enabled? settings)
+    (define secret (broker-capability-secret settings))
+    (cond
+      [(not secret)
+       (error 'wire-runtime-parameters!
+              "mas.broker.enabled is #t but mas.broker.capability-secret is not set")]
+      [else
+       ;; Enable risk-based routing policy
+       (current-routing-policy 'risk-based)
+       ;; Wire remote executor function
+       (current-remote-tool-executor execute-via-remote-envelope)
+       ;; The actual remote-executor connection is established lazily
+       ;; by the wiring layer when broker is enabled.
+       ;; current-remote-executor starts as #f; execute-via-remote-envelope
+       ;; returns a clear error until a connection is established.
+       (log-info "broker: enabled, risk-based routing active")]))
   ;; v0.99.5: Wire verifier agent from settings (default #f = disabled)
   ;; When enabled, verification gate runs between executing and idle/done.
   (current-verifier-enabled (verifier-enabled? settings))
