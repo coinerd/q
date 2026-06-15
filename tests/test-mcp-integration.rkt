@@ -34,6 +34,9 @@
     (hasheq 'content
             (list (hasheq 'type "text" 'text (format "~a:~a" name (hash-ref args 'text "")))))))
 
+(define (make-event-recorder events)
+  (lambda (event-name data) (set-box! events (append (unbox events) (list (cons event-name data))))))
+
 (define suite
   (test-suite "MCP Integration (v0.99.9 W6)"
 
@@ -49,6 +52,20 @@
       (check-equal? (hash-ref result 'protocolVersion) MCP-PROTOCOL-VERSION)
       (check-equal? (hash-ref (hash-ref result 'serverInfo) 'name) "q")
       (check-not-false (parse-mcp-initialize-response resp)))
+
+    (test-case "H4 FIXED: initialize emits mas.mcp.connected event from real handler"
+      (define reg (make-integration-registry))
+      (define events (box '()))
+      (parameterize ([current-mcp-event-sink (make-event-recorder events)])
+        (define resp
+          (handle-mcp-request (json-roundtrip (build-mcp-initialize 101))
+                              reg
+                              (make-recording-execute-fn (box '()))))
+        (check-not-false (parse-mcp-initialize-response resp)))
+      (check-equal? (map car (unbox events)) '(mas.mcp.connected))
+      (define data (cdr (car (unbox events))))
+      (check-equal? (hash-ref data 'server-name) "q")
+      (check-equal? (hash-ref data 'method) "initialize"))
 
     (test-case "initialized notification produces no JSON-RPC response"
       (define reg (make-integration-registry))
@@ -77,6 +94,37 @@
       (check-equal? (unbox calls) (list (list "echo" (hasheq 'text "hello"))))
       (check-equal? (length content) 1)
       (check-equal? (hash-ref (car content) 'text) "echo:hello"))
+
+    (test-case "H4 FIXED: tools/call emits success event from real handler"
+      (define reg (make-integration-registry))
+      (define events (box '()))
+      (parameterize ([current-mcp-event-sink (make-event-recorder events)])
+        (define resp
+          (handle-mcp-request
+           (json-roundtrip (build-mcp-tools-call 303 "echo" (hasheq 'text "hello")))
+           reg
+           (make-recording-execute-fn (box '()))))
+        (check-equal? (length (parse-mcp-tools-call-response resp)) 1))
+      (check-equal? (map car (unbox events)) '(mas.mcp.tool.called))
+      (define data (cdr (car (unbox events))))
+      (check-equal? (hash-ref data 'tool-name) "echo")
+      (check-equal? (hash-ref data 'success?) #t)
+      (check-equal? (hash-ref data 'route) 'local))
+
+    (test-case "H4 FIXED: tools/call emits failure event when executor raises"
+      (define reg (make-integration-registry))
+      (define events (box '()))
+      (parameterize ([current-mcp-event-sink (make-event-recorder events)])
+        (define resp
+          (handle-mcp-request (json-roundtrip (build-mcp-tools-call 304 "echo" (hasheq 'text "boom")))
+                              reg
+                              (lambda (_name _args) (error 'boom "executor failed"))))
+        (check-true (mcp-error-response? resp)))
+      (check-equal? (map car (unbox events)) '(mas.mcp.tool.called))
+      (define data (cdr (car (unbox events))))
+      (check-equal? (hash-ref data 'tool-name) "echo")
+      (check-equal? (hash-ref data 'success?) #f)
+      (check-equal? (hash-ref data 'error-code) -32603))
 
     (test-case "ping request succeeds after tool call lifecycle"
       (define reg (make-integration-registry))

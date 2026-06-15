@@ -15,10 +15,7 @@
          racket/match
          (only-in "base.rkt" gen:agent-role agent-role-capabilities make-capability-guarded-handler)
          (only-in "../../util/capability.rkt" ROLE-CAPABILITIES)
-         (only-in "../../util/message/mas-envelope.rkt"
-                  mas-envelope?
-                  mas-envelope-payload
-                  mas-envelope-risk-level))
+         (only-in "../../util/message/mas-envelope.rkt" mas-envelope-payload mas-envelope-risk-level))
 
 ;; ============================================================
 ;; W3 (v0.99.9): Risk-Based Routing Policy
@@ -55,6 +52,34 @@
 ;; H2: The active executor — set by wiring layer when feature flag is ON
 (define current-tool-executor (make-parameter default-tool-executor))
 
+(define (routing-decision->execution-route decision)
+  (match decision
+    ['local 'local]
+    ;; W4/M4 phase 1: no remote executor exists yet, so high/critical risk
+    ;; requests are explicitly tagged but still executed locally.
+    ['remote 'remote-tagged-but-executed-local]
+    [_ 'local]))
+
+(define (annotate-routing-result result decision envelope)
+  (define base-result
+    (if (hash? result)
+        result
+        (hasheq 'status 'ok 'result result)))
+  (hash-set* base-result
+             'routing-decision
+             decision
+             'route
+             (routing-decision->execution-route decision)
+             'executed-locally?
+             #t
+             'risk-level
+             (mas-envelope-risk-level envelope)))
+
+(define (execute-tool-gateway-with-routing envelope)
+  (define decision (route-execution-request envelope))
+  (define result ((current-tool-executor) envelope))
+  (annotate-routing-result result decision envelope))
+
 ;; ============================================================
 ;; Struct Definition
 ;; ============================================================
@@ -71,8 +96,11 @@
                     "network requests, and browser automation."))
    (define agent-role-handle-envelope
      (make-capability-guarded-handler (lambda (self) (agent-role-capabilities self))
-                                      ;; H2: Use injected executor instead of direct sandbox import
-                                      (lambda (self envelope) ((current-tool-executor) envelope))))])
+                                      ;; H2: Use injected executor instead of direct sandbox import.
+                                      ;; W4/M4: route through the policy integration wrapper so
+                                      ;; the real gateway path exposes routing metadata.
+                                      (lambda (self envelope)
+                                        (execute-tool-gateway-with-routing envelope))))])
 
 ;; ============================================================
 ;; Convenience Functions
@@ -91,7 +119,8 @@
          current-tool-executor
          default-tool-executor
          current-routing-policy
-         route-execution-request)
+         route-execution-request
+         execute-tool-gateway-with-routing)
 
 (define (make-tool-gateway-role)
   (tool-gateway-role))

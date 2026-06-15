@@ -39,6 +39,33 @@
 (define MCP-SERVER-VERSION "0.99.9")
 
 ;; ============================================================
+;; MCP Event Emission (H4 fix)
+;; ============================================================
+
+;; Event sink parameter for the real MCP path.
+;; Procedure shape: (event-name-symbol data-hash -> void). Default is no-op.
+(define current-mcp-event-sink (make-parameter void))
+
+(define (safe-emit-mcp-event! event-name data)
+  (define sink (current-mcp-event-sink))
+  (when (procedure? sink)
+    (with-handlers ([exn:fail? (lambda (_) (void))])
+      (sink event-name data))))
+
+(define (emit-mcp-connected! method)
+  (safe-emit-mcp-event!
+   'mas.mcp.connected
+   (hasheq 'server-name MCP-SERVER-NAME 'method method 'protocol-version MCP-PROTOCOL-VERSION)))
+
+(define (emit-mcp-tool-called! tool-name success? #:route [route 'local] #:error-code [error-code #f])
+  (define base
+    (hasheq 'tool-name tool-name 'server-name MCP-SERVER-NAME 'success? success? 'route route))
+  (safe-emit-mcp-event! 'mas.mcp.tool.called
+                        (if error-code
+                            (hash-set base 'error-code error-code)
+                            base)))
+
+;; ============================================================
 ;; MCP Server: Tool Serialization (H2 fix)
 ;; ============================================================
 
@@ -86,6 +113,7 @@
   (cond
     ;; C1 (v0.99.10 W1): Reject unknown tools with JSON-RPC error.
     [(not (lookup-tool registry tool-name-str))
+     (emit-mcp-tool-called! tool-name-str #f #:error-code -32602)
      (hasheq 'jsonrpc
              "2.0"
              'id
@@ -102,12 +130,21 @@
      (define raw-result
        (with-handlers ([exn:fail? (lambda (e) (hasheq '__internal-error (exn-message e)))])
          (execute-fn tool-name-str tool-args)))
-     (handle-tools-call-result id raw-result)]))
+     (handle-tools-call-result id tool-name-str raw-result)]))
+
+(define (raw-result-route raw-result)
+  (if (hash? raw-result)
+      (hash-ref raw-result 'route 'local)
+      'local))
 
 ;; Convert raw execute-fn result to MCP response.
-(define (handle-tools-call-result id raw-result)
+(define (handle-tools-call-result id tool-name-str raw-result)
   (cond
     [(and (hash? raw-result) (hash-has-key? raw-result '__internal-error))
+     (emit-mcp-tool-called! tool-name-str
+                            #f
+                            #:route (raw-result-route raw-result)
+                            #:error-code -32603)
      (hasheq 'jsonrpc
              "2.0"
              'id
@@ -126,6 +163,7 @@
          [(tool-result? raw-result) (tool-result->jsexpr raw-result)]
          [(hash? raw-result) raw-result]
          [else (hasheq 'content (list (hasheq 'type "text" 'text (format "~a" raw-result))))]))
+     (emit-mcp-tool-called! tool-name-str #t #:route (raw-result-route raw-result))
      (hasheq 'jsonrpc "2.0" 'id id 'result result)]))
 
 ;; Handle a single MCP request (JSON-RPC 2.0).
@@ -143,6 +181,7 @@
      (define id (hash-ref req 'id #f))
      (match method
        ["initialize"
+        (emit-mcp-connected! method)
         (hasheq 'jsonrpc
                 "2.0"
                 'id
@@ -284,7 +323,8 @@
 (provide MCP-PROTOCOL-VERSION
          MCP-SERVER-NAME
          MCP-SERVER-VERSION
-         current-mcp-execute-fn)
+         current-mcp-execute-fn
+         current-mcp-event-sink)
 
 (provide (contract-out [handle-mcp-request (-> hash? tool-registry? procedure? hash?)]
                        [build-mcp-initialize (-> (or/c string? number?) hash?)]
