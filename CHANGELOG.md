@@ -1,3 +1,36 @@
+## 0.99.11
+
+Released: 2026-06-15
+
+### User-Visible Changes
+- Hardened MCP Phase 1 security: `tools/call` now routes through governed scheduler execution with real `exec-context`, eliminating the direct `tool-execute` bypass.
+- Malformed JSON-RPC `tools/call` params now return `-32602 Invalid params` instead of crashing the handler.
+- Internal exception details are no longer exposed to MCP clients in error responses.
+- Capability token symbol validation tightened to match string input strictness.
+
+### Breaking / Behavior Changes
+- MCP `tools/call` malformed params (non-hash params, non-string name, non-hash arguments) now return JSON-RPC `-32602` instead of throwing uncaught exceptions.
+- MCP `tools/call` internal errors return generic `-32603 Internal error` without `data.detail` field.
+- Capability symbols containing colons or invalid characters are now rejected at signing time via `capability-input?` contract.
+
+### Migration Notes
+- No configuration changes required. MCP remains disabled by default.
+- Existing valid capability tokens remain backward-compatible.
+
+### Testing
+- Focused gates pass: MCP adapter 31/31, config 17/17, events 12/12, integration 10/10, protocol compliance 7/7, security gates 19/19, capability tokens 22/22, hardening 18/18.
+- Broad fast suite: 912 files, 835 passed, 77 failed; 11425 tests, 11305 passed, 120 failed; 5 zero-parsed sentinels (known unrelated pre-existing debt).
+
+### Operational / Release
+- Fixed F-01 (CRITICAL): MCP `tools/call` now routes through governed scheduler execution (`run-tool-batch`) via `make-mcp-governed-execute-fn` with a real `exec-context`.
+- Fixed F-02 (HIGH): `handle-tools-call` validates params/name/arguments types and returns `-32602` for malformed input.
+- Fixed F-03 (MEDIUM): `handle-tools-call-result` no longer exposes internal exception details.
+- Fixed F-04 (MEDIUM): Gate evidence files updated from stale `0.94.9` to current truthful `0.99.11` status; committed evidence artifact added to `docs/reports/`.
+- Fixed F-05 (LOW): CHANGELOG W6 wording corrected to past tense; C1 claim qualified.
+- Fixed F-06 (LOW): `capability-input?` contract tightened for symbol inputs.
+
+---
+
 ## 0.99.10
 
 Released: 2026-06-15
@@ -23,8 +56,9 @@ Released: 2026-06-15
 - Required fast-suite gate was run after each implementation wave; it timed out after 20 minutes with pre-existing broad-suite failures/hangs and is recorded as not green.
 
 ### Operational / Release
-- Remediated v0.99.9 post-audit blockers C1, C2, H1-H5, and M1-M5 across W1-W4.
-- Added W5 documentation/release-hygiene artifacts; version bump and final audit remain scheduled for W6.
+- Remediated v0.99.9 post-audit blockers C2, H1-H5, and M1-M5 across W1-W4.
+- Completed W5 documentation/release-hygiene artifacts and W6 version bump/audit.
+- Note: C1 (governed MCP execution) was partially addressed in v0.99.10; the independent post-remediation audit found F-01 (CRITICAL) remained open. C1/F-01 is fully closed in v0.99.11.
 
 ---
 
