@@ -63,8 +63,10 @@
       (define tools (parse-mcp-tools-list-response resp))
       (check-equal? (length tools) 1)
       (define tool-entry (car tools))
-      (check-equal? (hash-ref tool-entry 'type) "function")
-      (check-equal? (hash-ref (hash-ref tool-entry 'function) 'name) "echo"))
+      ;; H2 (v0.99.10 W2): MCP schema uses {name, description, inputSchema}
+      (check-equal? (hash-ref tool-entry 'name) "echo")
+      (check-not-false (hash-ref tool-entry 'description #f))
+      (check-not-false (hash-ref tool-entry 'inputSchema #f)))
 
     (test-case "tools/call request routes to execute-fn and parses content"
       (define reg (make-integration-registry))

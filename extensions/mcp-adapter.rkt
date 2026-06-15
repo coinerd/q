@@ -21,8 +21,14 @@
 (require racket/contract
          racket/match
          json
-         (only-in "../tools/registry.rkt" list-tools-jsexpr tool-registry? lookup-tool)
-         (only-in "../tools/tool.rkt" tool-result? tool-result->jsexpr))
+         (only-in "../tools/registry.rkt" list-active-tools tool-registry? lookup-tool)
+         (only-in "../tools/tool.rkt"
+                  tool-result?
+                  tool-result->jsexpr
+                  tool?
+                  tool-name
+                  tool-description
+                  tool-schema))
 
 ;; ============================================================
 ;; MCP Protocol Constants
@@ -33,67 +39,129 @@
 (define MCP-SERVER-VERSION "0.99.9")
 
 ;; ============================================================
+;; MCP Server: Tool Serialization (H2 fix)
+;; ============================================================
+
+;; Serialize a single tool into the MCP spec format.
+;; MCP requires: {name, description, inputSchema}
+;; NOT the OpenAI format: {type: "function", function: {name, ...}}
+(define (tool->mcp-jsexpr t)
+  (hasheq 'name (tool-name t) 'description (tool-description t) 'inputSchema (tool-schema t)))
+
+;; Serialize all active tools into MCP spec format.
+(define (tools->mcp-list registry)
+  (map tool->mcp-jsexpr (list-active-tools registry)))
+
+;; ============================================================
 ;; MCP Server: Message Handler
 ;; ============================================================
+
+;; Check if a request is a JSON-RPC notification (no 'id key present).
+;; Per JSON-RPC 2.0 spec: "A Notification is a Request object without an id member."
+;; A Request object MUST contain an id member (even if null).
+(define (mcp-notification? req)
+  (and (hash? req) (not (hash-has-key? req 'id))))
+
+;; H3 (v0.99.10 W2): Handle tools/call request with full validation and error handling.
+;; Extracted from handle-mcp-request to keep match clauses readable.
+(define (handle-tools-call req id registry execute-fn)
+  ;; H3: Validate params presence — return -32602 if missing.
+  (cond
+    [(not (hash-has-key? req 'params))
+     (hasheq 'jsonrpc
+             "2.0"
+             'id
+             id
+             'error
+             (hasheq 'code -32602 'message "Invalid params: missing 'params'"))]
+    [else
+     (define params (hash-ref req 'params))
+     (define tool-name-str (hash-ref params 'name ""))
+     (define tool-args (hash-ref params 'arguments (hasheq)))
+     (handle-tools-call-exec id tool-name-str tool-args registry execute-fn)]))
+
+;; Inner handler for tools/call once params are validated.
+;; C1: check tool existence. H3: wrap exceptions. C2: convert tool-result.
+(define (handle-tools-call-exec id tool-name-str tool-args registry execute-fn)
+  (cond
+    ;; C1 (v0.99.10 W1): Reject unknown tools with JSON-RPC error.
+    [(not (lookup-tool registry tool-name-str))
+     (hasheq 'jsonrpc
+             "2.0"
+             'id
+             id
+             'error
+             (hasheq 'code
+                     -32602
+                     'message
+                     (format "Unknown tool: ~a" tool-name-str)
+                     'data
+                     (hasheq 'tool-name tool-name-str)))]
+    [else
+     ;; H3 (v0.99.10 W2): Wrap execute-fn exceptions into -32603 internal error.
+     (define raw-result
+       (with-handlers ([exn:fail? (lambda (e) (hasheq '__internal-error (exn-message e)))])
+         (execute-fn tool-name-str tool-args)))
+     (handle-tools-call-result id raw-result)]))
+
+;; Convert raw execute-fn result to MCP response.
+(define (handle-tools-call-result id raw-result)
+  (cond
+    [(and (hash? raw-result) (hash-has-key? raw-result '__internal-error))
+     (hasheq 'jsonrpc
+             "2.0"
+             'id
+             id
+             'error
+             (hasheq 'code
+                     -32603
+                     'message
+                     "Internal error"
+                     'data
+                     (hasheq 'detail (hash-ref raw-result '__internal-error))))]
+    [else
+     ;; C2 (v0.99.10 W1): Convert tool-result structs to MCP-compatible jsexpr.
+     (define result
+       (cond
+         [(tool-result? raw-result) (tool-result->jsexpr raw-result)]
+         [(hash? raw-result) raw-result]
+         [else (hasheq 'content (list (hasheq 'type "text" 'text (format "~a" raw-result))))]))
+     (hasheq 'jsonrpc "2.0" 'id id 'result result)]))
 
 ;; Handle a single MCP request (JSON-RPC 2.0).
 ;; req: jsexpr — incoming request hash
 ;; registry: tool-registry? — q's tool registry
 ;; execute-fn: procedure — tool execution function (tool-name args -> result)
-;; Returns: jsexpr — response hash
+;; Returns: jsexpr — response hash (empty hash for notifications)
 (define (handle-mcp-request req registry execute-fn)
   (define method (hash-ref req 'method ""))
-  (define id (hash-ref req 'id #f))
-  (match method
-    ["initialize"
-     (hasheq 'jsonrpc
-             "2.0"
-             'id
-             id
-             'result
-             (hasheq 'protocolVersion
-                     MCP-PROTOCOL-VERSION
-                     'capabilities
-                     (hasheq 'tools (hasheq))
-                     'serverInfo
-                     (hasheq 'name MCP-SERVER-NAME 'version MCP-SERVER-VERSION)))]
-    ["tools/list" (hasheq 'jsonrpc "2.0" 'id id 'result (hasheq 'tools (list-tools-jexpr registry)))]
-    ["tools/call"
-     (define params (hash-ref req 'params (hasheq)))
-     (define tool-name (hash-ref params 'name ""))
-     (define tool-args (hash-ref params 'arguments (hasheq)))
-     (cond
-       ;; C1 (v0.99.10 W1): Reject unknown tools with JSON-RPC error.
-       ;; Previously execute-fn was called blindly, returning fake content.
-       [(not (lookup-tool registry tool-name))
+  ;; H3 (v0.99.10 W2): Notifications (requests without 'id) get no response.
+  (cond
+    ;; This is a notification — no response per JSON-RPC spec.
+    [(mcp-notification? req) (hasheq)]
+    [else
+     (define id (hash-ref req 'id #f))
+     (match method
+       ["initialize"
         (hasheq 'jsonrpc
                 "2.0"
                 'id
                 id
-                'error
-                (hasheq 'code
-                        -32602
-                        'message
-                        (format "Unknown tool: ~a" tool-name)
-                        'data
-                        (hasheq 'tool-name tool-name)))]
-       [else
-        ;; C2 (v0.99.10 W1): Convert tool-result structs to MCP-compatible jsexpr.
-        ;; Previously raw structs passed through, failing JSON serialization.
-        (define raw-result (execute-fn tool-name tool-args))
-        (define result
-          (cond
-            [(tool-result? raw-result) (tool-result->jsexpr raw-result)]
-            [(hash? raw-result) raw-result]
-            [else (hasheq 'content (list (hasheq 'type "text" 'text (format "~a" raw-result))))]))
-        (hasheq 'jsonrpc "2.0" 'id id 'result result)])]
-    ;; Notification — no response needed
-    ["notifications/initialized" (hasheq)]
-    ["ping" (hasheq 'jsonrpc "2.0" 'id id 'result (hasheq))]
-    [_ (hasheq 'jsonrpc "2.0" 'id id 'error (hasheq 'code -32601 'message "Method not found"))]))
-
-;; Alias for list-tools-jsexpr (avoid name collision with contract export)
-(define list-tools-jexpr list-tools-jsexpr)
+                'result
+                (hasheq 'protocolVersion
+                        MCP-PROTOCOL-VERSION
+                        'capabilities
+                        (hasheq 'tools (hasheq))
+                        'serverInfo
+                        (hasheq 'name MCP-SERVER-NAME 'version MCP-SERVER-VERSION)))]
+       ;; H2 (v0.99.10 W2): Use MCP-specific tool serializer producing
+       ;; {name, description, inputSchema} instead of OpenAI shape.
+       ["tools/list"
+        (hasheq 'jsonrpc "2.0" 'id id 'result (hasheq 'tools (tools->mcp-list registry)))]
+       ["tools/call" (handle-tools-call req id registry execute-fn)]
+       ["notifications/initialized" (hasheq)]
+       ["ping" (hasheq 'jsonrpc "2.0" 'id id 'result (hasheq))]
+       [_ (hasheq 'jsonrpc "2.0" 'id id 'error (hasheq 'code -32601 'message "Method not found"))])]))
 
 ;; ============================================================
 ;; MCP Client: Message Construction
@@ -230,4 +298,7 @@
                        [mcp-error-response? (-> any/c boolean?)]
                        [mcp-error-code (-> hash? (or/c number? #f))]
                        [mcp-error-message (-> hash? (or/c string? #f))]
-                       [run-mcp-stdio-server! (-> tool-registry? void?)]))
+                       [run-mcp-stdio-server! (-> tool-registry? void?)]
+                       [tool->mcp-jsexpr (-> tool? hash?)]
+                       [tools->mcp-list (-> tool-registry? (listof hash?))]
+                       [mcp-notification? (-> any/c boolean?)]))
