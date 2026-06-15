@@ -213,7 +213,8 @@
                      [current-conclusion-token-budget 0])
         (apply-context-assembly-profile! 'bounded)
         (check-true (current-task-state-aware-assembly?))
-        (check-equal? (current-conclusion-token-budget) 2000)
+        ;; Default max-context is 128k; dynamic budget is capped at 4000.
+        (check-equal? (current-conclusion-token-budget) 4000)
         ;; Reset
         (apply-context-assembly-profile! 'off)))
 

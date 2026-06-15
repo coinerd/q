@@ -247,11 +247,12 @@
   (check-equal? (compute-dynamic-tier-b-count 600) 50)
   (check-equal? (compute-dynamic-tier-b-count 1000) 50))
 
-(test-case "build-tiered-context: dynamic tier-b grows with messages"
-  ;; With 300 messages, dynamic tier-b = 30
+(test-case "build-tiered-context: dynamic tier-b grows with removable messages"
+  ;; With universal user pinning, user messages go to Tier A. Use assistant
+  ;; messages here so the test still exercises dynamic Tier-B sizing.
   (define msgs-300
     (for/list ([i (in-range 300)])
-      (make-test-msg (format "m~a" i) 'user 'message (format "Msg ~a" i))))
+      (make-test-msg (format "m~a" i) 'assistant 'message (format "Msg ~a" i))))
   (define tiered-300 (build-tiered-context msgs-300 #:tier-c-count 4))
   (define tier-b-300 (tiered-context-tier-b tiered-300))
   ;; Tier-B should be ~30 (300/10 = 30), minus tier-c (4)

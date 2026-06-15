@@ -120,6 +120,36 @@
   (check-equal? (length result) 1)
   (check-equal? (message-id (car result)) "u1"))
 
+(test-case "ensure-user-messages-pinned re-injects missing users in order"
+  (define u1 (make-test-message "u1" 'user 'message "first"))
+  (define a1 (make-test-message "a1" 'assistant 'message "assistant 1"))
+  (define u2 (make-test-message "u2" 'user 'message "second"))
+  (define a2 (make-test-message "a2" 'assistant 'message "assistant 2"))
+  (define u3 (make-test-message "u3" 'user 'message "third"))
+  (define original (list u1 a1 u2 a2 u3))
+  (define result (ensure-user-messages-pinned (list a1 a2) original))
+  (check-equal? (map message-id result)
+                '("u1" "a1" "u2" "a2" "u3")
+                "missing user messages must be re-inserted at their original positions"))
+
+(test-case "ensure-user-messages-pinned is idempotent"
+  (define u1 (make-test-message "u1" 'user 'message "first"))
+  (define u2 (make-test-message "u2" 'user 'message "second"))
+  (define original (list u1 u2))
+  (define result (ensure-user-messages-pinned original original))
+  (check-equal? (map message-id result)
+                '("u1" "u2")
+                "calling ensure-user-messages-pinned on a complete list must not change order"))
+
+(test-case "ensure-user-messages-pinned handles empty result"
+  (define u1 (make-test-message "u1" 'user 'message "first"))
+  (define u2 (make-test-message "u2" 'user 'message "second"))
+  (define original (list u1 u2))
+  (define result (ensure-user-messages-pinned '() original))
+  (check-equal? (map message-id result)
+                '("u1" "u2")
+                "all user messages must be re-injected when result is empty"))
+
 ;; ============================================================
 ;; build-pair-index
 ;; ============================================================

@@ -72,16 +72,18 @@
   (define (dfs id visited rec-stack cycles)
     (let* ([visited (hash-set visited id #t)]
            [rec-stack (hash-set rec-stack id #t)])
-      (for/fold ([v visited]
-                 [rs rec-stack]
-                 [cy cycles])
-                ([dep (in-list (hash-ref edges id '()))])
-        (cond
-          [(hash-ref rs dep #f) (values v rs (cons id cy))]
-          [(not (hash-ref v dep #f))
-           (define-values (v2 rs2 cy2) (dfs dep v rs cy))
-           (values v2 rs2 cy2)]
-          [else (values v rs cy)]))))
+      (define-values (v rs cy)
+        (for/fold ([v visited]
+                   [rs rec-stack]
+                   [cy cycles])
+                  ([dep (in-list (hash-ref edges id '()))])
+          (cond
+            [(hash-ref rs dep #f) (values v rs (cons id cy))]
+            [(not (hash-ref v dep #f))
+             (define-values (v2 rs2 cy2) (dfs dep v rs cy))
+             (values v2 rs2 cy2)]
+            [else (values v rs cy)])))
+      (values v (hash-remove rs id) cy)))
   (define-values (final-visited _final-stack final-cycles)
     (for/fold ([visited (hash)]
                [rec-stack (hash)]

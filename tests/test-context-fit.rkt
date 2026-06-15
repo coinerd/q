@@ -33,20 +33,39 @@
   (check-true (<= total-tokens budget)
               (format "total tokens ~a exceed budget ~a" total-tokens budget)))
 
-(test-case "truncate-messages-to-budget truncates when over budget"
-  (define msgs
-    (for/list ([i (in-range 20)])
-      (make-message (number->string i)
+(test-case "truncate-messages-to-budget drops assistant messages but preserves all users"
+  ;; Under universal pinning, user messages are protected. Build a mix of
+  ;; users and assistant messages; truncation should drop assistants while
+  ;; keeping every user message.
+  (define user-msgs
+    (for/list ([i (in-range 5)])
+      (make-message (format "u~a" i)
                     #f
                     'user
                     'text
-                    (list (make-text-part (make-string 100 #\b)))
+                    (list (make-text-part (format "User prompt ~a" i)))
                     i
                     (hasheq))))
+  (define assistant-msgs
+    (for/list ([i (in-range 15)])
+      (make-message (format "a~a" i)
+                    #f
+                    'assistant
+                    'text
+                    (list (make-text-part (make-string 100 #\b)))
+                    (+ 100 i)
+                    (hasheq))))
+  (define msgs (append user-msgs assistant-msgs))
   (define budget 200)
   (define result (truncate-messages-to-budget msgs budget))
-  ;; Should have dropped some messages (pinning may cause slight over-budget)
-  (check-true (< (length result) 20)))
+  (define result-ids (map message-id result))
+  ;; All users survive.
+  (for ([u (in-list user-msgs)])
+    (check-not-false (member (message-id u) result-ids)
+                     (format "user message ~a must survive truncation" (message-id u))))
+  ;; Some assistant messages were dropped.
+  (check-true (< (length result) (length msgs))
+              "assistant messages should be dropped when budget is tight"))
 
 (test-case "fit-messages-from-recent returns empty for empty input"
   (check-equal? (fit-messages-from-recent '() 1000) '()))

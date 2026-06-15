@@ -23,21 +23,22 @@
       (hash-ref (car content) 'text "")
       ""))
 
-(test-case "browser-error-result appends session hint for 'not found'"
+(test-case "browser-error-result-hint classifies 'not found' as open-session"
+  (check-eq? (browser-error-result-hint (make-exn "session not found")) 'open-session))
+
+(test-case "browser-error-result-hint classifies 'timed out' as retry"
+  (check-eq? (browser-error-result-hint (make-exn "operation timed out")) 'retry))
+
+(test-case "browser-error-result-hint classifies 'blocked' as policy"
+  (check-eq? (browser-error-result-hint (make-exn "navigation blocked by policy")) 'policy))
+
+(test-case "browser-error-result-hint classifies unknown errors as none"
+  (check-eq? (browser-error-result-hint (make-exn "connection refused")) 'none))
+
+(test-case "browser-error-result still includes human-readable hint text"
   (define r (browser-error-result "browser_observe" (make-exn "session not found")))
   (define text (result-text r))
-  (check-true (string-contains? text "browser_open") "hint should mention browser_open"))
-
-(test-case "browser-error-result appends timeout hint"
-  (define r (browser-error-result "browser_click" (make-exn "operation timed out")))
-  (define text (result-text r))
-  (check-true (string-contains? text "slow to respond") "hint should mention slow response"))
-
-(test-case "browser-error-result appends blocked hint"
-  (define r (browser-error-result "browser_open" (make-exn "navigation blocked by policy")))
-  (define text (result-text r))
-  (check-true (string-contains? text "blocked by browser policy")
-              "hint should mention browser policy"))
+  (check-true (string-contains? text "browser_open") "text output must still mention browser_open"))
 
 (test-case "browser-error-result includes original error message"
   (define r (browser-error-result "browser_open" (make-exn "connection refused")))

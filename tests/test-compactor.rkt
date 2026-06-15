@@ -78,6 +78,14 @@
   (for/list ([i (in-range n)])
     (make-test-message (format "msg~a" i) 'user (format "Message ~a content" i))))
 
+;; Build messages that still exercise tier-b/tier-c under universal user pinning:
+;; one pinned user followed by removable assistant messages.
+(define (make-n-tier-messages n)
+  (for/list ([i (in-range n)])
+    (make-test-message (format "msg~a" i)
+                       (if (zero? i) 'user 'assistant)
+                       (format "Message ~a content" i))))
+
 ;; Simple test summarize function that concatenates texts
 (define (test-summarize messages)
   (define texts (map msg-text messages))
@@ -404,7 +412,7 @@
  ;; ══════════════════════════════════════════════════════════════
  (test-case "build-tiered-context-with-hooks: no dispatcher returns base context"
    ;; When no hook-dispatcher is provided, should return base tiered context
-   (define msgs (make-n-messages 15))
+   (define msgs (make-n-tier-messages 15))
    (define-values (tc hook-result)
      (build-tiered-context-with-hooks msgs #:hook-dispatcher #f #:tier-b-count 5 #:tier-c-count 3))
    ;; Should return valid tiered-context
@@ -419,7 +427,7 @@
    (check-false hook-result))
  (test-case "build-tiered-context-with-hooks: hook returns 'pass"
    ;; Hook that returns 'pass should not modify context
-   (define msgs (make-n-messages 15))
+   (define msgs (make-n-tier-messages 15))
    (define pass-hook
      (lambda (hook-point payload)
        (check-equal? hook-point 'context-assembly)
@@ -442,7 +450,7 @@
    (check-equal? (length (tiered-context-tier-c tc)) 3)
    (check-equal? (length (tiered-context-tier-b tc)) 5))
  (test-case "build-tiered-context-with-hooks contract accepts hook-result (regression v0.74.8)"
-   (define msgs (make-n-messages 10))
+   (define msgs (make-n-tier-messages 10))
    (define pass-hook (λ (hook-point data) (hook-pass data)))
    (define-values (tc hr)
      (build-tiered-context-with-hooks msgs
@@ -453,7 +461,7 @@
    (check-equal? (hook-result-action hr) 'pass))
  (test-case "build-tiered-context-with-hooks: hook returns 'amend"
    ;; Hook that modifies tier composition via amend
-   (define msgs (make-n-messages 20))
+   (define msgs (make-n-tier-messages 20))
    (define amend-hook
      (lambda (hook-point payload)
        (check-equal? hook-point 'context-assembly)
@@ -488,7 +496,7 @@
    (check-equal? (length (tiered-context-tier-c tc)) 3))
  (test-case "build-tiered-context-with-hooks: hook returns 'block raises error"
    ;; Hook that blocks context assembly
-   (define msgs (make-n-messages 10))
+   (define msgs (make-n-tier-messages 10))
    (define block-hook
      (lambda (hook-point payload)
        (check-equal? hook-point 'context-assembly)
@@ -511,7 +519,7 @@
                                                  #:tier-c-count 3))))
  (test-case "context-assembly-payload is serializable"
    ;; Payload should be serializable for logging
-   (define msgs (make-n-messages 10))
+   (define msgs (make-n-tier-messages 10))
    (define tc (build-tiered-context msgs #:tier-b-count 5 #:tier-c-count 3))
    (define payload (tiered-context->payload tc 8192 (hasheq 'test-key "test-value")))
 
@@ -529,7 +537,7 @@
                  (length (tiered-context-tier-c tc))))
  (test-case "build-tiered-context-with-hooks: payload contains correct tier messages"
    ;; Verify payload contains the actual tier message lists
-   (define msgs (make-n-messages 12))
+   (define msgs (make-n-tier-messages 12))
    (define received-payload #f)
 
    (define capture-hook
@@ -581,7 +589,7 @@
          ;; Second call: pass
          [else (hook-pass payload)])))
 
-   (define msgs (make-n-messages 10))
+   (define msgs (make-n-tier-messages 10))
    (define-values (tc hook-result)
      (build-tiered-context-with-hooks msgs
                                       #:hook-dispatcher chained-hook
@@ -594,7 +602,7 @@
    (check-equal? (hook-result-action hook-result) 'amend))
  (test-case "tiered-context->message-list after hook amendment"
    ;; Verify that tiered-context->message-list works correctly on amended context
-   (define msgs (make-n-messages 10))
+   (define msgs (make-n-tier-messages 10))
    (define amend-hook
      (lambda (hook-point payload)
        ;; Swap tier B and C for testing

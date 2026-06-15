@@ -33,7 +33,8 @@
          handle-browser-close
          handle-browser-check-local-app
          observation->hash
-         browser-error-result)
+         browser-error-result
+         browser-error-result-hint)
 
 ;; ---------------------------------------------------------------------------
 ;; Helper: get service from exec context or parameter
@@ -70,15 +71,25 @@
 (define (ok-result . pairs)
   (make-success-result (apply hasheq 'status "ok" pairs)))
 
+(define (browser-error-hint-category msg)
+  (cond
+    [(string-contains? msg "not found") 'open-session]
+    [(string-contains? msg "timed out") 'retry]
+    [(string-contains? msg "blocked") 'policy]
+    [else 'none]))
+
+(define (browser-error-result-hint e)
+  (browser-error-hint-category (exn-message e)))
+
 (define (browser-error-result tool-name e)
   (define msg (exn-message e))
   (define recovery-hint
-    (cond
-      [(string-contains? msg "not found")
+    (case (browser-error-hint-category msg)
+      [(open-session)
        " Hint: The browser session may have expired or the ID was incorrect. Use browser_open to create a new session, then retry."]
-      [(string-contains? msg "timed out")
+      [(retry)
        " Hint: The page may be slow to respond. Try again with a simpler action or observe first."]
-      [(string-contains? msg "blocked")
+      [(policy)
        " Hint: The URL was blocked by browser policy. Check the policy settings or try a different URL."]
       [else ""]))
   (make-error-result (format "~a failed: ~a~a" tool-name msg recovery-hint)))
