@@ -27,7 +27,7 @@
          (only-in "../../util/entry-predicates.rkt" compaction-summary-entry?)
          (only-in "../context/context-policy.rkt"
                   estimate-message-tokens
-                  ensure-first-user-pinned
+                  ensure-user-messages-pinned
                   fit-messages-with-importance-rescue)
          (only-in "../context/context-pinning.rkt" partition-messages/working-set)
          (only-in "../working-set.rkt" working-set? working-set-resolve-messages)
@@ -313,7 +313,7 @@
                           (hash-has-key? recent-ids (message-id m))))
       m))
 
-  (define result-with-pin (ensure-first-user-pinned result-messages raw-messages))
+  (define result-with-pin (ensure-user-messages-pinned result-messages raw-messages))
   (define result-with-pin-and-summary
     (if summary-msg
         (cons summary-msg result-with-pin)

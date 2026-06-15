@@ -360,12 +360,12 @@
 ;; v0.28.23 W1: GSD role guard tests (user messages NOT pinned)
 ;; ============================================================
 
-(test-case "T9: user message with wave-done text NOT pinned to Tier A"
-  ;; Build 100 messages so Tier A is selective (only recent messages)
+(test-case "T9: ALL user messages are pinned to Tier A (universal pinning)"
+  ;; Build 100 messages so Tier A would otherwise be selective (recent messages only)
   (define base-msgs
     (for/list ([i (in-range 100)])
       (make-test-msg (format "m~a" i) 'user 'message (format "Msg ~a" i))))
-  ;; Add user message with GSD-like text at position 50 (middle)
+  ;; Add user message with arbitrary text at position 50 (middle/old)
   (define user-gsd
     (make-message "ug"
                   #f
@@ -377,8 +377,7 @@
   (define msgs-with-user (append (take base-msgs 50) (list user-gsd) (drop base-msgs 50)))
   (define tiered (build-tiered-context msgs-with-user #:tier-c-count 4))
   (define tier-a (tiered-context-tier-a tiered))
-  ;; User message at position 50 should NOT appear in Tier A
-  ;; (too old for recency, NOT GSD-pinned because role=user)
+  ;; With universal pinning, every user message is protected in Tier A
   (define user-in-a?
     (for/or ([m (in-list tier-a)])
       (and (eq? (message-role m) 'user)
@@ -388,7 +387,7 @@
                                                      ""))
                                                (message-content m)))
                              "wave-done"))))
-  (check-false user-in-a? "user message with wave-done NOT pinned to Tier A"))
+  (check-true user-in-a? "user message must be pinned to Tier A under universal pinning"))
 
 (test-case "T10: tool message with Wave N marked complete IS pinned to Tier A"
   ;; Same setup but with tool message containing GSD text

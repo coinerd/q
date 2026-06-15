@@ -107,16 +107,9 @@
   (define-values (gsd-pinned regular) (partition gsd-progress-message? regular-msgs))
   (define-values (sys-protected unpinned-raw)
     (partition (lambda (m) (eq? (message-kind m) 'system-instruction)) regular))
-  (define first-user-idx
-    (for/first ([m (in-list unpinned-raw)]
-                [i (in-naturals)]
-                #:when (eq? (message-role m) 'user))
-      i))
+  ;; UNIVERSAL PINNING: Pin ALL user messages to Tier A, not just the first.
   (define-values (pinned-user unpinned)
-    (if first-user-idx
-        (values (list (list-ref unpinned-raw first-user-idx))
-                (append (take unpinned-raw first-user-idx) (drop unpinned-raw (add1 first-user-idx))))
-        (values '() unpinned-raw)))
+    (partition (lambda (m) (eq? (message-role m) 'user)) unpinned-raw))
   (define total (length unpinned))
   (define effective-tier-b (or tier-b-count (compute-dynamic-tier-b-count total)))
   (define effective-tier-c

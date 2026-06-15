@@ -4,7 +4,7 @@
 ;;
 ;; Extracted from context-assembly.rkt to reduce surface area.
 ;; Functions for fitting messages within token budgets while preserving
-;; system instructions and first-user pinning.
+;; system instructions and ALL user message pinning.
 
 (require racket/contract
          racket/list
@@ -13,7 +13,7 @@
          (only-in "context-policy.rkt"
                   estimate-message-tokens
                   estimate-message-tokens-cached
-                  ensure-first-user-pinned
+                  ensure-user-messages-pinned
                   fit-messages-with-importance-rescue))
 
 (provide (contract-out
@@ -26,35 +26,31 @@
   (fit-messages-with-importance-rescue messages budget))
 
 ;; truncate-messages-to-budget: Trim messages from the front to fit within token budget.
-;; Returns truncated message list with first-user pinning preserved.
+;; Returns truncated message list with ALL user message pinning preserved.
 (define (truncate-messages-to-budget messages max-tokens)
   (cond
     [(null? messages) '()]
     [(<= (for/sum ([m (in-list messages)]) (estimate-message-tokens-cached m)) max-tokens) messages]
     [else
+     ;; Partition into protected (system, summaries, ALL user messages) and removable
      (define-values (protected removable)
-       (partition (lambda (m) (memq (message-kind m) '(system-instruction compaction-summary)))
+       (partition (lambda (m)
+                    (or (memq (message-kind m) '(system-instruction compaction-summary))
+                        (eq? (message-role m) 'user)))
                   messages))
-     (define first-user-msg
-       (for/first ([m (in-list messages)]
-                   #:when (eq? (message-role m) 'user))
-         m))
      (define protected-tokens (for/sum ([m (in-list protected)]) (estimate-message-tokens-cached m)))
-     (define pinned-tokens
-       (if (and first-user-msg (not (member first-user-msg protected)))
-           (estimate-message-tokens-cached first-user-msg)
-           0))
-     (define remaining-budget (- max-tokens protected-tokens pinned-tokens))
+     (define remaining-budget (- max-tokens protected-tokens))
      (cond
-       [(<= remaining-budget 0) (ensure-first-user-pinned protected messages)]
+       [(<= remaining-budget 0) (ensure-user-messages-pinned protected messages)]
        [else
         (define kept-removable (fit-messages-from-recent removable remaining-budget))
         (define kept-ids
           (for/set ([m (in-list kept-removable)])
             (message-id m)))
-        (ensure-first-user-pinned
+        (ensure-user-messages-pinned
          (for/list ([m (in-list messages)]
                     #:when (or (memq (message-kind m) '(system-instruction compaction-summary))
+                               (eq? (message-role m) 'user)
                                (set-member? kept-ids (message-id m))))
            m)
          messages)])]))

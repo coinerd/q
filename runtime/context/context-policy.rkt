@@ -39,6 +39,7 @@
           [invalidate-token-estimate-cache! (-> void?)]
           [token-estimate-cache-hit-stats (-> (hash/c symbol? exact-nonnegative-integer?))]
           [ensure-first-user-pinned (-> (listof message?) (listof message?) (listof message?))]
+          [ensure-user-messages-pinned (-> (listof message?) (listof message?) (listof message?))]
           [fit-messages-pair-preserving
            (->* [(listof message?) exact-nonnegative-integer?]
                 [(or/c #f procedure?)]
@@ -124,33 +125,33 @@
 ;; Pinning
 ;; ============================================================
 
+;; ============================================================
+;; Universal user message pinning (replaces first-user-only pinning)
+;; ============================================================
+
+;; Ensure ALL user messages from original are present in result.
+;; If any are missing, insert them at their correct chronological position
+;; based on the original message ordering.
+(define (ensure-user-messages-pinned result original)
+  (define result-ids
+    (for/set ([m (in-list result)])
+      (message-id m)))
+  (define missing-users
+    (filter (lambda (m) (and (user-message? m) (not (set-member? result-ids (message-id m)))))
+            original))
+  (if (null? missing-users)
+      result
+      (let ([orig-index (for/hash ([m (in-list original)]
+                                   [i (in-naturals)])
+                          (values (message-id m) i))])
+        (sort (append result missing-users)
+              <
+              #:key (lambda (m) (hash-ref orig-index (message-id m) 999999999))))))
+
 ;; Ensure the first user message is present in the result list.
-;; Merged best of both implementations: searches result for first-user,
-;; if missing, inserts at its original position from the source list.
-(define (ensure-first-user-pinned result original)
-  (define first-user
-    (for/first ([m (in-list original)]
-                #:when (user-message? m))
-      m))
-  (cond
-    [(not first-user) result]
-    [(member first-user result) result]
-    [else
-     (define target-id (message-id first-user))
-     (define after-id
-       (for/first ([m (in-list (dropf original (lambda (m) (not (equal? (message-id m) target-id)))))]
-                   #:when (member m result))
-         (message-id m)))
-     (cond
-       [after-id
-        (let loop ([acc '()]
-                   [rem result])
-          (cond
-            [(null? rem) (reverse (cons first-user acc))]
-            [(equal? (message-id (car rem)) after-id)
-             (loop (cons (car rem) (cons first-user acc)) (cdr rem))]
-            [else (loop (cons (car rem) acc) (cdr rem))]))]
-       [else (cons first-user result)])]))
+;; DEPRECATED: Now delegates to ensure-user-messages-pinned which protects
+;; ALL user messages. Kept for backward compatibility.
+(define ensure-first-user-pinned ensure-user-messages-pinned)
 
 ;; ============================================================
 ;; Pair-preserving budget fitting
