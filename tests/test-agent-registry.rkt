@@ -261,6 +261,46 @@
       (reset-registry!)
       (register-agent! 'planner "1.0" dummy-factory-v1 #:module-path "agent/roles/planner.rkt")
       (define d (resolve-agent 'planner))
-      (check-equal? (agent-descriptor-module-path d) "agent/roles/planner.rkt"))))
+      (check-equal? (agent-descriptor-module-path d) "agent/roles/planner.rkt"))
+
+    ;; ── R2-1: Validate version before activation (T3-2) ──
+
+    (test-case "R2-1: activate non-existent version raises error"
+      (reset-registry!)
+      (register-agent! 'planner "1.0" dummy-factory-v1)
+      (check-exn exn:fail? (lambda () (activate-agent-version! 'planner "9.9.9")))
+      (reset-registry!))
+
+    (test-case "R2-1: existing versions still work after failed activation"
+      (reset-registry!)
+      (register-agent! 'planner "1.0" dummy-factory-v1)
+      (register-agent! 'planner "2.0" dummy-factory-v2)
+      ;; Try to activate non-existent version
+      (check-exn exn:fail? (lambda () (activate-agent-version! 'planner "9.9.9")))
+      ;; v1 should still be active (not deactivated by the failed attempt)
+      (define d (resolve-agent 'planner))
+      (check-equal? (agent-descriptor-version d) "1.0")
+      (check-true (agent-descriptor-active? d))
+      (reset-registry!))
+
+    ;; ── R2-2: Idempotent registration (T3-3) ──
+
+    (test-case "R2-2: duplicate registration is idempotent"
+      (reset-registry!)
+      (register-agent! 'planner "1.0" dummy-factory-v1)
+      (register-agent! 'planner "1.0" dummy-factory-v1) ; duplicate
+      (define versions (agent-versions 'planner))
+      (check-equal? (length versions) 1) ; no duplicate
+      (reset-registry!))
+
+    (test-case "R2-2: idempotent registration preserves active flag"
+      (reset-registry!)
+      (register-agent! 'planner "1.0" dummy-factory-v1)
+      (activate-agent-version! 'planner "1.0")
+      ;; Re-register same version — should not break active flag
+      (register-agent! 'planner "1.0" dummy-factory-v1)
+      (define d (resolve-agent 'planner))
+      (check-true (agent-descriptor-active? d))
+      (reset-registry!))))
 
 (run-tests suite)

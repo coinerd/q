@@ -99,7 +99,13 @@
 ;; even with current-use-registry #t, missing registrations degrade
 ;; safely instead of erroring.
 (define (resolve-sub-role role-name direct-factory)
-  (with-handlers ([exn:fail? (lambda (_) (direct-factory))])
+  (with-handlers ([exn:fail?
+                   (lambda (e)
+                     ;; R2-4: Log warning before falling back to direct construction.
+                     (log-warning "resolve-sub-role: registry failed for ~a, falling back: ~a"
+                                  role-name
+                                  (exn-message e))
+                     (direct-factory))])
     (if (member role-name (registered-roles))
         (make-agent-instance role-name)
         (direct-factory))))

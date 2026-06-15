@@ -16,7 +16,7 @@
                   current-use-registry)
          (only-in "../agent/roles/planner.rkt" planner-role? make-planner-role)
          (only-in "../agent/roles/verifier.rkt" verifier-role? make-verifier-role)
-         (only-in "../agent/roles/tool-gateway.rkt" tool-gateway-role?)
+         (only-in "../agent/roles/tool-gateway.rkt" tool-gateway-role? make-tool-gateway-role)
          (only-in "../agent/registry.rkt" register-agent! reset-registry! registered-roles))
 
 (define suite
@@ -69,11 +69,7 @@
       (reset-registry!)
       (register-agent! 'planner "1.0" make-planner-role)
       (register-agent! 'verifier "1.0" make-verifier-role)
-      (register-agent! 'tool-gateway
-                       "1.0"
-                       (lambda ()
-                         ;; Use dynamic require to avoid circular dep
-                         ((dynamic-require "agent/roles/tool-gateway.rkt" 'make-tool-gateway-role))))
+      (register-agent! 'tool-gateway "1.0" make-tool-gateway-role)
       (parameterize ([current-use-registry #t])
         (define sv (make-supervisor-role))
         (check-true (supervisor-role? sv))
@@ -110,10 +106,7 @@
       (reset-registry!)
       (register-agent! 'planner "1.0" make-planner-role)
       (register-agent! 'verifier "1.0" make-verifier-role)
-      (register-agent! 'tool-gateway
-                       "1.0"
-                       (lambda ()
-                         ((dynamic-require "agent/roles/tool-gateway.rkt" 'make-tool-gateway-role))))
+      (register-agent! 'tool-gateway "1.0" make-tool-gateway-role)
       (parameterize ([current-use-registry #t])
         (define sv-on (make-supervisor-role))
         (check-equal? (hash-count (supervisor-role-sub-roles sv-on)) 3))
@@ -134,10 +127,7 @@
       (reset-registry!)
       (register-agent! 'planner "1.0" make-planner-role)
       (register-agent! 'verifier "1.0" make-verifier-role)
-      (register-agent! 'tool-gateway
-                       "1.0"
-                       (lambda ()
-                         ((dynamic-require "agent/roles/tool-gateway.rkt" 'make-tool-gateway-role))))
+      (register-agent! 'tool-gateway "1.0" make-tool-gateway-role)
       (parameterize ([current-use-registry #t])
         (define sv1 (make-supervisor-role))
         (define sv2 (make-supervisor-role))

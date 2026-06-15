@@ -264,6 +264,8 @@
                               (make-test-event 'gsd.wave.started
                                                (hasheq 'wave (format "W~a-~a" t i)))))))))
     (for-each thread-wait threads)
+    ;; T3-4: Allow subscriber to process remaining queued events.
+    (sleep 0.1)
     ;; Verify total events processed
     (define final (read-blackboard bb))
     (define wave-count (hash-count (blackboard-state-wave-status final)))

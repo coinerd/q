@@ -47,12 +47,18 @@
    (lambda ()
      (define entry (hash-ref (unbox registry) role-name #f))
      (define existing (or (and entry (registry-entry-descriptors entry)) '()))
-     (define is-first (null? existing))
-     (define new-desc (agent-descriptor role-name version factory mod-path is-first))
-     (define new-entry (registry-entry role-name (append existing (list new-desc))))
-     (set-box! registry (hash-set (unbox registry) role-name new-entry)))))
+     ;; R2-2: Idempotent registration — skip if version already exists.
+     (define already-registered?
+       (for/or ([d (in-list existing)])
+         (equal? (agent-descriptor-version d) version)))
+     (unless already-registered?
+       (define is-first (null? existing))
+       (define new-desc (agent-descriptor role-name version factory mod-path is-first))
+       (define new-entry (registry-entry role-name (append existing (list new-desc))))
+       (set-box! registry (hash-set (unbox registry) role-name new-entry))))))
 
 ;; Activate a specific version for a role. Deactivates all other versions.
+;; R2-1: Validates that the target version exists before deactivating.
 (define (activate-agent-version! role-name version)
   (call-with-semaphore
    registry-semaphore
@@ -60,6 +66,12 @@
      (define entry (hash-ref (unbox registry) role-name #f))
      (unless entry
        (error 'activate-agent-version! "unknown role: ~a" role-name))
+     ;; R2-1: Validate version exists before deactivating others.
+     (define has-version?
+       (for/or ([d (in-list (registry-entry-descriptors entry))])
+         (equal? (agent-descriptor-version d) version)))
+     (unless has-version?
+       (error 'activate-agent-version! "unknown version ~a for role ~a" version role-name))
      (define updated
        (for/list ([d (in-list (registry-entry-descriptors entry))])
          (struct-copy agent-descriptor d [active? (equal? (agent-descriptor-version d) version)])))
