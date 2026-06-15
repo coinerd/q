@@ -153,4 +153,31 @@
    (type . number)
    (default . 4)
    (description . "Maximum concurrent sandboxed processes")
-   (since . "0.20.0"))))
+   (since . "0.20.0")))
+
+ (mas
+  (broker-enabled
+   (type . boolean)
+   (default . #f)
+   (description . "Master gate for remote execution via TCP broker. If false, no TCP listeners are started and all execution is local.")
+   (since . "0.99.12"))
+  (broker-remote-host
+   (type . string)
+   (default . "localhost")
+   (description . "Hostname or IP of the remote executor node")
+   (since . "0.99.12"))
+  (broker-remote-port
+   (type . exact-positive-integer)
+   (default . 8443)
+   (description . "TCP port of the remote executor node")
+   (since . "0.99.12"))
+  (broker-cert-dir
+   (type . string)
+   (default . "~/.q/certs/")
+   (description . "Directory containing CA, client cert, and client key PEM files")
+   (since . "0.99.12"))
+  (broker-capability-secret
+   (type . (or/c string #f))
+   (default . #f)
+   (description . "HMAC-SHA256 secret for signing capability tokens. Required when broker is enabled.")
+   (since . "0.99.12"))))

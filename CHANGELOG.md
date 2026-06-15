@@ -1,3 +1,40 @@
+## 0.99.12
+
+Released: 2026-06-26
+
+### Features
+- **Distributed execution via mTLS TCP broker**: high-risk tool execution can now be routed to a remote executor node over mutual TLS, isolating hostile code from the developer machine.
+- Certificate infrastructure: `q generate-certificates` command creates a local CA, server cert, and client cert (RSA 4096, 365-day validity).
+- Remote IPC client: async TLS client (`remote-ipc.rkt`) with JSON-RPC over TLS, request/response matching by request-id, drain thread for async responses.
+- Executor node server: TLS server (`executor-server.rkt`) with per-connection threads, capability token validation, request size limits, and graceful shutdown.
+- Risk-based routing integration: tool-gateway now dispatches `'remote` decisions to the actual remote executor when `mas.broker.enabled = true`.
+- Connection resilience: circuit breaker (3-state: closed/open/half-open, threshold 5, cooldown 30s), automatic reconnection with exponential backoff, background health check thread.
+- Configuration: new `mas.broker.*` settings (`enabled`, `remote-host`, `remote-port`, `cert-dir`, `capability-secret`) — all default-off.
+
+### Breaking / Behavior Changes
+- `routing-decision->execution-route` now returns `'remote` for high/critical risk decisions (was `'remote-tagged-but-executed-local`). When broker is disabled (default), remote decisions fall back to local execution.
+- `broker-enabled?` now reads `mas.broker.enabled` (was hardcoded `#f`). Default remains `#f`.
+- When `mas.broker.enabled = true` but `capability-secret` is not set, q fails fast with an error (fail-closed).
+
+### Migration Notes
+- No configuration changes required for local-only operation. The broker is strictly opt-in.
+- To enable remote execution: set `mas.broker.enabled = true`, configure `remote-host`, `remote-port`, `cert-dir`, and `capability-secret`.
+- Run `q generate-certificates` to create the required mTLS certificates.
+- See `docs/distributed-execution-guide.md` for the 5-step deployment guide.
+
+### Testing
+- Focused gates pass: TLS contexts 8/8, cert generator 5/5, remote IPC 5/5, remote executor 4/4, executor server 10/10, remote routing 10/10, gateway bridge remote 5/5, routing policy 11/11 + 5/5 integration, remote IPC resilience 11/11, remote executor security 11/11.
+- Circuit breaker: 7 unit tests (closed→open, open→reject, cooldown→half-open, half-open recovery) + 4 integration tests.
+- Adversarial security: 7 token validation tests + 4 integration tests (circuit storm prevention, prompt injection as data, mTLS rejection).
+- Broad fast suite: no regressions from v0.99.11 baseline.
+
+### Operational / Release
+- Certificate generation uses RSA 4096-bit keys with SHA-256 signatures and TLS 1.2 (TLS 1.3 compatible).
+- Capability tokens use HMAC-SHA256 with 5-minute TTL and constant-time MAC comparison.
+- Circuit breaker protects against connection storms: 5 consecutive failures → circuit open → fast-fail for 30s → half-open trial.
+- Zero network surface when disabled: no TCP listeners, no sockets, no cert reads.
+- Defense in depth: transport (mTLS) + application (capability tokens) + deployment (config gate) + execution (sandbox).
+
 ## 0.99.11
 
 Released: 2026-06-15
