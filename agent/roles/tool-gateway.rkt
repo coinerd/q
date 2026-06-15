@@ -12,9 +12,34 @@
 ;; The wiring layer (run-modes.rkt) sets the real executor when enabled.
 
 (require racket/generic
+         racket/match
          (only-in "base.rkt" gen:agent-role agent-role-capabilities make-capability-guarded-handler)
          (only-in "../../util/capability.rkt" ROLE-CAPABILITIES)
-         (only-in "../../util/message/mas-envelope.rkt" mas-envelope? mas-envelope-payload))
+         (only-in "../../util/message/mas-envelope.rkt"
+                  mas-envelope?
+                  mas-envelope-payload
+                  mas-envelope-risk-level))
+
+;; ============================================================
+;; W3 (v0.99.9): Risk-Based Routing Policy
+;; ============================================================
+
+;; Routing policy parameter.
+;; 'local-only (default): all requests go to local executor — zero behavioral change.
+;; 'risk-based: high/critical risk requests are tagged for remote execution.
+;; Phase 1: even with 'risk-based, the remote executor doesn't exist yet.
+;; The routing decision is logged but execution stays local.
+;; Phase 2: remote executor will handle 'remote-tagged requests via TCP broker.
+(define current-routing-policy (make-parameter 'local-only))
+
+;; Decide where to route an execution request based on risk level.
+;; Returns: 'local or 'remote
+(define (route-execution-request envelope)
+  (define risk (mas-envelope-risk-level envelope))
+  (match (current-routing-policy)
+    ['local-only 'local]
+    ['risk-based (if (memq risk '(high critical)) 'remote 'local)]
+    [_ 'local]))
 
 ;; H2: Default executor — returns stub response (backward compat)
 (define (default-tool-executor envelope)
@@ -64,7 +89,9 @@
 (provide tool-gateway-role?
          make-tool-gateway-role
          current-tool-executor
-         default-tool-executor)
+         default-tool-executor
+         current-routing-policy
+         route-execution-request)
 
 (define (make-tool-gateway-role)
   (tool-gateway-role))
