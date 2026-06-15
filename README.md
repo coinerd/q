@@ -79,6 +79,12 @@ q is provider-agnostic: it ships with adapters for **OpenAI**, **Anthropic**, an
 
 The core agent loop never depends on TUI, CLI, or any interface-specific concern. Each layer communicates through deterministic events and strict contracts.
 
+## MCP and Capability Security
+
+MCP server support is feature-gated and disabled by default. The Phase 1 implementation supports local `stdio` protocol handling only; there is no network broker, mTLS channel, or remote executor yet. High/critical risk routes are therefore tagged explicitly as `remote-tagged-but-executed-local` rather than executed remotely.
+
+For the current security model, feature gates (`mas.mcp.enabled`, `mas.mcp.server.enabled`, `mas.mcp.server.transport`), MCP event metadata, and capability-token validation APIs, see [MCP and Capability-Token Security Notes](docs/mcp-capability-security.md).
+
 ## Quick Start
 
 ### Install

@@ -1,3 +1,33 @@
+## 0.99.10
+
+Released: 2026-06-15
+
+### User-Visible Changes
+- Hardened MCP Phase 1 server behavior while keeping MCP disabled by default behind `mas.mcp.enabled` and `mas.mcp.server.enabled`.
+- Documented local-only Phase 1 transport limits: `stdio` is the supported transport; no network broker, mTLS channel, or remote executor exists in this release.
+- Documented capability-token validation APIs and security properties in `docs/mcp-capability-security.md`.
+
+### Breaking / Behavior Changes
+- Invalid `mas.mcp.server.transport` values now fall back to `"stdio"` instead of crashing.
+- MCP `tools/call` now rejects unknown tools before execution and returns JSON-RPC errors for invalid params/internal failures.
+- Empty capability-token/HMAC secrets are rejected.
+- Legacy `validate-capability-token` remains backward-compatible; claim-aware validation is available through the new claims APIs.
+
+### Migration Notes
+- MCP users must enable both `mas.mcp.enabled` and `mas.mcp.server.enabled` for local server mode.
+- Do not expose the Phase 1 MCP server over a network wrapper; remote execution is deferred to Phase 2.
+- Use `validate-capability-token-for-agent` when agent scope must be enforced.
+
+### Testing
+- Focused remediation gates passed for MCP security/config/protocol/integration/events, routing policy integration, and capability-token hardening.
+- Required fast-suite gate was run after each implementation wave; it timed out after 20 minutes with pre-existing broad-suite failures/hangs and is recorded as not green.
+
+### Operational / Release
+- Remediated v0.99.9 post-audit blockers C1, C2, H1-H5, and M1-M5 across W1-W4.
+- Added W5 documentation/release-hygiene artifacts; version bump and final audit remain scheduled for W6.
+
+---
+
 ## [0.98.6] — 2026-06-12
 
 ### Browser Audit Final Closure (13 findings from v0.98.3–v0.98.5 audit chain)
