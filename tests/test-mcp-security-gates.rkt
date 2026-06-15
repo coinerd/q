@@ -14,13 +14,15 @@
          racket/runtime-path
          racket/string
          "../extensions/mcp-adapter.rkt"
+         (only-in "../wiring/run-modes.rkt" make-mcp-governed-execute-fn)
          "../tools/registry.rkt"
          (only-in "../tools/tool.rkt"
                   make-tool
                   make-success-result
                   make-error-result
                   tool-result?
-                  tool-result->jsexpr)
+                  tool-result->jsexpr
+                  exec-context?)
          "../runtime/settings-query.rkt"
          (only-in "../runtime/settings.rkt" q-settings))
 
@@ -97,36 +99,30 @@
       (check-not-false (unbox calls) "execute-fn was called for known tool")
       (check-not-false (hash-ref resp 'result #f) "result returned from execute-fn"))
 
-    (test-case "F-01 CHARACTERIZE: MCP adapter invokes execute-fn without execution context"
-      ;; v0.99.11 W0: This is a repro harness for the remaining governance
-      ;; blocker. handle-mcp-request exposes only (tool-name args) to the
-      ;; execution function; there is no governed execution context argument.
-      ;; W1 should replace this characterization with a positive governed-path
-      ;; assertion.
-      (define reg (make-test-registry))
-      (define observed-arity (box #f))
-      (define observed-call (box #f))
-      (define exec-fn
-        (lambda args
-          (set-box! observed-arity (length args))
-          (set-box! observed-call args)
-          (hasheq 'content (list (hasheq 'type "text" 'text "ok")))))
-      (define req (json-roundtrip (build-mcp-tools-call 1 "echo" (hasheq 'text "hi"))))
+    (test-case "F-01 FIXED: MCP governed execute fn supplies execution context"
+      ;; v0.99.11 W1: MCP tools/call must route through the governed scheduler
+      ;; path, which supplies a real exec-context to the tool handler.
+      (define reg (make-tool-registry))
+      (define observed-ctx (box #f))
+      (register-tool! reg
+                      (make-tool "ctx-probe"
+                                 "Probe execution context"
+                                 (hasheq 'type "object" 'properties (hasheq))
+                                 (lambda (args ctx)
+                                   (set-box! observed-ctx ctx)
+                                   (make-success-result "ok"))))
+      (define exec-fn (make-mcp-governed-execute-fn reg #:working-directory (current-directory)))
+      (define req (json-roundtrip (build-mcp-tools-call 1 "ctx-probe" (hasheq))))
       (define resp (handle-mcp-request req reg exec-fn))
-      (check-equal? (unbox observed-arity)
-                    2
-                    "current MCP adapter calls execute-fn with only name and args")
-      (check-equal? (map values (unbox observed-call)) (list "echo" (hasheq 'text "hi")))
-      (check-not-false (hash-ref resp 'result #f)))
+      (check-not-false (hash-ref resp 'result #f))
+      (check-true (exec-context? (unbox observed-ctx))
+                  "governed MCP execution supplies a real exec-context, not #f"))
 
-    (test-case "F-01 CHARACTERIZE: run-modes MCP wiring still direct-executes tools with ctx #f"
-      ;; Source-level characterization for the exact independent-audit finding.
-      ;; This test intentionally records the current unsafe wiring so W1 has a
-      ;; stable red/green target: the direct `(tool-execute ... args #f)` path
-      ;; must disappear when governed MCP execution is introduced.
+    (test-case "F-01 FIXED: run-modes MCP wiring no longer direct-executes tools with ctx #f"
+      ;; Source-level regression guard for the exact independent-audit finding.
       (define run-modes-source (file->string run-modes-path))
-      (check-not-false (string-contains? run-modes-source "((tool-execute t) args #f)")
-                       "current run-modes MCP path directly invokes tool-execute with ctx #f"))
+      (check-false (string-contains? run-modes-source "((tool-execute t) args #f)")
+                   "run-modes MCP path must not directly invoke tool-execute with ctx #f"))
 
     (test-case "C2 FIXED: tool-result struct IS converted to MCP-compatible jsexpr"
       ;; W1 FIX: handle-mcp-request now checks tool-result? and converts.
