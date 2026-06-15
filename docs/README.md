@@ -27,6 +27,7 @@ q/docs/
 ├── publish-verify-workflow.md ← extension publishing guide
 ├── releasing.md            ← release process
 ├── sdk-rpc-catalog.md ← SDK/RPC interface reference
+├── mcp-capability-security.md ← MCP/capability-token security notes
 ├── security.md        ← security model
 ├── style-guide.md     ← code style conventions
 ├── trust-model.md     ← trust boundaries
