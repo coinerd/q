@@ -61,7 +61,11 @@
           [mcp-server-enabled? (-> q-settings? boolean?)]
           [mcp-server-transport (-> q-settings? string?)]
           [mcp-client-servers (-> q-settings? (listof any/c))]
-          [broker-enabled? (-> q-settings? boolean?)]))
+          [broker-enabled? (-> q-settings? boolean?)]
+          [broker-remote-host (-> q-settings? string?)]
+          [broker-remote-port (-> q-settings? exact-positive-integer?)]
+          [broker-cert-dir (-> q-settings? string?)]
+          [broker-capability-secret (-> q-settings? (or/c string? #f))]))
 
 ;; Query
 ;; ============================================================
@@ -476,7 +480,37 @@
       raw
       '()))
 
-;; Config key: mas.broker.enabled (default #f — always #f in Phase 1)
-;; Phase 2 will enable TCP broker with mTLS.
+;; ============================================================
+;; Broker Settings (v0.99.12 MAS Schritt 6 Phase 2)
+;; ============================================================
+
+;; Config key: mas.broker.enabled (default #f — always disabled by default)
+;; When #t, high-risk tool execution can be routed to remote executor nodes
+;; via mTLS TCP broker.
 (define (broker-enabled? settings)
-  #f)
+  (define raw (setting-ref* settings '(mas broker enabled) #f))
+  (cond
+    [(boolean? raw) raw]
+    [(string? raw) (and (member (string-downcase raw) '("true" "1" "yes")) #t)]
+    [else #f]))
+
+;; Config key: mas.broker.remote-host (default "localhost")
+;; Hostname of the remote executor node.
+(define (broker-remote-host settings)
+  (setting-ref* settings '(mas broker remote-host) "localhost"))
+
+;; Config key: mas.broker.remote-port (default 8443)
+;; Port of the remote executor node.
+(define (broker-remote-port settings)
+  (define raw (setting-ref* settings '(mas broker remote-port) 8443))
+  (if (exact-positive-integer? raw) raw 8443))
+
+;; Config key: mas.broker.cert-dir (default "~/.q/certs/")
+;; Directory containing mTLS certificates (ca.pem, client.pem, client-key.pem).
+(define (broker-cert-dir settings)
+  (setting-ref* settings '(mas broker cert-dir) "~/.q/certs/"))
+
+;; Config key: mas.broker.capability-secret (default #f — MUST be set when enabled)
+;; HMAC secret for signing capability tokens. Required for broker operation.
+(define (broker-capability-secret settings)
+  (setting-ref* settings '(mas broker capability-secret) #f))
