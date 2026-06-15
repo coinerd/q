@@ -93,7 +93,8 @@
                   mcp-enabled?
                   mcp-server-enabled?
                   mcp-server-transport)
-         (only-in "../extensions/mcp-adapter.rkt" run-mcp-stdio-server! current-mcp-execute-fn))
+         (only-in "../extensions/mcp-adapter.rkt" run-mcp-stdio-server! current-mcp-execute-fn)
+         (only-in "../tools/scheduler.rkt" run-tool-batch scheduler-result-results))
 
 ;; Re-export mode runners from sub-modules
 (require "run-interactive.rkt"
@@ -111,7 +112,43 @@
          run-json
          run-rpc
          run-print-mode
-         wire-runtime-parameters!)
+         wire-runtime-parameters!
+         make-mcp-governed-execute-fn)
+
+;; ============================================================
+;; MCP governed tool execution
+;; ============================================================
+
+(define (make-mcp-event-publisher bus session-id)
+  (and bus
+       (lambda (event-type payload)
+         (publish! bus
+                   (make-event event-type (current-inexact-milliseconds) session-id #f payload)))))
+
+(define (make-mcp-governed-execute-fn registry
+                                      #:working-directory [working-directory #f]
+                                      #:event-publisher [event-publisher #f]
+                                      #:runtime-settings [runtime-settings #f]
+                                      #:session-metadata [session-metadata #f]
+                                      #:permission-config [permission-config #f]
+                                      #:hook-dispatcher [hook-dispatcher #f])
+  (lambda (tool-name args)
+    (define call-id (format "mcp-~a" (current-inexact-milliseconds)))
+    (define sched-result
+      (run-tool-batch (list (make-tool-call call-id tool-name args))
+                      registry
+                      #:hook-dispatcher hook-dispatcher
+                      #:exec-context (make-exec-context #:working-directory working-directory
+                                                        #:event-publisher event-publisher
+                                                        #:runtime-settings runtime-settings
+                                                        #:call-id call-id
+                                                        #:session-metadata session-metadata
+                                                        #:permission-config permission-config)
+                      #:parallel? #f))
+    (define results (scheduler-result-results sched-result))
+    (if (pair? results)
+        (car results)
+        (make-error-result (format "tool '~a' produced no result" tool-name)))))
 
 ;; ============================================================
 ;; build-runtime-from-cli
@@ -241,14 +278,14 @@
   ;; Feature-gated: zero behavioral change when disabled (default).
   (when (and (mcp-enabled? settings) (mcp-server-enabled? settings))
     (log-info "mcp: starting MCP stdio server (transport=~a)" (mcp-server-transport settings))
-    ;; Wire tool execution: route MCP tools/call to the tool registry
-    (current-mcp-execute-fn
-     (lambda (tool-name args)
-       (define t (lookup-tool reg tool-name))
-       (if t
-           ((tool-execute t) args #f)
-           (hasheq 'content
-                   (list (hasheq 'type "text" 'text (format "unknown tool: ~a" tool-name)))))))
+    ;; Wire tool execution: route MCP tools/call through the governed scheduler path.
+    (current-mcp-execute-fn (make-mcp-governed-execute-fn
+                             reg
+                             #:working-directory project-dir
+                             #:event-publisher (make-mcp-event-publisher bus (current-gsd-session-id))
+                             #:runtime-settings settings
+                             #:session-metadata
+                             (hasheq 'session-id (current-gsd-session-id) 'route 'mcp)))
     (run-mcp-stdio-server! reg)
     (exit 0))
 
