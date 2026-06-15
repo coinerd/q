@@ -52,6 +52,18 @@
   (or (hash-ref evt 'timestamp #f) (hash-ref evt 'time #f) (now-seconds)))
 
 ;; ============================================================
+;; R1 fix (v0.99.8): Cap list fields to prevent unbounded growth.
+;; ============================================================
+
+(define MAX-BLACKBOARD-ENTRIES 50)
+
+;; Append item to list, dropping oldest if at capacity.
+(define (capped-append lst item)
+  (if (>= (length lst) MAX-BLACKBOARD-ENTRIES)
+      (append (cdr lst) (list item)) ; drop oldest
+      (append lst (list item))))
+
+;; ============================================================
 ;; Wave Status Handlers
 ;; ============================================================
 
@@ -127,7 +139,7 @@
   (struct-copy blackboard-state
                state
                [verifier-decisions
-                (append (blackboard-state-verifier-decisions state) (list decision))]
+                (capped-append (blackboard-state-verifier-decisions state) decision)]
                [last-updated (event-timestamp evt)]))
 
 (define (handle-verification-escalated state evt)
@@ -145,7 +157,7 @@
   (struct-copy blackboard-state
                state
                [verifier-decisions
-                (append (blackboard-state-verifier-decisions state) (list decision))]
+                (capped-append (blackboard-state-verifier-decisions state) decision)]
                [last-updated (event-timestamp evt)]))
 
 ;; ============================================================
@@ -164,7 +176,7 @@
             (event-timestamp evt)))
   (struct-copy blackboard-state
                state
-               [artifact-refs (append (blackboard-state-artifact-refs state) (list artifact))]
+               [artifact-refs (capped-append (blackboard-state-artifact-refs state) artifact)]
                [last-updated (event-timestamp evt)]))
 
 (define (handle-test-result state evt)
@@ -179,7 +191,7 @@
             (event-timestamp evt)))
   (struct-copy blackboard-state
                state
-               [test-results (append (blackboard-state-test-results state) (list result))]
+               [test-results (capped-append (blackboard-state-test-results state) result)]
                [last-updated (event-timestamp evt)]))
 
 (define (handle-hypothesis-opened state evt)
@@ -194,7 +206,7 @@
             (event-timestamp evt)))
   (struct-copy blackboard-state
                state
-               [open-hypotheses (append (blackboard-state-open-hypotheses state) (list hyp))]
+               [open-hypotheses (capped-append (blackboard-state-open-hypotheses state) hyp)]
                [last-updated (event-timestamp evt)]))
 
 (define (handle-hypothesis-resolved state evt)
@@ -208,6 +220,13 @@
                state
                [open-hypotheses filtered]
                [last-updated (event-timestamp evt)]))
+
+;; ============================================================
+;; A1 fix (v0.99.8): Blackboard sync handler (heartbeat).
+;; ============================================================
+
+(define (handle-blackboard-sync state evt)
+  (struct-copy blackboard-state state [last-updated (event-timestamp evt)]))
 
 ;; ============================================================
 ;; Main Reducer
@@ -233,6 +252,8 @@
     [(eq? ev-name 'mas.test.result) (handle-test-result state evt)]
     [(eq? ev-name 'mas.hypothesis.opened) (handle-hypothesis-opened state evt)]
     [(eq? ev-name 'mas.hypothesis.resolved) (handle-hypothesis-resolved state evt)]
+    ;; MAS sync (heartbeat)
+    [(eq? ev-name 'mas.blackboard.sync) (handle-blackboard-sync state evt)]
     ;; Unknown event → unchanged
     [else state]))
 
@@ -246,7 +267,9 @@
 
 (provide event-name
          event-data
-         data-ref)
+         data-ref
+         capped-append
+         MAX-BLACKBOARD-ENTRIES)
 
 (provide (contract-out [apply-event (-> blackboard-state? hash? blackboard-state?)]
                        [apply-events (->* ((listof hash?)) (blackboard-state?) blackboard-state?)]))

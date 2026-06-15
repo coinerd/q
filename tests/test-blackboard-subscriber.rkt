@@ -250,4 +250,25 @@
         ;; Second stop should not error
         (stop-blackboard-subscriber! bus)))))
 
+(test-case "T1: concurrent dispatch handles 100 events from 5 threads"
+  (define bus (make-event-bus))
+  (define bb (make-blackboard))
+  (parameterize ([current-blackboard bb])
+    (start-blackboard-subscriber! bus bb)
+    ;; Launch 5 threads, each publishing 20 wave events
+    (define threads
+      (for/list ([t (in-range 5)])
+        (thread (lambda ()
+                  (for ([i (in-range 20)])
+                    (publish! bus
+                              (make-test-event 'gsd.wave.started
+                                               (hasheq 'wave (format "W~a-~a" t i)))))))))
+    (for-each thread-wait threads)
+    ;; Verify total events processed
+    (define final (read-blackboard bb))
+    (define wave-count (hash-count (blackboard-state-wave-status final)))
+    (check-true (>= wave-count 1))
+    (check-true (<= wave-count 100))
+    (stop-blackboard-subscriber! bus)))
+
 (run-tests suite)

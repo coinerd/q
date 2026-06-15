@@ -241,9 +241,9 @@
       (check-not-false (string-contains? text "Use struct for data")
                        (format "missing conclusion in: ~a" text)))
 
-    (test-case "preamble limits conclusions to top 10"
+    (test-case "preamble limits conclusions to top 20"
       (define conclusions
-        (for/list ([i (in-range 15)])
+        (for/list ([i (in-range 25)])
           (task-conclusion (format "c~a" i)
                            (format "Finding ~a" i)
                            'fact
@@ -254,7 +254,7 @@
                            '())))
       (define p (build-state-awareness-preamble task-planning conclusions))
       (define text (text-part-text (car (message-content p))))
-      (check-not-false (string-contains? text "Finding 9"))
-      (check-false (string-contains? text "Finding 14")))))
+      (check-not-false (string-contains? text "Finding 19"))
+      (check-false (string-contains? text "Finding 24")))))
 
 (run-tests suite)

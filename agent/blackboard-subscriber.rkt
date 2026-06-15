@@ -41,7 +41,8 @@
                      mas.artifact.produced
                      mas.test.result
                      mas.hypothesis.opened
-                     mas.hypothesis.resolved))
+                     mas.hypothesis.resolved
+                     mas.blackboard.sync))
 
 ;; Check if an event is relevant to the blackboard.
 ;; Accepts both event? structs (from the bus) and hashes (from JSONL).
