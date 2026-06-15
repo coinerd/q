@@ -1,6 +1,6 @@
 #lang racket/base
 
-;; sandbox/worker-main.rkt — Execution Plane Worker
+;; sandbox/worker-main.rkt — Execution Plane Worker (stdio)
 ;;
 ;; Run as: racket -tm sandbox/worker-main.rkt
 ;; Communicates via newline-delimited JSON on stdin/stdout.
@@ -11,44 +11,14 @@
 ;;   3. Dispatch to worker-tool-registry
 ;;   4. Write ipc-response as JSON to stdout
 ;;   5. Repeat until EOF on stdin
+;;
+;; W2 (v0.99.12): Dispatch logic extracted to worker-dispatch.rkt.
+;; This module is now a thin stdio wrapper around process-request-line
+;; and serialize-response.
 
-(require racket/match
-         json
+(require racket/string
          "ipc-protocol.rkt"
-         "worker-tools.rkt")
-
-;; ── Request Processing ──────────────────────────────────────────
-
-(define (process-request-line line)
-  ;; Parse JSON → ipc-request → dispatch → ipc-response
-  ;; Returns ipc-response
-  ;; M5: Use parameterize for CWD so changes don't leak across requests
-  (with-handlers ([exn:fail? (lambda (e)
-                               (make-error-response #f (format "worker error: ~a" (exn-message e))))])
-    (define req-data
-      (with-handlers ([exn:fail? (lambda (_) #f)])
-        (string->jsexpr line)))
-    (define request (and req-data (jsexpr->ipc-request req-data)))
-    (cond
-      [(not request) (make-error-response #f "malformed request")]
-      [else
-       (define req-id (ipc-request-request-id request))
-       (define tool-name (ipc-request-tool-name request))
-       (define arguments (ipc-request-arguments request))
-       ;; M5: parameterize restores CWD after dispatch (no leak)
-       (define response
-         (let ([wd (ipc-request-working-dir request)])
-           (if wd
-               (parameterize ([current-directory wd])
-                 (dispatch-tool tool-name arguments))
-               (dispatch-tool tool-name arguments))))
-       ;; Stamp the request-id into the response
-       (ipc-response req-id
-                     (ipc-response-status response)
-                     (ipc-response-content response)
-                     (ipc-response-details response)
-                     (ipc-response-error-message response)
-                     (ipc-response-schema-version response))])))
+         "worker-dispatch.rkt")
 
 ;; ── Worker Main Loop ────────────────────────────────────────────
 
@@ -65,31 +35,9 @@
        [else
         ;; Process the request
         (define response (process-request-line trimmed))
-        ;; Normalize void content to #f for JSON serialization
-        (define clean-response
-          (if (void? (ipc-response-content response))
-              (ipc-response (ipc-response-request-id response)
-                            (ipc-response-status response)
-                            #f
-                            (ipc-response-details response)
-                            (ipc-response-error-message response)
-                            (ipc-response-schema-version response))
-              response))
-        ;; M4: Enforce IPC-MAX-RESPONSE-BYTES — prevent oversized responses from crashing
-        (define json-str (jsexpr->string (ipc-response->jsexpr clean-response)))
-        (define final-json-str
-          (if (> (string-length json-str) IPC-MAX-RESPONSE-BYTES)
-              (let ([truncated (ipc-response (ipc-response-request-id clean-response)
-                                             'error
-                                             (format "response too large (~a bytes, max ~a)"
-                                                     (string-length json-str)
-                                                     IPC-MAX-RESPONSE-BYTES)
-                                             (hasheq 'original-bytes (string-length json-str))
-                                             "response exceeded size limit"
-                                             (ipc-response-schema-version clean-response))])
-                (jsexpr->string (ipc-response->jsexpr truncated)))
-              json-str))
-        (display final-json-str (current-output-port))
+        ;; Serialize with size enforcement
+        (define json-str (serialize-response response))
+        (display json-str (current-output-port))
         (newline (current-output-port))
         (flush-output (current-output-port))
         (worker-loop)])]))
@@ -101,10 +49,6 @@
 
 (module+ main
   (worker-loop))
-
-;; ── Requires for string-trim ────────────────────────────────────
-
-(require racket/string)
 
 ;; ── Provides for testing ────────────────────────────────────────
 
