@@ -1,4 +1,4 @@
-<!-- verified-against: 0.99.9 -->
+<!-- verified-against: 0.99.10 -->
 # MCP and Capability-Token Security Notes
 
 This document describes the v0.99.10 remediation state for MAS Schritt 6 Phase 1.
@@ -69,7 +69,7 @@ Primary APIs:
 
 | API | Result | Use |
 |-----|--------|-----|
-| `generate-capability-token` | token string | Issue a token for an agent/capability/expiry. |
+| `sign-capability-token` | token string | Issue a token for an agent/capability/timestamp. |
 | `validate-capability-token` | capability symbol or `#f` | Backward-compatible capability check. |
 | `validate-capability-token/claims` | `capability-token-claims` or `#f` | Validate and inspect agent, capability, issued-at, and expiry claims. |
 | `validate-capability-token-for-agent` | capability symbol or `#f` | Validate token and enforce intended agent scope. |

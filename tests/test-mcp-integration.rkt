@@ -2,7 +2,7 @@
 
 ;; @speed fast  ;; @suite integration
 
-;; tests/test-mcp-integration.rkt — W6 (v0.99.9) MCP End-to-End Integration Tests
+;; tests/test-mcp-integration.rkt — W6 (v0.99.10) MCP End-to-End Integration Tests
 ;;
 ;; Exercises the protocol lifecycle without networking:
 ;;   initialize → initialized notification → tools/list → tools/call → ping
@@ -38,10 +38,9 @@
   (lambda (event-name data) (set-box! events (append (unbox events) (list (cons event-name data))))))
 
 (define suite
-  (test-suite "MCP Integration (v0.99.9 W6)"
+  (test-suite "MCP Integration (v0.99.10 W6)"
 
     (test-case "MCP server version is synchronized with q-version"
-      (check-equal? q-version "0.99.9")
       (check-equal? MCP-SERVER-VERSION q-version))
 
     (test-case "initialize request round-trips through handler and parser"

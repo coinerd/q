@@ -28,7 +28,8 @@
                   tool?
                   tool-name
                   tool-description
-                  tool-schema))
+                  tool-schema)
+         (only-in "../util/version.rkt" q-version))
 
 ;; ============================================================
 ;; MCP Protocol Constants
@@ -36,7 +37,7 @@
 
 (define MCP-PROTOCOL-VERSION "2024-11-05")
 (define MCP-SERVER-NAME "q")
-(define MCP-SERVER-VERSION "0.99.9")
+(define MCP-SERVER-VERSION q-version)
 
 ;; ============================================================
 ;; MCP Event Emission (H4 fix)

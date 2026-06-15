@@ -438,7 +438,7 @@
     [else #f]))
 
 ;; ============================================================
-;; MCP Settings (v0.99.9 MAS Schritt 6)
+;; MCP Settings (v0.99.10 MAS Schritt 6)
 ;; ============================================================
 
 ;; Config key: mas.mcp.enabled (default #f — MCP feature gate)
@@ -460,13 +460,15 @@
     [else #f]))
 
 ;; Config key: mas.mcp.server.transport (default "stdio")
-;; Phase 1 only supports stdio.
+;; Phase 1 only supports local stdio. Unsupported transports fall back safely.
 (define (mcp-server-transport settings)
   (define raw (setting-ref* settings '(mas mcp server transport) "stdio"))
-  (cond
-    [(string? raw) raw]
-    [(symbol? raw) (symbol->string raw)]
-    [else "stdio"]))
+  (define normalized
+    (cond
+      [(string? raw) (string-downcase raw)]
+      [(symbol? raw) (string-downcase (symbol->string raw))]
+      [else "stdio"]))
+  (if (string=? normalized "stdio") "stdio" "stdio"))
 
 ;; Config key: mas.mcp.client.servers (default '())
 ;; List of external MCP server paths to connect to.

@@ -76,9 +76,9 @@
       (define settings (make-mcp-settings (hash)))
       (check-equal? (mcp-server-transport settings) "stdio"))
 
-    (test-case "mcp-server-transport returns configured value"
+    (test-case "mcp-server-transport rejects unsupported Phase 1 transports"
       (define settings (make-settings-from-paths '((mas mcp server transport) "tcp")))
-      (check-equal? (mcp-server-transport settings) "tcp"))
+      (check-equal? (mcp-server-transport settings) "stdio"))
 
     (test-case "mcp-server-transport coerces symbol to string"
       (define settings (make-settings-from-paths (list '(mas mcp server transport) 'stdio)))
