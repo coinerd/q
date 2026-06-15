@@ -247,6 +247,39 @@
                [agent-activities (capped-append (blackboard-state-agent-activities state) activity)]
                [last-updated (event-timestamp evt)]))
 
+;; v0.99.8 W5: Hot-swap registry event handlers.
+;; ============================================================
+
+(define (handle-agent-registered state evt)
+  (define activity
+    (hasheq 'agent-name
+            (data-ref evt 'role-name 'unknown)
+            'action
+            'registered
+            'version
+            (data-ref evt 'version "unknown")
+            'timestamp
+            (event-timestamp evt)))
+  (struct-copy blackboard-state
+               state
+               [agent-activities (capped-append (blackboard-state-agent-activities state) activity)]
+               [last-updated (event-timestamp evt)]))
+
+(define (handle-agent-activated state evt)
+  (define activity
+    (hasheq 'agent-name
+            (data-ref evt 'role-name 'unknown)
+            'action
+            'activated
+            'version
+            (data-ref evt 'version "unknown")
+            'timestamp
+            (event-timestamp evt)))
+  (struct-copy blackboard-state
+               state
+               [agent-activities (capped-append (blackboard-state-agent-activities state) activity)]
+               [last-updated (event-timestamp evt)]))
+
 ;; ============================================================
 ;; Main Reducer
 ;; ============================================================
@@ -275,6 +308,9 @@
     [(eq? ev-name 'mas.blackboard.sync) (handle-blackboard-sync state evt)]
     ;; v0.99.8 W4: Agent version pinning
     [(eq? ev-name 'mas.agent.version.pinned) (handle-agent-version-pinned state evt)]
+    ;; v0.99.8 W5: Hot-swap registry events
+    [(eq? ev-name 'mas.agent.registered) (handle-agent-registered state evt)]
+    [(eq? ev-name 'mas.agent.activated) (handle-agent-activated state evt)]
     ;; Unknown event → unchanged
     [else state]))
 

@@ -89,3 +89,23 @@
                     "mas.agent.version.pinned"
                     (role-name version)
                     #:schema-version 1)
+
+;; ============================================================
+;; Hot-Swap Registry Events (v0.99.8 W5)
+;; ============================================================
+
+;; Emitted when a new agent version is registered in the registry.
+;; role-name: symbol identifying the agent role
+;; version: string version that was registered
+(define-typed-event mas-agent-registered-event
+                    "mas.agent.registered"
+                    (role-name version)
+                    #:schema-version 1)
+
+;; Emitted when an agent version is activated (hot-swap).
+;; role-name: symbol identifying the agent role
+;; version: string version that was activated
+(define-typed-event mas-agent-activated-event
+                    "mas.agent.activated"
+                    (role-name version)
+                    #:schema-version 1)
