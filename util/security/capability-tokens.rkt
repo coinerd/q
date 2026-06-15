@@ -56,7 +56,12 @@
   (and (non-empty-string? v) (not (regexp-match? #rx":" v))))
 
 (define (capability-input? v)
-  (or (symbol? v) (token-field-string? v)))
+  ;; F-06 (v0.99.11 W2): Both symbol and string inputs must pass the same
+  ;; field validation after symbol->string conversion.
+  (and (or (symbol? v) (string? v))
+       (token-field-string? (if (symbol? v)
+                                (symbol->string v)
+                                v))))
 
 (define (secret-key? v)
   (non-empty-string? v))
