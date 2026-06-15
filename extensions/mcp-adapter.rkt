@@ -21,7 +21,8 @@
 (require racket/contract
          racket/match
          json
-         (only-in "../tools/registry.rkt" list-tools-jsexpr tool-registry?))
+         (only-in "../tools/registry.rkt" list-tools-jsexpr tool-registry? lookup-tool)
+         (only-in "../tools/tool.rkt" tool-result? tool-result->jsexpr))
 
 ;; ============================================================
 ;; MCP Protocol Constants
@@ -61,8 +62,31 @@
      (define params (hash-ref req 'params (hasheq)))
      (define tool-name (hash-ref params 'name ""))
      (define tool-args (hash-ref params 'arguments (hasheq)))
-     (define result (execute-fn tool-name tool-args))
-     (hasheq 'jsonrpc "2.0" 'id id 'result result)]
+     (cond
+       ;; C1 (v0.99.10 W1): Reject unknown tools with JSON-RPC error.
+       ;; Previously execute-fn was called blindly, returning fake content.
+       [(not (lookup-tool registry tool-name))
+        (hasheq 'jsonrpc
+                "2.0"
+                'id
+                id
+                'error
+                (hasheq 'code
+                        -32602
+                        'message
+                        (format "Unknown tool: ~a" tool-name)
+                        'data
+                        (hasheq 'tool-name tool-name)))]
+       [else
+        ;; C2 (v0.99.10 W1): Convert tool-result structs to MCP-compatible jsexpr.
+        ;; Previously raw structs passed through, failing JSON serialization.
+        (define raw-result (execute-fn tool-name tool-args))
+        (define result
+          (cond
+            [(tool-result? raw-result) (tool-result->jsexpr raw-result)]
+            [(hash? raw-result) raw-result]
+            [else (hasheq 'content (list (hasheq 'type "text" 'text (format "~a" raw-result))))]))
+        (hasheq 'jsonrpc "2.0" 'id id 'result result)])]
     ;; Notification — no response needed
     ["notifications/initialized" (hasheq)]
     ["ping" (hasheq 'jsonrpc "2.0" 'id id 'result (hasheq))]

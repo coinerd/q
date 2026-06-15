@@ -84,6 +84,15 @@
       (define settings (make-settings-from-paths (list '(mas mcp server transport) 'stdio)))
       (check-equal? (mcp-server-transport settings) "stdio"))
 
+    (test-case "mcp-server-transport defaults for invalid types (M5 fix)"
+      ;; v0.99.10 W1: non-string/symbol values return "stdio" instead of crashing
+      (check-equal? (mcp-server-transport (make-settings-from-paths '((mas mcp server transport) #t)))
+                    "stdio"
+                    "boolean transport returns default")
+      (check-equal? (mcp-server-transport (make-settings-from-paths '((mas mcp server transport) 42)))
+                    "stdio"
+                    "number transport returns default"))
+
     ;; ── mcp-client-servers ──
 
     (test-case "mcp-client-servers defaults to empty list"

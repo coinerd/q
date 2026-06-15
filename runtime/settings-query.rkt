@@ -463,9 +463,10 @@
 ;; Phase 1 only supports stdio.
 (define (mcp-server-transport settings)
   (define raw (setting-ref* settings '(mas mcp server transport) "stdio"))
-  (if (string? raw)
-      raw
-      (symbol->string raw)))
+  (cond
+    [(string? raw) raw]
+    [(symbol? raw) (symbol->string raw)]
+    [else "stdio"]))
 
 ;; Config key: mas.mcp.client.servers (default '())
 ;; List of external MCP server paths to connect to.

@@ -111,13 +111,13 @@
                 'method
                 "tools/call"
                 'params
-                (hasheq 'name "my-tool" 'arguments (hasheq 'x 1))))
+                (hasheq 'name "test-tool" 'arguments (hasheq 'x 1))))
       (define resp (handle-mcp-request req reg exec-fn))
       (check-equal? (hash-ref resp 'id) 3)
       (check-true (hash-has-key? resp 'result))
       ;; The execute-fn was called with correct args
       (check-equal? (length call-log) 1)
-      (check-equal? (first (first call-log)) "my-tool"))
+      (check-equal? (first (first call-log)) "test-tool"))
 
     (test-case "tools/call with empty arguments"
       (define reg (make-test-registry))

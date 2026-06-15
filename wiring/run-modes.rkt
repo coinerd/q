@@ -234,10 +234,12 @@
     (pin-current-versions))
 
   ;; v0.99.9 W4: MCP server mode — alternative entry point.
-  ;; When mas.mcp.server.enabled is true, q runs as an MCP server over stdio.
+  ;; When mas.mcp.server.enabled is true AND mas.mcp.enabled is true,
+  ;; q runs as an MCP server over stdio.
+  ;; H1 (v0.99.10 W1): Enforce master gate — both flags must be #t.
   ;; This blocks until stdin closes, then exits.
   ;; Feature-gated: zero behavioral change when disabled (default).
-  (when (mcp-server-enabled? settings)
+  (when (and (mcp-enabled? settings) (mcp-server-enabled? settings))
     (log-info "mcp: starting MCP stdio server (transport=~a)" (mcp-server-transport settings))
     ;; Wire tool execution: route MCP tools/call to the tool registry
     (current-mcp-execute-fn
