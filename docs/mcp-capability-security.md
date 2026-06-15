@@ -1,7 +1,9 @@
 <!-- verified-against: 0.99.10 -->
 # MCP and Capability-Token Security Notes
 
-This document describes the v0.99.10 remediation state for MAS Schritt 6 Phase 1.
+This document describes the security state for MAS Schritt 6 Phases 1 and 2.
+
+> **Phase 2 (v0.99.12) update:** Remote execution via mTLS TCP broker is now available. See [Distributed Execution Guide](distributed-execution-guide.md) and [mTLS Security Model](security-mtls.md) for details.
 
 ## Scope
 
@@ -17,10 +19,12 @@ Phase 1 provides:
 
 Phase 1 does **not** provide:
 
-- A network broker.
-- A remote executor.
-- mTLS or cross-host authentication.
-- Remote route execution. High/critical risk routes are explicitly tagged as `remote-tagged-but-executed-local` until Phase 2 exists.
+- ~~A network broker.~~ **→ Phase 2 provides a Racket-native TCP broker.**
+- ~~A remote executor.~~ **→ Phase 2 provides `sandbox/executor-server.rkt`.**
+- ~~mTLS or cross-host authentication.~~ **→ Phase 2 provides full mTLS with mutual certificate verification.**
+- ~~Remote route execution.~~ **→ Phase 2 routes high/critical risk requests to the remote executor via mTLS.**
+
+> **v0.99.12 change:** The `remote-tagged-but-executed-local` annotation is removed. Risk-based routing now dispatches `'remote` decisions to the actual remote executor when `mas.broker.enabled = true`. When the broker is disabled (default), risk-based routing falls back to local execution with a clear warning.
 
 ## Feature gates
 
@@ -92,4 +96,29 @@ Security properties:
 | `local-only` | All requests execute locally and are tagged `route = 'local`. |
 | `risk-based` | Low/medium requests execute locally; high/critical requests receive `routing-decision = 'remote` and `route = 'remote-tagged-but-executed-local`. |
 
-Because Phase 2 remote execution does not exist yet, risk-based remote decisions are explicit metadata, not network execution.
+## Phase 2: Remote Execution (v0.99.12)
+
+Phase 2 completes the remote execution path. When `mas.broker.enabled = true`:
+
+- High/critical risk requests are routed to the remote executor via mTLS TCP.
+- Capability tokens are injected per-request with the shared HMAC secret.
+- The circuit breaker protects against executor outages.
+- Reconnection with exponential backoff recovers dead connections.
+
+When `mas.broker.enabled = false` (default):
+
+- No TCP listeners are started.
+- All requests execute locally.
+- Risk-based routing still computes routing decisions, but `'remote` decisions fall back to local execution.
+
+### Key Phase 2 References
+
+- [Distributed Execution Guide](distributed-execution-guide.md) — deployment, troubleshooting
+- [mTLS Security Model](security-mtls.md) — trust model, threat model, defense in depth
+- `agent/distributed/remote-executor.rkt` — client with circuit breaker and reconnection
+- `agent/distributed/remote-ipc.rkt` — async TLS client
+- `sandbox/executor-server.rkt` — TLS server with capability token validation
+- `sandbox/worker-dispatch.rkt` — extracted dispatch logic
+- `util/security/tls-contexts.rkt` — mTLS context factories
+- `util/security/cert-generator.rkt` — CA/cert generation
+- `cli/generate-certificates.rkt` — `q generate-certificates` command
