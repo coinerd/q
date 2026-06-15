@@ -200,6 +200,92 @@
 
     (test-case "transport works correctly for symbols"
       (define settings (make-settings-from-paths (list '(mas mcp server transport) 'stdio)))
-      (check-equal? (mcp-server-transport settings) "stdio"))))
+      (check-equal? (mcp-server-transport settings) "stdio"))
+
+    ;; ════════════════════════════════════════════════════════════
+    ;; F-02 HIGH: Malformed tools/call params must return -32602, not crash
+    ;; ════════════════════════════════════════════════════════════
+
+    (test-case "F-02 FIXED: params not a hash returns -32602 without exception"
+      (define reg (make-test-registry))
+      (define exec-fn (lambda (name args) (hasheq 'content '())))
+      (define req
+        (json-roundtrip (hasheq 'jsonrpc "2.0" 'id 1 'method "tools/call" 'params "not-a-hash")))
+      (define resp (handle-mcp-request req reg exec-fn))
+      (check-true (mcp-error-response? resp))
+      (check-equal? (mcp-error-code resp) -32602))
+
+    (test-case "F-02 FIXED: name as number returns -32602 without exception"
+      (define reg (make-test-registry))
+      (define exec-fn (lambda (name args) (hasheq 'content '())))
+      (define req
+        (json-roundtrip (hasheq 'jsonrpc
+                                "2.0"
+                                'id
+                                1
+                                'method
+                                "tools/call"
+                                'params
+                                (hasheq 'name 42 'arguments (hasheq)))))
+      (define resp (handle-mcp-request req reg exec-fn))
+      (check-true (mcp-error-response? resp))
+      (check-equal? (mcp-error-code resp) -32602))
+
+    (test-case "F-02 FIXED: arguments as string returns -32602 without exception"
+      (define reg (make-test-registry))
+      (define exec-fn (lambda (name args) (hasheq 'content '())))
+      (define req
+        (json-roundtrip (hasheq 'jsonrpc
+                                "2.0"
+                                'id
+                                1
+                                'method
+                                "tools/call"
+                                'params
+                                (hasheq 'name "echo" 'arguments "not-a-hash"))))
+      (define resp (handle-mcp-request req reg exec-fn))
+      (check-true (mcp-error-response? resp))
+      (check-equal? (mcp-error-code resp) -32602))
+
+    (test-case "F-02 FIXED: empty name returns -32602 without exception"
+      (define reg (make-test-registry))
+      (define exec-fn (lambda (name args) (hasheq 'content '())))
+      (define req
+        (json-roundtrip (hasheq 'jsonrpc
+                                "2.0"
+                                'id
+                                1
+                                'method
+                                "tools/call"
+                                'params
+                                (hasheq 'name "" 'arguments (hasheq)))))
+      (define resp (handle-mcp-request req reg exec-fn))
+      (check-true (mcp-error-response? resp))
+      (check-equal? (mcp-error-code resp) -32602))
+
+    ;; ════════════════════════════════════════════════════════════
+    ;; F-03 MEDIUM: Internal exception details must not leak to clients
+    ;; ════════════════════════════════════════════════════════════
+
+    (test-case "F-03 FIXED: internal exception details are redacted from client response"
+      (define reg (make-test-registry))
+      (define exec-fn (lambda (name args) (error "secret API key: ABC123XYZ")))
+      (define req (json-roundtrip (build-mcp-tools-call 1 "echo" (hasheq 'text "hi"))))
+      (define resp (handle-mcp-request req reg exec-fn))
+      (check-true (mcp-error-response? resp))
+      (check-equal? (mcp-error-code resp) -32603)
+      ;; The sensitive detail must NOT appear anywhere in the response
+      (define resp-str (jsexpr->string resp))
+      (check-false (regexp-match? #rx"ABC123XYZ" resp-str)
+                   "internal exception detail must not leak to client"))
+
+    (test-case "F-03 FIXED: exception detail not in data field"
+      (define reg (make-test-registry))
+      (define exec-fn (lambda (name args) (error "INTERNAL_PATH=/secret/data")))
+      (define req (json-roundtrip (build-mcp-tools-call 1 "echo" (hasheq 'text "hi"))))
+      (define resp (handle-mcp-request req reg exec-fn))
+      (define err (hash-ref resp 'error #f))
+      (check-false (hash-has-key? (or err (hasheq)) 'data)
+                   "error response must not include data/detail field"))))
 
 (run-tests suite)

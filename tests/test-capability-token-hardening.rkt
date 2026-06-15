@@ -120,6 +120,22 @@
 
     (test-case "future token rejected"
       (define token (sign-capability-token 'file-write "agent-X" SECRET #:timestamp 10000))
-      (check-false (validate-capability-token token SECRET #:now 100)))))
+      (check-false (validate-capability-token token SECRET #:now 100)))
+
+    ;; ════════════════════════════════════════════════════════════
+    ;; F-06 LOW: Symbol capabilities must be validated as strictly as strings
+    ;; ════════════════════════════════════════════════════════════
+
+    (test-case "F-06 FIXED: symbol with colons is rejected at signing"
+      ;; A symbol like '|invalid:symbol| would produce a capability string
+      ;; containing colons, which would break token parsing on validation.
+      ;; After the fix, sign-capability-token should reject such symbols
+      ;; via the capability-input? contract.
+      (check-exn exn:fail:contract?
+                 (lambda () (sign-capability-token '|invalid:symbol| "agent-A" SECRET))))
+
+    (test-case "F-06 FIXED: normal symbol still works after tightening"
+      (define token (sign-capability-token 'read-only "agent-A" SECRET #:timestamp 1000))
+      (check-equal? (validate-capability-token token SECRET #:now 1100) 'read-only))))
 
 (run-tests suite)

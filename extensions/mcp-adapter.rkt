@@ -94,6 +94,7 @@
 ;; Extracted from handle-mcp-request to keep match clauses readable.
 (define (handle-tools-call req id registry execute-fn)
   ;; H3: Validate params presence — return -32602 if missing.
+  ;; F-02 (v0.99.11 W2): Validate params type and structure.
   (cond
     [(not (hash-has-key? req 'params))
      (hasheq 'jsonrpc
@@ -104,9 +105,37 @@
              (hasheq 'code -32602 'message "Invalid params: missing 'params'"))]
     [else
      (define params (hash-ref req 'params))
-     (define tool-name-str (hash-ref params 'name ""))
-     (define tool-args (hash-ref params 'arguments (hasheq)))
-     (handle-tools-call-exec id tool-name-str tool-args registry execute-fn)]))
+     (cond
+       ;; F-02: params must be a hash/object.
+       [(not (hash? params))
+        (hasheq 'jsonrpc
+                "2.0"
+                'id
+                id
+                'error
+                (hasheq 'code -32602 'message "Invalid params: params must be an object"))]
+       [else
+        (define tool-name-str (hash-ref params 'name ""))
+        (define tool-args (hash-ref params 'arguments (hasheq)))
+        (cond
+          ;; F-02: name must be a non-empty string.
+          [(not (and (string? tool-name-str) (positive? (string-length tool-name-str))))
+           (hasheq
+            'jsonrpc
+            "2.0"
+            'id
+            id
+            'error
+            (hasheq 'code -32602 'message "Invalid params: 'name' must be a non-empty string"))]
+          ;; F-02: arguments must be a hash/object if present.
+          [(not (hash? tool-args))
+           (hasheq 'jsonrpc
+                   "2.0"
+                   'id
+                   id
+                   'error
+                   (hasheq 'code -32602 'message "Invalid params: 'arguments' must be an object"))]
+          [else (handle-tools-call-exec id tool-name-str tool-args registry execute-fn)])])]))
 
 ;; Inner handler for tools/call once params are validated.
 ;; C1: check tool existence. H3: wrap exceptions. C2: convert tool-result.
@@ -146,17 +175,9 @@
                             #f
                             #:route (raw-result-route raw-result)
                             #:error-code -32603)
-     (hasheq 'jsonrpc
-             "2.0"
-             'id
-             id
-             'error
-             (hasheq 'code
-                     -32603
-                     'message
-                     "Internal error"
-                     'data
-                     (hasheq 'detail (hash-ref raw-result '__internal-error))))]
+     ;; F-03 (v0.99.11 W2): Do NOT expose internal exception details to clients.
+     ;; The error message is logged server-side only.
+     (hasheq 'jsonrpc "2.0" 'id id 'error (hasheq 'code -32603 'message "Internal error"))]
     [else
      ;; C2 (v0.99.10 W1): Convert tool-result structs to MCP-compatible jsexpr.
      (define result
