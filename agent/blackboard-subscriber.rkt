@@ -45,7 +45,9 @@
                      mas.blackboard.sync
                      mas.agent.version.pinned
                      mas.agent.registered
-                     mas.agent.activated))
+                     mas.agent.activated
+                     mas.mcp.connected
+                     mas.mcp.tool.called))
 
 ;; Check if an event is relevant to the blackboard.
 ;; Accepts both event? structs (from the bus) and hashes (from JSONL).

@@ -280,6 +280,38 @@
                [agent-activities (capped-append (blackboard-state-agent-activities state) activity)]
                [last-updated (event-timestamp evt)]))
 
+;; v0.99.9 W5: MCP adapter event handlers.
+;; Tracks MCP server connections and tool calls as agent activities.
+;; ============================================================
+
+(define (handle-mcp-connected state evt)
+  (define activity
+    (hasheq 'agent-name
+            (data-ref evt 'server-name "unknown")
+            'action
+            'mcp-connected
+            'timestamp
+            (event-timestamp evt)))
+  (struct-copy blackboard-state
+               state
+               [agent-activities (capped-append (blackboard-state-agent-activities state) activity)]
+               [last-updated (event-timestamp evt)]))
+
+(define (handle-mcp-tool-called state evt)
+  (define activity
+    (hasheq 'agent-name
+            (or (data-ref evt 'server-name #f) "mcp")
+            'action
+            'mcp-tool-called
+            'tool-name
+            (data-ref evt 'tool-name "unknown")
+            'timestamp
+            (event-timestamp evt)))
+  (struct-copy blackboard-state
+               state
+               [agent-activities (capped-append (blackboard-state-agent-activities state) activity)]
+               [last-updated (event-timestamp evt)]))
+
 ;; ============================================================
 ;; Main Reducer
 ;; ============================================================
@@ -311,6 +343,9 @@
     ;; v0.99.8 W5: Hot-swap registry events
     [(eq? ev-name 'mas.agent.registered) (handle-agent-registered state evt)]
     [(eq? ev-name 'mas.agent.activated) (handle-agent-activated state evt)]
+    ;; v0.99.9 W5: MCP adapter events
+    [(eq? ev-name 'mas.mcp.connected) (handle-mcp-connected state evt)]
+    [(eq? ev-name 'mas.mcp.tool.called) (handle-mcp-tool-called state evt)]
     ;; Unknown event → unchanged
     [else state]))
 

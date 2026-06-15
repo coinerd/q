@@ -109,3 +109,20 @@
                     "mas.agent.activated"
                     (role-name version)
                     #:schema-version 1)
+
+;; ============================================================
+;; MCP Adapter Events (v0.99.9 W5)
+;; ============================================================
+
+;; Emitted when an MCP server connection is established.
+;; server-name: name of the MCP server connected to
+(define-typed-event mas-mcp-connected-event "mas.mcp.connected" (server-name) #:schema-version 1)
+
+;; Emitted when an MCP tool is called.
+;; tool-name: name of the MCP tool invoked
+;; server-name: optional, the server providing the tool
+(define-typed-event mas-mcp-tool-called-event
+                    "mas.mcp.tool.called"
+                    (tool-name)
+                    #:optional ([server-name #f])
+                    #:schema-version 1)
