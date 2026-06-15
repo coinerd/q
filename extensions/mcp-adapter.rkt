@@ -329,10 +329,12 @@
     (with-handlers ([exn:fail? (lambda (_) (values #f #f))])
       (values #t (string->jsexpr line))))
   (cond
-    [(not parse-ok?)
-     (hasheq 'jsonrpc "2.0" 'id #f 'error (hasheq 'code -32700 'message "Parse error"))]
+    ;; JSON-RPC 2.0 spec: invalid JSON or EOF must produce -32700 Parse error
+    ;; with id: null. Racket 'null serializes to JSON null; #f serializes to false.
+    [(or (not parse-ok?) (eof-object? req))
+     (hasheq 'jsonrpc "2.0" 'id 'null 'error (hasheq 'code -32700 'message "Parse error"))]
     [(not (hash? req))
-     (hasheq 'jsonrpc "2.0" 'id #f 'error (hasheq 'code -32600 'message "Invalid Request"))]
+     (hasheq 'jsonrpc "2.0" 'id 'null 'error (hasheq 'code -32600 'message "Invalid Request"))]
     [else (handle-mcp-request req registry execute-fn)]))
 
 ;; Run the MCP server loop on stdin/stdout.

@@ -7,11 +7,14 @@ Released: 2026-06-15
 - Malformed JSON-RPC `tools/call` params now return `-32602 Invalid params` instead of crashing the handler.
 - Internal exception details are no longer exposed to MCP clients in error responses.
 - Capability token symbol validation tightened to match string input strictness.
+- MCP stdio server now returns JSON-RPC 2.0 spec-compliant `-32700 Parse error` and `-32600 Invalid Request` responses for malformed input (previously silently dropped).
+- Broad-suite failure baseline documented in `docs/reports/BROAD-SUITE-DEBT-TRIAGE.md`.
 
 ### Breaking / Behavior Changes
 - MCP `tools/call` malformed params (non-hash params, non-string name, non-hash arguments) now return JSON-RPC `-32602` instead of throwing uncaught exceptions.
 - MCP `tools/call` internal errors return generic `-32603 Internal error` without `data.detail` field.
 - Capability symbols containing colons or invalid characters are now rejected at signing time via `capability-input?` contract.
+- MCP stdio server now returns JSON-RPC error responses (instead of silently dropping) for invalid JSON (`-32700`) and non-object JSON (`-32600`).
 
 ### Migration Notes
 - No configuration changes required. MCP remains disabled by default.

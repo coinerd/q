@@ -150,10 +150,31 @@
       (check-true (hash-has-key? resp 'jsonrpc))
       (check-true (hash-has-key? resp 'result)))
 
-    (test-case "parse-error response includes id null"
+    (test-case "parse-error response includes id null on wire"
       ;; JSON-RPC spec: if id cannot be determined, it MUST be null.
+      ;; Racket #f serializes to JSON false; 'null serializes to JSON null.
       (define reg (make-test-registry))
       (define resp (handle-mcp-raw-input "garbage" reg noop-execute))
-      (check-false (hash-ref resp 'id #t) "parse-error id must be null/#f"))))
+      (define wire (jsexpr->string resp))
+      (check-true (regexp-match? #rx"\"id\":null" wire)
+                  (format "wire format must have id:null, got: ~a" wire))
+      (check-false (regexp-match? #rx"\"id\":false" wire) "wire format must NOT have id:false"))
+
+    (test-case "empty string returns -32700 parse error"
+      ;; JSON-RPC spec: empty string is not valid JSON → -32700 Parse error.
+      ;; string->jsexpr returns eof for empty input, not an exception.
+      (define reg (make-test-registry))
+      (define resp (handle-mcp-raw-input "" reg noop-execute))
+      (check-true (mcp-error-response? resp))
+      (check-equal? (mcp-error-code resp) -32700)
+      (check-equal? (mcp-error-message resp) "Parse error"))
+
+    (test-case "invalid request response includes id null on wire"
+      ;; Same wire-format check for -32600 Invalid Request.
+      (define reg (make-test-registry))
+      (define resp (handle-mcp-raw-input "42" reg noop-execute))
+      (define wire (jsexpr->string resp))
+      (check-true (regexp-match? #rx"\"id\":null" wire)
+                  (format "wire format must have id:null, got: ~a" wire)))))
 
 (run-tests suite)
