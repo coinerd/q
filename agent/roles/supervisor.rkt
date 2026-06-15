@@ -16,7 +16,11 @@
          (only-in "../../util/message/mas-envelope.rkt"
                   mas-envelope?
                   mas-envelope-payload
-                  mas-envelope-target-agent))
+                  mas-envelope-target-agent)
+         ;; Registry import — used only when current-use-registry is #t.
+         ;; The lazy require pattern avoids a hard dependency at load time
+         ;; when the registry is not enabled.
+         (only-in "../registry.rkt" make-agent-instance registered-roles))
 
 ;; ============================================================
 ;; Struct Definition
@@ -65,18 +69,47 @@
 ;; Constructor
 ;; ============================================================
 
+;; When #f (default), the supervisor uses direct construction (backward compat).
+;; When #t, the supervisor resolves sub-roles from the agent registry.
+;; Set to #t by the wiring layer when mas.hot-swap.enabled is true.
+(define current-use-registry (make-parameter #f))
+
 (define (make-supervisor-role)
-  (supervisor-role (hasheq 'planner
-                           (make-planner-role)
-                           'verifier
-                           (make-verifier-role)
-                           'tool-gateway
-                           (make-tool-gateway-role))))
+  (define sub-roles
+    (if (current-use-registry)
+        ;; Registry path: resolve each sub-role from the registry.
+        ;; Falls back to direct construction if the role is not registered.
+        (hasheq 'planner
+                (resolve-sub-role 'planner make-planner-role)
+                'verifier
+                (resolve-sub-role 'verifier make-verifier-role)
+                'tool-gateway
+                (resolve-sub-role 'tool-gateway make-tool-gateway-role))
+        ;; Backward compat: direct construction (no registry dependency)
+        (hasheq 'planner
+                (make-planner-role)
+                'verifier
+                (make-verifier-role)
+                'tool-gateway
+                (make-tool-gateway-role))))
+  (supervisor-role sub-roles))
+
+;; Helper: try registry first, fall back to direct construction if
+;; the role is not registered. This makes registry adoption graceful —
+;; even with current-use-registry #t, missing registrations degrade
+;; safely instead of erroring.
+(define (resolve-sub-role role-name direct-factory)
+  (with-handlers ([exn:fail? (lambda (_) (direct-factory))])
+    (if (member role-name (registered-roles))
+        (make-agent-instance role-name)
+        (direct-factory))))
 
 ;; ============================================================
 ;; Provides
 ;; ============================================================
 
 (provide supervisor-role?
+         supervisor-role-sub-roles
          make-supervisor-role
-         supervisor-dispatch)
+         supervisor-dispatch
+         current-use-registry)
