@@ -79,3 +79,23 @@
   (check-true (and (id-in? "u1" ids) (id-in? "u2" ids)) "both user messages must survive")
   ;; Assistant messages are not protected and may be dropped
   (check-true (<= (length trimmed) 3) "assistant messages should be dropped before user messages"))
+
+(test-case "multi-prompt session: all user prompts survive tool-failure truncation"
+  ;; Simulate the regression scenario: 3 user prompts interleaved with
+  ;; large assistant/tool outputs. Under tight budget, every prompt must
+  ;; remain visible so the model does not regress to the first task.
+  (define prompt1 (make-text-msg "p1" 'user 'message "Re-build and restart server"))
+  (define assistant1 (make-text-msg "a1" 'assistant 'message (make-string 5000 #\b)))
+  (define tool1 (make-text-msg "t1" 'tool 'message (make-string 3000 #\c)))
+  (define prompt2 (make-text-msg "p2" 'user 'message "Create a list of pages"))
+  (define assistant2 (make-text-msg "a2" 'assistant 'message (make-string 5000 #\d)))
+  (define tool2 (make-text-msg "t2" 'tool 'message (make-string 3000 #\e)))
+  (define prompt3 (make-text-msg "p3" 'user 'message "Copy contents from live URLs"))
+  (define assistant3 (make-text-msg "a3" 'assistant 'message (make-string 5000 #\f)))
+  (define tool-fail (make-text-msg "tf" 'tool 'message (make-string 2000 #\g)))
+  (define all-msgs
+    (list prompt1 assistant1 tool1 prompt2 assistant2 tool2 prompt3 assistant3 tool-fail))
+  (define trimmed (truncate-messages-to-budget all-msgs 1000))
+  (define ids (map message-id trimmed))
+  (for ([pid (in-list '("p1" "p2" "p3"))])
+    (check-true (id-in? pid ids) (format "prompt ~a must survive tight-budget truncation" pid))))

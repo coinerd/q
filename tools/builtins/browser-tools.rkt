@@ -32,7 +32,8 @@
          handle-browser-scroll
          handle-browser-close
          handle-browser-check-local-app
-         observation->hash)
+         observation->hash
+         browser-error-result)
 
 ;; ---------------------------------------------------------------------------
 ;; Helper: get service from exec context or parameter
@@ -70,7 +71,17 @@
   (make-success-result (apply hasheq 'status "ok" pairs)))
 
 (define (browser-error-result tool-name e)
-  (make-error-result (format "~a failed: ~a" tool-name (exn-message e))))
+  (define msg (exn-message e))
+  (define recovery-hint
+    (cond
+      [(string-contains? msg "not found")
+       " Hint: The browser session may have expired or the ID was incorrect. Use browser_open to create a new session, then retry."]
+      [(string-contains? msg "timed out")
+       " Hint: The page may be slow to respond. Try again with a simpler action or observe first."]
+      [(string-contains? msg "blocked")
+       " Hint: The URL was blocked by browser policy. Check the policy settings or try a different URL."]
+      [else ""]))
+  (make-error-result (format "~a failed: ~a~a" tool-name msg recovery-hint)))
 
 ;; Truncate observation text to avoid context overflow (NF-11).
 ;; Pages with 50K+ chars of text-content would consume the entire
