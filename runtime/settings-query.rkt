@@ -55,7 +55,8 @@
           [verifier-enabled? (-> q-settings? boolean?)]
           [verifier-model (-> q-settings? (or/c string? #f))]
           [verifier-risk-threshold (-> q-settings? symbol?)]
-          [blackboard-enabled? (-> q-settings? boolean?)]))
+          [blackboard-enabled? (-> q-settings? boolean?)]
+          [hot-swap-enabled? (-> q-settings? boolean?)]))
 
 ;; Query
 ;; ============================================================
@@ -416,6 +417,16 @@
 ;; context injection is enabled, and crash recovery runs from trace.jsonl.
 (define (blackboard-enabled? settings)
   (define raw (setting-ref* settings '(mas blackboard enabled) #f))
+  (cond
+    [(boolean? raw) raw]
+    [(string? raw) (and (member (string-downcase raw) '("true" "1" "yes")) #t)]
+    [else #f]))
+
+;; Check whether hot-swap (registry-based dispatch) is enabled.
+;; Config path: mas.hot-swap.enabled
+;; Default: #f (direct construction path)
+(define (hot-swap-enabled? settings)
+  (define raw (setting-ref* settings '(mas hot-swap enabled) #f))
   (cond
     [(boolean? raw) raw]
     [(string? raw) (and (member (string-downcase raw) '("true" "1" "yes")) #t)]

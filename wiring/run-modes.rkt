@@ -83,7 +83,10 @@
                   start-blackboard-subscriber!
                   rebuild-blackboard-from-log!)
          (only-in "../runtime/context-assembly/state-aware-builder.rkt"
-                  current-blackboard-injection-enabled))
+                  current-blackboard-injection-enabled)
+         ;; v0.99.8: Registry + hot-swap
+         (only-in "../agent/registry-defaults.rkt" register-default-agents!)
+         (only-in "../agent/roles/supervisor.rkt" current-use-registry))
 
 ;; Re-export mode runners from sub-modules
 (require "run-interactive.rkt"
@@ -212,6 +215,13 @@
     (define trace-path (build-path session-dir "trace.jsonl"))
     (when (file-exists? trace-path)
       (rebuild-blackboard-from-log! trace-path bb)))
+
+  ;; v0.99.8 W3: Register agents and enable registry-based dispatch.
+  ;; Always populate the registry (pure data, zero side effects).
+  ;; Enable hot-swap only when mas.hot-swap.enabled is true.
+  (register-default-agents!)
+  (when (hot-swap-enabled? settings)
+    (current-use-registry #t))
 
   ;; Build final config: immutable hash -> session-config (W-03)
   (define final-hash
