@@ -1,0 +1,39 @@
+{
+  "version": "0.99.11",
+  "timestamp": "2026-06-15T22:00:00Z",
+  "head": "51428873",
+  "focused_gates": {
+    "status": "GREEN",
+    "suites": {
+      "test-mcp-adapter.rkt": {"passed": 31, "failed": 0},
+      "test-mcp-config.rkt": {"passed": 17, "failed": 0},
+      "test-mcp-events.rkt": {"passed": 12, "failed": 0},
+      "test-mcp-integration.rkt": {"passed": 10, "failed": 0},
+      "test-mcp-protocol-compliance.rkt": {"passed": 7, "failed": 0},
+      "test-mcp-security-gates.rkt": {"passed": 19, "failed": 0},
+      "test-capability-tokens.rkt": {"passed": 22, "failed": 0},
+      "test-capability-token-hardening.rkt": {"passed": 18, "failed": 0}
+    }
+  },
+  "broad_fast_suite": {
+    "status": "NOT_GREEN",
+    "files": {"total": 912, "passed": 835, "failed": 77, "timeouts": 0},
+    "tests": {"total": 11425, "passed": 11305, "failed": 120},
+    "zero_parsed_sentinels": [
+      "tests/mock-worker.rkt",
+      "tests/test-cursor-debug.rkt",
+      "tests/test-event-ordering.rkt",
+      "tests/test-vision-helpers.rkt",
+      "tests/tui/test-error-scenarios.rkt"
+    ],
+    "classification": "Pre-existing unrelated debt — no W0-W2 regressions introduced."
+  },
+  "notes": [
+    "F-01 (CRITICAL) closed: MCP tools/call routes through governed scheduler execution.",
+    "F-02 (HIGH) closed: Malformed params return -32602 instead of crashing.",
+    "F-03 (MEDIUM) closed: Internal exception details no longer exposed to MCP clients.",
+    "F-06 (LOW) closed: Capability symbol validation tightened.",
+    "F-04 (MEDIUM) closed: Gate evidence updated to current version and truthful status.",
+    "F-05 (LOW) closed: CHANGELOG W6 wording corrected."
+  ]
+}
