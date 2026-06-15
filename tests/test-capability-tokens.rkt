@@ -29,8 +29,9 @@
     (test-case "hmac-sha256 differs for different messages"
       (check-false (string=? (hmac-sha256 "key" "msg1") (hmac-sha256 "key" "msg2"))))
 
-    (test-case "hmac-sha256 handles empty key"
-      (check-equal? (string-length (hmac-sha256 "" "message")) 64))
+    (test-case "hmac-sha256 rejects empty key"
+      ;; M3 (v0.99.10 W3): empty token/HMAC secrets are rejected at the primitive boundary.
+      (check-exn exn:fail:contract? (lambda () (hmac-sha256 "" "message"))))
 
     (test-case "hmac-sha256 handles long key (> block size)"
       ;; Key longer than 64 bytes gets hashed first
