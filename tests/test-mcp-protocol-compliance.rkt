@@ -114,6 +114,46 @@
       (define resp (handle-mcp-request req reg crashing-fn))
       (check-true (mcp-error-response? resp))
       (check-equal? (mcp-error-code resp) -32603)
-      (check-equal? (mcp-error-message resp) "Internal error"))))
+      (check-equal? (mcp-error-message resp) "Internal error"))
+
+    ;; ════════════════════════════════════════════════════════════
+    ;; Stdio parse-error protocol gap (JSON-RPC 2.0 §-32700/-32600)
+    ;; ════════════════════════════════════════════════════════════
+
+    (test-case "invalid JSON returns -32700 parse error"
+      ;; JSON-RPC 2.0 spec: invalid JSON must produce -32700 Parse error.
+      (define reg (make-test-registry))
+      (define resp (handle-mcp-raw-input "{not valid json" reg noop-execute))
+      (check-true (mcp-error-response? resp))
+      (check-equal? (mcp-error-code resp) -32700)
+      (check-equal? (mcp-error-message resp) "Parse error"))
+
+    (test-case "valid JSON but not a request object returns -32600 invalid request"
+      ;; JSON-RPC 2.0 spec: valid JSON that is not a JSON-RPC request object
+      ;; must produce -32600 Invalid Request.
+      (define reg (make-test-registry))
+      (define resp (handle-mcp-raw-input "42" reg noop-execute))
+      (check-true (mcp-error-response? resp))
+      (check-equal? (mcp-error-code resp) -32600)
+      (check-equal? (mcp-error-message resp) "Invalid Request"))
+
+    (test-case "JSON array returns -32600 invalid request"
+      (define reg (make-test-registry))
+      (define resp (handle-mcp-raw-input "[]" reg noop-execute))
+      (check-true (mcp-error-response? resp))
+      (check-equal? (mcp-error-code resp) -32600))
+
+    (test-case "valid request string still works through raw-input handler"
+      (define reg (make-test-registry))
+      (define req (jsexpr->string (build-mcp-ping 1)))
+      (define resp (handle-mcp-raw-input req reg noop-execute))
+      (check-true (hash-has-key? resp 'jsonrpc))
+      (check-true (hash-has-key? resp 'result)))
+
+    (test-case "parse-error response includes id null"
+      ;; JSON-RPC spec: if id cannot be determined, it MUST be null.
+      (define reg (make-test-registry))
+      (define resp (handle-mcp-raw-input "garbage" reg noop-execute))
+      (check-false (hash-ref resp 'id #t) "parse-error id must be null/#f"))))
 
 (run-tests suite)

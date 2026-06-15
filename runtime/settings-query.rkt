@@ -460,15 +460,13 @@
     [else #f]))
 
 ;; Config key: mas.mcp.server.transport (default "stdio")
-;; Phase 1 only supports local stdio. Unsupported transports fall back safely.
+;; Phase 1 only supports local stdio. All other values fall back to stdio.
 (define (mcp-server-transport settings)
   (define raw (setting-ref* settings '(mas mcp server transport) "stdio"))
-  (define normalized
-    (cond
-      [(string? raw) (string-downcase raw)]
-      [(symbol? raw) (string-downcase (symbol->string raw))]
-      [else "stdio"]))
-  (if (string=? normalized "stdio") "stdio" "stdio"))
+  (cond
+    [(string? raw) "stdio"]
+    [(symbol? raw) "stdio"]
+    [else "stdio"]))
 
 ;; Config key: mas.mcp.client.servers (default '())
 ;; List of external MCP server paths to connect to.

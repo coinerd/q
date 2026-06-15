@@ -318,6 +318,23 @@
   (make-parameter (lambda (name args)
                     (hasheq 'content (list (hasheq 'type "text" 'text "not implemented"))))))
 
+;; Process a raw line of input from the stdio transport.
+;; Handles the JSON parse boundary per JSON-RPC 2.0 spec:
+;;   - Invalid JSON      -> -32700 Parse error (id null)
+;;   - Valid non-object  -> -32600 Invalid Request (id null)
+;;   - Valid JSON-RPC    -> delegate to handle-mcp-request
+;; Returns a hash response (empty for notifications).
+(define (handle-mcp-raw-input line registry execute-fn)
+  (define-values (parse-ok? req)
+    (with-handlers ([exn:fail? (lambda (_) (values #f #f))])
+      (values #t (string->jsexpr line))))
+  (cond
+    [(not parse-ok?)
+     (hasheq 'jsonrpc "2.0" 'id #f 'error (hasheq 'code -32700 'message "Parse error"))]
+    [(not (hash? req))
+     (hasheq 'jsonrpc "2.0" 'id #f 'error (hasheq 'code -32600 'message "Invalid Request"))]
+    [else (handle-mcp-request req registry execute-fn)]))
+
 ;; Run the MCP server loop on stdin/stdout.
 ;; Reads JSON-RPC requests from stdin, writes responses to stdout.
 ;; This is the standard MCP transport for local servers.
@@ -326,16 +343,12 @@
   (let loop ()
     (define line (read-line (current-input-port) 'any))
     (unless (eof-object? line)
-      (define req
-        (with-handlers ([exn:fail? (lambda (_) #f)])
-          (string->jsexpr line)))
-      (when (and req (hash? req))
-        (define resp (handle-mcp-request req registry execute-fn))
-        ;; Only write responses (not notifications or empty hashes)
-        (when (and (hash? resp) (hash-has-key? resp 'jsonrpc))
-          (write-json resp (current-output-port))
-          (newline (current-output-port))
-          (flush-output (current-output-port))))
+      (define resp (handle-mcp-raw-input line registry execute-fn))
+      ;; Only write responses (not notifications or empty hashes)
+      (when (and (hash? resp) (hash-has-key? resp 'jsonrpc))
+        (write-json resp (current-output-port))
+        (newline (current-output-port))
+        (flush-output (current-output-port)))
       (loop))))
 
 ;; ============================================================
@@ -349,6 +362,7 @@
          current-mcp-event-sink)
 
 (provide (contract-out [handle-mcp-request (-> hash? tool-registry? procedure? hash?)]
+                       [handle-mcp-raw-input (-> string? tool-registry? procedure? hash?)]
                        [build-mcp-initialize (-> (or/c string? number?) hash?)]
                        [build-mcp-tools-list (-> (or/c string? number?) hash?)]
                        [build-mcp-tools-call (-> (or/c string? number?) string? hash? hash?)]
