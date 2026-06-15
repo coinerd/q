@@ -87,7 +87,13 @@
          ;; v0.99.8: Registry + hot-swap
          (only-in "../agent/registry-defaults.rkt" register-default-agents!)
          (only-in "../agent/registry.rkt" pin-current-versions)
-         (only-in "../agent/roles/supervisor.rkt" current-use-registry))
+         (only-in "../agent/roles/supervisor.rkt" current-use-registry)
+         ;; v0.99.9 W4: MCP config + adapter
+         (only-in "../runtime/settings-query.rkt"
+                  mcp-enabled?
+                  mcp-server-enabled?
+                  mcp-server-transport)
+         (only-in "../extensions/mcp-adapter.rkt" run-mcp-stdio-server! current-mcp-execute-fn))
 
 ;; Re-export mode runners from sub-modules
 (require "run-interactive.rkt"
@@ -226,6 +232,23 @@
     ;; v0.99.8 W4: Pin agent versions at session start.
     ;; Pinned versions ensure mid-session consistency.
     (pin-current-versions))
+
+  ;; v0.99.9 W4: MCP server mode — alternative entry point.
+  ;; When mas.mcp.server.enabled is true, q runs as an MCP server over stdio.
+  ;; This blocks until stdin closes, then exits.
+  ;; Feature-gated: zero behavioral change when disabled (default).
+  (when (mcp-server-enabled? settings)
+    (log-info "mcp: starting MCP stdio server (transport=~a)" (mcp-server-transport settings))
+    ;; Wire tool execution: route MCP tools/call to the tool registry
+    (current-mcp-execute-fn
+     (lambda (tool-name args)
+       (define t (lookup-tool reg tool-name))
+       (if t
+           ((tool-execute t) args #f)
+           (hasheq 'content
+                   (list (hasheq 'type "text" 'text (format "unknown tool: ~a" tool-name)))))))
+    (run-mcp-stdio-server! reg)
+    (exit 0))
 
   ;; Build final config: immutable hash -> session-config (W-03)
   (define final-hash

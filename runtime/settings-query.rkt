@@ -56,7 +56,12 @@
           [verifier-model (-> q-settings? (or/c string? #f))]
           [verifier-risk-threshold (-> q-settings? symbol?)]
           [blackboard-enabled? (-> q-settings? boolean?)]
-          [hot-swap-enabled? (-> q-settings? boolean?)]))
+          [hot-swap-enabled? (-> q-settings? boolean?)]
+          [mcp-enabled? (-> q-settings? boolean?)]
+          [mcp-server-enabled? (-> q-settings? boolean?)]
+          [mcp-server-transport (-> q-settings? string?)]
+          [mcp-client-servers (-> q-settings? (listof any/c))]
+          [broker-enabled? (-> q-settings? boolean?)]))
 
 ;; Query
 ;; ============================================================
@@ -431,3 +436,46 @@
     [(boolean? raw) raw]
     [(string? raw) (and (member (string-downcase raw) '("true" "1" "yes")) #t)]
     [else #f]))
+
+;; ============================================================
+;; MCP Settings (v0.99.9 MAS Schritt 6)
+;; ============================================================
+
+;; Config key: mas.mcp.enabled (default #f — MCP feature gate)
+;; Master switch for all MCP functionality.
+(define (mcp-enabled? settings)
+  (define raw (setting-ref* settings '(mas mcp enabled) #f))
+  (cond
+    [(boolean? raw) raw]
+    [(string? raw) (and (member (string-downcase raw) '("true" "1" "yes")) #t)]
+    [else #f]))
+
+;; Config key: mas.mcp.server.enabled (default #f)
+;; When #t, q runs as an MCP server over stdio.
+(define (mcp-server-enabled? settings)
+  (define raw (setting-ref* settings '(mas mcp server enabled) #f))
+  (cond
+    [(boolean? raw) raw]
+    [(string? raw) (and (member (string-downcase raw) '("true" "1" "yes")) #t)]
+    [else #f]))
+
+;; Config key: mas.mcp.server.transport (default "stdio")
+;; Phase 1 only supports stdio.
+(define (mcp-server-transport settings)
+  (define raw (setting-ref* settings '(mas mcp server transport) "stdio"))
+  (if (string? raw)
+      raw
+      (symbol->string raw)))
+
+;; Config key: mas.mcp.client.servers (default '())
+;; List of external MCP server paths to connect to.
+(define (mcp-client-servers settings)
+  (define raw (setting-ref* settings '(mas mcp client servers) '()))
+  (if (list? raw)
+      raw
+      '()))
+
+;; Config key: mas.broker.enabled (default #f — always #f in Phase 1)
+;; Phase 2 will enable TCP broker with mTLS.
+(define (broker-enabled? settings)
+  #f)
