@@ -20,6 +20,8 @@
                   update-blackboard!)
          (only-in "../runtime/context-assembly/blackboard-context.rkt"
                   build-blackboard-context-snippet
+                  MAX-BLACKBOARD-SNIPPET-LEN
+                  truncate-snippet
                   format-active-plan
                   format-wave-status
                   format-test-results
@@ -154,6 +156,49 @@
         (define preamble (build-state-awareness-preamble 'implementation '()))
         (check-not-false preamble)
         (check-true (string-contains? (preamble-text preamble) "[Blackboard]"))
-        (check-true (string-contains? (preamble-text preamble) "W0=completed"))))))
+        (check-true (string-contains? (preamble-text preamble) "W0=completed"))))
+
+    ;; ── v0.99.14 W3: Token Budget Guard ──
+
+    (test-case "MAX-BLACKBOARD-SNIPPET-LEN is 500"
+      (check-equal? MAX-BLACKBOARD-SNIPPET-LEN 500))
+
+    (test-case "snippet under 500 chars is returned as-is"
+      (define state (make-populated-state))
+      (define snippet (build-blackboard-context-snippet state))
+      (check-true (string? snippet))
+      (check-true (<= (string-length snippet) MAX-BLACKBOARD-SNIPPET-LEN)
+                  "small blackboard should not be truncated")
+      (check-false (string-suffix? snippet "...")))
+
+    (test-case "snippet over 500 chars is truncated to exactly 500"
+      (define big-wave-status
+        (for/hash ([i (in-range 60)])
+          (values (format "Wave~a" i) (if (even? i) 'completed 'in-progress))))
+      (define state (blackboard-state #f '() '() '() big-wave-status '() '() 0))
+      (define snippet (build-blackboard-context-snippet state))
+      (check-true (string? snippet))
+      (check-equal? (string-length snippet) MAX-BLACKBOARD-SNIPPET-LEN)
+      (check-true (string-suffix? snippet "...")))
+
+    (test-case "truncate-snippet is identity for short strings"
+      (check-equal? (truncate-snippet "hello") "hello"))
+
+    (test-case "truncate-snippet truncates long strings to 497+..."
+      (define long-string (make-string 1000 #\A))
+      (define result (truncate-snippet long-string))
+      (check-equal? (string-length result) 500)
+      (check-true (string-suffix? result "..."))
+      (check-equal? (substring result 0 497) (make-string 497 #\A)))
+
+    (test-case "truncate-snippet boundary: exactly 500 chars untouched"
+      (define exact-string (make-string 500 #\B))
+      (check-equal? (truncate-snippet exact-string) exact-string))
+
+    (test-case "truncate-snippet boundary: 501 chars truncated"
+      (define over-string (make-string 501 #\C))
+      (define result (truncate-snippet over-string))
+      (check-equal? (string-length result) 500)
+      (check-true (string-suffix? result "...")))))
 
 (run-tests suite)

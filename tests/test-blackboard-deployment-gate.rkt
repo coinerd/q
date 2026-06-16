@@ -30,7 +30,8 @@
                   stop-blackboard-subscriber!
                   current-subscription)
          (only-in "../runtime/context-assembly/blackboard-context.rkt"
-                  build-blackboard-context-snippet)
+                  build-blackboard-context-snippet
+                  MAX-BLACKBOARD-SNIPPET-LEN)
          (only-in "../runtime/context-assembly/state-aware-builder.rkt"
                   current-blackboard-injection-enabled))
 
@@ -81,6 +82,37 @@
       (check-not-exn (lambda () (stop-blackboard-subscriber!)))
       ;; Calling again is still safe
       (check-not-exn (lambda () (stop-blackboard-subscriber!)))
-      (check-false (unbox current-subscription)))))
+      (check-false (unbox current-subscription)))
+
+    ;; ── v0.99.14 W3: Integration Tests ──
+
+    (test-case "default settings enable blackboard (subscriber would start)"
+      (define settings (make-settings (hash)))
+      (check-true (blackboard-enabled? settings) "blackboard should be enabled by default"))
+
+    (test-case "explicit #f disables blackboard (subscriber would not start)"
+      (define settings (make-settings (hash 'mas (hash 'blackboard (hash 'enabled #f)))))
+      (check-false (blackboard-enabled? settings)
+                   "blackboard should be disabled when explicitly set to #f"))
+
+    (test-case "injection only when blackboard is non-empty"
+      (check-false (build-blackboard-context-snippet empty-blackboard))
+      (define populated-state
+        (struct-copy blackboard-state empty-blackboard [wave-status (hash "W0" "completed")]))
+      (define snippet (build-blackboard-context-snippet populated-state))
+      (check-not-false snippet)
+      (check-true (string-contains? snippet "[Blackboard]")))
+
+    (test-case "token budget: large blackboard state truncated to 500 chars"
+      (define big-wave-status
+        (for/hash ([i (in-range 60)])
+          (values (format "Wave~a" i) (if (even? i) "completed" "in-progress"))))
+      (define state (struct-copy blackboard-state empty-blackboard [wave-status big-wave-status]))
+      (define snippet (build-blackboard-context-snippet state))
+      (check-not-false snippet)
+      (check-true (string? snippet))
+      (check-true (<= (string-length snippet) MAX-BLACKBOARD-SNIPPET-LEN)
+                  "snippet must not exceed 500 chars")
+      (check-true (string-suffix? snippet "...") "truncated snippet must end with ..."))))
 
 (run-tests deployment-gate-suite)
