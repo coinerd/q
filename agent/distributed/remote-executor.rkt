@@ -300,14 +300,25 @@
      result]))
 
 ;; Execute with reconnection + retry logic.
+;; F-09 fix: Uses if/cond instead of broken `return` identity function.
+;; The original `(define (return v) v)` did NOT provide early-exit semantics.
 (define (execute-with-resilience executor tool-name arguments capability timeout-ms)
   (define conn (get-connection executor))
   ;; If connection is dead, try to reconnect first
-  (unless (and conn (remote-connection-alive? conn))
-    (log-remote-executor-info "connection dead, attempting reconnect before request")
-    (define reconnected? (reconnect-executor! executor))
-    (unless reconnected?
-      (return (make-error-response #f "connection lost and reconnection failed"))))
+  (cond
+    [(and conn (remote-connection-alive? conn))
+     ;; Connection alive — proceed to build and send request
+     (build-and-send-request executor tool-name arguments capability timeout-ms)]
+    [else
+     ;; Connection dead — attempt reconnect
+     (log-remote-executor-info "connection dead, attempting reconnect before request")
+     (define reconnected? (reconnect-executor! executor))
+     (if reconnected?
+         (build-and-send-request executor tool-name arguments capability timeout-ms)
+         (make-error-response #f "connection lost and reconnection failed"))]))
+
+;; Build the ipc-request with capability token and dispatch via with-retry.
+(define (build-and-send-request executor tool-name arguments capability timeout-ms)
   (define req-id (generate-remote-request-id))
   (define cap-token
     (sign-capability-token capability
@@ -348,20 +359,22 @@
      (define delay (* RETRY-BASE-DELAY-MS (expt 2 attempt)))
      (log-remote-executor-info "retrying in ~ams (attempt ~a)" delay (add1 attempt))
      (sleep (/ delay 1000.0))
+     ;; F-09 fix: Use proper if/cond instead of broken `return`.
      ;; Try to reconnect if connection is dead
-     (unless (remote-connection-alive? conn)
-       (log-remote-executor-info "connection dead during retry, attempting reconnect")
-       (define reconnected? (reconnect-executor! executor))
-       (unless reconnected?
-         (log-remote-executor-warning "reconnect failed during retry")
-         (return (make-error-response (ipc-request-request-id req)
-                                      "connection lost and cannot be re-established"))))
-     (with-retry executor req timeout-ms (add1 attempt))]
+     (cond
+       ;; Connection alive — retry directly
+       [(remote-connection-alive? conn) (with-retry executor req timeout-ms (add1 attempt))]
+       [else
+        ;; Connection dead — attempt reconnect
+        (log-remote-executor-info "connection dead during retry, attempting reconnect")
+        (define reconnected? (reconnect-executor! executor))
+        (if reconnected?
+            (with-retry executor req timeout-ms (add1 attempt))
+            (begin
+              (log-remote-executor-warning "reconnect failed during retry")
+              (make-error-response (ipc-request-request-id req)
+                                   "connection lost and cannot be re-established")))])]
     [else result]))
-
-;; Helper: return value without implicit begin issues
-(define (return v)
-  v)
 
 ;; ── Shutdown ────────────────────────────────────────────────────
 

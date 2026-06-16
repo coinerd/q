@@ -30,6 +30,7 @@
                   execute-via-remote
                   reconnect-executor!
                   remote-executor-alive?
+                  remote-executor-connection
                   remote-executor-circuit-state
                   remote-executor-circuit-failure-count
                   make-circuit-breaker
@@ -37,7 +38,8 @@
                   circuit-record-success!
                   circuit-record-failure!
                   circuit-state
-                  circuit-failure-count))
+                  circuit-failure-count)
+         (only-in "../agent/distributed/remote-ipc.rkt" remote-connection-alive-flag))
 
 ;; ── Test Fixture ──
 
@@ -255,7 +257,38 @@
         (check-true (remote-executor-alive? exec))
         (shutdown-remote-executor! exec)
         (stop-server))
-      (check-true #t "completed 10 cycles without error"))))
+      (check-true #t "completed 10 cycles without error"))
+
+    (test-case "F-09: reconnection failure returns clear error, not silent fallthrough"
+      ;; F-09 regression test: the `return` identity function did not early-exit.
+      ;; When reconnection fails, execute-with-resilience must return the
+      ;; "connection lost" error, not silently fall through to a dead connection.
+      (define-values (port stop-server) (start-mock-server))
+      (sleep 0.2)
+      (define exec
+        (start-remote-executor! #:host "localhost"
+                                #:port port
+                                #:ssl-context client-ctx
+                                #:capability-secret TEST-SECRET
+                                #:agent-id TEST-AGENT
+                                #:health-check-enabled #f))
+      (check-true (remote-executor-alive? exec))
+      ;; Kill server so reconnection will fail
+      (stop-server)
+      (sleep 0.3)
+      ;; Force the connection to be dead
+      (define conn (remote-executor-connection exec))
+      (when conn
+        (set-box! (remote-connection-alive-flag conn) #f))
+      ;; Execute should return an error mentioning connection/reconnect/circuit
+      (define resp (execute-via-remote exec "test-tool" (hasheq 'msg "dead") 'execute-tools 3000))
+      (check-equal? (ipc-response-status resp) 'error)
+      (define err-msg (or (ipc-response-error-message resp) ""))
+      (check-true (or (string-contains? err-msg "connection")
+                      (string-contains? err-msg "reconnect")
+                      (string-contains? err-msg "circuit"))
+                  (format "error should mention connection/reconnect/circuit, got: ~a" err-msg))
+      (shutdown-remote-executor! exec))))
 
 (run-tests cb-unit-suite)
 (run-tests integration-suite)
