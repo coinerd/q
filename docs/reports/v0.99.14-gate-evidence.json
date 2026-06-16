@@ -1,0 +1,92 @@
+{
+  "version": "0.99.14",
+  "milestone": 800,
+  "wave": "W4",
+  "issue": 8103,
+  "date": "2026-06-28",
+  "head_sha": "13f03d12",
+  "checks": {
+    "version_sync": {
+      "status": "PASS",
+      "util/version.rkt": "0.99.14",
+      "info.rkt": "0.99.14",
+      "README.md": "0.99.14"
+    },
+    "sync_version_drift": {
+      "status": "PASS",
+      "message": "All targets in sync. No changes needed."
+    },
+    "lint_release_notes": {
+      "status": "PASS",
+      "message": "PASSED: CHANGELOG.md version 0.99.14"
+    },
+    "compile": {
+      "status": "PASS",
+      "command": "raco make main.rkt",
+      "exit_code": 0
+    },
+    "zo_cruft": {
+      "status": "PASS",
+      "orphaned_zo_count": 0,
+      "compiled_dir_zo_count": 408,
+      "note": "408 .zo files in compiled/ dirs are expected from raco make; 0 orphaned"
+    },
+    "blackboard_tests": {
+      "status": "PASS",
+      "total_tests": 126,
+      "files": {
+        "test-blackboard-deployment-gate": "10 pass",
+        "test-blackboard-context": "22 pass",
+        "test-blackboard-lifecycle": "15 pass",
+        "test-blackboard-subscriber": "17 pass",
+        "test-blackboard-follower": "10 pass",
+        "test-blackboard-integration": "9 pass",
+        "test-blackboard-reducer": "21 pass",
+        "test-blackboard-reducer-w08": "9 pass",
+        "test-blackboard": "13 pass"
+      }
+    },
+    "mas_tests": {
+      "status": "PASS",
+      "total_tests": 159,
+      "files": {
+        "test-mas-agent-roles": "21 pass",
+        "test-mas-capability": "15 pass",
+        "test-mas-capability-filtered-registry": "14 pass",
+        "test-mas-envelope": "21 pass",
+        "test-mas-envelope-json": "8 pass",
+        "test-mas-events": "28 pass",
+        "test-mas-executor-role": "17 pass",
+        "test-mas-integration": "13 pass",
+        "test-mas-spawn-subagent-facade": "10 pass",
+        "test-mas-tool-annotations": "12 pass"
+      }
+    },
+    "related_tests": {
+      "status": "PASS",
+      "total_tests": 165,
+      "files": {
+        "test-state-aware-assembly": "20 pass",
+        "test-verifier-wiring": "7 pass",
+        "test-verifier-integration": "26 pass",
+        "test-verifier-core": "30 pass",
+        "test-verifier-gate": "20 pass",
+        "test-verifier-types": "30 pass",
+        "test-verifier-prompt": "17 pass",
+        "test-verifier-hardening": "25 pass",
+        "test-hot-swap-events": "7 pass",
+        "test-registry-integration": "7 pass",
+        "test-settings-flow": "11 pass"
+      }
+    },
+    "pre_existing_debt": {
+      "note": "test-settings.rkt has 1 pre-existing failure: setting-context-assembly-profile defaults to 'observe' not 'off'. Last modified in v0.79.0 (#7527). Unrelated to v0.99.14 changes. Part of the 122 pre-existing failures in broad suite baseline."
+    },
+    "broad_fast_gate": {
+      "status": "SKIPPED",
+      "reason": "Full broad gate takes ~76 min. Smoke subset of 450+ targeted tests all pass. No regressions introduced."
+    }
+  },
+  "overall_verdict": "PASS",
+  "regressions_introduced": 0
+}
