@@ -447,13 +447,13 @@
 
 ;; Check whether hot-swap (registry-based dispatch) is enabled.
 ;; Config path: mas.hot-swap.enabled
-;; Default: #f (direct construction path)
+;; Default: #t (Phase 4 activation — enabled by default since v0.99.18)
 (define (hot-swap-enabled? settings)
-  (define raw (setting-ref* settings '(mas hot-swap enabled) #f))
+  (define raw (setting-ref* settings '(mas hot-swap enabled) #t))
   (cond
     [(boolean? raw) raw]
     [(string? raw) (and (member (string-downcase raw) '("true" "1" "yes")) #t)]
-    [else #f]))
+    [else #t]))
 
 ;; ============================================================
 ;; MCP Settings (v0.99.10 MAS Schritt 6)

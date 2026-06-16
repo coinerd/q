@@ -64,11 +64,10 @@
     ;; DG-1: Settings layer — hot-swap-enabled? config parsing
     ;; ============================================================
 
-    (test-case "DG-1a: hot-swap-enabled? returns #f for empty settings (pre-flip default)"
-      ;; Pre-flip: default is #f. Post-flip (W3): default will be #t.
-      ;; This test will be updated in W3 to check #t.
-      (check-false (settings:hot-swap-enabled? empty-settings)
-                   "pre-flip: empty settings should default to #f"))
+    (test-case "DG-1a: hot-swap-enabled? returns #t for empty settings (post-flip default)"
+      ;; Post-flip (W3): default is #t. Phase 4 activation.
+      (check-true (settings:hot-swap-enabled? empty-settings)
+                  "post-flip: empty settings should default to #t"))
 
     (test-case "DG-1b: hot-swap-enabled? returns #t when config explicitly enables"
       (check-true (settings:hot-swap-enabled? hot-swap-true-settings)
