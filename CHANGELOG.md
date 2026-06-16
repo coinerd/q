@@ -18,13 +18,13 @@ Released: 2026-06-28
 ### Testing
 - W0: 6 characterization tests (`test-blackboard-deployment-gate.rkt`) — default behavior, context snippet, subscriber idempotency.
 - W1: 3 session lifecycle cleanup tests (`test-blackboard-lifecycle.rkt`) — subscription cleared, idempotent stop, safe no-op.
-- All 115 existing blackboard tests green.
+- All 106 existing blackboard tests green.
 - Broad fast gate: zero regressions vs. v0.99.13 baseline.
 
 ### Operational / Release
 - Feature gate: `mas.blackboard.enabled` (default `#t`, was `#f`).
 - Trace logger dependency: crash recovery reads `trace.jsonl` from the session directory if it exists.
-- Token budget guard (W3, forthcoming): context injection will be capped at 500 characters.
+- Token budget guard: context injection is capped at 500 characters (implemented in W3).
 
 ## 0.99.13
 
@@ -48,11 +48,11 @@ Released: 2026-06-27
 ### Migration Notes
 - No configuration changes required. All new features are default-off.
 - To enable hot-swapping: set `mas.hot-swap.enabled = true` and `mas.hot-swap.auto-reload.enabled = true`.
-- `blackboard-follower.rkt` re-exports all symbols from `blackboard-subscriber.rkt` for backward compatibility.
+- `blackboard-subscriber.rkt` re-exports follower symbols (extracted from it) for backward compatibility.
 
 ### Testing
 - Blackboard follower: 10/10 tests green.
-- Registry hot-swap: 9/9 tests green (static path, dynamic path, version pinning, session warning, fallback).
+- Registry hot-swap: 8/9 tests green (1 dynamic-require path failure due to relative module path resolution, fixed in v0.99.15 W1).
 - Registry watcher: 9/9 tests green (file detection, modified files, start/stop lifecycle, no-leak).
 - E2E distributed execution: 6/6 tests green.
 - All existing registry tests: 31 + 11 + 7 + 10 + 2 = 61 tests green.

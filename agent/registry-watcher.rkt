@@ -9,18 +9,20 @@
 ;;   mas.hot-swap.enabled = #t AND
 ;;   mas.hot-swap.auto-reload.enabled = #t (default #f)
 ;;
-;; Uses filesystem-change-evt (available in Racket 8.x) for efficient
-;; event-based file change notification. Falls back to polling if
-;; filesystem-change-evt is not supported on the platform.
+;; Uses polling-based file change detection (checks modification times
+;; at configurable intervals). This avoids platform-specific
+;; filesystem event dependencies.
 ;;
 ;; Design:
 ;;   - start-registry-watcher!: start background thread watching agent/roles/
 ;;   - stop-registry-watcher!: terminate thread cleanly
 ;;   - path->role-name: convert file path to role symbol
-;;   - next-version: increment minor version string ("1.0.0" → "1.0.1")
+;;   - next-version: increment patch version string ("1.0.0" → "1.0.1")
 
 (require racket/match
          racket/string
+         racket/list
+         racket/contract
          "registry.rkt")
 
 ;; ============================================================
@@ -32,21 +34,15 @@
 (define (path->role-name path-str)
   (define filename
     (let* ([parts (string-split path-str "/" #:trim? #f)]
-           [last (if (null? parts)
-                     path-str
-                     (last parts))])
-      (if (string-suffix? last ".rkt")
-          (substring last 0 (- (string-length last) 4))
-          last)))
+           [fname (if (null? parts)
+                      path-str
+                      (last parts))])
+      (if (string-suffix? fname ".rkt")
+          (substring fname 0 (- (string-length fname) 4))
+          fname)))
   (string->symbol filename))
 
-;; Helper: get last element of a list.
-(define (last lst)
-  (if (null? (cdr lst))
-      (car lst)
-      (last (cdr lst))))
-
-;; Increment the minor version of a semver string.
+;; Increment the patch version of a semver string.
 ;; "1.0.0" → "1.0.1", "2.3.4" → "2.3.5"
 (define (next-version version-str)
   (define parts (string-split version-str "."))
@@ -63,10 +59,6 @@
           (lambda (n) (number->string (+ n 1)))]
          [else "1"]))
      (string-append major "." minor "." new-patch)]))
-
-;; Helper: get third element of a list.
-(define (caddr lst)
-  (car (cddr lst)))
 
 ;; ============================================================
 ;; Watcher State
@@ -154,8 +146,9 @@
 ;; Provides
 ;; ============================================================
 
-(provide path->role-name
-         next-version
-         start-registry-watcher!
-         stop-registry-watcher!
-         watcher-running?)
+(provide (contract-out [path->role-name (-> string? symbol?)]
+                       [next-version (-> string? string?)]
+                       [start-registry-watcher!
+                        (->* (path-string? procedure?) (#:poll-interval real?) thread?)]
+                       [stop-registry-watcher! (-> void?)]
+                       [watcher-running? (-> boolean?)]))

@@ -133,22 +133,30 @@
                                 #:health-check-enabled #f))
       (sleep 0.2)
 
-      ;; Execute a tool that echoes its arguments
-      ;; bash will receive only 'command' — NOT 'capability-token' (F-10 fix)
+      ;; F-17: Strengthened assertion — verify the capability secret does
+      ;; NOT appear anywhere in the response content. The bash command
+      ;; dumps all environment variables, so if the token leaked into any
+      ;; part of the dispatch pipeline, it would appear in the output.
       (define resp
         (execute-via-remote exec
                             "bash"
-                            (hasheq 'command "echo 'token-strip-verified'")
+                            (hasheq 'command "echo 'token-strip-verified'; env")
                             'execute-tools
                             10000))
       (check-equal? (ipc-response-status resp) 'ok)
-      (check-true (string-contains? (or (ipc-response-content resp) "") "token-strip-verified"))
-
-      ;; The fact that bash succeeded means the token was stripped.
-      ;; If it hadn't been stripped, the worker would have received an extra
-      ;; 'capability-token key in arguments — which bash ignores, but the
-      ;; important part is the server validated it BEFORE stripping.
-      ;; We verify the server validated by checking it returned 'ok (not 'error).
+      (define content (or (ipc-response-content resp) ""))
+      (check-true (string-contains? content "token-strip-verified")
+                  "response should contain echo output")
+      ;; F-17: Strong negative assertion — the capability secret must not
+      ;; appear anywhere in the response. This proves the token was stripped
+      ;; before dispatch (F-10 fix). If the token leaked into stdout, stderr,
+      ;; error messages, or response details, we'd catch it here.
+      (check-false (string-contains? content TEST-SECRET)
+                   "capability secret must NOT appear in tool output (token was stripped)")
+      (check-false (string-contains? (or (ipc-response-error-message resp) "") TEST-SECRET)
+                   "capability secret must NOT appear in error message")
+      (check-false (string-contains? (format "~a" (or (ipc-response-details resp) "")) TEST-SECRET)
+                   "capability secret must NOT appear in response details")
 
       (shutdown-remote-executor! exec)
       (shutdown-executor-server! server)
@@ -266,21 +274,17 @@
       (shutdown-executor-server! server)
       (sleep 0.2))
 
-    ;; ── E2E-5: Broker disabled → local fallback ──────────────────
-    (test-case "E2E-5: broker-disabled default means local-only execution"
-      ;; When mas.broker.enabled = #f (default), the remote executor is never started.
-      ;; The tool-gateway falls back to local execution for all risk levels.
-      ;; We verify this by checking that without a remote executor configured,
-      ;; the routing decision is 'local (not 'remote).
-
-      ;; Verify the default remote tool executor is fail-closed
-      ;; (from tool-gateway.rkt: default-remote-tool-executor returns error)
-      ;; This means when broker is disabled, remote routing returns an error
-      ;; (which the caller catches and falls back to local)
-
-      ;; We simulate the broker-disabled state by NOT starting any server
-      ;; and NOT connecting any client. The test verifies that no server is
-      ;; running and the default state is local-only.
+    ;; ── E2E-5: No server running → connection fails (fail-closed) ─
+    ;; F-19: Renamed for accuracy. This test verifies the fail-closed
+    ;; behavior when no server is running — it does NOT test local
+    ;; fallback (which is handled by the wiring layer in run-modes.rkt).
+    (test-case "E2E-5: no server running → executor connection fails (fail-closed)"
+      ;; When no executor server is running, a remote executor client
+      ;; cannot connect. This is the correct fail-closed behavior:
+      ;; no server = no remote execution. In production, the wiring
+      ;; layer (run-modes.rkt) checks broker-enabled? before ever
+      ;; calling start-remote-executor!, so this situation only arises
+      ;; from misconfiguration.
 
       ;; Verify that without starting a server, a connection attempt fails gracefully
       (define test-port
