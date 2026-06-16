@@ -1,3 +1,36 @@
+## 0.99.17
+
+Released: 2026-07-06
+
+### Features
+- **Execution plane default-on (MAS Phase 3)**: The execution plane now defaults to enabled (`mas.execution-plane.enabled` defaults to `#t`). Dangerous tools marked `#:dangerous? #t` and `#:externalizable? #t` route through the sandboxed worker process by default. The runtime parameter `current-execution-plane-enabled` still defaults to `#f` — it is activated by the wiring layer (`run-modes.rkt`) after proper worker setup. Explicit `mas.execution-plane.enabled: false` in config still disables it.
+
+### Bug Fixes
+- **F-EP-01: `raco test` subprocess compatibility**: Fixed `raco test` custodian interference that caused premature worker subprocess termination. Root cause: worker subprocess drain threads were linked to the test's custodian. Fix: worker subprocesses and drain threads now run under an independent custodian. All gateway IPC tests (19/19) and concurrent IPC tests (12/12) now pass under `raco test`.
+- **F-EP-02: Execution plane E2E path resolution**: Fixed `raco test` path resolution using `define-runtime-path` pattern. E2E tests resolve worker-main.rkt to absolute paths at compile time. E2E tests: 7/16 → **16/16** under `raco test`.
+- **F-EP-03: Worker-main path resolution**: Same `define-runtime-path` fix for `test-worker-main.rkt`. Worker tests: 17/18 → **18/18** under `raco test`.
+- **F-EP-04: Mouse-event contract violation**: Fixed contracts in `tui/input/state-types.rkt` that caused `raco test` contract violations. `decode-mouse-x10` return type corrected from `mouse-event?` to `(or/c list? #f)`. `decode-mouse-message` and `parse-mouse-event` input contracts broadened from `bytes?` to `any/c`. These functions return lists (e.g., `'(mouse click 0 16 16)`), not `mouse-event?` structs.
+- **F-EP-05: TUI render loop test pass**: Fixed 11 additional pre-existing `test-interfaces-tui.rkt` failures as a bonus from the contract fix. `test-tui-render-loop.rkt`: 21/22 + 1 error → **25/25**.
+- **F-EP-06: Execution plane default flip**: `execution-plane-enabled?` in `settings-query.rkt` now defaults to `#t`. Added 7 deployment gate tests verifying default-on behavior, explicit disable, and timeout defaults.
+
+### Breaking / Behavior Changes
+- **Execution plane default-on**: `mas.execution-plane.enabled` now defaults to `#t`. Users who relied on the default-off behavior must explicitly set `mas.execution-plane.enabled: false` in their config to disable it.
+
+### Migration Notes
+- To disable the execution plane, add to config: `{"mas": {"execution-plane": {"enabled": false}}}`
+- The execution plane only routes tools marked both `#:dangerous? #t` AND `#:externalizable? #t`. Non-dangerous tools are unaffected.
+
+### Testing
+- W0: 9 characterization tests for execution plane + gateway IPC.
+- W1: F-EP-01 fix. Gateway IPC: 19/19, concurrent IPC: 12/12, characterization: 9/9 under `raco test`.
+- W2: F-EP-02/03 fix. E2E: 16/16, worker-main: 18/18 under `raco test`.
+- W3: F-EP-04/05 fix. TUI render loop: 25/25, interfaces-tui: 104/106 (2 pre-existing failures).
+- W4: F-EP-06 default-on flip. Deployment gate: 7/7. All 125 execution plane tests pass under `raco test`.
+
+### Operational / Release
+- Version bumped to 0.99.17. `info.rkt` and `README.md` synced.
+- Execution plane is now production-default-on. The worker subprocess runs `racket -tm sandbox/worker-main.rkt` by default.
+
 ## 0.99.16
 
 Released: 2026-06-30
