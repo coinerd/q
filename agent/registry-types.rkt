@@ -21,7 +21,9 @@
 ;;   role-name: symbol — e.g., 'planner, 'verifier, 'tool-gateway
 ;;   version: string — semantic version (e.g., "1.0.0")
 ;;   factory: procedure — factory that creates a fresh role instance
-;;   module-path: (or/c #f string?) — for dynamic-require loading
+;;   module-path: (or/c #f module-path?) — for dynamic-require loading
+;;     v0.99.15 W1 (F-11): broadened from (or/c #f string?) to accept
+;;     path? and symbol? (collection form) in addition to string paths.
 ;;   factory-name: (or/c #f symbol?) — export name for dynamic-require
 ;;   active?: boolean — whether this version is currently active
 (struct agent-descriptor (role-name version factory module-path factory-name active?) #:transparent)
@@ -45,7 +47,7 @@
 (provide (contract-out (struct agent-descriptor
                                ([role-name symbol?] [version string?]
                                                     [factory procedure?]
-                                                    [module-path (or/c #f string?)]
+                                                    [module-path (or/c #f module-path?)]
                                                     [factory-name (or/c #f symbol?)]
                                                     [active? boolean?]))
                        (struct version-pin

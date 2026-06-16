@@ -91,7 +91,10 @@
                   current-blackboard-injection-enabled)
          ;; v0.99.8: Registry + hot-swap
          (only-in "../agent/registry-defaults.rkt" register-default-agents!)
-         (only-in "../agent/registry.rkt" pin-current-versions)
+         (only-in "../agent/registry.rkt"
+                  pin-current-versions
+                  set-hot-swap-enabled!
+                  set-session-active!)
          (only-in "../agent/roles/supervisor.rkt" current-use-registry)
          ;; v0.99.9 W4: MCP config + adapter
          (only-in "../runtime/settings-query.rkt"
@@ -274,7 +277,14 @@
   ;; Always populate the registry (pure data, zero side effects).
   ;; Enable hot-swap only when mas.hot-swap.enabled is true.
   (register-default-agents!)
+  ;; v0.99.15 W1 (F-14): Mark session as active so the registry
+  ;; knows version switches should be deferred.
+  (set-session-active! #t)
   (when (hot-swap-enabled? settings)
+    ;; v0.99.15 W1 (F-13): Bridge config flag to registry parameter.
+    ;; Without this, hot-swap-enabled? in registry.rkt stays #f even
+    ;; when the config setting is #t.
+    (set-hot-swap-enabled! #t)
     (current-use-registry #t)
     ;; v0.99.8 W4: Pin agent versions at session start.
     ;; Pinned versions ensure mid-session consistency.

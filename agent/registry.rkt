@@ -61,7 +61,10 @@
 ;; namespace boundaries for predicates to work correctly.
 ;; Kept minimal — only modules that define structs or generics
 ;; used in runtime dispatch.
-(define SHARED-MODULES '())
+;;
+;; v0.99.15 W1 (F-12): Populated with base role + capability modules
+;; so that gen:agent-role predicates work in dynamically-loaded namespaces.
+(define SHARED-MODULES (list 'q/agent/roles/base 'q/util/capability))
 
 ;; ============================================================
 ;; Registry State (thread-safe)
@@ -141,8 +144,13 @@
           ((agent-descriptor-factory desc)))])
     (define ns (make-base-namespace))
     ;; Attach shared modules to preserve struct identity across namespaces.
+    ;; F-12: Wrap each attachment in its own handler — some modules may not
+    ;; be instantiated in the current namespace (e.g., in test contexts).
+    ;; Skipping an unloaded module is safe: the dynamic-require will still
+    ;; work, it just may create fresh struct identities rather than sharing.
     (for ([mod (in-list SHARED-MODULES)])
-      (namespace-attach-module (current-namespace) mod ns))
+      (with-handlers ([exn:fail? (lambda (_) (void))])
+        (namespace-attach-module (current-namespace) mod ns)))
     (define factory-proc
       (parameterize ([current-namespace ns])
         (dynamic-require (agent-descriptor-module-path desc) (agent-descriptor-factory-name desc))))

@@ -14,7 +14,8 @@
 (require rackunit
          rackunit/text-ui
          "../agent/registry.rkt"
-         "../agent/registry-types.rkt")
+         "../agent/registry-types.rkt"
+         "../agent/registry-defaults.rkt")
 
 ;; ============================================================
 ;; Helpers
@@ -67,14 +68,21 @@
       (set-hot-swap-enabled! #f))
 
     ;; ── Test 4: Dynamic path with real role module ──
+    ;; F-11 fix: Use collection-based module path so dynamic-require
+    ;; resolves regardless of (current-directory).
     (test-case "dynamic path: planner loaded via dynamic-require"
       (reset-registry!)
       (set-hot-swap-enabled! #t)
-      ;; Register a role with real module path + factory name
+      ;; Register a role with real module path + factory name.
+      ;; Use register-default-agents! which now uses resolved paths (F-11).
+      (register-default-agents!)
+      ;; Override the planner's static factory with a dummy to verify
+      ;; the dynamic path is taken (not the static fallback).
+      ;; Re-register planner with a dummy factory but real module path.
       (register-agent! 'planner
                        "1.0"
                        (lambda () 'static-fallback)
-                       #:module-path "agent/roles/planner.rkt"
+                       #:module-path 'q/agent/roles/planner
                        #:factory-name 'make-planner-role)
       (define result (make-agent-instance 'planner))
       ;; The dynamic path should load the real planner-role
