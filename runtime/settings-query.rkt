@@ -421,11 +421,12 @@
 ;; Blackboard Settings (v0.99.7 MAS Schritt 4)
 ;; ============================================================
 
-;; Config key: mas.blackboard.enabled (default #f — inert by default)
+;; Config key: mas.blackboard.enabled (default #t — enabled by default since v0.99.14)
 ;; When #t, blackboard subscriber starts on session startup,
 ;; context injection is enabled, and crash recovery runs from trace.jsonl.
+;; v0.99.14: Flipped default from #f to #t (MAS Phase 1: Blackboard Default-On).
 (define (blackboard-enabled? settings)
-  (define raw (setting-ref* settings '(mas blackboard enabled) #f))
+  (define raw (setting-ref* settings '(mas blackboard enabled) #t))
   (cond
     [(boolean? raw) raw]
     [(string? raw) (and (member (string-downcase raw) '("true" "1" "yes")) #t)]

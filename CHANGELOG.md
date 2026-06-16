@@ -1,3 +1,31 @@
+## 0.99.14
+
+Released: 2026-06-28
+
+### Features
+- **Blackboard default-on (MAS Phase 1)**: The blackboard subsystem now defaults to enabled (`mas.blackboard.enabled` defaults to `#t`). This enables zero-latency event-bus-driven blackboard updates, context injection of wave/task status into the system prompt, and crash recovery from `trace.jsonl` — all by default, with no configuration required.
+- **Session lifecycle cleanup**: `close-session!` now calls `stop-blackboard-subscriber!` to prevent event bus subscription leaks when sessions end. The call is idempotent and safe when no subscriber is active.
+
+### Breaking / Behavior Changes
+- `mas.blackboard.enabled` default changed from `#f` to `#t`. Sessions will now start the blackboard subscriber and inject context by default.
+- To disable: set `mas.blackboard.enabled = false` explicitly in config.
+
+### Migration Notes
+- No action required for most users — blackboard is passive and low-overhead.
+- To opt out: set `mas.blackboard.enabled = false` in your config file.
+- The blackboard subscriber is stopped automatically on session close (W1 wiring).
+
+### Testing
+- W0: 6 characterization tests (`test-blackboard-deployment-gate.rkt`) — default behavior, context snippet, subscriber idempotency.
+- W1: 3 session lifecycle cleanup tests (`test-blackboard-lifecycle.rkt`) — subscription cleared, idempotent stop, safe no-op.
+- All 115 existing blackboard tests green.
+- Broad fast gate: zero regressions vs. v0.99.13 baseline.
+
+### Operational / Release
+- Feature gate: `mas.blackboard.enabled` (default `#t`, was `#f`).
+- Trace logger dependency: crash recovery reads `trace.jsonl` from the session directory if it exists.
+- Token budget guard (W3, forthcoming): context injection will be capped at 500 characters.
+
 ## 0.99.13
 
 Released: 2026-06-27

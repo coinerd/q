@@ -48,9 +48,9 @@
 
     ;; ── W6-T2: Config Schema ──
 
-    (test-case "blackboard-enabled? defaults to #f"
+    (test-case "blackboard-enabled? defaults to #t (v0.99.14)"
       (define settings (make-settings (hash)))
-      (check-false (blackboard-enabled? settings)))
+      (check-true (blackboard-enabled? settings)))
 
     (test-case "blackboard-enabled? returns #t when mas.blackboard.enabled is true"
       (define settings (make-settings (hash 'mas (hash 'blackboard (hash 'enabled #t)))))
@@ -64,9 +64,9 @@
       (define settings (make-settings (hash 'mas (hash 'blackboard (hash 'enabled "false")))))
       (check-false (blackboard-enabled? settings)))
 
-    (test-case "blackboard-enabled? handles missing mas key"
+    (test-case "blackboard-enabled? handles missing mas key (defaults to #t)"
       (define settings (make-settings (hash 'other-key 'val)))
-      (check-false (blackboard-enabled? settings)))
+      (check-true (blackboard-enabled? settings)))
 
     ;; ── W6-T1: Subscriber Lifecycle ──
 
