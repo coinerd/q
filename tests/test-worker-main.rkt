@@ -8,9 +8,14 @@
          racket/port
          racket/file
          racket/string
+         racket/runtime-path
          "../sandbox/ipc-protocol.rkt"
          "../sandbox/worker-tools.rkt"
          "../sandbox/worker-main.rkt")
+
+;; Worker main path — resolved relative to this source file
+;; so it works under both racket and raco test.
+(define-runtime-path worker-main-src "../sandbox/worker-main.rkt")
 
 ;; ── Helpers ─────────────────────────────────────────────────────
 
@@ -163,7 +168,7 @@
     (test-case "full round-trip: subprocess worker bash"
       (define racket-bin (find-executable-path "racket"))
       (define-values (proc out-in in-out err-in)
-        (subprocess #f #f #f racket-bin "sandbox/worker-main.rkt"))
+        (subprocess #f #f #f racket-bin (path->string worker-main-src)))
       (define req
         (ipc-request "integ-1" "bash" (hasheq 'command "echo integration") 5000 #f 'shell-exec 1))
       (display (jsexpr->string (ipc-request->jsexpr req)) in-out)
