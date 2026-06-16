@@ -6,11 +6,15 @@
 (require rackunit
          rackunit/text-ui
          racket/async-channel
+         racket/runtime-path
          (only-in racket/list remove-duplicates)
          "../sandbox/ipc-protocol.rkt"
          "../sandbox/gateway-ipc.rkt")
 
-(define mock-path (path->string (path->complete-path "tests/mock-worker.rkt")))
+;; Mock worker path — resolved relative to this source file
+;; so it works under both `racket` and `raco test`.
+(define-runtime-path mock-worker-src "mock-worker.rkt")
+(define mock-path (path->string mock-worker-src))
 
 (define (start-mock [mode "echo"])
   (start-worker! "racket" (list "-tm" mock-path mode) #f))
