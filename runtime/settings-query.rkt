@@ -368,9 +368,9 @@
 ;; Execution Plane Settings (v0.99.2 MAS Schritt 2)
 ;; ============================================================
 
-;; Config key: mas.execution-plane.enabled (default #f)
+;; Config key: mas.execution-plane.enabled (default #t — Phase 3 activation)
 (define (execution-plane-enabled? settings)
-  (setting-ref* settings '(mas execution-plane enabled) #f))
+  (setting-ref* settings '(mas execution-plane enabled) #t))
 
 ;; Config key: mas.execution-plane.timeout-ms (default 120000)
 (define (execution-plane-timeout-ms settings)

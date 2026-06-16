@@ -6,9 +6,12 @@
 ;; sends them to the worker process, and translates ipc-responses back
 ;; into the hash format expected by agent-role-handle-envelope.
 ;;
-;; Feature-gated: when current-execution-plane-enabled is #f (default),
+;; Feature-gated: when current-execution-plane-enabled is #f,
 ;; no worker is started and execute-via-worker raises an error.
 ;; The tool-gateway checks the flag before calling this module.
+;; NOTE: The settings default is now #t (Phase 3 activation, v0.99.17),
+;; but this parameter still defaults to #f — it is enabled by the
+;; wiring layer (run-modes.rkt) after proper worker setup.
 
 (require racket/contract
          racket/match
