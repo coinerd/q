@@ -5,15 +5,16 @@
 ;; tests/test-verifier-deployment-gate.rkt
 ;; v0.99.15 W0: Verifier Characterization & Pre-Implementation Safety Net
 ;;
-;; These tests lock in the CURRENT default-off behavior of the verifier
-;; before the default flip in W3. After W3, tests #1 and #4 will be updated.
+;; Updated in W3: Tests #1 and #4 now reflect the flipped defaults:
+;;   verifier-enabled? default is now #t (was #f)
+;;   verifier-risk-threshold default is now 'high (was 'medium)
 ;;
 ;; Test Cases:
-;;   1. verifier-enabled? returns #f for default settings (characterize current)
+;;   1. verifier-enabled? returns #t for default settings (post-W3 flip)
 ;;   2. verifier-enabled? returns #t when explicitly enabled
 ;;   3. verifier-enabled? returns #f when explicitly disabled
-;;   4. verifier-risk-threshold returns 'medium for default settings
-;;   5. verifier-risk-threshold returns 'high when explicitly set
+;;   4. verifier-risk-threshold returns 'high for default settings (post-W3)
+;;   5. verifier-risk-threshold returns 'medium when explicitly set
 ;;   6. Gate with flag OFF returns 'approved (no LLM call)
 ;;   7. Gate with flag ON + no provider returns 'approved (safe fallback)
 
@@ -44,10 +45,10 @@
 (define deployment-gate-suite
   (test-suite "Verifier Deployment Gate (v0.99.15 W0)"
 
-    ;; ── Test 1: Default is #f (characterize current default-off) ──
-    (test-case "verifier-enabled? returns #f for default settings"
+    ;; ── Test 1: Default is #t (post-W3 default-on) ──
+    (test-case "verifier-enabled? returns #t for default settings"
       (define settings (make-settings (hash)))
-      (check-false (verifier-enabled? settings) "default should be #f before W3 flip"))
+      (check-true (verifier-enabled? settings) "default should be #t after W3 flip"))
 
     ;; ── Test 2: Explicit #t ──
     (test-case "verifier-enabled? returns #t when mas.verifier.enabled = #t"
@@ -59,15 +60,15 @@
       (define settings (make-settings (hash 'mas (hash 'verifier (hash 'enabled #f)))))
       (check-false (verifier-enabled? settings)))
 
-    ;; ── Test 4: Risk threshold default is 'medium ──
-    (test-case "verifier-risk-threshold returns 'medium for default settings"
+    ;; ── Test 4: Risk threshold default is 'high (post-W3) ──
+    (test-case "verifier-risk-threshold returns 'high for default settings"
       (define settings (make-settings (hash)))
-      (check-equal? (verifier-risk-threshold settings) 'medium))
-
-    ;; ── Test 5: Risk threshold explicit 'high ──
-    (test-case "verifier-risk-threshold returns 'high when explicitly set"
-      (define settings (make-settings (hash 'mas (hash 'verifier (hash 'risk-threshold "high")))))
       (check-equal? (verifier-risk-threshold settings) 'high))
+
+    ;; ── Test 5: Risk threshold explicit 'medium ──
+    (test-case "verifier-risk-threshold returns 'medium when explicitly set"
+      (define settings (make-settings (hash 'mas (hash 'verifier (hash 'risk-threshold "medium")))))
+      (check-equal? (verifier-risk-threshold settings) 'medium))
 
     ;; ── Test 6: Gate with flag OFF returns 'approved ──
     (test-case "execute-verification-gate returns 'approved when verifier disabled"
