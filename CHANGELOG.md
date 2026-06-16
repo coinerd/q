@@ -26,7 +26,7 @@ Released: 2026-06-26
 - Focused gates pass: TLS contexts 8/8, cert generator 5/5, remote IPC 5/5, remote executor 4/4, executor server 10/10, remote routing 10/10, gateway bridge remote 5/5, routing policy 11/11 + 5/5 integration, remote IPC resilience 11/11, remote executor security 11/11.
 - Circuit breaker: 7 unit tests (closed→open, open→reject, cooldown→half-open, half-open recovery) + 4 integration tests.
 - Adversarial security: 7 token validation tests + 4 integration tests (circuit storm prevention, prompt injection as data, mTLS rejection).
-- Broad fast suite: no regressions from v0.99.11 baseline.
+- Broad fast suite: 913 files, 831 passed, 81 failed (pre-existing debt, no Phase 2 regressions); 11433 tests, 11310 passed, 123 failed.
 
 ### Operational / Release
 - Certificate generation uses RSA 4096-bit keys with SHA-256 signatures and TLS 1.2 (TLS 1.3 compatible).
