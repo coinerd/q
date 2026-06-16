@@ -42,10 +42,10 @@
                        [push-kill (-> input-state? string? input-state?)]
                        [strip-for-undo (-> input-state? input-state?)]
                        ;; Mouse event support
-                       [parse-mouse-event (-> bytes? (or/c mouse-event? #f))]
+                       [parse-mouse-event (-> any/c (or/c mouse-event? #f))]
                        [decode-mouse-x10
-                        (-> exact-integer? exact-integer? exact-integer? mouse-event?)]
-                       [decode-mouse-message (-> bytes? (or/c mouse-event? #f))]
+                        (-> exact-integer? exact-integer? exact-integer? (or/c list? #f))]
+                       [decode-mouse-message (-> any/c (or/c list? #f))]
                        [normalize-selection-range
                         (-> exact-nonnegative-integer?
                             exact-nonnegative-integer?
