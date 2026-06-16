@@ -79,6 +79,7 @@
          apply-cursor-blink-timer!
          cursor-blink-redraw-needed?
          render-cursor-blink-frame!
+         write-cell!
          FULL-RENDER-INTERVAL-FRAMES
          incremental-frame-count
          (contract-out [check-busy-watchdog (-> any/c number? number? (or/c any/c #f))]
@@ -338,11 +339,33 @@
      (define prev-ubuf (unbox (tui-ctx-prev-ubuf-box ctx)))
      (define out (tui-output-port))
      (terminal-sync-begin!)
-     (render-smart! prev-ubuf ubuf out #:sync? #f)
+     (cond
+       ;; No previous snapshot — full render needed (e.g., after resize).
+       [(not prev-ubuf) (render-smart! #f ubuf out #:sync? #f)]
+       [else
+        ;; F-TUI-04 (v0.99.16 W3): Direct single-cell write for cursor blink.
+        ;; Bypasses render-smart!/render-deltas-to-port! to avoid ESC[K
+        ;; emission (W2 F-TUI-03) which would corrupt terminal state when
+        ;; the cursor cell toggles to/from a default cell (e.g., cursor
+        ;; positioned past the end of text where the cell is a blank space).
+        ;; Writing the cell directly is also more efficient — no diff or
+        ;; row-grouping overhead for a single-cell change.
+        (define cursor-cell (cell-buffer-ref ubuf col row))
+        ;; Disable auto-wrap for safety at terminal's last column.
+        (display "\x1b[?7l" out)
+        ;; Position at cursor cell (terminal is 1-indexed).
+        (display (format "\x1b[~a;~aH" (add1 row) (add1 col)) out)
+        ;; Apply SGR for the toggled cursor cell.
+        (display (cell->sgr cursor-cell) out)
+        ;; Write the character.
+        (display (cell-char cursor-cell) out)
+        ;; Re-enable auto-wrap.
+        (display "\x1b[?7h" out)])
      (tui-cursor (+ col 1) (+ row 1) #f)
      (display CURSOR-MARKER out)
      (terminal-sync-end!)
      (tui-flush)
+     ;; F-TUI-04: Snapshot stored for consistency with future deltas.
      (set-box! (tui-ctx-prev-ubuf-box ctx) (cell-buffer-snapshot ubuf))
      (set-box! cursor-blink-redraw-needed-box #f)
      (set-box! last-render-ms (current-inexact-milliseconds))
