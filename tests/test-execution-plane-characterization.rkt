@@ -18,12 +18,14 @@
          rackunit/text-ui
          racket/port
          racket/string
+         racket/runtime-path
          json
          "../sandbox/ipc-protocol.rkt"
          "../sandbox/gateway-ipc.rkt")
 
-;; Path to the mock worker script
-(define mock-worker-path (build-path (current-directory) "tests" "mock-worker.rkt"))
+;; Path to the mock worker script — resolved relative to this source file
+;; so it works under both `racket` and `raco test`.
+(define-runtime-path mock-worker-path "mock-worker.rkt")
 (define racket-bin (find-executable-path "racket"))
 
 (define (start-mock-worker [mode "echo"])
