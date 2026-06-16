@@ -79,6 +79,8 @@
          apply-cursor-blink-timer!
          cursor-blink-redraw-needed?
          render-cursor-blink-frame!
+         FULL-RENDER-INTERVAL-FRAMES
+         incremental-frame-count
          (contract-out [check-busy-watchdog (-> any/c number? number? (or/c any/c #f))]
                        [apply-busy-watchdog! (-> tui-ctx? number? number? boolean?)]
                        [tui-ctx-init-terminal! (-> tui-ctx? void?)]
@@ -120,6 +122,12 @@
 (define last-cursor-row-box (box #f))
 (define last-cursor-base-cell-box (box #f))
 
+;; F-TUI-02 (v0.99.16 W1): Periodic full-render safety net.
+;; After this many consecutive incremental renders, force a full render
+;; to clear any accumulated snapshot drift.
+(define FULL-RENDER-INTERVAL-FRAMES 300)
+(define incremental-frame-count (box 0))
+
 (define (reset-idle-render-state!)
   (set-box! last-render-ms 0.0)
   (set-box! last-blink-toggle-ms 0.0)
@@ -128,7 +136,9 @@
   (set-box! cursor-blink-redraw-needed-box #f)
   (set-box! last-cursor-col-box #f)
   (set-box! last-cursor-row-box #f)
-  (set-box! last-cursor-base-cell-box #f))
+  (set-box! last-cursor-base-cell-box #f)
+  ;; F-TUI-02 (v0.99.16 W1): Reset incremental frame counter.
+  (set-box! incremental-frame-count 0))
 
 (define (resize-poll-due? now-ms last-ms interval-ms)
   (or (not last-ms) (>= (- now-ms last-ms) interval-ms)))
@@ -179,7 +189,13 @@
   (define-values (cols rows) (tui-screen-size))
   (define ubuf (make-cell-buffer cols rows))
   (set-box! (tui-ctx-ubuf-box ctx) ubuf)
+  ;; F-TUI-01 (v0.99.16 W1): Clear ALL render snapshots on resize.
+  ;; Previously only previous-frame-box was cleared, leaving prev-ubuf-box
+  ;; with a stale snapshot that caused delta-render drift after resize.
   (set-box! (tui-ctx-previous-frame-box ctx) #f)
+  (set-box! (tui-ctx-prev-ubuf-box ctx) #f)
+  ;; F-TUI-02 (v0.99.16 W1): Reset incremental frame counter on resize.
+  (set-box! incremental-frame-count 0)
   ;; GAP-LB (v0.98.8 W0): Classify layout breakpoints after resize.
   ;; classify-layout-breakpoint is a pure function — returns (listof symbol).
   ;; Components can query breakpoints via tui-ctx-layout-breakpoints for responsive layout.
@@ -263,9 +279,22 @@
   ;; Hardware cursor remains hidden; we draw the cursor in the cell buffer.
   ;; Sync bracket prevents frame tearing on capable terminals.
   (define prev-ubuf (unbox (tui-ctx-prev-ubuf-box ctx)))
+  ;; F-TUI-02 (v0.99.16 W1): Periodic full-render safety net.
+  ;; After FULL-RENDER-INTERVAL-FRAMES incremental renders, force a
+  ;; full render to clear any accumulated snapshot drift.
+  (define force-full-render?
+    (and prev-ubuf (>= (unbox incremental-frame-count) FULL-RENDER-INTERVAL-FRAMES)))
+  (cond
+    ;; Safety net tripped — reset counter and force full render
+    [force-full-render? (set-box! incremental-frame-count 0)]
+    ;; Normal incremental render — count it
+    [prev-ubuf (set-box! incremental-frame-count (add1 (unbox incremental-frame-count)))]
+    ;; Full render (prev was #f) — ensure counter is 0
+    [else (set-box! incremental-frame-count 0)])
+  (define effective-prev (if force-full-render? #f prev-ubuf))
   (define out (tui-output-port))
   (terminal-sync-begin!)
-  (render-smart! prev-ubuf ubuf out #:sync? #f)
+  (render-smart! effective-prev ubuf out #:sync? #f)
   ;; Store snapshot for next diff
   (set-box! (tui-ctx-prev-ubuf-box ctx) (cell-buffer-snapshot ubuf))
 
