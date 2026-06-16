@@ -127,7 +127,14 @@
       [else
        (define-values (valid? err-msg) (validate-request-capability request secret))
        (if valid?
-           (process-ipc-request request)
+           ;; F-10 fix: Strip capability token from arguments before dispatch
+           ;; so it's not passed to the worker tool.
+           (let ([cleaned-request (struct-copy ipc-request
+                                               request
+                                               [arguments
+                                                (hash-remove (ipc-request-arguments request)
+                                                             'capability-token)])])
+             (process-ipc-request cleaned-request))
            (make-error-response (ipc-request-request-id request) err-msg))])))
 
 ;; ── Accept Loop ─────────────────────────────────────────────────
