@@ -5,6 +5,7 @@
 
 (require rackunit
          rackunit/text-ui
+         racket/runtime-path
          (only-in racket/list first)
          (only-in "../tools/tool.rkt"
                   tool?
@@ -24,7 +25,15 @@
                   tool-externalizable?
                   tool-required-capability)
          (only-in "../tools/scheduler.rkt" run-tool-batch scheduler-result-results)
-         (only-in "../sandbox/gateway-bridge.rkt" current-execution-plane-enabled shutdown-worker!))
+         (only-in "../sandbox/gateway-bridge.rkt"
+                  current-execution-plane-enabled
+                  current-worker-args
+                  shutdown-worker!))
+
+;; ── Worker path resolution ─────────────────────────────────────
+;; Resolve worker-main.rkt relative to this source file.
+(define-runtime-path worker-main-path "../sandbox/worker-main.rkt")
+(current-worker-args (list "-tm" (path->string worker-main-path)))
 
 ;; ── Test Helpers ────────────────────────────────────────────────
 

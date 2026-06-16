@@ -5,6 +5,7 @@
 (require rackunit
          rackunit/text-ui
          racket/match
+         racket/runtime-path
          (only-in "../util/capability.rkt" ROLE-CAPABILITIES)
          (only-in "../util/message/mas-envelope.rkt"
                   make-mas-envelope
@@ -26,6 +27,11 @@
                   make-error-response)
          "../sandbox/gateway-bridge.rkt"
          "../agent/roles/tool-gateway.rkt")
+
+;; ── Worker path resolution ─────────────────────────────────────
+;; Resolve worker-main.rkt relative to this source file.
+(define-runtime-path worker-main-path "../sandbox/worker-main.rkt")
+(current-worker-args (list "-tm" (path->string worker-main-path)))
 
 ;; ── Test Suite ──────────────────────────────────────────────────
 
