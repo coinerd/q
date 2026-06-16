@@ -55,7 +55,6 @@
          render-frame!
          draw-frame
          tui-ctx-resize-ubuf!
-         decode-mouse-x10
 
          ;; ── from tui-init.rkt ──
          subscribe-runtime-events!)

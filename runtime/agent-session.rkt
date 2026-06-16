@@ -98,7 +98,9 @@
                   make-mock-browser-adapter
                   configure-session-browser!)
          (only-in "../browser/service.rkt" current-browser-service)
-         (only-in "../runtime/memory/service.rkt" initialize-memory-backend!))
+         (only-in "../runtime/memory/service.rkt" initialize-memory-backend!)
+         ;; v0.99.18 W4 (F-HS-07): Clear hot-swap state on session teardown
+         (only-in "../agent/registry.rkt" set-session-active! set-hot-swap-enabled!))
 (require "session/session-mutation.rkt")
 
 (provide agent-session?
@@ -495,7 +497,13 @@
   ;; Prevents event bus subscription leak when blackboard is default-on.
   ;; Idempotent: safe no-op when no subscription is active.
   (with-handlers ([exn:fail? (lambda (_) (void))])
-    (stop-blackboard-subscriber!)))
+    (stop-blackboard-subscriber!))
+  ;; v0.99.18 W4 (F-HS-07): Clear hot-swap state on session teardown.
+  ;; Prevents stale session-active flag from blocking version switches
+  ;; and resets the runtime gate for clean next-session startup.
+  ;; The wiring layer re-enables hot-swap at the next session start.
+  (set-session-active! #f)
+  (set-hot-swap-enabled! #f))
 
 ;; ============================================================
 ;; Re-exported from extracted sub-modules

@@ -69,7 +69,6 @@
 
 ;; ── Ubuf/terminal lifecycle ──
 (provide fix-sgr-bg-black
-         decode-mouse-x10
          decode-mouse-message
          mouse-event?
          current-busy-watchdog-ms
