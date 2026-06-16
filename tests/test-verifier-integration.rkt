@@ -120,9 +120,9 @@
 
     ;; ── Config Accessor Tests ──
 
-    (test-case "verifier-enabled? returns #f when not set"
+    (test-case "verifier-enabled? returns #t by default (v0.99.15 default-on)"
       (define s (make-minimal-settings))
-      (check-false (verifier-enabled? s)))
+      (check-true (verifier-enabled? s)))
 
     (test-case "verifier-enabled? returns #t when mas.verifier.enabled is true"
       (define s
@@ -160,9 +160,9 @@
         (make-minimal-settings #:overrides (hasheq 'mas (hasheq 'verifier (hasheq 'model 'glm-5.1)))))
       (check-equal? (verifier-model s) "glm-5.1"))
 
-    (test-case "verifier-risk-threshold returns 'medium by default"
+    (test-case "verifier-risk-threshold returns 'high by default (v0.99.15)"
       (define s (make-minimal-settings))
-      (check-equal? (verifier-risk-threshold s) 'medium))
+      (check-equal? (verifier-risk-threshold s) 'high))
 
     (test-case "verifier-risk-threshold parses string \"high\""
       (define s
@@ -176,11 +176,11 @@
                                (hasheq 'mas (hasheq 'verifier (hasheq 'risk-threshold "low")))))
       (check-equal? (verifier-risk-threshold s) 'low))
 
-    (test-case "verifier-risk-threshold coerces invalid to 'medium"
+    (test-case "verifier-risk-threshold coerces invalid to 'high (v0.99.15 default)"
       (define s
         (make-minimal-settings #:overrides
                                (hasheq 'mas (hasheq 'verifier (hasheq 'risk-threshold "extreme")))))
-      (check-equal? (verifier-risk-threshold s) 'medium))
+      (check-equal? (verifier-risk-threshold s) 'high))
 
     (test-case "verifier-risk-threshold accepts symbol directly"
       (define s
@@ -210,14 +210,16 @@
 
     (test-case "config-disabled→parameter wiring (manual simulation)"
       (save-params!)
-      (define s (make-minimal-settings))
+      ;; Explicitly disable to test the disabled path (default is now #t)
+      (define s
+        (make-minimal-settings #:overrides (hasheq 'mas (hasheq 'verifier (hasheq 'enabled #f)))))
       (current-verifier-enabled (verifier-enabled? s))
       (current-verifier-model (verifier-model s))
       (current-verifier-risk-threshold (verifier-risk-threshold s))
 
       (check-false (current-verifier-enabled))
       (check-false (current-verifier-model))
-      (check-equal? (current-verifier-risk-threshold) 'medium)
+      (check-equal? (current-verifier-risk-threshold) 'high)
 
       (restore-params!))
 

@@ -388,14 +388,18 @@
 ;; Verifier Agent Settings (v0.99.5 MAS Schritt 3)
 ;; ============================================================
 
-;; Config key: mas.verifier.enabled (default #f — inert by default)
+;; Config key: mas.verifier.enabled (default #t — enabled by default since v0.99.15)
 ;; When #t, verification gate runs between executing and idle/done.
+;; v0.99.15: Flipped default from #f to #t (MAS Phase 2: Verifier Default-On).
+;; The verifier only activates for GSD wave-done commands in sessions with
+;; a verifier provider configured; non-GSD sessions are unaffected.
+;; Safe fallback chain: no provider → auto-approve, error → escalate, timeout → escalate.
 (define (verifier-enabled? settings)
-  (define raw (setting-ref* settings '(mas verifier enabled) #f))
+  (define raw (setting-ref* settings '(mas verifier enabled) #t))
   (cond
     [(boolean? raw) raw]
     [(string? raw) (and (member (string-downcase raw) '("true" "1" "yes")) #t)]
-    [else #f]))
+    [else #t]))
 
 ;; Config key: mas.verifier.model (default #f = use session model)
 ;; When set, verification uses a specific model instead of the session default.
@@ -406,16 +410,18 @@
     [(symbol? raw) (symbol->string raw)]
     [else #f]))
 
-;; Config key: mas.verifier.risk-threshold (default 'medium)
+;; Config key: mas.verifier.risk-threshold (default 'high — conservative since v0.99.15)
 ;; Valid values: 'low, 'medium, 'high.
 ;; Decisions with risk-level >= threshold are forced to require human review.
+;; v0.99.15: Changed default from 'medium to 'high so the verifier gate
+;; only escalates genuinely high-risk decisions by default.
 (define (verifier-risk-threshold settings)
-  (define raw (setting-ref* settings '(mas verifier risk-threshold) "medium"))
+  (define raw (setting-ref* settings '(mas verifier risk-threshold) "high"))
   (define sym
     (if (symbol? raw)
         raw
         (string->symbol raw)))
-  (if (memq sym '(low medium high)) sym 'medium))
+  (if (memq sym '(low medium high)) sym 'high))
 
 ;; ============================================================
 ;; Blackboard Settings (v0.99.7 MAS Schritt 4)
