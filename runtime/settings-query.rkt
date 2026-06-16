@@ -10,7 +10,12 @@
          racket/contract
          racket/hash
          racket/file
+         racket/runtime-path
          "../util/config-paths.rkt")
+
+;; Resolve worker-main.rkt to an absolute path at compile time.
+;; This ensures the execution plane works regardless of current-directory.
+(define-runtime-path default-worker-main-rkt "../sandbox/worker-main.rkt")
 
 (provide (contract-out
           [setting-ref (->* (q-settings? (or/c symbol? string?)) (any/c) any/c)]
@@ -380,9 +385,11 @@
 (define (execution-plane-command settings)
   (setting-ref* settings '(mas execution-plane command) #f))
 
-;; Config key: mas.execution-plane.worker-args (default '("-tm" "sandbox/worker-main.rkt"))
+;; Config key: mas.execution-plane.worker-args (default: absolute path to worker-main.rkt)
 (define (execution-plane-worker-args settings)
-  (setting-ref* settings '(mas execution-plane worker-args) '("-tm" "sandbox/worker-main.rkt")))
+  (setting-ref* settings
+                '(mas execution-plane worker-args)
+                (list "-tm" (path->string default-worker-main-rkt))))
 
 ;; ============================================================
 ;; Verifier Agent Settings (v0.99.5 MAS Schritt 3)
