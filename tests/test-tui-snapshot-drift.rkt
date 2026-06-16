@@ -107,23 +107,21 @@
       ;; Should contain the actual text
       (check-true (string-contains? output "ABC") "should contain the changed text"))
 
-    ;; ── Test 7: render-deltas-to-port! does NOT emit ESC[K ──
-    ;; This documents the F-TUI-03 condition: delta render lacks ESC[K.
-    (test-case "F-TUI-03: render-deltas-to-port! does NOT emit ESC[K (bug characterization)"
+    ;; ── Test 7: render-deltas-to-port! emits ESC[K for shortened rows (FIXED) ──
+    ;; After W2 fix, delta render emits ESC[K after rows whose last delta is a default cell.
+    (test-case "F-TUI-03: render-deltas-to-port! emits ESC[K for shortened rows (fixed)"
       (define prev (make-cell-buffer 10 3))
       (cell-buffer-putstring! prev 0 0 "XXXXXXXXX" #:fg 2)
       (define curr (make-cell-buffer 10 3))
       (cell-buffer-putstring! curr 0 0 "ABC" #:fg 2)
-      ;; Only first 3 cells differ (A replaces X, B replaces X, C replaces X)
-      ;; Cells 3-8 still have X in prev but space in curr — they're in deltas
+      ;; Cols 0-2 change to ABC, cols 3-8 change from X to default (space)
       (define deltas (diff-cell-buffers prev curr))
       (define out (open-output-string))
       (render-deltas-to-port! deltas curr out #:sync? #f)
       (define output (get-output-string out))
-      ;; Before W2 fix: no ESC[K in delta render
-      ;; After W2 fix: ESC[K emitted at row boundaries
-      (check-false (string-contains? output "\x1b[K")
-                   "delta render does NOT emit ESC[K (F-TUI-03 bug condition)"))
+      ;; After W2 fix: ESC[K IS emitted because last delta in row has default new-cell
+      (check-true (string-contains? output "\x1b[K")
+                  "delta render SHOULD emit ESC[K for rows ending in default cells (F-TUI-03 fixed)"))
 
     ;; ── Test 8: cell-buffer-snapshot produces independent copy ──
     (test-case "cell-buffer-snapshot produces independent copy"
@@ -202,6 +200,64 @@
       ;; Verify BOTH are cleared
       (check-false (unbox (tui-ctx-prev-ubuf-box ctx)) "prev-ubuf-box must be #f after resize")
       (check-false (unbox (tui-ctx-previous-frame-box ctx))
-                   "previous-frame-box must be #f after resize"))))
+                   "previous-frame-box must be #f after resize"))
+
+    ;; ============================================================
+    ;; W2 Tests: F-TUI-03 Delta Render Row-End Clear
+    ;; ============================================================
+
+    ;; ── Test 14: F-TUI-03 — multiple rows shortened → ESC[K at each boundary ──
+    (test-case "F-TUI-03: multiple shortened rows each get ESC[K"
+      (define prev (make-cell-buffer 10 3))
+      (cell-buffer-putstring! prev 0 0 "XXXXX" #:fg 2)
+      (cell-buffer-putstring! prev 0 1 "YYYYY" #:fg 3)
+      (define curr (make-cell-buffer 10 3))
+      (cell-buffer-putstring! curr 0 0 "AB" #:fg 2)
+      (cell-buffer-putstring! curr 0 1 "CD" #:fg 3)
+      (define deltas (diff-cell-buffers prev curr))
+      (define out (open-output-string))
+      (render-deltas-to-port! deltas curr out #:sync? #f)
+      (define output (get-output-string out))
+      ;; Count ESC[K occurrences — should be 2 (one per shortened row)
+      (define esc-k-count (length (regexp-match-positions* #rx"\x1b\\[K" output)))
+      (check-equal? esc-k-count 2 "should emit ESC[K once per shortened row"))
+
+    ;; ── Test 15: F-TUI-03 — no deltas → no ESC[K ──
+    (test-case "F-TUI-03: no deltas produces no ESC[K"
+      (define buf (make-cell-buffer 10 3))
+      (define out (open-output-string))
+      (render-deltas-to-port! '() buf out #:sync? #f)
+      (define output (get-output-string out))
+      (check-false (string-contains? output "\x1b[K") "no deltas should produce no ESC[K"))
+
+    ;; ── Test 16: F-TUI-03 — row NOT shortened (last delta non-default) → no ESC[K ──
+    (test-case "F-TUI-03: row ending with non-default cell does NOT get ESC[K"
+      (define prev (make-cell-buffer 10 3))
+      (cell-buffer-putstring! prev 0 0 "Hello" #:fg 2)
+      (define curr (make-cell-buffer 10 3))
+      (cell-buffer-putstring! curr 0 0 "Hexlo" #:fg 2)
+      ;; Only col 1 changes: e→x. Last delta new-cell is 'x' (non-default)
+      (define deltas (diff-cell-buffers prev curr))
+      (define out (open-output-string))
+      (render-deltas-to-port! deltas curr out #:sync? #f)
+      (define output (get-output-string out))
+      (check-false (string-contains? output "\x1b[K")
+                   "row ending with non-default cell should NOT emit ESC[K"))
+
+    ;; ── Test 17: F-TUI-03 — multiple batches same row → single ESC[K at row end ──
+    (test-case "F-TUI-03: multiple batches in same row produce single ESC[K"
+      (define prev (make-cell-buffer 10 3))
+      (cell-buffer-putstring! prev 0 0 "XXXXX" #:fg 2)
+      (define curr (make-cell-buffer 10 3))
+      ;; Put ABC with fg=2 at cols 0-2, then spaces (default fg=7) at cols 3-4
+      (cell-buffer-putstring! curr 0 0 "ABC" #:fg 2)
+      ;; Deltas will have two batches: ABC (fg2) and spaces (fg7) — same row
+      (define deltas (diff-cell-buffers prev curr))
+      (define out (open-output-string))
+      (render-deltas-to-port! deltas curr out #:sync? #f)
+      (define output (get-output-string out))
+      ;; Multiple batches in same row, but only ONE ESC[K at the row end
+      (define esc-k-count (length (regexp-match-positions* #rx"\x1b\\[K" output)))
+      (check-equal? esc-k-count 1 "single ESC[K for multi-batch row ending in default"))))
 
 (run-tests snapshot-drift-suite)

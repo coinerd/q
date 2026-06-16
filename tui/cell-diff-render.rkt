@@ -8,6 +8,7 @@
 ;; Uses DEC 2026 (Synchronized Output) when available.
 
 (require racket/contract
+         racket/list
          racket/string
          "cell-buffer.rkt"
          "cell-diff.rkt"
@@ -55,63 +56,78 @@
 ;; Render deltas to output port
 ;; ============================================================
 
+;; F-TUI-03 (v0.99.16 W2): Check if a cell is a default/blank cell.
+;; Used to determine whether to emit ESC[K after a row's deltas.
+(define (default-cell? cell)
+  (and (char=? (cell-char cell) #\space)
+       (= (cell-fg cell) 7)
+       (= (cell-bg cell) 0)
+       (not (cell-bold? cell))
+       (not (cell-underline? cell))
+       (not (cell-italic? cell))
+       (not (cell-blink? cell))))
+
 ;; Render cell deltas to an output port as minimal ANSI sequences.
 ;; Deltas should be sorted by position (row-major order) for optimal grouping.
+;; F-TUI-03 (v0.99.16 W2): After each row's last delta, if the last cell
+;; is a default/blank cell, emit ESC[K to clear residual content to the
+;; right. This prevents display corruption when row content is shortened
+;; and the terminal's actual state has drifted from the snapshot.
 (define (render-deltas-to-port! deltas buf out #:sync? [sync? #t])
   (call-with-terminal-render-guards
    out
    sync?
    (lambda ()
-     (define prev-sgr #f)
+     (define prev-sgr (box #f))
      ;; Filter out continuation cells — they are rendered as part of their base char
      (define real-deltas
        (filter (lambda (d) (not (continuation-cell? (cell-delta-new-cell d)))) deltas))
-     ;; Batch consecutive deltas in same row with same SGR into one cursor move + string
-     (let loop ([remaining real-deltas])
-       (cond
-         [(null? remaining) (void)]
-         [else
-          (define d (car remaining))
-          (define col (cell-delta-col d))
-          (define row (cell-delta-row d))
-          (define new-cell (cell-delta-new-cell d))
-          (define sgr (cell->sgr new-cell))
-          ;; Position cursor: CSI row+1 ; col+1 H
-          (display (format "\x1b[~a;~aH" (add1 row) (add1 col)) out)
-          ;; Apply SGR only if changed
-          (unless (equal? sgr prev-sgr)
-            (display sgr out)
-            (set! prev-sgr sgr))
-          ;; Collect consecutive cells in same row with same SGR
-          (define chars (list (cell-char new-cell)))
-          (let gather ([rest (cdr remaining)]
-                       [acc chars]
-                       [next-col (add1 col)])
-            (cond
-              [(null? rest)
-               ;; Emit batch — last batch in entire delta list
-               (display (list->string (reverse acc)) out)
-               ;; NOTE: No ESC[K here. The delta list includes all changed
-               ;; cells (including trailing spaces), so unchanged content to
-               ;; the right of the last delta must NOT be erased. ESC[K would
-               ;; destroy on-screen content that hasn't changed.
-               (loop rest)]
-              [else
-               (define nd (car rest))
-               (define nd-col (cell-delta-col nd))
-               (define nd-row (cell-delta-row nd))
-               (define nd-cell (cell-delta-new-cell nd))
-               (define nd-sgr (cell->sgr nd-cell))
-               (cond
-                 [(and (= nd-row row) (= nd-col next-col) (equal? nd-sgr sgr))
-                  ;; Same row, consecutive column, same style — batch continues
-                  (gather (cdr rest) (cons (cell-char nd-cell) acc) (add1 next-col))]
-                 [else
-                  ;; Batch ends — emit accumulated chars
-                  (display (list->string (reverse acc)) out)
-                  ;; NOTE: No ESC[K between batches. The delta list includes
-                  ;; all changed cells; unchanged content must not be erased.
-                  (loop rest)])]))])))))
+     ;; F-TUI-03 (v0.99.16 W2): Group deltas by row for row-end ESC[K emission.
+     ;; Deltas from diff-cell-buffers are already sorted by row then column.
+     (define row-groups (group-by cell-delta-row real-deltas))
+     (for ([row-group (in-list row-groups)])
+       ;; Render all batches in this row group
+       (let loop ([remaining row-group])
+         (cond
+           [(null? remaining) (void)]
+           [else
+            (define d (car remaining))
+            (define col (cell-delta-col d))
+            (define row (cell-delta-row d))
+            (define new-cell (cell-delta-new-cell d))
+            (define sgr (cell->sgr new-cell))
+            ;; Position cursor: CSI row+1 ; col+1 H
+            (display (format "\x1b[~a;~aH" (add1 row) (add1 col)) out)
+            ;; Apply SGR only if changed
+            (unless (equal? sgr (unbox prev-sgr))
+              (display sgr out)
+              (set-box! prev-sgr sgr))
+            ;; Collect consecutive cells with same SGR
+            (define chars (list (cell-char new-cell)))
+            (let gather ([rest (cdr remaining)]
+                         [acc chars]
+                         [next-col (add1 col)])
+              (cond
+                ;; Emit batch — last batch in this row group
+                [(null? rest) (display (list->string (reverse acc)) out)]
+                [else
+                 (define nd (car rest))
+                 (define nd-col (cell-delta-col nd))
+                 (define nd-cell (cell-delta-new-cell nd))
+                 (define nd-sgr (cell->sgr nd-cell))
+                 (cond
+                   [(and (= nd-col next-col) (equal? nd-sgr sgr))
+                    ;; Consecutive column, same style — batch continues
+                    (gather (cdr rest) (cons (cell-char nd-cell) acc) (add1 next-col))]
+                   [else
+                    ;; Batch ends — emit accumulated chars
+                    (display (list->string (reverse acc)) out)
+                    (loop rest)])]))]))
+       ;; F-TUI-03 (v0.99.16 W2): After the last delta in this row, if the
+       ;; last cell is a default/blank cell, emit ESC[K to clear any residual
+       ;; content to the right (defensive against snapshot drift).
+       (when (default-cell? (cell-delta-new-cell (last row-group)))
+         (display "\x1b[K" out))))))
 
 ;; ============================================================
 ;; Full buffer render (for first frame or resize)
