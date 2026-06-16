@@ -100,11 +100,30 @@
          (format "Verifier: ~a" (string-join parts ", ")))))
 
 ;; ============================================================
+;; Token Budget Guard (v0.99.14 W3)
+;; ============================================================
+
+;; Maximum length of the blackboard context snippet in characters.
+;; Prevents context-injection bloat in the system prompt.
+;; If the snippet exceeds this limit, it is truncated and suffixed with "...".
+(define MAX-BLACKBOARD-SNIPPET-LEN 500)
+
+;; Truncate a snippet to MAX-BLACKBOARD-SNIPPET-LEN chars.
+;; If already within budget, returns as-is.
+;; If over budget, returns first (MAX-BLACKBOARD-SNIPPET-LEN - 3) chars + "...".
+(define (truncate-snippet text)
+  (if (and (string? text) (> (string-length text) MAX-BLACKBOARD-SNIPPET-LEN))
+      (string-append (substring text 0 (- MAX-BLACKBOARD-SNIPPET-LEN 3)) "...")
+      text))
+
+;; ============================================================
 ;; Combined Snippet Builder
 ;; ============================================================
 
 ;; Build a compact blackboard context snippet for system prompt injection.
 ;; Returns #f if the blackboard is empty or no sections have content.
+;; The result is capped at MAX-BLACKBOARD-SNIPPET-LEN chars (500) to prevent
+;; context-injection bloat (v0.99.14 W3 token budget guard).
 ;; Optional state argument; defaults to current-blackboard.
 (define (build-blackboard-context-snippet [state #f])
   (define bb-state
@@ -122,13 +141,15 @@
                   (format-verifier-decisions bb-state))))
   (if (null? sections)
       #f
-      (string-append "[Blackboard]\n" (string-join sections "\n"))))
+      (truncate-snippet (string-append "[Blackboard]\n" (string-join sections "\n")))))
 
 ;; ============================================================
 ;; Provides
 ;; ============================================================
 
 (provide build-blackboard-context-snippet
+         MAX-BLACKBOARD-SNIPPET-LEN
+         truncate-snippet
          format-active-plan
          format-wave-status
          format-test-results
