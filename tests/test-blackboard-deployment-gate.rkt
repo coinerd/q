@@ -41,10 +41,10 @@
 (define deployment-gate-suite
   (test-suite "Blackboard Deployment Gate (v0.99.14 W0)"
 
-    ;; ── Test 1: Current default is #f ──
-    (test-case "blackboard-enabled? returns #f for default settings"
+    ;; ── Test 1: Default is now #t (v0.99.14 W2 flip) ──
+    (test-case "blackboard-enabled? returns #t for default settings"
       (define settings (make-settings (hash)))
-      (check-false (blackboard-enabled? settings) "default should be #f before W2 flip"))
+      (check-true (blackboard-enabled? settings) "default should be #t after W2 flip"))
 
     ;; ── Test 2: Explicit #t ──
     (test-case "blackboard-enabled? returns #t when mas.blackboard.enabled = #t"
