@@ -22,6 +22,7 @@
                   agent-descriptor-version
                   agent-descriptor-factory
                   agent-descriptor-module-path
+                  agent-descriptor-factory-name
                   agent-descriptor-active?
                   version-pin
                   version-pin?
@@ -62,11 +63,12 @@
     ;; ── registry-types.rkt: Struct construction ──
 
     (test-case "agent-descriptor constructs with correct fields"
-      (define d (agent-descriptor 'planner "1.0" dummy-factory-v1 #f #t))
+      (define d (agent-descriptor 'planner "1.0" dummy-factory-v1 #f #f #t))
       (check-true (agent-descriptor? d))
       (check-equal? (agent-descriptor-role-name d) 'planner)
       (check-equal? (agent-descriptor-version d) "1.0")
       (check-equal? (agent-descriptor-module-path d) #f)
+      (check-equal? (agent-descriptor-factory-name d) #f)
       (check-true (agent-descriptor-active? d)))
 
     (test-case "version-pin constructs with correct fields"
@@ -83,8 +85,8 @@
       (check-equal? (registry-entry-descriptors e) '()))
 
     (test-case "agent-descriptor is transparent (has equal? semantics)"
-      (define d1 (agent-descriptor 'planner "1.0" dummy-factory-v1 #f #t))
-      (define d2 (agent-descriptor 'planner "1.0" dummy-factory-v1 #f #t))
+      (define d1 (agent-descriptor 'planner "1.0" dummy-factory-v1 #f #f #t))
+      (define d2 (agent-descriptor 'planner "1.0" dummy-factory-v1 #f #f #t))
       (check-equal? d1 d2))
 
     ;; ── registry.rkt: Registration ──
