@@ -1,3 +1,53 @@
+## 0.99.15
+
+Released: 2026-06-29
+
+### Features
+- **Verifier default-on (MAS Phase 2)**: The verifier agent now defaults to enabled (`mas.verifier.enabled` defaults to `#t`). Verification gate runs between executing and idle/done states for GSD `wave-done` commands. Non-GSD sessions are completely unaffected. Safe fallback chain: no provider → auto-approve, error → escalate, timeout → escalate.
+- **Conservative risk threshold**: `mas.verifier.risk-threshold` default changed from `'medium` to `'high`, so the verifier gate only escalates genuinely high-risk decisions by default.
+
+### Hot-Swap Bug Fixes (W1)
+- **F-11**: `registry-defaults.rkt` now uses `#%variable-reference` + `split-path` for absolute module paths instead of relative strings. Fixed `path-only` unbound error.
+- **F-12**: `SHARED-MODULES` populated with `'q/agent/roles/base` and `'q/util/capability` in `registry.rkt`. `namespace-attach-module` wrapped in per-module `with-handlers` for test resilience.
+- **F-13**: `set-hot-swap-enabled!` now wired from settings in `run-modes.rkt`.
+- **F-14**: `set-session-active!` called at session start in `run-modes.rkt`.
+- Contract broadened: `agent-descriptor module-path` from `(or/c #f string?)` to `(or/c #f module-path?)`.
+- Registry hot-swap tests: 8/9 → **9/9** (all green from both `q/` and `q/tests/` directories).
+
+### Audit Debt Closure (W2)
+- **F-15**: Fixed v0.99.13 CHANGELOG inaccuracies (hot-swap test count, re-export direction).
+- **F-16**: Fixed `registry-watcher.rkt` comments (false `filesystem-change-evt` claim, "minor version" → "patch version", removed shadowed local `last`/`caddr` definitions).
+- **F-17**: Strengthened E2E-2 token-stripping assertion — bash command dumps env vars, test asserts capability secret does NOT appear in response.
+- **F-18**: Added contracts to all 5 `registry-watcher.rkt` provides.
+- **F-19**: Renamed E2E-5 for accuracy: "no server running → executor connection fails (fail-closed)".
+- **v0.99.14-F-01**: Fixed CHANGELOG "Token budget guard (W3, forthcoming)" → past tense.
+- **v0.99.14-F-02**: Fixed CHANGELOG test count "115 existing" → "106 existing".
+
+### Breaking / Behavior Changes
+- `mas.verifier.enabled` default changed from `#f` to `#t`. GSD sessions will now run the verification gate by default.
+- `mas.verifier.risk-threshold` default changed from `'medium` to `'high`.
+- To disable verification: set `mas.verifier.enabled = false` explicitly in config.
+- `verifier-risk-threshold` invalid-value fallback changed from `'medium` to `'high`.
+
+### Migration Notes
+- No action required for most users — verifier is safe-by-default with auto-approve fallback when no provider is configured.
+- To opt out: set `mas.verifier.enabled = false` in your config file.
+- The `current-verifier-enabled` runtime parameter default remains `#f` (uninitialized safety); the settings default is wired in during session start.
+
+### Testing
+- W0: 7 verifier characterization tests (`test-verifier-deployment-gate.rkt`) — default behavior, explicit on/off, risk threshold, gate with/without provider.
+- W1: 8 registry deployment gate tests + hot-swap tests now 9/9 from all directories.
+- W2: All audit findings F-15 through F-19 + v0.99.14-F-01/F-02 addressed. Watcher contracts added.
+- W3: All verifier tests updated for new defaults — 7/7 deployment gate, 26/26 integration, 20/20 gate, 30/30 core, 25/25 hardening, 17/17 prompt, 30/30 types, 7/7 wiring.
+- All 155 existing verifier tests green.
+- All 61 existing registry tests green.
+
+### Operational / Release
+- Feature gate: `mas.verifier.enabled` (default `#t`, was `#f`).
+- Risk threshold: `mas.verifier.risk-threshold` (default `'high`, was `'medium`).
+- Safe fallback: no verifier provider → auto-approve (no LLM call).
+- Scope: verifier only activates for GSD `wave-done` commands.
+
 ## 0.99.14
 
 Released: 2026-06-28
