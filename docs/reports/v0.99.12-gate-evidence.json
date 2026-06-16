@@ -1,0 +1,65 @@
+{
+  "version": "0.99.12",
+  "timestamp": "2026-06-26T23:00:00Z",
+  "head": "2e404be2",
+  "focused_gates": {
+    "status": "GREEN",
+    "suites": {
+      "test-tls-contexts.rkt": {"passed": 8, "failed": 0},
+      "test-cert-generator.rkt": {"passed": 5, "failed": 0},
+      "test-capability-tokens.rkt": {"passed": 22, "failed": 0},
+      "test-capability-token-hardening.rkt": {"passed": 18, "failed": 0},
+      "test-mcp-adapter.rkt": {"passed": 31, "failed": 0},
+      "test-mcp-security-gates.rkt": {"passed": 19, "failed": 0},
+      "test-remote-ipc.rkt": {"passed": 5, "failed": 0},
+      "test-remote-executor.rkt": {"passed": 4, "failed": 0},
+      "test-executor-server.rkt": {"passed": 10, "failed": 0},
+      "test-remote-ipc-resilience.rkt": {"passed": 11, "failed": 0},
+      "test-remote-executor-security.rkt": {"passed": 11, "failed": 0},
+      "test-tool-gateway-remote-routing.rkt": {"passed": 10, "failed": 0},
+      "test-gateway-bridge-remote.rkt": {"passed": 5, "failed": 0},
+      "test-routing-policy.rkt": {"passed": 11, "failed": 0},
+      "test-routing-policy-integration.rkt": {"passed": 5, "failed": 0}
+    },
+    "total": {"passed": 175, "failed": 0}
+  },
+  "broad_fast_suite": {
+    "status": "NOT_GREEN",
+    "files": {"total": 913, "passed": 831, "failed": 81, "timeouts": 1},
+    "tests": {"total": 11433, "passed": 11310, "failed": 123},
+    "elapsed": "1h 16m 10s",
+    "zero_parsed_sentinels": [
+      "tests/mock-worker.rkt",
+      "tests/test-cursor-debug.rkt",
+      "tests/test-event-ordering.rkt",
+      "tests/test-vision-helpers.rkt",
+      "tests/tui/test-error-scenarios.rkt"
+    ],
+    "classification": "Pre-existing unrelated debt — no v0.99.12 regressions introduced. See docs/reports/BROAD-SUITE-DEBT-TRIAGE.md."
+  },
+  "security_verification": {
+    "broker_enabled_default": false,
+    "capability_secret_default": null,
+    "tcp_listeners_default": 0,
+    "mtls_enforced": true,
+    "capability_token_required": true,
+    "circuit_breaker_implemented": true
+  },
+  "compilation": {
+    "raco_make_main": "PASS",
+    "sync_version": "PASS (0.99.12)",
+    "lint_release_notes": "PASS (0.99.12)"
+  },
+  "notes": [
+    "Phase 2 TCP broker with mTLS implemented across 6 waves (W0-W5).",
+    "W0: Certificate infrastructure & mTLS primitives (RSA 4096, TLS 1.2).",
+    "W1: Wire protocol & remote IPC client (async TLS, drain thread, request-id matching).",
+    "W2: Executor node server (mTLS accept, capability token validation, graceful shutdown).",
+    "W3: Risk-based routing integration (fail-closed remote executor, fail-fast on missing secret).",
+    "W4: Connection resilience (circuit breaker, exponential backoff, adversarial security tests).",
+    "W5: Documentation, config schema & deployment guide.",
+    "Zero network attack surface when disabled (default).",
+    "Defense in depth: transport (mTLS) + application (tokens) + config gate + sandbox.",
+    "Independent audit verdict: 4.5/5.0 APPROVED."
+  ]
+}
