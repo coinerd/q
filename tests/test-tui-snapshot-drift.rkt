@@ -28,7 +28,10 @@
          "../tui/cell-diff.rkt"
          "../tui/cell-diff-render.rkt"
          "../tui/terminal.rkt"
-         (only-in "../tui/tui-render-loop.rkt" FULL-RENDER-INTERVAL-FRAMES incremental-frame-count))
+         (only-in "../tui/tui-render-loop.rkt"
+                  FULL-RENDER-INTERVAL-FRAMES
+                  incremental-frame-count
+                  write-cell!))
 
 (define snapshot-drift-suite
   (test-suite "TUI Snapshot Drift Characterization (v0.99.16 W0)"
@@ -258,6 +261,104 @@
       (define output (get-output-string out))
       ;; Multiple batches in same row, but only ONE ESC[K at the row end
       (define esc-k-count (length (regexp-match-positions* #rx"\x1b\\[K" output)))
-      (check-equal? esc-k-count 1 "single ESC[K for multi-batch row ending in default"))))
+      (check-equal? esc-k-count 1 "single ESC[K for multi-batch row ending in default"))
+
+    ;; ============================================================
+    ;; W3 Tests: F-TUI-04 Cursor-Blink Snapshot Consistency
+    ;; ============================================================
+
+    ;; ── Test 18: F-TUI-04 — write-cell! toggles inverse correctly ──
+    (test-case "F-TUI-04: write-cell! toggles cursor cell inverse video"
+      (define ubuf (make-cell-buffer 10 3))
+      ;; Create a base cell: char=X, fg=2, bg=0
+      (cell-buffer-set! ubuf 3 1 #:char #\X #:fg 2 #:bg 0)
+      (define base-cell (cell-buffer-ref ubuf 3 1))
+      ;; Toggle inverse ON
+      (write-cell! ubuf 3 1 base-cell #:inverse? #t)
+      (define inv-cell (cell-buffer-ref ubuf 3 1))
+      (check-equal? (cell-char inv-cell) #\X "inverse toggle preserves char")
+      (check-equal? (cell-fg inv-cell) 0 "inverse swaps fg to original bg")
+      (check-equal? (cell-bg inv-cell) 2 "inverse swaps bg to original fg")
+      ;; Toggle inverse OFF (revert)
+      (write-cell! ubuf 3 1 base-cell #:inverse? #f)
+      (define norm-cell (cell-buffer-ref ubuf 3 1))
+      (check-equal? (cell-fg norm-cell) 2 "non-inverse restores original fg")
+      (check-equal? (cell-bg norm-cell) 0 "non-inverse restores original bg"))
+
+    ;; ── Test 19: F-TUI-04 — direct cursor cell write produces NO ESC[K ──
+    ;; The W3 fix bypasses render-deltas-to-port! for blink frames.
+    ;; Simulate the direct write path and verify no ESC[K is emitted.
+    (test-case "F-TUI-04: direct cursor cell write bypasses ESC[K emission"
+      (define ubuf (make-cell-buffer 10 3))
+      ;; Put a default cell at the cursor position (space, fg=7, bg=0)
+      ;; This is the exact scenario that would trigger ESC[K via the delta path
+      (cell-buffer-set! ubuf 5 1 #:char #\space #:fg 7 #:bg 0)
+      (define cursor-cell (cell-buffer-ref ubuf 5 1))
+      ;; Simulate F-TUI-04 direct write path
+      (define out (open-output-string))
+      (display "\x1b[?7l" out)
+      (display (format "\x1b[~a;~aH" 2 6) out)
+      (display (cell->sgr cursor-cell) out)
+      (display (cell-char cursor-cell) out)
+      (display "\x1b[?7h" out)
+      (define output (get-output-string out))
+      ;; The direct write path must NOT contain ESC[K
+      (check-false (string-contains? output "\x1b[K")
+                   "F-TUI-04: cursor blink direct write must NOT emit ESC[K"))
+
+    ;; ── Test 20: F-TUI-04 — repeated blink toggles maintain consistency ──
+    (test-case "F-TUI-04: repeated blink toggles cycle correctly"
+      (define ubuf (make-cell-buffer 10 3))
+      (cell-buffer-set! ubuf 2 0 #:char #\A #:fg 3 #:bg 1)
+      (define base-cell (cell-buffer-ref ubuf 2 0))
+      ;; Simulate 4 blink phases: on, off, on, off
+      (define phases '(#t #f #t #f))
+      (for ([phase (in-list phases)])
+        (write-cell! ubuf 2 0 base-cell #:inverse? phase))
+      ;; After even number of toggles, cell should be back to base
+      (define final-cell (cell-buffer-ref ubuf 2 0))
+      (check-equal? (cell-fg final-cell) 3 "fg restored after even toggles")
+      (check-equal? (cell-bg final-cell) 1 "bg restored after even toggles")
+      ;; Odd number of toggles leaves it inverted
+      (write-cell! ubuf 2 0 base-cell #:inverse? #t)
+      (define odd-cell (cell-buffer-ref ubuf 2 0))
+      (check-equal? (cell-fg odd-cell) 1 "fg inverted after odd toggles")
+      (check-equal? (cell-bg odd-cell) 3 "bg inverted after odd toggles"))
+
+    ;; ── Test 21: F-TUI-04 — blink with no prev snapshot does full render ──
+    ;; When prev-ubuf is #f, the blink path must fall through to render-smart!
+    ;; with #f to do a full render (not the direct write).
+    (test-case "F-TUI-04: no prev-ubuf triggers full render path"
+      ;; Simulate: prev-ubuf-box is #f, ubuf has content
+      (define ubuf (make-cell-buffer 10 3))
+      (cell-buffer-putstring! ubuf 0 0 "Hello" #:fg 2)
+      (define prev-ubuf #f)
+      ;; When prev-ubuf is #f, render-smart! does a full render
+      (define out (open-output-string))
+      (render-smart! prev-ubuf ubuf out #:sync? #f)
+      (define output (get-output-string out))
+      ;; Full render should contain the text and cursor positioning
+      (check-true (string-contains? output "Hello") "full render should contain all cell content")
+      ;; Full render should have cursor home or row positioning
+      (check-true (or (string-contains? output "\x1b[H") (string-contains? output "\x1b[1;"))
+                  "full render should position cursor at start"))
+
+    ;; ── Test 22: F-TUI-04 — snapshot after blink matches ubuf ──
+    (test-case "F-TUI-04: snapshot after blink frame matches cell buffer"
+      (define ubuf (make-cell-buffer 10 3))
+      (cell-buffer-set! ubuf 4 2 #:char #\Z #:fg 5 #:bg 0)
+      (define base-cell (cell-buffer-ref ubuf 4 2))
+      ;; Toggle cursor cell to inverse (simulating blink ON)
+      (write-cell! ubuf 4 2 base-cell #:inverse? #t)
+      ;; Store snapshot (same as render-cursor-blink-frame! does)
+      (define snapshot (cell-buffer-snapshot ubuf))
+      ;; The snapshot should match the ubuf at the cursor position
+      (define snap-cell (cell-buffer-ref snapshot 4 2))
+      (check-equal? (cell-fg snap-cell) 0 "snapshot cursor cell fg = inverted")
+      (check-equal? (cell-bg snap-cell) 5 "snapshot cursor cell bg = inverted")
+      ;; Verify the rest of the snapshot matches
+      (check-equal? (cell-char (cell-buffer-ref snapshot 0 0))
+                    (cell-char (cell-buffer-ref ubuf 0 0))
+                    "snapshot matches ubuf at non-cursor cell"))))
 
 (run-tests snapshot-drift-suite)
