@@ -10,6 +10,7 @@
 
 (require rackunit
          rackunit/text-ui
+         racket/runtime-path
          (only-in racket/string string-contains?)
          (only-in "../util/capability.rkt" ROLE-CAPABILITIES)
          (only-in "../util/message/mas-envelope.rkt" make-mas-envelope mas-envelope-trace-id)
@@ -39,6 +40,13 @@
          (only-in "../tools/scheduler.rkt" run-tool-batch scheduler-result-results))
 
 ;; ── Test Helpers ────────────────────────────────────────────────
+
+;; ── Worker path resolution ─────────────────────────────────────
+;; Under raco test, current-directory is set to the test file's
+;; directory. Use runtime-path to locate worker-main.rkt relative
+;; to this source file so it works under both racket and raco test.
+(define-runtime-path worker-main-path "../sandbox/worker-main.rkt")
+(current-worker-args (list "-tm" (path->string worker-main-path)))
 
 (define call-counter (box 0))
 
