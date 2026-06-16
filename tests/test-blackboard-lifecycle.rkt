@@ -147,6 +147,31 @@
         ;; Only the wave.started event should be reflected
         (check-true (hash-has-key? waves "W2"))
         (check-false (hash-has-key? waves "W0")))
-      (delete-file trace-path))))
+      (delete-file trace-path))
+
+    ;; ── v0.99.14 W1: Session Teardown Cleanup ──
+
+    (test-case "stop-blackboard-subscriber! clears subscription after start"
+      ;; Start a subscriber on a fresh event bus
+      (define bus (make-event-bus))
+      (define bb (make-blackboard))
+      (parameterize ([current-blackboard bb])
+        (start-blackboard-subscriber! bus bb)
+        (check-true (pair? (unbox current-subscription)))
+        ;; Stop it — should clear the subscription box
+        (stop-blackboard-subscriber!)
+        (check-false (unbox current-subscription))))
+
+    (test-case "calling stop-blackboard-subscriber! twice is safe (idempotent)"
+      (set-box! current-subscription #f)
+      (check-not-exn (lambda () (stop-blackboard-subscriber!)))
+      (check-not-exn (lambda () (stop-blackboard-subscriber!)))
+      (check-false (unbox current-subscription)))
+
+    (test-case "stop-blackboard-subscriber! with no active subscription is safe no-op"
+      ;; Simulate session close when blackboard was never enabled
+      (set-box! current-subscription #f)
+      (check-not-exn (lambda () (stop-blackboard-subscriber!)))
+      (check-false (unbox current-subscription)))))
 
 (run-tests suite)

@@ -50,6 +50,7 @@
          "../util/ids.rkt"
          (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
          (only-in "../agent/event-emitter.rkt" emit-typed-event!)
+         (only-in "../agent/blackboard-subscriber.rkt" stop-blackboard-subscriber!)
          (only-in "../agent/event-structs/session-events.rkt"
                   session-start-event
                   session-shutdown-event)
@@ -489,7 +490,12 @@
     (persist-high-value-conclusions! (agent-session-task-conclusions sess)
                                      #:backend (current-memory-backend)
                                      #:session-id (agent-session-session-id sess))
-    (guarded-set-active! sess #f)))
+    (guarded-set-active! sess #f))
+  ;; v0.99.14 W1: Stop blackboard subscriber on session teardown.
+  ;; Prevents event bus subscription leak when blackboard is default-on.
+  ;; Idempotent: safe no-op when no subscription is active.
+  (with-handlers ([exn:fail? (lambda (_) (void))])
+    (stop-blackboard-subscriber!)))
 
 ;; ============================================================
 ;; Re-exported from extracted sub-modules
