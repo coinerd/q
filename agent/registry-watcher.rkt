@@ -5,6 +5,13 @@
 ;;
 ;; v0.99.13 W2 (G-4): Registry Watcher
 ;;
+;; ⚠️ INTENTIONALLY UNWIRED (v0.99.18 W4, F-HS-06):
+;;   This module is fully implemented and tested but is NOT connected
+;;   to the runtime startup. The watcher is gated behind
+;;   mas.hot-swap.auto-reload.enabled (default #f). Even after Phase 4
+;;   (hot-swap default-on), auto-reload remains opt-in.
+;;   See: test-registry-hot-swap.rkt for watcher tests.
+;;
 ;; Feature-gated: only active when:
 ;;   mas.hot-swap.enabled = #t AND
 ;;   mas.hot-swap.auto-reload.enabled = #t (default #f)

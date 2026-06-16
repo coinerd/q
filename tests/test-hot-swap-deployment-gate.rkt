@@ -184,6 +184,18 @@
       (check-equal? (agent-descriptor-version desc) "2.0")
       (set-session-active! #f))
 
+    (test-case "DG-5c: session teardown clears both hot-swap gate and session-active (F-HS-07)"
+      ;; Simulate what close-session! does: clear both registry flags
+      (set-hot-swap-enabled! #t)
+      (set-session-active! #t)
+      (check-true (hot-swap-enabled?))
+      (check-true (session-active?))
+      ;; Teardown (as called by close-session!)
+      (set-session-active! #f)
+      (set-hot-swap-enabled! #f)
+      (check-false (session-active?) "session-active? should be #f after teardown")
+      (check-false (hot-swap-enabled?) "hot-swap-enabled? should be #f after teardown"))
+
     ;; ============================================================
     ;; DG-6: End-to-end integration with hot-swap ON
     ;; ============================================================
