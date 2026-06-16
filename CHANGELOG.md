@@ -1,3 +1,41 @@
+## 0.99.13
+
+Released: 2026-06-27
+
+### Features
+- **Blackboard follower extraction (G-2)**: Extracted `normalize-jsonl-entry`, `rebuild-blackboard-from-log!`, `blackboard-relevant-event?`, and `relevant-event-names` from `blackboard-subscriber.rkt` into a new `blackboard-follower.rkt` module. This separates crash-recovery/JSONL replay from the event-bus subscription lifecycle, enabling standalone log-tailing.
+- **Namespace-based hot-swapping (G-3)**: Agent role registry now supports dynamic-require-based loading via `#:module-path` + `#:factory-name` on `register-agent!`. When `hot-swap-enabled?` is `#t`, `make-agent-instance` loads agent modules in a fresh namespace with `namespace-attach-module` for type identity. Default-off: zero behavioral change.
+- **Registry watcher (G-4)**: New `registry-watcher.rkt` module provides file-system monitoring of the `agent/roles/` directory. `start-registry-watcher!` starts a polling thread, `stop-registry-watcher!` terminates cleanly. Includes `path->role-name` and `next-version` utilities for automatic role version incrementing.
+- **E2E distributed execution tests (G-5)**: 6 comprehensive end-to-end tests covering the full tool→gateway→TLS→executor→result round-trip with real mTLS certificates.
+- **Bug fix (F-09)**: `return-identity` helper in remote-executor did not provide early-exit semantics; rewritten with proper `if/cond` control flow.
+- **Bug fix (F-10)**: Capability token was not stripped from arguments before tool dispatch; fixed with `hash-remove`.
+
+### Breaking / Behavior Changes
+- `agent-descriptor` struct gains `factory-name` field (6 fields, was 5). Code constructing descriptors must add `#f` for the new field.
+- `register-agent!` signature extended with optional `#:factory-name` keyword arg (default `#f`).
+- `register-default-agents!` now passes `#:module-path` and `#:factory-name` to enable dynamic-require hot-swapping.
+- `make-agent-instance` and `make-agent-instance-versioned` now check `hot-swap-enabled?` gate before attempting dynamic-require.
+- `activate-agent-version!` now logs a warning when called during an active session.
+
+### Migration Notes
+- No configuration changes required. All new features are default-off.
+- To enable hot-swapping: set `mas.hot-swap.enabled = true` and `mas.hot-swap.auto-reload.enabled = true`.
+- `blackboard-follower.rkt` re-exports all symbols from `blackboard-subscriber.rkt` for backward compatibility.
+
+### Testing
+- Blackboard follower: 10/10 tests green.
+- Registry hot-swap: 9/9 tests green (static path, dynamic path, version pinning, session warning, fallback).
+- Registry watcher: 9/9 tests green (file detection, modified files, start/stop lifecycle, no-leak).
+- E2E distributed execution: 6/6 tests green.
+- All existing registry tests: 31 + 11 + 7 + 10 + 2 = 61 tests green.
+- Broad fast suite: 916 files, 835 passed, 80 failed (pre-existing debt, zero regressions); 11461 tests, 11339 passed, 122 failed.
+
+### Operational / Release
+- Feature gates: `mas.hot-swap.enabled` (default `#f`), `mas.hot-swap.auto-reload.enabled` (default `#f`).
+- Dynamic-require fallback: if module loading fails, registry falls back to static factory with a warning log.
+- Session safety: `activate-agent-version!` warns when session is active, deferring switch to next session.
+- Registry watcher uses custodian-based cleanup to prevent thread leaks.
+
 ## 0.99.12
 
 Released: 2026-06-26
