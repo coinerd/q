@@ -1,3 +1,36 @@
+## 0.99.18
+
+Released: 2026-07-13
+
+### Features
+- **Hot-swap default-on (MAS Phase 4)**: Agent hot-swap now defaults to enabled (`mas.hot-swap.enabled` defaults to `#t` in `settings-query.rkt`). The dynamic agent loading path in `load-agent-dynamically` is now the primary code path. The runtime registry box (`hot-swap-enabled-box` in `agent/registry.rkt`) still defaults to `#f` — it is bridged at runtime by the wiring layer (`run-modes.rkt`) which reads the settings value. Explicit `mas.hot-swap.enabled: false` in config still disables it.
+
+### Bug Fixes
+- **F-HS-01: `mas-envelope` shared module**: Added `'q/util/message/mas-envelope` to `SHARED-MODULES` in `agent/registry.rkt`, allowing dynamically loaded agent modules to require the MAS envelope type.
+- **F-HS-03: Agent identity verification**: `load-agent-dynamically` now performs an `agent-role?` check on dynamically loaded factories. If the loaded module does not produce a valid agent role, it falls back to the static factory. This prevents malformed dynamic loads from crashing the agent pipeline.
+- **F-HS-05: Dead `decode-mouse-x10` provides**: Removed stale `decode-mouse-x10` re-exports from `tui/tui-render-loop.rkt` and `interfaces/tui.rkt`. The function is defined in `tui/input/state-types.rkt` and remains available via `tui/input.rkt`.
+- **F-HS-07: Session teardown clears hot-swap state**: `close-session!` in `runtime/agent-session.rkt` now calls `set-session-active! #f` and `set-hot-swap-enabled! #f`, preventing stale session-active flags from blocking version switches and ensuring clean next-session startup.
+
+### Documentation
+- **F-HS-06: Registry watcher documentation**: Added prominent `⚠️ INTENTIONALLY UNWIRED` notice to `agent/registry-watcher.rkt`, clarifying that the module is fully implemented and tested but not connected to runtime startup. The watcher is gated behind `mas.hot-swap.auto-reload.enabled` (default `#f`).
+
+### Breaking / Behavior Changes
+- **Hot-swap default-on**: `mas.hot-swap.enabled` now defaults to `#t`. Users who relied on the default-off behavior must explicitly set `mas.hot-swap.enabled: false` in their config to disable it.
+
+### Migration Notes
+- To disable hot-swap, add to config: `{"mas": {"hot-swap": {"enabled": false}}}`
+- The auto-reload watcher (`registry-watcher.rkt`) remains opt-in behind `mas.hot-swap.auto-reload.enabled: true`.
+
+### Testing
+- W0: 12 characterization tests documenting pre-Phase-4 hot-swap behavior (`test-hot-swap-characterization.rkt`).
+- W1: Added `mas-envelope` to `SHARED-MODULES`; added 6 identity verification tests (`test-registry-hot-swap.rkt`, 15 total).
+- W2: 16 deployment gate tests covering settings parsing, registry gate toggles, supervisor resolution, watcher default-off, session tracking, and E2E integration (`test-hot-swap-deployment-gate.rkt`).
+- W3: Flipped `hot-swap-enabled?` default from `#f` to `#t` in `settings-query.rkt`; updated DG-1a test.
+- W4: Dead import removal, watcher documentation, session teardown. Added DG-5c test (17 total deployment gate tests).
+
+### Operational / Release
+- Version bumped to 0.99.18. `info.rkt` and `README.md` synced.
+
 ## 0.99.17
 
 Released: 2026-07-06
