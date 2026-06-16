@@ -23,6 +23,7 @@
 (require racket/contract
          racket/match
          (only-in "../util/ids.rkt" now-seconds)
+         (only-in "roles/base.rkt" agent-role?)
          "registry-types.rkt")
 
 ;; ============================================================
@@ -64,7 +65,11 @@
 ;;
 ;; v0.99.15 W1 (F-12): Populated with base role + capability modules
 ;; so that gen:agent-role predicates work in dynamically-loaded namespaces.
-(define SHARED-MODULES (list 'q/agent/roles/base 'q/util/capability))
+;; v0.99.18 W1 (F-HS-01): Added mas-envelope — all role files import
+;; mas-envelope-payload/mas-envelope? from it. Without sharing, the
+;; dynamically-loaded namespace creates a fresh mas-envelope? struct
+;; identity, breaking predicate checks in cross-namespace dispatch.
+(define SHARED-MODULES (list 'q/agent/roles/base 'q/util/capability 'q/util/message/mas-envelope))
 
 ;; ============================================================
 ;; Registry State (thread-safe)
@@ -132,6 +137,9 @@
 
 ;; Load an agent dynamically via dynamic-require in a fresh namespace.
 ;; Attaches shared modules to preserve type identity.
+;; v0.99.18 W1 (F-HS-03): After loading, verifies the result satisfies
+;; agent-role? from the parent namespace. If identity mismatch is detected
+;; (e.g., a shared module was not properly attached), falls back to static.
 ;; Falls back to static factory on any error.
 (define (load-agent-dynamically desc)
   (with-handlers
@@ -154,7 +162,16 @@
     (define factory-proc
       (parameterize ([current-namespace ns])
         (dynamic-require (agent-descriptor-module-path desc) (agent-descriptor-factory-name desc))))
-    (factory-proc)))
+    (define result (factory-proc))
+    ;; F-HS-03: Identity verification — the dynamically loaded result must
+    ;; satisfy agent-role? from the parent namespace. If namespace identity
+    ;; mismatch occurs (shared module not attached), fall back to static.
+    (unless (agent-role? result)
+      (log-warning "load-agent-dynamically: identity mismatch for ~a, falling back to static"
+                   (agent-descriptor-role-name desc))
+      (raise (exn:fail (format "identity mismatch for ~a" (agent-descriptor-role-name desc))
+                       (current-continuation-marks))))
+    result))
 
 ;; ============================================================
 ;; Resolution
