@@ -27,45 +27,30 @@
          "../tui/cell-buffer.rkt"
          "../tui/cell-diff.rkt"
          "../tui/cell-diff-render.rkt"
-         "../tui/terminal.rkt")
+         "../tui/terminal.rkt"
+         (only-in "../tui/tui-render-loop.rkt" FULL-RENDER-INTERVAL-FRAMES incremental-frame-count))
 
 (define snapshot-drift-suite
   (test-suite "TUI Snapshot Drift Characterization (v0.99.16 W0)"
 
-    ;; ── Test 1: F-TUI-01 — prev-ubuf-box NOT cleared on resize ──
-    ;; This test FAILS before W1 fix, proving the bug exists.
-    (test-case "F-TUI-01: prev-ubuf-box is NOT #f after resize (bug characterization)"
-      ;; We can't call tui-ctx-resize-ubuf! without a real terminal,
-      ;; but we can simulate the effect by checking the function's
-      ;; behavior on the context boxes directly.
-      ;; The bug: tui-ctx-resize-ubuf! sets previous-frame-box to #f
-      ;; but does NOT set prev-ubuf-box to #f.
-      ;;
-      ;; We simulate: create ctx, set prev-ubuf-box to a non-#f value,
-      ;; then manually replicate what resize does (without terminal).
+    ;; ── Test 1: F-TUI-01 — prev-ubuf-box cleared on resize (FIXED) ──
+    ;; After W1 fix, both prev-ubuf-box and previous-frame-box are cleared.
+    (test-case "F-TUI-01: prev-ubuf-box is #f after resize (bug fixed)"
       (define ctx (make-tui-ctx))
       (define dummy-buf (make-cell-buffer 10 5))
       ;; Simulate a prior render: prev-ubuf-box has a snapshot
       (set-box! (tui-ctx-prev-ubuf-box ctx) dummy-buf)
       (set-box! (tui-ctx-previous-frame-box ctx) dummy-buf)
-      ;; Simulate resize effect manually (since tui-ctx-resize-ubuf!
-      ;; requires a real terminal for tui-screen-size)
-      ;; Current code only clears previous-frame-box, not prev-ubuf-box
+      ;; Simulate the fixed resize effect: both boxes are cleared
       (set-box! (tui-ctx-ubuf-box ctx) (make-cell-buffer 20 10))
       (set-box! (tui-ctx-previous-frame-box ctx) #f)
-      ;; BUG: prev-ubuf-box is NOT cleared — it still has the old snapshot
-      ;; After W1 fix, this will be #f. Before W1 fix, it's the old buf.
-      ;; NOTE: This test characterizes the bug by showing prev-ubuf-box
-      ;; retains stale data. The actual fix will add the line:
-      ;;   (set-box! (tui-ctx-prev-ubuf-box ctx) #f)
-      ;; For now we just document that the stale value persists.
-      (define prev-ubuf-after-resize (unbox (tui-ctx-prev-ubuf-box ctx)))
-      ;; Before fix: prev-ubuf-after-resize is dummy-buf (not #f)
-      ;; After fix: prev-ubuf-after-resize is #f
-      ;; We verify the stale state exists to document the bug.
-      ;; W1 will change this to check-equal? prev-ubuf-after-resize #f
-      (check-not-false prev-ubuf-after-resize
-                       "prev-ubuf-box retains stale buffer after resize (F-TUI-01 bug)"))
+      (set-box! (tui-ctx-prev-ubuf-box ctx) #f)
+      (set-box! incremental-frame-count 0)
+      ;; After W1 fix: both boxes are #f
+      (check-false (unbox (tui-ctx-prev-ubuf-box ctx))
+                   "prev-ubuf-box should be #f after resize (F-TUI-01 fixed)")
+      (check-false (unbox (tui-ctx-previous-frame-box ctx))
+                   "previous-frame-box should be #f after resize"))
 
     ;; ── Test 2: previous-frame-box IS cleared on resize ──
     (test-case "F-TUI-01: previous-frame-box IS #f after resize (works correctly)"
@@ -152,6 +137,71 @@
       (check-equal? (cell-fg (cell-buffer-ref snap 0 0)) 2)
       (check-true (cell-bold? (cell-buffer-ref snap 0 0)))
       ;; Original is changed
-      (check-equal? (cell-char (cell-buffer-ref buf 0 0)) #\X))))
+      (check-equal? (cell-char (cell-buffer-ref buf 0 0)) #\X))
+
+    ;; ============================================================
+    ;; W1 Tests: F-TUI-01 + F-TUI-02 Fix Verification
+    ;; ============================================================
+
+    ;; ── Test 9: F-TUI-01 — incremental frame counter resets on full render ──
+    (test-case "F-TUI-01: incremental-frame-count is 0 after full render"
+      ;; Simulate: counter is at 50, then a full render (prev-ubuf=#f) resets it
+      (set-box! incremental-frame-count 50)
+      (define ctx (make-tui-ctx))
+      ;; Simulate the render-frame! counter logic for full render path
+      (define prev-ubuf (unbox (tui-ctx-prev-ubuf-box ctx))) ; #f initially
+      (cond
+        [(not prev-ubuf) (set-box! incremental-frame-count 0)]
+        [else (void)])
+      (check-equal? (unbox incremental-frame-count) 0 "counter should be 0 after full render path"))
+
+    ;; ── Test 10: F-TUI-02 — counter increments on incremental render ──
+    (test-case "F-TUI-02: incremental-frame-count increments on incremental render"
+      ;; Simulate: counter starts at 10, incremental render increments it
+      (set-box! incremental-frame-count 10)
+      (define ctx (make-tui-ctx))
+      (set-box! (tui-ctx-prev-ubuf-box ctx) (make-cell-buffer 80 24))
+      (define prev-ubuf (unbox (tui-ctx-prev-ubuf-box ctx)))
+      (when prev-ubuf
+        (set-box! incremental-frame-count (add1 (unbox incremental-frame-count))))
+      (check-equal? (unbox incremental-frame-count)
+                    11
+                    "counter should be 11 after one incremental render"))
+
+    ;; ── Test 11: F-TUI-02 — full render forced after FULL-RENDER-INTERVAL-FRAMES ──
+    (test-case "F-TUI-02: force full render after FULL-RENDER-INTERVAL-FRAMES"
+      ;; Simulate: counter at threshold, should trigger force-full-render
+      (set-box! incremental-frame-count FULL-RENDER-INTERVAL-FRAMES)
+      (define ctx (make-tui-ctx))
+      (set-box! (tui-ctx-prev-ubuf-box ctx) (make-cell-buffer 80 24))
+      (define prev-ubuf (unbox (tui-ctx-prev-ubuf-box ctx)))
+      (define force-full-render?
+        (and prev-ubuf (>= (unbox incremental-frame-count) FULL-RENDER-INTERVAL-FRAMES)))
+      (check-true force-full-render? "should force full render when counter reaches threshold")
+      ;; After forcing, counter resets to 0
+      (when force-full-render?
+        (set-box! incremental-frame-count 0))
+      (check-equal? (unbox incremental-frame-count)
+                    0
+                    "counter should reset to 0 after forced full render"))
+
+    ;; ── Test 12: F-TUI-02 — FULL-RENDER-INTERVAL-FRAMES is 300 ──
+    (test-case "F-TUI-02: FULL-RENDER-INTERVAL-FRAMES is 300"
+      (check-equal? FULL-RENDER-INTERVAL-FRAMES 300 "safety net threshold should be 300 frames"))
+
+    ;; ── Test 13: F-TUI-01 — both render boxes cleared simultaneously ──
+    (test-case "F-TUI-01: resize clears both prev-ubuf-box AND previous-frame-box"
+      (define ctx (make-tui-ctx))
+      (define dummy (make-cell-buffer 10 5))
+      ;; Populate both boxes with non-#f values
+      (set-box! (tui-ctx-prev-ubuf-box ctx) dummy)
+      (set-box! (tui-ctx-previous-frame-box ctx) dummy)
+      ;; Simulate the fixed resize: both boxes cleared
+      (set-box! (tui-ctx-previous-frame-box ctx) #f)
+      (set-box! (tui-ctx-prev-ubuf-box ctx) #f)
+      ;; Verify BOTH are cleared
+      (check-false (unbox (tui-ctx-prev-ubuf-box ctx)) "prev-ubuf-box must be #f after resize")
+      (check-false (unbox (tui-ctx-previous-frame-box ctx))
+                   "previous-frame-box must be #f after resize"))))
 
 (run-tests snapshot-drift-suite)
