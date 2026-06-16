@@ -8,6 +8,8 @@
 ;; This module defines the pure data structures for the agent registry.
 ;; It depends on nothing except racket/contract, making it a stable
 ;; foundation that all other registry modules can build upon.
+;;
+;; v0.99.13 W2 (G-3): Added factory-name field for dynamic-require loading.
 
 (require racket/contract)
 
@@ -19,9 +21,10 @@
 ;;   role-name: symbol — e.g., 'planner, 'verifier, 'tool-gateway
 ;;   version: string — semantic version (e.g., "1.0.0")
 ;;   factory: procedure — factory that creates a fresh role instance
-;;   module-path: (or/c #f string?) — for future dynamic-require loading
+;;   module-path: (or/c #f string?) — for dynamic-require loading
+;;   factory-name: (or/c #f symbol?) — export name for dynamic-require
 ;;   active?: boolean — whether this version is currently active
-(struct agent-descriptor (role-name version factory module-path active?) #:transparent)
+(struct agent-descriptor (role-name version factory module-path factory-name active?) #:transparent)
 
 ;; A version pin records which version a session is locked to.
 ;; This prevents mid-session version switches that could cause inconsistency.
@@ -43,6 +46,7 @@
                                ([role-name symbol?] [version string?]
                                                     [factory procedure?]
                                                     [module-path (or/c #f string?)]
+                                                    [factory-name (or/c #f symbol?)]
                                                     [active? boolean?]))
                        (struct version-pin
                                ([role-name symbol?] [pinned-version string?]
