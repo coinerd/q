@@ -71,6 +71,7 @@
 (provide fix-sgr-bg-black
          decode-mouse-x10
          decode-mouse-message
+         mouse-event?
          current-busy-watchdog-ms
          current-streaming-watchdog-ms
          current-resize-poll-interval-ms

@@ -44,7 +44,7 @@
                        ;; Mouse event support
                        [parse-mouse-event (-> any/c (or/c mouse-event? #f))]
                        [decode-mouse-x10
-                        (-> exact-integer? exact-integer? exact-integer? (or/c list? #f))]
+                        (-> exact-integer? exact-integer? exact-integer? (or/c mouse-event? #f))]
                        [decode-mouse-message (-> any/c (or/c list? #f))]
                        [normalize-selection-range
                         (-> exact-nonnegative-integer?
@@ -179,10 +179,10 @@
   (define x (- cx 33))
   (define y (- cy 33))
   (cond
-    [scroll? (list 'mouse (if (= button 0) 'scroll-up 'scroll-down) x y)]
-    [(= button 3) (list 'mouse 'release x y)]
-    [(and motion? (<= button 2)) (list 'mouse 'drag x y)]
-    [(and (<= button 2) (not motion?)) (list 'mouse 'click button x y)]
+    [scroll? (mouse-event (if (= button 0) 'mouse-scroll-up 'mouse-scroll-down) 0 x y)]
+    [(= button 3) (mouse-event 'mouse-release 0 x y)]
+    [(and motion? (<= button 2)) (mouse-event 'mouse-drag button x y)]
+    [(and (<= button 2) (not motion?)) (mouse-event 'mouse-click button x y)]
     [else #f]))
 
 ;; Decode a native tmousemsg into q's internal mouse event format.

@@ -15,6 +15,7 @@
 
 (require racket/contract
          racket/match
+         racket/runtime-path
          (only-in "../util/message/mas-envelope.rkt"
                   mas-envelope?
                   mas-envelope-payload
@@ -39,7 +40,9 @@
 (define current-worker-command (make-parameter "racket"))
 
 ;; Worker script arguments — the worker main entry point.
-(define current-worker-args (make-parameter '("-tm" "sandbox/worker-main.rkt")))
+;; Resolved via runtime-path so it works regardless of current-directory.
+(define-runtime-path worker-main-rkt "worker-main.rkt")
+(define current-worker-args (make-parameter (list "-tm" (path->string worker-main-rkt))))
 
 ;; Timeout for execution plane requests (ms).
 ;; Default: 120000 (2 minutes).

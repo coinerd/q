@@ -79,10 +79,9 @@
     ;; --------------------------------------------------
     ;; Test 4: decode-mouse-x10 decodes mouse bytes
     ;; --------------------------------------------------
-    (test-case "decode-mouse-x10 returns list with mouse type"
+    (test-case "decode-mouse-x10 returns mouse-event struct"
       (define result (decode-mouse-x10 32 49 49))
-      (check-pred list? result)
-      (check-true (>= (length result) 1)))
+      (check-pred mouse-event? result))
 
     ;; --------------------------------------------------
     ;; Test 5: drain-events! on empty channel is safe

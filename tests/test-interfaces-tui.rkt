@@ -806,62 +806,70 @@
     ;; Left click at screen (0,0): cb=32, cx=33, cy=33
     ;; X10: column/row are 1-based + 32 offset → screen(0,0) = bytes(33,33)
     (check-equal? (decode-mouse-x10 32 33 33)
-                  '(mouse click 0 0 0)
+                  (mouse-event 'mouse-click 0 0 0)
                   "decode-mouse-x10: left click at (0,0)")))
 (test-case "decode-mouse-x10: right click"
   (let ()
     ;; Left click at (5,10): cb=32, cx=38, cy=43
     ;; X10: screen(5,10) = bytes(38,43)
     (check-equal? (decode-mouse-x10 32 38 43)
-                  '(mouse click 0 5 10)
+                  (mouse-event 'mouse-click 0 5 10)
                   "decode-mouse-x10: left click at (5,10)")))
 (test-case "decode-mouse-x10: left drag"
   (let ()
     ;; Middle click: cb=33 (button=1, no motion)
     (check-equal? (decode-mouse-x10 33 38 43)
-                  '(mouse click 1 5 10)
+                  (mouse-event 'mouse-click 1 5 10)
                   "decode-mouse-x10: middle click")))
 (test-case "decode-mouse-x10: middle drag"
   (let ()
     ;; Right click: cb=34 (button=2, no motion)
-    (check-equal? (decode-mouse-x10 34 38 43) '(mouse click 2 5 10) "decode-mouse-x10: right click")))
+    (check-equal? (decode-mouse-x10 34 38 43)
+                  (mouse-event 'mouse-click 2 5 10)
+                  "decode-mouse-x10: right click")))
 (test-case "decode-mouse-x10: release (P0 — was silently dropped)"
   (let ()
     ;; Drag (left held + motion): cb = 32+32 = 64
-    (check-equal? (decode-mouse-x10 64 38 43) '(mouse drag 5 10) "decode-mouse-x10: left drag")))
+    (check-equal? (decode-mouse-x10 64 38 43)
+                  (mouse-event 'mouse-drag 0 5 10)
+                  "decode-mouse-x10: left drag")))
 (test-case "decode-mouse-x10: release at (0,0)"
   (let ()
     ;; Drag (middle held + motion): cb = 33+32 = 65
-    (check-equal? (decode-mouse-x10 65 38 43) '(mouse drag 5 10) "decode-mouse-x10: middle drag")))
+    (check-equal? (decode-mouse-x10 65 38 43)
+                  (mouse-event 'mouse-drag 1 5 10)
+                  "decode-mouse-x10: middle drag")))
 (test-case "decode-mouse-x10: scroll up"
   (let ()
     ;; Release: cb=35 (button=3, NO motion bit) — this was the P0 bug
     ;; In X10 mode 1002, release has button=3 and motion bit is 0
     (check-equal? (decode-mouse-x10 35 38 43)
-                  '(mouse release 5 10)
+                  (mouse-event 'mouse-release 0 5 10)
                   "decode-mouse-x10: release (P0 — was silently dropped)")))
 (test-case "decode-mouse-x10: scroll down"
   (let ()
     ;; Release at origin: cb=35, cx=33, cy=33
     (check-equal? (decode-mouse-x10 35 33 33)
-                  '(mouse release 0 0)
+                  (mouse-event 'mouse-release 0 0 0)
                   "decode-mouse-x10: release at (0,0)")))
 (test-case "decode-mouse-x10: cb=67 is release (button=3 regardless of motion)"
   (let ()
     ;; Scroll up: cb = 96 (64 + 0 + 32)
-    (check-equal? (decode-mouse-x10 96 33 33) '(mouse scroll-up 0 0) "decode-mouse-x10: scroll up")))
+    (check-equal? (decode-mouse-x10 96 33 33)
+                  (mouse-event 'mouse-scroll-up 0 0 0)
+                  "decode-mouse-x10: scroll up")))
 (test-case "decode-mouse-x10: scroll down cb=97"
   (let ()
     ;; Scroll down: cb = 97 (64 + 1 + 32)
     (check-equal? (decode-mouse-x10 97 33 33)
-                  '(mouse scroll-down 0 0)
+                  (mouse-event 'mouse-scroll-down 0 0 0)
                   "decode-mouse-x10: scroll down")))
 (test-case "decode-mouse-x10: cb=67 with motion returns release"
   (let ()
     ;; Unknown event: cb=39 (button=3 + motion=1 → shouldn't happen in X10)
     ;; But since we now catch button=3 first, this returns release
     (check-equal? (decode-mouse-x10 67 38 43)
-                  '(mouse release 5 10)
+                  (mouse-event 'mouse-release 0 5 10)
                   "decode-mouse-x10: cb=67 is release (button=3 regardless of motion)")))
 (test-case "selection-text P1 fix: first transcript row extracts text"
   (let ()

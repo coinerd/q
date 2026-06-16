@@ -31,19 +31,23 @@ This audit covers the v0.99.17 milestone (MAS Phase 3: Execution Isolation), whi
 
 ## 3. Fix Verification
 
-### F-EP-01: raco test Subprocess Compatibility ✅
+### F-EP-01: raco test Path Resolution ✅
 
-**Problem:** `raco test` runs under a restricted custodian that kills subprocesses prematurely. Worker drain threads were linked to the test's custodian, causing premature termination.
+**Problem:** `raco test` sets `current-directory` to the test file's directory (unlike direct `racket` execution where CWD is the project root). Test code used `(build-path (current-directory) "tests" "mock-worker.rkt")` and `(path->complete-path "tests/mock-worker.rkt")` to locate worker scripts. Under `raco test`, these paths resolved to `tests/tests/mock-worker.rkt` (wrong), causing worker subprocesses to fail immediately with EOF.
 
-**Fix:** Worker subprocesses and drain threads now run under an independent custodian (`worker-custodian`) created in `gateway-ipc.rkt` line 173. The custodian is passed to subprocess creation and drain thread spawning.
+> **ERRATUM (2026-06-16):** An earlier version of this section incorrectly claimed that the fix involved creating an independent `worker-custodian` in `gateway-ipc.rkt` line 173. That custodian has existed since v0.99.4 (commit `326d2aaa`) and was **not modified** in v0.99.17. No production code was changed for F-EP-01. The actual fix was `define-runtime-path` in test files only.
+
+**Fix:** `define-runtime-path` resolves paths relative to the source file at compile time, producing absolute paths that work regardless of `current-directory`. Applied in 3 test files:
+- `test-gateway-ipc.rkt`: `(define-runtime-path mock-worker-path "mock-worker.rkt")`
+- `test-gateway-ipc-concurrent.rkt`: `(define-runtime-path mock-worker-src "mock-worker.rkt")`
+- `test-execution-plane-characterization.rkt`: same pattern
 
 **Verification:**
-- `gateway-ipc.rkt:173-202`: Independent `worker-custodian` used for subprocess creation and drain threads.
 - `test-gateway-ipc.rkt`: 19/19 pass under `raco test`
 - `test-gateway-ipc-concurrent.rkt`: 12/12 pass under `raco test`
 - `test-execution-plane-characterization.rkt`: 9/9 pass under `raco test`
 
-**Assessment:** Root cause correctly identified. Fix is surgical and correct. The independent custodian isolates worker resources from the test harness custodian lifecycle.
+**Assessment:** Correct fix. The `define-runtime-path` pattern is the idiomatic Racket solution for test path portability. The execution plane infrastructure itself was never broken — only test infrastructure had CWD-relative path bugs.
 
 ### F-EP-02: Execution Plane E2E Path Resolution ✅
 
@@ -151,16 +155,16 @@ All previously-passing tests continue to pass. No test went from pass to fail.
 ## 5. Code Quality Assessment
 
 ### Positive
-- **Root cause analysis**: F-EP-01 correctly identified the custodian lifecycle issue, not a superficial symptom.
+- **Root cause analysis**: F-EP-01 root cause was `raco test` changing `current-directory` to the test file's directory, causing path resolution failures. Fixed via `define-runtime-path`.
 - **Consistent fix pattern**: `define-runtime-path` applied uniformly across all affected test files (7 files).
-- **Contract precision**: F-EP-04 contracts now match actual return types (lists, not structs).
+- **Contract precision**: F-EP-04 contracts corrected. `decode-mouse-x10` now returns `mouse-event?` structs (corrected post-audit to match `parse-mouse-event` return type). `decode-mouse-message` contracts broadened from `bytes?` to `any/c` with `(or/c list? #f)` return.
 - **Separation of concerns**: Settings default vs runtime parameter is a clean design decision.
 - **Test coverage**: New deployment gate test (7 tests) specifically validates the default-on behavior.
 - **Documentation**: Comment updates in gateway-bridge.rkt clearly explain the Phase 3 status.
 
 ### Concerns (Minor)
-1. **Relative path in production**: `gateway-bridge.rkt` still uses relative path `"sandbox/worker-main.rkt"` for `current-worker-args`. This is correct from project root but could fail if the CWD changes. Tests use absolute paths via `define-runtime-path`. This is a pre-existing design choice, not a regression.
-2. **2 pre-existing TUI test failures**: `test-interfaces-tui.rkt` has 2 remaining failures related to selection-text. These are pre-existing debt documented in prior milestones and explicitly out of scope.
+1. **2 pre-existing TUI test failures**: `test-interfaces-tui.rkt` has 2 remaining failures related to selection-text. These are pre-existing debt documented in prior milestones and explicitly out of scope.
+2. **Audit narrative error (corrected)**: The original version of this audit incorrectly described F-EP-01 as a custodian fix in production code. The actual fix was `define-runtime-path` in test files. See erratum in Section 3.
 
 ### Technical Debt
 - None introduced. All changes are fixes or test additions.
@@ -174,7 +178,7 @@ All previously-passing tests continue to pass. No test went from pass to fail.
 | F-EP-01: All gateway IPC tests pass under raco test | ✅ | 19/19 + 12/12 |
 | F-EP-02: All execution plane E2E tests pass under raco test | ✅ | 16/16 |
 | F-EP-03: All worker-main tests pass under raco test | ✅ | 18/18 |
-| F-EP-04: decode-mouse-x10 returns correct type | ✅ | Contract: `(or/c list? #f)` |
+| F-EP-04: decode-mouse-x10 returns correct type | ✅ | Contract: `(or/c mouse-event? #f)` — returns structs |
 | F-EP-05: parse-mouse-event returns mouse-event? or #f | ✅ | Contract: `(-> any/c (or/c mouse-event? #f))` |
 | F-EP-06: execution-plane-enabled? default is #t | ✅ | `settings-query.rkt:373` |
 | All ~131 focused tests pass under raco test | ✅ | 125+ tests, 0 failures |
@@ -190,9 +194,11 @@ All previously-passing tests continue to pass. No test went from pass to fail.
 
 **Score: 4.8 / 5.0**
 
-All six failure items (F-EP-01 through F-EP-06) are correctly fixed with appropriate tests. Root cause analysis was thorough. No regressions introduced. The execution plane default-on flip is a clean, well-documented Phase 3 activation with proper safety separation between settings and runtime parameter defaults.
+All six failure items (F-EP-01 through F-EP-06) are correctly fixed with appropriate tests. No regressions introduced. The execution plane default-on flip is a clean, well-documented Phase 3 activation with proper safety separation between settings and runtime parameter defaults.
 
-Minor deduction: The 2 pre-existing TUI test failures remain (out of scope), and the production relative path for worker-main.rkt is a pre-existing design choice that could benefit from absolute path resolution in a future version.
+> **ERRATUM (2026-06-16):** The original audit incorrectly attributed F-EP-01 to a custodian fix in `gateway-ipc.rkt`. The actual fix was `define-runtime-path` in test files (path resolution, not custodian lifecycle). Additionally, F-EP-04 was subsequently corrected: `decode-mouse-x10` now returns `mouse-event?` structs to match `parse-mouse-event`, and the production worker path now uses `define-runtime-path`. These corrections do not affect the audit score as all functional outcomes remain correct.
+
+Minor deduction: The 2 pre-existing TUI test failures remain (out of scope).
 
 ---
 
