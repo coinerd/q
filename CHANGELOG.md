@@ -1,3 +1,30 @@
+## 0.99.16
+
+Released: 2026-06-30
+
+### Bug Fixes
+- **F-TUI-01: Snapshot clear on resize**: `tui-ctx-resize-ubuf!` now clears `prev-ubuf-box` in addition to `previous-frame-box`. Previously, the delta-render snapshot survived a resize, causing the next incremental render to diff against a stale buffer and produce corrupted display output.
+- **F-TUI-02: Periodic full render safety net**: Added `FULL-RENDER-INTERVAL-FRAMES = 300` constant. After 300 consecutive incremental delta renders, a full render is forced to clear any accumulated snapshot drift. The counter resets on full render, forced full render, and resize.
+- **F-TUI-03: Delta render row-end clear**: `render-deltas-to-port!` now groups deltas by row and emits `ESC[K` (erase-to-end-of-line) after rows whose last delta has a default/blank cell. This prevents display corruption when row content is shortened and the terminal's actual state has drifted from the tracked snapshot. The `ESC[K` is only emitted when the row was shortened (last delta changed TO a default cell), not when the row ends with non-default content.
+- **F-TUI-04: Cursor-blink snapshot consistency**: `render-cursor-blink-frame!` now bypasses the delta renderer and writes the cursor cell directly (position + SGR + character) when a previous snapshot exists. This prevents the F-TUI-03 `ESC[K` emission from corrupting terminal state when the cursor cell toggles to/from a default cell during blink (e.g., cursor past end of text). Falls back to full render when `prev-ubuf` is `#f`.
+
+### Breaking / Behavior Changes
+- None. All fixes are internal to the TUI rendering pipeline.
+
+### Migration Notes
+- No action required. All fixes are transparent improvements to display stability.
+
+### Testing
+- W0: 8 TUI snapshot drift characterization tests establishing bug baselines.
+- W1: F-TUI-01 + F-TUI-02 fixes. Updated test #1 from bug-characterization to fix-verification. Added tests 9-13. 13 total tests.
+- W2: F-TUI-03 fix. Updated test #7 from `check-false` to `check-true`. Added tests 14-17. 17 total tests.
+- W3: F-TUI-04 fix. Exported `write-cell!` for testability. Added tests 18-22. 22 total tests.
+- All 22 tests pass. No regressions in existing TUI tests.
+
+### Operational / Release
+- Internal rendering pipeline fixes only — no config changes, no API changes.
+- `FULL-RENDER-INTERVAL-FRAMES` is a compile-time constant (300 frames ≈ 5 seconds at 60fps).
+
 ## 0.99.15
 
 Released: 2026-06-29
