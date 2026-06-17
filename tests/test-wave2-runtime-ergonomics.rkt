@@ -42,7 +42,7 @@
      ;; Stray writes should be silently discarded
      (display "this should not appear" (current-output-port))
      ;; Real port should be accessible via guarded-real-output-port
-     (check-eq? (guarded-real-output-port) real-out "real port should be saved"))))
+     (check-eq? (current-guarded-real-output-port) real-out "real port should be saved"))))
 
 (test-case "#1181: call-with-raw-output restores real port"
   (define real-out (current-output-port))
