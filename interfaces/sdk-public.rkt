@@ -22,7 +22,6 @@
 
 (require (only-in "sdk.rkt"
                   runtime?
-                  runtime
                   runtime-config
                   runtime-config?
                   make-runtime

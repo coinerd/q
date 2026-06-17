@@ -90,7 +90,7 @@
                   make-cancellation-token
                   cancellation-token?
                   cancellation-token-cancelled?
-                  cancel-token!))
+                  cancel-token!)
          (only-in "helpers/temp-fs.rkt" with-temp-dir))
 
 ;; ============================================================

@@ -147,7 +147,7 @@
 
 (test-case "safe-mode-deactivate! works when not locked"
   (parameterize ([current-safe-mode #f]
-                 [safe-mode-locked? #f])
+                 [current-safe-mode-locked? #f])
     (safe-mode-active!)
     (check-true (safe-mode?))
     (safe-mode-deactivate!)
@@ -155,7 +155,7 @@
 
 (test-case "safe-mode-deactivate! raises error when locked"
   (parameterize ([current-safe-mode #t]
-                 [safe-mode-locked? #f])
+                 [current-safe-mode-locked? #f])
     (lock-safe-mode!)
     (check-exn #rx"Safe mode is locked and cannot be changed" (lambda () (safe-mode-deactivate!)))
     ;; Safe mode should still be active
@@ -163,21 +163,21 @@
 
 (test-case "lock-safe-mode! prevents deactivation"
   (parameterize ([current-safe-mode #t]
-                 [safe-mode-locked? #f])
+                 [current-safe-mode-locked? #f])
     (lock-safe-mode!)
-    (check-true (safe-mode-locked?))
+    (check-true (current-safe-mode-locked?))
     (check-exn exn:fail? (lambda () (safe-mode-deactivate!)))))
 
 (test-case "safe-mode can still be activated when locked"
   (parameterize ([current-safe-mode #f]
-                 [safe-mode-locked? #t])
+                 [current-safe-mode-locked? #t])
     ;; Activation should still work even when locked
     (safe-mode-active!)
     (check-true (safe-mode?))))
 
-(test-case "safe-mode-locked? defaults to #f"
-  (parameterize ([safe-mode-locked? #f])
-    (check-false (safe-mode-locked?))))
+(test-case "current-safe-mode-locked? defaults to #f"
+  (parameterize ([current-safe-mode-locked? #f])
+    (check-false (current-safe-mode-locked?))))
 
 ;; ============================================================
 ;; 12. Custom allowed-paths with canonicalization
