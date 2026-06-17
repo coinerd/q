@@ -58,7 +58,8 @@
                   selection-text
                   handle-mouse
                   handle-tree-overlay-key
-                  update-tree-overlay!)
+                  update-tree-overlay!
+                  handle-approval-overlay-key)
          ;; W20: key dispatch extracted to keybindings/key-dispatch.rkt
          (only-in "keybindings/key-dispatch.rkt" dispatch-keymap-action handle-key)
          (prefix-in commands: "../tui/commands.rkt")
@@ -116,6 +117,7 @@
          ;; W16: re-exported from selection.rkt
          handle-tree-overlay-key
          update-tree-overlay!
+         handle-approval-overlay-key
          (contract-out
           [make-tui-ctx
            (->* ()
