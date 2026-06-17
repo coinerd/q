@@ -35,24 +35,32 @@
       '()))
 
 ;; Get a compact git diff excerpt for the wave's files.
+;; v0.99.24 C-3: Fixed dead code — file paths were computed but never passed to git.
+;; Uses `git show --stat HEAD -- <files>` instead of `git diff --stat` because
+;; at /wave-done time, changes are already committed.
 ;; Returns a string (possibly empty when no changes or no git).
 (define (get-diff-excerpt base-dir files)
   (if (or (null? files) (not base-dir))
       ""
       (with-handlers ([exn:fail? (lambda (_) "")])
-        (define file-args (string-join files " "))
-        (define port
+        (define output
           (parameterize ([current-directory (if (path? base-dir)
                                                 base-dir
                                                 (string->path base-dir))])
-            (open-input-string (with-output-to-string
-                                (lambda ()
-                                  (with-handlers ([exn:fail? void])
-                                    (system* (find-executable-path "git") "diff" "--stat" "--")))))))
-        (define output (string-trim (port->string port)))
-        (if (> (string-length output) 2000)
-            (string-append (substring output 0 2000) "...")
-            output))))
+            (with-output-to-string (lambda ()
+                                     (with-handlers ([exn:fail? void])
+                                       (apply system*
+                                              (find-executable-path "git")
+                                              "show"
+                                              "--stat"
+                                              "--oneline"
+                                              "HEAD"
+                                              "--"
+                                              files))))))
+        (define trimmed (string-trim output))
+        (if (> (string-length trimmed) 2000)
+            (string-append (substring trimmed 0 2000) "...")
+            trimmed))))
 
 ;; Build an enriched plan-context hash for the verification gate.
 ;;

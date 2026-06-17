@@ -33,15 +33,15 @@
      (mode-for-config "not a config"))))
 
 (test-case "mode-for-config returns symbol for valid cli-config"
-  (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f #f))
+  (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f #f #f #f #f))
   (check-equal? (mode-for-config cfg) 'interactive))
 
 (test-case "mode-for-config returns 'help for help command"
-  (define cfg (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f #f))
+  (define cfg (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f #f #f #f #f))
   (check-equal? (mode-for-config cfg) 'help))
 
 (test-case "mode-for-config returns 'version for version command"
-  (define cfg (cli-config 'version #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f #f))
+  (define cfg (cli-config 'version #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f #f #f #f #f))
   (check-equal? (mode-for-config cfg) 'version))
 
 ;; ============================================================
