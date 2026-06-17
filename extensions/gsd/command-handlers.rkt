@@ -63,6 +63,7 @@
                   set-gsd-event-bus!
                   current-gsd-ctx
                   current-gsd-session-id)
+         (only-in "plan-context-builder.rkt" build-enriched-plan-ctx)
          (only-in "../../agent/verification/verifier-gate.rkt" execute-verification-gate)
          (only-in "../../agent/verification/verifier-core.rkt" current-verifier-enabled)
          racket/file)
@@ -185,17 +186,14 @@
      (define gate-result
        (if (and (gsd-success? cmd-result) (current-verifier-enabled))
            (let ([ctx (current-gsd-ctx)])
-             (define plan-ctx
-               (hasheq 'plan-summary
-                       ""
-                       'wave-name
-                       (format "W~a" (or wd-args ""))
-                       'files-changed
-                       '()
-                       'test-summary
-                       ""
-                       'diff-excerpt
-                       ""))
+             ;; v0.99.23 B-1/B-2: Enrich plan-ctx with real wave data
+             ;; Previously all fields were empty strings/lists, making
+             ;; §6.1 skip heuristic and §6.2 dynamic threshold inert.
+             (define wd-args-num
+               (let ([n (and wd-args (string->number wd-args))])
+                 (if (and n (exact-nonnegative-integer? n)) n 0)))
+             (define plan (load-plan-from-index base-dir))
+             (define plan-ctx (build-enriched-plan-ctx base-dir plan wd-args-num))
              (execute-verification-gate ctx plan-ctx))
            'approved))
      ;; Only emit wave.completed if verification approved (or was not run)
