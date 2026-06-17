@@ -1,3 +1,37 @@
+## 0.99.21
+
+Released: 2026-07-15
+
+### Overview
+Two-track release: v0.99.20 hotfix (critical build fix) + Säule A agent-driven MAS activation. The hotfix restores the build broken in v0.99.20 (F-1). Säule A makes the primary agent aware of MAS capabilities and able to autonomously delegate to subagents.
+
+### Critical Fixes
+- **F-1 (BUILD BREAK)**: Fixed `register-agent!` unbound identifier in `wiring/run-modes.rkt`. The v0.99.20 release could not compile. This hotfix restores the build.
+- **F-2**: Wired `mas.verifier.max-rework-iterations` setting to `gsd-max-rework-iterations` parameter. The setting was defined but orphaned in v0.99.20.
+
+### Corrections
+- F-3: Documented that rework limit blocks (does not force 'done') — intentional safety design.
+- F-4: Corrected v0.99.20 CHANGELOG "8 files fixed" to "7 files fixed + 1 documented obsolete".
+- F-5: Updated process checklist to require `raco make` with clean bytecode.
+
+### Features
+- **§4.1 System-Prompt MAS Guidance**: The primary agent's system prompt now includes delegation guidance when the blackboard is enabled. The agent knows when to use `spawn-subagent` for parallel work, isolated exploration, second opinions, and high-risk isolation.
+- **§4.2 Capability-Aware Spawn**: `spawn-subagent` now accepts an optional `capabilities` argument. When provided, the child agent's tool registry is filtered to only include tools matching the requested capabilities (e.g., `['read-only']` for analyst roles). Backward compatible — omitting `capabilities` provides all child-safe tools.
+- **§4.3 Blackboard-Context Injection**: Subagents now receive a compact summary of the parent session's blackboard state as a prefix to their system prompt. This includes recent agent activities, verifier decisions, and wave status.
+
+### Testing
+- W0: 2 new tests for rework-limit wiring; `raco make main.rkt` PASSES
+- W1: 7 new tests for MAS guidance injection
+- W2: 10 new tests for capability-aware filtering
+- W3: 6 new tests for blackboard context injection
+- All existing MAS tests (135+) still pass
+
+### Operational / Release
+- Version bumped to 0.99.21.
+- New production file: `agent/mas-guidance.rkt`
+- 4 new test files.
+- 7 production files changed.
+
 ## 0.99.20
 
 Released: 2026-07-14
