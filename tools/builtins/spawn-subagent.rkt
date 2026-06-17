@@ -71,10 +71,14 @@
          subagent-config-role
          subagent-config-max-turns
          subagent-config-tools
-         subagent-config-model)
+         subagent-config-model
+         subagent-config-capabilities
+         ;; v0.99.21 §4.2: Capability-aware tool filtering
+         child-safe-tools-filtered)
 
 ;; Subagent configuration struct — replaces ad-hoc hash extraction
-(struct subagent-config (task role max-turns tools model) #:transparent)
+;; v0.99.21 §4.2: Added capabilities field (6th, default #f for backward compat)
+(struct subagent-config (task role max-turns tools model capabilities) #:transparent)
 
 ;; Spawn rate limiter: parameter holding list of spawn timestamps (milliseconds)
 (define current-spawn-timestamps (make-parameter (box '())))
@@ -119,12 +123,27 @@
             (run-subagent-with-config cfg exec-ctx)))))
 
 ;; Parse subagent-config from tool call args hash.
+;; v0.99.21 §4.2: Added capabilities parsing.
 (define (parse-subagent-config args)
+  (define caps-raw (hash-ref args 'capabilities #f))
+  (define caps
+    (cond
+      [(not caps-raw) #f]
+      [(list? caps-raw)
+       (filter valid-capability?
+               (map (lambda (c)
+                      (if (string? c)
+                          (string->symbol c)
+                          c))
+                    caps-raw))]
+      [(string? caps-raw) (list (string->symbol caps-raw))]
+      [else #f]))
   (subagent-config (hash-ref args 'task #f)
                    (resolve-role-prompt (hash-ref args 'role default-role-prompt))
                    (hash-ref args 'max-turns 5)
                    (hash-ref args 'tools #f)
-                   (hash-ref args 'model #f)))
+                   (hash-ref args 'model #f)
+                   (and caps (pair? caps) caps)))
 
 ;; Execute subagent using typed config struct.
 (define (run-subagent-with-config cfg exec-ctx)
@@ -137,7 +156,9 @@
                         'tools
                         (subagent-config-tools cfg)
                         'model
-                        (subagent-config-model cfg))
+                        (subagent-config-model cfg)
+                        'capabilities
+                        (subagent-config-capabilities cfg))
                 (subagent-config-role cfg)
                 (subagent-config-max-turns cfg)
                 (subagent-config-tools cfg)
@@ -281,6 +302,21 @@
            (tool-name t)
            (tool-required-capability t))))
 
+;; v0.99.21 §4.2: Capability-aware tool filtering for subagent children.
+;; Returns child-safe tools filtered by the given capabilities list.
+;; - When capabilities is #f or empty, returns ALL child-safe tools (backward compat).
+;; - When capabilities is a list of symbols, returns only tools whose
+;;   required-capability is 'any or is in the capabilities list.
+(define (child-safe-tools-filtered capabilities)
+  (define all-tools (child-safe-tools))
+  (cond
+    [(or (not capabilities) (null? capabilities)) all-tools]
+    [else
+     (filter (lambda (t)
+               (define rc (tool-required-capability t))
+               (or (eq? rc 'any) (memq rc capabilities)))
+             all-tools)]))
+
 ;; Internal: run the subagent
 (define (run-subagent args role-prompt max-turns allowed-tools exec-ctx)
   (define task (hash-ref args 'task))
@@ -292,9 +328,11 @@
     (define model-name (resolve-model-name exec-ctx args))
 
     ;; Create scoped tool registry with child-safe tools
+    ;; v0.99.21 §4.2: Filter tools by capabilities when specified
+    (define capabilities (hash-ref args 'capabilities #f))
     (define registry (make-tool-registry))
     ;; Register tools directly to avoid circular dependency with registry-defaults
-    (for ([t (child-safe-tools)])
+    (for ([t (child-safe-tools-filtered capabilities)])
       (register-tool! registry t))
 
     ;; Build child session
