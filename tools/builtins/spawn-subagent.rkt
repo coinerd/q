@@ -16,6 +16,7 @@
          "../../tools/tool.rkt"
          (only-in "../../util/capability.rkt" valid-capability?)
          (only-in "../../runtime/runtime-helpers.rkt" emit-session-event! make-event-bus)
+         (only-in "../../tui/approval-channel.rkt" current-approval-channel approval-await-result)
          (only-in "../../runtime/settings.rkt" q-settings? setting-ref)
          "../model-bridge.rkt"
          (only-in "provider-hash-bridge.rkt"
@@ -143,9 +144,15 @@
                        (if (and (string? task-desc) (> (string-length task-desc) 200))
                            (substring task-desc 0 200)
                            (or task-desc "")))))
-  ;; Consult the approval result parameter.
-  ;; Default #t (permissive). TUI mode would set this based on user response.
-  (current-spawn-approval-result))
+  ;; v0.99.25 §5.3: Check for approval channel (TUI interactive mode).
+  ;; When a channel is set, block until user responds (with timeout).
+  ;; When no channel (non-interactive mode), use the permissive parameter.
+  (define ch (current-approval-channel))
+  (if ch
+      ;; Interactive: block until user responds or timeout
+      (approval-await-result)
+      ;; Non-interactive: use permissive parameter (default #t)
+      (current-spawn-approval-result)))
 
 ;; Default role prompt when no role is specified
 (define default-role-prompt
