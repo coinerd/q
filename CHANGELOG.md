@@ -7,16 +7,16 @@ Released: 2026-07-14
 This release addresses four technical debts (§3.1–§3.4) identified in the MAS (Multi-Agent System) Enablement Strategy audit, converting MAS infrastructure from passively wired to actively hardened. The work spans broad test-suite stabilization, extension tool routing, rework-loop protection, and auto-reload watcher wiring.
 
 ### Bug Fixes
-- **§3.1: Broad-suite stabilization**: Fixed 8 compilation-broken test files that masked potential MAS regressions. Root causes included SDK interface drift, arity mismatches, unbound identifiers, and syntax errors. All 8 files now compile and run.
+- **§3.1: Broad-suite stabilization**: Fixed 7 compilation-broken test files and documented 1 obsolete test file (`test-context-assembly-config.rkt` tested a completely refactored struct). Root causes included SDK interface drift, arity mismatches, unbound identifiers, and syntax errors. All 7 fixed files now compile and run.
 
 ### Features
 - **§3.2: Extension tool routing (delete-lines externalization)**: Externalized the `delete-lines` tool to the worker process sandbox. Added `"delete-lines"` to `externalizable-tool-names` in `registry-table.rkt`. Implemented `execute-delete-lines` in `worker-tools.rkt` with path safety (`path-allowed?`), line range validation, and atomic writes via `call-with-atomic-output-file`. Browser tools (`browser_click`, `browser_type`, `browser_press`) remain in-process pending a proxy architecture (M4/v1.0.0-rc2).
-- **§3.3: Rework-loop protection**: Added a rework iteration limit to the GSD state machine. New `gsd-max-rework-iterations` parameter (default 3) blocks the verifying→executing transition when the limit is reached, emitting a `transition-failed` event. The counter resets on fresh plan-written→executing transitions. Configurable via `mas.verifier.max-rework-iterations`.
+- **§3.3: Rework-loop protection**: Added a rework iteration limit to the GSD state machine. New `gsd-max-rework-iterations` parameter (default 3) blocks the verifying→executing transition when the limit is reached, emitting a `transition-failed` event. The session remains in `verifying` state until manually resolved (via `gsd done` or `gsd reset`). This is intentional — a wave that fails verification 3 times requires human review, not automatic acceptance. The counter resets on fresh plan-written→executing transitions. Configurable via `mas.verifier.max-rework-iterations`.
 - **§3.4: Auto-reload watcher wiring**: Connected the registry watcher (fully implemented since v0.99.13 but intentionally unwired) to the runtime lifecycle. When `mas.hot-swap.auto-reload.enabled` is `#t` (default `#f`), the watcher monitors `agent/roles/` for `.rkt` file changes and automatically registers new agent versions via `dynamic-require` + `register-agent!`. The watcher is stopped in `close-session!` (idempotent).
 
 ### Breaking / Behavior Changes
 - `delete-lines` now executes in the worker process sandbox when externalization is active. Path validation is enforced — only paths within the project root are accepted.
-- GSD sessions now have a rework iteration cap (default 3). Sessions exceeding this limit receive a `transition-failed` event instead of silently looping.
+- GSD sessions now have a rework iteration cap (default 3). When the limit is reached, the verifying→executing transition is **blocked** with a `transition-failed` event. The session remains in `verifying` state until manually resolved. This is intentional safety design — a wave that fails verification 3 times requires human review.
 
 ### Migration Notes
 - No action required for default configurations. All new features are opt-in or use safe defaults.
@@ -24,7 +24,7 @@ This release addresses four technical debts (§3.1–§3.4) identified in the MA
 - To adjust rework limit: set `mas.verifier.max-rework-iterations` in config.
 
 ### Testing
-- **W0**: 8 previously compilation-broken test files now compile and run.
+- **W0**: 7 previously compilation-broken test files now compile and run; 1 obsolete test documented.
 - **W1**: 5/5 new rework-limit tests pass.
 - **W2**: 5/5 new delete-lines worker tests pass.
 - **W3**: 5/5 new auto-reload wiring tests pass. 24/24 existing registry/watcher tests pass.
