@@ -112,6 +112,8 @@
                   verifier-max-rework-iterations)
          ;; v0.99.21 F-2: Wire rework limit parameter from settings
          (only-in "../extensions/gsd/state-machine.rkt" gsd-max-rework-iterations)
+         ;; v0.99.21 §4.1: MAS delegation guidance
+         (only-in "../agent/mas-guidance.rkt" build-mas-delegation-guidance)
          (only-in "../extensions/mcp-adapter.rkt" run-mcp-stdio-server! current-mcp-execute-fn)
          (only-in "../tools/scheduler.rkt" run-tool-batch scheduler-result-results))
 
@@ -209,6 +211,13 @@
   (define project-tree-section
     (let ([tree-str (project-tree->string project-dir)]) (if (string=? tree-str "") #f tree-str)))
 
+  ;; v0.99.21 §4.1: Inject MAS delegation guidance when blackboard is enabled.
+  ;; Makes the primary agent aware of spawn-subagent capabilities.
+  (define mas-guidance-section
+    (if (blackboard-enabled? settings)
+        (build-mas-delegation-guidance settings)
+        #f))
+
   (define final-system-instrs
     (append system-instrs
             (if skill-section
@@ -216,6 +225,9 @@
                 (list))
             (if project-tree-section
                 (list project-tree-section)
+                (list))
+            (if mas-guidance-section
+                (list mas-guidance-section)
                 (list))))
 
   ;; Provider uses the shared settings
