@@ -32,7 +32,7 @@ This release addresses four technical debts (§3.1–§3.4) identified in the MA
 
 ### Operational / Release
 - Version bumped to 0.99.20. `info.rkt` and `README.md` synced.
-- 4 production files changed across W1–W3, 0 in W0 (test-only).
+- 8 production files changed (1 interface fix in W0, 7 across W1–W3). 3 new test files.
 
 ## 0.99.19
 
