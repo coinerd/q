@@ -29,6 +29,7 @@
          busy-box ; (boxof boolean?)
          correlation-id-box ; (boxof (or/c string? #f))
          transaction-box ; (boxof hash?)
+         rework-count-box ; (boxof exact-nonnegative-integer?) — v0.99.20 W1
          sem ; semaphore for thread safety
          )
   #:transparent)
@@ -44,6 +45,7 @@
                    (box #f)
                    (box #f)
                    (box (hash))
+                   (box 0)
                    (make-semaphore 1)))
 
 ;; ============================================================
@@ -147,6 +149,16 @@
 
                          (set-box! (gsd-session-ctx-history-box ctx)
                                    (update-thunk (unbox (gsd-session-ctx-history-box ctx)))))))
+
+;; ============================================================
+;; Rework-loop protection accessors (v0.99.20 W1)
+;; ============================================================
+
+(define (gsd-ctx-rework-count ctx)
+  (ctx-read ctx gsd-session-ctx-rework-count-box))
+
+(define (gsd-ctx-reset-rework-count! ctx)
+  (ctx-write! ctx gsd-session-ctx-rework-count-box 0))
 ;; ============================================================
 ;; Default global context (backward compatibility)
 ;; DEPRECATION TIMELINE: Deprecated globals (current-gsd-state, set-gsd-state!,
@@ -250,6 +262,7 @@
          gsd-session-ctx-pinned-dir-box
          gsd-session-ctx-event-bus-box
          gsd-session-ctx-sem
+         gsd-session-ctx-rework-count-box
          ;; Global default context (plain)
          gsd-default-ctx
          current-gsd-ctx
@@ -285,6 +298,8 @@
                        [gsd-ctx-state-snapshot (-> gsd-session-ctx? gsd-runtime-state?)]
                        [gsd-ctx-state-update! (-> gsd-session-ctx? procedure? any)]
                        [gsd-ctx-history-update! (-> gsd-session-ctx? procedure? any)]
+                       [gsd-ctx-rework-count (-> gsd-session-ctx? exact-nonnegative-integer?)]
+                       [gsd-ctx-reset-rework-count! (-> gsd-session-ctx? void?)]
                        ;; Backward-compatible accessors (deprecated, removal v0.37.0)
                        [current-gsd-state (-> gsd-runtime-state?)]
                        [set-gsd-state! (-> gsd-runtime-state? void?)]

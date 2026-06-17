@@ -60,6 +60,7 @@
           [verifier-enabled? (-> q-settings? boolean?)]
           [verifier-model (-> q-settings? (or/c string? #f))]
           [verifier-risk-threshold (-> q-settings? symbol?)]
+          [verifier-max-rework-iterations (-> q-settings? exact-positive-integer?)]
           [blackboard-enabled? (-> q-settings? boolean?)]
           [hot-swap-enabled? (-> q-settings? boolean?)]
           [mcp-enabled? (-> q-settings? boolean?)]
@@ -429,6 +430,20 @@
         raw
         (string->symbol raw)))
   (if (memq sym '(low medium high)) sym 'high))
+
+;; Config key: mas.verifier.max-rework-iterations (default 3)
+;; v0.99.20 W1: Maximum consecutive verifying→executing (rework) transitions
+;; before the GSD state machine blocks and forces 'idle (done).
+;; Prevents infinite verifier-rework loops.
+(define (verifier-max-rework-iterations settings)
+  (define raw (setting-ref* settings '(mas verifier max-rework-iterations) 3))
+  (cond
+    [(exact-positive-integer? raw) raw]
+    [(and (integer? raw) (positive? raw)) raw]
+    [(string? raw)
+     (define n (string->number raw))
+     (if (and (exact-positive-integer? n)) n 3)]
+    [else 3]))
 
 ;; ============================================================
 ;; Blackboard Settings (v0.99.7 MAS Schritt 4)
