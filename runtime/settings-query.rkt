@@ -63,6 +63,7 @@
           [verifier-max-rework-iterations (-> q-settings? exact-positive-integer?)]
           [blackboard-enabled? (-> q-settings? boolean?)]
           [hot-swap-enabled? (-> q-settings? boolean?)]
+          [auto-reload-enabled? (-> q-settings? boolean?)]
           [mcp-enabled? (-> q-settings? boolean?)]
           [mcp-server-enabled? (-> q-settings? boolean?)]
           [mcp-server-transport (-> q-settings? string?)]
@@ -469,6 +470,18 @@
     [(boolean? raw) raw]
     [(string? raw) (and (member (string-downcase raw) '("true" "1" "yes")) #t)]
     [else #t]))
+
+;; v0.99.20 W3 (§3.4): Check whether auto-reload (filesystem watcher) is enabled.
+;; Config path: mas.hot-swap.auto-reload.enabled
+;; Default: #f (opt-in — even when hot-swap is default-on, auto-reload stays off)
+;; When #t, the registry watcher monitors agent/roles/ for file changes
+;; and automatically registers new agent versions for hot-swap.
+(define (auto-reload-enabled? settings)
+  (define raw (setting-ref* settings '(mas hot-swap auto-reload enabled) #f))
+  (cond
+    [(boolean? raw) raw]
+    [(string? raw) (and (member (string-downcase raw) '("true" "1" "yes")) #t)]
+    [else #f]))
 
 ;; ============================================================
 ;; MCP Settings (v0.99.10 MAS Schritt 6)

@@ -95,6 +95,7 @@
                   pin-current-versions
                   set-hot-swap-enabled!
                   set-session-active!)
+         (only-in "../agent/registry-watcher.rkt" start-registry-watcher!)
          (only-in "../agent/roles/supervisor.rkt" current-use-registry)
          ;; v0.99.9 W4: MCP config + adapter
          (only-in "../runtime/settings-query.rkt"
@@ -105,7 +106,8 @@
                   broker-remote-host
                   broker-remote-port
                   broker-capability-secret
-                  broker-cert-dir)
+                  broker-cert-dir
+                  auto-reload-enabled?)
          (only-in "../extensions/mcp-adapter.rkt" run-mcp-stdio-server! current-mcp-execute-fn)
          (only-in "../tools/scheduler.rkt" run-tool-batch scheduler-result-results))
 
@@ -288,7 +290,25 @@
     (current-use-registry #t)
     ;; v0.99.8 W4: Pin agent versions at session start.
     ;; Pinned versions ensure mid-session consistency.
-    (pin-current-versions))
+    (pin-current-versions)
+    ;; v0.99.20 W3 (§3.4): Start registry watcher for auto-reload.
+    ;; When mas.hot-swap.auto-reload.enabled is true, monitor agent/roles/
+    ;; for file changes and register new agent versions for hot-swap.
+    ;; Default: #f (opt-in — even with hot-swap default-on).
+    (when (auto-reload-enabled? settings)
+      (define roles-dir (build-path project-dir "agent" "roles"))
+      (start-registry-watcher!
+       roles-dir
+       ;; Callback: register new version via dynamic-require
+       (lambda (role-name new-version module-path)
+         (define factory-sym (string->symbol (format "make-~a-role" role-name)))
+         (with-handlers ([exn:fail? (lambda (e)
+                                      (log-warning "auto-reload: failed to load ~a: ~a"
+                                                   module-path
+                                                   (exn-message e)))])
+           (define factory (dynamic-require module-path factory-sym))
+           (register-agent! role-name new-version factory #:module-path module-path)
+           (log-info "auto-reload: registered ~a v~a" role-name new-version))))))
 
   ;; v0.99.9 W4: MCP server mode — alternative entry point.
   ;; When mas.mcp.server.enabled is true AND mas.mcp.enabled is true,

@@ -100,7 +100,9 @@
          (only-in "../browser/service.rkt" current-browser-service)
          (only-in "../runtime/memory/service.rkt" initialize-memory-backend!)
          ;; v0.99.18 W4 (F-HS-07): Clear hot-swap state on session teardown
-         (only-in "../agent/registry.rkt" set-session-active! set-hot-swap-enabled!))
+         (only-in "../agent/registry.rkt" set-session-active! set-hot-swap-enabled!)
+         ;; v0.99.20 W3 (§3.4): Stop watcher on session teardown
+         (only-in "../agent/registry-watcher.rkt" stop-registry-watcher!))
 (require "session/session-mutation.rkt")
 
 (provide agent-session?
@@ -503,7 +505,11 @@
   ;; and resets the runtime gate for clean next-session startup.
   ;; The wiring layer re-enables hot-swap at the next session start.
   (set-session-active! #f)
-  (set-hot-swap-enabled! #f))
+  (set-hot-swap-enabled! #f)
+  ;; v0.99.20 W3 (§3.4): Stop auto-reload watcher on session teardown.
+  ;; Idempotent: safe no-op when watcher was never started.
+  (with-handlers ([exn:fail? (lambda (_) (void))])
+    (stop-registry-watcher!)))
 
 ;; ============================================================
 ;; Re-exported from extracted sub-modules
