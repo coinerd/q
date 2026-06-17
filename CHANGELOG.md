@@ -34,7 +34,7 @@ Säule B user ergonomics (HITL approval for dangerous spawns + CLI flags for MAS
 - W0: 15 new tests for plan-context enrichment
 - W1: 15 new tests for HITL spawn approval
 - W2: 9 new tests for CLI flags
-- All existing MAS tests still pass
+- All existing MAS tests pass; 4 cli-config arity regressions identified for v0.99.24 fix
 
 ### Operational / Release
 - Version bumped to 0.99.23.
