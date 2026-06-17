@@ -1,3 +1,48 @@
+## 0.99.23
+
+Released: 2026-07-17
+
+### Overview
+Two-track release: critical remediation (fix dead plan-context code from v0.99.22) +
+Säule B user ergonomics (HITL approval for dangerous spawns + CLI flags for MAS control).
+
+### Remediation (Track 1)
+- **B-1**: Fixed empty `plan-context` hash that made §6.1 (complexity heuristic) and
+  §6.2 (dynamic risk threshold) dead code in v0.99.22. The verifier gate was receiving
+  empty strings for all plan fields, so capability-based verification decisions never
+  triggered. New `plan-context-builder.rkt` module now provides real wave data.
+- **B-2**: `build-enriched-plan-ctx` populates `files-changed`, `capabilities-used`,
+  `diff-excerpt`, `plan-summary`, and `wave-name` from actual plan data.
+- **B-3**: Corrected v0.99.22 CHANGELOG file count (2 → 3 production files changed).
+
+### Features (Track 2: Säule B — User Ergonomics)
+- **§5.3 HITL Approval for Dangerous Spawns**: Subagent spawns with `shell-exec` or
+  `git-write` capabilities now trigger a human-in-the-loop approval gate.
+  `requires-hitl-approval?` identifies dangerous capabilities.
+  `request-spawn-approval` emits `mas.spawn-approval-requested` events for TUI display.
+  Non-interactive mode is permissive (auto-approve) — only interactive/TUI mode blocks.
+  Approval denial returns an error result from `run-subagent-with-config`.
+- **§5.1 `--agent-pool N` CLI Flag**: Session-wide limit on concurrent subagents.
+  New `current-agent-pool-limit` parameter (default 3). `spawn-subagents` respects
+  the pool limit. Wired from CLI via `build-runtime-from-cli`.
+- **§5.1 `--parallel` CLI Flag**: Enables parallel execution mode. Injects
+  partitioning guidance into the system prompt instructing the agent to use
+  `spawn_subagents` for task partitioning. Leverages model intelligence — no
+  separate partitioning module needed.
+
+### Testing
+- W0: 15 new tests for plan-context enrichment
+- W1: 15 new tests for HITL spawn approval
+- W2: 9 new tests for CLI flags
+- All existing MAS tests still pass
+
+### Operational / Release
+- Version bumped to 0.99.23.
+- 5 production files changed (spawn-subagent.rkt, run-modes.rkt, cli/args.rkt,
+  interfaces/cli.rkt, command-handlers.rkt).
+- 3 new modules (plan-context-builder.rkt) + test files.
+- 39 new tests total across 3 waves.
+
 ## 0.99.22
 
 Released: 2026-07-16
