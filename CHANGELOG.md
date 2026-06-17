@@ -35,7 +35,7 @@ and introduces complexity-based verifier optimization.
 
 ### Operational / Release
 - Version bumped to 0.99.22.
-- 2 production files changed (spawn-subagent.rkt, verifier-gate.rkt).
+- 3 production files changed (spawn-subagent.rkt, verifier-gate.rkt, skill-tools.rkt).
 - 2 test files changed (1 fix, 1 extend).
 - 2 new test files.
 - 1 schema update (skill-tools.rkt).
