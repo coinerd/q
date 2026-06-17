@@ -99,26 +99,47 @@
    (make-tool-spec*
     "spawn-subagent"
     "Spawn an isolated child agent to execute a delegated task"
-    (hasheq 'type
-            "object"
-            'required
-            '("task")
-            'properties
-            (hasheq 'task
-                    (hasheq 'type "string" 'description "Task description for the child agent")
-                    'role
-                    (hasheq 'type "string" 'description "Role prompt to load")
-                    'model
-                    (hasheq 'type "string" 'description "Model override for child")
-                    'max-turns
-                    (hasheq 'type "integer" 'description "Max turns (default 5)")
-                    'tools
-                    (hasheq 'type
-                            "array"
-                            'items
-                            (hasheq 'type "string")
-                            'description
-                            "Allowed tool names for child")))
+    (hasheq
+     'type
+     "object"
+     'required
+     '("task")
+     'properties
+     (hasheq
+      'task
+      (hasheq 'type "string" 'description "Task description for the child agent")
+      'role
+      (hasheq 'type "string" 'description "Role prompt to load")
+      'model
+      (hasheq 'type "string" 'description "Model override for child")
+      'max-turns
+      (hasheq 'type "integer" 'description "Max turns (default 5)")
+      'tools
+      (hasheq 'type
+              "array"
+              'items
+              (hasheq 'type "string")
+              'description
+              "Allowed tool names for child")
+      'capabilities
+      (hasheq
+       'type
+       "array"
+       'items
+       (hasheq 'type
+               "string"
+               'enum
+               '("read-only" "file-write"
+                             "shell-exec"
+                             "plan-write"
+                             "git-write"
+                             "network"
+                             "memory-write"
+                             "browser"
+                             "subagent"
+                             "any"))
+       'description
+       "Capability filter: child only gets tools matching these capabilities. Default: all child-safe tools.")))
     tool-spawn-subagent
     #f
     'subagent)
