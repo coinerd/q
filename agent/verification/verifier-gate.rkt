@@ -55,6 +55,29 @@
           (hash-ref plan-context 'diff-excerpt "")))
 
 ;; ============================================================
+;; v0.99.22 §6.1: Complexity Heuristic — Verifier Skip
+;; ============================================================
+
+;; Determine whether a wave is trivial enough to skip LLM-based verification.
+;; A wave is "trivial" (auto-approved) when ALL of:
+;;   1. ≤ 2 files changed
+;;   2. Capabilities are explicitly provided AND contain only read-only
+;;      (no shell-exec, git-write, or file-write)
+;;
+;; Conservative design: when 'capabilities-used is absent from plan-context,
+;; returns #f (verify). This preserves backward compatibility with existing
+;; callers that don't populate the capabilities-used field.
+(define (should-skip-verification? plan-context)
+  (define files-changed (hash-ref plan-context 'files-changed '()))
+  (define capabilities-used (hash-ref plan-context 'capabilities-used #f))
+  (and capabilities-used
+       (list? capabilities-used)
+       (<= (length files-changed) 2)
+       (not (member 'shell-exec capabilities-used))
+       (not (member 'git-write capabilities-used))
+       (not (member 'file-write capabilities-used))))
+
+;; ============================================================
 ;; Main Gate Entry Point
 ;; ============================================================
 
@@ -77,6 +100,10 @@
     ;; Feature flag OFF → skip verification entirely
     [(not (current-verifier-enabled))
      ;; Auto-transition to idle (preserve existing behavior)
+     (gsm-ctx-transition! ctx 'idle #:event 'done)
+     'approved]
+    ;; v0.99.22 §6.1: Trivial wave → skip verification, auto-approve
+    [(should-skip-verification? plan-context)
      (gsm-ctx-transition! ctx 'idle #:event 'done)
      'approved]
     ;; No provider available → auto-approve (safe default)
@@ -141,8 +168,11 @@
 
 ;; Check if the verification gate should run for the given context.
 ;; Returns #t when the FSM is in 'verifying state AND verifier is enabled.
-(define (should-run-verification-gate? ctx)
-  (and (current-verifier-enabled) (eq? (gsm-ctx-current ctx) 'verifying)))
+;; When plan-context is provided, also returns #f if the wave is trivial (§6.1).
+(define (should-run-verification-gate? ctx [plan-context #f])
+  (and (current-verifier-enabled)
+       (eq? (gsm-ctx-current ctx) 'verifying)
+       (or (not plan-context) (not (should-skip-verification? plan-context)))))
 
 ;; ============================================================
 ;; Provides
@@ -152,7 +182,8 @@
          GATE-RESULTS
          gate-result?)
 
-(provide (contract-out [execute-verification-gate (-> gsd-session-ctx? hash? gate-result?)]
-                       [should-run-verification-gate? (-> gsd-session-ctx? boolean?)]
-                       [extract-plan-context
-                        (-> hash? (values string? string? (listof string?) string? string?))]))
+(provide (contract-out
+          [execute-verification-gate (-> gsd-session-ctx? hash? gate-result?)]
+          [should-run-verification-gate? (->* (gsd-session-ctx?) ((or/c hash? #f)) boolean?)]
+          [extract-plan-context (-> hash? (values string? string? (listof string?) string? string?))]
+          [should-skip-verification? (-> hash? boolean?)]))
