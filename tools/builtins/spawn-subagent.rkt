@@ -87,11 +87,17 @@
          requires-hitl-approval?
          request-spawn-approval
          current-spawn-approval-result
-         run-subagent-with-config)
+         run-subagent-with-config
+         ;; v0.99.23 §5.1: Session-wide agent pool limit
+         current-agent-pool-limit)
 
 ;; Subagent configuration struct — replaces ad-hoc hash extraction
 ;; v0.99.21 §4.2: Added capabilities field (6th, default #f for backward compat)
 (struct subagent-config (task role max-turns tools model capabilities) #:transparent)
+
+;; v0.99.23 §5.1: Session-wide agent pool limit parameter.
+;; Default 3 (matching the previous hardcoded max). CLI --agent-pool overrides.
+(define current-agent-pool-limit (make-parameter 3))
 
 ;; Spawn rate limiter: parameter holding list of spawn timestamps (milliseconds)
 (define current-spawn-timestamps (make-parameter (box '())))
@@ -664,7 +670,9 @@
     [(not (check-spawn-rate!)) (make-error-result "spawn rate limit exceeded (30/min)")]
     [else
      ;; v0.83.10: Clamp instead of reject. Semaphore-based queuing handles excess.
-     (define effective-parallel (min max-parallel (length jobs) 3))
+     ;; v0.99.23 §5.1: Respect session-wide --agent-pool limit parameter.
+     (define pool-limit (current-agent-pool-limit))
+     (define effective-parallel (min max-parallel (length jobs) pool-limit))
      (with-handlers ([exn:fail? (lambda (e)
                                   (make-error-result (format "spawn-subagents failed: ~a"
                                                              (exn-message e))))])

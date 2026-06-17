@@ -32,6 +32,9 @@
          cli-config-keybindings-path
          cli-config-print-mode?
          cli-config-context-profile
+         cli-config-memory
+         cli-config-agent-pool
+         cli-config-parallel?
          ;; from args.rkt
          parse-cli-args
          cli-config->runtime-config

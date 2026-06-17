@@ -115,7 +115,9 @@
          ;; v0.99.21 §4.1: MAS delegation guidance
          (only-in "../agent/mas-guidance.rkt" build-mas-delegation-guidance)
          (only-in "../extensions/mcp-adapter.rkt" run-mcp-stdio-server! current-mcp-execute-fn)
-         (only-in "../tools/scheduler.rkt" run-tool-batch scheduler-result-results))
+         (only-in "../tools/scheduler.rkt" run-tool-batch scheduler-result-results)
+         ;; v0.99.23 §5.1: Agent pool limit for --agent-pool CLI flag
+         (only-in "../tools/builtins/spawn-subagent.rkt" current-agent-pool-limit))
 
 ;; Re-export mode runners from sub-modules
 (require "run-interactive.rkt"
@@ -218,6 +220,19 @@
         (build-mas-delegation-guidance settings)
         #f))
 
+  ;; v0.99.23 §5.1: Inject parallel mode guidance when --parallel flag is active.
+  ;; Rather than building a separate partitioning module, we instruct the
+  ;; primary agent to use spawn-subagents for task partitioning.
+  (define parallel-guidance-section
+    (if (cli-config-parallel? cfg)
+        (string-append "\n\n## Parallel Execution Mode\n"
+                       "You are running in --parallel mode. Your FIRST action must be to:\n"
+                       "1. Analyze the user's task and identify independent subtasks\n"
+                       "2. Call spawn_subagents with one job per subtask\n"
+                       "3. Synthesize the results into a single coherent answer\n"
+                       "Do NOT work on the task directly — delegate everything to subagents.")
+        #f))
+
   (define final-system-instrs
     (append system-instrs
             (if skill-section
@@ -228,6 +243,9 @@
                 (list))
             (if mas-guidance-section
                 (list mas-guidance-section)
+                (list))
+            (if parallel-guidance-section
+                (list parallel-guidance-section)
                 (list))))
 
   ;; Provider uses the shared settings
@@ -447,6 +465,12 @@
   (when (and prov effective-model-name)
     (current-llm-distill-fn (make-distill-callback prov effective-model-name))
     (current-reflection-llm-fn (make-reflection-callback prov effective-model-name)))
+
+  ;; v0.99.23 §5.1: Wire session-wide agent pool limit from --agent-pool flag.
+  ;; Default 3 (matching current-agent-pool-limit's own default).
+  (when (cli-config-agent-pool cfg)
+    (current-agent-pool-limit (cli-config-agent-pool cfg)))
+
   (hash->session-config final-hash-with-auto-extract))
 
 ;; ============================================================
