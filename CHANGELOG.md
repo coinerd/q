@@ -1,3 +1,62 @@
+## 0.99.24
+
+Released: 2026-07-18
+
+### Overview
+Säule C Completion: Adaptive Verification Production-Ready. This release completes
+the adaptive verification pillar (§6.1 complexity heuristic + §6.2 dynamic risk
+threshold) to production quality by fixing audit findings, enhancing capability
+inference, and adding end-to-end integration tests that verify the full data path.
+
+### Audit Remediation (W0)
+- **C-1**: Fixed `test-cli.rkt` regression — 4 test failures from `cli-config` struct
+  arity mismatch (17 args, struct now has 20).
+- **C-2**: Fixed 40 pre-existing `cli-config` arity failures across 4 additional test
+  files (test-cli-interactive.rkt, test-wiring-run-modes.rkt, test-cli-builder.rkt,
+  test-wiring-contracts.rkt). All 50 constructor calls now pass 20 args.
+- **C-3**: Fixed `get-diff-excerpt` dead code — `file-args` was computed but never
+  passed to `system*`. Now uses `git show --stat --oneline HEAD -- <files>` to show
+  committed changes at wave-done time (working-tree diff is empty post-commit).
+- **C-4**: Corrected v0.99.23 CHANGELOG: acknowledged 4 cli-config arity regressions
+  (previously claimed "all existing tests pass").
+
+### Enhanced Capability Inference (W1)
+- **FILE-EXTENSION->CAPABILITY table**: 11-entry mapping from file extensions to
+  capability symbols (`.rkt`→file-write, `.sh`→shell-exec, `.md`→file-write, etc.).
+  Easy to extend without changing inference logic.
+- **`infer-capabilities-from-files`** (enhanced): Rewritten to use the extension
+  table. Now correctly detects `shell-exec` from `.sh` files (was only
+  `.rkt`→file-write).
+- **`infer-capabilities-from-tasks`** (NEW): Regex-based heuristic that scans task
+  names/actions for `shell`/`bash`/`command`/`exec`→shell-exec and
+  `git`/`commit`/`push`/`merge`→git-write.
+- **`get-test-summary`** (NEW): Reads cached `.planning/test-results.txt` if available,
+  returns descriptive message otherwise (was hardcoded "tests not run").
+- **`build-enriched-plan-ctx`** (updated): Combines file-based AND task-based inference
+  via `remove-duplicates(append(file-caps, task-caps))`.
+
+### E2E Integration Tests (W2)
+- **14 end-to-end tests** verifying the full production data path:
+  `gsd-plan`/`gsd-wave` structs → `build-enriched-plan-ctx` → `should-skip-verification?`
+  (§6.1) → `effective-risk-threshold` (§6.2).
+- Tests use real struct constructors (no mocks), covering: read-only skip, file-write
+  non-skip, shell-exec non-skip, large-wave non-skip, empty-wave skip, threshold
+  escalation (file-write→medium, shell-exec→low, git-write→low), combined capabilities,
+  null plan, missing wave index.
+
+### Testing
+- W0: 0 new tests (structural fix — all 50 cli-config calls corrected)
+- W1: 11 new tests (26 total enrichment tests, up from 15)
+- W2: 14 new E2E integration tests
+- 25 new tests total across 3 waves
+
+### Operational / Release
+- Version bumped to 0.99.24.
+- 2 production files changed (plan-context-builder.rkt, version.rkt + info.rkt + README.md sync).
+- 2 new test files (test-adaptive-verification-e2e.rkt + updated test-plan-context-enrichment.rkt).
+- All enrichment tests (26), E2E tests (14), and verifier tests pass.
+- `raco make main.rkt` passes with clean bytecode.
+
 ## 0.99.23
 
 Released: 2026-07-17
