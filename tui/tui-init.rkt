@@ -30,6 +30,10 @@
          "../runtime/session/session-switch.rkt"
          "../tui/tui-keybindings.rkt"
          "../tui/tui-render-loop.rkt"
+         (only-in "../tui/approval-channel.rkt"
+                  make-approval-channel
+                  set-approval-channel!
+                  clear-approval-channel!)
          "../cli/args.rkt"
          "../extensions/ui-surface.rkt"
          (only-in "../ui-core/ui-actions.rkt"
@@ -329,6 +333,10 @@
 
 ;; Full TUI run with runtime config -- 4-phase orchestrator (W-19)
 (define (run-tui-with-runtime rt-config cli-cfg)
+  ;; v0.99.25 §5.3: Initialize HITL approval channel for TUI mode.
+  ;; The channel is shared via a module-level box so the session thread
+  ;; (spawned by handle-user-submit!) can read it without parameter inheritance.
+  (set-approval-channel! (make-approval-channel))
   ;; GAP-EA (v0.98.7 W0): Wire UI event actions flag from config.json.
   ;; Reads "ui.event-actions.enabled" from settings; default #f = zero behavior change.
   (define settings (dict-ref rt-config 'settings #f))
@@ -341,10 +349,15 @@
   (load-tui-scrollback ctx sess rt-config scrollback-path)
   (init-tui-terminal ctx)
   (run-tui-loop ctx scrollback-path)
+  ;; v0.99.25 §5.3: Clear approval channel on TUI teardown.
+  ;; Prevents stale channel from leaking to non-TUI modes after exit.
+  (clear-approval-channel!)
   (displayln "Goodbye."))
 
 ;; Simple TUI run (for testing without full runtime)
 (define (run-tui #:session-runner [session-runner (lambda (prompt) (void))] #:event-bus [bus #f])
+  ;; v0.99.25 §5.3: Initialize HITL approval channel for TUI mode.
+  (set-approval-channel! (make-approval-channel))
   (define ctx (make-tui-ctx #:event-bus bus #:session-runner session-runner))
   (tui-ctx-init-terminal! ctx)
   (with-handlers ([exn:break? (lambda (e) (void))]
@@ -361,4 +374,6 @@
                                (log-q-tui-init-warning "cleanup failed: ~a" (exn-message e)))])
     (disable-mouse-tracking)
     (tui-term-close (unbox (tui-ctx-term-box ctx))))
+  ;; v0.99.25 §5.3: Clear approval channel on teardown.
+  (clear-approval-channel!)
   (displayln "Goodbye."))
