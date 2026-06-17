@@ -82,7 +82,12 @@
          ;; v0.99.21 §4.3: Blackboard context injection for subagents
          build-subagent-blackboard-context
          ;; v0.99.22 A-2: Batch capabilities parsing
-         parse-job-capabilities)
+         parse-job-capabilities
+         ;; v0.99.23 §5.3: HITL approval for dangerous spawns
+         requires-hitl-approval?
+         request-spawn-approval
+         current-spawn-approval-result
+         run-subagent-with-config)
 
 ;; Subagent configuration struct — replaces ad-hoc hash extraction
 ;; v0.99.21 §4.2: Added capabilities field (6th, default #f for backward compat)
@@ -103,6 +108,38 @@
       (begin
         (set-box! ts-box (cons now valid-ts))
         #t)))
+
+;; v0.99.23 §5.3: HITL approval override hook.
+;; Defaults to #t (permissive — non-interactive mode).
+;; Tests can parameterize this to #f to simulate denial.
+(define current-spawn-approval-result (make-parameter #t))
+
+;; v0.99.23 §5.3: Check if subagent spawn requires HITL approval.
+;; Returns #t when capabilities include shell-exec or git-write.
+;; Returns #f for #f, '(), or read-only capabilities.
+(define (requires-hitl-approval? capabilities)
+  (and (list? capabilities)
+       (pair? capabilities)
+       (or (memq 'shell-exec capabilities) (memq 'git-write capabilities))))
+
+;; v0.99.23 §5.3: Request HITL approval via exec-ctx event system.
+;; Returns #t when approved, #f when denied.
+;; When no approval channel is available (non-interactive mode), returns #t
+;; (permissive — the approval gate only blocks in interactive/TUI mode).
+(define (request-spawn-approval capabilities task-desc exec-ctx)
+  (define publisher (and exec-ctx (exec-context-event-publisher exec-ctx)))
+  ;; Emit the approval-request event for TUI display (when available)
+  (when publisher
+    (publisher 'mas.spawn-approval-requested
+               (hasheq 'capabilities
+                       capabilities
+                       'task-preview
+                       (if (and (string? task-desc) (> (string-length task-desc) 200))
+                           (substring task-desc 0 200)
+                           (or task-desc "")))))
+  ;; Consult the approval result parameter.
+  ;; Default #t (permissive). TUI mode would set this based on user response.
+  (current-spawn-approval-result))
 
 ;; Default role prompt when no role is specified
 (define default-role-prompt
@@ -154,23 +191,28 @@
                    (and caps (pair? caps) caps)))
 
 ;; Execute subagent using typed config struct.
+;; v0.99.23 §5.3: HITL approval gate for dangerous capabilities.
 (define (run-subagent-with-config cfg exec-ctx)
-  (run-subagent (hasheq 'task
-                        (subagent-config-task cfg)
-                        'role
-                        (subagent-config-role cfg)
-                        'max-turns
-                        (subagent-config-max-turns cfg)
-                        'tools
-                        (subagent-config-tools cfg)
-                        'model
-                        (subagent-config-model cfg)
-                        'capabilities
-                        (subagent-config-capabilities cfg))
-                (subagent-config-role cfg)
-                (subagent-config-max-turns cfg)
-                (subagent-config-tools cfg)
-                exec-ctx))
+  (define caps (subagent-config-capabilities cfg))
+  (if (and (requires-hitl-approval? caps)
+           (not (request-spawn-approval caps (subagent-config-task cfg) exec-ctx)))
+      (make-error-result "subagent spawn blocked — HITL approval denied")
+      (run-subagent (hasheq 'task
+                            (subagent-config-task cfg)
+                            'role
+                            (subagent-config-role cfg)
+                            'max-turns
+                            (subagent-config-max-turns cfg)
+                            'tools
+                            (subagent-config-tools cfg)
+                            'model
+                            (subagent-config-model cfg)
+                            'capabilities
+                            caps)
+                    (subagent-config-role cfg)
+                    (subagent-config-max-turns cfg)
+                    (subagent-config-tools cfg)
+                    exec-ctx)))
 
 ;; Resolve the provider from exec-context runtime-settings.
 ;; Returns the real provider if available, or falls back to a mock.
