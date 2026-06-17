@@ -81,7 +81,7 @@
     ;; ── F-13: set-hot-swap-enabled! toggles feature gate ──
     (test-case "set-hot-swap-enabled! toggles feature gate (F-13)"
       (set-hot-swap-enabled! #f)
-      (check-false (hot-swap-enabled?) "default should be #f")
+      (check-false (hot-swap-enabled?) "after explicit set-hot-swap-enabled! #f")
       (set-hot-swap-enabled! #t)
       (check-true (hot-swap-enabled?) "after set to #t, should be #t")
       (set-hot-swap-enabled! #f)
