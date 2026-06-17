@@ -66,17 +66,41 @@
       (check-equal? (subagent-config-capabilities cfg) '(read-only)))
 
     (test-case "parse-subagent-config handles multiple capabilities"
-      (define cfg (parse-subagent-config (hasheq 'task "test" 'capabilities '("read-only" "file-write"))))
+      (define cfg
+        (parse-subagent-config (hasheq 'task "test" 'capabilities '("read-only" "file-write"))))
       (check-equal? (subagent-config-capabilities cfg) '(read-only file-write)))
 
     (test-case "parse-subagent-config filters invalid capabilities"
-      (define cfg (parse-subagent-config (hasheq 'task "test" 'capabilities '("read-only" "bogus-cap"))))
+      (define cfg
+        (parse-subagent-config (hasheq 'task "test" 'capabilities '("read-only" "bogus-cap"))))
       ;; Only valid capability is kept
       (check-equal? (subagent-config-capabilities cfg) '(read-only)))
 
     (test-case "parse-subagent-config handles empty capabilities list"
       (define cfg (parse-subagent-config (hasheq 'task "test" 'capabilities '())))
       ;; Empty list after filtering becomes #f (treat as "all tools")
-      (check-false (subagent-config-capabilities cfg)))))
+      (check-false (subagent-config-capabilities cfg)))
+
+    ;; v0.99.22 A-2: Batch capabilities support
+    (test-case "parse-job-capabilities returns #f when no capabilities key"
+      (define caps (parse-job-capabilities (hasheq 'task "hello")))
+      (check-false caps))
+
+    (test-case "parse-job-capabilities parses valid capabilities"
+      (define caps
+        (parse-job-capabilities (hasheq 'task "hello" 'capabilities '("read-only" "file-write"))))
+      (check-equal? caps '(read-only file-write)))
+
+    (test-case "parse-job-capabilities filters invalid and returns #f for empty"
+      ;; Mix of valid and invalid
+      (define caps1
+        (parse-job-capabilities (hasheq 'task "hello" 'capabilities '("read-only" "bogus"))))
+      (check-equal? caps1 '(read-only))
+      ;; All invalid → #f
+      (define caps2 (parse-job-capabilities (hasheq 'task "hello" 'capabilities '("bogus"))))
+      (check-false caps2)
+      ;; Empty list → #f
+      (define caps3 (parse-job-capabilities (hasheq 'task "hello" 'capabilities '())))
+      (check-false caps3))))
 
 (run-tests suite)

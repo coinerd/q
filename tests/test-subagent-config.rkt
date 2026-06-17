@@ -10,7 +10,7 @@
 
 ;; subagent-config struct
 (test-case "subagent-config construction"
-  (define cfg (subagent-config "do stuff" "assistant" 5 #f #f))
+  (define cfg (subagent-config "do stuff" "assistant" 5 #f #f #f))
   (check-equal? (subagent-config-task cfg) "do stuff")
   (check-equal? (subagent-config-role cfg) "assistant")
   (check-equal? (subagent-config-max-turns cfg) 5)
@@ -18,7 +18,7 @@
   (check-false (subagent-config-model cfg)))
 
 (test-case "subagent-config transparent"
-  (define cfg (subagent-config "task" "role" 3 '("read") "gpt-4"))
+  (define cfg (subagent-config "task" "role" 3 '("read") "gpt-4" #f))
   (check-equal? (subagent-config-tools cfg) '("read"))
   (check-equal? (subagent-config-model cfg) "gpt-4"))
 

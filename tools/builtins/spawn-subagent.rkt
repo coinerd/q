@@ -80,7 +80,9 @@
          ;; v0.99.21 §4.2: Capability-aware tool filtering
          child-safe-tools-filtered
          ;; v0.99.21 §4.3: Blackboard context injection for subagents
-         build-subagent-blackboard-context)
+         build-subagent-blackboard-context
+         ;; v0.99.22 A-2: Batch capabilities parsing
+         parse-job-capabilities)
 
 ;; Subagent configuration struct — replaces ad-hoc hash extraction
 ;; v0.99.21 §4.2: Added capabilities field (6th, default #f for backward compat)
@@ -559,6 +561,24 @@
 ;; spawn-subagents: Batch parallel execution
 ;; ============================================================
 
+;; v0.99.22 A-2: Parse capabilities from a job hash (for batch spawn path).
+;; Mirrors the capability parsing in parse-subagent-config.
+;; Returns #f when no valid capabilities, or a list of symbols.
+(define (parse-job-capabilities job)
+  (define caps-raw (hash-ref job 'capabilities #f))
+  (cond
+    [(not caps-raw) #f]
+    [(list? caps-raw)
+     (define filtered
+       (filter valid-capability?
+               (map (lambda (c)
+                      (if (string? c)
+                          (string->symbol c)
+                          c))
+                    caps-raw)))
+     (if (null? filtered) #f filtered)]
+    [else #f]))
+
 ;; Run a single job and return (cons job-id result) or (cons job-id error)
 (define (run-single-job job provider parent-ctx)
   (define job-id (hash-ref job 'jobId #f))
@@ -566,6 +586,8 @@
   (define role-prompt (hash-ref job 'role (hash-ref job 'rolePrompt #f)))
   (define model-name (or (hash-ref job 'model #f) (resolve-model-name parent-ctx job)))
   (define max-turns (hash-ref job 'max-turns 5))
+  ;; v0.99.22 A-2: Parse capabilities from job hash (mirrors parse-subagent-config)
+  (define caps (parse-job-capabilities job))
   (define result
     (if (not task)
         (make-error-result "task is required for each job")
@@ -576,7 +598,9 @@
                               'model
                               model-name
                               'max-turns
-                              max-turns)
+                              max-turns
+                              'capabilities
+                              caps)
                       (or role-prompt default-role-prompt)
                       max-turns
                       #f ;; allowed-tools
