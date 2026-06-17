@@ -78,6 +78,26 @@
        (not (member 'file-write capabilities-used))))
 
 ;; ============================================================
+;; v0.99.22 §6.2: Dynamic Risk Threshold
+;; ============================================================
+
+;; Compute the effective risk threshold for a wave based on its capability profile.
+;;
+;; Dangerous capabilities always get stricter treatment:
+;;   - shell-exec or git-write present → 'low (strictest — always scrutinize)
+;;   - file-write present (but not shell/git) → 'medium
+;;   - read-only only → defer to user's configured base threshold
+;;
+;; Returns a valid risk-level symbol.
+(define (effective-risk-threshold plan-context base-threshold)
+  (define capabilities-used (hash-ref plan-context 'capabilities-used '()))
+  (cond
+    [(member 'shell-exec capabilities-used) 'low]
+    [(member 'git-write capabilities-used) 'low]
+    [(member 'file-write capabilities-used) 'medium]
+    [else base-threshold]))
+
+;; ============================================================
 ;; Main Gate Entry Point
 ;; ============================================================
 
@@ -122,14 +142,18 @@
                                                            #:turn-id 0
                                                            #:artifact-count (length files-changed)))
 
-     ;; 2. Call run-verification (safe — never throws)
+     ;; 2. Compute dynamic risk threshold (v0.99.22 §6.2) and run verification
+     ;;    Dangerous capabilities force stricter thresholds.
+     (define base-threshold (current-verifier-risk-threshold))
+     (define dyn-threshold (effective-risk-threshold plan-context base-threshold))
      (define decision
-       (run-verification provider
-                         plan-summary
-                         wave-name
-                         files-changed
-                         test-summary
-                         #:diff-excerpt diff-excerpt))
+       (parameterize ([current-verifier-risk-threshold dyn-threshold])
+         (run-verification provider
+                           plan-summary
+                           wave-name
+                           files-changed
+                           test-summary
+                           #:diff-excerpt diff-excerpt)))
 
      ;; 3. Emit verification-completed event
      (ctx-emit-gsd-event! ctx
@@ -186,4 +210,5 @@
           [execute-verification-gate (-> gsd-session-ctx? hash? gate-result?)]
           [should-run-verification-gate? (->* (gsd-session-ctx?) ((or/c hash? #f)) boolean?)]
           [extract-plan-context (-> hash? (values string? string? (listof string?) string? string?))]
-          [should-skip-verification? (-> hash? boolean?)]))
+          [should-skip-verification? (-> hash? boolean?)]
+          [effective-risk-threshold (-> hash? symbol? symbol?)]))
