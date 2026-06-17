@@ -1,3 +1,45 @@
+## 0.99.22
+
+Released: 2026-07-16
+
+### Overview
+Three-track release: v0.99.21 audit remediation + Säule A completion (batch capabilities) +
+Säule C foundation (adaptive verification). Closes all audit findings from v0.99.21
+and introduces complexity-based verifier optimization.
+
+### Remediation (v0.99.21 Audit)
+- **A-1**: Fixed `test-subagent-config.rkt` regression — struct arity mismatch from
+  the v0.99.21 W2 capability field addition. Test now passes 4/4.
+- **A-2**: `spawn-subagents` (batch) now supports per-job `capabilities` filtering.
+  Previously only `spawn-subagent` (single) supported capabilities. The batch path
+  always gave all tools. Now jobs can specify `capabilities: ["read-only"]` etc.
+- **F-5**: Actually updated `.planning/AUDIT-PROCESS-CHECKLIST.md` with clean-bytecode
+  `raco make` verification step (was claimed in v0.99.21 but never done).
+
+### Features (Säule C: Adaptive Verification)
+- **§6.1 Complexity Heuristic**: The verification gate now skips LLM-based verification
+  for trivially simple waves (≤2 files changed, read-only tools only). These waves
+  auto-approve with a log message. Non-trivial waves go through full verification
+  as before. This reduces verifier latency for simple operations.
+- **§6.2 Dynamic Risk Threshold**: The verifier's risk threshold now adjusts dynamically
+  based on the wave's capability profile. Shell-exec and git-write waves always get
+  the strictest threshold ('low). File-write waves get 'medium. Read-only waves defer
+  to the user's configured threshold. This ensures dangerous operations are always
+  scrutinized, while simple operations are not over-verified.
+
+### Testing
+- W0: 3 new batch-capability tests (total 13 in suite); 1 regression fix
+- W1: 16 new tests for complexity heuristic
+- W2: 9 new tests for dynamic risk threshold
+- All existing MAS tests still pass
+
+### Operational / Release
+- Version bumped to 0.99.22.
+- 2 production files changed (spawn-subagent.rkt, verifier-gate.rkt).
+- 2 test files changed (1 fix, 1 extend).
+- 2 new test files.
+- 1 schema update (skill-tools.rkt).
+
 ## 0.99.21
 
 Released: 2026-07-15
