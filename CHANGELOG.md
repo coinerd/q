@@ -1,3 +1,36 @@
+## 0.99.19
+
+Released: 2026-07-13
+
+### Overview
+
+This is a test and documentation only remediation release. It addresses the five findings (A-1 through A-5) from the v0.99.18 post-implementation in-depth audit. Zero production code changes.
+
+### Bug Fixes
+- **A-1: Test regressions in config-wiring suite**: Fixed 3 failing assertions in `test-registry-config-wiring.rkt`. The `hot-swap-enabled?` default flipped from `#f` to `#t` in v0.99.18, but 3 tests still asserted `#f`. Updated all 3 to `check-true` with post-flip descriptions. Tests: 8/11 → **11/11**.
+
+### Documentation
+- **A-2: Missing W6 audit report**: Created `docs/reports/AUDIT-v0.99.18-POST-IMPLEMENTATION.md` — the persistent audit artifact that was missing from the v0.99.18 milestone. Covers all 7 F-HS findings, CHANGELOG accuracy audit (13/13 verified), architecture assessment. Score: 4.2/5.0 APPROVED.
+- **A-3: Stale "pre-flip" descriptions**: Updated header comment, suite name, and CHAR-1 test name in `test-hot-swap-characterization.rkt` to reflect post-Phase-4 state.
+- **A-4: Stale comment in deployment gate test**: Updated comment in `test-registry-deployment-gate.rkt` from "default should be #f" to "after explicit set-hot-swap-enabled! #f".
+- **A-5: Process checklist improvement**: Added "Before Declaring a Wave Complete" section to `.planning/AUDIT-PROCESS-CHECKLIST.md`, requiring grep for all tests of changed functions before wave completion.
+
+### Breaking / Behavior Changes
+- None. This is a test and documentation only release.
+
+### Migration Notes
+- None required. No production code changed.
+
+### Testing
+- All 11 registry/hot-swap test suites pass: **135/135** (was 132/135).
+- W1: Fixed 3 test regressions. Config-wiring: 11/11, characterization: 12/12, deployment gate: 8/8.
+- W2: Created missing audit report artifact.
+- W3: Process checklist update + version bump.
+
+### Operational / Release
+- Version bumped to 0.99.19. `info.rkt` and `README.md` synced.
+- Zero production code changes — test and documentation only.
+
 ## 0.99.18
 
 Released: 2026-07-13
