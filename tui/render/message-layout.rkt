@@ -9,7 +9,7 @@
          racket/string
          racket/list
          racket/function
-         "../state.rkt"
+         "../state-types.rkt"
          "../input.rkt"
          "../char-width.rkt"
          "../theme.rkt"
