@@ -94,7 +94,8 @@
          (only-in "../agent/registry.rkt"
                   pin-current-versions
                   set-hot-swap-enabled!
-                  set-session-active!)
+                  set-session-active!
+                  register-agent!)
          (only-in "../agent/registry-watcher.rkt" start-registry-watcher!)
          (only-in "../agent/roles/supervisor.rkt" current-use-registry)
          ;; v0.99.9 W4: MCP config + adapter
@@ -107,7 +108,10 @@
                   broker-remote-port
                   broker-capability-secret
                   broker-cert-dir
-                  auto-reload-enabled?)
+                  auto-reload-enabled?
+                  verifier-max-rework-iterations)
+         ;; v0.99.21 F-2: Wire rework limit parameter from settings
+         (only-in "../extensions/gsd/state-machine.rkt" gsd-max-rework-iterations)
          (only-in "../extensions/mcp-adapter.rkt" run-mcp-stdio-server! current-mcp-execute-fn)
          (only-in "../tools/scheduler.rkt" run-tool-batch scheduler-result-results))
 
@@ -309,6 +313,11 @@
            (define factory (dynamic-require module-path factory-sym))
            (register-agent! role-name new-version factory #:module-path module-path)
            (log-info "auto-reload: registered ~a v~a" role-name new-version))))))
+
+  ;; v0.99.21 F-2: Wire verifier rework limit from settings.
+  ;; The setting mas.verifier.max-rework-iterations was defined in v0.99.20
+  ;; but never connected to the gsd-max-rework-iterations parameter.
+  (gsd-max-rework-iterations (verifier-max-rework-iterations settings))
 
   ;; v0.99.9 W4: MCP server mode — alternative entry point.
   ;; When mas.mcp.server.enabled is true AND mas.mcp.enabled is true,
