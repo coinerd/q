@@ -55,7 +55,11 @@
          (only-in "../builtins/grep.rkt" tool-grep)
          (only-in "../builtins/find.rkt" tool-find)
          (only-in "../builtins/ls.rkt" tool-ls)
-         (only-in "../builtins/skill-router.rkt" tool-skill-route))
+         (only-in "../builtins/skill-router.rkt" tool-skill-route)
+         ;; v0.99.21 §4.3: Blackboard context injection for subagents
+         (only-in "../../runtime/context-assembly/blackboard-context.rkt"
+                  build-blackboard-context-snippet)
+         (only-in "../../agent/blackboard.rkt" current-blackboard))
 
 (provide (contract-out [resolve-role-prompt (-> (or/c string? #f) string?)]
                        [parse-subagent-config (-> any/c subagent-config?)])
@@ -74,7 +78,9 @@
          subagent-config-model
          subagent-config-capabilities
          ;; v0.99.21 §4.2: Capability-aware tool filtering
-         child-safe-tools-filtered)
+         child-safe-tools-filtered
+         ;; v0.99.21 §4.3: Blackboard context injection for subagents
+         build-subagent-blackboard-context)
 
 ;; Subagent configuration struct — replaces ad-hoc hash extraction
 ;; v0.99.21 §4.2: Added capabilities field (6th, default #f for backward compat)
@@ -317,6 +323,19 @@
                (or (eq? rc 'any) (memq rc capabilities)))
              all-tools)]))
 
+;; v0.99.21 §4.3: Build blackboard context string for subagent injection.
+;; Reads the parent session's blackboard via current-blackboard parameter.
+;; Returns a formatted string with '## Parent Session Context' header when
+;; the blackboard has content, or "" when no blackboard is available.
+;; Uses the existing build-blackboard-context-snippet which handles:
+;;   - #f when no blackboard or empty
+;;   - Token budget guard (capped at 500 chars)
+(define (build-subagent-blackboard-context)
+  (define snippet (build-blackboard-context-snippet))
+  (if (and snippet (> (string-length snippet) 0))
+      (string-append "## Parent Session Context\n" snippet "\n")
+      ""))
+
 ;; Internal: run the subagent
 (define (run-subagent args role-prompt max-turns allowed-tools exec-ctx)
   (define task (hash-ref args 'task))
@@ -351,9 +370,22 @@
                          #:call-id (generate-id)
                          #:session-metadata (hasheq 'session-id session-id 'role "subagent")))
 
+    ;; v0.99.21 §4.3: Inject parent blackboard context into subagent system prompt
+    (define bb-context (build-subagent-blackboard-context))
+    (define effective-role-prompt
+      (if (> (string-length bb-context) 0)
+          (string-append bb-context "\n" role-prompt)
+          role-prompt))
+
     ;; Build messages for child
     (define system-msg
-      (make-message (generate-id) #f 'system 'message (list role-prompt) (current-seconds) (hasheq)))
+      (make-message (generate-id)
+                    #f
+                    'system
+                    'message
+                    (list effective-role-prompt)
+                    (current-seconds)
+                    (hasheq)))
     (define user-msg
       (make-message (generate-id) #f 'user 'message (list task) (current-seconds) (hasheq)))
 
