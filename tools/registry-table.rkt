@@ -39,10 +39,18 @@
   '("write" "edit" "bash" "delete-lines" "browser_click" "browser_type" "browser_press"))
 
 ;; M2: Tools explicitly marked as externalizable (safe to run in worker process).
-;; The worker process supports: bash, write, edit (plus git via worker-tools.rkt).
+;; The worker process supports: bash, write, edit, delete-lines (plus git via worker-tools.rkt).
 ;; All other tools default to #:externalizable? #f (run in-process even when
 ;; execution plane is enabled).
-(define externalizable-tool-names '("bash" "write" "edit"))
+;;
+;; v0.99.20 W2 (§3.2): Added delete-lines — it's a pure file-edit operation
+;; (reads file, deletes line range, writes back) fully implementable in the worker.
+;;
+;; NOTE: browser_click, browser_type, browser_press are dangerous but NOT
+;; externalizable because they require a running Chromium process that only
+;; exists in the main process. A pass-through proxy architecture is planned
+;; for M4 (v1.0.0-rc2) per the MAS Enablement Strategy §3.2.
+(define externalizable-tool-names '("bash" "write" "edit" "delete-lines"))
 
 ;; Register tools from tool-spec structs.
 (define (register-tools-from-specs! registry specs #:only [only #f])

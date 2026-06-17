@@ -17,6 +17,7 @@
          racket/match
          racket/port
          racket/string
+         (only-in racket/list take drop)
          json
          "ipc-protocol.rkt"
          "subprocess.rkt"
@@ -256,10 +257,85 @@
                       (format "git ~a exited with code ~a" command exit-code)
                       IPC-SCHEMA-VERSION)])]))
 
+;; v0.99.20 W2 (§3.2): delete-lines — pure file-edit operation.
+;; Reads file, removes lines [start-line, end-line] (inclusive, 1-based),
+;; writes result back atomically.
+(define (execute-delete-lines args)
+  (define path (hash-ref args 'path #f))
+  (define start-line (hash-ref args 'start-line #f))
+  (define end-line (hash-ref args 'end-line #f))
+  (cond
+    [(not path) (make-error-response #f "delete-lines: missing 'path' argument")]
+    [(not start-line) (make-error-response #f "delete-lines: missing 'start-line' argument")]
+    [(not end-line) (make-error-response #f "delete-lines: missing 'end-line' argument")]
+    [(not (exact-integer? start-line))
+     (make-error-response #f (format "delete-lines: start-line must be integer, got: ~v" start-line))]
+    [(not (exact-integer? end-line))
+     (make-error-response #f (format "delete-lines: end-line must be integer, got: ~v" end-line))]
+    [(not (path-allowed? path))
+     (make-error-response #f (format "delete-lines: path not allowed: ~a" path))]
+    [else
+     (define resolved (path->complete-path (expand-user-path path) (current-directory)))
+     (cond
+       [(not (file-exists? resolved))
+        (make-error-response #f (format "delete-lines: file not found: ~a" path))]
+       [else
+        (define content (file->string resolved))
+        (define lines (string-split content "\n" #:trim? #f))
+        (define total-lines (length lines))
+        (cond
+          [(< start-line 1)
+           (make-error-response
+            #f
+            (format "delete-lines: start-line ~a is out of range (file has ~a lines)"
+                    start-line
+                    total-lines))]
+          [(> end-line total-lines)
+           (make-error-response
+            #f
+            (format "delete-lines: end-line ~a exceeds file length (file has ~a lines)"
+                    end-line
+                    total-lines))]
+          [(> start-line end-line)
+           (make-error-response
+            #f
+            (format "delete-lines: start-line (~a) must be ≤ end-line (~a)" start-line end-line))]
+          [else
+           (define before (take lines (sub1 start-line)))
+           (define after (drop lines end-line))
+           (define new-lines (append before after))
+           (define new-content (string-join new-lines "\n"))
+           (define deleted-count (- end-line start-line -1))
+           (call-with-atomic-output-file resolved (lambda (port) (display new-content port)))
+           (ipc-response #f
+                         'ok
+                         (format "Deleted lines ~a-~a from ~a (~a lines removed)"
+                                 start-line
+                                 end-line
+                                 (path->string resolved)
+                                 deleted-count)
+                         (hasheq 'path
+                                 (path->string resolved)
+                                 'lines-deleted
+                                 deleted-count
+                                 'remaining-lines
+                                 (length new-lines))
+                         #f
+                         IPC-SCHEMA-VERSION)])])]))
+
 ;; ── Tool Registry ───────────────────────────────────────────────
 
 (define worker-tool-registry
-  (hash "bash" execute-bash "write" execute-write "edit" execute-edit "git" execute-git))
+  (hash "bash"
+        execute-bash
+        "write"
+        execute-write
+        "edit"
+        execute-edit
+        "git"
+        execute-git
+        "delete-lines"
+        execute-delete-lines))
 
 (define (dispatch-tool tool-name arguments)
   (define executor (hash-ref worker-tool-registry tool-name #f))
@@ -281,6 +357,7 @@
          execute-bash
          execute-write
          execute-edit
-         execute-git)
+         execute-git
+         execute-delete-lines)
 
 ;; dispatch-tool is provided above without contract
