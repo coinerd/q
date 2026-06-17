@@ -25,26 +25,31 @@
      (cond
        [(eq? tree-result 'handled) (void)]
        [else
-        (define result (handle-key ctx keycode))
+        ;; v0.99.25 §5.3: Intercept approval-prompt overlay keys
+        (define approval-result (handle-approval-overlay-key ctx keycode))
         (cond
-          [(eq? result 'quit)
-           (set-box! (tui-ctx-running-box ctx) #f)
-           'quit]
-          [(and (list? result) (eq? (car result) 'submit))
-           (define raw-text (cadr result))
-           ;; G3.3: Expand !! inline bash prefix
-           (define text (expand-inline-bash raw-text (unbox (tui-ctx-last-prompt-box ctx))))
-           ;; Store prompt for /retry (#1378)
-           (set-box! (tui-ctx-last-prompt-box ctx) text)
-           (handle-user-submit! ctx text)]
-          [(and (list? result) (eq? (car result) 'command))
-           (define cmd (cadr result))
-           (define raw-text
-             (if (>= (length result) 3)
-                 (caddr result)
-                 ""))
-           (process-slash-command ctx cmd raw-text)]
-          [else (void)])])]
+          [(eq? approval-result 'handled) (void)]
+          [else
+           (define result (handle-key ctx keycode))
+           (cond
+             [(eq? result 'quit)
+              (set-box! (tui-ctx-running-box ctx) #f)
+              'quit]
+             [(and (list? result) (eq? (car result) 'submit))
+              (define raw-text (cadr result))
+              ;; G3.3: Expand !! inline bash prefix
+              (define text (expand-inline-bash raw-text (unbox (tui-ctx-last-prompt-box ctx))))
+              ;; Store prompt for /retry (#1378)
+              (set-box! (tui-ctx-last-prompt-box ctx) text)
+              (handle-user-submit! ctx text)]
+             [(and (list? result) (eq? (car result) 'command))
+              (define cmd (cadr result))
+              (define raw-text
+                (if (>= (length result) 3)
+                    (caddr result)
+                    ""))
+              (process-slash-command ctx cmd raw-text)]
+             [else (void)])])])]
     ;; Resize event: signal caller
     [(resize) 'resize]
     ;; Redraw command: mark dirty
