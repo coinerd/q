@@ -92,9 +92,9 @@
 
     ;; ── hot-swap-enabled? config query ──
 
-    (test-case "hot-swap-enabled? returns #f by default"
+    (test-case "hot-swap-enabled? returns #t by default (v0.99.18 Phase 4)"
       (define settings (make-test-settings))
-      (check-false (hot-swap-enabled? settings)))
+      (check-true (hot-swap-enabled? settings)))
 
     (test-case "hot-swap-enabled? returns #t when boolean true"
       (define settings (make-mas-settings (list 'mas (make-mas-setting '(hot-swap enabled) #t))))
@@ -108,13 +108,13 @@
       (define settings (make-mas-settings (list 'mas (make-mas-setting '(hot-swap enabled) "false"))))
       (check-false (hot-swap-enabled? settings)))
 
-    (test-case "hot-swap-enabled? returns #f when key absent"
+    (test-case "hot-swap-enabled? returns #t when key absent (v0.99.18 default-on)"
       (define settings (make-test-settings))
-      (check-false (hot-swap-enabled? settings)))
+      (check-true (hot-swap-enabled? settings)))
 
-    (test-case "hot-swap-enabled? returns #f for random value"
+    (test-case "hot-swap-enabled? returns #t for random value (v0.99.18 else-branch default-on)"
       (define settings (make-mas-settings (list 'mas (make-mas-setting '(hot-swap enabled) 42))))
-      (check-false (hot-swap-enabled? settings)))
+      (check-true (hot-swap-enabled? settings)))
 
     ;; ── blackboard-enabled? still works (regression check) ──
 

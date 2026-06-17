@@ -5,12 +5,12 @@
 ;; tests/test-hot-swap-characterization.rkt
 ;; v0.99.18 W0: Characterization Tests for Hot-Swap Subsystem
 ;;
-;; Locks in the current state of the hot-swap subsystem BEFORE
-;; Phase 4 changes (default-on flip). These tests document the
-;; pre-flip behavior so regressions are caught immediately.
+;; Documents the hot-swap subsystem behavior after Phase 4 default-on.
+;; These tests verify the runtime gate toggle semantics and agent
+;; loading paths. Updated in v0.99.19 to reflect post-flip state.
 ;;
 ;; Test Cases:
-;;   1. hot-swap-enabled? returns #f by default (pre-flip state)
+;;   1. set-hot-swap-enabled! #f disables hot-swap at runtime
 ;;   2. set-hot-swap-enabled! #t enables hot-swap
 ;;   3. make-agent-instance with hot-swap OFF uses static factory
 ;;   4. make-agent-instance with hot-swap ON uses dynamic-require
@@ -42,12 +42,12 @@
 ;; ============================================================
 
 (define characterization-suite
-  (test-suite "Hot-Swap Characterization (v0.99.18 W0 — pre-flip)"
+  (test-suite "Hot-Swap Characterization (v0.99.18 W0)"
 
     ;; ── Setup: ensure clean state before each test group ──
-    (test-case "CHAR-1: hot-swap-enabled? returns #f by default (pre-flip)"
+    (test-case "CHAR-1: set-hot-swap-enabled! #f disables hot-swap at runtime"
       (set-hot-swap-enabled! #f)
-      (check-false (hot-swap-enabled?) "Before Phase 4 flip, hot-swap should be disabled by default"))
+      (check-false (hot-swap-enabled?) "After explicit disable, hot-swap should be off"))
 
     (test-case "CHAR-2: set-hot-swap-enabled! #t enables hot-swap"
       (set-hot-swap-enabled! #t)
