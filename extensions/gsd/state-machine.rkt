@@ -43,7 +43,11 @@
                   gsd-ctx-history
                   gsd-ctx-set-history!
                   gsd-ctx-history-update!
-                  gsd-ctx-transaction!))
+                  gsd-ctx-transaction!
+                  gsd-ctx-rework-count
+                  gsd-ctx-reset-rework-count!
+                  gsd-session-ctx-rework-count-box
+                  gsd-ctx-event-bus))
 
 ;; States
 ;; Struct exports (plain)
@@ -66,7 +70,10 @@
          ;; Wave gate
          gsd-wave-gate-counter
          gsd-wave-gate-interval
-         gsd-wave-gate-increment!)
+         gsd-wave-gate-increment!
+         ;; Rework-loop protection (v0.99.20 W1)
+         gsd-max-rework-iterations
+         gsd-rework-limit-reached?)
 
 ;; Data constants (plain)
 (provide GSD-STATES
@@ -397,6 +404,18 @@
   (gsd-wave-gate-counter (add1 (gsd-wave-gate-counter))))
 
 ;; ============================================================
+;; Rework-loop protection (v0.99.20 W1 — §3.3)
+;; ============================================================
+
+;; Maximum consecutive verifying→executing (rework) transitions before
+;; the state machine blocks and forces 'idle (done).
+;; Config: mas.verifier.max-rework-iterations (default 3)
+(define gsd-max-rework-iterations (make-parameter 3))
+
+(define (gsd-rework-limit-reached? ctx)
+  (>= (unbox (gsd-session-ctx-rework-count-box ctx)) (gsd-max-rework-iterations)))
+
+;; ============================================================
 ;; State invariants (F3 fix: runtime invariant checks)
 ;; ============================================================
 
@@ -437,37 +456,64 @@
   (valid-targets (gsm-ctx-current ctx)))
 
 (define (gsm-ctx-transition! ctx target #:event [event #f])
-  (gsd-ctx-transaction!
-   ctx
-   (lambda (state history event-bus set-state! set-history!)
-     (define current (gsd-runtime-state-mode state))
-     (emit-to-bus!
-      event-bus
-      'gsd.transition.attempted
-      (make-gsd-transition-attempted-event #:session-id "" #:turn-id 0 #:from current #:to target))
-     (define-values (result new-state) (compute-next-gsm-state state target #:event event))
-     (cond
-       [(ok? result)
-        (define new-mode (gsd-runtime-state-mode new-state))
-        (set-state! new-state)
-        (set-history! (cons (list current new-mode (current-seconds)) history))
-        (emit-to-bus! event-bus
-                      'gsd.transition.succeeded
-                      (make-gsd-transition-succeeded-event #:session-id ""
-                                                           #:turn-id 0
-                                                           #:from current
-                                                           #:to new-mode))
-        result]
-       [else
-        (emit-to-bus! event-bus
-                      'gsd.transition.failed
-                      (make-gsd-transition-failed-event #:session-id ""
-                                                        #:turn-id 0
-                                                        #:from current
-                                                        #:to target
-                                                        #:reason
-                                                        (format "invalid: ~a -> ~a" current target)))
-        result]))))
+  ;; v0.99.20 W1: Rework-loop protection.
+  ;; Block verifying→executing (rework) when limit is reached.
+  ;; Reset counter on fresh execution start (plan-written→executing).
+  (define is-rework?
+    (and (eq? (gsd-runtime-state-mode (gsd-ctx-state-snapshot ctx)) 'verifying)
+         (eq? target 'executing)
+         (or (not event) (eq? event 'rework))))
+  (cond
+    [(and is-rework? (gsd-rework-limit-reached? ctx))
+     (emit-to-bus! (gsd-ctx-event-bus ctx)
+                   'gsd.transition.failed
+                   (make-gsd-transition-failed-event #:session-id ""
+                                                     #:turn-id 0
+                                                     #:from 'verifying
+                                                     #:to target
+                                                     #:reason (format "rework limit (~a) reached"
+                                                                      (gsd-max-rework-iterations))))
+     (err-result (format "rework limit (~a) reached" (gsd-max-rework-iterations)) 'verifying target)]
+    [else
+     (gsd-ctx-transaction!
+      ctx
+      (lambda (state history event-bus set-state! set-history!)
+        (define current (gsd-runtime-state-mode state))
+        (emit-to-bus!
+         event-bus
+         'gsd.transition.attempted
+         (make-gsd-transition-attempted-event #:session-id "" #:turn-id 0 #:from current #:to target))
+        (define-values (result new-state) (compute-next-gsm-state state target #:event event))
+        (cond
+          [(ok? result)
+           (define new-mode (gsd-runtime-state-mode new-state))
+           ;; v0.99.20 W1: Increment rework counter on verifying→executing transition.
+           ;; Reset counter on fresh execution start (plan-written→executing).
+           (cond
+             [(and (eq? current 'verifying) (eq? new-mode 'executing))
+              (set-box! (gsd-session-ctx-rework-count-box ctx)
+                        (add1 (unbox (gsd-session-ctx-rework-count-box ctx))))]
+             [(and (eq? current 'plan-written) (eq? new-mode 'executing))
+              (set-box! (gsd-session-ctx-rework-count-box ctx) 0)])
+           (set-state! new-state)
+           (set-history! (cons (list current new-mode (current-seconds)) history))
+           (emit-to-bus! event-bus
+                         'gsd.transition.succeeded
+                         (make-gsd-transition-succeeded-event #:session-id ""
+                                                              #:turn-id 0
+                                                              #:from current
+                                                              #:to new-mode))
+           result]
+          [else
+           (emit-to-bus! event-bus
+                         'gsd.transition.failed
+                         (make-gsd-transition-failed-event
+                          #:session-id ""
+                          #:turn-id 0
+                          #:from current
+                          #:to target
+                          #:reason (format "invalid: ~a -> ~a" current target)))
+           result])))]))
 
 (define (gsm-ctx-reset! ctx)
   (gsd-ctx-transaction!
