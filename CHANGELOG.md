@@ -20,7 +20,7 @@ Two-track release: v0.99.20 hotfix (critical build fix) + Säule A agent-driven 
 - **§4.3 Blackboard-Context Injection**: Subagents now receive a compact summary of the parent session's blackboard state as a prefix to their system prompt. This includes recent agent activities, verifier decisions, and wave status.
 
 ### Testing
-- W0: 2 new tests for rework-limit wiring; `raco make main.rkt` PASSES
+- W0: 4 new tests for rework-limit wiring; `raco make main.rkt` PASSES
 - W1: 7 new tests for MAS guidance injection
 - W2: 10 new tests for capability-aware filtering
 - W3: 6 new tests for blackboard context injection
@@ -30,7 +30,7 @@ Two-track release: v0.99.20 hotfix (critical build fix) + Säule A agent-driven 
 - Version bumped to 0.99.21.
 - New production file: `agent/mas-guidance.rkt`
 - 4 new test files.
-- 7 production files changed.
+- 4 production files changed across W0–W3.
 
 ## 0.99.20
 
