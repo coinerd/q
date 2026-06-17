@@ -155,12 +155,32 @@
      'properties
      (hasheq
       'jobs
-      (hasheq 'type
-              "array"
-              'description
-              "Array of job objects, each with task (required), role, model, max-turns, jobId"
-              'items
-              (hasheq 'type "object"))
+      (hasheq
+       'type
+       "array"
+       'description
+       "Array of job objects, each with task (required), role, model, max-turns, jobId, capabilities"
+       'items
+       (hasheq
+        'type
+        "object"
+        'properties
+        (hasheq
+         'task
+         (hasheq 'type "string")
+         'role
+         (hasheq 'type "string")
+         'capabilities
+         (hasheq
+          'type
+          "array"
+          'items
+          (hasheq 'type
+                  "string"
+                  'enum
+                  '("read-only" "file-write" "shell-exec" "git-write" "network" "browser" "any"))
+          'description
+          "Capability filter for this job's child agent"))))
       'maxParallel
       (hasheq 'type "integer" 'description "Max concurrent subagents (1-3, default 3)")
       'aggregate
