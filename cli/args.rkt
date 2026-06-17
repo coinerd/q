@@ -45,7 +45,9 @@
                        [print-version (->* () (output-port?) void?)])
          ;; q-version imported from util/version.rkt (Issue #203)
          q-version
-         cli-config-memory)
+         cli-config-memory
+         cli-config-agent-pool
+         cli-config-parallel?)
 
 ;; ============================================================
 ;; CLI config struct
@@ -69,12 +71,14 @@
          keybindings-path ; path-string or #f -- custom keybindings file (#1118)
          print-mode? ; boolean -- -p/--print flag (G9.3)
          context-profile ; symbol: off|observe|bounded|self-healing|full, or #f
-         memory)
+         memory
+         agent-pool ; integer or #f — max concurrent subagents (v0.99.23 §5.1)
+         parallel?) ; boolean — --parallel mode (v0.99.23 §5.1)
   #:transparent)
 
 ;; Helper: construct a "help" config (used for parse errors and --help)
 (define (make-help-config)
-  (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f #f #f))
+  (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f #f #f #f #f))
 
 ;; ============================================================
 ;; Flag definition table (QUAL-12)
@@ -130,7 +134,9 @@
                      (session-dir . #f)
                      (keybindings-path . #f)
                      (print-mode? . #f)
-                     (memory . #f)))
+                     (memory . #f)
+                     (agent-pool . #f)
+                     (parallel? . #f)))
 
 ;; Construct a cli-config from an accumulator alist.
 (define (acc->cli-config acc)
@@ -177,7 +183,9 @@
               (acc-ref acc 'keybindings-path)
               (acc-ref acc 'print-mode?)
               (acc-ref acc 'context-profile)
-              (acc-ref acc 'memory)))
+              (acc-ref acc 'memory)
+              (acc-ref acc 'agent-pool)
+              (acc-ref acc 'parallel?)))
 
 ;; ============================================================
 ;; Flag table -- all option definitions
@@ -339,7 +347,23 @@
                     (define sym (string->symbol val))
                     (if (memq sym '(off observe bounded self-healing full))
                         (acc-set acc 'context-profile sym)
-                        (acc-set acc 'context-profile 'off))))))
+                        (acc-set acc 'context-profile 'off))))
+        ;; --agent-pool <n> (v0.99.23 §5.1)
+        (flag-def "agent-pool"
+                  #f
+                  "agent-pool"
+                  'integer
+                  "Max concurrent subagents (default: 3)"
+                  3
+                  (lambda (val acc) (acc-set acc 'agent-pool val)))
+        ;; --parallel (v0.99.23 §5.1)
+        (flag-def "parallel"
+                  #f
+                  "parallel"
+                  'boolean
+                  "Enable parallel execution mode: auto-partition task into subtasks"
+                  #f
+                  (lambda (val acc) (acc-set acc 'parallel? #t)))))
 
 ;; Build lookup tables for fast matching
 (define long-flag-table
@@ -402,7 +426,7 @@
        (cond
          [(eq? result 'help) (make-help-config)]
          [(eq? result 'version)
-          (cli-config 'version #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f #f #f)]
+          (cli-config 'version #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f #f #f #f #f)]
          [else (loop (add1 i) result)]))]
     [(or (eq? t 'string) (eq? t 'integer) (eq? t 'accumulate))
      (if (< (add1 i) n)
@@ -458,6 +482,8 @@
                              #f
                              #f
                              #f
+                             #f
+                             #f
                              #f))
                (make-help-config)))
          (make-help-config))]
@@ -481,6 +507,8 @@
                        #f
                        'verify
                        (cons path-arg rest-args)
+                       #f
+                       #f
                        #f
                        #f
                        #f
