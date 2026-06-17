@@ -75,7 +75,7 @@
       (define approved (request-spawn-approval '(shell-exec) "my task" mock-ctx))
       (check-true approved "default should be permissive")
       (check-true (pair? events-received) "should have emitted an event")
-      (check-equal? (caar events-received) 'mas.spawn-approval-requested))
+      (check-equal? (caar events-received) "mas.spawn-approval-requested"))
 
     (test-case "request-spawn-approval truncates long task descriptions"
       (define events-received '())

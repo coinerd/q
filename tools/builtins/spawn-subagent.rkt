@@ -137,7 +137,7 @@
   (define publisher (and exec-ctx (exec-context-event-publisher exec-ctx)))
   ;; Emit the approval-request event for TUI display (when available)
   (when publisher
-    (publisher 'mas.spawn-approval-requested
+    (publisher "mas.spawn-approval-requested"
                (hasheq 'capabilities
                        capabilities
                        'task-preview

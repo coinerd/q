@@ -14,6 +14,7 @@
          "../../util/content/content-helpers.rkt"
          "../state-types.rkt"
          (only-in "../../runtime/gsd-query.rkt" current-gsd-mode-query)
+         (only-in "../render/message-layout.rkt" plain-line)
          "helpers.rkt"
          "registry.rkt")
 
@@ -457,11 +458,55 @@
     [_ state]))
 
 ;; ============================================================
+;; HITL Approval handler (v0.99.25 §5.3)
+;; ============================================================
+
+;; Handle spawn approval request from MAS spawn.
+;; Sets active-overlay to 'approval-prompt so the TUI can collect
+;; user input (y/n/Esc) and respond via approval-put!.
+(define (handle-spawn-approval-requested state evt)
+  (define payload (event-payload evt))
+  (define capabilities (hash-ref payload 'capabilities '()))
+  (define task-preview (hash-ref payload 'task-preview ""))
+  (define caps-str
+    (string-join (map (lambda (c)
+                        (if (symbol? c)
+                            (symbol->string c)
+                            (format "~a" c)))
+                      (if (list? capabilities)
+                          capabilities
+                          '()))
+                 ", "))
+  (define preview-str
+    (if (string? task-preview)
+        task-preview
+        (format "~a" task-preview)))
+  (define content
+    (list (plain-line "\u26a1 Subagent Approval Required")
+          (plain-line (format "  Capabilities: ~a" caps-str))
+          (plain-line (format "  Task: ~a" preview-str))
+          (plain-line "")
+          (plain-line "  [y] Approve   [n] Deny   [Esc] Cancel")))
+  ;; Store capabilities and task-preview in extra for key handler access.
+  (struct-copy ui-state
+               state
+               [active-overlay
+                (overlay-state 'approval-prompt
+                               content
+                               ""
+                               'top-left
+                               #f
+                               #f
+                               0
+                               (hasheq 'capabilities capabilities 'task-preview preview-str))]))
+
+;; ============================================================
 ;; Register all core handlers at module load time
 ;; ============================================================
 
 ;; M2 fix (v0.99.6): Exported for testing.
-(provide verification-payload-ref)
+(provide verification-payload-ref
+         handle-spawn-approval-requested)
 
 (register-event-reducer! "assistant.message.completed" handle-assistant-message-completed)
 (register-event-reducer! "tool.call.started" handle-tool-call-started)
@@ -501,3 +546,4 @@
 (register-event-reducer! "gsd.verification.started" handle-verification-started)
 (register-event-reducer! "gsd.verification.completed" handle-verification-completed)
 (register-event-reducer! "gsd.verification.escalated" handle-verification-escalated)
+(register-event-reducer! "mas.spawn-approval-requested" handle-spawn-approval-requested)
