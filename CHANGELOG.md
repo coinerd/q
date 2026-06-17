@@ -1,3 +1,90 @@
+## 0.99.25
+
+Released: 2026-07-19
+
+### Overview
+Säule B Completion: HITL (Human-in-the-Loop) Approval TUI Handler. This release
+completes the human-approval pillar (§5.3) for multi-agent spawn requests with
+dangerous capabilities (shell-exec, git-write). When a subagent requests spawn
+with dangerous capabilities, the TUI displays an interactive approval overlay
+that blocks until the user explicitly approves (y) or denies (n/Esc). This
+replaces the previous always-permissive behavior with a user-controlled gate.
+
+### W0: Approval Channel Infrastructure
+- **Async-channel-based blocking mechanism** (`tui/approval-channel.rkt`): Uses
+  `racket/async-channel` — the session thread blocks on `approval-await-result`
+  while the TUI main thread collects user input. `async-channel-put` is
+  non-blocking (unlike `channel-put`), eliminating deadlock risk.
+- **Module-level box for thread safety**: Racket parameters are NOT inherited by
+  child threads. The approval channel is stored in a module-level `box` (heap-
+  allocated mutable cell), shared across all threads.
+- **`approval-await-result`**: Blocks with 120s timeout. On timeout → deny (#f).
+  On approval → #t. Safe default: both timeout and denial return #f.
+- **`spawn-subagent.rkt` integration**: `request-spawn-approval` checks
+  `current-approval-channel` — if set (interactive TUI), blocks on
+  `approval-await-result`; if #f (non-interactive: CLI, JSON, RPC), falls back
+  to the permissive parameter (always #t).
+- **12 unit tests** in `tests/test-approval-channel.rkt`.
+
+### W1: TUI Event Reducer + Overlay State
+- **`handle-spawn-approval-requested`** handler in
+  `tui/state-events/core-handlers.rkt`: Creates `'approval-prompt` overlay with
+  styled-line content showing capabilities, task preview, and y/n/Esc prompt.
+- Registered as event `"mas.spawn-approval-requested"` (string, not symbol —
+  all bus events use string names).
+- **Circular dependency fix**: `tui/render/message-layout.rkt` import changed
+  from `"../state.rkt"` (which re-exports from state-events → core-handlers,
+  creating a cycle) to `"../state-types.rkt"` (only exports struct accessors).
+- **10 unit tests** in `tests/test-tui-approval-reducer.rkt`.
+
+### W2: TUI Key Handler + Display
+- **`handle-approval-overlay-key`** in `tui/selection.rkt`: Handles
+  `#\y`/`#\Y` → approve (`approval-put! #t`) + dismiss overlay,
+  `#\n`/`#\N` → deny (`approval-put! #f`) + dismiss overlay,
+  `'escape` → cancel/deny (`approval-put! #f`) + dismiss overlay,
+  all other keys → `'pass` (overlay stays active).
+- Re-exported through `tui/tui-keybindings.rkt` (following tree-overlay pattern).
+- Wired into `tui/message-dispatch.rkt` as second intercept:
+  tree overlay → approval overlay → normal `handle-key`.
+- **10 unit tests** in `tests/test-tui-approval-keyhandler.rkt`.
+
+### W3: Wiring + Integration
+- **TUI init wiring**: `run-tui-with-runtime` calls `set-approval-channel!` before
+  session creation; `run-tui` (simpler entry point) does the same.
+- **TUI teardown wiring**: `clear-approval-channel!` called after loop exits in
+  both entry points. Prevents stale channel from leaking to non-TUI modes.
+- **Non-TUI modes**: Channel box stays #f (permissive default, unchanged).
+- **10 integration tests** in `tests/test-hitl-approval-integration.rkt` covering
+  full cross-thread lifecycle: init → spawn → approve/deny → teardown.
+
+### Complete Approval Flow
+```
+1. TUI init → set-approval-channel! (box set)
+2. spawn-subagent → current-approval-channel (reads box)
+   → approval-await-result (blocks with 120s timeout)
+3. TUI event reducer → creates 'approval-prompt overlay
+4. TUI key handler → approval-put! #t/#f + dismiss overlay
+5. approval-await-result unblocks → returns result to spawn
+6. TUI teardown → clear-approval-channel! (box set to #f)
+```
+
+### Testing
+- W0: 12 new tests (approval-channel unit tests)
+- W1: 10 new tests (approval reducer unit tests)
+- W2: 10 new tests (approval key handler unit tests)
+- W3: 10 new tests (integration tests)
+- 42 new tests total across 4 waves
+- All 57 approval-related tests pass (42 new + 15 pre-existing)
+- 45 TUI smoke tests pass (no regressions)
+
+### Operational / Release
+- Version bumped to 0.99.25.
+- 1 new production module (`tui/approval-channel.rkt`).
+- 7 production files changed (approval-channel, spawn-subagent, core-handlers,
+  message-layout, selection, tui-keybindings, message-dispatch, tui-init).
+- 4 new test files.
+- `raco make main.rkt` passes with clean bytecode.
+
 ## 0.99.24
 
 Released: 2026-07-18
