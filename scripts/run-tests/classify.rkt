@@ -26,6 +26,7 @@
          runtime-file?
          extensions-file?
          workflows-file?
+         unit-fast-file?
          smoke-excluded?
          file-has-suite-tag?
          support-test-module?
@@ -278,6 +279,13 @@
        (or (not (string-contains? f "/fixtures/"))
            (string-prefix? (path->string (file-name-from-path f)) "test-"))))
 
+(define (unit-fast-file? f)
+  (define meta (get-file-metadata f))
+  (define speed (hash-ref meta 'speed #f))
+  (define boundary (hash-ref meta 'boundary #f))
+  (and (not (mutating-file? f))
+       (or (file-has-suite-tag? f "unit-fast") (and (eq? speed 'fast) (equal? boundary "unit")))))
+
 (define (file-has-rackunit-tests? path)
   (and (file-exists? path)
        (let* ([content (file->string path)]
@@ -341,6 +349,7 @@
      (case suite
        [(all) all-files]
        [(fast) (filter (lambda (f) (not (slow-file? f))) all-files)]
+       [(unit-fast) (filter unit-fast-file? all-files)]
        [(slow) (filter slow-file? all-files)]
        [(tui) (filter tui-file? all-files)]
        [(smoke) (filter (lambda (f) (not (smoke-excluded? f))) all-files)]
