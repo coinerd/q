@@ -59,7 +59,14 @@
                               "browser_extract"
                               "browser_screenshot"
                               "browser_scroll"
-                              "browser_close"))
+                              "browser_close"
+                              ;; Memory tools (read-only / safe state mutation)
+                              "list-memory"
+                              "search-memory"
+                              "store-memory"
+                              "update-memory"
+                              "consolidate-memory"
+                              "cleanup-expired-memory"))
                      (or needs-approval
                          (set "edit"
                               "write"
@@ -74,7 +81,10 @@
                               "browser_click"
                               "browser_type"
                               "browser_press"
-                              "browser_check_local_app"))
+                              "browser_check_local_app"
+                              ;; Destructive memory tools
+                              "delete-memory"
+                              "clear-memory"))
                      (or callback (lambda (tool-name args) #t))
                      (if (memq mode '(strict permissive)) mode 'strict)))
 

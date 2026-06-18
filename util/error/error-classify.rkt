@@ -32,6 +32,17 @@
 (define (classify-error e)
   (define msg (exn-message e))
   (cond
+    ;; ── Session domain (checked before contract because hash-ref errors
+    ;; often contain 'contract' in the message, but are really missing-key errors) ──
+    [(or (regexp-match? #rx"hash-ref:" msg) (regexp-match? #rx"session" msg))
+     (list 'session
+           (cond
+             [(regexp-match? #rx"hash-ref:" msg) "A required value was missing from the data."]
+             [else "A session error occurred."])
+           '("Check your configuration file for missing fields."
+             "Run 'q doctor' to diagnose configuration issues."
+             "Try creating a new session."))]
+
     ;; ── Contract domain ────────────────────────────────────
     [(or (regexp-match? #rx"contract" msg)
          (regexp-match? #rx"blaming:" msg)
@@ -97,16 +108,6 @@
              "Run 'q init' to set up your configuration."
              "Check file permissions."
              "Run 'q doctor' to diagnose configuration issues."))]
-
-    ;; ── Session domain ─────────────────────────────────────
-    [(or (regexp-match? #rx"hash-ref:" msg) (regexp-match? #rx"session" msg))
-     (list 'session
-           (cond
-             [(regexp-match? #rx"hash-ref:" msg) "A required value was missing from the data."]
-             [else "A session error occurred."])
-           '("Check your configuration file for missing fields."
-             "Run 'q doctor' to diagnose configuration issues."
-             "Try creating a new session."))]
 
     ;; ── Tool domain ────────────────────────────────────────
     [(or (regexp-match? #rx"tool.*timeout|timed? ?out" msg)
