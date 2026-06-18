@@ -347,7 +347,7 @@
                                      (not (hash-ref (get-file-metadata rel) 'not-test? #f))))))
          (path->string (find-relative-path base-dir f))))
      (case suite
-       [(all) all-files]
+       [(all broad) all-files]
        [(fast) (filter (lambda (f) (not (slow-file? f))) all-files)]
        [(unit-fast) (filter unit-fast-file? all-files)]
        [(slow) (filter slow-file? all-files)]

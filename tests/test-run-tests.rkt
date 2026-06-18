@@ -432,7 +432,8 @@
                   inventory?
                   diagnose?
                   mode
-                  json-out)
+                  json-out
+                  ledger)
     (parse '("--repeat" "3")))
   (check-equal? repeat 3)
   (check-false record-gate?))
@@ -450,7 +451,8 @@
                   inventory?
                   diagnose?
                   mode
-                  json-out)
+                  json-out
+                  ledger)
     (parse '()))
   (check-equal? repeat 1)
   (check-false record-gate?))
@@ -468,7 +470,8 @@
                   inventory?
                   diagnose?
                   mode
-                  json-out)
+                  json-out
+                  ledger)
     (parse '("--suite" "smoke" "--repeat" "2")))
   (check-equal? suite 'smoke)
   (check-equal? repeat 2)
@@ -491,7 +494,8 @@
                   inventory?
                   diagnose?
                   mode
-                  json-out)
+                  json-out
+                  ledger)
     (parse '("--record-gate-evidence")))
   (check-true record-gate?))
 
@@ -508,7 +512,8 @@
                   inventory?
                   diagnose?
                   mode
-                  json-out)
+                  json-out
+                  ledger)
     (parse '()))
   (check-false record-gate?))
 
