@@ -39,7 +39,18 @@
   (test-suite "run-tests in-process/grouped modes"
 
     (test-case "parse-args accepts --mode and defaults to auto"
-      (define-values (jobs seq? timeout strict? suite extra repeat record? inventory? diagnose? mode)
+      (define-values (jobs
+                      seq?
+                      timeout
+                      strict?
+                      suite
+                      extra
+                      repeat
+                      record?
+                      inventory?
+                      diagnose?
+                      mode
+                      json-out)
         (parse-args '("--mode" "in-process" "--suite" "unit-fast")))
       (check-equal? mode 'in-process)
       (check-equal? suite 'unit-fast)
@@ -53,7 +64,8 @@
                       _record?
                       _inventory?
                       _diagnose?
-                      default-mode)
+                      default-mode
+                      _json-out)
         (parse-args '()))
       (check-equal? default-mode 'auto))
 
