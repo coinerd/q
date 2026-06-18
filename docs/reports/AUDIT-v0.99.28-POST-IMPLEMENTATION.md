@@ -1,9 +1,27 @@
+> **⚠️ ERRATA (2026-07-22, v0.99.29 W3):** This report contains two
+> inaccuracies corrected below:
+>
+> 1. **Stale head commit:** §1 cites `17ee78d8` (W6 version bump) as the
+>    head commit. The actual v0.99.28 final commit is `9fa89689` (this W7
+>    audit commit itself). The file diff in §2 used `8eccb3ca..17ee78d8`,
+>    which excludes the W4/W5/W7 documentation and report files.
+> 2. **False broad-suite claims (§6):** The report claims "971 test files"
+>    and attributes hangs to "TUI/provider/subprocess-dependent tests."
+>    v0.99.29 W2 measured per-file overhead and found ALL test files
+>    exhibit 10+ second subprocess overhead in this VPS environment (2 vCPU).
+>    The actual fast suite selects 950 files, not 971. See
+>    `docs/reports/AUDIT-v0.99.29-BROAD-GATE-TRIAGE.md` for evidence.
+>
+> The core audit conclusions (production diffs, focused test results,
+> release gate verifications) remain valid and are not affected by
+> these corrections.
+
 # Post-Implementation Audit: v0.99.28 — M4.5 Audit Remediation + MAS Technical Debt
 
 **Date:** 2026-07-21  
 **Wave:** W7 (#8287)  
 **Base commit:** `8eccb3ca` (v0.99.27)  
-**Head commit:** `17ee78d8` (v0.99.28)  
+**Head commit:** `9fa89689` (v0.99.28 final)  
 **Auditor:** Independent audit (same session, different wave)  
 
 ---
@@ -204,6 +222,16 @@ tests hang in the `raco test` subprocess environment, preventing completion.
 **v0.99.28 W3 improvement:** The runner now prints an explicit VERDICT line
 classifying this as INCOMPLETE, not PASS. See
 `docs/reports/AUDIT-v0.99.28-BROAD-GATE-TRIAGE.md` for full triage.
+
+> **⚠️ ERRATA (v0.99.29 W3):** The figures above are corrected in
+> `docs/reports/AUDIT-v0.99.29-BROAD-GATE-TRIAGE.md`:
+> - **950 files** (not 971) are selected by the fast suite.
+> - The timeout is **not specific to TUI/provider tests**. ALL test files
+>   exhibit 10+ second `raco test` subprocess overhead in this VPS
+>   environment (2 vCPU) due to JIT compilation costs. With 950 files,
+>   minimum wall-clock time is 2.6+ hours.
+> - The INCOMPLETE verdict remains correct but is now substantiated by
+>   per-file timing measurements.
 
 ---
 
