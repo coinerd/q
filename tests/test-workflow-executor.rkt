@@ -42,7 +42,10 @@
 (define (make-simple-workflow steps)
   (define wf-steps
     (for/list ([s (in-list steps)])
-      (workflow-step (hash-ref s 'role "assistant") (hash-ref s 'task "") #f #f)))
+      (workflow-step (hash-ref s 'role "assistant")
+                     (hash-ref s 'task "")
+                     (hash-ref s 'capabilities #f)
+                     (hash-ref s 'parallel #f))))
   (mas-workflow "test-wf" "test desc" wf-steps '()))
 
 (define suite
@@ -146,6 +149,58 @@
       (when (hash? content)
         (define steps-hash (hash-ref content 'steps))
         (check-equal? (hash-ref (car steps-hash) 'role) "researcher")))
+
+    (test-case "execute parallel workflow steps"
+      (define provider (make-static-text-provider "Parallel done"))
+      (define exec-ctx (make-test-exec-ctx provider))
+      (define wf
+        (make-simple-workflow (list (hasheq 'role "a" 'task "Task A" 'parallel #t)
+                                    (hasheq 'role "b" 'task "Task B" 'parallel #t))))
+      (define result (execute-workflow wf (hasheq) exec-ctx))
+      (check-false (tool-result-is-error? result) "parallel workflow should succeed")
+      (define content (tool-result-content result))
+      (check-true (hash? content) "content should be a hash")
+      (check-equal? (hash-ref content 'workflow) "test-wf")
+      (define steps-hash (hash-ref content 'steps))
+      (check-equal? (length steps-hash) 2)
+      (check-true (andmap (lambda (s) (hash-ref s 'success #f)) steps-hash)
+                  "both parallel steps should succeed"))
+
+    (test-case "execute mixed sequential and parallel workflow"
+      (define provider (make-static-text-provider "Done"))
+      (define exec-ctx (make-test-exec-ctx provider))
+      (define wf
+        (make-simple-workflow (list (hasheq 'role "prep" 'task "Prepare")
+                                    (hasheq 'role "a" 'task "Parallel A" 'parallel #t)
+                                    (hasheq 'role "b" 'task "Parallel B" 'parallel #t)
+                                    (hasheq 'role "finalize" 'task "Finalize: {{result}}"))))
+      (define result (execute-workflow wf (hasheq) exec-ctx))
+      (check-false (tool-result-is-error? result) "mixed workflow should succeed")
+      (define content (tool-result-content result))
+      (define steps-hash (hash-ref content 'steps))
+      (check-equal? (length steps-hash) 4)
+      (check-true (andmap (lambda (s) (hash-ref s 'success #f)) steps-hash)
+                  "all mixed steps should succeed")
+      ;; Finalize step should see the last parallel step's result
+      (define finalize-task (hash-ref (cadddr steps-hash) 'task ""))
+      (check-true (string-contains? finalize-task "Done")
+                  "finalize should be rendered with previous result"))
+
+    (test-case "parallel step failure stops pipeline"
+      (define provider (make-failing-provider))
+      (define exec-ctx (make-test-exec-ctx provider))
+      (define wf
+        (make-simple-workflow (list (hasheq 'role "a" 'task "Task A" 'parallel #t)
+                                    (hasheq 'role "b" 'task "Task B" 'parallel #t)
+                                    (hasheq 'role "c" 'task "Task C"))))
+      (define result (execute-workflow wf (hasheq) exec-ctx))
+      (check-true (tool-result-is-error? result) "should be error")
+      (define content (tool-result-content result))
+      (define msg
+        (if (list? content)
+            (hash-ref (car content) 'text "")
+            (format "~a" content)))
+      (check-true (string-contains? msg "failed") "should mention failure"))
 
     (test-case "workflow-step-result struct"
       (define r (workflow-step-result 0 "analyst" "Do thing" #t "Done"))

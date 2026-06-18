@@ -59,6 +59,27 @@
       (check-equal? (workflow-step-role (cadr (mas-workflow-steps wf))) "reviewer")
       (check-equal? (workflow-step-role (caddr (mas-workflow-steps wf))) "writer"))
 
+    (test-case "parse workflow with parallel steps"
+      (define fm
+        (parse-fm (skill-with-frontmatter "type: mas-workflow"
+                                          "agents:"
+                                          "  - role: researcher"
+                                          "    task: Research {{topic}}"
+                                          "    parallel: true"
+                                          "  - role: checker"
+                                          "    task: Check sources"
+                                          "    parallel: true"
+                                          "  - role: writer"
+                                          "    task: Write summary")))
+      (define-values (wf err) (parse-mas-workflow "parallel-wf" "desc" fm))
+      (check-false err)
+      (check-true (mas-workflow? wf))
+      (define steps (mas-workflow-steps wf))
+      (check-equal? (length steps) 3)
+      (check-true (workflow-step-parallel? (car steps)) "first step should be parallel")
+      (check-true (workflow-step-parallel? (cadr steps)) "second step should be parallel")
+      (check-false (workflow-step-parallel? (caddr steps)) "third step should be sequential"))
+
     (test-case "parse workflow with inline array capabilities"
       (define fm
         (parse-fm (skill-with-frontmatter "type: mas-workflow"
