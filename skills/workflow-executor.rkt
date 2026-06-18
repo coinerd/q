@@ -33,6 +33,7 @@
                   tool-result-is-error?
                   tool-result-content
                   tool-result-details
+                  make-tool-result
                   make-error-result
                   make-success-result))
 
@@ -85,9 +86,7 @@
   (if all-success?
       (make-success-result
        (hasheq 'workflow (mas-workflow-name workflow) 'steps (step-results->jsexpr step-results)))
-      (make-error-result (format "workflow '~a' failed at step ~a"
-                                 (mas-workflow-name workflow)
-                                 (find-failed-step-index step-results)))))
+      (make-workflow-error-result workflow step-results)))
 
 ;; ============================================================
 ;; Helpers
@@ -289,6 +288,25 @@
       (workflow-step-result-step failed)
       0))
 
+;; make-workflow-error-result : mas-workflow? (listof workflow-step-result?) -> tool-result?
+;; Build an error result that preserves partial step results in details.
+;; Content remains human-readable text for backward compatibility.
+;; Details contain structured information for programmatic callers.
+(define (make-workflow-error-result workflow step-results)
+  (define failed-idx (find-failed-step-index step-results))
+  (define name (mas-workflow-name workflow))
+  (define msg (format "workflow '~a' failed at step ~a" name failed-idx))
+  (make-tool-result (list (hasheq 'type "text" 'text msg))
+                    (hasheq 'workflow
+                            name
+                            'status
+                            "failed"
+                            'failed-step
+                            failed-idx
+                            'steps
+                            (step-results->jsexpr step-results))
+                    #t))
+
 ;; ============================================================
 ;; Exports
 ;; ============================================================
@@ -301,5 +319,6 @@
          workflow-step-result-success?
          workflow-step-result-result
          execute-workflow
+         make-workflow-error-result
          render-step-task
          extract-result-text)

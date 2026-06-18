@@ -33,6 +33,24 @@
                  (lambda (req) (error 'failing-provider "simulated failure"))
                  (lambda (req) (error 'failing-provider "streaming failed"))))
 
+;; Provider that succeeds N times, then fails on subsequent calls.
+;; Used to test partial workflow results.
+(define (make-succeed-then-fail-provider n)
+  (define counter (box 0))
+  (make-provider
+   (lambda () "hybrid-mock")
+   (lambda () (hasheq 'streaming #t))
+   (lambda (req)
+     (define c (unbox counter))
+     (set-box! counter (add1 c))
+     (if (< c n)
+         (make-model-response (list (hasheq 'type "text" 'text (format "Success ~a" c)))
+                              (hasheq 'prompt-tokens 10 'completion-tokens 5 'total-tokens 15)
+                              "mock-model"
+                              'stop)
+         (error 'hybrid-provider "failure after ~a successes" n)))
+   (lambda (req) (error 'hybrid-provider "streaming failed"))))
+
 (define (make-test-exec-ctx provider)
   (make-exec-context #:working-directory (current-directory)
                      #:runtime-settings (hasheq 'provider provider 'model "mock-model")))
@@ -270,6 +288,75 @@
       (check-equal? (workflow-step-result-role r) "analyst")
       (check-equal? (workflow-step-result-task r) "Do thing")
       (check-true (workflow-step-result-success? r))
-      (check-equal? (workflow-step-result-result r) "Done"))))
+      (check-equal? (workflow-step-result-result r) "Done"))
+
+    ;; ── v0.99.28 W0: Partial workflow failure results ──
+
+    (test-case "sequential failure preserves partial step results in details"
+      ;; Step 1 succeeds, step 2 fails, step 3 is never reached.
+      (define provider (make-succeed-then-fail-provider 1))
+      (define exec-ctx (make-test-exec-ctx provider))
+      (define wf
+        (make-simple-workflow (list (hasheq 'role "step1" 'task "First task")
+                                    (hasheq 'role "step2" 'task "Second task")
+                                    (hasheq 'role "step3" 'task "Third task"))))
+      (define result (execute-workflow wf (hasheq) exec-ctx))
+      (check-true (tool-result-is-error? result) "should be error")
+      (define details (tool-result-details result))
+      (check-true (hash? details) "details should be a hash")
+      (check-equal? (hash-ref details 'workflow) "test-wf")
+      (check-equal? (hash-ref details 'status) "failed")
+      (check-equal? (hash-ref details 'failed-step) 1)
+      (define steps (hash-ref details 'steps))
+      (check-equal? (length steps) 2 "should have 2 steps (step 0 + step 1), not 3")
+      (check-true (hash-ref (car steps) 'success) "step 0 should be successful")
+      (check-false (hash-ref (cadr steps) 'success) "step 1 should be failed")
+      ;; Step 2 (index 2) should be absent (skipped)
+      (check-false (findf (lambda (s) (= (hash-ref s 'step) 2)) steps)
+                   "step 2 should not be present (skipped)"))
+
+    (test-case "HITL denied preserves denied step results in details"
+      (parameterize ([current-spawn-approval-result #f])
+        (define provider (make-static-text-provider "Done"))
+        (define exec-ctx (make-test-exec-ctx provider))
+        (define wf
+          (mas-workflow "hitl-denied-test"
+                        "desc"
+                        (list (workflow-step "runner" "rm -rf /" '(shell-exec) #f))
+                        '()))
+        (define result (execute-workflow wf (hasheq) exec-ctx))
+        (check-true (tool-result-is-error? result) "should be error")
+        (define details (tool-result-details result))
+        (check-true (hash? details) "details should be a hash")
+        (define steps (hash-ref details 'steps))
+        (check-equal? (length steps) 1 "denied step should be present")
+        (check-false (hash-ref (car steps) 'success) "denied step should be marked failed")
+        (check-true (string-contains? (hash-ref (car steps) 'result "") "HITL approval denied")
+                    "should contain denial message")))
+
+    (test-case "parallel failure preserves all parallel step results in details"
+      (define provider (make-failing-provider))
+      (define exec-ctx (make-test-exec-ctx provider))
+      (define wf
+        (make-simple-workflow (list (hasheq 'role "a" 'task "Task A" 'parallel #t)
+                                    (hasheq 'role "b" 'task "Task B" 'parallel #t))))
+      (define result (execute-workflow wf (hasheq) exec-ctx))
+      (check-true (tool-result-is-error? result) "should be error")
+      (define details (tool-result-details result))
+      (check-true (hash? details) "details should be a hash")
+      (define steps (hash-ref details 'steps))
+      (check-equal? (length steps) 2 "both parallel steps should be present")
+      (check-false (hash-ref (car steps) 'success) "step 0 should be failed")
+      (check-false (hash-ref (cadr steps) 'success) "step 1 should be failed"))
+
+    (test-case "successful workflow result shape unchanged"
+      (define provider (make-static-text-provider "Done"))
+      (define exec-ctx (make-test-exec-ctx provider))
+      (define wf (make-simple-workflow (list (hasheq 'role "step1" 'task "First task"))))
+      (define result (execute-workflow wf (hasheq) exec-ctx))
+      (check-false (tool-result-is-error? result) "should succeed")
+      (define content (tool-result-content result))
+      (check-true (hash? content) "content should still be a hash")
+      (check-equal? (hash-ref content 'workflow) "test-wf"))))
 
 (run-tests suite)
