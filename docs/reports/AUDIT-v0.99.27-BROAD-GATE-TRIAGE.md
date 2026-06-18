@@ -153,4 +153,30 @@ issues, which are documented here truthfully.
 
 ---
 
-*Triage performed as part of v0.99.27 W4 (#8271).*
+## 7. Errata (v0.99.28 W4)
+
+The following inaccuracies in this report were identified and corrected
+in v0.99.28 W4 (#8284):
+
+1. **Test count:** §3 claimed "261 total" focused tests. The v0.99.27
+   in-depth audit independently verified the count as **251**. The 10-test
+   discrepancy was likely caused by counting test-case blocks rather than
+   `raco test`'s reported test count. The corrected count is used in the
+   v0.99.28 broad-gate triage.
+
+2. **Pre-existing failures resolved:** §4.2 listed `test-registry-defaults.rkt`
+   and `test-cli.rkt` as pre-existing failures. Both are now **fixed** in
+   v0.99.28 W2 (#8282):
+   - `test-registry-defaults.rkt`: 7/7 PASS (was 1/7 FAIL)
+   - `test-cli.rkt`: 69/69 PASS (was 3/69 FAIL)
+
+3. **Runner improvements:** v0.99.28 W3 (#8283) added explicit VERDICT
+   output and zero-test warnings to the test runner, addressing
+   recommendation #4 above.
+
+See: `docs/reports/AUDIT-v0.99.28-BROAD-GATE-TRIAGE.md` for the current
+authoritative triage.
+
+---
+
+*Triage performed as part of v0.99.27 W4 (#8271). Errata added in v0.99.28 W4 (#8284).*
