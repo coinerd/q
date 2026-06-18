@@ -1,3 +1,62 @@
+## 0.99.29
+
+Released: 2026-07-22
+
+### Overview
+Gate Truth Hotfix for v0.99.28. This release closes all six findings
+(B-1 through B-6) from the v0.99.28 in-depth audit before the M5/v1.0
+milestone. The hotfix focuses on gate truthfulness: ensuring that test
+results, audit narratives, and release-gate verdicts are accurate and
+verifiable.
+
+### Bug Fixes
+
+- **W0: Skill workflow E2E test hardening (B-1, BLOCKER)**.
+  `test-skill-workflow-e2e.rkt` now uses idempotent file writes
+  (`#:exists 'truncate/replace`) to prevent failures under `raco test`
+  lifecycle re-execution. Added `describe-state` diagnostic helper for
+  debugging skill discovery failures with contextual state information.
+
+### Documentation
+
+- **W1: Metrics sync and version bump (B-2, BLOCKER)**.
+  README metrics table synced with `--sync-all`. Version bumped to
+  0.99.29 in `util/version.rkt`, `info.rkt`, and README badge.
+
+- **W2: Truthful broad-suite triage (B-3, B-6)**.
+  `docs/reports/AUDIT-v0.99.29-BROAD-GATE-TRIAGE.md` reports actual
+  broad-suite results with honest verdict classification.
+
+- **W3: Corrected v0.99.28 narratives (B-4, B-5)**.
+  Errata added to v0.99.28 post-implementation audit, broad-gate triage,
+  and MAS completeness audit. Stale head commit references corrected.
+  False gate claims removed.
+
+### Breaking / Behavior Changes
+
+- None. All changes are test hardening, documentation corrections, and
+  version/metrics metadata.
+
+### Migration Notes
+
+- No API changes.
+
+### Testing
+
+- Skill workflow E2E: 5/5 PASS (verified over 10 consecutive `raco test` runs).
+- Full focused matrix (17 files): ALL PASS under `raco test`.
+- Zero regressions from v0.99.28.
+
+### Operational / Release
+
+- Broad-gate triage: `docs/reports/AUDIT-v0.99.29-BROAD-GATE-TRIAGE.md`.
+- Post-implementation audit: `docs/reports/AUDIT-v0.99.29-POST-IMPLEMENTATION.md`.
+
+### Stats
+- 1 hardened test file
+- 1 metrics sync
+- 4 audit/triage reports created or corrected
+
 ## 0.99.28
 
 Released: 2026-07-21
