@@ -67,6 +67,7 @@
                   save-failure-logs
                   format-duration
                   summary-exit-code
+                  compute-verdict
                   make-unique-log-name)
          (only-in "run-tests/cli.rkt" usage parse-args validate-args! known-suites)
          (only-in "run-tests/gate-evidence.rkt" record-gate-evidence!)
@@ -101,6 +102,7 @@
          save-failure-logs
          format-duration
          summary-exit-code
+         compute-verdict
          bytes->string*
          clean-stale-bytecode!
          file-has-rackunit-tests?
