@@ -1,3 +1,64 @@
+## 0.99.27
+
+Released: 2026-07-20
+
+### Overview
+M4.5 Skill Workflows Remediation. This release fixes production-blocking
+issues found in the v0.99.26 in-depth audit: a broken `skill-route workflow`
+execution path, a capability taxonomy regression, non-boolean `parallel:`
+parsing, partial workflow results dropped on failure, and HITL approval gates
+for dangerous workflow steps. Also adds parallel workflow step execution and
+truthful broad-gate triage reporting.
+
+### W0: Fix `skill-route workflow` Execution (B-1, BLOCKER)
+- **Root cause**: `dynamic-require` used runtime-relative string paths that
+  resolved to wrong directories when executed from a non-repo working directory.
+- **Fix**: Replaced with `define-runtime-module-path-index` for compile-time-
+  resolved module paths that are stable relative to the source module.
+- **Test**: Added happy-path E2E test in `tests/test-skill-workflow-e2e.rkt`
+  that verifies workflow execution works from a temp directory.
+
+### W1: Restore `skill-route` Read-only Capability Contract (B-2, HIGH)
+- **Fix**: Reverted `skill-route` capability from `'subagent` back to
+  `'read-only` in `tools/registry-table/skill-tools.rkt`.
+- Read-only subagents can discover and load skills again.
+- Workflow action remains safe: sub-spawns are individually mediated by
+  `run-subagent-with-config` / HITL / capability filtering.
+
+### W2: Parallel Workflow Step Execution (M-1)
+- **Feature**: Added parallel workflow step groups via `parallel: true` in
+  frontmatter. Steps with `parallel: true` in the same group execute
+  concurrently via `spawn-subagents`.
+- **Fix**: Added `parse-boolean` coercion in `skills/mas-workflow.rkt` to
+  normalize YAML `parallel: true` (string) to Racket `#t`.
+- Sequential and parallel steps can be mixed in a single workflow.
+- **7 new tests** in `tests/test-workflow-executor.rkt` for parallel execution.
+
+### W3: HITL Approval Gate for Dangerous Workflow Steps
+- **Feature**: `execute-step-group` now checks `requires-hitl-approval?` on
+  the union of all step capabilities in a group before execution.
+- Steps with `shell-exec` or `git-write` capabilities require interactive
+  approval. On denial, all steps in the group are marked failed and the
+  pipeline stops.
+- `step-group-capabilities` aggregates capabilities; `step-group-task-preview`
+  builds a short preview for the approval prompt.
+- **4 new tests** for approved/denied sequential and parallel dangerous steps.
+
+### W4: Broad-Gate Triage + v0.99.26 Audit Errata (B-3, HIGH)
+- Clean-bytecode `raco make main.rkt`: PASS.
+- 261 focused tests across 22 files: ALL PASS, zero v0.99.27 regressions.
+- Pre-existing failures classified: `test-registry-defaults.rkt` (stale
+  hardcoded tool count from v0.86.2), `test-cli.rkt` (Issues #149, #166).
+- Hanging tests classified as environment-dependent (TUI/provider/subprocess).
+- Added errata to v0.99.26 audit report correcting fast-suite timeout claim.
+- New report: `docs/reports/AUDIT-v0.99.27-BROAD-GATE-TRIAGE.md`.
+
+### Stats
+- 4 modified production files (skill-router, skill-tools, mas-workflow,
+  workflow-executor)
+- 11 new tests across 2 test files (workflow-executor, skill-workflow-e2e)
+- 2 new audit reports (broad-gate triage, post-implementation)
+
 ## 0.99.26
 
 Released: 2026-07-20
