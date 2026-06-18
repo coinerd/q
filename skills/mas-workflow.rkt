@@ -64,7 +64,7 @@
          (workflow-step (hash-ref agent 'role "assistant")
                         (hash-ref agent 'task "")
                         (parse-capabilities (hash-ref agent 'capabilities #f))
-                        (hash-ref agent 'parallel #f))))
+                        (parse-boolean (hash-ref agent 'parallel #f)))))
      ;; Validate: every step must have a non-empty task
      (define empty-tasks (filter (lambda (s) (string=? (workflow-step-task s) "")) steps))
      (cond
@@ -92,6 +92,15 @@
 ;; ============================================================
 ;; Capability parsing
 ;; ============================================================
+
+;; parse-boolean : (or/c boolean? string? #f) -> boolean?
+;; Coerce YAML boolean values. Strings "true"/"yes"/"on" (case-insensitive)
+;; become #t; everything else becomes #f.
+(define (parse-boolean v)
+  (cond
+    [(boolean? v) v]
+    [(string? v) (not (not (member (string-downcase (string-trim v)) '("true" "yes" "on" "1"))))]
+    [else #f]))
 
 ;; parse-capabilities : (or/c list? #f) -> (or/c (listof symbol?) #f)
 ;; Parse capabilities field: ("read-only" "file-write") → '(read-only file-write)
