@@ -363,7 +363,9 @@
       (define e (exn:fail "hash-ref: contract violation" (current-continuation-marks)))
       (define result (classify-error e))
       (check-not-false result)
-      (check-true (string-contains? (cadr result) "contract")))
+      ;; hash-ref errors are classified as session (missing key), not contract
+      (check-equal? (car result) 'session)
+      (check-true (string-contains? (cadr result) "missing")))
     (test-case "read-json"
       (define e (exn:fail "read-json: expected" (current-continuation-marks)))
       (define result (classify-error e))

@@ -14,28 +14,45 @@
 ;; register-default-tools! — registers all tools
 ;; ============================================================
 
-(test-case "register-default-tools! registers all 17 built-in tools"
+(test-case "register-default-tools! registers all 35 built-in tools"
   (define reg (make-tool-registry))
   (register-default-tools! reg)
   (define names (sort (tool-names reg) string<?))
   (check equal?
          names
-         (sort '("bash"
+         (sort '("bash" "browser_check_local_app"
+                        "browser_click"
+                        "browser_close"
+                        "browser_extract"
+                        "browser_observe"
+                        "browser_open"
+                        "browser_press"
+                        "browser_screenshot"
+                        "browser_scroll"
+                        "browser_type"
+                        "cleanup-expired-memory"
+                        "clear-memory"
+                        "consolidate-memory"
                         "date"
                         "delete-lines"
+                        "delete-memory"
                         "edit"
                         "find"
                         "firecrawl"
                         "grep"
+                        "list-memory"
                         "ls"
                         "read"
                         "record_conclusion"
                         "save-conclusion"
+                        "search-memory"
                         "session_recall"
                         "set-task-state"
                         "skill-route"
                         "spawn-subagent"
                         "spawn-subagents"
+                        "store-memory"
+                        "update-memory"
                         "write")
                string<?)))
 
