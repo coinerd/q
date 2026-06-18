@@ -1,3 +1,14 @@
+> **⚠️ ERRATA (2026-07-22, v0.99.29 W2):** Sections of this report contain
+> inaccuracies corrected in `docs/reports/AUDIT-v0.99.29-BROAD-GATE-TRIAGE.md`.
+> Key corrections:
+> - §2.2: The "971 test files" count is wrong — the fast suite selects 950 files.
+> - §2.2: The attribution of hangs to "TUI/provider/subprocess tests" is
+>   inaccurate — ALL files exhibit 10+ second per-file overhead in the VPS
+>   environment due to CPU-intensive JIT compilation.
+> - §4.3: The environment-dependent hang classification was speculative;
+>   v0.99.29 W2 provides concrete per-file timing measurements.
+> - The INCOMPLETE verdict is correct but was previously unsubstantiated.
+
 # Broad-Gate Triage: v0.99.28 — M4.5 Audit Remediation + MAS Technical Debt
 
 **Date:** 2026-07-21  
