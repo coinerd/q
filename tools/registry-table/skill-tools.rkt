@@ -226,26 +226,32 @@
    ;; skill-route
    (make-tool-spec*
     "skill-route"
-    "Discover, search, and load skill instructions by name or description."
+    (string-append
+     "Discover, search, load skills, or execute mas-workflow skills. "
+     "Actions: list (all skills), match (search), load (full content), workflow (execute pipeline).")
     (hasheq
      'type
      "object"
      'required
      '()
      'properties
-     (hasheq
-      'action
-      (hasheq 'type
-              "string"
-              'description
-              "Action: list (all skills), match (search by query), load (full content by name)")
-      'query
-      (hasheq 'type "string" 'description "Search query for match action")
-      'name
-      (hasheq 'type "string" 'description "Skill name for load action")))
+     (hasheq 'action
+             (hasheq 'type
+                     "string"
+                     'description
+                     "Action: list, match, load, or workflow (execute mas-workflow)")
+             'query
+             (hasheq 'type "string" 'description "Search query for match action")
+             'name
+             (hasheq 'type "string" 'description "Skill name for load or workflow action")
+             'variables
+             (hasheq 'type
+                     "object"
+                     'description
+                     "Template variables for workflow action (e.g., {file: \"src/main.rkt\"})")))
     tool-skill-route
     #f
-    'read-only)
+    'subagent)
    ;; delete-lines
    (make-tool-spec*
     "delete-lines"

@@ -20,6 +20,7 @@
          racket/list
          json
          "../../skills/resource-loader.rkt"
+         "../../skills/frontmatter.rkt"
          "../../util/config-paths.rkt"
          (only-in "../../util/error/error-sanitizer.rkt" sanitize-error-message)
          "../../tools/tool.rkt")
@@ -43,13 +44,15 @@
              [else
               (with-safe-fallback
                '()
-               (filter values
-                       (for/list ([entry (in-list (directory-list skills-dir))]
-                                  #:when (directory-exists? (build-path skills-dir entry)))
-                         (define skill-name (path->string entry))
-                         (define skill-file (build-path skills-dir entry "SKILL.md"))
-                         (define content (try-read-file skill-file))
-                         (and content (parse-skill skill-name content)))))]))))
+               (filter
+                values
+                (for/list ([entry (in-list (directory-list skills-dir))]
+                           #:when (directory-exists? (build-path skills-dir entry)))
+                  (define skill-name (path->string entry))
+                  (define skill-file (build-path skills-dir entry "SKILL.md"))
+                  (define content (try-read-file skill-file))
+                  (and content
+                       (hash-set (parse-skill skill-name content) 'raw-content content)))))]))))
 
 ;; ============================================================
 ;; Tool handler
@@ -62,12 +65,20 @@
                                                    (format "skill-route error: ~a"
                                                            (exn-message e)))))])
     (cond
-      ;; list: return all skills with name + description
+      ;; list: return all skills with name + description + type
       [(string=? action "list")
        (define skills (discover-skills))
        (define summaries
          (for/list ([s (in-list skills)])
-           (hasheq 'name (hash-ref s 'name "?") 'description (hash-ref s 'description ""))))
+           (define raw-content (hash-ref s 'raw-content (hash-ref s 'content "")))
+           (define fm (parse-skill-frontmatter-extended raw-content))
+           (define skill-type (and fm (hash-ref fm 'type #f)))
+           (hasheq 'name
+                   (hash-ref s 'name "?")
+                   'description
+                   (hash-ref s 'description "")
+                   'type
+                   (or skill-type "standard"))))
        (make-success-result (list (hasheq 'type "text" 'text (jsexpr->string summaries))))]
 
       ;; match: search skills by query text
@@ -194,6 +205,52 @@
           (make-success-result (list (hasheq 'type "text" 'text full-content)))]
          [else (make-error-result (format "Skill not found: ~a" ctx-name))])]
 
+      ;; workflow: execute a mas-workflow skill
+      ;; Uses dynamic-require to avoid circular dependency:
+      ;; skill-router → workflow-executor → spawn-subagent → skill-router
+      [(string=? action "workflow")
+       (define wf-name (hash-ref args 'name ""))
+       (when (string=? wf-name "")
+         (raise (exn:fail "workflow requires 'name'" (current-continuation-marks))))
+       (define wf-skills (discover-skills))
+       (define wf-found (findf (lambda (s) (string=? (hash-ref s 'name "") wf-name)) wf-skills))
+       (cond
+         [(not wf-found) (make-error-result (format "Skill not found: ~a" wf-name))]
+         [else
+          (define raw-content (hash-ref wf-found 'raw-content (hash-ref wf-found 'content "")))
+          (define fm (parse-skill-frontmatter-extended raw-content))
+          (define wf-type (and fm (hash-ref fm 'type #f)))
+          (cond
+            [(not (and fm (equal? wf-type "mas-workflow")))
+             (make-error-result (format "Skill '~a' is not a mas-workflow skill" wf-name))]
+            [else
+             ;; Lazily load workflow modules to break dependency cycle
+             (define parse-mas-workflow-fn
+               (dynamic-require "../../skills/mas-workflow.rkt" 'parse-mas-workflow))
+             (define execute-workflow-fn
+               (dynamic-require "../../skills/workflow-executor.rkt" 'execute-workflow))
+             (define variables (hash-ref args 'variables (hasheq)))
+             (define-values (wf wf-err)
+               (parse-mas-workflow-fn wf-name (hash-ref wf-found 'description "") fm))
+             (cond
+               [wf-err (make-error-result wf-err)]
+               [else
+                (define wf-result (execute-workflow-fn wf variables exec-ctx))
+                (define wf-content (tool-result-content wf-result))
+                (define wf-is-error (tool-result-is-error? wf-result))
+                (define wf-msg
+                  (if wf-is-error
+                      (if (list? wf-content)
+                          (hash-ref (car wf-content) 'text "")
+                          (format "~a" wf-content))
+                      (format "Workflow '~a' completed successfully.\n~a"
+                              wf-name
+                              (jsexpr->string wf-content))))
+                (if wf-is-error
+                    (make-error-result wf-msg)
+                    (make-success-result (list (hasheq 'type "text" 'text wf-msg))))])])])]
+
       [else
-       (make-error-result (format "Unknown action: ~a. Valid: list, match, load, recommend, context"
-                                  action))])))
+       (make-error-result
+        (format "Unknown action: ~a. Valid: list, match, load, recommend, context, workflow"
+                action))])))
