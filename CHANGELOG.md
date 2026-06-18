@@ -1,3 +1,78 @@
+## 0.99.28
+
+Released: 2026-07-21
+
+### Overview
+M4.5 Audit Remediation + MAS Technical Debt. This release closes remaining
+audit blockers found in the v0.99.27 in-depth audit: workflow failure results
+discarding partial outputs, YAML frontmatter polluting skill descriptions,
+MAS test debt (stale registry defaults, CLI error classification), and
+test-runner reporting truthfulness (silent PASS on timeouts/zero-test files).
+Also corrects the MAS completeness audit's inaccurate "261 tests" claim.
+
+### Bug Fixes
+
+- **W0: Preserve partial workflow failure results (V27-B1, BLOCKER)**.
+  `make-workflow-error-result` now uses `make-tool-result` directly to
+  include completed and failed step results in structured details.
+  Previously, `make-error-result` discarded all partial outputs.
+
+- **W1: Frontmatter-aware skill descriptions (V27-B2, BLOCKER)**.
+  `strip-leading-frontmatter-lines` in `resource-loader.rkt` removes
+  leading YAML frontmatter before extracting title/description/content.
+  `skill-route list` no longer shows raw `type: mas-workflow` YAML.
+
+- **W2: MAS technical debt — registry defaults, CLI verbose, tool taxonomy**.
+  - `test-registry-defaults.rkt`: Updated hardcoded tool count from 17 to 35
+    with full browser/memory/spawn tool coverage.
+  - `classify-error` in `util/error/error-classify.rkt`: Reordered
+    `hash-ref:` session pattern before `contract` pattern. Issues #149, #166
+    now classify correctly as `'session` with user-friendly message.
+  - `tools/permission-gate.rkt`: Added 8 memory tools to permission sets.
+    Read/safe operations auto-approved; destructive (delete/clear) require
+    approval.
+
+- **W3: Test-runner reporting truthfulness (V27-B3, MAS-TD-1)**.
+  `compute-verdict` in `scripts/run-tests/reporting.rkt` returns
+  `'pass`/`'fail`/`'incomplete`/`'inconclusive`. `print-summary` now
+  prints an explicit VERDICT line and warns about zero-test files.
+  Previously, timeout-heavy runs could appear to pass at a glance.
+
+### Breaking / Behavior Changes
+
+- `classify-error` pattern ordering changed: `hash-ref:` errors that
+  were previously classified as `'contract` are now correctly classified
+  as `'session`. User-facing error messages for missing-key scenarios
+  are now friendlier.
+
+### Migration Notes
+
+- No API changes. All fixes are internal behavior improvements.
+- If your code depends on `classify-error` returning `'contract` for
+  `hash-ref:` errors, update to expect `'session`.
+
+### Testing
+
+- 19 new tests in `test-run-tests-reporting-truthfulness.rkt` (W3).
+- 11 new tests in `test-skill-resource-loader-frontmatter.rkt` (W1).
+- `test-registry-defaults.rkt`: 7/7 PASS (was 1/7 FAIL).
+- `test-cli.rkt`: 69/69 PASS (was 3/69 FAIL).
+- 251 focused tests verified passing across 33 individually-run files.
+- Zero direct v0.99.28 regressions.
+
+### Operational / Release
+
+- Broad-gate triage: `docs/reports/AUDIT-v0.99.28-BROAD-GATE-TRIAGE.md`.
+- MAS completeness audit corrected: "261 tests" → actual 251.
+- Board hygiene report: `docs/reports/AUDIT-v0.99.28-BOARD-HYGIENE.md`.
+- v0.99.27 broad-gate triage errata added.
+
+### Stats
+- 3 modified production files (workflow-executor, resource-loader,
+  error-classify, permission-gate, run-tests reporting)
+- 30 new tests across 2 new test files
+- 3 new audit/hygiene reports
+
 ## 0.99.27
 
 Released: 2026-07-20
