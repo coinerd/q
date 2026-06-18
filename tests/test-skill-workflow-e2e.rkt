@@ -12,7 +12,9 @@
          racket/string
          json
          "../tools/builtins/skill-router.rkt"
-         "../tools/tool.rkt")
+         "../tools/tool.rkt"
+         "../llm/provider.rkt"
+         "../llm/model.rkt")
 
 ;; ── Test skill content ──
 
@@ -102,6 +104,40 @@
         (check-true (tool-result-is-error? result))
         (define content (tool-result-content result))
         (define text (hash-ref (car content) 'text ""))
-        (check-true (or (string-contains? text "requires") (string-contains? text "name")))))))
+        (check-true (or (string-contains? text "requires") (string-contains? text "name")))))
+
+    (test-case "workflow action executes mas-workflow from non-repo current directory"
+      ;; Regression test for B-1: dynamic-require used runtime-relative paths,
+      ;; so calling skill-route from a project directory failed. This test
+      ;; parameterizes current-directory to a temp project dir and provides a
+      ;; mock provider via exec-context.
+      (parameterize ([current-directory temp-dir])
+        (define mock-response
+          (make-model-response (list (hasheq 'type "text" 'text "mocked step output"))
+                               (hasheq 'prompt-tokens 0 'completion-tokens 0 'total-tokens 0)
+                               "mock-model"
+                               'stop))
+        (define mock-provider (make-mock-provider mock-response #:name "workflow-test-mock"))
+        (define exec-ctx
+          (make-exec-context #:runtime-settings (hasheq 'provider mock-provider 'model "mock-model")))
+        (define result
+          (tool-skill-route
+           (hasheq 'action "workflow" 'name "test-workflow" 'variables (hasheq 'file "src/main.rkt"))
+           exec-ctx))
+        (check-false (tool-result-is-error? result) "happy-path workflow should succeed")
+        (define content (tool-result-content result))
+        (check-true (list? content) "result content should be a list")
+        (define text (hash-ref (car content) 'text ""))
+        (check-true (string-contains? text "Workflow 'test-workflow' completed successfully")
+                    "result should report successful completion")
+        (check-true (string-contains? text "mocked step output")
+                    "result should include mocked subagent output")
+        ;; Verify the workflow executed 2 steps
+        (define payload-match (regexp-match #rx"\n(.*)$" text))
+        (check-true (pair? payload-match) "text should contain newline-delimited JSON payload")
+        (define parsed (string->jsexpr (cadr payload-match)))
+        (check-true (hash? parsed) "parsed payload should be a hash")
+        (check-equal? (hash-ref parsed 'workflow #f) "test-workflow")
+        (check-equal? (length (hash-ref parsed 'steps '())) 2)))))
 
 (run-tests suite)

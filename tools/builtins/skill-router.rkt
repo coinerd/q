@@ -13,7 +13,8 @@
 ;; Scans .q/skills/ and .pi/skills/ directories from the working directory.
 ;; This is a read-only discovery tool — no modification.
 
-(require "../../util/error/error-helpers.rkt")
+(require "../../util/error/error-helpers.rkt"
+         racket/runtime-path)
 (require racket/contract
          racket/file
          racket/string
@@ -26,6 +27,12 @@
          "../../tools/tool.rkt")
 
 (provide (contract-out [tool-skill-route (->* (hash?) (any/c) any/c)]))
+
+;; Stable module-path indexes for workflow support modules.
+;; These resolve relative to this source module at runtime, not relative to
+;; the process current-directory, fixing B-1 (broken skill-route workflow).
+(define-runtime-module-path-index mas-workflow-module "../../skills/mas-workflow.rkt")
+(define-runtime-module-path-index workflow-executor-module "../../skills/workflow-executor.rkt")
 
 ;; ============================================================
 ;; Skill discovery helpers
@@ -224,11 +231,11 @@
             [(not (and fm (equal? wf-type "mas-workflow")))
              (make-error-result (format "Skill '~a' is not a mas-workflow skill" wf-name))]
             [else
-             ;; Lazily load workflow modules to break dependency cycle
-             (define parse-mas-workflow-fn
-               (dynamic-require "../../skills/mas-workflow.rkt" 'parse-mas-workflow))
-             (define execute-workflow-fn
-               (dynamic-require "../../skills/workflow-executor.rkt" 'execute-workflow))
+             ;; Lazily load workflow modules to break dependency cycle.
+             ;; Module-path indexes are defined at the top level so resolution
+             ;; is stable relative to this source module.
+             (define parse-mas-workflow-fn (dynamic-require mas-workflow-module 'parse-mas-workflow))
+             (define execute-workflow-fn (dynamic-require workflow-executor-module 'execute-workflow))
              (define variables (hash-ref args 'variables (hasheq)))
              (define-values (wf wf-err)
                (parse-mas-workflow-fn wf-name (hash-ref wf-found 'description "") fm))
