@@ -75,13 +75,14 @@ replaces the previous always-permissive behavior with a user-controlled gate.
 - W3: 10 new tests (integration tests)
 - 42 new tests total across 4 waves
 - All 57 approval-related tests pass (42 new + 15 pre-existing)
-- 45 TUI smoke tests pass (no regressions)
+- 44 TUI smoke tests pass (no regressions)
 
 ### Operational / Release
 - Version bumped to 0.99.25.
 - 1 new production module (`tui/approval-channel.rkt`).
-- 7 production files changed (approval-channel, spawn-subagent, core-handlers,
-  message-layout, selection, tui-keybindings, message-dispatch, tui-init).
+- 8 production files changed (1 new + 7 modified):
+  approval-channel (NEW), spawn-subagent, core-handlers,
+  message-layout, selection, tui-keybindings, message-dispatch, tui-init.
 - 4 new test files.
 - `raco make main.rkt` passes with clean bytecode.
 
