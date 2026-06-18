@@ -348,10 +348,13 @@
   (define-values (ctx sess scrollback-path) (create-tui-session rt-config cli-cfg))
   (load-tui-scrollback ctx sess rt-config scrollback-path)
   (init-tui-terminal ctx)
-  (run-tui-loop ctx scrollback-path)
-  ;; v0.99.25 §5.3: Clear approval channel on TUI teardown.
-  ;; Prevents stale channel from leaking to non-TUI modes after exit.
-  (clear-approval-channel!)
+  ;; v0.99.26 E-2: Wrap run-tui-loop in dynamic-wind to guarantee
+  ;; clear-approval-channel! runs on both normal exit AND exception paths.
+  ;; Without this, an unhandled exception in the TUI loop would leave
+  ;; the approval channel set, causing subsequent code to block.
+  (dynamic-wind void
+                (lambda () (run-tui-loop ctx scrollback-path))
+                (lambda () (clear-approval-channel!)))
   (displayln "Goodbye."))
 
 ;; Simple TUI run (for testing without full runtime)
