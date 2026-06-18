@@ -1,3 +1,81 @@
+## 0.99.26
+
+Released: 2026-07-20
+
+### Overview
+M4 Skill Workflows (§5.2 Skill-based MAS). This release delivers declarative
+multi-agent pipelines packaged as skills. A SKILL.md with `type: mas-workflow`
+frontmatter defines an ordered list of agent steps. The skill-router detects
+this type and can execute the pipeline, chaining subagent spawns with result
+forwarding via `{{result}}` template variables.
+
+Also includes subagent reliability fixes (F-1a/F-1b/F-2) from the v0.99.25
+audit: auto-retry for rate-limited subagents, increased default max-turns,
+and improved error labeling for bash failures.
+
+### W0: Audit Remediation + Subagent Reliability Fixes
+- **E-2**: Exception-safe approval channel cleanup via `dynamic-wind` in
+  `tui/tui-init.rkt` — `clear-approval-channel!` now runs on both normal
+  exit AND exception paths.
+- **E-3/E-4**: CHANGELOG count corrections (44 TUI smoke tests, 8 production
+  files).
+- **F-1a (CRITICAL)**: Wrapped `provider-send` in `with-auto-retry` inside
+  `run-subagent-loop`. Subagents now survive rate-limited and transient
+  provider errors instead of dying immediately.
+- **F-1b**: Default `max-turns` raised from 5 to 10. Complex analysis tasks
+  were exhausting 5 turns on tool calls before producing summaries.
+- **F-2**: `ipc-response->tool-result` now handles `status='error` separately,
+  showing `"command failed (exit N): <stderr>"` instead of generic
+  `"execution plane error"`.
+- **9 new tests**: test-approval-channel-teardown.rkt (4), test-subagent-retry.rkt
+  (4), test-execution-plane-error-label.rkt (5).
+
+### W1: YAML-Subset Frontmatter Parser
+- **`parse-skill-frontmatter-extended`** in `skills/frontmatter.rkt`: Parses
+  YAML-subset frontmatter supporting lists (`- item`), nested maps within list
+  items, inline arrays (`[a, b, c]`), and quoted values.
+- Recursive descent parser with indentation tracking. Backward compatible —
+  existing `parse-skill-frontmatter` unchanged.
+- **13 new tests** in `tests/test-frontmatter-extended.rkt`.
+
+### W2: MAS Workflow Types + Parser
+- **`workflow-step` struct** (role, task, capabilities, parallel?) — a single
+  step in a multi-agent pipeline.
+- **`mas-workflow` struct** (name, description, steps, variables) — a complete
+  parsed workflow.
+- **`parse-mas-workflow`**: Frontmatter hash → mas-workflow with validation.
+- **`extract-template-variables`**: Finds `{{var}}` patterns in step tasks.
+- **`parse-capabilities`**: String list → symbol list.
+- **19 new tests** in `tests/test-mas-workflow.rkt`.
+
+### W3: Workflow Executor
+- **`execute-workflow`** in `skills/workflow-executor.rkt`: Executes a parsed
+  mas-workflow sequentially, chaining results between steps.
+- Sequential model: each step receives previous result as `{{result}}`.
+- Error stops pipeline: first failure halts remaining steps.
+- Reuses `run-subagent-with-config` — no new spawning code.
+- HITL approval flows through existing subagent infrastructure.
+- **13 new tests** in `tests/test-workflow-executor.rkt`.
+
+### W4: Skill Router Integration + System Prompt
+- **`"workflow"` action** in `tool-skill-route`: Loads skill, validates
+  `type=mas-workflow`, executes pipeline. Uses `dynamic-require` to break
+  circular dependency.
+- **`"list"` action** now includes skill type (`standard`/`mas-workflow`).
+- **System prompt**: "Available Workflows" section injected when workflow
+  skills are present.
+- **`skill-tools.rkt`**: Updated tool description and schema with `variables`
+  property.
+- **4 new tests** in `tests/test-skill-workflow-e2e.rkt`.
+
+### Stats
+- 3 new source modules (frontmatter extended, mas-workflow, workflow-executor)
+- 5 modified production files (skill-router, skill-tools, run-modes,
+  resource-loader, spawn-subagent)
+- 1 modified test infrastructure file (scheduler.rkt)
+- 49 new tests across 6 test files
+- 2 existing test files updated for new defaults
+
 ## 0.99.25
 
 Released: 2026-07-19
