@@ -25,6 +25,7 @@
          "../runtime/settings.rkt"
          "../skills/types.rkt"
          (only-in "../skills/resource-loader.rkt" skills-summary-section)
+         (only-in "../skills/frontmatter.rkt" parse-skill-frontmatter-extended)
          "../runtime/provider/model-registry.rkt"
          (only-in "../runtime/provider/provider-factory.rkt" build-provider)
          "../tools/tool.rkt"
@@ -184,6 +185,15 @@
 ;; v0.35.2 (W-03): Returns session-config? instead of mutable hash.
 ;; Consumers should use dict-ref (not hash-ref) for access.
 
+;; v0.99.26 §5.2: Filter skills that have type: mas-workflow in their frontmatter.
+;; Returns a list of skill hashes (same format as resource-set-skills).
+(define (filter-workflow-skills skills)
+  (filter (lambda (s)
+            (define raw-content (hash-ref s 'raw-content (hash-ref s 'content "")))
+            (define fm (parse-skill-frontmatter-extended raw-content))
+            (and fm (equal? (hash-ref fm 'type #f) "mas-workflow")))
+          skills))
+
 (define (build-runtime-from-cli cfg)
   (define base-config (cli-config->runtime-config cfg))
   (define bus (make-event-bus))
@@ -207,6 +217,20 @@
   ;; Progressive skill disclosure: inject skill summaries into system prompt
   ;; Full SKILL.md content is available on-demand via the `read` tool
   (define skill-section (skills-summary-section (resource-set-skills all-resources)))
+
+  ;; v0.99.26 §5.2: Detect mas-workflow skills and inject workflow guidance.
+  ;; When workflow skills are present, tell the agent how to execute them.
+  (define workflow-section
+    (let ([wf-skills (filter-workflow-skills (resource-set-skills all-resources))])
+      (if (null? wf-skills)
+          #f
+          (string-append
+           "\n\n## Available Workflows\n\n"
+           "Multi-agent workflows that can be triggered with `skill-route`:\n"
+           (string-join (for/list ([s (in-list wf-skills)])
+                          (format "- **~a**: ~a" (hash-ref s 'name "?") (hash-ref s 'description "")))
+                        "\n")
+           "\n\nExecute with: skill-route {action: \"workflow\", name: \"<skill-name>\", variables: {...}}"))))
 
   ;; v0.19.3 Wave 3: Inject project file tree into system prompt
   ;; This saves 1-2 exploration iterations per session.
@@ -237,6 +261,9 @@
     (append system-instrs
             (if skill-section
                 (list skill-section)
+                (list))
+            (if workflow-section
+                (list workflow-section)
                 (list))
             (if project-tree-section
                 (list project-tree-section)

@@ -148,7 +148,7 @@
                (define skill-name (path->string entry))
                (define skill-file (build-path skills-dir entry "SKILL.md"))
                (define content (try-read-file skill-file))
-               (and content (parse-skill skill-name content))))]))
+               (and content (hash-set (parse-skill skill-name content) 'raw-content content))))]))
 
 ;; Load templates from a templates/ subdirectory
 (define (load-templates dir)
