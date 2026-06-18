@@ -73,7 +73,13 @@
                   summary-exit-code
                   compute-verdict
                   write-json-results!
+                  print-ledger-summary
                   make-unique-log-name)
+         (only-in "run-tests/ledger.rkt"
+                  load-known-failure-ledger
+                  summarize-ledger-results
+                  ledger-summary-counts
+                  ledger-entry-matches-result?)
          (only-in "run-tests/cli.rkt" usage parse-args validate-args! known-suites known-modes)
          (only-in "run-tests/gate-evidence.rkt" record-gate-evidence!)
          (only-in "run-tests/inventory.rkt"
@@ -124,6 +130,11 @@
          summary-exit-code
          compute-verdict
          write-json-results!
+         print-ledger-summary
+         load-known-failure-ledger
+         summarize-ledger-results
+         ledger-summary-counts
+         ledger-entry-matches-result?
          bytes->string*
          clean-stale-bytecode!
          file-has-rackunit-tests?
@@ -371,7 +382,8 @@
                         repeat-num
                         repeat-total
                         mode
-                        json-out)
+                        json-out
+                        ledger)
   (define t0 (current-inexact-milliseconds))
   (define-values (serial-files parallel-files)
     (if (> jobs 1)
@@ -407,7 +419,10 @@
                          results
                          #:suite (string->symbol suite-label)
                          #:mode mode
-                         #:elapsed-ms total-elapsed))
+                         #:elapsed-ms total-elapsed
+                         #:ledger ledger))
+  (when ledger
+    (print-ledger-summary ledger results))
   (save-failure-logs results)
   (define failed-files
     (count (lambda (r)
@@ -446,7 +461,8 @@
                   inventory?
                   diagnose-overhead?
                   requested-mode
-                  json-out)
+                  json-out
+                  ledger-path)
     (parse-args args))
   (validate-args! jobs
                   sequential?
@@ -459,7 +475,8 @@
                   inventory?
                   diagnose-overhead?
                   requested-mode
-                  json-out)
+                  json-out
+                  ledger-path)
   (when diagnose-overhead?
     (print-overhead-diagnostics #:base-dir base-dir)
     (exit 0))
@@ -486,6 +503,7 @@
   (define timeout-ms (and timeout (* timeout 1000)))
   (define suite-label (symbol->string suite))
   (define mode (effective-mode requested-mode suite-label))
+  (define ledger (and ledger-path (load-known-failure-ledger ledger-path)))
   (define n-files (length suite-files))
   (printf ";; run-tests: suite=~a files=~a jobs=~a sequential=~a repeat=~a mode=~a~n"
           suite-label
@@ -504,7 +522,16 @@
     (when (> repeat 1)
       (printf "~n;; ── Run ~a/~a ──~n" run-num repeat))
     (define-values (exit-code results)
-      (run-suite-once suite-files jobs timeout-ms strict? suite-label run-num repeat mode json-out))
+      (run-suite-once suite-files
+                      jobs
+                      timeout-ms
+                      strict?
+                      suite-label
+                      run-num
+                      repeat
+                      mode
+                      json-out
+                      ledger))
     (set-box! last-results results)
     (unless (zero? exit-code)
       (exit exit-code)))

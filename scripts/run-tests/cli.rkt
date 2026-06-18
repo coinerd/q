@@ -25,17 +25,20 @@
   (displayln "  --timeout SECS    Per-file timeout in seconds")
   (displayln "  --mode <name>     Execution mode: auto (default), subprocess, in-process, grouped")
   (displayln
-   "  --suite <name>    Run test suite: all (default), fast, unit-fast, slow, tui, smoke, security, arch, runtime, extensions, workflows")
+   "  --suite <name>    Run test suite: all/broad (default all), fast, unit-fast, slow, tui, smoke, security, arch, runtime, extensions, workflows")
   (displayln "  --strict          Enable strict zero-test detection (default: on)")
   (displayln "  --repeat N        Run suite N times (exit 1 if any run fails)")
   (displayln "  --record-gate-evidence  Write .gate-evidence/<suite>.passed on success")
   (displayln "  --inventory             Print inventory report (selected/excluded files) and exit")
   (displayln "  --diagnose-overhead     Measure Racket/raco per-file startup overhead and exit")
   (displayln "  --json-out PATH         Write structured per-file JSON results")
+  (displayln
+   "  --ledger PATH           Read known-failure ledger JSON and report known/new/resolved failures")
   (displayln "  --help            Show this help message")
   (newline)
   (displayln "Suites:")
   (displayln "  all     Entire tests/ directory (per-file spawn)")
+  (displayln "  broad   Alias for all discoverable tests (per-file spawn)")
   (displayln "  fast    All tests except slow patterns (per-file spawn)")
   (displayln "  unit-fast  Fast unit tests eligible for in-process/grouped execution")
   (displayln "  slow    Only sandbox/subprocess tests")
@@ -47,7 +50,8 @@
   (displayln "  extensions Extension/GSD/hook tests")
   (displayln "  workflows All tests/workflows/ including fixture self-tests (integration-level)"))
 
-(define known-suites '(all fast unit-fast slow smoke tui security arch runtime extensions workflows))
+(define known-suites
+  '(all broad fast unit-fast slow smoke tui security arch runtime extensions workflows))
 (define known-modes '(auto subprocess in-process grouped))
 
 (define (parse-args args)
@@ -63,7 +67,8 @@
              [inventory? #f]
              [diagnose-overhead? #f]
              [mode 'auto]
-             [json-out #f])
+             [json-out #f]
+             [ledger #f])
     (match rest
       ['()
        (values jobs
@@ -77,7 +82,8 @@
                inventory?
                diagnose-overhead?
                mode
-               json-out)]
+               json-out
+               ledger)]
       [(list "--help" _ ...)
        (usage)
        (exit 0)]
@@ -94,7 +100,8 @@
              inventory?
              diagnose-overhead?
              mode
-             json-out)]
+             json-out
+             ledger)]
       [(list "--jobs" n rest ...)
        (loop rest
              (string->number n)
@@ -108,7 +115,8 @@
              inventory?
              diagnose-overhead?
              mode
-             json-out)]
+             json-out
+             ledger)]
       [(list "--sequential" rest ...)
        (loop rest
              1
@@ -122,7 +130,8 @@
              inventory?
              diagnose-overhead?
              mode
-             json-out)]
+             json-out
+             ledger)]
       [(list "--timeout" secs rest ...)
        (loop rest
              jobs
@@ -136,7 +145,8 @@
              inventory?
              diagnose-overhead?
              mode
-             json-out)]
+             json-out
+             ledger)]
       [(list "--mode" name rest ...)
        (loop rest
              jobs
@@ -150,7 +160,8 @@
              inventory?
              diagnose-overhead?
              (string->symbol name)
-             json-out)]
+             json-out
+             ledger)]
       [(list "--suite" name rest ...)
        (loop rest
              jobs
@@ -164,7 +175,8 @@
              inventory?
              diagnose-overhead?
              mode
-             json-out)]
+             json-out
+             ledger)]
       [(list "--repeat" n rest ...)
        (loop rest
              jobs
@@ -178,7 +190,8 @@
              inventory?
              diagnose-overhead?
              mode
-             json-out)]
+             json-out
+             ledger)]
       [(list "--record-gate-evidence" rest ...)
        (loop rest
              jobs
@@ -192,7 +205,8 @@
              inventory?
              diagnose-overhead?
              mode
-             json-out)]
+             json-out
+             ledger)]
       [(list "--inventory" rest ...)
        (loop rest
              jobs
@@ -206,7 +220,8 @@
              #t
              diagnose-overhead?
              mode
-             json-out)]
+             json-out
+             ledger)]
       [(list "--diagnose-overhead" rest ...)
        (loop rest
              jobs
@@ -220,7 +235,8 @@
              inventory?
              #t
              mode
-             json-out)]
+             json-out
+             ledger)]
       [(list "--json-out" path rest ...)
        (loop rest
              jobs
@@ -234,6 +250,22 @@
              inventory?
              diagnose-overhead?
              mode
+             path
+             ledger)]
+      [(list "--ledger" path rest ...)
+       (loop rest
+             jobs
+             sequential?
+             timeout
+             strict?
+             suite
+             extra
+             repeat
+             record-gate?
+             inventory?
+             diagnose-overhead?
+             mode
+             json-out
              path)]
       [(list (regexp #rx"^--") rest ...)
        (eprintf "run-tests: unknown flag: ~a~n" (car rest))
@@ -252,7 +284,8 @@
              inventory?
              diagnose-overhead?
              mode
-             json-out)])))
+             json-out
+             ledger)])))
 
 (define (validate-args! jobs
                         sequential?
@@ -265,7 +298,8 @@
                         inventory?
                         diagnose-overhead?
                         mode
-                        json-out)
+                        json-out
+                        ledger)
   (unless (memq suite known-suites)
     (raise-user-error 'run-tests
                       "unknown suite: ~a (valid: ~a)"
@@ -284,4 +318,17 @@
                       (string-join (map symbol->string known-modes) ", ")))
   (when (and json-out (not (string? json-out)))
     (raise-user-error 'run-tests "--json-out must be a path string, got: ~a" json-out))
-  (values jobs sequential? timeout strict? suite extra repeat record-gate? inventory? mode json-out))
+  (when (and ledger (not (string? ledger)))
+    (raise-user-error 'run-tests "--ledger must be a path string, got: ~a" ledger))
+  (values jobs
+          sequential?
+          timeout
+          strict?
+          suite
+          extra
+          repeat
+          record-gate?
+          inventory?
+          mode
+          json-out
+          ledger))

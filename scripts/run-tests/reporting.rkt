@@ -10,6 +10,10 @@
          racket/path
          racket/list
          json
+         (only-in "ledger.rkt"
+                  summarize-ledger-results
+                  ledger-summary-counts
+                  ledger-entry-matches-result?)
          (only-in "parse.rkt"
                   test-file-result-path
                   test-file-result-exit-code
@@ -33,6 +37,7 @@
          classify-test-result
          test-result->jsexpr
          write-json-results!
+         print-ledger-summary
          format-verdict-line)
 
 (define (format-duration ms)
@@ -121,11 +126,33 @@
                #:when (> (hash-ref counts category 0) 0))
     (values (string->symbol (symbol->string category)) (hash-ref counts category))))
 
+(define (ledger-match ledger r)
+  (and ledger
+       (for/first ([entry (in-list ledger)]
+                   #:when (ledger-entry-matches-result? entry r))
+         entry)))
+
+(define (test-result->ledger-jsexpr r ledger)
+  (define base (test-result->jsexpr r))
+  (define entry (ledger-match ledger r))
+  (if entry
+      (hash-set* base
+                 'known_failure
+                 #t
+                 'issue
+                 (hash-ref entry 'issue)
+                 'owner
+                 (hash-ref entry 'owner)
+                 'release_blocking
+                 (hash-ref entry 'release_blocking))
+      (hash-set base 'known_failure #f)))
+
 (define (write-json-results! path
                              results
                              #:suite [suite 'all]
                              #:mode [mode 'subprocess]
-                             #:elapsed-ms [elapsed-ms 0])
+                             #:elapsed-ms [elapsed-ms 0]
+                             #:ledger [ledger #f])
   (define passed-files (count (lambda (r) (= (test-file-result-exit-code r) 0)) results))
   (define failed-files
     (count (lambda (r)
@@ -134,6 +161,7 @@
            results))
   (define timeout-files (count (lambda (r) (= (test-file-result-exit-code r) 2)) results))
   (define counts (category-counts results))
+  (define ledger-summary (and ledger (summarize-ledger-results ledger results)))
   (define payload
     (hasheq 'suite
             (symbol->string suite)
@@ -160,9 +188,30 @@
                     (for/sum ([r (in-list results)]) (test-file-result-failed r)))
             'category_counts
             (category-counts->jsexpr counts)
+            'ledger
+            (and ledger-summary (ledger-summary-counts ledger-summary))
             'files
-            (map test-result->jsexpr results)))
+            (if ledger
+                (map (lambda (r) (test-result->ledger-jsexpr r ledger)) results)
+                (map test-result->jsexpr results))))
   (call-with-output-file path #:exists 'truncate/replace (lambda (out) (write-json payload out))))
+
+(define (print-ledger-summary ledger results)
+  (define summary (summarize-ledger-results ledger results))
+  (define counts (ledger-summary-counts summary))
+  (newline)
+  (displayln "KNOWN-FAILURE LEDGER")
+  (printf "  Known failures: ~a~n" (hash-ref counts 'known_failures))
+  (printf "  New failures: ~a~n" (hash-ref counts 'new_failures))
+  (printf "  Unclassified failures: ~a~n" (hash-ref counts 'unclassified_failures))
+  (printf "  Resolved known failures: ~a~n" (hash-ref counts 'resolved_known_failures))
+  (printf "  Release-blocking known failures: ~a~n"
+          (hash-ref counts 'release_blocking_known_failures))
+  (when (> (hash-ref counts 'unclassified_failures) 0)
+    (displayln "  ⛔ Ledger incomplete: unclassified failures remain."))
+  (when (> (hash-ref counts 'new_failures) 0)
+    (displayln "  ⛔ New failures require triage before broad gate approval."))
+  summary)
 
 (define (print-summary results total-start-ms)
   (define total-files (length results))

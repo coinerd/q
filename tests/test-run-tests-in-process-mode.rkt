@@ -50,7 +50,8 @@
                       inventory?
                       diagnose?
                       mode
-                      json-out)
+                      json-out
+                      ledger)
         (parse-args '("--mode" "in-process" "--suite" "unit-fast")))
       (check-equal? mode 'in-process)
       (check-equal? suite 'unit-fast)
@@ -65,7 +66,8 @@
                       _inventory?
                       _diagnose?
                       default-mode
-                      _json-out)
+                      _json-out
+                      _ledger)
         (parse-args '()))
       (check-equal? default-mode 'auto))
 

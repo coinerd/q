@@ -84,7 +84,8 @@
                       _inventory?
                       _diagnose?
                       _mode
-                      json-out)
+                      json-out
+                      _ledger)
         (parse-args '("--json-out" "/tmp/q-results.json")))
       (check-equal? json-out "/tmp/q-results.json"))
 
