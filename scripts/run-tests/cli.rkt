@@ -8,7 +8,8 @@
 
 (require racket/match
          racket/string
-         (only-in racket/future processor-count))
+         (only-in racket/future processor-count)
+         (only-in "profiles.rkt" known-profiles))
 
 (provide usage
          parse-args
@@ -34,6 +35,7 @@
   (displayln "  --json-out PATH         Write structured per-file JSON results")
   (displayln
    "  --ledger PATH           Read known-failure ledger JSON and report known/new/resolved failures")
+  (displayln "  --profile NAME          Environment profile: local, vps, ci, headless, full")
   (displayln "  --help            Show this help message")
   (newline)
   (displayln "Suites:")
@@ -68,7 +70,38 @@
              [diagnose-overhead? #f]
              [mode 'auto]
              [json-out #f]
-             [ledger #f])
+             [ledger #f]
+             [profile 'local])
+    (define (continue rest
+                      #:jobs [jobs* jobs]
+                      #:sequential? [sequential?* sequential?]
+                      #:timeout [timeout* timeout]
+                      #:strict? [strict?* strict?]
+                      #:suite [suite* suite]
+                      #:extra [extra* extra]
+                      #:repeat [repeat* repeat]
+                      #:record-gate? [record-gate?* record-gate?]
+                      #:inventory? [inventory?* inventory?]
+                      #:diagnose-overhead? [diagnose-overhead?* diagnose-overhead?]
+                      #:mode [mode* mode]
+                      #:json-out [json-out* json-out]
+                      #:ledger [ledger* ledger]
+                      #:profile [profile* profile])
+      (loop rest
+            jobs*
+            sequential?*
+            timeout*
+            strict?*
+            suite*
+            extra*
+            repeat*
+            record-gate?*
+            inventory?*
+            diagnose-overhead?*
+            mode*
+            json-out*
+            ledger*
+            profile*))
     (match rest
       ['()
        (values jobs
@@ -83,209 +116,30 @@
                diagnose-overhead?
                mode
                json-out
-               ledger)]
+               ledger
+               profile)]
       [(list "--help" _ ...)
        (usage)
        (exit 0)]
-      [(list "--strict" rest ...)
-       (loop rest
-             jobs
-             sequential?
-             timeout
-             #t
-             suite
-             extra
-             repeat
-             record-gate?
-             inventory?
-             diagnose-overhead?
-             mode
-             json-out
-             ledger)]
-      [(list "--jobs" n rest ...)
-       (loop rest
-             (string->number n)
-             sequential?
-             timeout
-             strict?
-             suite
-             extra
-             repeat
-             record-gate?
-             inventory?
-             diagnose-overhead?
-             mode
-             json-out
-             ledger)]
-      [(list "--sequential" rest ...)
-       (loop rest
-             1
-             #t
-             timeout
-             strict?
-             suite
-             extra
-             repeat
-             record-gate?
-             inventory?
-             diagnose-overhead?
-             mode
-             json-out
-             ledger)]
-      [(list "--timeout" secs rest ...)
-       (loop rest
-             jobs
-             sequential?
-             (string->number secs)
-             strict?
-             suite
-             extra
-             repeat
-             record-gate?
-             inventory?
-             diagnose-overhead?
-             mode
-             json-out
-             ledger)]
-      [(list "--mode" name rest ...)
-       (loop rest
-             jobs
-             sequential?
-             timeout
-             strict?
-             suite
-             extra
-             repeat
-             record-gate?
-             inventory?
-             diagnose-overhead?
-             (string->symbol name)
-             json-out
-             ledger)]
-      [(list "--suite" name rest ...)
-       (loop rest
-             jobs
-             sequential?
-             timeout
-             strict?
-             (string->symbol name)
-             extra
-             repeat
-             record-gate?
-             inventory?
-             diagnose-overhead?
-             mode
-             json-out
-             ledger)]
-      [(list "--repeat" n rest ...)
-       (loop rest
-             jobs
-             sequential?
-             timeout
-             strict?
-             suite
-             extra
-             (string->number n)
-             record-gate?
-             inventory?
-             diagnose-overhead?
-             mode
-             json-out
-             ledger)]
-      [(list "--record-gate-evidence" rest ...)
-       (loop rest
-             jobs
-             sequential?
-             timeout
-             strict?
-             suite
-             extra
-             repeat
-             #t
-             inventory?
-             diagnose-overhead?
-             mode
-             json-out
-             ledger)]
-      [(list "--inventory" rest ...)
-       (loop rest
-             jobs
-             sequential?
-             timeout
-             strict?
-             suite
-             extra
-             repeat
-             record-gate?
-             #t
-             diagnose-overhead?
-             mode
-             json-out
-             ledger)]
-      [(list "--diagnose-overhead" rest ...)
-       (loop rest
-             jobs
-             sequential?
-             timeout
-             strict?
-             suite
-             extra
-             repeat
-             record-gate?
-             inventory?
-             #t
-             mode
-             json-out
-             ledger)]
-      [(list "--json-out" path rest ...)
-       (loop rest
-             jobs
-             sequential?
-             timeout
-             strict?
-             suite
-             extra
-             repeat
-             record-gate?
-             inventory?
-             diagnose-overhead?
-             mode
-             path
-             ledger)]
-      [(list "--ledger" path rest ...)
-       (loop rest
-             jobs
-             sequential?
-             timeout
-             strict?
-             suite
-             extra
-             repeat
-             record-gate?
-             inventory?
-             diagnose-overhead?
-             mode
-             json-out
-             path)]
-      [(list (regexp #rx"^--") rest ...)
-       (eprintf "run-tests: unknown flag: ~a~n" (car rest))
+      [(list "--strict" rest ...) (continue rest #:strict? #t)]
+      [(list "--jobs" n rest ...) (continue rest #:jobs (string->number n))]
+      [(list "--sequential" rest ...) (continue rest #:jobs 1 #:sequential? #t)]
+      [(list "--timeout" secs rest ...) (continue rest #:timeout (string->number secs))]
+      [(list "--mode" name rest ...) (continue rest #:mode (string->symbol name))]
+      [(list "--suite" name rest ...) (continue rest #:suite (string->symbol name))]
+      [(list "--repeat" n rest ...) (continue rest #:repeat (string->number n))]
+      [(list "--record-gate-evidence" rest ...) (continue rest #:record-gate? #t)]
+      [(list "--inventory" rest ...) (continue rest #:inventory? #t)]
+      [(list "--diagnose-overhead" rest ...) (continue rest #:diagnose-overhead? #t)]
+      [(list "--json-out" path rest ...) (continue rest #:json-out path)]
+      [(list "--ledger" path rest ...) (continue rest #:ledger path)]
+      [(list "--profile" name rest ...) (continue rest #:profile (string->symbol name))]
+      [(list flag rest ...)
+       #:when (regexp-match? #rx"^--" flag)
+       (eprintf "run-tests: unknown flag: ~a~n" flag)
        (usage)
        (exit 2)]
-      [(list arg rest ...)
-       (loop rest
-             jobs
-             sequential?
-             timeout
-             strict?
-             suite
-             (cons arg extra)
-             repeat
-             record-gate?
-             inventory?
-             diagnose-overhead?
-             mode
-             json-out
-             ledger)])))
+      [(list arg rest ...) (continue rest #:extra (cons arg extra))])))
 
 (define (validate-args! jobs
                         sequential?
@@ -299,7 +153,8 @@
                         diagnose-overhead?
                         mode
                         json-out
-                        ledger)
+                        ledger
+                        profile)
   (unless (memq suite known-suites)
     (raise-user-error 'run-tests
                       "unknown suite: ~a (valid: ~a)"
@@ -316,6 +171,11 @@
                       "unknown mode: ~a (valid: ~a)"
                       mode
                       (string-join (map symbol->string known-modes) ", ")))
+  (unless (memq profile known-profiles)
+    (raise-user-error 'run-tests
+                      "unknown profile: ~a (valid: ~a)"
+                      profile
+                      (string-join (map symbol->string known-profiles) ", ")))
   (when (and json-out (not (string? json-out)))
     (raise-user-error 'run-tests "--json-out must be a path string, got: ~a" json-out))
   (when (and ledger (not (string? ledger)))
@@ -331,4 +191,5 @@
           inventory?
           mode
           json-out
-          ledger))
+          ledger
+          profile))

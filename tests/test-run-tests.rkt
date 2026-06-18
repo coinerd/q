@@ -433,7 +433,8 @@
                   diagnose?
                   mode
                   json-out
-                  ledger)
+                  ledger
+                  profile)
     (parse '("--repeat" "3")))
   (check-equal? repeat 3)
   (check-false record-gate?))
@@ -452,7 +453,8 @@
                   diagnose?
                   mode
                   json-out
-                  ledger)
+                  ledger
+                  profile)
     (parse '()))
   (check-equal? repeat 1)
   (check-false record-gate?))
@@ -471,7 +473,8 @@
                   diagnose?
                   mode
                   json-out
-                  ledger)
+                  ledger
+                  profile)
     (parse '("--suite" "smoke" "--repeat" "2")))
   (check-equal? suite 'smoke)
   (check-equal? repeat 2)
@@ -495,7 +498,8 @@
                   diagnose?
                   mode
                   json-out
-                  ledger)
+                  ledger
+                  profile)
     (parse '("--record-gate-evidence")))
   (check-true record-gate?))
 
@@ -513,7 +517,8 @@
                   diagnose?
                   mode
                   json-out
-                  ledger)
+                  ledger
+                  profile)
     (parse '()))
   (check-false record-gate?))
 

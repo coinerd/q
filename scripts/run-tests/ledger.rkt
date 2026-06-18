@@ -84,7 +84,8 @@
   (map normalize-ledger-entry (extract-ledger-entries payload)))
 
 (define (result-failure? r)
-  (not (= (test-file-result-exit-code r) 0)))
+  (and (not (= (test-file-result-exit-code r) 0))
+       (not (eq? (classify-test-result r) 'SKIPPED_BY_PROFILE))))
 
 (define (result-path-string r)
   (normalize-path-string (test-file-result-path r)))
