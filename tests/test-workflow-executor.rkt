@@ -12,7 +12,7 @@
          racket/string
          "../skills/workflow-executor.rkt"
          "../skills/mas-workflow.rkt"
-         "../tools/builtins/spawn-subagent.rkt"
+         (only-in "../tools/builtins/spawn-subagent.rkt" current-spawn-approval-result)
          "../tools/tool.rkt"
          "../llm/provider.rkt"
          "../llm/model.rkt")
@@ -138,6 +138,68 @@
                       '()))
       (define result (execute-workflow wf (hasheq) exec-ctx))
       (check-false (tool-result-is-error? result) "read-only should not trigger HITL denial"))
+
+    (test-case "dangerous sequential capability requires approval — denied"
+      (parameterize ([current-spawn-approval-result #f])
+        (define provider (make-static-text-provider "Done"))
+        (define exec-ctx (make-test-exec-ctx provider))
+        (define wf
+          (mas-workflow "dangerous-seq"
+                        "desc"
+                        (list (workflow-step "runner" "rm -rf /" '(shell-exec) #f))
+                        '()))
+        (define result (execute-workflow wf (hasheq) exec-ctx))
+        (check-true (tool-result-is-error? result) "denied workflow should error")
+        (define content (tool-result-content result))
+        (define msg
+          (if (list? content)
+              (hash-ref (car content) 'text "")
+              (format "~a" content)))
+        (check-true (string-contains? msg "failed") "should mention failure")))
+
+    (test-case "dangerous sequential capability approved by default in non-interactive mode"
+      (define provider (make-static-text-provider "Done"))
+      (define exec-ctx (make-test-exec-ctx provider))
+      (define wf
+        (mas-workflow "dangerous-seq-approved"
+                      "desc"
+                      (list (workflow-step "runner" "echo ok" '(shell-exec) #f))
+                      '()))
+      (define result (execute-workflow wf (hasheq) exec-ctx))
+      (check-false (tool-result-is-error? result) "default permissive mode should allow"))
+
+    (test-case "dangerous parallel capability requires approval — denied"
+      (parameterize ([current-spawn-approval-result #f])
+        (define provider (make-static-text-provider "Done"))
+        (define exec-ctx (make-test-exec-ctx provider))
+        (define wf
+          (mas-workflow "dangerous-par"
+                        "desc"
+                        (list (workflow-step "a" "Run A" '(shell-exec) #t)
+                              (workflow-step "b" "Run B" '(shell-exec) #t)
+                              (workflow-step "c" "Clean up" '(git-write) #f))
+                        '()))
+        (define result (execute-workflow wf (hasheq) exec-ctx))
+        (check-true (tool-result-is-error? result) "denied parallel workflow should error")
+        (define content (tool-result-content result))
+        (define msg
+          (if (list? content)
+              (hash-ref (car content) 'text "")
+              (format "~a" content)))
+        (check-true (string-contains? msg "failed") "should mention failure")
+        (check-true (string-contains? msg "step 1") "should indicate failed step")))
+
+    (test-case "dangerous parallel capability approved by default in non-interactive mode"
+      (define provider (make-static-text-provider "Done"))
+      (define exec-ctx (make-test-exec-ctx provider))
+      (define wf
+        (mas-workflow "dangerous-par-approved"
+                      "desc"
+                      (list (workflow-step "a" "Run A" '(shell-exec) #t)
+                            (workflow-step "b" "Run B" '(shell-exec) #t))
+                      '()))
+      (define result (execute-workflow wf (hasheq) exec-ctx))
+      (check-false (tool-result-is-error? result) "default permissive mode should allow parallel"))
 
     (test-case "role used in workflow steps"
       (define provider (make-static-text-provider "Role check"))

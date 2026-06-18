@@ -25,7 +25,9 @@
          (only-in "../tools/builtins/spawn-subagent.rkt"
                   subagent-config
                   run-subagent-with-config
-                  tool-spawn-subagents)
+                  tool-spawn-subagents
+                  requires-hitl-approval?
+                  request-spawn-approval)
          (only-in "../tools/tool.rkt"
                   tool-result?
                   tool-result-is-error?
@@ -115,13 +117,47 @@
       [(pred (car lst)) (loop (cdr lst) (cons (car lst) taken))]
       [else (values (reverse taken) lst)])))
 
+;; step-group-capabilities : (listof workflow-step?) -> (listof symbol?)
+;; Aggregate all capabilities requested by steps in a group.
+(define (step-group-capabilities group)
+  (remove-duplicates (append* (for/list ([step (in-list group)])
+                                (or (workflow-step-capabilities step) '())))))
+
+;; step-group-task-preview : (listof workflow-step?) hash? (or/c string? #f) -> string?
+;; Build a short task preview for approval requests.
+(define (step-group-task-preview group variables prev-result)
+  (string-join
+   (for/list ([step (in-list group)])
+     (format "[~a] ~a" (workflow-step-role step) (render-step-task step variables prev-result)))
+   "\n"))
+
 ;; execute-step-group : (listof workflow-step?) exact-nonnegative-integer? hash? string? (or/c exec-context? #f)
 ;;                      -> (values (listof workflow-step-result?) exact-nonnegative-integer? boolean? string?)
 ;; Execute a group of steps (sequential singleton or parallel batch).
 ;; Returns the step results, next index, whether the group succeeded, and the
 ;; result text to pass as {{result}} to the next group (last step's result).
 (define (execute-step-group group idx variables prev-result exec-ctx)
+  ;; v0.99.27 W3: HITL approval gate for dangerous capabilities.
+  ;; Covers both sequential steps (run-subagent-with-config also checks) and
+  ;; parallel batches (which previously bypassed the gate via run-subagent).
+  (define group-caps (step-group-capabilities group))
+  (define approval-denied?
+    (and (requires-hitl-approval? group-caps)
+         (not (request-spawn-approval group-caps
+                                      (step-group-task-preview group variables prev-result)
+                                      exec-ctx))))
   (cond
+    [approval-denied?
+     (define denied-msg "subagent spawn blocked — HITL approval denied")
+     (define denied-results
+       (for/list ([step (in-list group)]
+                  [step-idx (in-naturals idx)])
+         (workflow-step-result step-idx
+                               (workflow-step-role step)
+                               (render-step-task step variables prev-result)
+                               #f
+                               denied-msg)))
+     (values denied-results (+ idx (length group)) #f "")]
     [(= (length group) 1)
      (define step (car group))
      (define rendered-task (render-step-task step variables prev-result))
