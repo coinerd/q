@@ -18,6 +18,7 @@
          (only-in "../../runtime/runtime-helpers.rkt" emit-session-event! make-event-bus)
          (only-in "../../tui/approval-channel.rkt" current-approval-channel approval-await-result)
          (only-in "../../runtime/settings.rkt" q-settings? setting-ref)
+         (only-in "../../runtime/auto-retry.rkt" with-auto-retry)
          "../model-bridge.rkt"
          (only-in "provider-hash-bridge.rkt"
                   message->provider-hash
@@ -198,7 +199,7 @@
       [else #f]))
   (subagent-config (hash-ref args 'task #f)
                    (resolve-role-prompt (hash-ref args 'role default-role-prompt))
-                   (hash-ref args 'max-turns 5)
+                   (hash-ref args 'max-turns 10)
                    (hash-ref args 'tools #f)
                    (hash-ref args 'model #f)
                    (and caps (pair? caps) caps)))
@@ -562,7 +563,13 @@
        ;; jsexpr->bytes on the request body, which rejects Racket structs.
        (define provider-msgs (messages->provider-hashes msgs))
        (define req (make-model-request provider-msgs (list-active-tools-jsexpr registry) (hasheq)))
-       (define resp (provider-send provider req))
+       ;; F-1a (v0.99.26): Wrap provider-send in auto-retry so subagents
+       ;; survive rate-limiting and transient timeouts. Without this,
+       ;; a single 429 kills the subagent immediately while the parent
+       ;; agent retries silently.
+       (define resp
+         (with-auto-retry (lambda () (provider-send provider req))
+                          #:per-type-budgets (hash 'timeout 2 'rate-limit 4 'provider-error 2)))
        (define content (model-response-content resp))
        ;; Build assistant message from response content parts
        (define content-parts
@@ -640,7 +647,7 @@
   (define task (hash-ref job 'task #f))
   (define role-prompt (hash-ref job 'role (hash-ref job 'rolePrompt #f)))
   (define model-name (or (hash-ref job 'model #f) (resolve-model-name parent-ctx job)))
-  (define max-turns (hash-ref job 'max-turns 5))
+  (define max-turns (hash-ref job 'max-turns 10))
   ;; v0.99.22 A-2: Parse capabilities from job hash (mirrors parse-subagent-config)
   (define caps (parse-job-capabilities job))
   (define result

@@ -35,6 +35,6 @@
 (test-case "parse-subagent-config with defaults"
   (define cfg (parse-subagent-config (hasheq 'task "hello")))
   (check-equal? (subagent-config-task cfg) "hello")
-  (check-equal? (subagent-config-max-turns cfg) 5)
+  (check-equal? (subagent-config-max-turns cfg) 10) ; F-1b: default raised from 5 to 10
   (check-false (subagent-config-tools cfg))
   (check-false (subagent-config-model cfg)))

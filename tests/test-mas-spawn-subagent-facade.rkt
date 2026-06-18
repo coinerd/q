@@ -83,9 +83,9 @@
       (define cfg (parse-subagent-config (hasheq 'task "do something")))
       (check-equal? (subagent-config-task cfg) "do something"))
 
-    (test-case "parse-subagent-config: default max-turns is 5"
+    (test-case "parse-subagent-config: default max-turns is 10"
       (define cfg (parse-subagent-config (hasheq 'task "test")))
-      (check-equal? (subagent-config-max-turns cfg) 5))
+      (check-equal? (subagent-config-max-turns cfg) 10))
 
     (test-case "parse-subagent-config: custom max-turns"
       (define cfg (parse-subagent-config (hasheq 'task "test" 'max-turns 10)))

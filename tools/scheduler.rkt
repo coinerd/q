@@ -119,6 +119,7 @@
          scheduler-batch-stats-errors
          scheduler-batch-stats->hash
          run-preflight
+         ipc-response->tool-result
          (contract-out [run-tool-batch
                         (->* ((listof tool-call?) tool-registry?)
                              (#:hook-dispatcher (or/c procedure? #f)
@@ -288,6 +289,13 @@
     [(ok) (make-success-result (or content "ok") details)]
     [(timeout) (make-error-result (format "tool execution timed out: ~a" (or err-msg "")))]
     [(crashed) (make-error-result (format "worker crashed: ~a" (or err-msg "")))]
+    ;; F-2 (v0.99.26): Tool ran but returned non-zero exit (e.g., bash syntax error).
+    ;; Show stderr and exit code so the agent can diagnose the failure.
+    [(error)
+     (define stderr (and details (hash? details) (hash-ref details 'stderr #f)))
+     (define exit-code (and details (hash? details) (hash-ref details 'exit-code #f)))
+     (make-error-result
+      (format "command failed (exit ~a): ~a" (or exit-code "?") (or stderr err-msg "unknown")))]
     [else (make-error-result (format "execution plane error: ~a" (or err-msg "unknown")))]))
 
 ;; ============================================================
