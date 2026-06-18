@@ -71,7 +71,8 @@
                       _diagnose?
                       _mode
                       _json-out
-                      ledger)
+                      ledger
+                      _profile)
         (parse-args '("--ledger" "tests/test-suite-ledger.json")))
       (check-equal? ledger "tests/test-suite-ledger.json"))
 

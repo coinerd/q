@@ -62,23 +62,37 @@
     [(> timeout-count 0) 2]
     [else 0]))
 
+(define (skipped-by-profile-result? r)
+  (eq? (classify-test-result r) 'SKIPPED_BY_PROFILE))
+
+(define (passed-result? r)
+  (and (= (test-file-result-exit-code r) 0) (not (skipped-by-profile-result? r))))
+
+(define (failed-result? r)
+  (and (not (skipped-by-profile-result? r))
+       (not (= (test-file-result-exit-code r) 0))
+       (not (= (test-file-result-exit-code r) 2))))
+
+(define (timeout-result? r)
+  (and (not (skipped-by-profile-result? r)) (= (test-file-result-exit-code r) 2)))
+
 ;; Compute a verdict symbol from results: 'pass, 'fail, 'incomplete, 'inconclusive.
 ;; - 'fail:          at least one file exited non-zero (not timeout)
 ;; - 'incomplete:    at least one file timed out (exit-code 2)
 ;; - 'inconclusive:  all files passed but zero tests were parsed
 ;; - 'pass:          all files passed and at least one test was parsed
 (define (compute-verdict results)
-  (define failed-files
-    (count (lambda (r)
-             (and (not (= (test-file-result-exit-code r) 0))
-                  (not (= (test-file-result-exit-code r) 2))))
-           results))
-  (define timeout-files (count (lambda (r) (= (test-file-result-exit-code r) 2)) results))
-  (define total-tests (for/sum ([r (in-list results)]) (test-file-result-total r)))
+  (define failed-files (count failed-result? results))
+  (define timeout-files (count timeout-result? results))
+  (define skipped-files (count skipped-by-profile-result? results))
+  (define runnable-results (filter (lambda (r) (not (skipped-by-profile-result? r))) results))
+  (define total-tests (for/sum ([r (in-list runnable-results)]) (test-file-result-total r)))
   (cond
     [(> failed-files 0) 'fail]
     [(> timeout-files 0) 'incomplete]
-    [(= total-tests 0) 'inconclusive]
+    [(and (null? runnable-results) (= skipped-files 0)) 'inconclusive]
+    [(and (pair? runnable-results) (= total-tests 0)) 'inconclusive]
+    [(and (null? runnable-results) (> skipped-files 0)) 'pass]
     [else 'pass]))
 
 (define (format-verdict-line verdict timeout-count)
@@ -93,7 +107,8 @@
     [else "  VERDICT:   ❓ UNKNOWN"]))
 
 (define known-result-categories
-  '(PASS ASSERTION_FAILURE
+  '(PASS SKIPPED_BY_PROFILE
+         ASSERTION_FAILURE
          MODULE_LOAD_FAILURE
          COMPILE_FAILURE
          TIMEOUT
@@ -152,14 +167,12 @@
                              #:suite [suite 'all]
                              #:mode [mode 'subprocess]
                              #:elapsed-ms [elapsed-ms 0]
-                             #:ledger [ledger #f])
-  (define passed-files (count (lambda (r) (= (test-file-result-exit-code r) 0)) results))
-  (define failed-files
-    (count (lambda (r)
-             (and (not (= (test-file-result-exit-code r) 0))
-                  (not (= (test-file-result-exit-code r) 2))))
-           results))
-  (define timeout-files (count (lambda (r) (= (test-file-result-exit-code r) 2)) results))
+                             #:ledger [ledger #f]
+                             #:profile [profile 'local])
+  (define passed-files (count passed-result? results))
+  (define failed-files (count failed-result? results))
+  (define timeout-files (count timeout-result? results))
+  (define skipped-files (count skipped-by-profile-result? results))
   (define counts (category-counts results))
   (define ledger-summary (and ledger (summarize-ledger-results ledger results)))
   (define payload
@@ -167,6 +180,8 @@
             (symbol->string suite)
             'mode
             (symbol->string mode)
+            'profile
+            (symbol->string profile)
             'verdict
             (symbol->string (compute-verdict results))
             'elapsed_ms
@@ -180,6 +195,8 @@
                     failed-files
                     'files_timeout
                     timeout-files
+                    'files_skipped_by_profile
+                    skipped-files
                     'tests_total
                     (for/sum ([r (in-list results)]) (test-file-result-total r))
                     'tests_passed
@@ -215,13 +232,10 @@
 
 (define (print-summary results total-start-ms)
   (define total-files (length results))
-  (define passed-files (count (lambda (r) (= (test-file-result-exit-code r) 0)) results))
-  (define failed-files
-    (count (lambda (r)
-             (and (not (= (test-file-result-exit-code r) 0))
-                  (not (= (test-file-result-exit-code r) 2))))
-           results))
-  (define timeout-files (count (lambda (r) (= (test-file-result-exit-code r) 2)) results))
+  (define passed-files (count passed-result? results))
+  (define failed-files (count failed-result? results))
+  (define timeout-files (count timeout-result? results))
+  (define skipped-files (count skipped-by-profile-result? results))
   (define zero-test-files
     (count (lambda (r) (and (= (test-file-result-exit-code r) 0) (= (test-file-result-total r) 0)))
            results))
@@ -238,6 +252,8 @@
           passed-files
           failed-files
           timeout-files)
+  (when (> skipped-files 0)
+    (printf "             Skipped by profile: ~a~n" skipped-files))
   (when (> zero-test-files 0)
     (printf "             ⚠ ~a file~a with zero parsed tests (exit=0 but no rackunit output)~n"
             zero-test-files
@@ -250,7 +266,7 @@
   (displayln "═══════════════════════════════════════════════════════════")
   (displayln (format-verdict-line verdict timeout-files))
   (displayln "═══════════════════════════════════════════════════════════")
-  (define failures (filter (lambda (r) (not (= (test-file-result-exit-code r) 0))) results))
+  (define failures (filter failed-result? results))
   (when (pair? failures)
     (newline)
     (displayln "FAILURES:")
@@ -280,7 +296,7 @@
   (string-append "q-test-fail-" (string-replace safe-base ".rkt" "") "-" path-hash ".log"))
 
 (define (save-failure-logs results)
-  (define failures (filter (lambda (r) (not (= (test-file-result-exit-code r) 0))) results))
+  (define failures (filter failed-result? results))
   (for ([f (in-list failures)])
     (define log-path (build-path "/tmp" (make-unique-log-name (test-file-result-path f))))
     (call-with-output-file log-path

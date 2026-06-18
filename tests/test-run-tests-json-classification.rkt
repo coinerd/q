@@ -85,7 +85,8 @@
                       _diagnose?
                       _mode
                       json-out
-                      _ledger)
+                      _ledger
+                      _profile)
         (parse-args '("--json-out" "/tmp/q-results.json")))
       (check-equal? json-out "/tmp/q-results.json"))
 

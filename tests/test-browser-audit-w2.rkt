@@ -1,5 +1,7 @@
 #lang racket
 
+;; @requires browser
+
 ;; tests/test-browser-audit-w2.rkt — Tests for Wave 2 audit fixes
 ;; C1: restart-sidecar! actually relaunches
 ;; C2: pending-box guarded by semaphore

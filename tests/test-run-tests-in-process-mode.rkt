@@ -51,7 +51,8 @@
                       diagnose?
                       mode
                       json-out
-                      ledger)
+                      ledger
+                      _profile)
         (parse-args '("--mode" "in-process" "--suite" "unit-fast")))
       (check-equal? mode 'in-process)
       (check-equal? suite 'unit-fast)
@@ -67,7 +68,8 @@
                       _diagnose?
                       default-mode
                       _json-out
-                      _ledger)
+                      _ledger
+                      _default-profile)
         (parse-args '()))
       (check-equal? default-mode 'auto))
 

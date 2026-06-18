@@ -81,6 +81,13 @@
                   ledger-summary-counts
                   ledger-entry-matches-result?)
          (only-in "run-tests/cli.rkt" usage parse-args validate-args! known-suites known-modes)
+         (only-in "run-tests/profiles.rkt"
+                  known-profiles
+                  profile-unavailable-requirements
+                  profile-skips-test?
+                  skipped-requirements
+                  make-skipped-result
+                  skipped-result-exit-code)
          (only-in "run-tests/gate-evidence.rkt" record-gate-evidence!)
          (only-in "run-tests/inventory.rkt"
                   print-inventory
@@ -135,6 +142,12 @@
          summarize-ledger-results
          ledger-summary-counts
          ledger-entry-matches-result?
+         known-profiles
+         profile-unavailable-requirements
+         profile-skips-test?
+         skipped-requirements
+         make-skipped-result
+         skipped-result-exit-code
          bytes->string*
          clean-stale-bytecode!
          file-has-rackunit-tests?
@@ -383,13 +396,26 @@
                         repeat-total
                         mode
                         json-out
-                        ledger)
+                        ledger
+                        profile)
   (define t0 (current-inexact-milliseconds))
+  (define-values (skipped-files runnable-files)
+    (partition (lambda (f)
+                 (profile-skips-test? profile (hash-ref (get-file-metadata f) 'requires '())))
+               suite-files))
+  (define skipped-results
+    (for/list ([f (in-list skipped-files)])
+      (make-skipped-result f profile (hash-ref (get-file-metadata f) 'requires '()))))
+  (when (pair? skipped-files)
+    (printf ";; run-tests: profile=~a skipped ~a file~a by @requires metadata~n"
+            profile
+            (length skipped-files)
+            (if (= (length skipped-files) 1) "" "s")))
   (define-values (serial-files parallel-files)
     (if (> jobs 1)
-        (values (filter mutating-file? suite-files)
-                (filter (lambda (f) (not (mutating-file? f))) suite-files))
-        (values '() suite-files)))
+        (values (filter mutating-file? runnable-files)
+                (filter (lambda (f) (not (mutating-file? f))) runnable-files))
+        (values '() runnable-files)))
   (when (pair? serial-files)
     (printf ";; run-tests: serializing ~a mutation-sensitive file~a before parallel batches~n"
             (length serial-files)
@@ -409,7 +435,7 @@
                [i (in-naturals)])
       (values f i)))
   (define results
-    (sort (append serial-results parallel-results)
+    (sort (append skipped-results serial-results parallel-results)
           <
           #:key (lambda (r) (hash-ref file-order (test-file-result-path r) 0))))
   (define total-elapsed (exact-round (- (current-inexact-milliseconds) t0)))
@@ -420,16 +446,22 @@
                          #:suite (string->symbol suite-label)
                          #:mode mode
                          #:elapsed-ms total-elapsed
-                         #:ledger ledger))
+                         #:ledger ledger
+                         #:profile profile))
   (when ledger
     (print-ledger-summary ledger results))
   (save-failure-logs results)
   (define failed-files
     (count (lambda (r)
-             (and (not (= (test-file-result-exit-code r) 0))
+             (and (not (eq? (classify-test-result r) 'SKIPPED_BY_PROFILE))
+                  (not (= (test-file-result-exit-code r) 0))
                   (not (= (test-file-result-exit-code r) 2))))
            results))
-  (define timeout-files (count (lambda (r) (= (test-file-result-exit-code r) 2)) results))
+  (define timeout-files
+    (count (lambda (r)
+             (and (not (eq? (classify-test-result r) 'SKIPPED_BY_PROFILE))
+                  (= (test-file-result-exit-code r) 2)))
+           results))
   (when strict?
     (define suspicious
       (filter (lambda (r) (and (= (test-file-result-exit-code r) 0) (= (test-file-result-total r) 0)))
@@ -462,7 +494,8 @@
                   diagnose-overhead?
                   requested-mode
                   json-out
-                  ledger-path)
+                  ledger-path
+                  profile)
     (parse-args args))
   (validate-args! jobs
                   sequential?
@@ -476,7 +509,8 @@
                   diagnose-overhead?
                   requested-mode
                   json-out
-                  ledger-path)
+                  ledger-path
+                  profile)
   (when diagnose-overhead?
     (print-overhead-diagnostics #:base-dir base-dir)
     (exit 0))
@@ -505,13 +539,14 @@
   (define mode (effective-mode requested-mode suite-label))
   (define ledger (and ledger-path (load-known-failure-ledger ledger-path)))
   (define n-files (length suite-files))
-  (printf ";; run-tests: suite=~a files=~a jobs=~a sequential=~a repeat=~a mode=~a~n"
+  (printf ";; run-tests: suite=~a files=~a jobs=~a sequential=~a repeat=~a mode=~a profile=~a~n"
           suite-label
           n-files
           jobs
           sequential?
           repeat
-          mode)
+          mode
+          profile)
   (newline)
   (when (> repeat 1)
     (printf ";; run-tests: running suite ~a time~a for confidence gate~n"
@@ -531,7 +566,8 @@
                       repeat
                       mode
                       json-out
-                      ledger))
+                      ledger
+                      profile))
     (set-box! last-results results)
     (unless (zero? exit-code)
       (exit exit-code)))

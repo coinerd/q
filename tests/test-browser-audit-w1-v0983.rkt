@@ -1,5 +1,7 @@
 #lang racket
 
+;; @requires browser
+
 ;; tests/test-browser-audit-w1-v0983.rkt — Tests for Wave 1 audit fixes (v0.98.3)
 ;; SEC-07: Unbounded timeout_ms clamped
 ;; SEC-10: Ping-based readiness after restart

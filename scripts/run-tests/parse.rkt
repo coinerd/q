@@ -110,6 +110,7 @@
   (define total (test-file-result-total r))
   (define output (result-output-string r))
   (cond
+    [(or (= exit-code 5) (regexp-match? #rx"skipped_by_profile" output)) 'SKIPPED_BY_PROFILE]
     [(and (= exit-code 0) (> total 0)) 'PASS]
     [(and (= exit-code 0) (= total 0)) 'ZERO_PARSED]
     [(= exit-code 2) 'TIMEOUT]
