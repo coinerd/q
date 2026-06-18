@@ -61,6 +61,8 @@
                   parse-raco-output
                   normalize-counts
                   effective-exit-code
+                  classify-test-result
+                  test-result->jsexpr
                   extract-failure-lines
                   truncate-test-output
                   DEFAULT-OUTPUT-CAP)
@@ -70,6 +72,7 @@
                   format-duration
                   summary-exit-code
                   compute-verdict
+                  write-json-results!
                   make-unique-log-name)
          (only-in "run-tests/cli.rkt" usage parse-args validate-args! known-suites known-modes)
          (only-in "run-tests/gate-evidence.rkt" record-gate-evidence!)
@@ -105,6 +108,8 @@
          make-test-file-result
          parse-raco-output
          normalize-counts
+         classify-test-result
+         test-result->jsexpr
          extract-failure-lines
          run-single-file
          run-all-files
@@ -118,6 +123,7 @@
          format-duration
          summary-exit-code
          compute-verdict
+         write-json-results!
          bytes->string*
          clean-stale-bytecode!
          file-has-rackunit-tests?
@@ -357,7 +363,15 @@
     [(eq? requested-mode 'auto) (if (string=? suite-label "unit-fast") 'grouped 'subprocess)]
     [else requested-mode]))
 
-(define (run-suite-once suite-files jobs timeout-ms strict? suite-label repeat-num repeat-total mode)
+(define (run-suite-once suite-files
+                        jobs
+                        timeout-ms
+                        strict?
+                        suite-label
+                        repeat-num
+                        repeat-total
+                        mode
+                        json-out)
   (define t0 (current-inexact-milliseconds))
   (define-values (serial-files parallel-files)
     (if (> jobs 1)
@@ -388,6 +402,12 @@
           #:key (lambda (r) (hash-ref file-order (test-file-result-path r) 0))))
   (define total-elapsed (exact-round (- (current-inexact-milliseconds) t0)))
   (print-summary results total-elapsed)
+  (when json-out
+    (write-json-results! json-out
+                         results
+                         #:suite (string->symbol suite-label)
+                         #:mode mode
+                         #:elapsed-ms total-elapsed))
   (save-failure-logs results)
   (define failed-files
     (count (lambda (r)
@@ -425,7 +445,8 @@
                   record-gate?
                   inventory?
                   diagnose-overhead?
-                  requested-mode)
+                  requested-mode
+                  json-out)
     (parse-args args))
   (validate-args! jobs
                   sequential?
@@ -437,7 +458,8 @@
                   record-gate?
                   inventory?
                   diagnose-overhead?
-                  requested-mode)
+                  requested-mode
+                  json-out)
   (when diagnose-overhead?
     (print-overhead-diagnostics #:base-dir base-dir)
     (exit 0))
@@ -482,7 +504,7 @@
     (when (> repeat 1)
       (printf "~n;; ── Run ~a/~a ──~n" run-num repeat))
     (define-values (exit-code results)
-      (run-suite-once suite-files jobs timeout-ms strict? suite-label run-num repeat mode))
+      (run-suite-once suite-files jobs timeout-ms strict? suite-label run-num repeat mode json-out))
     (set-box! last-results results)
     (unless (zero? exit-code)
       (exit exit-code)))

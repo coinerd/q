@@ -31,6 +31,7 @@
   (displayln "  --record-gate-evidence  Write .gate-evidence/<suite>.passed on success")
   (displayln "  --inventory             Print inventory report (selected/excluded files) and exit")
   (displayln "  --diagnose-overhead     Measure Racket/raco per-file startup overhead and exit")
+  (displayln "  --json-out PATH         Write structured per-file JSON results")
   (displayln "  --help            Show this help message")
   (newline)
   (displayln "Suites:")
@@ -61,7 +62,8 @@
              [record-gate? #f]
              [inventory? #f]
              [diagnose-overhead? #f]
-             [mode 'auto])
+             [mode 'auto]
+             [json-out #f])
     (match rest
       ['()
        (values jobs
@@ -74,7 +76,8 @@
                record-gate?
                inventory?
                diagnose-overhead?
-               mode)]
+               mode
+               json-out)]
       [(list "--help" _ ...)
        (usage)
        (exit 0)]
@@ -90,7 +93,8 @@
              record-gate?
              inventory?
              diagnose-overhead?
-             mode)]
+             mode
+             json-out)]
       [(list "--jobs" n rest ...)
        (loop rest
              (string->number n)
@@ -103,7 +107,8 @@
              record-gate?
              inventory?
              diagnose-overhead?
-             mode)]
+             mode
+             json-out)]
       [(list "--sequential" rest ...)
        (loop rest
              1
@@ -116,7 +121,8 @@
              record-gate?
              inventory?
              diagnose-overhead?
-             mode)]
+             mode
+             json-out)]
       [(list "--timeout" secs rest ...)
        (loop rest
              jobs
@@ -129,7 +135,8 @@
              record-gate?
              inventory?
              diagnose-overhead?
-             mode)]
+             mode
+             json-out)]
       [(list "--mode" name rest ...)
        (loop rest
              jobs
@@ -142,7 +149,8 @@
              record-gate?
              inventory?
              diagnose-overhead?
-             (string->symbol name))]
+             (string->symbol name)
+             json-out)]
       [(list "--suite" name rest ...)
        (loop rest
              jobs
@@ -155,7 +163,8 @@
              record-gate?
              inventory?
              diagnose-overhead?
-             mode)]
+             mode
+             json-out)]
       [(list "--repeat" n rest ...)
        (loop rest
              jobs
@@ -168,7 +177,8 @@
              record-gate?
              inventory?
              diagnose-overhead?
-             mode)]
+             mode
+             json-out)]
       [(list "--record-gate-evidence" rest ...)
        (loop rest
              jobs
@@ -181,7 +191,8 @@
              #t
              inventory?
              diagnose-overhead?
-             mode)]
+             mode
+             json-out)]
       [(list "--inventory" rest ...)
        (loop rest
              jobs
@@ -194,7 +205,8 @@
              record-gate?
              #t
              diagnose-overhead?
-             mode)]
+             mode
+             json-out)]
       [(list "--diagnose-overhead" rest ...)
        (loop rest
              jobs
@@ -207,7 +219,22 @@
              record-gate?
              inventory?
              #t
-             mode)]
+             mode
+             json-out)]
+      [(list "--json-out" path rest ...)
+       (loop rest
+             jobs
+             sequential?
+             timeout
+             strict?
+             suite
+             extra
+             repeat
+             record-gate?
+             inventory?
+             diagnose-overhead?
+             mode
+             path)]
       [(list (regexp #rx"^--") rest ...)
        (eprintf "run-tests: unknown flag: ~a~n" (car rest))
        (usage)
@@ -224,7 +251,8 @@
              record-gate?
              inventory?
              diagnose-overhead?
-             mode)])))
+             mode
+             json-out)])))
 
 (define (validate-args! jobs
                         sequential?
@@ -236,7 +264,8 @@
                         record-gate?
                         inventory?
                         diagnose-overhead?
-                        mode)
+                        mode
+                        json-out)
   (unless (memq suite known-suites)
     (raise-user-error 'run-tests
                       "unknown suite: ~a (valid: ~a)"
@@ -253,4 +282,6 @@
                       "unknown mode: ~a (valid: ~a)"
                       mode
                       (string-join (map symbol->string known-modes) ", ")))
-  (values jobs sequential? timeout strict? suite extra repeat record-gate? inventory? mode))
+  (when (and json-out (not (string? json-out)))
+    (raise-user-error 'run-tests "--json-out must be a path string, got: ~a" json-out))
+  (values jobs sequential? timeout strict? suite extra repeat record-gate? inventory? mode json-out))

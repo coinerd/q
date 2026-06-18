@@ -23,6 +23,8 @@
          parse-raco-output
          normalize-counts
          effective-exit-code
+         classify-test-result
+         test-result->jsexpr
          extract-failure-lines
          truncate-test-output
          DEFAULT-OUTPUT-CAP)
@@ -92,6 +94,69 @@
 
 (define (effective-exit-code exit-code failed)
   (if (and (= exit-code 0) (> failed 0)) 1 exit-code))
+
+(define (result-output-string r)
+  (string-downcase (string-append (bytes->string* (test-file-result-stdout-bytes r))
+                                  "\n"
+                                  (bytes->string* (test-file-result-stderr-bytes r)))))
+
+(define (output-matches-any? output patterns)
+  (for/or ([pat (in-list patterns)])
+    (regexp-match? pat output)))
+
+(define (classify-test-result r)
+  (define exit-code (test-file-result-exit-code r))
+  (define failed (test-file-result-failed r))
+  (define total (test-file-result-total r))
+  (define output (result-output-string r))
+  (cond
+    [(and (= exit-code 0) (> total 0)) 'PASS]
+    [(and (= exit-code 0) (= total 0)) 'ZERO_PARSED]
+    [(= exit-code 2) 'TIMEOUT]
+    [(output-matches-any? output (list #rx"user break" #rx"break exception")) 'USER_BREAK]
+    [(output-matches-any? output
+                          (list #rx"missing environment variable"
+                                #rx"environment variable"
+                                #rx"api[_-]?key"
+                                #rx"display.*not available"
+                                #rx"x11"
+                                #rx"no such file or directory"))
+     'ENVIRONMENT_MISSING]
+    [(output-matches-any?
+      output
+      (list #rx"read-syntax" #rx"syntax error" #rx"module: identifier already defined"))
+     'COMPILE_FAILURE]
+    [(output-matches-any? output
+                          (list #rx"standard-module-name-resolver"
+                                #rx"collection not found"
+                                #rx"cannot open module file"
+                                #rx"cannot find module"
+                                #rx"cannot open input file"))
+     'MODULE_LOAD_FAILURE]
+    [(or (> failed 0)
+         (output-matches-any? output
+                              (list #rx"failure" #rx"check-[a-z0-9-]+" #rx"actual:" #rx"expected:")))
+     'ASSERTION_FAILURE]
+    [else 'UNKNOWN_FAILURE]))
+
+(define (test-result->jsexpr r)
+  (hasheq 'path
+          (let ([p (test-file-result-path r)])
+            (if (path? p)
+                (path->string p)
+                p))
+          'category
+          (symbol->string (classify-test-result r))
+          'exit_code
+          (test-file-result-exit-code r)
+          'elapsed_ms
+          (test-file-result-elapsed-ms r)
+          'passed
+          (test-file-result-passed r)
+          'failed
+          (test-file-result-failed r)
+          'total
+          (test-file-result-total r)))
 
 (define FAILURE-START #rx"^-+ FAILURE -+$")
 (define FAILURE-END #rx"^-{20,}$")

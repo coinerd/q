@@ -9,6 +9,7 @@
 (require racket/string
          racket/path
          racket/list
+         json
          (only-in "parse.rkt"
                   test-file-result-path
                   test-file-result-exit-code
@@ -18,6 +19,8 @@
                   test-file-result-passed
                   test-file-result-failed
                   test-file-result-total
+                  classify-test-result
+                  test-result->jsexpr
                   bytes->string*
                   extract-failure-lines))
 
@@ -27,6 +30,9 @@
          summary-exit-code
          make-unique-log-name
          compute-verdict
+         classify-test-result
+         test-result->jsexpr
+         write-json-results!
          format-verdict-line)
 
 (define (format-duration ms)
@@ -81,6 +87,83 @@
     [(pass) "  VERDICT:   ✅ PASS"]
     [else "  VERDICT:   ❓ UNKNOWN"]))
 
+(define known-result-categories
+  '(PASS ASSERTION_FAILURE
+         MODULE_LOAD_FAILURE
+         COMPILE_FAILURE
+         TIMEOUT
+         ENVIRONMENT_MISSING
+         ZERO_PARSED
+         USER_BREAK
+         UNKNOWN_FAILURE))
+
+(define (category-counts results)
+  (define counts (make-hasheq))
+  (for ([category (in-list known-result-categories)])
+    (hash-set! counts category 0))
+  (for ([r (in-list results)])
+    (define category (classify-test-result r))
+    (hash-set! counts category (add1 (hash-ref counts category 0))))
+  counts)
+
+(define (print-category-summary results)
+  (define counts (category-counts results))
+  (define non-zero
+    (filter (lambda (category) (> (hash-ref counts category 0) 0)) known-result-categories))
+  (when (pair? non-zero)
+    (printf "  Category:  ~a~n"
+            (string-join (for/list ([category (in-list non-zero)])
+                           (format "~a=~a" category (hash-ref counts category)))
+                         ", "))))
+
+(define (category-counts->jsexpr counts)
+  (for/hasheq ([category (in-list known-result-categories)]
+               #:when (> (hash-ref counts category 0) 0))
+    (values (string->symbol (symbol->string category)) (hash-ref counts category))))
+
+(define (write-json-results! path
+                             results
+                             #:suite [suite 'all]
+                             #:mode [mode 'subprocess]
+                             #:elapsed-ms [elapsed-ms 0])
+  (define passed-files (count (lambda (r) (= (test-file-result-exit-code r) 0)) results))
+  (define failed-files
+    (count (lambda (r)
+             (and (not (= (test-file-result-exit-code r) 0))
+                  (not (= (test-file-result-exit-code r) 2))))
+           results))
+  (define timeout-files (count (lambda (r) (= (test-file-result-exit-code r) 2)) results))
+  (define counts (category-counts results))
+  (define payload
+    (hasheq 'suite
+            (symbol->string suite)
+            'mode
+            (symbol->string mode)
+            'verdict
+            (symbol->string (compute-verdict results))
+            'elapsed_ms
+            elapsed-ms
+            'summary
+            (hasheq 'files_total
+                    (length results)
+                    'files_passed
+                    passed-files
+                    'files_failed
+                    failed-files
+                    'files_timeout
+                    timeout-files
+                    'tests_total
+                    (for/sum ([r (in-list results)]) (test-file-result-total r))
+                    'tests_passed
+                    (for/sum ([r (in-list results)]) (test-file-result-passed r))
+                    'tests_failed
+                    (for/sum ([r (in-list results)]) (test-file-result-failed r)))
+            'category_counts
+            (category-counts->jsexpr counts)
+            'files
+            (map test-result->jsexpr results)))
+  (call-with-output-file path #:exists 'truncate/replace (lambda (out) (write-json payload out))))
+
 (define (print-summary results total-start-ms)
   (define total-files (length results))
   (define passed-files (count (lambda (r) (= (test-file-result-exit-code r) 0)) results))
@@ -111,6 +194,7 @@
             zero-test-files
             (if (= zero-test-files 1) "" "s")))
   (printf "  Tests:     ~a total, ~a passed, ~a failed~n" total-tests total-passed total-failed)
+  (print-category-summary results)
   (when (and (= total-tests 0) (= passed-files total-files))
     (displayln "  ⚠ No test results parsed — files may use non-standard output format"))
   (printf "  Elapsed:   ~a~n" (format-duration total-start-ms))
@@ -124,9 +208,10 @@
     (for ([f (in-list failures)])
       (define path (test-file-result-path f))
       (define ec (test-file-result-exit-code f))
-      (printf "  ~a ~a (exit=~a, ~a passed, ~a failed, ~a)~n"
+      (printf "  ~a ~a [~a] (exit=~a, ~a passed, ~a failed, ~a)~n"
               (if (= ec 2) "⏱" "✗")
               path
+              (classify-test-result f)
               ec
               (test-file-result-passed f)
               (test-file-result-failed f)
