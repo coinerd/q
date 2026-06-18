@@ -28,6 +28,7 @@
   (displayln "  --repeat N        Run suite N times (exit 1 if any run fails)")
   (displayln "  --record-gate-evidence  Write .gate-evidence/<suite>.passed on success")
   (displayln "  --inventory             Print inventory report (selected/excluded files) and exit")
+  (displayln "  --diagnose-overhead     Measure Racket/raco per-file startup overhead and exit")
   (displayln "  --help            Show this help message")
   (newline)
   (displayln "Suites:")
@@ -52,15 +53,35 @@
              [extra '()]
              [repeat 1]
              [record-gate? #f]
-             [inventory? #f])
+             [inventory? #f]
+             [diagnose-overhead? #f])
     (match rest
       ['()
-       (values jobs sequential? timeout strict? suite (reverse extra) repeat record-gate? inventory?)]
+       (values jobs
+               sequential?
+               timeout
+               strict?
+               suite
+               (reverse extra)
+               repeat
+               record-gate?
+               inventory?
+               diagnose-overhead?)]
       [(list "--help" _ ...)
        (usage)
        (exit 0)]
       [(list "--strict" rest ...)
-       (loop rest jobs sequential? timeout #t suite extra repeat record-gate? inventory?)]
+       (loop rest
+             jobs
+             sequential?
+             timeout
+             #t
+             suite
+             extra
+             repeat
+             record-gate?
+             inventory?
+             diagnose-overhead?)]
       [(list "--jobs" n rest ...)
        (loop rest
              (string->number n)
@@ -71,9 +92,10 @@
              extra
              repeat
              record-gate?
-             inventory?)]
+             inventory?
+             diagnose-overhead?)]
       [(list "--sequential" rest ...)
-       (loop rest 1 #t timeout strict? suite extra repeat record-gate? inventory?)]
+       (loop rest 1 #t timeout strict? suite extra repeat record-gate? inventory? diagnose-overhead?)]
       [(list "--timeout" secs rest ...)
        (loop rest
              jobs
@@ -84,7 +106,8 @@
              extra
              repeat
              record-gate?
-             inventory?)]
+             inventory?
+             diagnose-overhead?)]
       [(list "--suite" name rest ...)
        (loop rest
              jobs
@@ -95,7 +118,8 @@
              extra
              repeat
              record-gate?
-             inventory?)]
+             inventory?
+             diagnose-overhead?)]
       [(list "--repeat" n rest ...)
        (loop rest
              jobs
@@ -106,11 +130,34 @@
              extra
              (string->number n)
              record-gate?
-             inventory?)]
+             inventory?
+             diagnose-overhead?)]
       [(list "--record-gate-evidence" rest ...)
-       (loop rest jobs sequential? timeout strict? suite extra repeat #t inventory?)]
+       (loop rest
+             jobs
+             sequential?
+             timeout
+             strict?
+             suite
+             extra
+             repeat
+             #t
+             inventory?
+             diagnose-overhead?)]
       [(list "--inventory" rest ...)
-       (loop rest jobs sequential? timeout strict? suite extra repeat record-gate? #t)]
+       (loop rest
+             jobs
+             sequential?
+             timeout
+             strict?
+             suite
+             extra
+             repeat
+             record-gate?
+             #t
+             diagnose-overhead?)]
+      [(list "--diagnose-overhead" rest ...)
+       (loop rest jobs sequential? timeout strict? suite extra repeat record-gate? inventory? #t)]
       [(list (regexp #rx"^--") rest ...)
        (eprintf "run-tests: unknown flag: ~a~n" (car rest))
        (usage)
@@ -125,11 +172,21 @@
              (cons arg extra)
              repeat
              record-gate?
-             inventory?)])))
+             inventory?
+             diagnose-overhead?)])))
 
 (define known-suites '(all fast slow smoke tui security arch runtime extensions workflows))
 
-(define (validate-args! jobs sequential? timeout strict? suite extra repeat record-gate? inventory?)
+(define (validate-args! jobs
+                        sequential?
+                        timeout
+                        strict?
+                        suite
+                        extra
+                        repeat
+                        record-gate?
+                        inventory?
+                        diagnose-overhead?)
   (unless (memq suite known-suites)
     (raise-user-error 'run-tests
                       "unknown suite: ~a (valid: ~a)"
