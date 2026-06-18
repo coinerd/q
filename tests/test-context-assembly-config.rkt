@@ -1,5 +1,6 @@
 #lang racket/base
 
+;; @not-test
 ;; @skip BROKEN: Tests obsolete 12-field context-assembly-config struct.
 ;; The config was refactored to a 4-field struct (recent-tokens,
 ;; max-catalog-entries, max-catalog-tokens, summary-window) in budgeting.rkt.
