@@ -25,7 +25,9 @@
          save-failure-logs
          format-duration
          summary-exit-code
-         make-unique-log-name)
+         make-unique-log-name
+         compute-verdict
+         format-verdict-line)
 
 (define (format-duration ms)
   (define total-secs (/ ms 1000.0))
@@ -49,6 +51,36 @@
     [(> timeout-count 0) 2]
     [else 0]))
 
+;; Compute a verdict symbol from results: 'pass, 'fail, 'incomplete, 'inconclusive.
+;; - 'fail:          at least one file exited non-zero (not timeout)
+;; - 'incomplete:    at least one file timed out (exit-code 2)
+;; - 'inconclusive:  all files passed but zero tests were parsed
+;; - 'pass:          all files passed and at least one test was parsed
+(define (compute-verdict results)
+  (define failed-files
+    (count (lambda (r)
+             (and (not (= (test-file-result-exit-code r) 0))
+                  (not (= (test-file-result-exit-code r) 2))))
+           results))
+  (define timeout-files (count (lambda (r) (= (test-file-result-exit-code r) 2)) results))
+  (define total-tests (for/sum ([r (in-list results)]) (test-file-result-total r)))
+  (cond
+    [(> failed-files 0) 'fail]
+    [(> timeout-files 0) 'incomplete]
+    [(= total-tests 0) 'inconclusive]
+    [else 'pass]))
+
+(define (format-verdict-line verdict timeout-count)
+  (case verdict
+    [(fail) "  VERDICT:   ❌ FAIL"]
+    [(incomplete)
+     (format "  VERDICT:   ⏱ INCOMPLETE (~a timeout~a)"
+             timeout-count
+             (if (= timeout-count 1) "" "s"))]
+    [(inconclusive) "  VERDICT:   ⚠ INCONCLUSIVE (0 tests parsed)"]
+    [(pass) "  VERDICT:   ✅ PASS"]
+    [else "  VERDICT:   ❓ UNKNOWN"]))
+
 (define (print-summary results total-start-ms)
   (define total-files (length results))
   (define passed-files (count (lambda (r) (= (test-file-result-exit-code r) 0)) results))
@@ -58,9 +90,13 @@
                   (not (= (test-file-result-exit-code r) 2))))
            results))
   (define timeout-files (count (lambda (r) (= (test-file-result-exit-code r) 2)) results))
-  (define total-passed (apply + (map test-file-result-passed results)))
-  (define total-failed (apply + (map test-file-result-failed results)))
-  (define total-tests (apply + (map test-file-result-total results)))
+  (define zero-test-files
+    (count (lambda (r) (and (= (test-file-result-exit-code r) 0) (= (test-file-result-total r) 0)))
+           results))
+  (define total-passed (for/sum ([r (in-list results)]) (test-file-result-passed r)))
+  (define total-failed (for/sum ([r (in-list results)]) (test-file-result-failed r)))
+  (define total-tests (for/sum ([r (in-list results)]) (test-file-result-total r)))
+  (define verdict (compute-verdict results))
   (newline)
   (displayln "═══════════════════════════════════════════════════════════")
   (displayln "                    TEST SUMMARY")
@@ -70,10 +106,16 @@
           passed-files
           failed-files
           timeout-files)
+  (when (> zero-test-files 0)
+    (printf "             ⚠ ~a file~a with zero parsed tests (exit=0 but no rackunit output)~n"
+            zero-test-files
+            (if (= zero-test-files 1) "" "s")))
   (printf "  Tests:     ~a total, ~a passed, ~a failed~n" total-tests total-passed total-failed)
   (when (and (= total-tests 0) (= passed-files total-files))
     (displayln "  ⚠ No test results parsed — files may use non-standard output format"))
   (printf "  Elapsed:   ~a~n" (format-duration total-start-ms))
+  (displayln "═══════════════════════════════════════════════════════════")
+  (displayln (format-verdict-line verdict timeout-files))
   (displayln "═══════════════════════════════════════════════════════════")
   (define failures (filter (lambda (r) (not (= (test-file-result-exit-code r) 0))) results))
   (when (pair? failures)
