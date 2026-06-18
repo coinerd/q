@@ -33,6 +33,7 @@
                        [skill-summary-text (-> list? string?)]
                        [skills-summary-section (-> list? (or/c string? #f))]
                        [parse-skill (-> string? string? hash?)]
+                       [strip-leading-frontmatter-lines (-> list? list?)]
                        [try-read-file (-> path-string? (or/c string? #f))]))
 
 ;; ============================================================
@@ -98,15 +99,39 @@
       [(string=? (string-trim (car remaining)) "") (values (reverse acc) (cdr remaining))]
       [else (loop (cdr remaining) (cons (car remaining) acc))])))
 
+;; strip-leading-frontmatter-lines : (listof string?) -> (listof string?)
+;; If the first line is '---', strip everything up to and including the
+;; next '---' line.  Returns the original list unchanged if there is no
+;; opening '---' or no closing '---' (conservative: treat as content).
+;; This prevents raw YAML frontmatter from leaking into skill descriptions.
+(define (strip-leading-frontmatter-lines lines)
+  (cond
+    [(null? lines) lines]
+    [(not (string=? (string-trim (car lines)) "---")) lines]
+    [else
+     ;; Look for closing '---' in remaining lines
+     (define rest (cdr lines))
+     (let loop ([remaining rest])
+       (cond
+         [(null? remaining) lines] ; no closing --- → return original
+         [(string=? (string-trim (car remaining)) "---")
+          (cdr remaining)] ; closing found → return content after it
+         [else (loop (cdr remaining))]))]))
+
 ;; Parse a SKILL.md file into a hash with name, description, content
 ;; Format:
+;;   ---
+;;   frontmatter (optional)
+;;   ---
 ;;   # Skill-Name
 ;;
 ;;   Description text
 ;;
 ;;   Full content/instructions
 (define (parse-skill name raw-content)
-  (define lines (string-split raw-content "\n"))
+  (define all-lines (string-split raw-content "\n"))
+  ;; Strip leading YAML frontmatter block if present
+  (define lines (strip-leading-frontmatter-lines all-lines))
   (cond
     [(null? lines) (hash 'name name 'description "" 'content "")]
     [else
