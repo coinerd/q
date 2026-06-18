@@ -52,6 +52,22 @@
 (define (clear-metadata-cache!)
   (hash-clear! metadata-cache))
 
+(define (metadata-tokens raw)
+  (filter (lambda (s) (not (string=? s ""))) (regexp-split #rx"[ ,\t]+" (string-trim raw))))
+
+(define (metadata-bool raw default)
+  (define normalized (string-downcase (string-trim raw)))
+  (cond
+    [(string=? normalized "") default]
+    [(member normalized '("true" "yes" "1" "on")) #t]
+    [(member normalized '("false" "no" "0" "off")) #f]
+    [else default]))
+
+(define (metadata-line-match line tag)
+  (define pattern (pregexp (format "@~a(?:[[:space:]]+([^;]*))?" (regexp-quote tag))))
+  (define m (regexp-match pattern line))
+  (and m (list line (string-trim (or (cadr m) "")))))
+
 (define (get-file-metadata f)
   (hash-ref!
    metadata-cache
@@ -61,53 +77,71 @@
        (if (absolute-path? f)
            f
            (build-path base-dir f)))
-     (if (file-exists? full-path)
-         (let ([speed #f]
-               [suite #f]
-               [mutates #f]
-               [boundary #f]
-               [isolation #f]
-               [timeout #f])
-           (with-handlers ([exn:fail? (lambda (_) (void))])
-             (call-with-input-file
-              full-path
-              (lambda (port)
-                (for ([_ (in-range 30)]
-                      #:break (eof-object? (peek-byte port)))
-                  (define line (read-line port))
-                  (when (string? line)
-                    (cond
-                      [(regexp-match? #rx";+[ \t]*@speed[ \t]+fast" line) (set! speed 'fast)]
-                      [(regexp-match? #rx";+[ \t]*@speed[ \t]+slow" line) (set! speed 'slow)]
-                      [(regexp-match? #rx";+[ \t]*@speed[ \t]+perf" line) (set! speed 'perf)]
-                      [(regexp-match #rx";+[ \t]*@suite[ \t]+(.+)$" line)
-                       =>
-                       (lambda (m) (set! suite (string-trim (cadr m))))]
-                      [(regexp-match #rx";+[ \t]*@mutates[ \t]+(.+)$" line)
-                       =>
-                       (lambda (m) (set! mutates (string-trim (cadr m))))]
-                      [(regexp-match #rx";+[ \t]*@boundary[ \t]+(.+)$" line)
-                       =>
-                       (lambda (m) (set! boundary (string-trim (cadr m))))]
-                      [(regexp-match #rx";+[ \t]*@isolation[ \t]+(.+)$" line)
-                       =>
-                       (lambda (m) (set! isolation (string-trim (cadr m))))]
-                      [(regexp-match #rx";+[ \t]*@timeout[ \t]+([0-9]+)" line)
-                       =>
-                       (lambda (m) (set! timeout (string->number (cadr m))))]))))))
-           (hash 'speed
-                 speed
-                 'suite
-                 suite
-                 'mutates
-                 mutates
-                 'boundary
-                 boundary
-                 'isolation
-                 isolation
-                 'timeout
-                 timeout))
-         (hash)))))
+     (cond
+       [(not (file-exists? full-path)) (hash)]
+       [else
+        (define speed #f)
+        (define suite #f)
+        (define suites '())
+        (define requires '())
+        (define not-test? #f)
+        (define mutates #f)
+        (define boundary #f)
+        (define isolation #f)
+        (define timeout #f)
+        (with-handlers ([exn:fail? (lambda (_) (void))])
+          (call-with-input-file full-path
+                                (lambda (port)
+                                  (for ([_ (in-range 50)]
+                                        #:break (eof-object? (peek-byte port)))
+                                    (define line (read-line port))
+                                    (when (string? line)
+                                      (define speed-match (metadata-line-match line "speed"))
+                                      (when speed-match
+                                        (define toks (metadata-tokens (cadr speed-match)))
+                                        (when (pair? toks)
+                                          (set! speed (string->symbol (car toks)))))
+                                      (define suite-match (metadata-line-match line "suite"))
+                                      (when suite-match
+                                        (set! suites (metadata-tokens (cadr suite-match)))
+                                        (set! suite (and (pair? suites) (car suites))))
+                                      (define requires-match (metadata-line-match line "requires"))
+                                      (when requires-match
+                                        (set! requires (metadata-tokens (cadr requires-match))))
+                                      (define not-test-match (metadata-line-match line "not-test"))
+                                      (when not-test-match
+                                        (set! not-test? (metadata-bool (cadr not-test-match) #t)))
+                                      (define mutates-match (metadata-line-match line "mutates"))
+                                      (when mutates-match
+                                        (set! mutates (string-trim (cadr mutates-match))))
+                                      (define boundary-match (metadata-line-match line "boundary"))
+                                      (when boundary-match
+                                        (set! boundary (string-trim (cadr boundary-match))))
+                                      (define isolation-match (metadata-line-match line "isolation"))
+                                      (when isolation-match
+                                        (set! isolation (string-trim (cadr isolation-match))))
+                                      (define timeout-match
+                                        (regexp-match #rx";+[ \\t]*@timeout[ \\t]+([0-9]+)" line))
+                                      (when timeout-match
+                                        (set! timeout (string->number (cadr timeout-match)))))))))
+        (hash 'speed
+              speed
+              'suite
+              suite
+              'suites
+              suites
+              'requires
+              requires
+              'not-test?
+              not-test?
+              'mutates
+              mutates
+              'boundary
+              boundary
+              'isolation
+              isolation
+              'timeout
+              timeout)]))))
 
 ;; ============================================================
 ;; Patterns
@@ -197,15 +231,9 @@
       (file-has-suite-tag? f "security")))
 
 (define (file-has-suite-tag? f tag)
-  (with-safe-fallback #f
-                      (call-with-input-file f
-                                            (lambda (port)
-                                              (define target (string-append "@suite " tag))
-                                              (for/or ([_ (in-range 10)]
-                                                       #:break (eof-object? (peek-byte port)))
-                                                (define line (read-line port))
-                                                (and (string? line)
-                                                     (string-contains? line target)))))))
+  (define meta (get-file-metadata f))
+  (define suites (hash-ref meta 'suites '()))
+  (or (member tag suites) #f))
 
 (define (smoke-excluded? f)
   (or (slow-file? f) (string-contains? f "/workflows/") (string-contains? f "/interfaces/")))
@@ -303,10 +331,12 @@
      (define all-files
        (for/list ([f (in-directory (build-path base-dir "tests"))]
                   #:when (and (file-exists? f)
-                              (let ([s (path->string f)])
+                              (let* ([s (path->string f)]
+                                     [rel (path->string (find-relative-path base-dir f))])
                                 (and (string-suffix? s ".rkt")
                                      (not (string-contains? s "/compiled/"))
-                                     (not (support-test-module? s))))))
+                                     (not (support-test-module? s))
+                                     (not (hash-ref (get-file-metadata rel) 'not-test? #f))))))
          (path->string (find-relative-path base-dir f))))
      (case suite
        [(all) all-files]

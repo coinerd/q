@@ -1,6 +1,7 @@
 #!/usr/bin/env racket
 #lang racket/base
 
+;; @not-test
 ;; Mock worker for gateway-ipc tests.
 ;; Reads newline-delimited JSON on stdin, echoes back responses.
 ;;

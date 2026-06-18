@@ -18,7 +18,8 @@
                   runtime-file?
                   extensions-file?
                   workflows-file?
-                  support-test-module?))
+                  support-test-module?
+                  get-file-metadata))
 
 (provide print-inventory
          classify-exclusion-reason
@@ -30,6 +31,7 @@
     [(string-contains? f "/compiled/") 'compiled]
     [(not (string-suffix? f ".rkt")) 'non-rkt]
     [(support-test-module? f) 'support-module]
+    [(hash-ref (get-file-metadata f) 'not-test? #f) 'metadata-not-test]
     [else 'unknown]))
 
 (define (detect-high-risk-flags f)
