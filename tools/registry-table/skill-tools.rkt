@@ -251,7 +251,12 @@
                      "Template variables for workflow action (e.g., {file: \"src/main.rkt\"})")))
     tool-skill-route
     #f
-    'subagent)
+    'read-only)
+   ;; NOTE: skill-route is tagged 'read-only because discovery/list/load/match
+   ;; actions are purely read-only. The optional 'workflow' action delegates
+   ;; execution to child-safe subagent tools whose own capability filtering
+   ;; governs runtime permissions; the router itself does not mutate files or
+   ;; spawn dangerous processes directly.)
    ;; delete-lines
    (make-tool-spec*
     "delete-lines"
