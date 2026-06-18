@@ -75,7 +75,20 @@
                   print-inventory
                   classify-exclusion-reason
                   detect-high-risk-flags
-                  compute-inventory-hash))
+                  compute-inventory-hash)
+         (only-in "run-tests/overhead.rkt"
+                  print-overhead-diagnostics
+                  collect-overhead-diagnostics
+                  format-overhead-result
+                  run-overhead-command
+                  make-overhead-result
+                  overhead-result?
+                  overhead-result-label
+                  overhead-result-command
+                  overhead-result-exit-code
+                  overhead-result-elapsed-ms
+                  overhead-result-stdout
+                  overhead-result-stderr))
 
 (provide test-file-result
          test-file-result?
@@ -124,7 +137,19 @@
          print-inventory
          classify-exclusion-reason
          detect-high-risk-flags
-         compute-inventory-hash)
+         compute-inventory-hash
+         print-overhead-diagnostics
+         collect-overhead-diagnostics
+         format-overhead-result
+         run-overhead-command
+         make-overhead-result
+         overhead-result?
+         overhead-result-label
+         overhead-result-command
+         overhead-result-exit-code
+         overhead-result-elapsed-ms
+         overhead-result-stdout
+         overhead-result-stderr)
 
 (define (build-result-from-process test-path stdout-out stderr-out ctrl timeout elapsed)
   (cond
@@ -305,9 +330,30 @@
   (values exit-code results))
 
 (define (main args)
-  (define-values (jobs sequential? timeout strict? suite extra-files repeat record-gate? inventory?)
+  (define-values (jobs
+                  sequential?
+                  timeout
+                  strict?
+                  suite
+                  extra-files
+                  repeat
+                  record-gate?
+                  inventory?
+                  diagnose-overhead?)
     (parse-args args))
-  (validate-args! jobs sequential? timeout strict? suite extra-files repeat record-gate? inventory?)
+  (validate-args! jobs
+                  sequential?
+                  timeout
+                  strict?
+                  suite
+                  extra-files
+                  repeat
+                  record-gate?
+                  inventory?
+                  diagnose-overhead?)
+  (when diagnose-overhead?
+    (print-overhead-diagnostics #:base-dir base-dir)
+    (exit 0))
   (define cleaned-dirs (clean-stale-bytecode! (current-directory)))
   (when (> cleaned-dirs 0)
     (printf ";; run-tests: cleaned ~a stale compiled/ director~a~n"
