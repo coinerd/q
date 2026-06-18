@@ -421,20 +421,21 @@
 
 (test-case "parse-args: --repeat N sets repeat count"
   (define parse (runner-ref 'parse-args))
-  (define-values (jobs seq? timeout strict? suite extra repeat record-gate? inventory?)
+  (define-values (jobs seq? timeout strict? suite extra repeat record-gate? inventory? diagnose? mode)
     (parse '("--repeat" "3")))
   (check-equal? repeat 3)
   (check-false record-gate?))
 
 (test-case "parse-args: --repeat defaults to 1"
   (define parse (runner-ref 'parse-args))
-  (define-values (jobs seq? timeout strict? suite extra repeat record-gate? inventory?) (parse '()))
+  (define-values (jobs seq? timeout strict? suite extra repeat record-gate? inventory? diagnose? mode)
+    (parse '()))
   (check-equal? repeat 1)
   (check-false record-gate?))
 
 (test-case "parse-args: --repeat with --suite smoke"
   (define parse (runner-ref 'parse-args))
-  (define-values (jobs seq? timeout strict? suite extra repeat record-gate? inventory?)
+  (define-values (jobs seq? timeout strict? suite extra repeat record-gate? inventory? diagnose? mode)
     (parse '("--suite" "smoke" "--repeat" "2")))
   (check-equal? suite 'smoke)
   (check-equal? repeat 2)
@@ -446,13 +447,14 @@
 
 (test-case "parse-args: --record-gate-evidence sets flag"
   (define parse (runner-ref 'parse-args))
-  (define-values (jobs seq? timeout strict? suite extra repeat record-gate? inventory?)
+  (define-values (jobs seq? timeout strict? suite extra repeat record-gate? inventory? diagnose? mode)
     (parse '("--record-gate-evidence")))
   (check-true record-gate?))
 
 (test-case "parse-args: record-gate defaults to #f"
   (define parse (runner-ref 'parse-args))
-  (define-values (jobs seq? timeout strict? suite extra repeat record-gate? inventory?) (parse '()))
+  (define-values (jobs seq? timeout strict? suite extra repeat record-gate? inventory? diagnose? mode)
+    (parse '()))
   (check-false record-gate?))
 
 ;; ---- end of file ----

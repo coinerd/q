@@ -21,6 +21,7 @@
          racket/port
          racket/list
          racket/future
+         racket/exn
          (only-in "run-tests/classify.rkt"
                   base-dir
                   normalize-test-path
@@ -38,6 +39,7 @@
                   runtime-file?
                   extensions-file?
                   workflows-file?
+                  unit-fast-file?
                   support-test-module?
                   smoke-excluded?
                   slow-patterns
@@ -69,7 +71,7 @@
                   summary-exit-code
                   compute-verdict
                   make-unique-log-name)
-         (only-in "run-tests/cli.rkt" usage parse-args validate-args! known-suites)
+         (only-in "run-tests/cli.rkt" usage parse-args validate-args! known-suites known-modes)
          (only-in "run-tests/gate-evidence.rkt" record-gate-evidence!)
          (only-in "run-tests/inventory.rkt"
                   print-inventory
@@ -124,11 +126,13 @@
          runtime-file?
          extensions-file?
          workflows-file?
+         unit-fast-file?
          slow-file?
          tui-file?
          mutating-file?
          validate-args!
          known-suites
+         known-modes
          record-gate-evidence!
          get-file-metadata
          clear-metadata-cache!
@@ -203,16 +207,38 @@
                        failed
                        total)]))
 
-(define (run-single-file test-path #:timeout [timeout #f])
-  (define resolved-path
-    (if (absolute-path? test-path)
+(define (resolve-test-path test-path)
+  (define p
+    (if (path? test-path)
         test-path
-        (simplify-path (build-path base-dir test-path))))
-  (define file-timeout
-    (let ([meta-timeout (hash-ref (get-file-metadata test-path) 'timeout #f)])
-      (if meta-timeout
-          (* meta-timeout 1000)
-          (or timeout 120000))))
+        (string->path test-path)))
+  (if (absolute-path? p)
+      p
+      (simplify-path (build-path base-dir p))))
+
+(define (file-timeout-ms test-path timeout)
+  (let ([meta-timeout (hash-ref (get-file-metadata test-path) 'timeout #f)])
+    (if meta-timeout
+        (* meta-timeout 1000)
+        (or timeout 120000))))
+
+(define (parse-result-bytes test-path stdout-bytes stderr-bytes exit-code elapsed-ms)
+  (define merged-bytes (bytes-append stdout-bytes stderr-bytes))
+  (define-values (parsed-passed parsed-failed parsed-total) (parse-raco-output merged-bytes))
+  (define-values (passed failed total)
+    (normalize-counts exit-code parsed-passed parsed-failed parsed-total))
+  (test-file-result test-path
+                    (effective-exit-code exit-code failed)
+                    stdout-bytes
+                    stderr-bytes
+                    elapsed-ms
+                    passed
+                    failed
+                    total))
+
+(define (run-single-file/subprocess test-path #:timeout [timeout #f])
+  (define resolved-path (resolve-test-path test-path))
+  (define file-timeout (file-timeout-ms test-path timeout))
   (define t0 (current-inexact-milliseconds))
   (define elapsed (lambda () (exact-round (- (current-inexact-milliseconds) t0))))
   (define stdout-out (open-output-string))
@@ -234,12 +260,66 @@
           ctrl)))
   (build-result-from-process test-path stdout-out stderr-out ctrl file-timeout elapsed))
 
+(define (module-plus-test-file? path)
+  (and (file-exists? path) (regexp-match? #px"\\(module\\+\\s+test\\b" (file->string path))))
+
+(define (in-process-module-path resolved-path)
+  (if (module-plus-test-file? resolved-path)
+      (make-resolved-module-path (cons resolved-path '(test)))
+      (make-resolved-module-path resolved-path)))
+
+(define (in-process-eligible? resolved-path)
+  (or (module-plus-test-file? resolved-path) (not (file-has-rackunit-tests? resolved-path))))
+
+(define (run-single-file/in-process test-path #:timeout [timeout #f])
+  (define resolved-path (resolve-test-path test-path))
+  ;; Bare RackUnit files without run-tests/module+ still need raco's discovery output;
+  ;; fall back to subprocess to avoid reintroducing zero-parsed false greens.
+  (cond
+    [(not (in-process-eligible? resolved-path))
+     (run-single-file/subprocess test-path #:timeout timeout)]
+    [else
+     (define file-timeout (file-timeout-ms test-path timeout))
+     (define t0 (current-inexact-milliseconds))
+     (define elapsed (lambda () (exact-round (- (current-inexact-milliseconds) t0))))
+     (define stdout-out (open-output-string))
+     (define stderr-out (open-output-string))
+     (define exit-code (box #f))
+     (define cust (make-custodian))
+     (define worker
+       (parameterize ([current-custodian cust])
+         (thread (lambda ()
+                   (with-handlers ([exn:fail? (lambda (e)
+                                                (displayln (exn->string e) stderr-out)
+                                                (set-box! exit-code 1))])
+                     (parameterize ([current-output-port stdout-out]
+                                    [current-error-port stderr-out]
+                                    [current-directory base-dir]
+                                    [current-command-line-arguments #()]
+                                    [current-namespace (make-base-namespace)])
+                       (dynamic-require (in-process-module-path resolved-path) #f)
+                       (set-box! exit-code 0)))))))
+     (define completed? (sync/timeout (/ file-timeout 1000.0) worker))
+     (unless completed?
+       (custodian-shutdown-all cust))
+     (define stdout-bytes (string->bytes/utf-8 (get-output-string stdout-out)))
+     (define stderr-bytes (string->bytes/utf-8 (get-output-string stderr-out)))
+     (if completed?
+         (parse-result-bytes test-path stdout-bytes stderr-bytes (or (unbox exit-code) 0) (elapsed))
+         (test-file-result test-path 2 stdout-bytes stderr-bytes (elapsed) 0 0 0))]))
+
+(define (run-single-file test-path #:timeout [timeout #f] #:mode [mode 'subprocess])
+  (case mode
+    [(in-process grouped) (run-single-file/in-process test-path #:timeout timeout)]
+    [(auto subprocess) (run-single-file/subprocess test-path #:timeout timeout)]
+    [else (run-single-file/subprocess test-path #:timeout timeout)]))
+
 (define (split-list lst n)
   (cond
     [(null? lst) '()]
     [else (cons (take lst (min n (length lst))) (split-list (drop lst (min n (length lst))) n))]))
 
-(define (run-all-files files jobs timeout)
+(define (run-all-files files jobs timeout #:mode [mode 'subprocess])
   (define results (box '()))
   (define results-lock (make-semaphore 1))
   (define (add-result! r)
@@ -253,7 +333,7 @@
     (define batch-threads
       (for/list ([f (in-list batch)])
         (thread (lambda ()
-                  (define result (run-single-file f #:timeout (or timeout 120000)))
+                  (define result (run-single-file f #:timeout (or timeout 120000) #:mode mode))
                   (define exit-code (test-file-result-exit-code result))
                   (cond
                     [(= exit-code 0) (display ".")]
@@ -272,7 +352,12 @@
       (values f i)))
   (sort (unbox results) < #:key (lambda (r) (hash-ref file-order (test-file-result-path r) 0))))
 
-(define (run-suite-once suite-files jobs timeout-ms strict? suite-label repeat-num repeat-total)
+(define (effective-mode requested-mode suite-label)
+  (cond
+    [(eq? requested-mode 'auto) (if (string=? suite-label "unit-fast") 'grouped 'subprocess)]
+    [else requested-mode]))
+
+(define (run-suite-once suite-files jobs timeout-ms strict? suite-label repeat-num repeat-total mode)
   (define t0 (current-inexact-milliseconds))
   (define-values (serial-files parallel-files)
     (if (> jobs 1)
@@ -285,13 +370,13 @@
             (if (= (length serial-files) 1) "" "s")))
   (define serial-results
     (if (pair? serial-files)
-        (run-all-files serial-files 1 timeout-ms)
+        (run-all-files serial-files 1 timeout-ms #:mode mode)
         '()))
   (when (pair? serial-files)
     (restore-repo-surfaces! base-dir))
   (define parallel-results
     (if (pair? parallel-files)
-        (run-all-files parallel-files jobs timeout-ms)
+        (run-all-files parallel-files jobs timeout-ms #:mode mode)
         '()))
   (define file-order
     (for/hash ([f (in-list suite-files)]
@@ -339,7 +424,8 @@
                   repeat
                   record-gate?
                   inventory?
-                  diagnose-overhead?)
+                  diagnose-overhead?
+                  requested-mode)
     (parse-args args))
   (validate-args! jobs
                   sequential?
@@ -350,7 +436,8 @@
                   repeat
                   record-gate?
                   inventory?
-                  diagnose-overhead?)
+                  diagnose-overhead?
+                  requested-mode)
   (when diagnose-overhead?
     (print-overhead-diagnostics #:base-dir base-dir)
     (exit 0))
@@ -376,13 +463,15 @@
     (exit 1))
   (define timeout-ms (and timeout (* timeout 1000)))
   (define suite-label (symbol->string suite))
+  (define mode (effective-mode requested-mode suite-label))
   (define n-files (length suite-files))
-  (printf ";; run-tests: suite=~a files=~a jobs=~a sequential=~a repeat=~a~n"
+  (printf ";; run-tests: suite=~a files=~a jobs=~a sequential=~a repeat=~a mode=~a~n"
           suite-label
           n-files
           jobs
           sequential?
-          repeat)
+          repeat
+          mode)
   (newline)
   (when (> repeat 1)
     (printf ";; run-tests: running suite ~a time~a for confidence gate~n"
@@ -393,7 +482,7 @@
     (when (> repeat 1)
       (printf "~n;; ── Run ~a/~a ──~n" run-num repeat))
     (define-values (exit-code results)
-      (run-suite-once suite-files jobs timeout-ms strict? suite-label run-num repeat))
+      (run-suite-once suite-files jobs timeout-ms strict? suite-label run-num repeat mode))
     (set-box! last-results results)
     (unless (zero? exit-code)
       (exit exit-code)))

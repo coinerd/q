@@ -13,7 +13,8 @@
 (provide usage
          parse-args
          validate-args!
-         known-suites)
+         known-suites
+         known-modes)
 
 (define (usage)
   (displayln "Usage: racket scripts/run-tests.rkt [OPTIONS] [TEST-FILES ...]")
@@ -22,8 +23,9 @@
   (displayln "  --jobs N          Number of parallel jobs (default: processor-count)")
   (displayln "  --sequential      Run tests sequentially (jobs=1)")
   (displayln "  --timeout SECS    Per-file timeout in seconds")
+  (displayln "  --mode <name>     Execution mode: auto (default), subprocess, in-process, grouped")
   (displayln
-   "  --suite <name>    Run test suite: all (default), fast, slow, tui, smoke, security, arch, runtime, extensions, workflows")
+   "  --suite <name>    Run test suite: all (default), fast, unit-fast, slow, tui, smoke, security, arch, runtime, extensions, workflows")
   (displayln "  --strict          Enable strict zero-test detection (default: on)")
   (displayln "  --repeat N        Run suite N times (exit 1 if any run fails)")
   (displayln "  --record-gate-evidence  Write .gate-evidence/<suite>.passed on success")
@@ -34,6 +36,7 @@
   (displayln "Suites:")
   (displayln "  all     Entire tests/ directory (per-file spawn)")
   (displayln "  fast    All tests except slow patterns (per-file spawn)")
+  (displayln "  unit-fast  Fast unit tests eligible for in-process/grouped execution")
   (displayln "  slow    Only sandbox/subprocess tests")
   (displayln "  tui     Files in tests/tui/")
   (displayln "  smoke   Fast minus workflows/, interfaces/, and provider tests")
@@ -42,6 +45,9 @@
   (displayln "  runtime Runtime/session/compaction/iteration tests")
   (displayln "  extensions Extension/GSD/hook tests")
   (displayln "  workflows All tests/workflows/ including fixture self-tests (integration-level)"))
+
+(define known-suites '(all fast unit-fast slow smoke tui security arch runtime extensions workflows))
+(define known-modes '(auto subprocess in-process grouped))
 
 (define (parse-args args)
   (let loop ([rest args]
@@ -54,7 +60,8 @@
              [repeat 1]
              [record-gate? #f]
              [inventory? #f]
-             [diagnose-overhead? #f])
+             [diagnose-overhead? #f]
+             [mode 'auto])
     (match rest
       ['()
        (values jobs
@@ -66,7 +73,8 @@
                repeat
                record-gate?
                inventory?
-               diagnose-overhead?)]
+               diagnose-overhead?
+               mode)]
       [(list "--help" _ ...)
        (usage)
        (exit 0)]
@@ -81,7 +89,8 @@
              repeat
              record-gate?
              inventory?
-             diagnose-overhead?)]
+             diagnose-overhead?
+             mode)]
       [(list "--jobs" n rest ...)
        (loop rest
              (string->number n)
@@ -93,9 +102,21 @@
              repeat
              record-gate?
              inventory?
-             diagnose-overhead?)]
+             diagnose-overhead?
+             mode)]
       [(list "--sequential" rest ...)
-       (loop rest 1 #t timeout strict? suite extra repeat record-gate? inventory? diagnose-overhead?)]
+       (loop rest
+             1
+             #t
+             timeout
+             strict?
+             suite
+             extra
+             repeat
+             record-gate?
+             inventory?
+             diagnose-overhead?
+             mode)]
       [(list "--timeout" secs rest ...)
        (loop rest
              jobs
@@ -107,7 +128,21 @@
              repeat
              record-gate?
              inventory?
-             diagnose-overhead?)]
+             diagnose-overhead?
+             mode)]
+      [(list "--mode" name rest ...)
+       (loop rest
+             jobs
+             sequential?
+             timeout
+             strict?
+             suite
+             extra
+             repeat
+             record-gate?
+             inventory?
+             diagnose-overhead?
+             (string->symbol name))]
       [(list "--suite" name rest ...)
        (loop rest
              jobs
@@ -119,7 +154,8 @@
              repeat
              record-gate?
              inventory?
-             diagnose-overhead?)]
+             diagnose-overhead?
+             mode)]
       [(list "--repeat" n rest ...)
        (loop rest
              jobs
@@ -131,7 +167,8 @@
              (string->number n)
              record-gate?
              inventory?
-             diagnose-overhead?)]
+             diagnose-overhead?
+             mode)]
       [(list "--record-gate-evidence" rest ...)
        (loop rest
              jobs
@@ -143,7 +180,8 @@
              repeat
              #t
              inventory?
-             diagnose-overhead?)]
+             diagnose-overhead?
+             mode)]
       [(list "--inventory" rest ...)
        (loop rest
              jobs
@@ -155,9 +193,21 @@
              repeat
              record-gate?
              #t
-             diagnose-overhead?)]
+             diagnose-overhead?
+             mode)]
       [(list "--diagnose-overhead" rest ...)
-       (loop rest jobs sequential? timeout strict? suite extra repeat record-gate? inventory? #t)]
+       (loop rest
+             jobs
+             sequential?
+             timeout
+             strict?
+             suite
+             extra
+             repeat
+             record-gate?
+             inventory?
+             #t
+             mode)]
       [(list (regexp #rx"^--") rest ...)
        (eprintf "run-tests: unknown flag: ~a~n" (car rest))
        (usage)
@@ -173,9 +223,8 @@
              repeat
              record-gate?
              inventory?
-             diagnose-overhead?)])))
-
-(define known-suites '(all fast slow smoke tui security arch runtime extensions workflows))
+             diagnose-overhead?
+             mode)])))
 
 (define (validate-args! jobs
                         sequential?
@@ -186,7 +235,8 @@
                         repeat
                         record-gate?
                         inventory?
-                        diagnose-overhead?)
+                        diagnose-overhead?
+                        mode)
   (unless (memq suite known-suites)
     (raise-user-error 'run-tests
                       "unknown suite: ~a (valid: ~a)"
@@ -198,4 +248,9 @@
     (raise-user-error 'run-tests "--repeat must be a positive integer, got: ~a" repeat))
   (when (and timeout (or (not (number? timeout)) (<= timeout 0)))
     (raise-user-error 'run-tests "--timeout must be a positive number, got: ~a" timeout))
-  (values jobs sequential? timeout strict? suite extra repeat record-gate? inventory?))
+  (unless (memq mode known-modes)
+    (raise-user-error 'run-tests
+                      "unknown mode: ~a (valid: ~a)"
+                      mode
+                      (string-join (map symbol->string known-modes) ", ")))
+  (values jobs sequential? timeout strict? suite extra repeat record-gate? inventory? mode))
