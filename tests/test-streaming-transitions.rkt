@@ -180,8 +180,8 @@
                     '(assistant tool-start tool-fail)
                     "last entry is tool-fail, not tool-end")
       (define fail-text (last (transcript-texts final)))
-      (check-not-false (regexp-match #rx"\\[FAIL:" fail-text)
-                       (format "fail entry has FAIL prefix, got: ~a" fail-text)))
+      (check-not-false (regexp-match? #rx"File not found" fail-text)
+                       (format "fail entry has error text, got: ~a" fail-text)))
 
     ;; ============================================================
     ;; Wave 4 edge case tests
@@ -431,6 +431,9 @@
       (check-not-false qc "queue-counts is set")
       (check-equal? (hash-ref qc 'steering) 2 "steering count = 2")
       (check-equal? (hash-ref qc 'followup) 1 "followup count = 1"))))
+
+(module+ test
+  (run-tests streaming-transition-tests))
 
 (module+ main
   (run-tests streaming-transition-tests))

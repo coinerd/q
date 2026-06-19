@@ -89,7 +89,8 @@
                                    #:turn-id "t1"
                                    #:tool-name "bash"
                                    #:duration-ms 200
-                                   #:result-summary "done"))
+                                   #:result-summary "done"
+                                   #:result-error #f))
   (check-base-round-trip evt)
   (check-equal? (tool-execution-end-event-tool-name (round-trip evt)) "bash"))
 

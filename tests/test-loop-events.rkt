@@ -38,7 +38,7 @@
       (check-equal? (tool-execution-start-event-tool-name tese) "bash")
       (define teue (tool-execution-update-event "tool-update" 1001.0 "s1" "t1" "bash" "running..."))
       (check-equal? (tool-execution-update-event-progress teue) "running...")
-      (define teee (tool-execution-end-event "tool-end" 1002.0 "s1" "t1" "bash" 150 'done))
+      (define teee (tool-execution-end-event "tool-end" 1002.0 "s1" "t1" "bash" 150 'done #f))
       (check-equal? (tool-execution-end-event-result-summary teee) 'done))
 
     (test-case "typed events can be published on event bus"

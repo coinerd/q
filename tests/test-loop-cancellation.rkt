@@ -15,6 +15,7 @@
 (require rackunit
          rackunit/text-ui
          "../util/message/protocol-types.rkt"
+         "../util/event/event.rkt"
          "../util/event/event-bus.rkt"
          "../agent/loop.rkt"
          "../llm/model.rkt"
@@ -65,9 +66,9 @@
       (define evts (reverse (unbox events)))
       (define evt-names (map event-event evts))
 
-      ;; Should have turn.cancelled because cancellation fired mid-stream
-      (check-not-false (member "turn.cancelled" evt-names)
-                       "turn.cancelled emitted after cancellation during stream")
+      ;; Should have stream.turn.cancelled because cancellation fired mid-stream
+      (check-not-false (member "stream.turn.cancelled" evt-names)
+                       "stream.turn.cancelled emitted after cancellation during stream")
       ;; turn.completed should still be emitted
       (check-not-false (member "stream.turn.completed" evt-names) "turn.completed emitted")
       ;; Result should be cancelled
@@ -160,11 +161,14 @@
       (define evt-names (map event-event evts))
 
       ;; Stream completed, but cancelled?=#t so handle-cancellation runs
-      (check-not-false (member "turn.cancelled" evt-names)
-                       "turn.cancelled emitted when cancellation at stream end")
+      (check-not-false (member "stream.turn.cancelled" evt-names)
+                       "stream.turn.cancelled emitted when cancellation at stream end")
       (check-equal? (loop-result-termination-reason result)
                     'cancelled
                     "result status is cancelled"))))
+
+(module+ test
+  (run-tests cancellation-tests))
 
 (module+ main
   (run-tests cancellation-tests))

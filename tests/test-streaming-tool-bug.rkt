@@ -86,17 +86,15 @@
       (check-true (ui-state-busy? s4) "tool.call.started → busy")
       (check-equal? (transcript-types s4) '(tool-start) "only tool-start in transcript")
 
-      ;; KEY BUG ASSERTION: streaming-text still has the answer text!
-      ;; In the real system, no assistant.message.completed is emitted before
-      ;; tool.call.started, so streaming-text is never committed to transcript.
-      ;; This means the answer text lives only in the temporary streaming-text buffer.
-      (check-equal? (ui-state-streaming-text s4)
-                    "The answer is 42."
-                    "BUG PRESENT: streaming-text persists after tool.call.started (not committed)")
+      ;; KEY ASSERTION: streaming-text is cleared when tool.call.started fires.
+      ;; Previously this was a bug where text persisted. Now it's cleared (FIXED).
+      (check-false (ui-state-streaming-text s4)
+                   "FIXED: streaming-text cleared after tool.call.started")
 
-      ;; The answer text is NOT in the transcript — it's only in streaming-text
+      ;; The answer text is NOT in the transcript yet — it's committed via
+      ;; assistant.message.completed which comes later
       (check-false (member "The answer is 42." (transcript-texts s4))
-                   "BUG PRESENT: answer text is NOT in permanent transcript")
+                   "answer text is NOT in permanent transcript yet")
 
       ;; Tool completes
       (define s5
@@ -232,6 +230,9 @@
 
       ;; FIXED: streaming-text is just "New text" — no contamination
       (check-equal? (ui-state-streaming-text s6) "New text" "B2 FIXED: no cross-turn contamination"))))
+
+(module+ test
+  (run-tests streaming-tool-bug-tests))
 
 (module+ main
   (run-tests streaming-tool-bug-tests))
