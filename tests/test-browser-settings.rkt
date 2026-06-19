@@ -85,7 +85,10 @@
                       "/usr/local/bin/node"
                       120000
                       'persistent
-                      #f))
+                      #f
+                      #f
+                      "auto"
+                      3))
   (check-true (browser-settings-enabled? s))
   (check-equal? (browser-settings-max-sessions s) 5)
   (check-equal? (browser-settings-profile-kind s) 'persistent)
@@ -113,8 +116,22 @@
   (check-false (browser-settings-enabled? (current-browser-settings))))
 
 (test-case "current-browser-settings parameterize"
-  (parameterize
-      ([current-browser-settings
-        (browser-settings #t '("https") '() '() #t '() 1 10 5000 1024 #f 30000 'ephemeral #t)])
+  (parameterize ([current-browser-settings (browser-settings #t
+                                                             '("https")
+                                                             '()
+                                                             '()
+                                                             #t
+                                                             '()
+                                                             1
+                                                             10
+                                                             5000
+                                                             1024
+                                                             #f
+                                                             30000
+                                                             'ephemeral
+                                                             #t
+                                                             #f
+                                                             "auto"
+                                                             3)])
     (check-true (browser-settings-enabled? (current-browser-settings)))
     (check-equal? (browser-settings-max-sessions (current-browser-settings)) 1)))

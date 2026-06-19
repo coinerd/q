@@ -44,26 +44,23 @@
 
 (test-case "test-typed-model: checks block 9"
   (check-true (model-request? (make-model-request (list (hasheq 'role "user" 'content "hello"))
-)
-                                                #f
-                                                (hasheq 'model "gpt-4")))
-            "model-request: basic construction")
+                                                  #f
+                                                  (hasheq 'model "gpt-4")))
+              "model-request: basic construction"))
 
 (test-case "test-typed-model: checks block 8"
-  (check-equal?
-)
- (model-request-messages (make-model-request (list (hasheq 'role "user" 'content "hi")) #f (hasheq)))
- (list (hasheq 'role "user" 'content "hi"))
- "model-request: messages accessor")
+  (check-equal? (model-request-messages
+                 (make-model-request (list (hasheq 'role "user" 'content "hi")) #f (hasheq)))
+                (list (hasheq 'role "user" 'content "hi"))
+                "model-request: messages accessor"))
 
 (test-case "test-typed-model: checks block 7"
   (check-false (model-request-tools (make-model-request '() #f (hasheq)))
                "model-request: tools is #f when not provided")
 
   (check-equal? (model-request-settings (make-model-request '() #f (hasheq 'temperature 0.7)))
-)
-              (hasheq 'temperature 0.7)
-              "model-request: settings accessor")
+                (hasheq 'temperature 0.7)
+                "model-request: settings accessor"))
 
 ;; ============================================================
 ;; model-request serialization roundtrip
@@ -94,17 +91,15 @@
 
 (test-case "test-typed-model: checks block 6"
   (check-true (model-response? (make-model-response (list (hasheq 'type "text" 'text "Hello"))
-)
-                                                  (hasheq 'prompt-tokens 10 'completion-tokens 5)
-                                                  "gpt-4"
-                                                  'stop))
-            "model-response: basic construction")
+                                                    (hasheq 'prompt-tokens 10 'completion-tokens 5)
+                                                    "gpt-4"
+                                                    'stop))
+              "model-response: basic construction"))
 
 (test-case "test-typed-model: checks block 5"
   (check-equal? (model-response-stop-reason (make-model-response '() (hasheq) "model" 'length))
-)
-              'length
-              "model-response: stop-reason accessor")
+                'length
+                "model-response: stop-reason accessor"))
 
 ;; ============================================================
 ;; model-response serialization roundtrip
@@ -129,16 +124,14 @@
   (check-true (stream-chunk? (make-stream-chunk "hello" #f #f #f)) "stream-chunk: basic construction")
 
   (check-equal? (stream-chunk-delta-text (make-stream-chunk "hi" #f #f #f))
-)
-              "hi"
-              "stream-chunk: delta-text accessor")
+                "hi"
+                "stream-chunk: delta-text accessor"))
 
 (test-case "test-typed-model: checks block 3"
   (check-false (stream-chunk-delta-tool-call (make-stream-chunk "hi" #f #f #f))
-)
-             "stream-chunk: delta-tool-call is #f")
+               "stream-chunk: delta-tool-call is #f"))
 
-;; Optional keyword args
+;; Optional keyword arg
 (let ([chunk
        (make-stream-chunk "text" #f #f #f #:delta-thinking "thinking..." #:finish-reason 'stop)])
   (check-equal? (stream-chunk-delta-thinking chunk)
@@ -161,12 +154,10 @@
 
   ;; Empty response content
   (check-not-exn (lambda () (make-model-response '() (hasheq) "model" 'stop))
-)
-               "edge: empty response content")
+                 "edge: empty response content"))
 
 ;; model-response with tool_calls stop reason
 (test-case "test-typed-model: checks block 1"
   (check-equal? (model-response-stop-reason (make-model-response '() (hasheq) "model" 'tool-calls))
-)
-              'tool-calls
-              "edge: tool-calls stop reason")
+                'tool-calls
+                "edge: tool-calls stop reason"))

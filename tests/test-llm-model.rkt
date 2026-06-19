@@ -13,16 +13,16 @@
 ;; ============================================================
 
 (test-case "make-model-request creates struct"
-  (define req (make-model-request '("msg1") #f (hasheq)))
+  (define req (make-model-request (list (hasheq 'role "user" 'content "msg1")) #f (hasheq)))
   (check-pred model-request? req)
-  (check-equal? (model-request-messages req) '("msg1"))
+  (check-equal? (model-request-messages req) (list (hasheq 'role "user" 'content "msg1")))
   (check-false (model-request-tools req))
   (check-equal? (model-request-settings req) (hasheq)))
 
 (test-case "model-request->jsexpr includes tools when present"
-  (define req (make-model-request '() '(tool1) (hasheq 'temp 0.7)))
+  (define req (make-model-request '() (list (hasheq 'name "tool1")) (hasheq 'temp 0.7)))
   (define j (model-request->jsexpr req))
-  (check-equal? (hash-ref j 'tools) '(tool1))
+  (check-equal? (hash-ref j 'tools) (list (hasheq 'name "tool1")))
   (check-equal? (hash-ref j 'settings) (hasheq 'temp 0.7)))
 
 (test-case "model-request->jsexpr omits tools when #f"
@@ -31,17 +31,24 @@
   (check-false (hash-has-key? j 'tools)))
 
 (test-case "jsexpr->model-request round-trip"
-  (define req (make-model-request '("hi") '(t) (hasheq 'x 1)))
+  (define req
+    (make-model-request (list (hasheq 'role "user" 'content "hi"))
+                        (list (hasheq 'name "t"))
+                        (hasheq 'x 1)))
   (define restored (jsexpr->model-request (model-request->jsexpr req)))
-  (check-equal? (model-request-messages restored) '("hi"))
-  (check-equal? (model-request-tools restored) '(t)))
+  (check-equal? (model-request-messages restored) (list (hasheq 'role "user" 'content "hi")))
+  (check-equal? (model-request-tools restored) (list (hasheq 'name "t"))))
 
 ;; ============================================================
 ;; model-response
 ;; ============================================================
 
 (test-case "make-model-response creates struct"
-  (define resp (make-model-response '("content") (hasheq 'total-tokens 10) "gpt-4" 'stop))
+  (define resp
+    (make-model-response (list (hasheq 'type "text" 'text "content"))
+                         (hasheq 'total-tokens 10)
+                         "gpt-4"
+                         'stop))
   (check-pred model-response? resp)
   (check-equal? (model-response-model resp) "gpt-4")
   (check-eq? (model-response-stop-reason resp) 'stop))
@@ -52,7 +59,7 @@
   (check-equal? (hash-ref j 'stopReason) "length"))
 
 (test-case "jsexpr->model-response round-trip"
-  (define resp (make-model-response '("hi") (hasheq 't 5) "m" 'stop))
+  (define resp (make-model-response (list (hasheq 'type "text" 'text "hi")) (hasheq 't 5) "m" 'stop))
   (define restored (jsexpr->model-response (model-response->jsexpr resp)))
   (check-equal? (model-response-model restored) "m")
   (check-eq? (model-response-stop-reason restored) 'stop))

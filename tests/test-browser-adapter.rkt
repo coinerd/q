@@ -59,20 +59,24 @@
 
 (test-case "make-browser-adapter creates a browser-adapter"
   (reset-call-log!)
-  (define a (make-browser-adapter
-             #:open mock-open
-             #:close mock-close
-             #:navigate mock-navigate
-             #:observe mock-observe
-             #:act mock-act
-             #:screenshot mock-screenshot))
+  (define a
+    (make-browser-adapter #:open mock-open
+                          #:close mock-close
+                          #:navigate mock-navigate
+                          #:observe mock-observe
+                          #:act mock-act
+                          #:screenshot mock-screenshot))
   (check-true (browser-adapter? a)))
 
 (test-case "browser-adapter is transparent"
   (reset-call-log!)
-  (define a (make-browser-adapter
-             #:open mock-open #:close mock-close #:navigate mock-navigate
-             #:observe mock-observe #:act mock-act #:screenshot mock-screenshot))
+  (define a
+    (make-browser-adapter #:open mock-open
+                          #:close mock-close
+                          #:navigate mock-navigate
+                          #:observe mock-observe
+                          #:act mock-act
+                          #:screenshot mock-screenshot))
   (check-true (struct? a)))
 
 ;; ---------------------------------------------------------------------------
@@ -82,28 +86,40 @@
 (test-case "browser-adapter-open delegates to open-fn"
   (reset-call-log!)
   (call-log '())
-  (define a (make-browser-adapter
-             #:open mock-open #:close mock-close #:navigate mock-navigate
-             #:observe mock-observe #:act mock-act #:screenshot mock-screenshot))
+  (define a
+    (make-browser-adapter #:open mock-open
+                          #:close mock-close
+                          #:navigate mock-navigate
+                          #:observe mock-observe
+                          #:act mock-act
+                          #:screenshot mock-screenshot))
   (define result (browser-adapter-open a "s1" "https://example.com"))
   (check-equal? result 'ok)
-  (check-equal? call-log '((open . ("s1" . ("https://example.com"))))))
+  (check-equal? (call-log) '((open "s1" "https://example.com"))))
 
 (test-case "browser-adapter-close delegates to close-fn"
   (reset-call-log!)
   (call-log '())
-  (define a (make-browser-adapter
-             #:open mock-open #:close mock-close #:navigate mock-navigate
-             #:observe mock-observe #:act mock-act #:screenshot mock-screenshot))
+  (define a
+    (make-browser-adapter #:open mock-open
+                          #:close mock-close
+                          #:navigate mock-navigate
+                          #:observe mock-observe
+                          #:act mock-act
+                          #:screenshot mock-screenshot))
   (browser-adapter-close a "s1")
-  (check-equal? call-log '((close . ("s1")))))
+  (check-equal? (call-log) '((close "s1"))))
 
 (test-case "browser-adapter-navigate delegates to navigate-fn"
   (reset-call-log!)
   (call-log '())
-  (define a (make-browser-adapter
-             #:open mock-open #:close mock-close #:navigate mock-navigate
-             #:observe mock-observe #:act mock-act #:screenshot mock-screenshot))
+  (define a
+    (make-browser-adapter #:open mock-open
+                          #:close mock-close
+                          #:navigate mock-navigate
+                          #:observe mock-observe
+                          #:act mock-act
+                          #:screenshot mock-screenshot))
   (define result (browser-adapter-navigate a "s1" "https://example.com"))
   (check-true (browser-observation? result))
   (check-equal? (browser-observation-url result) "https://example.com"))
@@ -111,47 +127,67 @@
 (test-case "browser-adapter-observe delegates to observe-fn"
   (reset-call-log!)
   (call-log '())
-  (define a (make-browser-adapter
-             #:open mock-open #:close mock-close #:navigate mock-navigate
-             #:observe mock-observe #:act mock-act #:screenshot mock-screenshot))
+  (define a
+    (make-browser-adapter #:open mock-open
+                          #:close mock-close
+                          #:navigate mock-navigate
+                          #:observe mock-observe
+                          #:act mock-act
+                          #:screenshot mock-screenshot))
   (define result (browser-adapter-observe a "s1"))
   (check-true (browser-observation? result))
-  (check-equal? call-log '((observe . ("s1" . (#f))))))
+  (check-equal? (call-log) '((observe "s1" #f))))
 
 (test-case "browser-adapter-observe with selector"
   (reset-call-log!)
   (call-log '())
-  (define a (make-browser-adapter
-             #:open mock-open #:close mock-close #:navigate mock-navigate
-             #:observe mock-observe #:act mock-act #:screenshot mock-screenshot))
+  (define a
+    (make-browser-adapter #:open mock-open
+                          #:close mock-close
+                          #:navigate mock-navigate
+                          #:observe mock-observe
+                          #:act mock-act
+                          #:screenshot mock-screenshot))
   (browser-adapter-observe a "s1" #:selector "#main")
-  (check-equal? call-log '((observe . ("s1" . ("#main"))))))
+  (check-equal? (call-log) '((observe "s1" "#main"))))
 
 (test-case "browser-adapter-act delegates to act-fn"
   (reset-call-log!)
   (call-log '())
-  (define a (make-browser-adapter
-             #:open mock-open #:close mock-close #:navigate mock-navigate
-             #:observe mock-observe #:act mock-act #:screenshot mock-screenshot))
+  (define a
+    (make-browser-adapter #:open mock-open
+                          #:close mock-close
+                          #:navigate mock-navigate
+                          #:observe mock-observe
+                          #:act mock-act
+                          #:screenshot mock-screenshot))
   (define action (browser-action-click "#btn" "left"))
   (browser-adapter-act a "s1" action)
-  (check-equal? (car (car call-log)) 'act))
+  (check-equal? (car (car (call-log))) 'act))
 
 (test-case "browser-adapter-screenshot delegates to screenshot-fn"
   (reset-call-log!)
   (call-log '())
-  (define a (make-browser-adapter
-             #:open mock-open #:close mock-close #:navigate mock-navigate
-             #:observe mock-observe #:act mock-act #:screenshot mock-screenshot))
+  (define a
+    (make-browser-adapter #:open mock-open
+                          #:close mock-close
+                          #:navigate mock-navigate
+                          #:observe mock-observe
+                          #:act mock-act
+                          #:screenshot mock-screenshot))
   (define result (browser-adapter-screenshot a "s1"))
   (check-true (bytes? result))
-  (check-equal? call-log '((screenshot . ("s1" . (#f . (#f)))))))
+  (check-equal? (call-log) '((screenshot "s1" #f #f))))
 
 (test-case "browser-adapter-screenshot with options"
   (reset-call-log!)
   (call-log '())
-  (define a (make-browser-adapter
-             #:open mock-open #:close mock-close #:navigate mock-navigate
-             #:observe mock-observe #:act mock-act #:screenshot mock-screenshot))
+  (define a
+    (make-browser-adapter #:open mock-open
+                          #:close mock-close
+                          #:navigate mock-navigate
+                          #:observe mock-observe
+                          #:act mock-act
+                          #:screenshot mock-screenshot))
   (browser-adapter-screenshot a "s1" #:selector "#main" #:full-page? #t)
-  (check-equal? call-log '((screenshot . ("s1" . ("#main" . (#t)))))))
+  (check-equal? (call-log) '((screenshot "s1" "#main" #t))))

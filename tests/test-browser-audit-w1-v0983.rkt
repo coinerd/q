@@ -53,7 +53,15 @@
 ;; ---------------------------------------------------------------------------
 
 (test-case "SEC-10: restart-sidecar! increments restart count even without sidecar-path"
-  (define config (hasheq 'sidecar-path #f 'restart-count 0 'pending-sema (make-semaphore 1)))
+  (define config
+    (hasheq 'sidecar-path
+            #f
+            'restart-count
+            0
+            'pending-sema
+            (make-semaphore 1)
+            'restart-sema
+            (make-semaphore 1)))
   (define state (playwright-sidecar-state #f #f #f (make-hash) #f #f config #f #f))
   (restart-sidecar! state)
   (check-equal? (hash-ref (playwright-sidecar-state-config state) 'restart-count) 1))

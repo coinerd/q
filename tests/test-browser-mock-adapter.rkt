@@ -107,31 +107,51 @@
 
 (test-case "error-mode raises q-browser-error"
   (define a (make-mock-adapter #:error-mode 'timeout))
-  (check-exn q-browser-error?
-             (lambda ()
-               (mock-open a "https://example.com" #f))))
+  (check-exn q-browser-error? (lambda () (mock-open a "https://example.com" #f))))
 
 (test-case "error-mode affects all calls"
   (define a (make-mock-adapter #:error-mode 'connection))
-  (check-exn q-browser-error?
-             (lambda () (mock-open a "https://x.com" #f)))
-  (check-exn q-browser-error?
-             (lambda () (mock-navigate a "s1" "https://x.com/p"))))
+  (check-exn q-browser-error? (lambda () (mock-open a "https://x.com" #f)))
+  (check-exn q-browser-error? (lambda () (mock-navigate a "s1" "https://x.com/p"))))
 
 ;; ---------------------------------------------------------------------------
 ;; Configurable responses
 ;; ---------------------------------------------------------------------------
 
 (test-case "custom response for open"
-  (define custom-obs (browser-observation "https://custom.com" "Custom" "text" "visible"
-                                           #f #f #f #f '() '() (hash) (hash 'custom #t)))
+  (define custom-obs
+    (browser-observation "https://custom.com"
+                         "Custom"
+                         "text"
+                         "visible"
+                         #f
+                         #f
+                         #f
+                         #f
+                         '()
+                         '()
+                         (hash)
+                         (hash 'custom #t)
+                         (hash)))
   (define a (make-mock-adapter #:responses (hash 'open custom-obs)))
   (define obs (mock-open a "https://x.com" #f))
   (check-equal? (browser-observation-url obs) "https://custom.com"))
 
 (test-case "custom response for navigate"
-  (define custom-obs (browser-observation "https://new.com" "New Page" "text" "visible"
-                                           #f #f #f #f '() '() (hash) (hash)))
+  (define custom-obs
+    (browser-observation "https://new.com"
+                         "New Page"
+                         "text"
+                         "visible"
+                         #f
+                         #f
+                         #f
+                         #f
+                         '()
+                         '()
+                         (hash)
+                         (hash)
+                         (hash)))
   (define a (make-mock-adapter #:responses (hash 'navigate custom-obs)))
   (define obs (mock-navigate a "s1" "https://old.com"))
   (check-equal? (browser-observation-url obs) "https://new.com"))

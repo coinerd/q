@@ -109,8 +109,7 @@
                    "registry creation from string-key config")
 
   (check-not-false (make-model-registry-from-config (make-empty-config))
-)
-                 "registry creation from empty config")
+                   "registry creation from empty config"))
 
 ;; ============================================================
 ;; Tests — available-models
@@ -182,15 +181,13 @@
 
 (test-case "test-model-registry: checks block 9"
   (check-false (resolve-model (make-model-registry-from-config (make-test-config))
-)
-                            "unknown-provider/gpt-4o")
-             "provider prefix with unknown provider returns #f")
+                              "unknown-provider/gpt-4o")
+               "provider prefix with unknown provider returns #f"))
 
 (test-case "test-model-registry: checks block 8"
   (check-false (resolve-model (make-model-registry-from-config (make-test-config))
-)
-                            "openai/nonexistent-model")
-             "provider prefix with unknown model returns #f")
+                              "openai/nonexistent-model")
+               "provider prefix with unknown model returns #f"))
 
 ;; ============================================================
 ;; Tests — resolve-model default (#f)
@@ -226,9 +223,9 @@
 ;; ============================================================
 
 (test-case "test-model-registry: checks block 7"
-  (check-false (resolve-model (make-model-registry-from-config (make-test-config)) "nonexistent-model")
-)
-             "unknown model returns #f")
+  (check-false (resolve-model (make-model-registry-from-config (make-test-config))
+                              "nonexistent-model")
+               "unknown model returns #f"))
 
 (let ([reg (make-model-registry-from-config (make-empty-config))])
   (check-false (resolve-model reg "anything") "empty registry resolve returns #f")
@@ -252,9 +249,8 @@
 
 (test-case "test-model-registry: checks block 6"
   (check-false (resolve-model-by-provider (make-model-registry-from-config (make-test-config))
-)
-                                        "nonexistent")
-             "resolve-model-by-provider returns #f for unknown provider")
+                                          "nonexistent")
+               "resolve-model-by-provider returns #f for unknown provider"))
 
 ;; ============================================================
 ;; Tests — default-model
@@ -262,26 +258,22 @@
 
 (test-case "test-model-registry: checks block 5"
   (check-equal? (default-model (make-model-registry-from-config (make-test-config)))
-)
-              "gpt-4o"
-              "default-model returns global default")
+                "gpt-4o"
+                "default-model returns global default"))
 
 (test-case "test-model-registry: checks block 4"
   (check-equal? (default-model (make-model-registry-from-config (make-single-provider-config)))
-)
-              "my-model-v2"
-              "default-model with single provider")
+                "my-model-v2"
+                "default-model with single provider"))
 
 (test-case "test-model-registry: checks block 3"
   (check-equal? (default-model (make-model-registry-from-config (make-minimal-config)))
-)
-              "llama3-70b"
-              "default-model falls back to first provider's default")
+                "llama3-70b"
+                "default-model falls back to first provider's default"))
 
 (test-case "test-model-registry: checks block 2"
   (check-false (default-model (make-model-registry-from-config (make-empty-config)))
-)
-             "default-model returns #f for empty config")
+               "default-model returns #f for empty config"))
 
 ;; ============================================================
 ;; Tests — default-model-for-mode
@@ -295,8 +287,7 @@
 
 (test-case "test-model-registry: checks block 1"
   (check-false (default-model-for-mode (make-model-registry-from-config (make-empty-config)) 'chat)
-)
-             "default-model-for-mode returns #f for empty registry")
+               "default-model-for-mode returns #f for empty registry"))
 
 ;; ============================================================
 ;; Tests — model-resolution includes provider-config

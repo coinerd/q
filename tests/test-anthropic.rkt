@@ -36,7 +36,7 @@
 ;; 2. anthropic-build-request-body — includes max_tokens
 ;; ============================================================
 
-(check-equal? (hash-ref body-basic 'max_tokens) 4096 "default max_tokens is 4096")
+(check-equal? (hash-ref body-basic 'max_tokens) 16384 "default max_tokens is 16384")
 
 ;; Custom max_tokens
 (define req-custom-max
@@ -615,10 +615,7 @@
      "assistant"
      'content
      (list (hash 'type "tool-call" 'id "call_abc123" 'name "bash" 'arguments (hash 'command "ls"))))
-    (hash 'role
-          "tool"
-          'content
-          (hash 'type "tool-result" 'toolCallId "call_abc123" 'content "file1.txt\nfile2.txt"))
+    (hash 'role "tool" 'tool_call_id "call_abc123" 'content "file1.txt\nfile2.txt")
     (hash 'role "user" 'content "Read file1.txt"))
    #f
    (hash 'model "claude-sonnet-4-20250514")))
