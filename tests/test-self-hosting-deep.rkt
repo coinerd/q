@@ -141,14 +141,14 @@
   (define core-modules
     '("agent/loop.rkt" "util/event/event-bus.rkt"
                        "agent/state.rkt"
-                       "runtime/iteration/main-loop.rkt"
+                       "runtime/iteration/internal.rkt"
                        "runtime/auto-retry.rkt"
-                       "runtime/context-assembly.rkt"
+                       "runtime/context-assembly/blackboard-context.rkt"
                        "runtime/trace-logger.rkt"
                        "runtime/project-tree.rkt"
                        "runtime/agent-session.rkt"
                        "runtime/settings.rkt"
-                       "runtime/session-store.rkt"
+                       "runtime/session/session-config.rkt"
                        "llm/provider.rkt"
                        "llm/openai-compatible.rkt"
                        "tools/tool.rkt"
@@ -183,7 +183,7 @@
 ;; Deep Test 8: Provider factory supports expected providers
 ;; ============================================================
 (test-case "DEEP-8: provider factory exists"
-  (define pf-path (build-path project-root "q" "runtime" "provider-factory.rkt"))
+  (define pf-path (build-path project-root "q" "runtime" "provider" "provider-factory.rkt"))
   (check-true (file-exists? pf-path))
   (define content (file->string pf-path))
   (check-true (string-contains? content "openai"))
@@ -192,15 +192,18 @@
 ;; ============================================================
 ;; Deep Test 9: Version is current
 ;; ============================================================
-(test-case "DEEP-9: version is >= 0.19.3"
+(test-case "DEEP-9: version is current"
   (define ver-path (build-path project-root "q" "util" "version.rkt"))
   (check-true (file-exists? ver-path))
   (define content (file->string ver-path))
-  (check-true (or (string-contains? content "0.20")
-                  (string-contains? content "0.21")
-                  (string-contains? content "0.22")
-                  (string-contains? content "0.55"))
-              "version must be in 0.20.x/0.21.x/0.22.x/0.55.x series"))
+  ;; Verify a valid semver is present (0.NN.NN format)
+  (check-true (regexp-match? #rx"0[.][0-9]+[.][0-9]+" content)
+              "version.rkt must contain a valid semver string")
+  ;; Verify it's a recent version (>= 0.90)
+  (define m (regexp-match #rx"0[.]([0-9]+)[.]" content))
+  (when m
+    (define minor (string->number (cadr m)))
+    (check-true (and minor (>= minor 90)) (format "version minor must be >= 90, got 0.~a.x" minor))))
 
 ;; ============================================================
 ;; Deep Test 10: Benchmark suite infrastructure

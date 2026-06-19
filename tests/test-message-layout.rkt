@@ -74,7 +74,9 @@
 
 (test-case "md-format-assistant: no leading whitespace on any wrapped line"
   (define text
-    "The CHANGELOG shows dozens of versions in rapid succession (v0.76 → v0.94). A lot of it is audit remediation — fixing drift, tightening contracts, updating stale references.")
+    (string-append "The CHANGELOG shows dozens of versions in rapid succession "
+                   "(v0.76 → v0.94). A lot of it is audit remediation — "
+                   "fixing drift, tightening contracts, updating stale references."))
   (define result (md-format-assistant text 80))
   (for ([l result]
         [i (in-naturals)])

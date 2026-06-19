@@ -59,7 +59,7 @@
 (test-case "test-typed-model: checks block 7"
   (check-false (model-request-tools (make-model-request '() #f (hasheq)))
                "model-request: tools is #f when not provided")
-  
+
   (check-equal? (model-request-settings (make-model-request '() #f (hasheq 'temperature 0.7)))
 )
               (hasheq 'temperature 0.7)
@@ -127,7 +127,7 @@
 
 (test-case "test-typed-model: checks block 4"
   (check-true (stream-chunk? (make-stream-chunk "hello" #f #f #f)) "stream-chunk: basic construction")
-  
+
   (check-equal? (stream-chunk-delta-text (make-stream-chunk "hi" #f #f #f))
 )
               "hi"
@@ -158,7 +158,7 @@
 ;; Empty messages list
 (test-case "test-typed-model: checks block 2"
   (check-not-exn (lambda () (make-model-request '() #f (hasheq))) "edge: empty messages list")
-  
+
   ;; Empty response content
   (check-not-exn (lambda () (make-model-response '() (hasheq) "model" 'stop))
 )

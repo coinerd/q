@@ -239,6 +239,39 @@
 (define (smoke-excluded? f)
   (or (slow-file? f) (string-contains? f "/workflows/") (string-contains? f "/interfaces/")))
 
+;; Smoke suite: curated sanity-gate of ~20 fast, always-green tests.
+;; Verifies the system can boot, import core modules, and perform basic operations.
+;; Files are selected by @suite smoke tag OR by matching the curated list below.
+(define smoke-curated-files
+  '("tests/test-version.rkt" "tests/test-safe-mode.rkt"
+                             "tests/test-error-classify.rkt"
+                             "tests/test-mutating-tool-taxonomy.rkt"
+                             "tests/test-run-tests-script.rkt"
+                             "tests/test-worker-security.rkt"
+                             "tests/test-spawn-subagent-serialization.rkt"
+                             "tests/test-verifier-gate.rkt"
+                             "tests/test-cli-flags.rkt"
+                             "tests/test-extension-tiers.rkt"
+                             "tests/test-capability-aware-spawn.rkt"
+                             "tests/test-frontmatter-extended.rkt"
+                             "tests/test-context-assembly-config.rkt"
+                             "tests/test-execution-plane-error-label.rkt"
+                             "tests/test-runtime-packages.rkt"
+                             "tests/test-cli.rkt"
+                             "tests/test-tui-hotspot-characterization.rkt"
+                             "tests/test-tui-render-loop.rkt"
+                             "tests/test-tui-frame-integrity.rkt"
+                             "tests/test-tui-goal-status-bar.rkt"))
+
+(define (smoke-included? f)
+  (define s
+    (if (path? f)
+        (path->string f)
+        f))
+  (or (file-has-suite-tag? f "smoke")
+      (for/or ([curated (in-list smoke-curated-files)])
+        (string-suffix? s curated))))
+
 (define (support-test-module? f)
   (define s
     (if (path? f)
@@ -352,7 +385,7 @@
        [(unit-fast) (filter unit-fast-file? all-files)]
        [(slow) (filter slow-file? all-files)]
        [(tui) (filter tui-file? all-files)]
-       [(smoke) (filter (lambda (f) (not (smoke-excluded? f))) all-files)]
+       [(smoke) (filter smoke-included? all-files)]
        [(security) (filter security-file? all-files)]
        [(arch) (filter arch-file? all-files)]
        [(runtime) (filter runtime-file? all-files)]

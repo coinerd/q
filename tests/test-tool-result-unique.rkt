@@ -21,7 +21,7 @@
 ;; tools/tool.rkt predicate
 (test-case "test-tool-result-unique: checks block 1"
   (check-pred tool-result? tr "tool-result? from tools/tool.rkt accepts its own constructor")
-  
+
   ;; Accessors from tools/tool.rkt work
   (check-equal? (tool-result-content tr) "hello")
   (check-false (tool-result-details tr))

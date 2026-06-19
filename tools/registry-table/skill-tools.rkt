@@ -21,7 +21,7 @@
    ;; save-conclusion
    (make-tool-spec*
     "save-conclusion"
-    "Save a distilled insight or conclusion about the current task. Use after discovering important facts, making decisions, identifying patterns, finding error causes, or getting test results."
+    "Save a distilled insight or conclusion about the current task."
     (hasheq
      'type
      "object"

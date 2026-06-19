@@ -78,7 +78,14 @@
             "assemble-context"
             "gsd-planning"
             "github/handlers"
-            "racket-tooling"))
+            "racket-tooling"
+            ;; Additional internal subdirectories
+            "compaction"
+            "content"
+            "definitely"
+            "error"
+            "session"
+            "tests"))
 
 ;; Dynamically required with fallbacks — not hard deps
 (define dynamic-packages (set "readline" "tui"))

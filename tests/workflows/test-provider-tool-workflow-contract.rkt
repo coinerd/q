@@ -30,21 +30,21 @@
   (define sc (turn-scenario-tool-call "bash" #:result "file.txt"))
   (define prov (scenario->provider sc))
   (define reg (scenario->tool-registry sc))
-  
+
   ;; Step 1: provider returns tool call
   (define resp1 (provider-send prov (make-model-request '() '() (hash))))
   (check-equal? (model-response-stop-reason resp1) 'tool-calls)
   (define tc (car (model-response-content resp1)))
   (check-equal? (hash-ref tc 'name) "bash")
   (check-true (hash-has-key? tc 'id))
-  
+
   ;; Step 2: tool executes
   (define tools (turn-scenario-tools sc))
   (define tool-result ((tool-execute (car tools)) (hash) #f))
   (check-true (tool-result? tool-result))
   (check-false (tool-result-is-error? tool-result))
   (check-equal? (tool-result-content tool-result) "file.txt")
-  
+
   ;; Step 3: provider returns final text
   (define resp2 (provider-send prov (make-model-request '() '() (hash))))
   (check-equal? (model-response-stop-reason resp2) 'stop))
@@ -57,13 +57,13 @@
   (define sc (turn-scenario-blocked-tool "dangerous-tool"))
   (define prov (scenario->provider sc))
   (define reg (scenario->tool-registry sc))
-  
+
   ;; Provider returns tool call for "dangerous-tool"
   (define resp1 (provider-send prov (make-model-request '() '() (hash))))
   (check-equal? (model-response-stop-reason resp1) 'tool-calls)
   (define tc (car (model-response-content resp1)))
   (check-equal? (hash-ref tc 'name) "dangerous-tool")
-  
+
   ;; Tool not found in registry — lookup returns #f
   (check-false (with-registry-snapshot reg
                  (lambda (tools-hash)
@@ -78,13 +78,13 @@
   (define sc (turn-scenario-multi-tool tool-names))
   (define prov (scenario->provider sc))
   (define reg (scenario->tool-registry sc))
-  
+
   ;; Provider returns multi-tool call
   (define resp1 (provider-send prov (make-model-request '() '() (hash))))
   (check-equal? (model-response-stop-reason resp1) 'tool-calls)
   (define content (model-response-content resp1))
   (check-true (>= (length content) 2))
-  
+
   ;; Tools execute in order
   (define tools (turn-scenario-tools sc))
   (define results

@@ -28,7 +28,7 @@
 (test-case "test-protocol-types-split: checks block 8"
   (check-not-false (regexp-match? #rx"DEPRECATED" protocol-types-source))
   (check-not-false (regexp-match? #rx"v0[.]8[23]" protocol-types-source))
-  
+
   ;; ── Content parts (from facade and direct) ─────────────────
   (check-equal? (text-part-text (make-text-part "hello")) "hello")
   (check-equal? (tool-call-part-name (make-tool-call-part "1" "bash" (hash))) "bash")
@@ -56,7 +56,7 @@
   (check-equal? (event-event evt) "test-event")
   (check-equal? (jsexpr->event (event->jsexpr evt)) evt)
   (check-equal? CURRENT-EVENT-VERSION 1)
-  
+
   ;; ── Entry predicates ───────────────────────────────────────
   (check-true (message-entry? msg))
   (check-false (tool-result-entry? msg))
@@ -75,12 +75,12 @@
   (check-true (tree-entry? be))
   (check-equal? (branch-entry-name be) "my-branch")
   (check-equal? (branch-entry-parent-entry-id be) "parent1")
-  
+
   (define tne (make-tree-navigation-entry "n1" "from1" "to1"))
   (check-true (tree-navigation-entry? tne))
   (check-true (tree-entry? tne))
   (check-equal? (tree-navigation-entry-target-entry-id tne) "to1")
-  
+
   (define bse (make-branch-summary-entry "s1" #f "summary text" "1..10" 500))
   (check-true (branch-summary-entry? bse))
   (check-true (tree-entry? bse))
@@ -109,7 +109,7 @@
 (test-case "test-protocol-types-split: checks block 1"
   (check-equal? (tool-call-id tc) "tc1")
   (check-equal? (tool-call-name tc) "read")
-  
+
   (define tr (tool-result "result content" (hash 'duration 1.5) #f))
   (check-equal? (tool-result-content tr) "result content")
   (check-false (tool-result-is-error? tr))

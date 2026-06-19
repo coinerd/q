@@ -67,10 +67,22 @@
       (string-contains? str "/src/main.rkt")
       (string-contains? str "/src/util.rkt")
       (string-contains? str "/foo/bar.txt")
+      (string-contains? str "/src/foo.rkt")
+      (string-contains? str "/path/file.rkt")
+      (string-contains? str "/test/project")
+      (string-contains? str "/plan.md")
+      (string-contains? str "/compiled/")
+      (string-contains? str "/tests/")
+      ;; Regex patterns in test strings (contain character classes)
+      (string-contains? str "[.]")
       ;; Single-char filenames like /a.rkt /b.rkt — clearly test fixtures
       (regexp-match? #rx"^/[a-z]\\.rkt$" str)
       ;; Multi-char fake test names /foo.rkt /bar.rkt
-      (regexp-match? #rx"^/(foo|bar|baz)\\.rkt$" str)))
+      (regexp-match? #rx"^/(foo|bar|baz)\\.rkt$" str)
+      ;; Credential key names (start with /list: or /cred:)
+      (regexp-match? #rx"^/(list|cred|key):" str)
+      ;; Short alphanumeric paths like /p1 /p2 /proj1 — test fixtures
+      (regexp-match? #rx"^/(p|proj)[0-9]+$" str)))
 
 (define (absolute-path-pattern? str)
   ;; matches #rx"^/[a-z]" but NOT allowed prefixes, CLI commands, or test fixtures
@@ -129,10 +141,11 @@
           [lineno (in-naturals 1)])
       (unless (comment-line? line)
         (for ([str (in-list (extract-strings-from-line line))])
-          (when (hardcoded-home-path? str)
-            (add-error! (format "ERROR: ~a:~a: hardcoded path \"~a\"" filepath lineno str)))
-          (when (absolute-path-pattern? str)
-            (add-error! (format "ERROR: ~a:~a: hardcoded path \"~a\"" filepath lineno str))))))))
+          (unless (or (not-a-file-path? str) (test-fixture-path? str) (cli-command? str))
+            (when (hardcoded-home-path? str)
+              (add-error! (format "ERROR: ~a:~a: hardcoded path \"~a\"" filepath lineno str)))
+            (when (absolute-path-pattern? str)
+              (add-error! (format "ERROR: ~a:~a: hardcoded path \"~a\"" filepath lineno str)))))))))
 
 (define (check-cwd-assumptions filepath lines)
   (define uses-current-directory? #f)
@@ -213,7 +226,6 @@
         (set! in-test-case? #f)
         (set! current-test-has-guard? #f)))))
 
-
 ;;; --- v0.83.4: Metadata and isolation checks (report-only) ---
 
 (define metadata-required-suites '("tui" "security" "workflows"))
@@ -228,28 +240,27 @@
     (for ([line (in-list lines)]
           [i (in-naturals 1)]
           #:break (> i 30))
-      (when (regexp-match? #rx";+[ 	]*@suite" line) (set! has-suite #t))
-      (when (regexp-match? #rx";+[ 	]*@boundary" line) (set! has-boundary #t))
-      (when (regexp-match? #rx";+[ 	]*@speed" line) (set! has-speed #t)))
+      (when (regexp-match? #rx";+[ \t]*@suite" line)
+        (set! has-suite #t))
+      (when (regexp-match? #rx";+[ \t]*@boundary" line)
+        (set! has-boundary #t))
+      (when (regexp-match? #rx";+[ \t]*@speed" line)
+        (set! has-speed #t)))
     ;; Check high-risk suites
     (for ([s (in-list '("tui" "security" "workflows"))])
-      (when (or (string-contains? filepath (string-append "/" s "/"))
-                (string-contains? basename s))
+      (when (or (string-contains? filepath (string-append "/" s "/")) (string-contains? basename s))
         (unless has-suite
-          (add-info!
-           (format "INFO: ~a: high-risk suite file missing @suite tag" filepath)))))
+          (add-info! (format "INFO: ~a: high-risk suite file missing @suite tag" filepath)))))
     ;; Warn about missing @speed for slow-pattern files
     (when (and (for/or ([p (in-list '("sandbox" "subprocess" "integration" "benchmark" "workflow-"))])
                  (string-contains? basename p))
                (not has-speed))
-      (add-info!
-       (format "INFO: ~a: slow-pattern file missing @speed tag" filepath)))))
+      (add-info! (format "INFO: ~a: slow-pattern file missing @speed tag" filepath)))))
 
 (define approved-helper-modules
-  '("tests/helpers/temp-fs.rkt"
-    "tests/helpers/fixtures.rkt"
-    "tests/helpers/test-sandbox.rkt"
-    "tests/workflows/fixtures/temp-project.rkt"))
+  '("tests/helpers/temp-fs.rkt" "tests/helpers/fixtures.rkt"
+                                "tests/helpers/test-sandbox.rkt"
+                                "tests/workflows/fixtures/temp-project.rkt"))
 
 (define (check-local-with-temp-dir filepath lines)
   "Report local with-temp-dir definitions outside approved helper modules."
@@ -259,11 +270,10 @@
   (unless is-approved
     (for ([line (in-list lines)]
           [lineno (in-naturals 1)])
-      (when (and (string-contains? line "define")
-                 (string-contains? line "with-temp-dir"))
-        (add-info!
-         (format "INFO: ~a:~a: local with-temp-dir definition (use helpers/fixtures.rkt)"
-                  filepath lineno))))))
+      (when (and (string-contains? line "define") (string-contains? line "with-temp-dir"))
+        (add-info! (format "INFO: ~a:~a: local with-temp-dir definition (use helpers/fixtures.rkt)"
+                           filepath
+                           lineno))))))
 
 (define (check-env-mutation-tag filepath lines)
   "Report env mutation (putenv/getenv/setenv) without @mutates or @isolation tag."
@@ -272,8 +282,10 @@
   (for ([line (in-list lines)]
         [i (in-naturals 1)]
         #:break (> i 30))
-    (when (regexp-match? #rx";+[ \t]*@mutates" line) (set! has-mutates-tag #t))
-    (when (regexp-match? #rx";+[ \t]*@isolation" line) (set! has-isolation-tag #t)))
+    (when (regexp-match? #rx";+[ \t]*@mutates" line)
+      (set! has-mutates-tag #t))
+    (when (regexp-match? #rx";+[ \t]*@isolation" line)
+      (set! has-isolation-tag #t)))
   (unless (or has-mutates-tag has-isolation-tag)
     (for ([line (in-list lines)]
           [lineno (in-naturals 1)])

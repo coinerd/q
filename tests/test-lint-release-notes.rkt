@@ -59,9 +59,8 @@
 
 (test-case "test-lint-release-notes: checks block 11"
   (check-equal? (validate-release-notes (extract-version-block valid-entry "0.5.0"))
-)
-              '()
-              "valid release notes should produce zero errors")
+                '()
+                "valid release notes should produce zero errors"))
 
 ;; ===========================================================================
 ;; Test 2: Missing required section fails
@@ -69,10 +68,10 @@
 
 (test-case "test-lint-release-notes: checks block 10"
   (check-not-false
-)
- (let ([errors (validate-release-notes (changelog "## 0.1.0" "" "### Features" "- stuff"))])
-   (and (> (length errors) 0) (ormap (λ (e) (string-contains? e "Missing required section")) errors)))
- "missing required sections should produce errors")
+   (let ([errors (validate-release-notes (changelog "## 0.1.0" "" "### Features" "- stuff"))])
+     (and (> (length errors) 0)
+          (ormap (λ (e) (string-contains? e "Missing required section")) errors)))
+   "missing required sections should produce errors"))
 
 ;; ===========================================================================
 ;; Test 3: Empty sections are ok (header present, no content)
@@ -80,23 +79,17 @@
 
 (test-case "test-lint-release-notes: checks block 9"
   (check-equal? (validate-release-notes (extract-version-block valid-entry "0.5.0"))
-)
-              '()
-              "empty section bodies are fine as long as headers exist")
+                '()
+                "empty section bodies are fine as long as headers exist"))
 
 ;; ===========================================================================
 ;; Test 4: Version not found in changelog fails
 ;; ===========================================================================
 
-;; placeholder check — real validation below
-(void)
-
 (test-case "test-lint-release-notes: checks block 8"
   (check-false (extract-version-block valid-entry "99.99.99") "version not present returns #f")
-  
   (check-not-false (let ([block (extract-version-block valid-entry "99.99.99")]) (not block))
-)
-                 "non-existent version block returns #f")
+                   "non-existent version block returns #f"))
 
 ;; ===========================================================================
 ;; Test 5: Multiple version entries — only check the requested one
@@ -122,16 +115,14 @@
 
 (test-case "test-lint-release-notes: checks block 7"
   (check-equal? (validate-release-notes (extract-version-block multi-version-changelog "0.5.0"))
-)
-              '()
-              "only the requested version is validated — 0.5.0 is valid")
+                '()
+                "only the requested version is validated — 0.5.0 is valid"))
 
 ;; The 0.4.0 entry is also valid; verify it separately
 (test-case "test-lint-release-notes: checks block 6"
   (check-equal? (validate-release-notes (extract-version-block multi-version-changelog "0.4.0"))
-)
-              '()
-              "version 0.4.0 is also valid in multi-version changelog")
+                '()
+                "version 0.4.0 is also valid in multi-version changelog"))
 
 ;; ===========================================================================
 ;; Test 6: Case-insensitive section headers
@@ -155,9 +146,8 @@
 
 (test-case "test-lint-release-notes: checks block 5"
   (check-equal? (validate-release-notes (extract-version-block uppercase-entry "1.0.0"))
-)
-              '()
-              "case-insensitive header matching")
+                '()
+                "case-insensitive header matching"))
 
 ;; Mixed case
 (define mixed-case-entry
@@ -178,9 +168,8 @@
 
 (test-case "test-lint-release-notes: checks block 4"
   (check-equal? (validate-release-notes (extract-version-block mixed-case-entry "1.1.0"))
-)
-              '()
-              "mixed case headers accepted")
+                '()
+                "mixed case headers accepted"))
 
 ;; ===========================================================================
 ;; Test 7: Extra sections are fine
@@ -210,23 +199,15 @@
 
 (test-case "test-lint-release-notes: checks block 3"
   (check-equal? (validate-release-notes (extract-version-block extra-sections-entry "0.6.0"))
-)
-              '()
-              "extra sections beyond the required ones are fine")
+                '()
+                "extra sections beyond the required ones are fine"))
 
 ;; ===========================================================================
 ;; Test 8: --check mode / exit code behavior
 ;; ===========================================================================
 
-;; We simulate the exit-code behavior by checking the errors list directly
-;; (The CLI module+main handles exit 1; we verify the logic it depends on.)
-
-;; placeholder — the real exit-code test follows below
-(void)
-
 ;; A bad block should produce errors that would trigger exit 1
-(let ([bad-block (changelog "### Features" "- only features, nothing else")]
-      [errors (validate-release-notes (changelog "### Features" "- only features, nothing else"))])
+(let ([errors (validate-release-notes (changelog "### Features" "- only features, nothing else"))])
   (check-true (> (length errors) 0) "bad block produces errors (would cause exit 1 with --check)"))
 
 ;; Good block produces no errors (would NOT exit 1)
@@ -255,9 +236,8 @@
 
 (test-case "test-lint-release-notes: checks block 2"
   (check-equal? (validate-release-notes (extract-version-block v-prefix-entry "2.0.0"))
-)
-              '()
-              "version with 'v' prefix in heading matched by plain number")
+                '()
+                "version with 'v' prefix in heading matched by plain number"))
 
 ;; ===========================================================================
 ;; Test: Features + Bug Fixes together is fine
@@ -265,9 +245,8 @@
 
 (test-case "test-lint-release-notes: checks block 1"
   (check-equal? (validate-release-notes (extract-version-block valid-entry-alt-headers "0.3.0"))
-)
-              '()
-              "Features + Bug Fixes (without User-Visible Changes) is acceptable")
+                '()
+                "Features + Bug Fixes (without User-Visible Changes) is acceptable"))
 
 ;; ===========================================================================
 ;; Summary

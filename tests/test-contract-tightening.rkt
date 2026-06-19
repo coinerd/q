@@ -149,7 +149,7 @@
                                   #:event-bus #f
                                   #:extension-registry #f
                                   #:model-name "gpt-4"
-                                  #:working-directory "/home/user"
+                                  #:working-directory (current-directory)
                                   #:ctx-version 1)))
 
 (test-case "make-extension-ctx: rejects bad session-id type"

@@ -28,16 +28,16 @@
          goal-capture-reset!
          make-on-event
          make-on-status
-         
+
          make-fake-run-prompt
          make-fake-run-prompt-with-error
          make-fake-run-prompt-timeout
-         
+
          make-goal-provider
          make-goal-provider-no-progress
          make-goal-provider-tool-timeout
          make-goal-provider-per-turn-cap
-         
+
          make-fake-shutdown-check
          make-immediate-shutdown)
 
@@ -69,8 +69,7 @@
             (cons (list evt-type payload) (unbox (goal-capture-events-box cap)))))
 
 (define ((make-on-status cap) msg)
-  (set-box! (goal-capture-statuses-box cap)
-            (cons msg (unbox (goal-capture-statuses-box cap)))))
+  (set-box! (goal-capture-statuses-box cap) (cons msg (unbox (goal-capture-statuses-box cap)))))
 
 ;; ---------------------------------------------------------------------------
 ;; Fake run-prompt! factories
@@ -81,16 +80,18 @@
   (define idx (modulo (hash-ref (make-hash) 'count 0) (length responses)))
   (define resp (list-ref responses idx))
   ;; Increment via mutation
-  (define call-count-box (hash-ref (make-hash) 'box (lambda () 
-    (define b (box 0))
-    (hash-set! (make-hash) 'box b)
-    b)))
+  (define call-count-box
+    (hash-ref (make-hash)
+              'box
+              (lambda ()
+                (define b (box 0))
+                (hash-set! (make-hash) 'box b)
+                b)))
   (set-box! call-count-box (add1 (unbox call-count-box)))
   (values sess resp))
 
 (define (make-fake-run-prompt-with-error error-msg)
-  (lambda (sess msg)
-    (raise (exn:fail error-msg (current-continuation-marks)))))
+  (lambda (sess msg) (raise (exn:fail error-msg (current-continuation-marks)))))
 
 (define (make-fake-run-prompt-timeout)
   (lambda (sess msg)
@@ -105,11 +106,10 @@
   "Create a provider that returns a sequence of text + then 'achieved' evaluation."
   (define prov-responses
     (or responses
-        (list
-         ;; First call: text response
-         (scenario-text "Working on the goal...")
-         ;; Second call: text + achieved evaluation
-         (scenario-text "Goal achieved!"))))
+        ;; First call: text response
+        (list (scenario-text "Working on the goal...")
+              ;; Second call: text + achieved evaluation
+              (scenario-text "Goal achieved!"))))
   (define-values (prov _cap) (make-scenario-provider prov-responses))
   prov)
 
@@ -122,10 +122,7 @@
 (define (make-goal-provider-tool-timeout)
   "Provider that returns a tool call, then times out."
   (define-values (prov _cap)
-    (make-scenario-provider
-     (list
-      (scenario-tool-call "bash")
-      (scenario-text "Timed out"))))
+    (make-scenario-provider (list (scenario-tool-call "bash") (scenario-text "Timed out"))))
   prov)
 
 ;; ---------------------------------------------------------------------------

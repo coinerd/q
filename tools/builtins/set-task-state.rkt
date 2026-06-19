@@ -122,7 +122,7 @@
 (define-tool
  set-task-state
  #:description
- "Transition the current task state. Valid states: idle, exploration, planning, implementation, verification, debugging. Valid events: begin-explore, begin-plan, begin-implement, begin-verify, begin-debug, task-complete, revisit, force-transition. The task state drives context assembly optimization."
+ "Transition the current task state. Valid states: idle, exploration, planning, implementation, verification, debugging."
  #:required ("state" "event")
  #:properties
  [(state "string"

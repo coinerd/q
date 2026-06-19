@@ -128,15 +128,6 @@
     },
     {
       "category": "ASSERTION_FAILURE",
-      "file": "tests/test-ci-local.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "release-engineering",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
       "file": "tests/test-context-assembly-raw.rkt",
       "first_seen": "0.99.30-W5-broad-baseline",
       "issue": "#8313",
@@ -317,24 +308,6 @@
     },
     {
       "category": "ASSERTION_FAILURE",
-      "file": "tests/test-lint-doc-freshness.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "release-engineering",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-lint-release-notes.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "release-engineering",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
       "file": "tests/test-llm-model.rkt",
       "first_seen": "0.99.30-W5-broad-baseline",
       "issue": "#8313",
@@ -416,15 +389,6 @@
     },
     {
       "category": "ASSERTION_FAILURE",
-      "file": "tests/test-pre-commit.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "release-engineering",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
       "file": "tests/test-prompt-injection.rkt",
       "first_seen": "0.99.30-W5-broad-baseline",
       "issue": "#8313",
@@ -457,15 +421,6 @@
       "issue": "#8313",
       "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
       "owner": "security",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-self-hosting-deep.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "release-engineering",
       "release_blocking": false
     },
     {
@@ -565,15 +520,6 @@
       "issue": "#8313",
       "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
       "owner": "core",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-sync-readme-status.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "release-engineering",
       "release_blocking": false
     },
     {
@@ -767,6 +713,20 @@
         ],
         "reason": "Fixed in v0.99.31 W1 (#8329)",
         "remaining_count": 80
+      }
+    },
+    {
+      "v0.99.31-W2-removals": {
+        "removed_files": [
+          "tests/test-ci-local.rkt",
+          "tests/test-lint-doc-freshness.rkt",
+          "tests/test-lint-release-notes.rkt",
+          "tests/test-pre-commit.rkt",
+          "tests/test-self-hosting-deep.rkt",
+          "tests/test-sync-readme-status.rkt"
+        ],
+        "reason": "Fixed in v0.99.31 W2 (#8330)",
+        "remaining_count": 74
       }
     }
   ]
