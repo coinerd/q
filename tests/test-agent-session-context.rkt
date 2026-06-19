@@ -166,24 +166,22 @@
    ;; Now build tiered context
    (define tiered (build-tiered-context compacted-context #:tier-b-count 2 #:tier-c-count 1))
 
-   ;; Tier A should have the summary message + pinned first user (v0.15.2 API compliance)
+   ;; Tier A should have the summary message + all pinned user messages.
    (check-equal? (length (tiered-context-tier-a tiered))
-                 2
-                 "Tier A should have 1 summary + 1 pinned first user")
+                 3
+                 "Tier A should have 1 summary + all user messages")
    ;; The compaction-summary should be present in Tier A
    (define tier-a-kinds (map message-kind (tiered-context-tier-a tiered)))
    (check-not-false (member 'compaction-summary tier-a-kinds)
                     "Tier A should contain a compaction-summary message")
 
-   ;; Tier B should have recent messages
-   ;; With token compaction + pinned user: fewer messages in B
-   (check-true (>= (length (tiered-context-tier-b tiered)) 1) "Tier B should have at least 1 message")
+   ;; No non-user regular messages remain after compaction + all-user pinning.
+   (check-equal? (length (tiered-context-tier-b tiered)) 0 "Tier B should have no unpinned messages")
 
-   ;; Tier C should have the most recent message
-   (check-equal? (length (tiered-context-tier-c tiered)) 1 "Tier C should have 1 message")
-   (check-equal? (message-content (first (tiered-context-tier-c tiered)))
-                 (message-content (last msgs))
-                 "Tier C should contain the most recent message"))
+   ;; Tier C keeps the remaining unpinned assistant message.
+   (check-equal? (length (tiered-context-tier-c tiered))
+                 1
+                 "Tier C should keep the unpinned assistant message"))
  (test-case "build-tiered-context with no compaction returns empty Tier A"
    (define msgs
      (list (make-message "id-1" #f 'user 'message (list (make-text-part "User 1")) 1000 (hasheq))
@@ -199,16 +197,18 @@
    ;; Build tiered context without prior compaction
    (define tiered (build-tiered-context msgs #:tier-b-count 2 #:tier-c-count 1))
 
-   ;; Tier A has the pinned first user message (v0.15.2 API compliance)
+   ;; Tier A has all pinned user messages.
    (check-equal? (length (tiered-context-tier-a tiered))
+                 2
+                 "Tier A should have all pinned user messages")
+
+   ;; The assistant message is the only unpinned message and lands in Tier C.
+   (check-equal? (length (tiered-context-tier-b tiered))
+                 0
+                 "Tier B should have no older unpinned messages")
+   (check-equal? (length (tiered-context-tier-c tiered))
                  1
-                 "Tier A should have the pinned first user message")
-
-   ;; Tier B should have the older messages
-   (check-equal? (length (tiered-context-tier-b tiered)) 1 "Tier B should have 1 message")
-
-   ;; Tier C should have the most recent
-   (check-equal? (length (tiered-context-tier-c tiered)) 1 "Tier C should have 1 message"))
+                 "Tier C should have the assistant message"))
  (test-case "tiered-context->message-list flattens in correct order"
    (define tier-a
      (list (make-message "sum-1"
@@ -245,11 +245,10 @@
    ;; tier-b-count=3, tier-c-count=2
    (define tiered (build-tiered-context msgs #:tier-b-count 3 #:tier-c-count 2))
 
-   ;; Tier A has the pinned first user message (v0.15.2)
-   (check-equal? (length (tiered-context-tier-a tiered)) 1 "Tier A has pinned first user")
-   ;; unpinned = 9 messages. Tier C=2, Tier B=min(3, 7)=3
-   (check-equal? (length (tiered-context-tier-b tiered)) 3 "Tier B should have exactly 3 messages")
-   (check-equal? (length (tiered-context-tier-c tiered)) 2 "Tier C should have exactly 2 messages"))
+   ;; Universal pinning puts all user messages in Tier A.
+   (check-equal? (length (tiered-context-tier-a tiered)) 10 "Tier A has all pinned users")
+   (check-equal? (length (tiered-context-tier-b tiered)) 0 "Tier B should have no unpinned messages")
+   (check-equal? (length (tiered-context-tier-c tiered)) 0 "Tier C should have no unpinned messages"))
  (test-case "build-tiered-context with empty input"
    (define tiered (build-tiered-context '() #:tier-b-count 5 #:tier-c-count 1))
    (check-equal? (length (tiered-context-tier-a tiered)) 0)

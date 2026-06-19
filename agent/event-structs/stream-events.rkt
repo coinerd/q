@@ -96,6 +96,5 @@
 (define-typed-event stream-assistant-msg-completed-event
                     "assistant.message.completed"
                     (message-id content)
-                    #:json-keys (message-id messageId)
-                    #:schema-version 1
-                    #:no-serialize)
+                    #:json-keys (message-id messageId content content)
+                    #:schema-version 1)

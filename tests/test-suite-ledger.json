@@ -4,8 +4,8 @@
       "category": "ASSERTION_FAILURE",
       "file": "tests/test-agent-session-context.rkt",
       "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
+      "issue": "#8315",
+      "notes": "Resolved in v0.99.30 W7: deterministic fast broad failure now passes individually under raco test; retained as historical ledger entry so resolved-known counts remain visible.",
       "owner": "runtime",
       "release_blocking": false
     },
@@ -148,8 +148,8 @@
       "category": "ASSERTION_FAILURE",
       "file": "tests/test-context-assembly-tree.rkt",
       "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
+      "issue": "#8315",
+      "notes": "Resolved in v0.99.30 W7: deterministic fast broad failure now passes individually under raco test; retained as historical ledger entry so resolved-known counts remain visible.",
       "owner": "runtime",
       "release_blocking": false
     },
@@ -184,8 +184,8 @@
       "category": "ASSERTION_FAILURE",
       "file": "tests/test-event-roundtrip.rkt",
       "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
+      "issue": "#8315",
+      "notes": "Resolved in v0.99.30 W7: deterministic fast broad failure now passes individually under raco test; retained as historical ledger entry so resolved-known counts remain visible.",
       "owner": "event-loop",
       "release_blocking": false
     },
@@ -220,8 +220,8 @@
       "category": "ASSERTION_FAILURE",
       "file": "tests/test-gap5-conclusion-bridge.rkt",
       "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
+      "issue": "#8315",
+      "notes": "Resolved in v0.99.30 W7: deterministic fast broad failure now passes individually under raco test; retained as historical ledger entry so resolved-known counts remain visible.",
       "owner": "core",
       "release_blocking": false
     },
@@ -661,8 +661,8 @@
       "category": "ASSERTION_FAILURE",
       "file": "tests/test-util-reclassification.rkt",
       "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
+      "issue": "#8315",
+      "notes": "Resolved in v0.99.30 W7: deterministic fast broad failure now passes individually under raco test; retained as historical ledger entry so resolved-known counts remain visible.",
       "owner": "core",
       "release_blocking": false
     },
@@ -789,7 +789,7 @@
     "tests_total": 12590
   },
   "source_verdict": "fail",
-  "strict_zero_parsed_note": "The source broad run exited 4 after JSON/reporting because strict mode detected tests/test-benchmarks.rkt with zero parsed tests.",
+  "strict_zero_parsed_note": "Resolved in v0.99.30 W7: tests/test-benchmarks.rkt now runs its RackUnit suites via rackunit/text-ui instead of producing zero parsed tests.",
   "version": 1,
   "w5_addendum": "tests/test-tool-edit-builtin.rkt passed individually but failed in broad --ledger rerun; ledgered as broad-order known debt."
 }
