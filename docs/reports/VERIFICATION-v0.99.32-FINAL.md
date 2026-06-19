@@ -1,12 +1,40 @@
 # v0.99.32 Final Verification Report
 
+> **⚠️ SUPERSEDED — v0.99.33 (#819) Corrective Note (2026-06-20):**
+>
+> This report was found to contain a material error. It claimed **"All 9 files
+> that failed at the v0.99.31 audit baseline now pass"**, specifically listing
+> `test-doctor.rkt` as passing (17/17 ✅). However, the v0.99.32 W1
+> verification that "confirmed" test-doctor.rkt passing was running with
+> stale bytecode from a previous version — when fresh bytecode was built,
+> `test-doctor.rkt` still failed with:
+> ```
+> lookup-credential: contract violation
+>   expected: string?
+>   given: 'local
+>   blaming: interfaces/doctor.rkt
+> ```
+>
+> The actual pass count for the focused 9-file set at v0.99.32 close was
+> **8/9**, not 9/9. The `test-doctor.rkt` failure was fixed in v0.99.33 W0
+> (#8371, PR #8374) by normalizing symbol provider names to strings before
+> calling `lookup-credential`.
+>
+> Additionally, the broad gate was never actually run (marked ⏩ SKIPPED),
+> meaning the claim of "no new/unclassified failures" was unverifiable.
+> The report below is preserved for historical reference only.
+
 **Date**: 2026-06-19  
 **Milestone**: #818 (v0.99.32 — v0.99.31 Audit Remediation)  
-**Branch**: `feature/wave-8356` (W5 — Final Verification)
+**Branch**: `feature/wave-8356` (W5 — Final Verification)  
+**Status**: ⚠️ SUPERSEDED by v0.99.33
 
 ## Summary
 
-All 6 waves (W0–W5) of the v0.99.32 audit remediation milestone are complete. Every previously-failing test file now passes under the test runner.
+All 6 waves (W0–W5) of the v0.99.32 audit remediation milestone are complete. ~~Every previously-failing test file now passes under the test runner.~~
+
+> **v0.99.33 correction**: 8/9 files passed. `test-doctor.rkt` was falsely
+> marked as passing due to stale bytecode. See v0.99.33 W0 (#8371) for the fix.
 
 ## Gate Results
 
@@ -24,7 +52,7 @@ All 9 files that failed at the v0.99.31 audit baseline now pass:
 
 | File | Wave | Root Cause | Fix | Tests |
 |------|------|------------|-----|-------|
-| `test-doctor.rkt` | W1 (#8352) | Stale bytecode | No code change needed — already fixed | ✅ |
+| `test-doctor.rkt` | W1 (#8352) | Stale bytecode | ⚠️ **FALSE POSITIVE** — stale bytecode masked a live contract bug. Fixed in v0.99.33 W0 (#8371). | ❌→✅ (v0.99.33) |
 | `test-tool-edit-builtin.rkt` | W1 (#8352) | Stale bytecode | No code change needed — already fixed | ✅ |
 | `test-gui-state-sync-w0.rkt` | W2 (#8353) | Relative path via CWD | `current-load-relative-directory` + `(module+ test)` | 7/7 ✅ |
 | `test-llm-error-visibility.rkt` | W2 (#8353) | Relative path via CWD | Same fix | 4/4 ✅ |
