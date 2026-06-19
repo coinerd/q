@@ -47,8 +47,8 @@
                         (-> exact-integer? exact-integer? exact-integer? (or/c mouse-event? #f))]
                        [decode-mouse-message (-> any/c (or/c list? #f))]
                        [normalize-selection-range
-                        (-> exact-nonnegative-integer?
-                            exact-nonnegative-integer?
+                        (-> (cons/c exact-nonnegative-integer? exact-nonnegative-integer?)
+                            (cons/c exact-nonnegative-integer? exact-nonnegative-integer?)
                             (values exact-integer? exact-integer? exact-integer? exact-integer?))]
                        ;; IME cursor markers
                        [cursor-marker-string (-> string?)]

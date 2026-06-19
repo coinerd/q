@@ -17,7 +17,23 @@
          "../tui/state.rkt"
          "../tui/layout.rkt"
          "../tui/render.rkt"
-         "../extensions/widget-api.rkt")
+         "../extensions/widget-api.rkt"
+         "../extensions/ui-surface.rkt")
+
+;; Install registry callbacks so ui-set-extension-widget! etc. work in tests
+(define (with-test-registry thunk)
+  (parameterize ([current-ui-registry (ui-callback-registry
+                                       #f
+                                       #f
+                                       #f
+                                       #f ; footer/header
+                                       styled-line
+                                       styled-segment ; constructors
+                                       #f ; status message
+                                       set-extension-widget ; set-extension-widget callback
+                                       remove-extension-widget ; remove callback
+                                       remove-all-extension-widgets)]) ; remove-all callback
+    (thunk)))
 
 ;; ============================================================
 ;; #713: Layout with widget containers
@@ -108,18 +124,22 @@
 ;; ============================================================
 
 (test-case "ctx-set-widget: updates ui-state box"
-  (define state-box (box (initial-ui-state)))
-  (define lines (list (styled-line (list (styled-segment "widget content" '())))))
-  (ctx-set-widget state-box 'my-ext "info" lines)
-  (define widgets (ui-state-extension-widgets (unbox state-box)))
-  (check-equal? (hash-ref widgets (cons 'my-ext "info")) lines))
+  (with-test-registry (lambda ()
+                        (define state-box (box (initial-ui-state)))
+                        (define lines
+                          (list (styled-line (list (styled-segment "widget content" '())))))
+                        (ctx-set-widget state-box 'my-ext "info" lines)
+                        (define widgets (ui-state-extension-widgets (unbox state-box)))
+                        (check-equal? (hash-ref widgets (cons 'my-ext "info")) lines))))
 
 (test-case "ctx-remove-widget: removes from ui-state box"
-  (define state-box (box (initial-ui-state)))
-  (define lines (list (styled-line (list (styled-segment "temp" '())))))
-  (ctx-set-widget state-box 'ext "key" lines)
-  (ctx-remove-widget state-box 'ext "key")
-  (check-equal? (hash-count (ui-state-extension-widgets (unbox state-box))) 0))
+  (with-test-registry (lambda ()
+                        (define state-box (box (initial-ui-state)))
+                        (define lines (list (styled-line (list (styled-segment "temp" '())))))
+                        (ctx-set-widget state-box 'ext "key" lines)
+                        (ctx-remove-widget state-box 'ext "key")
+                        (check-equal? (hash-count (ui-state-extension-widgets (unbox state-box)))
+                                      0))))
 
 ;; ============================================================
 ;; #715: Widget disposal
@@ -138,39 +158,43 @@
   (check-equal? (hash-count (ui-state-extension-widgets s4)) 1))
 
 (test-case "dispose-widgets: removes all for extension from box"
-  (define state-box (box (initial-ui-state)))
-  (define lines (list (styled-line (list (styled-segment "x" '())))))
-  (ctx-set-widget state-box 'ext1 "a" lines)
-  (ctx-set-widget state-box 'ext1 "b" lines)
-  (ctx-set-widget state-box 'ext2 "c" lines)
-  (dispose-widgets state-box 'ext1)
-  (define widgets (ui-state-extension-widgets (unbox state-box)))
-  (check-equal? (hash-count widgets) 1)
-  (check-true (hash-has-key? widgets (cons 'ext2 "c"))))
+  (with-test-registry (lambda ()
+                        (define state-box (box (initial-ui-state)))
+                        (define lines (list (styled-line (list (styled-segment "x" '())))))
+                        (ctx-set-widget state-box 'ext1 "a" lines)
+                        (ctx-set-widget state-box 'ext1 "b" lines)
+                        (ctx-set-widget state-box 'ext2 "c" lines)
+                        (dispose-widgets state-box 'ext1)
+                        (define widgets (ui-state-extension-widgets (unbox state-box)))
+                        (check-equal? (hash-count widgets) 1)
+                        (check-true (hash-has-key? widgets (cons 'ext2 "c"))))))
 
 (test-case "dispose-widgets: no-op for unknown extension"
-  (define state-box (box (initial-ui-state)))
-  (define lines (list (styled-line (list (styled-segment "x" '())))))
-  (ctx-set-widget state-box 'ext1 "a" lines)
-  (dispose-widgets state-box 'nonexistent)
-  (check-equal? (hash-count (ui-state-extension-widgets (unbox state-box))) 1))
+  (with-test-registry (lambda ()
+                        (define state-box (box (initial-ui-state)))
+                        (define lines (list (styled-line (list (styled-segment "x" '())))))
+                        (ctx-set-widget state-box 'ext1 "a" lines)
+                        (dispose-widgets state-box 'nonexistent)
+                        (check-equal? (hash-count (ui-state-extension-widgets (unbox state-box)))
+                                      1))))
 
 ;; ============================================================
 ;; #716: Integration — widget affects layout
 ;; ============================================================
 
 (test-case "integration: widgets shrink transcript and shift input"
-  (define state-box (box (initial-ui-state)))
-  ;; No widgets: standard layout
-  (define l0 (compute-layout 24 80))
-  (define th0 (tui-layout-transcript-height l0))
-  ;; Add 2 widget lines
-  (define lines
-    (list (styled-line (list (styled-segment "info line 1" '())))
-          (styled-line (list (styled-segment "info line 2" '())))))
-  (ctx-set-widget state-box 'ext "info" lines)
-  (define widget-count (length (get-widget-lines-above (unbox state-box))))
-  (check-equal? widget-count 2)
-  ;; Layout with widgets
-  (define l1 (compute-layout-with-widgets 80 24 widget-count))
-  (check-equal? (tui-layout-transcript-height l1) (- th0 widget-count)))
+  (with-test-registry (lambda ()
+                        (define state-box (box (initial-ui-state)))
+                        ;; No widgets: standard layout
+                        (define l0 (compute-layout 24 80))
+                        (define th0 (tui-layout-transcript-height l0))
+                        ;; Add 2 widget lines
+                        (define lines
+                          (list (styled-line (list (styled-segment "info line 1" '())))
+                                (styled-line (list (styled-segment "info line 2" '())))))
+                        (ctx-set-widget state-box 'ext "info" lines)
+                        (define widget-count (length (get-widget-lines-above (unbox state-box))))
+                        (check-equal? widget-count 2)
+                        ;; Layout with widgets
+                        (define l1 (compute-layout-with-widgets 80 24 widget-count))
+                        (check-equal? (tui-layout-transcript-height l1) (- th0 widget-count)))))

@@ -73,8 +73,8 @@
                         "turn.completed"
                         (hash)))
       (define state1 (apply-events state0 events))
-      ;; find-entry-by-text should locate the tool-start entry
-      (define tool-entry (find-entry-by-text state1 "[TOOL: bash]"))
+      ;; find-entry-by-text should locate the tool-start entry (arg-summary text)
+      (define tool-entry (find-entry-by-text state1 "ls"))
       (check-not-false tool-entry "should find tool-start entry")
       ;; find-entry-by-text should locate the assistant entry
       (define asst-entry (find-entry-by-text state1 "Found 2 files"))
@@ -83,8 +83,8 @@
       (check-equal? (entry-count state1) 3)
       ;; state->texts — check entries contain expected text
       (define texts (state->texts state1))
-      ;; Tool entry has arg summary appended: "[TOOL: bash] ls"
-      (check-not-false (find-entry-by-text state1 "[TOOL: bash]") "texts should contain tool-start")
+      ;; Tool entry text is arg-summary (extracted value from args)
+      (check-not-false (find-entry-by-text state1 "ls") "texts should contain tool-start")
       (check-not-false (member "Found 2 files" texts) "texts should contain assistant"))))
 
 (run-tests workflow-harness-smoke-tests)
