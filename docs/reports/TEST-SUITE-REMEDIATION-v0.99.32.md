@@ -57,8 +57,9 @@ Both target tests pass under fresh-bytecode direct `raco test` and `scripts/run-
 |------|-------|--------|-----|
 | W0 | #8351 | ✅ Done | #8357 |
 | W1 | #8352 | ✅ Done (verified, no code change needed) | #8358 |
-| W2 | #8353 | ✅ Done | — |
-| W3 | #8354 | Todo | — |
+| W2 | #8353 | ✅ Done | #8359 |
+| W3 | #8354 | ✅ Done | — |
+| W4 | #8355 | Todo | — |
 | W4 | #8355 | Todo | — |
 | W5 | #8356 | Todo | — |
 
@@ -85,3 +86,24 @@ test-loop-edge-cases.rkt:       6/6 PASS under runner subprocess
 unit-fast:                      10/10 PASS (102 tests)
 build:                          PASS
 ```
+
+## W3 Verification: Non-standard Test Runner Forms (2026-06-19)
+
+### Root Cause Fixed
+
+Both `test-session-config-helpers.rkt` and `test-struct-mutability.rkt` used `(run-tests 'symbol)` in their `module+ main` — this is a **contract violation** because `run-tests` from `rackunit/text-ui` expects a `test-case?` or `test-suite?`, not a symbol. The runner's subprocess mode executes the `main` submodule, which triggered this violation, producing zero parsed tests.
+
+Fix: Wrapped all module-level `test-case` forms into a `test-suite`, added `rackunit/text-ui` to the require list, and replaced `(run-tests 'symbol)` with `(run-tests suite-name)` in both `(module+ test ...)` and `(module+ main ...)`.
+
+### Verification Results
+
+```
+test-session-config-helpers.rkt:  4/4 PASS under runner subprocess
+test-struct-mutability.rkt:       8/8 PASS under runner subprocess
+unit-fast:                        10/10 PASS (102 tests)
+build:                            PASS
+```
+
+### Sweep
+
+Confirmed only 2 files in the entire test suite used the invalid `(run-tests 'symbol)` form. No other files affected.
