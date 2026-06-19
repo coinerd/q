@@ -54,7 +54,7 @@
                            mock-id
                            mock-tokens)
       (define old-ts (ws-entry-timestamp (car (working-set-entries ws))))
-      (sleep 0.5)
+      (sleep 1.1)
       (working-set-update! ws
                            (list (make-tool "read" "/tmp/foo.rkt"))
                            (list (mock-msg "m2" "second read longer"))

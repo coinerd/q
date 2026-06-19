@@ -23,6 +23,10 @@
 (define (make-test-msg text [id "msg-1"] [role 'user])
   (make-message id #f role 'text (list (make-text-part text)) 0 #f))
 
+;; Helper for non-user (removable) messages
+(define (make-assistant-msg text [id "msg-1"])
+  (make-message id #f 'assistant 'text (list (make-text-part text)) 0 #f))
+
 (define raw-assembly-tests
   (test-suite "build-assembled-context/raw"
 
@@ -61,9 +65,10 @@
       (define config (make-context-assembly-config #:recent-tokens 1))
       (define memo (make-hash))
       ;; Multiple messages to guarantee some are excluded
+      ;; Use assistant messages so they are NOT universally pinned (user messages are)
       (define msgs
         (for/list ([i (in-range 10)])
-          (make-test-msg (format "message number ~a with enough text" i) (format "msg-~a" i))))
+          (make-assistant-msg (format "message number ~a with enough text" i) (format "msg-~a" i))))
       (define result (build-assembled-context/raw msgs config #f #:memo memo))
       ;; With budget of 1, most should be excluded
       (check-true (> (context-result-excluded-count result) 0)
@@ -115,6 +120,9 @@
                          (text-part-text part))))
         (check-true (string-contains? all-text (context-summary-text summary-obj))
                     "summary text must be present in assembled context")))))
+
+(module+ test
+  (run-tests raw-assembly-tests))
 
 (module+ main
   (run-tests raw-assembly-tests))

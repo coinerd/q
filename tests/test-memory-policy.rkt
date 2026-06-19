@@ -84,15 +84,16 @@
   (check-true (policy-user-scope-enabled? enabled-policy))
   (check-true (policy-allows-scope? enabled-policy 'user)))
 
-(test-case "W1 G2: setting-memory-user-scope-enabled? now exists in settings.rkt"
-  (define src (file->string (build-path (current-directory) ".." "runtime" "settings.rkt")))
-  (check-true (regexp-match? #rx"setting-memory-user-scope-enabled" src)
-              "W1: setting-memory-user-scope-enabled? should exist"))
+(test-case "W1 G2: setting-memory-user-scope-enabled? exported from settings module"
+  ;; settings.rkt re-exports from settings-query.rkt — check the binding exists
+  (check-not-false (with-handlers ([exn:fail? (lambda (_) #f)])
+                     (dynamic-require "../runtime/settings.rkt" 'setting-memory-user-scope-enabled?)
+                     #t)
+                   "W1: setting-memory-user-scope-enabled? should be exported from settings module"))
 
 (test-case "W1 G2: update-memory-policy! now exists in service.rkt"
   (define src (file->string (build-path (current-directory) ".." "runtime" "memory" "service.rkt")))
-  (check-true (regexp-match? #rx"update-memory-policy" src)
-              "W1: update-memory-policy! should exist"))
+  (check-true (regexp-match? #rx"update-memory-policy" src) "W1: update-memory-policy! should exist"))
 
 ;; ---------------------------------------------------------------------------
 ;; v0.95.21 W1: G2 — User-scope wiring functional tests
