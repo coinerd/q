@@ -1,9 +1,14 @@
 # v0.99.31 — Fast/Broad Known-Debt Retirement: Final Audit Report
 
-**Date**: 2026-06-16  
+**Date**: 2026-06-16 (see correction below)  
 **Milestone**: #817  
 **Scope**: Retire 84 known test failures from the ledger across 10 waves  
-**Result**: ✅ ALL 84 ENTRIES RESOLVED (84 → 0)
+**Result**: 84 LEDGER ENTRIES RESOLVED — BUT FAST/BROAD GATES NOT GREEN
+
+> **CORRECTION (v0.99.32 W0):** An in-depth follow-up audit (2026-06-19) found
+> that while the ledger was mechanically emptied, 7 fast-gate and 6 broad-gate
+> failures remain. The claims below have been annotated with corrections.
+> See `docs/reports/AUDIT-v0.99.31-IN-DEPTH-FOLLOWUP.md` for the full audit.
 
 ## Wave Summary
 
@@ -18,7 +23,7 @@
 | W6 | #8334 | 12 TUI files | 36 → 24 | #8344 |
 | W7 | #8335 | 13 browser + LLM files | 24 → 11 | #8345 |
 | W8 | #8336 | 11 extension/security/sandbox/workflow files | 11 → 0 | #8346 |
-| W9 | #8337 | Final audit + verification | 0 → 0 | (this report) |
+| W9 | #8337 | Final audit + verification | 0 → 0 | #8347 |
 
 ## Root Cause Taxonomy
 
@@ -41,16 +46,23 @@
 ## Production Fixes (not just test fixes)
 
 1. **`tui/input/state-types.rkt`** — `normalize-selection-range` contract was `exact-nonnegative-integer?` but function takes `(col . row)` pairs. Fixed to `(cons/c exact-nonnegative-integer? exact-nonnegative-integer?)`. (W6)
-2. **`interfaces/doctor.rkt`** — `version>=?` match pattern used `(cons a b)` instead of `(cons a _)`, causing false negatives. (W5)
+2. **`interfaces/doctor.rkt`** — `version>=?` match pattern used `(cons a b)` instead of `(cons a _)`, causing false negatives. (W5) — **Note:** A separate credential contract bug remains; see v0.99.32 W1.
 3. **`docs/architecture/dependency-policy.rktd`** — Stale entries for removed modules. (W5)
 
 ## Gate Verification
 
 - **Build**: `raco make main.rkt` → PASS
 - **Unit-fast**: 10 files, 102 tests → ALL PASS
+- **Smoke**: 19 files, 286 tests → ALL PASS
 - **Ledger**: 0 entries remaining
-- **No new failures introduced**: All previously-passing tests still pass
+- ~~**No new failures introduced**~~ **CORRECTION**: Fresh fast gate has 7 failures; broad gate has 6 new/unclassified failures. These are addressed in v0.99.32.
 
 ## Conclusion
 
-All 84 known-debt test failures from the ledger have been resolved across 9 implementation waves. The majority were stale test assertions after code refactors (event names, module paths, struct fields, transcript formats) — only 3 required production code fixes. The test suite is now clean of known-debt entries.
+~~All 84 known-debt test failures from the ledger have been resolved across 9 implementation waves. The test suite is now clean of known-debt entries.~~
+
+**CORRECTION**: The 84 historical ledger entries were removed, but the fast and broad gates are not green. 7 fast-gate failures and 6 broad-gate failures remain, documented in `.planning/AUDIT-v0.99.31-IN-DEPTH.md` and addressed in milestone v0.99.32 (#818). The majority of fixes were stale test assertions after code refactors — only 3 required production code fixes.
+
+### Date Note
+
+The date `2026-06-16` on this report reflects the initial W9 creation date. The in-depth follow-up audit was conducted `2026-06-19`. The `TEST-SUITE-BASELINE-v0.99.31.md` date of `2026-07-22` appears to be a future-dated artifact from baseline planning.
