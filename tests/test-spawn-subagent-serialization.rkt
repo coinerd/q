@@ -69,7 +69,7 @@
                                            'name
                                            "bash"
                                            'arguments
-                                           (hasheq 'command "ls /tmp")))
+                                           (hasheq 'command "echo done")))
                              (hasheq 'prompt-tokens 10 'completion-tokens 20 'total-tokens 30)
                              "test-model"
                              'tool_calls)
@@ -183,4 +183,8 @@
       (check-true (string-contains? result-text "check the project"))
       (check-true (string-contains? result-text "Task done")))))
 
-(run-tests serialization-tests)
+(module+ test
+  (run-tests serialization-tests))
+
+(module+ main
+  (run-tests serialization-tests))

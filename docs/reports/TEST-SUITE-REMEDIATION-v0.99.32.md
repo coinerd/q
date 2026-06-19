@@ -59,8 +59,8 @@ Both target tests pass under fresh-bytecode direct `raco test` and `scripts/run-
 | W1 | #8352 | ✅ Done (verified, no code change needed) | #8358 |
 | W2 | #8353 | ✅ Done | #8359 |
 | W3 | #8354 | ✅ Done | #8360 |
-| W4 | #8355 | ✅ Done | — |
-| W5 | #8356 | Todo | — |
+| W4 | #8355 | ✅ Done | #8361 |
+| W5 | #8356 | ✅ Done | — |
 
 ## W2 Verification: Runner Diagnostics + Module-load Fixes (2026-06-19)
 
