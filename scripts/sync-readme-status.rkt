@@ -33,7 +33,7 @@
 ;; CHANGELOG parsing
 ;; ---------------------------------------------------------------------------
 
-(define changelog-header-rx #rx"^## v([0-9]+\\.[0-9]+\\.[0-9]+) — .+")
+(define changelog-header-rx #rx"^## v?([0-9]+\\.[0-9]+\\.[0-9]+)")
 (define sub-header-rx #rx"^### ")
 
 (define (parse-changelog-top-entry [path "CHANGELOG.md"])
@@ -61,7 +61,7 @@
          (and m (string-trim (cadr m)))]
         [else (loop (cdr ls) found-header?)])))
   (define header-subtitle
-    (let ([m (and header-line (regexp-match #rx"^## v[0-9.]+ — (.+)$" header-line))])
+    (let ([m (and header-line (regexp-match #rx"^## v?[0-9.]+ — (.+)$" header-line))])
       (and m (cadr m))))
   (define raw-summary (or sub-header-line header-subtitle (format "v~a release" version)))
   (define summary

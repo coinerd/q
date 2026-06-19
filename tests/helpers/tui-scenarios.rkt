@@ -23,11 +23,11 @@
          sync-capture-put!
          sync-capture-wait
          sync-capture-count
-         
+
          make-channel-pair
          channel-pair-send
          channel-pair-receive
-         
+
          make-frame-snapshot
          frame-snapshot?
          frame-snapshot-status-row
@@ -46,12 +46,13 @@
 
 (define (sync-capture-events cap)
   (call-with-semaphore (sync-capture-sema cap)
-    (lambda () (reverse (unbox (sync-capture-events-box cap))))))
+                       (lambda () (reverse (unbox (sync-capture-events-box cap))))))
 
 (define (sync-capture-put! cap evt)
   (call-with-semaphore (sync-capture-sema cap)
-    (lambda () (set-box! (sync-capture-events-box cap)
-                         (cons evt (unbox (sync-capture-events-box cap)))))))
+                       (lambda ()
+                         (set-box! (sync-capture-events-box cap)
+                                   (cons evt (unbox (sync-capture-events-box cap)))))))
 
 (define (sync-capture-wait cap expected-count #:timeout [timeout-ms 5000])
   ;; Spin until we have expected-count events or timeout
@@ -64,7 +65,7 @@
 
 (define (sync-capture-count cap)
   (call-with-semaphore (sync-capture-sema cap)
-    (lambda () (length (unbox (sync-capture-events-box cap))))))
+                       (lambda () (length (unbox (sync-capture-events-box cap))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Channel pair for deterministic interleaving
@@ -86,14 +87,14 @@
 ;; ---------------------------------------------------------------------------
 
 (struct frame-snapshot
-  (status-row   ; (or/c string? #f)
-   input-row    ; (or/c string? #f)
-   transcript   ; (listof string?)
-   dirty?)      ; boolean?
+        (status-row ; (or/c string? #f)
+         input-row ; (or/c string? #f)
+         transcript ; (listof string?)
+         dirty?) ; boolean?
   #:transparent)
 
 (define (make-frame-snapshot #:status-row [status-row #f]
-                              #:input-row [input-row #f]
-                              #:transcript [transcript '()]
-                              #:dirty? [dirty? #f])
+                             #:input-row [input-row #f]
+                             #:transcript [transcript '()]
+                             #:dirty? [dirty? #f])
   (frame-snapshot status-row input-row transcript dirty?))

@@ -83,7 +83,7 @@
    ;; browser_click (HIGH risk)
    (make-tool-spec*
     "browser_click"
-    "Click an element on the page. Use [q-id=\"N\"] selector from the interactiveElements in the most recent browser_observe result (e.g. [q-id=\"3\"])."
+    "Click an element on the page. Use [q-id=\"N\"] from interactiveElements."
     (hasheq 'type
             "object"
             'required
@@ -104,7 +104,7 @@
    ;; browser_type (HIGH risk)
    (make-tool-spec*
     "browser_type"
-    "Type text into an input element. Use [q-id=\"N\"] selector from the interactiveElements in the most recent browser_observe result (e.g. [q-id=\"3\"])."
+    "Type text into an input element. Use [q-id=\"N\"] from interactiveElements."
     (hasheq 'type
             "object"
             'required

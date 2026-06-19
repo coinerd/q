@@ -1,13 +1,13 @@
-<!-- verified-against: 0.99.10 -->
+<!-- verified-against: 0.99.29 -->
 # MCP and Capability-Token Security Notes
 
 This document describes the security state for MAS Schritt 6 Phases 1 and 2.
 
-> **Phase 2 (v0.99.12) update:** Remote execution via mTLS TCP broker is now available. See [Distributed Execution Guide](distributed-execution-guide.md) and [mTLS Security Model](security-mtls.md) for details.
+> **Phase 2 (v0.99.29) update:** Remote execution via mTLS TCP broker is now available. See [Distributed Execution Guide](distributed-execution-guide.md) and [mTLS Security Model](security-mtls.md) for details.
 
 ## Scope
 
-v0.99.10 hardens the existing Phase 1 MCP/capability-token implementation. It does **not** introduce the Phase 2 network broker, mTLS channel, or remote executor.
+v0.99.29 hardens the existing Phase 1 MCP/capability-token implementation. It does **not** introduce the Phase 2 network broker, mTLS channel, or remote executor.
 
 Phase 1 provides:
 
@@ -24,7 +24,7 @@ Phase 1 does **not** provide:
 - ~~mTLS or cross-host authentication.~~ **→ Phase 2 provides full mTLS with mutual certificate verification.**
 - ~~Remote route execution.~~ **→ Phase 2 routes high/critical risk requests to the remote executor via mTLS.**
 
-> **v0.99.12 change:** The `remote-tagged-but-executed-local` annotation is removed. Risk-based routing now dispatches `'remote` decisions to the actual remote executor when `mas.broker.enabled = true`. When the broker is disabled (default), risk-based routing falls back to local execution with a clear warning.
+> **v0.99.29 change:** The `remote-tagged-but-executed-local` annotation is removed. Risk-based routing now dispatches `'remote` decisions to the actual remote executor when `mas.broker.enabled = true`. When the broker is disabled (default), risk-based routing falls back to local execution with a clear warning.
 
 ## Feature gates
 
@@ -46,7 +46,7 @@ Transport limits in Phase 1:
 
 The MCP `tools/call` path now rejects unknown tools before calling the execution function. Known tools are executed through the configured execution wrapper and returned as MCP-compatible JSON values.
 
-JSON-RPC behavior hardened in v0.99.10:
+JSON-RPC behavior hardened in v0.99.29:
 
 - `tools/list` returns MCP tool shape: `{name, description, inputSchema}`.
 - Notifications are detected by the absence of an `id` member and receive no response.
@@ -67,7 +67,7 @@ The default event sink is a no-op. Integrations can parameterize `current-mcp-ev
 
 ## Capability-token API
 
-Capability tokens are HMAC-authenticated strings with strict parsing. v0.99.10 preserves the legacy API while adding claim-aware validation.
+Capability tokens are HMAC-authenticated strings with strict parsing. v0.99.29 preserves the legacy API while adding claim-aware validation.
 
 Primary APIs:
 
@@ -96,7 +96,7 @@ Security properties:
 | `local-only` | All requests execute locally and are tagged `route = 'local`. |
 | `risk-based` | Low/medium requests execute locally; high/critical requests receive `routing-decision = 'remote` and `route = 'remote-tagged-but-executed-local`. |
 
-## Phase 2: Remote Execution (v0.99.12)
+## Phase 2: Remote Execution (v0.99.29)
 
 Phase 2 completes the remote execution path. When `mas.broker.enabled = true`:
 

@@ -460,18 +460,20 @@
            "\n\nReminder: You recently received large tool results. Use record_conclusion to save key findings before taking more actions."
            ""))
      (define preamble-text
-       (format
-        "You are currently in the ~a phase.~a~a~a~a\n\nWorkflow: Use record_conclusion to persist findings. Use set_task_state to transition: exploration→planning→implementation→verification→debugging."
-        label
-        guidance
-        conclusion-section
-        reflection-reminder
-        (if (current-blackboard-injection-enabled)
-            (let ([snippet (build-blackboard-context-snippet)])
-              (if snippet
-                  (string-append "\n\n" snippet)
-                  ""))
-            "")))
+       (format (string-append "You are currently in the ~a phase.~a~a~a~a\n\n"
+                              "Workflow: Use record_conclusion to persist findings. "
+                              "Use set_task_state to transition: "
+                              "exploration→planning→implementation→verification→debugging.")
+               label
+               guidance
+               conclusion-section
+               reflection-reminder
+               (if (current-blackboard-injection-enabled)
+                   (let ([snippet (build-blackboard-context-snippet)])
+                     (if snippet
+                         (string-append "\n\n" snippet)
+                         ""))
+                   "")))
      ;; Clear reflection event after consuming it
      (current-reflection-event #f)
      (make-message "state-awareness-preamble"

@@ -75,13 +75,12 @@
 (test-case "test-model-command: checks block 4"
   (check-true (cmd-ctx? (make-test-cctx))
               "cmd-ctx accepts 8 arguments including last-prompt-box and session-runner")
-  
+
   (check-false (cmd-ctx-model-registry-box (make-test-cctx))
                "cmd-ctx-model-registry-box returns #f when not provided")
-  
-  (check-true (box? (cmd-ctx-model-registry-box (make-test-cctx #:model-registry 'something)))
-)
-            "cmd-ctx-model-registry-box returns a box when registry provided")
+
+  (check-true (box? (cmd-ctx-model-registry-box (make-test-cctx #:model-registry 'something))))
+  "cmd-ctx-model-registry-box returns a box when registry provided")
 
 ;; ============================================================
 ;; 2. handle-model-command — no registry (2 tests)
@@ -160,21 +159,19 @@
 
 (test-case "test-model-command: checks block 3"
   (check-equal? (parse-slash-command "/model") '(model) "parse-slash-command /model → (model)")
-  
-  (check-equal? (parse-slash-command "/model gpt-4")
-)
-              '(model "gpt-4")
-              "parse-slash-command /model gpt-4 → (model \"gpt-4\")")
+
+  (check-equal? (parse-slash-command "/model gpt-4"))
+  '(model "gpt-4")
+  "parse-slash-command /model gpt-4 → (model \"gpt-4\")")
 
 (test-case "test-model-command: checks block 2"
-  (check-equal? (parse-slash-command "/model ")
-)
-              '(model)
-              "parse-slash-command /model (trailing space) → (model)")
+  (check-equal? (parse-slash-command "/model "))
+  '(model)
+  "parse-slash-command /model (trailing space) → (model)")
 
 (test-case "test-model-command: checks block 1"
-  (check-false (parse-slash-command "/models") "parse-slash-command /models → #f (different command)")
-)
+  (check-false (parse-slash-command "/models")
+               "parse-slash-command /models → #f (different command)"))
 
 ;; ============================================================
 ;; 7. Model registry integration (5 tests)

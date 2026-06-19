@@ -104,10 +104,10 @@
 (test-case "test-model-registry: checks block 10"
   (check-not-false (make-model-registry-from-config (make-test-config))
                    "registry creation from symbol-key config")
-  
+
   (check-not-false (make-model-registry-from-config (make-test-config-with-string-keys))
                    "registry creation from string-key config")
-  
+
   (check-not-false (make-model-registry-from-config (make-empty-config))
 )
                  "registry creation from empty config")

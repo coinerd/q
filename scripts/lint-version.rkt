@@ -78,6 +78,7 @@
   (define skip-file?
     (or (equal? fname "README.md")
         (equal? fname "CHANGELOG.md")
+        (equal? fname "CHANGELOG-ARCHIVE.md")
         (equal? fname "releasing.md")
         (equal? fname "why-q.md")
         (equal? fname "api-stability.md")
@@ -102,6 +103,7 @@
                               filename)
                           "docs/demos/")
         (equal? fname "EXTENSIONS_INVENTORY.md")
+        (equal? fname "browser-guide.md")
         (equal? fname "security.md")
         (string-contains? (if (path? filename)
                               (path->string filename)

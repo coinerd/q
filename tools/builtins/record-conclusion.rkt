@@ -114,16 +114,15 @@
 ;; Tool definition via define-tool macro
 ;; --------------------------------------------------
 
-(define-tool
- record_conclusion
- #:description
- "Record a distilled insight or conclusion about the current task. Use after discovering important facts, making decisions, identifying patterns, finding error causes, or getting test results. Conclusions replace raw file contents in the prompt when the agent moves past exploration, enabling context optimization."
- #:required ("text")
- #:properties
- [(text "string" "The conclusion text")
-  (category "string" "Category: fact, decision, pattern, error-cause, test-result (default: fact)")
-  (tags "array" "List of relevance tags for state-aware filtering")
-  (dependencies "array" "List of conclusion IDs or file paths this depends on")]
- record-conclusion-handler)
+(define-tool record_conclusion
+             #:description "Record a distilled insight or conclusion about the current task."
+             #:required ("text")
+             #:properties
+             [(text "string" "The conclusion text")
+              (category "string"
+                        "Category: fact, decision, pattern, error-cause, test-result (default: fact)")
+              (tags "array" "List of relevance tags for state-aware filtering")
+              (dependencies "array" "List of conclusion IDs or file paths this depends on")]
+             record-conclusion-handler)
 
 (provide (contract-out [record_conclusion tool?]))

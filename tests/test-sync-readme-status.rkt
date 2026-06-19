@@ -51,7 +51,7 @@
 (define (extract-changelog-subtitle [path "CHANGELOG.md"])
   (parameterize ([current-directory q-root])
     (define lines (file->lines path))
-    (define header-rx #rx"^## v([0-9]+\\.[0-9]+\\.[0-9]+) — .+")
+    (define header-rx #rx"^## v?([0-9]+\\.[0-9]+\\.[0-9]+)")
     (define header-line
       (for/first ([line (in-list lines)]
                   #:when (regexp-match? header-rx line))

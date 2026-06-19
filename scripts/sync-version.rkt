@@ -95,6 +95,7 @@
 ;; Files where version refs are historical / should NOT be overwritten
 (define EXCLUDED-MD-FILES
   '("README.md" "CHANGELOG.md"
+                "CHANGELOG-ARCHIVE.md"
                 "releasing.md"
                 "why-q.md"
                 "api-stability.md"
@@ -102,6 +103,7 @@
                 "package-registry-spec.md"
                 "publish-verify-workflow.md"
                 "sdk-rpc-catalog.md"
+                "browser-guide.md"
                 "EXTENSIONS_INVENTORY.md"))
 
 (define (skip-md-path? p)
