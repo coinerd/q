@@ -58,9 +58,8 @@ Both target tests pass under fresh-bytecode direct `raco test` and `scripts/run-
 | W0 | #8351 | ✅ Done | #8357 |
 | W1 | #8352 | ✅ Done (verified, no code change needed) | #8358 |
 | W2 | #8353 | ✅ Done | #8359 |
-| W3 | #8354 | ✅ Done | — |
-| W4 | #8355 | Todo | — |
-| W4 | #8355 | Todo | — |
+| W3 | #8354 | ✅ Done | #8360 |
+| W4 | #8355 | ✅ Done | — |
 | W5 | #8356 | Todo | — |
 
 ## W2 Verification: Runner Diagnostics + Module-load Fixes (2026-06-19)
@@ -107,3 +106,26 @@ build:                            PASS
 ### Sweep
 
 Confirmed only 2 files in the entire test suite used the invalid `(run-tests 'symbol)` form. No other files affected.
+
+## W4 Verification: test-ci-local Order/Mutation Sensitivity (2026-06-19)
+
+### Root Cause
+
+`test-ci-local.rkt` ran the full CI suite (`ci-local.rkt`) **3 times** (full, `--fix`, `--quick`), each including `raco make main.rkt` compilation. This took 5+ minutes, exceeded the default 120s timeout, and mutated shared filesystem state when run in parallel with other tests. The test was tagged `@speed fast` but was inherently a slow integration test.
+
+### Fix
+
+1. Changed `@speed fast` → `@speed slow` — correctly excludes from fast suite
+2. Added `@timeout 300` — allows enough time for ci-local.rkt --quick (which includes raco make)
+3. Added `@isolation process` — runner serializes mutation-sensitive files before parallel batches
+4. Reduced from 3 full CI runs to 1 (`--quick` mode only)
+5. Wrapped test-case forms in `test-suite` + added `(module+ test)` and `(module+ main)`
+
+### Verification Results
+
+```
+test-ci-local.rkt:   3/3 PASS under runner subprocess (2m6s)
+Fast suite:          test-ci-local.rkt EXCLUDED (classified as slow)
+unit-fast:           10/10 PASS (102 tests)
+build:               PASS
+```
