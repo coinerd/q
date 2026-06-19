@@ -8,7 +8,7 @@
 > **CORRECTION (v0.99.32 W0):** An in-depth follow-up audit (2026-06-19) found
 > that while the ledger was mechanically emptied, 7 fast-gate and 6 broad-gate
 > failures remain. The claims below have been annotated with corrections.
-> See `docs/reports/AUDIT-v0.99.31-IN-DEPTH-FOLLOWUP.md` for the full audit.
+> See `.planning/AUDIT-v0.99.31-IN-DEPTH.md` for the full audit.
 
 ## Wave Summary
 
