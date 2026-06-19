@@ -14,8 +14,9 @@
          "../util/event/event.rkt")
 
 (define (make-temp-dir)
-  (define dir (build-path (find-system-path 'temp-dir)
-                          (format "q-browser-audit-test-~a" (current-milliseconds))))
+  (define dir
+    (build-path (find-system-path 'temp-dir)
+                (format "q-browser-audit-test-~a" (current-milliseconds))))
   (make-directory* dir)
   dir)
 
@@ -36,8 +37,20 @@
 
 (test-case "log-browser-action! with observation result"
   (define dir (make-temp-dir))
-  (define obs (browser-observation "https://x.com" "Title" "text" "visible"
-                                    #f #f #f #f '() '() (hash) (hash)))
+  (define obs
+    (browser-observation "https://x.com"
+                         "Title"
+                         "text"
+                         "visible"
+                         #f
+                         #f
+                         #f
+                         #f
+                         '()
+                         '()
+                         (hash)
+                         (hash)
+                         (hash)))
   (log-browser-action! "s1" 'observe obs dir)
   (define lines (file->lines (audit-log-path dir)))
   (check-equal? (length lines) 1)
@@ -66,18 +79,13 @@
 (test-case "emit-browser-event! publishes to event bus"
   (define bus (make-event-bus))
   (define received (box #f))
-  (subscribe! bus
-               (lambda (evt)
-                 (set-box! received evt)))
+  (subscribe! bus (lambda (evt) (set-box! received evt)))
   (emit-browser-event! bus 'test.event "s1" (hasheq 'key 'value))
-  (check-not-false (unbox received)
-                   "event should have been received by subscriber"))
+  (check-not-false (unbox received) "event should have been received by subscriber"))
 
 (test-case "emit-browser-event! with symbol event-type converts to string"
   (define bus (make-event-bus))
   (define received-topic (box #f))
-  (subscribe! bus
-               (lambda (evt)
-                 (set-box! received-topic (event-ev evt))))
+  (subscribe! bus (lambda (evt) (set-box! received-topic (event-ev evt))))
   (emit-browser-event! bus 'browser.action.started "s1" (hasheq))
   (check-equal? (unbox received-topic) "browser.action.started"))

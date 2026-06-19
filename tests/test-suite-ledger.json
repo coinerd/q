@@ -2,78 +2,6 @@
   "entries": [
     {
       "category": "ASSERTION_FAILURE",
-      "file": "tests/test-anthropic.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "llm",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-browser-adapter.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "browser",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-browser-audit-w1-v0983.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "browser",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-browser-audit-w2.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "browser",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-browser-audit.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "browser",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-browser-mock-adapter.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "browser",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-browser-robustness-w1.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "browser",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-browser-settings.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "browser",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
       "file": "tests/test-hook-expansion.rkt",
       "first_seen": "0.99.30-W5-broad-baseline",
       "issue": "#8313",
@@ -88,42 +16,6 @@
       "issue": "#8313",
       "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
       "owner": "extensions",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-llm-model.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "llm",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-mcp-config.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "llm",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-model-command.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "llm",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-model-registry.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "llm",
       "release_blocking": false
     },
     {
@@ -169,15 +61,6 @@
       "issue": "#8313",
       "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
       "owner": "sandbox",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-typed-model.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "llm",
       "release_blocking": false
     },
     {
@@ -359,6 +242,27 @@
         ],
         "reason": "Fixed in v0.99.31 W6 (#8334)",
         "remaining_count": 24
+      }
+    },
+    {
+      "v0.99.31-W7-removals": {
+        "removed_files": [
+          "tests/test-anthropic.rkt",
+          "tests/test-browser-adapter.rkt",
+          "tests/test-browser-audit-w1-v0983.rkt",
+          "tests/test-browser-audit-w2.rkt",
+          "tests/test-browser-audit.rkt",
+          "tests/test-browser-mock-adapter.rkt",
+          "tests/test-browser-robustness-w1.rkt",
+          "tests/test-browser-settings.rkt",
+          "tests/test-llm-model.rkt",
+          "tests/test-mcp-config.rkt",
+          "tests/test-model-command.rkt",
+          "tests/test-model-registry.rkt",
+          "tests/test-typed-model.rkt"
+        ],
+        "reason": "Fixed in v0.99.31 W7 (#8335)",
+        "remaining_count": 11
       }
     }
   ]

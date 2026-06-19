@@ -36,6 +36,8 @@
             'restart-count
             0
             'pending-sema
+            (make-semaphore 1)
+            'restart-sema
             (make-semaphore 1)))
   (define state (playwright-sidecar-state #f #f #f (make-hash) #f #f config #f #f))
   (restart-sidecar! state)
@@ -43,7 +45,16 @@
 
 (test-case "H1: double restart increments count twice"
   (define config
-    (hasheq 'timeout-ms 5000 'sidecar-path #f 'restart-count 0 'pending-sema (make-semaphore 1)))
+    (hasheq 'timeout-ms
+            5000
+            'sidecar-path
+            #f
+            'restart-count
+            0
+            'pending-sema
+            (make-semaphore 1)
+            'restart-sema
+            (make-semaphore 1)))
   (define state (playwright-sidecar-state #f #f #f (make-hash) #f #f config #f #f))
   (restart-sidecar! state)
   (restart-sidecar! state)
@@ -73,7 +84,9 @@
             'node-path
             "node"
             'headless?
-            #t))
+            #t
+            'restart-sema
+            (make-semaphore 1)))
   (define state (playwright-sidecar-state #f #f #f pending #f #f config #f #f))
   (restart-sidecar! state)
   (check-equal? (hash-ref (playwright-sidecar-state-config state) 'restart-count) 1))
@@ -84,15 +97,16 @@
 
 (test-case "H2/H3: restart-sidecar! handles missing sidecar-path"
   (define state
-    (playwright-sidecar-state #f
-                              #f
-                              #f
-                              (make-hash)
-                              #f
-                              #f
-                              (hasheq 'sidecar-path #f 'restart-count 0)
-                              #f
-                              #f))
+    (playwright-sidecar-state
+     #f
+     #f
+     #f
+     (make-hash)
+     #f
+     #f
+     (hasheq 'sidecar-path #f 'restart-count 0 'restart-sema (make-semaphore 1))
+     #f
+     #f))
   (restart-sidecar! state)
   (check-equal? (hash-ref (playwright-sidecar-state-config state) 'restart-count) 1))
 

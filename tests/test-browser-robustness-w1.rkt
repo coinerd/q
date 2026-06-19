@@ -18,26 +18,27 @@
 ;; Test: screenshot-max-bytes enforcement
 ;; ---------------------------------------------------------------------------
 
-(test-case "enforce-screenshot-max-bytes truncates oversized screenshot"
+(test-case "enforce-screenshot-max-bytes nulls oversized screenshot"
   (define s (default-browser-settings))
   (define max-bytes (browser-settings-screenshot-max-bytes s))
   (check-true (exact-positive-integer? max-bytes))
-  ;; Truncate a fake oversized observation
+  ;; Oversized observation → screenshot set to #f (H4: not corrupt truncated bytes)
   (define big-bytes (make-bytes (add1 max-bytes) 65)) ; 'A' bytes
-  (define obs (browser-observation "" "" "" "" #f #f "image/png" big-bytes '() '() #f #f))
+  (define obs (browser-observation "" "" "" "" #f #f "image/png" big-bytes '() '() #f #f (hash)))
   (define truncated (enforce-screenshot-max-bytes obs max-bytes))
-  (check-true (<= (bytes-length (browser-observation-screenshot-bytes truncated)) max-bytes)))
+  (check-false (browser-observation-screenshot-bytes truncated))
+  (check-false (browser-observation-screenshot-mime truncated)))
 
 (test-case "enforce-screenshot-max-bytes passes small screenshot through"
   (define s (default-browser-settings))
   (define max-bytes (browser-settings-screenshot-max-bytes s))
   (define small-bytes (make-bytes 100 65))
-  (define obs (browser-observation "" "" "" "" #f #f "image/png" small-bytes '() '() #f #f))
+  (define obs (browser-observation "" "" "" "" #f #f "image/png" small-bytes '() '() #f #f (hash)))
   (define result (enforce-screenshot-max-bytes obs max-bytes))
   (check-equal? (browser-observation-screenshot-bytes result) small-bytes))
 
 (test-case "enforce-screenshot-max-bytes handles #f bytes"
-  (define obs (browser-observation "" "" "" "" #f #f #f #f '() '() #f #f))
+  (define obs (browser-observation "" "" "" "" #f #f #f #f '() '() #f #f (hash)))
   (define result (enforce-screenshot-max-bytes obs 524288))
   (check-false (browser-observation-screenshot-bytes result)))
 

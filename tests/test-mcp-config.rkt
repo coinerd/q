@@ -114,8 +114,8 @@
       (define settings (make-mcp-settings (hash)))
       (check-false (broker-enabled? settings)))
 
-    (test-case "broker-enabled? returns #f even if set in config"
+    (test-case "broker-enabled? returns #t when set in config"
       (define settings (make-settings-from-paths '((mas broker enabled) #t)))
-      (check-false (broker-enabled? settings)))))
+      (check-true (broker-enabled? settings)))))
 
 (run-tests suite)
