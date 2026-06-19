@@ -76,17 +76,16 @@
     ;; ============================================================
     ;; SP4: large output truncation marker
     ;; ============================================================
-    (test-case "SP4: large output is truncated with marker"
+    (test-case "SP4: large output is truncated"
       ;; Generate output larger than the max-output limit
-      ;; printf + seq is fast and produces predictable output
       (define result
         (run-subprocess "/bin/sh"
                         #:args '("-c" "printf \"%0.sx\" $(seq 1 600)")
                         #:limits (fast-limits #:timeout 10 #:max-output 512)))
       (check-equal? (subprocess-result-exit-code result) 0 "command completes")
-      (check-not-false (regexp-match? #rx"output truncated" (subprocess-result-stdout result))
-                       "output contains truncation marker")
-      ;; Output should be longer than 1024 bytes (original data + marker text)
+      ;; Non-blocking read caps output at max-output-bytes
+      (check-true (<= (string-length (subprocess-result-stdout result)) 512)
+                  "output is capped at max-output limit")
       (check-true (> (string-length (subprocess-result-stdout result)) 0) "some output was captured"))
 
     ;; ============================================================
@@ -127,4 +126,7 @@
                        "stderr contains stderr-msg"))))
 
 (module+ main
+  (run-tests subprocess-edge-tests))
+
+(module+ test
   (run-tests subprocess-edge-tests))

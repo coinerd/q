@@ -145,7 +145,7 @@
   (check-true (file-exists? cc-path) "compact-context extension must exist"))
 
 (test-case "P6: context manager module exists"
-  (define ca-path (build-path project-root "q" "runtime" "context-assembly.rkt"))
+  (define ca-path (build-path project-root "q" "runtime" "context" "context-assembly.rkt"))
   (check-true (file-exists? ca-path) "context-assembly module must exist"))
 
 ;; ============================================================

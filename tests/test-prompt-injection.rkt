@@ -128,13 +128,13 @@
     (test-case "preamble shows exact conclusion count for 1 conclusion"
       (define conclusions (list (make-test-conclusion "Found the bug")))
       (define text (preamble-text (build-state-awareness-preamble 'implementation conclusions)))
-      (check-not-false (string-contains? text "1 in memory") (format "Missing count in: ~a" text)))
+      (check-not-false (string-contains? text "1 total") (format "Missing count in: ~a" text)))
 
     (test-case "preamble shows exact conclusion count for 3 conclusions"
       (define conclusions
         (list (make-test-conclusion "A") (make-test-conclusion "B") (make-test-conclusion "C")))
       (define text (preamble-text (build-state-awareness-preamble 'planning conclusions)))
-      (check-not-false (string-contains? text "3 in memory") (format "Missing count in: ~a" text)))
+      (check-not-false (string-contains? text "3 total") (format "Missing count in: ~a" text)))
 
     (test-case "preamble lists conclusion texts when conclusions exist"
       (define conclusions (list (make-test-conclusion "Use structs for data")))
@@ -158,14 +158,14 @@
       (check-true (<= preamble-count 2)
                   (format "Too many system-instruction messages: ~a" preamble-count)))
 
-    ;; ── Conclusion cap ──
-    (test-case "preamble limits displayed conclusions to top 10"
+    ;; ── Conclusion display (token-budget based, not hard count cap) ──
+    (test-case "preamble displays conclusions with total count"
       (define conclusions
         (for/list ([i (in-range 15)])
           (make-test-conclusion (format "Finding ~a" i))))
       (define text (preamble-text (build-state-awareness-preamble 'debugging conclusions)))
-      (check-not-false (string-contains? text "Finding 9"))
-      (check-false (string-contains? text "Finding 14")))
+      (check-not-false (string-contains? text "15 total") "should show total count")
+      (check-not-false (string-contains? text "Finding 0") "should include first finding"))
 
     ;; ── Integration: full assembly includes preamble ──
     (test-case "state-aware assembly includes instructions in message list"

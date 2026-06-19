@@ -57,7 +57,8 @@
       (define ev-names (event-names recorder))
       (check-not-false (member "session.started" ev-names) "expected session.started event")
       (check-not-false (member "turn.started" ev-names) "expected turn.started event")
-      (check-not-false (member "turn.completed" ev-names) "expected turn.completed event")
+      (check-not-false (member "stream.turn.completed" ev-names)
+                       "expected stream.turn.completed event")
 
       ;; BOUNDARY: message content matches what the provider returned
       (define entries (workflow-session-entries wr))
