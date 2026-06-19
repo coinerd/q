@@ -1,7 +1,7 @@
 #lang racket
 
-;; @speed fast
-;; @suite default
+;; @speed slow
+;; @suite integration
 
 (require rackunit
          racket/runtime-path
