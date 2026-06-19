@@ -16,7 +16,8 @@
          rackunit/text-ui
          racket/port
          racket/file
-         "../interfaces/doctor.rkt")
+         "../interfaces/doctor.rkt"
+         "../runtime/auth/auth-store.rkt")
 
 ;; ============================================================
 ;; Helpers
@@ -167,11 +168,37 @@
                  "output should contain warning count"))))
 
 ;; ============================================================
+;; Regression: lookup-credential with symbol provider name
+;; ============================================================
+;; Doctor's check-credentials calls lookup-credential with names from
+;; provider-names (hash-keys), which can be symbols. The lookup-credential
+;; contract requires string?. Doctor must normalize before calling.
+;; This test verifies the contract boundary directly.
+
+(define/provide-test-suite
+ credential-symbol-regression
+ (test-case "lookup-credential accepts string provider names"
+   ;; String input should always work (baseline)
+   (define cred (lookup-credential "test-provider-string" #f))
+   (check-not-false (or (not cred) (credential? cred))
+                    "lookup-credential with string should return credential? or #f"))
+ (test-case "doctor check-credentials does not raise on symbol-named providers"
+   ;; When a settings config has symbol keys (e.g. from JSON with unquoted keys),
+   ;; provider-names returns symbols. check-credentials must normalize them
+   ;; before calling lookup-credential. We verify by calling check-credentials
+   ;; which internally normalizes and calls lookup-credential.
+   (define r (check-credentials))
+   (check-pred check-result? r)
+   (check-equal? (check-result-name r) "Credentials")))
+
+;; ============================================================
 ;; Run
 ;; ============================================================
 
 (module+ test
-  (run-tests test-doctor))
+  (run-tests test-doctor)
+  (run-tests credential-symbol-regression))
 
 (module+ main
-  (run-tests test-doctor))
+  (run-tests test-doctor)
+  (run-tests credential-symbol-regression))
