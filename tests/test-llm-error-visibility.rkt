@@ -11,6 +11,9 @@
          racket/string
          (only-in "../llm/provider-errors.rkt" provider-error? provider-error-category))
 
+;; Resolve paths relative to this source file, not CWD.
+(define this-dir (or (current-load-relative-directory) (current-directory)))
+
 ;; ── Test Suite ──
 
 (define suite
@@ -44,8 +47,14 @@
 
     ;; Test 4: with-safe-fallback now logs warnings (v0.81.0 W3)
     (test-case "with-safe-fallback logs warnings instead of silent swallow"
-      (define src (with-input-from-file "../util/error/error-helpers.rkt" (lambda () (read-string 10000))))
+      (define src
+        (with-input-from-file (build-path this-dir "../util/error/error-helpers.rkt")
+                              (lambda () (read-string 10000))))
       (check-not-false (string-contains? src "log-warning \"with-safe-fallback caught")
                        "with-safe-fallback should log warnings"))))
 
-(run-tests suite)
+(module+ test
+  (run-tests suite))
+
+(module+ main
+  (run-tests suite))

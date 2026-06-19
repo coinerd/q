@@ -157,7 +157,9 @@
           'failed
           (test-file-result-failed r)
           'total
-          (test-file-result-total r)))
+          (test-file-result-total r)
+          'output
+          (truncate-test-output (result-output-string r) DEFAULT-OUTPUT-CAP)))
 
 (define FAILURE-START #rx"^-+ FAILURE -+$")
 (define FAILURE-END #rx"^-{20,}$")

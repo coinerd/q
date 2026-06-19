@@ -56,8 +56,32 @@ Both target tests pass under fresh-bytecode direct `raco test` and `scripts/run-
 | Wave | Issue | Status | PR |
 |------|-------|--------|-----|
 | W0 | #8351 | ✅ Done | #8357 |
-| W1 | #8352 | ✅ Done (verified, no code change needed) | — |
-| W2 | #8353 | Todo | — |
+| W1 | #8352 | ✅ Done (verified, no code change needed) | #8358 |
+| W2 | #8353 | ✅ Done | — |
 | W3 | #8354 | Todo | — |
 | W4 | #8355 | Todo | — |
 | W5 | #8356 | Todo | — |
+
+## W2 Verification: Runner Diagnostics + Module-load Fixes (2026-06-19)
+
+### Root Causes Fixed
+
+1. **test-gui-state-sync-w0.rkt** (MODULE_LOAD_FAILURE): File used relative paths `"../gui/main.rkt"` via `with-input-from-file`, which resolve relative to CWD. Runner runs from `q/`, so the path resolved incorrectly. Fix: Added `this-dir` via `current-load-relative-directory` and `build-path` for path resolution. Also added `(module+ test ...)` so runner detects it as rackunit test file.
+
+2. **test-llm-error-visibility.rkt** (MODULE_LOAD_FAILURE): Same relative path issue with `with-input-from-file "../util/error/error-helpers.rkt"`. Same fix applied.
+
+3. **test-loop-edge-cases.rkt** (ASSERTION_FAILURE): `(parameterize ([MAX-STREAM-CHUNKS 100]) ...)` failed because `MAX-STREAM-CHUNKS` was a plain `define`, not a parameter. Production fix: Changed to `(make-parameter 10000)` in `agent/stream-reducer.rkt`, updated call site in `agent/stream-runner.rkt` to `(MAX-STREAM-CHUNKS)`. Also removed duplicate module-level `(run-tests ...)` and added `(module+ test ...)`.
+
+### Runner Diagnostic Enhancement
+
+- Added `output` field to JSON test results in `scripts/run-tests/parse.rkt` — captures truncated stdout/stderr for each test file, enabling better failure diagnosis.
+
+### Verification Results
+
+```
+test-gui-state-sync-w0.rkt:     7/7 PASS under runner subprocess
+test-llm-error-visibility.rkt:  4/4 PASS under runner subprocess
+test-loop-edge-cases.rkt:       6/6 PASS under runner subprocess
+unit-fast:                      10/10 PASS (102 tests)
+build:                          PASS
+```
