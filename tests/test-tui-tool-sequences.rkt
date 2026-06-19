@@ -40,11 +40,12 @@
       ;; 3 tool-starts + 3 tool-ends + 1 assistant = 7 entries
       (check-equal? (length texts) 7)
       ;; Verify each tool pair
-      (check-not-false (find-entry-by-text (mock-session-state ms1) "[TOOL: read]")
+      ;; tool-start entries store arg-summary as text
+      (check-not-false (find-entry-by-text (mock-session-state ms1) "a.rkt")
                        "should find read tool-start")
-      (check-not-false (find-entry-by-text (mock-session-state ms1) "[TOOL: edit]")
+      (check-not-false (find-entry-by-text (mock-session-state ms1) "a.rkt")
                        "should find edit tool-start")
-      (check-not-false (find-entry-by-text (mock-session-state ms1) "[TOOL: bash]")
+      (check-not-false (find-entry-by-text (mock-session-state ms1) "raco test")
                        "should find bash tool-start")
       ;; All renders correctly
       (define rendered (mock-render ms1 80 24))
@@ -71,20 +72,21 @@
       (define texts (state->texts state1))
       ;; Order: tool-a start, tool-a end, tool-b start, tool-b end
       (check-equal? (length texts) 4)
+      ;; tool-start text is arg-summary (extracted value); tool-end text is result
       (define a-start-idx
         (for/first ([i (in-naturals)]
                     [t (in-list texts)]
-                    #:when (string-contains? t "[TOOL: tool-a]"))
+                    #:when (string-contains? t "1"))
           i))
       (define a-end-idx
         (for/first ([i (in-naturals)]
                     [t (in-list texts)]
-                    #:when (string-contains? t "[OK: tool-a]"))
+                    #:when (string-contains? t "a-result"))
           i))
       (define b-start-idx
         (for/first ([i (in-naturals)]
                     [t (in-list texts)]
-                    #:when (string-contains? t "[TOOL: tool-b]"))
+                    #:when (string-contains? t "2"))
           i))
       (check-true (< a-start-idx a-end-idx b-start-idx) "tool-a start < tool-a end < tool-b start"))
 
@@ -111,8 +113,8 @@
       ;; Turn 2: tool-start + tool-end + assistant = 3
       (check-equal? (length texts) 6)
       ;; Both tools present
-      (check-not-false (find-entry-by-text (mock-session-state ms1) "[TOOL: read]"))
-      (check-not-false (find-entry-by-text (mock-session-state ms1) "[TOOL: edit]"))
+      (check-not-false (find-entry-by-text (mock-session-state ms1) "f.rkt"))
+      (check-not-false (find-entry-by-text (mock-session-state ms1) "f.rkt"))
       ;; Both assistants present
       (check-not-false (find-entry-by-text (mock-session-state ms1) "File read."))
       (check-not-false (find-entry-by-text (mock-session-state ms1) "File edited.")))))

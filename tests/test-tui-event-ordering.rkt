@@ -105,7 +105,9 @@
       (define state1 (apply-events state0 events))
       (check-equal? (entry-count state1) 3)
       (check-not-false (find-entry-by-text state1 "Orphan message"))
-      (check-not-false (find-entry-by-text state1 "[TOOL: bash]"))
-      (check-not-false (find-entry-by-text state1 "[OK: bash]")))))
+      ;; tool-start entry stores arg-summary (extracted value) as text
+      (check-not-false (find-entry-by-text state1 "ls"))
+      ;; tool-end entry stores result text directly
+      (check-not-false (find-entry-by-text state1 "file.txt")))))
 
 (run-tests event-ordering-tests)

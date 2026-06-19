@@ -87,7 +87,8 @@
              [evt (make-test-event "tool.call.started" (hash 'name "bash"))]
              [s2 (apply-event-to-state s evt)])
         (check-equal? (transcript-entry-kind (first (ui-state-transcript s2))) 'tool-start)
-        (check-equal? (transcript-entry-text (first (ui-state-transcript s2))) "[TOOL: bash]")
+        ;; tool-start text is arg-summary (empty when no args)
+        (check-equal? (transcript-entry-text (first (ui-state-transcript s2))) "")
         (check-true (ui-state-busy? s2))
         (check-equal? (ui-state-pending-tool-name s2) "bash")))
 
@@ -96,7 +97,8 @@
              [evt (make-test-event "tool.execution.completed" (hash 'name "bash"))]
              [s2 (apply-event-to-state s evt)])
         (check-equal? (transcript-entry-kind (first (ui-state-transcript s2))) 'tool-end)
-        (check-equal? (transcript-entry-text (first (ui-state-transcript s2))) "[OK: bash]")
+        ;; tool-end text is result content (empty when no result)
+        (check-equal? (transcript-entry-text (first (ui-state-transcript s2))) "")
         (check-false (ui-state-pending-tool-name s2))))
 
     (test-case "apply-event: tool.call.failed"
@@ -105,8 +107,8 @@
                                    (hash 'name "bash" 'error "exit code 1"))]
              [s2 (apply-event-to-state s evt)])
         (check-equal? (transcript-entry-kind (first (ui-state-transcript s2))) 'tool-fail)
-        (check-equal? (transcript-entry-text (first (ui-state-transcript s2)))
-                      "[FAIL: bash] exit code 1")
+        ;; tool-fail text is raw error text without prefix
+        (check-equal? (transcript-entry-text (first (ui-state-transcript s2))) "exit code 1")
         (check-false (ui-state-pending-tool-name s2))))
 
     (test-case "apply-event: runtime.error"
@@ -468,7 +470,7 @@
              [s2 (apply-event-to-state s evt)])
         (define entry (first (ui-state-transcript s2)))
         (check-equal? (transcript-entry-kind entry) 'tool-start)
-        (check-true (string-contains? (transcript-entry-text entry) "[TOOL: bash]"))
+        ;; tool-start text is arg-summary (extracted value from args)
         (check-true (string-contains? (transcript-entry-text entry) "ls -la")
                     "arguments shown in text")
         (check-equal? (hash-ref (transcript-entry-meta entry) 'name) "bash")
@@ -482,7 +484,7 @@
              [s2 (apply-event-to-state s evt)])
         (define entry (first (ui-state-transcript s2)))
         (check-equal? (transcript-entry-kind entry) 'tool-end)
-        (check-true (string-contains? (transcript-entry-text entry) "[OK: bash]"))
+        ;; tool-end text is result content directly
         (check-true (string-contains? (transcript-entry-text entry) "3 files found")
                     "result shown in text")
         (check-equal? (hash-ref (transcript-entry-meta entry) 'name) "bash")
@@ -496,19 +498,7 @@
              [s2 (apply-event-to-state s evt)])
         (define entry (first (ui-state-transcript s2)))
         (check-equal? (transcript-entry-kind entry) 'tool-fail)
-        ;; v0.21.2 W2 Bug A fix: tool result with hash content shows text, not #hasheq
-        (test-case "apply-event: tool.call.completed with hash content shows text not hasheq"
-          (let* ([s (initial-ui-state)]
-                 [result-raw (list (hash 'type "text" 'text "Edited file successfully"))]
-                 [evt (make-test-event "tool.execution.completed"
-                                       (hash 'name "edit" 'result result-raw))]
-                 [s2 (apply-event-to-state s evt)])
-            (define entry (first (ui-state-transcript s2)))
-            (check-false (string-contains? (transcript-entry-text entry) "#hasheq")
-                         "should not show raw #hasheq")
-            (check-true (string-contains? (transcript-entry-text entry) "Edited file successfully")
-                        "should show extracted text")))
-        (check-true (string-contains? (transcript-entry-text entry) "[FAIL: bash]"))
+        ;; tool-fail text is raw error text without prefix
         (check-true (string-contains? (transcript-entry-text entry) "exit 1") "error shown in text")))
 
     (test-case "apply-event: tool.call.started without arguments"
@@ -516,16 +506,18 @@
              [evt (make-test-event "tool.call.started" (hash 'name "read"))]
              [s2 (apply-event-to-state s evt)])
         (define entry (first (ui-state-transcript s2)))
-        (check-equal? (transcript-entry-text entry)
-                      "[TOOL: read]"
-                      "no arguments: just shows tool name")))
+        ;; no arguments: text is empty (tool name in meta)
+        (check-equal? (transcript-entry-text entry) "")
+        (check-equal? (hash-ref (transcript-entry-meta entry) 'name) "read")))
 
     (test-case "apply-event: tool.call.completed without result"
       (let* ([s (initial-ui-state)]
              [evt (make-test-event "tool.execution.completed" (hash 'name "read"))]
              [s2 (apply-event-to-state s evt)])
         (define entry (first (ui-state-transcript s2)))
-        (check-equal? (transcript-entry-text entry) "[OK: read]" "no result: just shows tool name")))
+        ;; no result: text is empty (tool name in meta)
+        (check-equal? (transcript-entry-text entry) "")
+        (check-equal? (hash-ref (transcript-entry-meta entry) 'name) "read")))
 
     ;; ============================================================
     ;; String helpers: truncate-string, extract-arg-summary

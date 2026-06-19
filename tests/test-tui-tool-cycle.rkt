@@ -32,11 +32,11 @@
       (define texts (mock-entry-texts ms1))
       ;; Should have 2 entries: tool-start + tool-end
       (check-equal? (length texts) 2)
-      ;; Tool start includes arg summary
-      (check-not-false (find-entry-by-text (mock-session-state ms1) "[TOOL: read]")
+      ;; Tool start entry text is arg-summary (extracted value)
+      (check-not-false (find-entry-by-text (mock-session-state ms1) "main.rkt")
                        "should find tool-start entry")
-      ;; Tool end includes result
-      (check-not-false (find-entry-by-text (mock-session-state ms1) "[OK: read]")
+      ;; Tool end entry text is result content
+      (check-not-false (find-entry-by-text (mock-session-state ms1) "(define x 1)")
                        "should find tool-end entry")
       ;; Not busy after turn completed
       (check-false (mock-busy? ms1)))
@@ -53,9 +53,9 @@
                (cons "turn.completed" (hash)))))
       (define texts (mock-entry-texts ms1))
       (check-equal? (length texts) 2)
-      (check-not-false (find-entry-by-text (mock-session-state ms1) "[TOOL: bash]")
+      (check-not-false (find-entry-by-text (mock-session-state ms1) "rm -rf /")
                        "should find tool-start entry")
-      (check-not-false (find-entry-by-text (mock-session-state ms1) "[FAIL: bash]")
+      (check-not-false (find-entry-by-text (mock-session-state ms1) "permission denied")
                        "should find tool-fail entry"))
 
     ;; TC3: Blocked tool creates system entry with reason
@@ -90,12 +90,12 @@
                         (hash)))
       (define state1 (apply-events state0 events))
       (define-values (lines _st) (render-state-strings state1 80 24))
-      ;; All 3 entries should appear in rendered output
+      ;; Rendered output uses [TOOL] name: format
       (check-not-false (for/or ([l (in-list lines)])
-                         (string-contains? l "[TOOL: read]"))
+                         (string-contains? l "[TOOL] read"))
                        "tool start should render")
       (check-not-false (for/or ([l (in-list lines)])
-                         (string-contains? l "[OK: read]"))
+                         (string-contains? l "[OK] read"))
                        "tool end should render")
       (check-not-false (for/or ([l (in-list lines)])
                          (string-contains? l "Done reading."))

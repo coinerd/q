@@ -79,15 +79,16 @@
    (check-equal? (length msgs) 1)
    (check-equal? (gui-message-role (car msgs)) "tool")
    (check-true (string-contains? (gui-message-text (car msgs)) "bash")))
- (test-case "tool.execution.completed updates matching tool message"
+ (test-case "tool.execution.completed adds tool-end message"
    (define state-box (box (make-fresh-state)))
    (define subscriber (make-gui-event-subscriber state-box))
    (subscriber (make-test-event "tool.call.started" (hash 'name "bash" 'arguments #f)))
    (subscriber (make-test-event "tool.execution.completed"
                                 (hash 'toolName "bash" 'resultSummary 'completed)))
    (define msgs (gui-state-messages (unbox state-box)))
-   (check-equal? (length msgs) 1)
-   (check-true (string-contains? (gui-message-text (car msgs)) "OK")))
+   (check-equal? (length msgs) 2)
+   (check-true (string-contains? (gui-message-text (last msgs)) "completed")
+               "tool-end msg should have result"))
  (test-case "error events set error status"
    (define state-box (box (make-fresh-state)))
    (define subscriber (make-gui-event-subscriber state-box))

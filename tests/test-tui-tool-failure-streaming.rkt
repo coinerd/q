@@ -57,7 +57,7 @@
       ;; tool-start + tool-end + assistant = 3 entries
       (check-equal? (entry-count state1) 3)
       (check-false (ui-state-streaming-text state1))
-      (check-not-false (find-entry-by-text state1 "[TOOL: read]"))
+      (check-not-false (find-entry-by-text state1 "x.rkt"))
       (check-not-false (find-entry-by-text state1 "Here is the file.")))
 
     ;; TF3: Cancelled turn with active tool call cleans up state
@@ -79,7 +79,7 @@
       (check-false (ui-state-pending-tool-name state1))
       ;; Tool-start entry still exists (was already appended)
       (check-equal? (entry-count state1) 1)
-      (check-not-false (find-entry-by-text state1 "[TOOL: bash]")))
+      (check-not-false (find-entry-by-text state1 "sleep 10")))
 
     ;; TF4: Multiple streaming deltas accumulate correctly
     (test-case "TF4: multiple streaming deltas accumulate"
