@@ -190,7 +190,14 @@
   (define configured-providers
     (for/list ([name (in-list prov-names)])
       (define prov-cfg (provider-config settings name))
-      (define cred (lookup-credential name prov-cfg))
+      ;; Normalize provider name to string — lookup-credential contract
+      ;; requires string? but provider-names can return symbols from
+      ;; hash-keys when the settings JSON uses unquoted keys.
+      (define name-str
+        (if (symbol? name)
+            (symbol->string name)
+            name))
+      (define cred (lookup-credential name-str prov-cfg))
       (and cred (credential-provider-name cred))))
   (define providers-with-keys (filter (lambda (x) x) configured-providers))
   ;; Separate local vs remote providers
