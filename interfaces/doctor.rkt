@@ -87,7 +87,7 @@
     [(cons '() '()) #t]
     [(cons _ '()) #t]
     [(cons '() _) #f]
-    [(cons (list a ___) (list r ___))
+    [(cons (cons a _) (cons r _))
      (cond
        [(> a r) #t]
        [(< a r) #f]

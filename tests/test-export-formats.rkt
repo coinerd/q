@@ -93,9 +93,9 @@
 ;; ============================================================
 
 (test-case "test-export-formats: checks block 10"
-  (check-equal? (session->markdown basic-session))
-  (session->markdown basic-session)
-  "md: deterministic output")
+  (check-equal? (session->markdown basic-session)
+                (session->markdown basic-session)
+                "md: deterministic output"))
 
 ;; ============================================================
 ;; HTML: basic structure
@@ -210,9 +210,9 @@
 (define empty-json (export-session empty-path 'json))
 (define empty-parsed (string->jsexpr empty-json))
 (test-case "test-export-formats: checks block 1"
-  (check-equal? (hash-ref (hash-ref empty-parsed 'session) 'entries))
-  '()
-  "empty: json entries empty list")
+  (check-equal? (hash-ref (hash-ref empty-parsed 'session) 'entries)
+                '()
+                "empty: json entries empty list"))
 
 ;; ============================================================
 ;; Cleanup

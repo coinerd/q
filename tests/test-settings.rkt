@@ -587,9 +587,9 @@
   (check-equal? (hash-ref config 'secret-scrub-allowlist) '("SAFE_VAR")))
 
 ;; v0.79.0 GAP-1: Context assembly profile from settings
-(test-case "setting-context-assembly-profile defaults to off"
+(test-case "setting-context-assembly-profile defaults to observe"
   (define settings (q-settings (hash) (hash) (hash)))
-  (check-eq? (setting-context-assembly-profile settings) 'off))
+  (check-eq? (setting-context-assembly-profile settings) 'observe))
 
 (test-case "setting-context-assembly-profile reads from config"
   (define settings (q-settings (hash) (hash) (hash 'context-assembly (hash 'profile "observe"))))

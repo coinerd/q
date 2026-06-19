@@ -100,6 +100,8 @@
 
   ;; Test: total module count matches BLUEPRINT plan
   (check-equal? (length planned-module-paths)
-)
-              46
-              "Planned module count should be 46 (from BLUEPRINT/MODULES.md)")
+                46
+                "Planned module count should be 46 (from BLUEPRINT/MODULES.md)"))
+
+(module+ test
+  (void))
