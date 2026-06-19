@@ -67,7 +67,7 @@
 
   (define stream-gen (provider-stream provider req))
   (define chunk-count (box 0))
-  (define limit MAX-STREAM-CHUNKS)
+  (define limit (MAX-STREAM-CHUNKS))
   (define received-done? (box #f))
 
   ;; Error boundary — emit cleanup events on provider crash.

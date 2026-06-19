@@ -100,7 +100,8 @@
       (define evt-names (map event-event evts))
 
       ;; Should complete normally
-      (check-not-false (member "stream.turn.completed" evt-names) "turn.completed emitted on empty stream")
+      (check-not-false (member "stream.turn.completed" evt-names)
+                       "turn.completed emitted on empty stream")
       (check-equal? (loop-result-termination-reason result) 'completed "result status is completed")
       ;; No message events (no text content)
       (check-false (member "message.start" evt-names) "no message.start for empty stream"))
@@ -267,10 +268,13 @@
       ;; No message.start was emitted
       (check-false (member "message.start" evt-names) "no message.start when crash before text")
       ;; But turn.completed should still be emitted as cleanup
-      (check-not-false (member "stream.turn.completed" evt-names) "turn.completed emitted as cleanup"))))
+      (check-not-false (member "stream.turn.completed" evt-names)
+                       "turn.completed emitted as cleanup"))))
+
+(module+ test
+  (run-tests edge-case-tests)
+  (run-tests stream-safety-tests))
 
 (module+ main
   (run-tests edge-case-tests)
   (run-tests stream-safety-tests))
-
-(run-tests edge-case-tests)
