@@ -52,11 +52,14 @@
       (define recorder (workflow-result-events wr))
       (check-true (>= (length (events-of-type recorder "turn.started")) 1)
                   "expected at least one turn.started event")
-      (check-true (>= (length (events-of-type recorder "turn.completed")) 1)
-                  "expected at least one turn.completed event")
+      (check-true (>= (length (events-of-type recorder "stream.turn.completed")) 1)
+                  "expected at least one stream.turn.completed event")
 
       ;; Also check a contiguous subsequence that IS present
-      (check-equal? (event-sequence-matches? recorder '("context.built" "model.request.started")) #t)
+      (check-equal? (event-sequence-matches? recorder
+                                             '("context.built" "context.pressure"
+                                                               "model.request.started"))
+                    #t)
 
       ;; BOUNDARY: tree structure is valid
       (check-equal? (check-session-tree-structure (workflow-result-session-log wr)) #t)

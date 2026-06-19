@@ -162,7 +162,7 @@
       ;; SIDE-EFFECTS: two turn.started and two turn.completed events
       (define recorder (workflow-result-events wr))
       (define turn-started (events-of-type recorder "turn.started"))
-      (define turn-completed (events-of-type recorder "turn.completed"))
+      (define turn-completed (events-of-type recorder "stream.turn.completed"))
       (check-equal? (length turn-started)
                     4
                     "expected 4 turn.started events in 2-turn workflow (early + iteration per turn)")

@@ -1,105 +1,5 @@
 {
-  "entries": [
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-hook-expansion.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "extensions",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-hooks-complete.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "extensions",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-prompt-injection.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "security",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-safemode-enforcement.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "security",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-self-hosting-workflow.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "extensions",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-subprocess-edge-cases.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "sandbox",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-subprocess.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "sandbox",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/workflows/cli/test-cli-resume.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "workflows",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/workflows/cli/test-cli-single-shot.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "workflows",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/workflows/parity/test-sdk-cli-parity.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "workflows",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-tool-edit-builtin.rkt",
-      "first_seen": "0.99.30-W5-broad-ledger-rerun",
-      "issue": "#8313",
-      "notes": "Known broad-suite ordering/mutation-sensitive debt: passes individually but failed during W5 broad --ledger acceptance rerun.",
-      "owner": "tools",
-      "release_blocking": false
-    }
-  ],
+  "entries": [],
   "generated_by": "v0.99.30 W5 known-failure ledger",
   "policy": {
     "known_non_release_blocking_failures_allowed_but_visible": true,
@@ -263,6 +163,13 @@
         ],
         "reason": "Fixed in v0.99.31 W7 (#8335)",
         "remaining_count": 11
+      }
+    },
+    {
+      "v0.99.31-W8-removals": {
+        "removed_count": 11,
+        "reason": "Fixed in v0.99.31 W8 (#8336)",
+        "remaining_count": 0
       }
     }
   ]

@@ -341,7 +341,7 @@
       ;; Need a writable log-path for run-iteration-loop
       (define tmpdir (make-temporary-file "q-iteration-test-~a" 'directory))
       (define log-path (build-path tmpdir "session.jsonl"))
-      (run-iteration-loop ctx mock-prov bus #f ext-reg log-path "test-session" 10)
+      (run-iteration-loop ctx mock-prov bus (make-tool-registry) ext-reg log-path "test-session" 10)
       (check-true (unbox hook-called?) "before-agent-start hook should be called")
       (check-equal? (hash-ref (unbox captured-payload) 'session-id)
                     "test-session"
@@ -742,4 +742,7 @@
 
 ;; Run tests
 (module+ main
+  (run-tests hooks-tests))
+
+(module+ test
   (run-tests hooks-tests))

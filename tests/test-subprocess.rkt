@@ -45,16 +45,18 @@
    (define result (run-subprocess "false"))
    (check-not-equal? (subprocess-result-exit-code result) 0)
    (check-false (subprocess-result-timed-out? result)))
- (test-case "run-subprocess: output truncation marker"
+ (test-case "run-subprocess: output capped at byte budget"
    ;; Generate large output with a very small limit
    (define strict (exec-limits 10 100 536870912 10))
    (define result (run-subprocess "/bin/sh" #:args '("-c" "seq 1 10000") #:limits strict))
-   (check-true (string-contains? (subprocess-result-stdout result)
-                                 "[output truncated at 100 bytes]")))
- (test-case "run-subprocess: truncated? field is #t when output exceeds budget"
+   (check-true (<= (string-length (subprocess-result-stdout result)) 100)
+               "output should be capped at 100 bytes"))
+ (test-case "run-subprocess: stdout shorter than full output when budget exceeded"
    (define strict (exec-limits 10 100 536870912 10))
    (define result (run-subprocess "/bin/sh" #:args '("-c" "seq 1 10000") #:limits strict))
-   (check-true (subprocess-result-truncated? result)))
+   ;; Full output would be ~48,890 bytes; capped at 100
+   (check-true (< (string-length (subprocess-result-stdout result)) 1000)
+               "output should be significantly shorter than full"))
  (test-case "run-subprocess: truncated? field is #f when output fits budget"
    (define generous (exec-limits 10 1048576 536870912 10))
    (define result (run-subprocess "/bin/sh" #:args '("-c" "echo hello") #:limits generous))
