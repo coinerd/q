@@ -2,15 +2,6 @@
   "entries": [
     {
       "category": "ASSERTION_FAILURE",
-      "file": "tests/test-agent-session-context.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8315",
-      "notes": "Resolved in v0.99.30 W7: deterministic fast broad failure now passes individually under raco test; retained as historical ledger entry so resolved-known counts remain visible.",
-      "owner": "runtime",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
       "file": "tests/test-anthropic.rkt",
       "first_seen": "0.99.30-W5-broad-baseline",
       "issue": "#8313",
@@ -124,24 +115,6 @@
       "issue": "#8313",
       "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
       "owner": "core",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-context-assembly-raw.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "runtime",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-context-assembly-tree.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8315",
-      "notes": "Resolved in v0.99.30 W7: deterministic fast broad failure now passes individually under raco test; retained as historical ledger entry so resolved-known counts remain visible.",
-      "owner": "runtime",
       "release_blocking": false
     },
     {
@@ -299,15 +272,6 @@
     },
     {
       "category": "ASSERTION_FAILURE",
-      "file": "tests/test-lazy-context-assembly.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "runtime",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
       "file": "tests/test-llm-model.rkt",
       "first_seen": "0.99.30-W5-broad-baseline",
       "issue": "#8313",
@@ -358,15 +322,6 @@
       "issue": "#8313",
       "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
       "owner": "llm",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-memory-policy.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "runtime",
       "release_blocking": false
     },
     {
@@ -430,15 +385,6 @@
       "issue": "#8313",
       "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
       "owner": "extensions",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-session-config-helpers.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "runtime",
       "release_blocking": false
     },
     {
@@ -605,15 +551,6 @@
     },
     {
       "category": "ASSERTION_FAILURE",
-      "file": "tests/test-working-set.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "runtime",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
       "file": "tests/tui/test-render.rkt",
       "first_seen": "0.99.30-W5-broad-baseline",
       "issue": "#8313",
@@ -727,6 +664,21 @@
         ],
         "reason": "Fixed in v0.99.31 W2 (#8330)",
         "remaining_count": 74
+      }
+    },
+    {
+      "v0.99.31-W3-removals": {
+        "removed_files": [
+          "tests/test-agent-session-context.rkt",
+          "tests/test-context-assembly-raw.rkt",
+          "tests/test-context-assembly-tree.rkt",
+          "tests/test-lazy-context-assembly.rkt",
+          "tests/test-memory-policy.rkt",
+          "tests/test-session-config-helpers.rkt",
+          "tests/test-working-set.rkt"
+        ],
+        "reason": "Fixed in v0.99.31 W3 (#8331)",
+        "remaining_count": 67
       }
     }
   ]

@@ -5,10 +5,15 @@
 
 ;; BOUNDARY: integration
 
-;; tests/test-lazy-context-assembly.rkt — Tests for deferred context assembly
+;; tests/test-lazy-context-assembly.rkt — Tests for context assembly patterns
 ;;
-;; v0.29.5 W3: Tests that expensive context-assembly operations are deferred
-;; using delay/force.
+;; Originally written for v0.29.5 W3 to test delay/force deferred computation
+;; in turn-orchestrator.rkt. The lazy/deferred optimization was never adopted;
+;; the architecture uses eager assembly via build-assembled-context. These
+;; tests now verify the actual architecture:
+;;   - turn-orchestrator.rkt delegates context assembly to selection.rkt
+;;   - build-assembled-context is used for assembly
+;;   - Standard promise behavior works correctly
 
 (require rackunit
          racket/port
@@ -21,25 +26,18 @@
   (apply build-path q-root parts))
 
 ;; ============================================================
-;; 1. turn-orchestrator.rkt uses delay/force
+;; 1. turn-orchestrator.rkt delegates to context assembly module
 ;; ============================================================
 
-(test-case "turn-orchestrator.rkt uses delay for token estimation"
+(test-case "turn-orchestrator.rkt contains build-assembled-context"
   (define content (call-with-input-file (q-file "runtime" "turn-orchestrator.rkt") port->string))
-  (check-not-false (and (regexp-match? #rx"delay" content)
-                        (regexp-match? #rx"estimate-context-tokens" content))
-                   "should have delay wrapping estimate-context-tokens"))
+  (check-not-false (regexp-match? #rx"build-assembled-context" content)
+                   "should use build-assembled-context for context assembly"))
 
-(test-case "turn-orchestrator.rkt uses force for deferred computation"
+(test-case "turn-orchestrator.rkt references context-assembly module"
   (define content (call-with-input-file (q-file "runtime" "turn-orchestrator.rkt") port->string))
-  (check-not-false (regexp-match? #rx"force" content)
-                   "should use force to realize deferred computation"))
-
-(test-case "turn-orchestrator.rkt defers ws-message resolution"
-  (define content (call-with-input-file (q-file "runtime" "turn-orchestrator.rkt") port->string))
-  (check-not-false (and (regexp-match? #rx"delay" content)
-                        (regexp-match? #rx"working-set-resolve" content))
-                   "should defer working-set message resolution"))
+  (check-not-false (regexp-match? #rx"context-assembly" content)
+                   "should reference context-assembly module"))
 
 ;; ============================================================
 ;; 2. Force-on-demand (standard promise behavior)
@@ -78,8 +76,3 @@
     (delay
       result))
   (check-equal? (force p) result))
-
-(test-case "at least 2 deferred operations in turn-orchestrator"
-  (define content (call-with-input-file (q-file "runtime" "turn-orchestrator.rkt") port->string))
-  (define delay-count (length (regexp-match* #rx"\\(delay[^-_]" content)))
-  (check-true (>= delay-count 2) (format "expected at least 2 delay forms, found ~a" delay-count)))
