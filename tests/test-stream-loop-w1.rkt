@@ -65,7 +65,7 @@
 (test-case "phase-build-context returns raw-messages and effects"
   (define bus (make-event-bus))
   (define st (make-loop-state "s1" "t1"))
-  (define context (list (message "m1" #f 'user 'message "hello" (current-seconds) (hasheq))))
+  (define context (list (message "m1" #f 'user 'message (list "hello") (current-seconds) (hasheq))))
   (define-values (raw-msgs effects) (phase-build-context bus "s1" "t1" st context))
   (check-true (list? raw-msgs))
   (check-true (list? effects))

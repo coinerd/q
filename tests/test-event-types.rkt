@@ -201,7 +201,8 @@
                                    #:timestamp 2000
                                    #:tool-name "bash"
                                    #:duration-ms 1000
-                                   #:result-summary "exit 0"))
+                                   #:result-summary "exit 0"
+                                   #:result-error #f))
   (check-equal? (typed-event-type evt) "tool.execution.completed"))
 
 ;; ============================================================
