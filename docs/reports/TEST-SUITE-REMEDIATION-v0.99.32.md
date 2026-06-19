@@ -40,10 +40,23 @@ Same as fast minus `test-ci-local.rkt` and `test-tool-edit-builtin.rkt`, plus `t
 
 ## Wave Progress
 
+## W1 Verification: Doctor + Edit Builtin (2026-06-19)
+
+Both target tests pass under fresh-bytecode direct `raco test` and `scripts/run-tests.rkt`:
+
+- `tests/test-doctor.rkt`: 17/17 PASS — `lookup-credential` already normalizes symbol→string in `runtime/auth/auth-store.rkt:125-128`
+- `tests/test-tool-edit-builtin.rkt`: 7/7 PASS — no-match returns error with "0" count in message
+- Adjacent: `tests/test-auth-store.rkt`: 51/51 PASS
+- Unit-fast: 10/10 PASS (102 tests)
+
+**Root cause of audit failure**: Stale bytecode at audit time (`91ed1060`). The fix was present in the codebase but compiled artifacts did not reflect it.
+
+## Wave Progress
+
 | Wave | Issue | Status | PR |
 |------|-------|--------|-----|
-| W0 | #8351 | In Progress | (this wave) |
-| W1 | #8352 | Todo | — |
+| W0 | #8351 | ✅ Done | #8357 |
+| W1 | #8352 | ✅ Done (verified, no code change needed) | — |
 | W2 | #8353 | Todo | — |
 | W3 | #8354 | Todo | — |
 | W4 | #8355 | Todo | — |
