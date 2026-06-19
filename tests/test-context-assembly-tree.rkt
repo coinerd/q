@@ -172,13 +172,10 @@
                         (hash))))
       ;; Each message ~25 tokens. 10 messages = ~250 tokens. Budget 100 → ~4 fit.
       (define result (truncate-messages-to-budget msgs 100))
-      (check-true (< (length result) 10))
-      (check-true (>= (length result) 1))
-      ;; Should keep the most recent messages (highest index)
-      ;; #1380: first user message (m0) is also pinned, so it may appear
-      (check-true (and (member (message-id (last result)) '("m9" "m0")) #t)
-                  (format "last message should be m9 or pinned m0, got ~a"
-                          (message-id (last result)))))
+      (check-equal? (length result) 10)
+      ;; Universal user-message pinning preserves all user messages even when the
+      ;; token budget is too small for non-user history.
+      (check-equal? (map message-id result) (map message-id msgs)))
 
     (test-case "truncate-messages-to-budget: preserves system instructions"
       (define sys-msg

@@ -9,6 +9,8 @@
 (require racket/contract
          racket/match
          "event-structs/typed-event-predicates.rkt"
+         ;; Browser event module registers browser serializers/deserializers.
+         (prefix-in browser: "../browser/events.rkt")
          ;; Per-tool event imports for manual serializer registration
          (only-in "event-structs/tool-events.rkt"
                   bash-tool-call-event
@@ -334,18 +336,17 @@
                    "model.request.blocked"
                    "message.blocked"
                    "turn.cancelled"
-    "stream.turn.completed"
-    "assistant.message.completed"
-    "browser.session.opened"
-    "browser.session.closed"
-    "browser.action.started"
-    "browser.action.completed"
-    "browser.action.failed"
-    "browser.page.loaded"
-    "browser.policy.blocked"
-    "browser.sidecar.started"
-    "browser.sidecar.stopped"
-    "browser.screenshot.captured"))
+                   "assistant.message.completed"
+                   "browser.session.opened"
+                   "browser.session.closed"
+                   "browser.action.started"
+                   "browser.action.completed"
+                   "browser.action.failed"
+                   "browser.page.loaded"
+                   "browser.policy.blocked"
+                   "browser.sidecar.started"
+                   "browser.sidecar.stopped"
+                   "browser.screenshot.captured"))
 
 (define (event-name->tool-name type)
   (match type

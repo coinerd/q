@@ -155,3 +155,63 @@ STRICT MODE: files with zero parsed tests: tests/test-benchmarks.rkt
 ```
 
 Interpretation: W5 ledger classification is functioning; current broad failures are classified as known, no new/unclassified failures remain in this run. The command still exits `4` because strict zero-parsed detection remains correctly blocking for `tests/test-benchmarks.rkt` and is outside the known-failure ledger mechanism.
+
+## W7 deterministic-failure remediation addendum
+
+W7 (#8315) resolved a bounded deterministic batch from the broad ledger:
+
+- `tests/test-agent-session-context.rkt`
+- `tests/test-context-assembly-tree.rkt`
+- `tests/test-event-roundtrip.rkt`
+- `tests/test-gap5-conclusion-bridge.rkt`
+- `tests/test-util-reclassification.rkt`
+
+The entries remain in `tests/test-suite-ledger.json` as historical known failures with `issue: "#8315"`; when these files pass, the runner reports them under `Resolved known failures` rather than known/new/unclassified failures.
+
+W7 also fixed the strict zero-parsed sentinel for `tests/test-benchmarks.rkt` by adding an explicit RackUnit text-ui runner. Focused runner verification:
+
+```bash
+racket scripts/run-tests.rkt --ledger tests/test-suite-ledger.json \
+  tests/test-agent-session-context.rkt \
+  tests/test-context-assembly-tree.rkt \
+  tests/test-event-roundtrip.rkt \
+  tests/test-gap5-conclusion-bridge.rkt \
+  tests/test-util-reclassification.rkt \
+  tests/test-benchmarks.rkt
+```
+
+Observed result:
+
+```text
+Files: 6 total, 6 passed, 0 failed, 0 timeouts
+Tests: 83 total, 83 passed, 0 failed
+Category: PASS=6
+VERDICT: PASS
+Known failures: 0
+New failures: 0
+Unclassified failures: 0
+Resolved known failures: 84
+Release-blocking known failures: 0
+```
+
+Final W7 broad ledger verification:
+
+```bash
+timeout 900 racket scripts/run-tests.rkt --suite broad --profile local --ledger tests/test-suite-ledger.json
+```
+
+Observed result:
+
+```text
+w7-broad-ledger3-exit=1
+profile=local
+Files: 1042 total, 965 passed, 77 failed, 0 timeouts
+Tests: 12617 total, 12547 passed, 70 failed
+Category: PASS=965, ASSERTION_FAILURE=73, MODULE_LOAD_FAILURE=2, ENVIRONMENT_MISSING=1, UNKNOWN_FAILURE=1
+VERDICT: FAIL
+Known failures: 77
+New failures: 0
+Unclassified failures: 0
+Resolved known failures: 7
+Release-blocking known failures: 0
+```
