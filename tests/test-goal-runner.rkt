@@ -81,10 +81,10 @@
   (check-equal? (build-continuation-prompt "tests pass" #f)
                 "The goal is not yet achieved. Reason: unknown. Continue working toward: tests pass")
 
-  (check-equal?)
-  (build-continuation-prompt "tests pass"
-                             (make-evaluation-result #:achieved? #f #:reason "still 2 failures"))
-  "The goal is not yet achieved. Reason: still 2 failures. Continue working toward: tests pass")
+  (check-equal?
+   (build-continuation-prompt "tests pass"
+                              (make-evaluation-result #:achieved? #f #:reason "still 2 failures"))
+   "The goal is not yet achieved. Reason: still 2 failures. Continue working toward: tests pass"))
 
 ;; ============================================================
 ;; goal-run-simulated! — achieve in 1 turn

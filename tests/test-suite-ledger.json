@@ -11,24 +11,6 @@
     },
     {
       "category": "ASSERTION_FAILURE",
-      "file": "tests/test-arch-fitness.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "architecture",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-benchmark-scorer.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "core",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
       "file": "tests/test-browser-adapter.rkt",
       "first_seen": "0.99.30-W5-broad-baseline",
       "issue": "#8313",
@@ -92,96 +74,6 @@
     },
     {
       "category": "ASSERTION_FAILURE",
-      "file": "tests/test-bump-version.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "core",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-cell-diff-render.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "core",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-check-deps.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "core",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-doctor.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "core",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-effect-update-fsm-contract.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "core",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-export-formats.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "core",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-facade-surface.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "core",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-gap5-conclusion-bridge.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8315",
-      "notes": "Resolved in v0.99.30 W7: deterministic fast broad failure now passes individually under raco test; retained as historical ledger entry so resolved-known counts remain visible.",
-      "owner": "core",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-goal-evidence.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "core",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-goal-runner.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "core",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
       "file": "tests/test-gui-event-subscriber-characterization.rkt",
       "first_seen": "0.99.30-W5-broad-baseline",
       "issue": "#8313",
@@ -209,24 +101,6 @@
     },
     {
       "category": "ASSERTION_FAILURE",
-      "file": "tests/test-hotspot-report.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "architecture",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-integration.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "core",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
       "file": "tests/test-interfaces-tui.rkt",
       "first_seen": "0.99.30-W5-broad-baseline",
       "issue": "#8313",
@@ -250,15 +124,6 @@
       "issue": "#8313",
       "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
       "owner": "llm",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-main.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "core",
       "release_blocking": false
     },
     {
@@ -299,24 +164,6 @@
     },
     {
       "category": "ASSERTION_FAILURE",
-      "file": "tests/test-run-tests-arg-validation.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "core",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-run-tests.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "core",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
       "file": "tests/test-safemode-enforcement.rkt",
       "first_seen": "0.99.30-W5-broad-baseline",
       "issue": "#8313",
@@ -335,33 +182,6 @@
     },
     {
       "category": "ASSERTION_FAILURE",
-      "file": "tests/test-settings.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "core",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-skeleton.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "core",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-struct-mutability.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "core",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
       "file": "tests/test-subprocess-edge-cases.rkt",
       "first_seen": "0.99.30-W5-broad-baseline",
       "issue": "#8313",
@@ -376,15 +196,6 @@
       "issue": "#8313",
       "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
       "owner": "sandbox",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-summary-integration.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8313",
-      "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
-      "owner": "core",
       "release_blocking": false
     },
     {
@@ -448,15 +259,6 @@
       "issue": "#8313",
       "notes": "Known broad-suite debt captured by v0.99.30 W5 ledger; requires owner triage/follow-up before removal.",
       "owner": "tui",
-      "release_blocking": false
-    },
-    {
-      "category": "ASSERTION_FAILURE",
-      "file": "tests/test-util-reclassification.rkt",
-      "first_seen": "0.99.30-W5-broad-baseline",
-      "issue": "#8315",
-      "notes": "Resolved in v0.99.30 W7: deterministic fast broad failure now passes individually under raco test; retained as historical ledger entry so resolved-known counts remain visible.",
-      "owner": "core",
       "release_blocking": false
     },
     {
@@ -615,6 +417,36 @@
         ],
         "reason": "Fixed in v0.99.31 W4 (#8332)",
         "remaining_count": 58
+      }
+    },
+    {
+      "v0.99.31-W5-removals": {
+        "removed_files": [
+          "tests/test-arch-fitness.rkt",
+          "tests/test-benchmark-scorer.rkt",
+          "tests/test-bump-version.rkt",
+          "tests/test-cell-diff-render.rkt",
+          "tests/test-check-deps.rkt",
+          "tests/test-doctor.rkt",
+          "tests/test-effect-update-fsm-contract.rkt",
+          "tests/test-export-formats.rkt",
+          "tests/test-facade-surface.rkt",
+          "tests/test-gap5-conclusion-bridge.rkt",
+          "tests/test-goal-evidence.rkt",
+          "tests/test-goal-runner.rkt",
+          "tests/test-hotspot-report.rkt",
+          "tests/test-integration.rkt",
+          "tests/test-main.rkt",
+          "tests/test-run-tests-arg-validation.rkt",
+          "tests/test-run-tests.rkt",
+          "tests/test-settings.rkt",
+          "tests/test-skeleton.rkt",
+          "tests/test-struct-mutability.rkt",
+          "tests/test-summary-integration.rkt",
+          "tests/test-util-reclassification.rkt"
+        ],
+        "reason": "Fixed in v0.99.31 W5 (#8333)",
+        "remaining_count": 36
       }
     }
   ]

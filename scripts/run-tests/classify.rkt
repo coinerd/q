@@ -279,8 +279,7 @@
         f))
   (define base (file-name-from-path s))
   (or (string-contains? s "/helpers/")
-      (and (string-contains? s "/fixtures/")
-           (or (not base) (not (string-prefix? (path->string base) "test-"))))
+      (string-contains? s "/fixtures/")
       (and base (member (path->string base) support-test-module-names) #t)))
 
 (define (arch-file? f)

@@ -30,7 +30,8 @@
               (format "expected >= 8 all-from-out in protocol-types.rkt, found ~a" count)))
 
 (test-case "context-assembly.rkt re-exports 3 sub-modules (intentional facade)"
-  (define content (call-with-input-file (q-file "runtime" "context" "context-assembly.rkt") port->string))
+  (define content
+    (call-with-input-file (q-file "runtime" "context" "context-assembly.rkt") port->string))
   (define all-from-count (length (regexp-match* #rx"all-from-out" content)))
   (define explicit-count (length (regexp-match* #rx"provide" content)))
   ;; Either uses all-from-out or explicit provides (S1-F4 refactor)
@@ -47,7 +48,9 @@
   (define struct-out-count (length (regexp-match* #rx"struct-out" content)))
   ;; After v0.85.0 W2, all-from-out was replaced with explicit provides (struct-out entries)
   (check-true (or (>= all-from-count 6) (>= struct-out-count 6))
-              (format "expected >= 6 all-from-out or struct-out in event-structs.rkt, found ~a/~a" all-from-count struct-out-count)))
+              (format "expected >= 6 all-from-out or struct-out in event-structs.rkt, found ~a/~a"
+                      all-from-count
+                      struct-out-count)))
 
 ;; ============================================================
 ;; 2. Non-facade modules should NOT use all-from-out excessively
@@ -69,8 +72,10 @@
 
 (test-case "interfaces/sdk.rkt re-exports sdk-core and sdk-compat"
   (define content (call-with-input-file (q-file "interfaces" "sdk.rkt") port->string))
-  (check-not-false (regexp-match? #rx"all-from-out.*sdk-core" content))
-  (check-not-false (regexp-match? #rx"all-from-out.*sdk-compat" content)))
+  ;; ADR-0028: uses explicit provides, not all-from-out
+  (check-not-false (regexp-match? #rx"sdk-core[.]rkt" content) "sdk.rkt should require sdk-core.rkt")
+  (check-not-false (regexp-match? #rx"sdk-compat[.]rkt" content)
+                   "sdk.rkt should require sdk-compat.rkt"))
 
 (test-case "interfaces/sdk-public.rkt has explicit provides"
   (define content (call-with-input-file (q-file "interfaces" "sdk-public.rkt") port->string))

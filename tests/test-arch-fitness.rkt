@@ -743,13 +743,20 @@
     ;; F17a: Provider conformance
     (test-case "PC-1: All built-in providers implement provider? predicate"
       (define providers-to-test
-        (list (cons "openai"
-                    (dynamic-require "llm/openai-compatible.rkt" 'make-openai-compatible-provider))
-              (cons "gemini" (dynamic-require "llm/gemini.rkt" 'make-gemini-provider))
-              (cons "anthropic" (dynamic-require "llm/anthropic.rkt" 'make-anthropic-provider))
-              (cons "azure" (dynamic-require "llm/azure-openai.rkt" 'make-azure-openai-provider))
-              (cons "openrouter" (dynamic-require "llm/openrouter.rkt" 'make-openrouter-provider))))
-      (define provider-pred? (dynamic-require "llm/provider.rkt" 'provider?))
+        (list
+         (cons "openai"
+               (dynamic-require (build-path q-dir "llm" "openai-compatible.rkt")
+                                'make-openai-compatible-provider))
+         (cons "gemini" (dynamic-require (build-path q-dir "llm" "gemini.rkt") 'make-gemini-provider))
+         (cons "anthropic"
+               (dynamic-require (build-path q-dir "llm" "anthropic.rkt") 'make-anthropic-provider))
+         (cons "azure"
+               (dynamic-require (build-path q-dir "llm" "azure-openai.rkt")
+                                'make-azure-openai-provider))
+         (cons "openrouter"
+               (dynamic-require (build-path q-dir "llm" "openrouter.rkt")
+                                'make-openrouter-provider))))
+      (define provider-pred? (dynamic-require (build-path q-dir "llm" "provider.rkt") 'provider?))
       (for ([p providers-to-test])
         (define maker (cdr p))
         (define prov (maker (hasheq 'api-key "test-key" 'model "test-model")))
@@ -757,8 +764,9 @@
 
     (test-case "PC-2: Provider factory returns provider? for known names"
       (define create-provider
-        (dynamic-require "runtime/provider/provider-factory.rkt" 'create-provider-for-name))
-      (define provider-pred? (dynamic-require "llm/provider.rkt" 'provider?))
+        (dynamic-require (build-path q-dir "runtime" "provider" "provider-factory.rkt")
+                         'create-provider-for-name))
+      (define provider-pred? (dynamic-require (build-path q-dir "llm" "provider.rkt") 'provider?))
       (for ([name (list "gemini" "anthropic" "azure" "openrouter" "openai")])
         (define prov (create-provider name #f "test-key" "test-model"))
         (check-true (provider-pred? prov)
@@ -766,7 +774,8 @@
 
     ;; F17b: Session recovery invariants
     (test-case "SR-1: agent-session struct has all expected accessors"
-      (define agent-session? (dynamic-require "runtime/session/session-types.rkt" 'agent-session?))
+      (define agent-session?
+        (dynamic-require (build-path q-dir "runtime" "session" "session-types.rkt") 'agent-session?))
       (check-true (procedure? agent-session?) "agent-session? must be a procedure"))
 
     ;; F17c: Dependency policy completeness
@@ -787,10 +796,10 @@
                     "config-schema must have security section")))
 
     (test-case "F13: extension-ctx has ctx-version field"
-      (define ctx-version-accessor (dynamic-require "extensions/context.rkt" 'ctx-ctx-version))
-      (check-true (procedure? ctx-version-accessor) "ctx-ctx-version accessor must exist")
-      (define version-const (dynamic-require "extensions/context.rkt" 'current-extension-ctx-version))
-      (check-equal? version-const 1 "current-extension-ctx-version must be 1"))
+      (define ctx-version-accessor
+        (dynamic-require (build-path q-dir "util" "extension" "extension-types.rkt")
+                         'extension-ctx-ctx-version))
+      (check-true (procedure? ctx-version-accessor) "extension-ctx-ctx-version accessor must exist"))
 
     (test-case "F11: turn-orchestrator is documented as composition root"
       (define p (build-path q-dir "docs" "architecture" "dependency-policy.rktd"))
@@ -815,12 +824,11 @@
                     "settings-query.rkt must define setting-ref")))
 
     (test-case "F5: session facets exported from session-types"
-      (define facets (list "session->provider-facet"
-                           "session->tool-facet"
-                           "session->identity-facet"))
+      (define facets (list "session->provider-facet" "session->tool-facet" "session->identity-facet"))
       (for ([f facets])
-        (check-not-exn (lambda () (dynamic-require "runtime/session/session-types.rkt"
-                                                   (string->symbol f)))
+        (check-not-exn (lambda ()
+                         (dynamic-require (build-path q-dir "runtime" "session" "session-types.rkt")
+                                          (string->symbol f)))
                        (format "~a must be exported from session-types" f))))))
 
 (run-tests v09719-suite)

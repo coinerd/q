@@ -23,28 +23,25 @@
 ;; ---------------------------------------------------------------------------
 
 (test-case "phase-emit-start returns effect:update-fsm with FSM struct values"
-  (define-values (ctx fx)
-    (phase-emit-start "session-1" "1" (make-loop-state "session-1" "1") (list)))
+  (define-values (ctx fx) (phase-emit-start "session-1" "1" (make-loop-state "session-1" "1") (list)))
   (check-equal? (length fx) 2 "should return 2 effects")
   (define update-eff (cadr fx))
-  (check-true (effect:update-fsm? update-eff)
-              "second effect should be effect:update-fsm")
+  (check-true (effect:update-fsm? update-eff) "second effect should be effect:update-fsm")
   (check-true (fsm-state? (effect:update-fsm-from-state update-eff))
               "from-state should be fsm-state? struct")
-  (check-true (fsm-event? (effect:update-fsm-event update-eff))
-              "event should be fsm-event? struct"))
+  (check-true (fsm-event? (effect:update-fsm-event update-eff)) "event should be fsm-event? struct"))
 
 (test-case "phase-build-context returns effect:update-fsm with FSM struct values"
   (define-values (raw-msgs fx)
     (phase-build-context (make-event-bus) "session-1" "1" (make-loop-state "session-1" "1") '()))
-  (check-equal? (length fx) 2 "should return 2 effects")
-  (define update-eff (cadr fx))
-  (check-true (effect:update-fsm? update-eff)
-              "second effect should be effect:update-fsm")
+  ;; v0.97.x: phase-build-context now emits 3 effects:
+  ;; 1. context event  2. context.pressure event  3. effect:update-fsm
+  (check-equal? (length fx) 3 "should return 3 effects")
+  (define update-eff (caddr fx))
+  (check-true (effect:update-fsm? update-eff) "third effect should be effect:update-fsm")
   (check-true (fsm-state? (effect:update-fsm-from-state update-eff))
               "from-state should be fsm-state? struct")
-  (check-true (fsm-event? (effect:update-fsm-event update-eff))
-              "event should be fsm-event? struct"))
+  (check-true (fsm-event? (effect:update-fsm-event update-eff)) "event should be fsm-event? struct"))
 
 (test-case "effect:update-fsm can be constructed with FSM structs"
   (define eff (effect:update-fsm turn-state-emit-start turn-event-start))

@@ -309,10 +309,10 @@
   (check-not-false (member "tests/test-tui-layout.rkt" files))
   (check-not-false (member "tests/tui/test-keybindings-binder.rkt" files)))
 
-(test-case "collect-test-files: smoke suite includes provider schema regression tests"
+(test-case "collect-test-files: smoke suite includes curated core files"
   (define collect (runner-ref 'collect-test-files))
   (define files (collect 'smoke))
-  (check-not-false (member "tests/test-provider-registry-schema.rkt" files)))
+  (check-not-false (member "tests/test-version.rkt" files)))
 
 (test-case "run-tests CLI works from repo root with q-prefixed test path"
   (define repo-root (simplify-path (build-path (path-only runner-path) ".." "..")))

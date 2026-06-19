@@ -170,5 +170,8 @@
 ;; Run
 ;; ============================================================
 
+(module+ test
+  (run-tests test-doctor))
+
 (module+ main
   (run-tests test-doctor))

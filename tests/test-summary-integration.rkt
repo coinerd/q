@@ -18,6 +18,7 @@
          rackunit/text-ui
          racket/list
          "../util/message/protocol-types.rkt"
+         (only-in "../runtime/context/context-summary.rkt" context-summary)
          "../runtime/session/session-store.rkt"
          "../runtime/session-index.rkt"
          "../runtime/context/context-assembly.rkt")
@@ -109,19 +110,22 @@
     ;; Large session: summary generated for excluded entries
     (test-case "large session generates summary for excluded entries"
       (define msgs (build-chain "System" "Start" 20 "old" "Recent user" "Recent reply"))
-      (with-session msgs
-                    (lambda (idx)
-                      (define cfg (make-context-assembly-config #:recent-tokens 50))
-                      (define cr (build-assembled-context idx cfg))
-                      (check-true (>= (length (context-result-messages cr)) 3)
-                                  (format "Expected >= 3 messages, got ~a"
-                                          (length (context-result-messages cr))))
-                      (define summary-msgs
-                        (filter (lambda (m) (eq? (message-kind m) 'context-assembly-summary))
-                                (context-result-messages cr)))
-                      (check-true (>= (length summary-msgs) 1)
-                                  (format "Expected >= 1 summary, got ~a" (length summary-msgs)))
-                      (void))))
+      (with-session
+       msgs
+       (lambda (idx)
+         (define cfg (make-context-assembly-config #:recent-tokens 50))
+         (define mock-summary-proc
+           (lambda (excluded provider model-name cache)
+             (context-summary "sys" "u2" "Sum" (length excluded))))
+         (define cr (build-assembled-context idx cfg #:generate-summary-proc mock-summary-proc))
+         (check-true (>= (length (context-result-messages cr)) 3)
+                     (format "Expected >= 3 messages, got ~a" (length (context-result-messages cr))))
+         (define summary-msgs
+           (filter (lambda (m) (eq? (message-kind m) 'context-assembly-summary))
+                   (context-result-messages cr)))
+         (check-true (>= (length summary-msgs) 1)
+                     (format "Expected >= 1 summary, got ~a" (length summary-msgs)))
+         (void))))
 
     ;; Cache is used when provided
     (test-case "assemble-context uses provided cache"

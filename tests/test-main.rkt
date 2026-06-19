@@ -408,10 +408,11 @@
                   (define cfg (parse-cli-args (vector "--project-dir" (path->string tmp-dir))))
                   (define rt (build-runtime-from-cli cfg))
                   (check-true (dict-has-key? rt 'system-instructions))
-                  ;; Empty project dir with no .q dir → no project tree, no instructions
-                  (check-equal? (dict-ref rt 'system-instructions)
-                                '()
-                                "system-instructions should be empty in empty project dir"))
+                  ;; Empty project dir with no .q dir → no project tree, but MAS delegation
+                  ;; instructions are always injected by build-runtime-from-cli
+                  (define instructions (dict-ref rt 'system-instructions))
+                  (check-not-false (and (list? instructions) (not (null? instructions)))
+                                   "system-instructions should contain base MAS guidance"))
                 (lambda () (delete-directory/files tmp-dir))))
 
 (test-case "build-runtime-from-cli: system-instructions loaded from .q/instructions.md"

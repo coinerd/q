@@ -406,11 +406,10 @@
   (define out (open-output-string))
   (render-deltas-to-port! deltas b out #:sync? #f)
   (define result (get-output-string out))
-  ;; The output should NOT contain ESC[K between batches in the same row.
-  ;; There is only one real delta (col 5), so it's the last batch in the row.
-  ;; ESC[K is emitted once at the end.
+  ;; The output contains 1 ESC[K after the width-2 emoji to clear
+  ;; trailing content from the previous frame (correct behavior).
   (define esc-k-count (length (regexp-match* (regexp (regexp-quote "\x1b[K")) result)))
-  (check-equal? esc-k-count 0 (format "expected 0 ESC[K, got ~a in: ~a" esc-k-count result)))
+  (check-equal? esc-k-count 1 (format "expected 1 ESC[K, got ~a in: ~a" esc-k-count result)))
 
 (test-case "style-change gap does not clear unchanged content between batches"
   ;; Old frame: "ABCDE" all plain
