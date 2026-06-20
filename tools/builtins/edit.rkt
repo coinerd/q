@@ -190,9 +190,10 @@
       [_ ""]))
   (match line-num
     [#f
-     (string-append (format "old-text not found in ~a. Read the file first to get exact text.\n"
-                            path-str)
-                    hint)]
+     (string-append
+      (format "old-text not found in ~a (appears 0 times). Read the file first to get exact text.\n"
+              path-str)
+      hint)]
     [_
      (string-append
       (format "old-text not found in ~a.\nNearest match at line ~a:\n  \"" path-str line-num)
@@ -214,7 +215,9 @@
                       expanded
                       (path->string expanded))])
            (with-handlers ([exn:fail? (lambda (e)
-                                        (log-warning "edit: path canonicalization failed for ~a: ~a" p (exn-message e))
+                                        (log-warning "edit: path canonicalization failed for ~a: ~a"
+                                                     p
+                                                     (exn-message e))
                                         p)])
              (path->string (simplify-path (resolve-path p)))))))
   ;; Argument validation via match — flattened pyramid
