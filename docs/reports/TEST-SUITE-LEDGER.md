@@ -4,7 +4,8 @@
 >
 > This file is historical. It documents how the v0.99.30 W5 known-failure
 > ledger was created and how debt was retired in later waves. It is **not** the
-> current source of known failures.
+> current source of known failures. For the short current-status page, see
+> `docs/reports/TEST-SUITE-LEDGER-CURRENT.md`.
 >
 > The current machine-readable ledger is `tests/test-suite-ledger.json`; as of
 > `main@d2565bc8` it contains `"entries": []`. Fresh v0.99.34 W1 local gates
