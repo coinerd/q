@@ -148,7 +148,21 @@
       (check-false (subprocess-result-timed-out? result) "large stderr does not deadlock")
       (check-true (subprocess-result-truncated? result) "large stderr is marked truncated")
       (check-true (<= (string-length (subprocess-result-stderr result)) 4096)
-                  "large stderr is capped at the byte budget"))))
+                  "large stderr is capped at the byte budget"))
+
+    ;; ============================================================
+    ;; SP8: exact byte-budget output is not truncation
+    ;; ============================================================
+    (test-case "SP8: exact max-output stdout is not marked truncated"
+      (define result
+        (run-subprocess "/bin/sh"
+                        #:args '("-c" "printf '%*s' 4096 '' | tr ' ' x")
+                        #:limits (fast-limits #:timeout 5 #:max-output 4096)))
+      (check-equal? (subprocess-result-exit-code result) 0 "exact-budget command succeeds")
+      (check-false (subprocess-result-timed-out? result) "exact-budget command does not time out")
+      (check-equal? (string-length (subprocess-result-stdout result)) 4096)
+      (check-false (subprocess-result-truncated? result)
+                   "exactly max-output bytes is not truncation"))))
 
 (module+ main
   (run-tests subprocess-edge-tests))

@@ -24,7 +24,7 @@ v0.99.34 closed the remaining post-v0.99.33 test/release-gate debt:
 | W0 | #8378 | #8382 | `996b14e8` | Fixed edit-builtin no-match/direct flake while preserving existing `not found` wording and explicit `0 times` count. |
 | W1 | #8379 | #8383 | `d2565bc8` | Fixed subprocess pipe-buffer deadlock by draining stdout/stderr concurrently with bounded reader threads; preserved background-child inherited-pipe behavior. |
 | W2 | #8380 | #8384 | `9c1cfbc1` | Corrected stale ledger and v0.99.33 audit-report truth claims; marked ledger markdown historical and current JSON ledger empty. |
-| W3 | #8381 | pending at report creation | this report | Ran final gates and recorded exact local evidence. |
+| W3 | #8381 | #8385 | `b709f7ee` | Ran final gates and recorded exact local evidence. |
 
 ## Final gate results from W3
 

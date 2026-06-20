@@ -138,12 +138,16 @@
                           (loop (- remaining to-record))]
                          [else (void)])]
                       [else
-                       ;; Budget exhausted.  Keep draining to EOF without storing so
-                       ;; the child is not blocked by a full pipe.
-                       (mark-truncated!)
+                       ;; Budget exhausted.  Keep draining only if there is actually
+                       ;; another byte beyond the budget.  If the next read is EOF,
+                       ;; output was exactly max-bytes and is not truncated.
                        (define n (read-bytes-avail! buf p))
-                       (unless (eof-object? n)
-                         (loop 0))])))))))
+                       (cond
+                         [(eof-object? n) (void)]
+                         [(number? n)
+                          (mark-truncated!)
+                          (loop 0)]
+                         [else (void)])])))))))
   (values reader snapshot))
 
 ;; --------------------------------------------------

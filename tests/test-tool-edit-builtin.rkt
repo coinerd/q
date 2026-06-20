@@ -90,7 +90,7 @@
          (check-pred tool-result? result)
          (check-true (tool-result-is-error? result))
          (define txt (error-text result))
-         (check-true (string-contains? txt "0"))
+         (check-true (string-contains? txt "appears 0 times"))
          (check-equal? (file->string p) "hello world\n"))
        (lambda () (cleanup-path p))))))
 
