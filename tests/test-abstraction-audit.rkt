@@ -44,7 +44,8 @@
 EOF
               )
 
-  ;; Big module with parameters, macros, struct-out, I/O mixed with logic
+  ;; Big module with parameters, macros, struct-out, I/O mixed with logic,
+  ;; error/raise, and provide shapes
   (write-file (build-path base-dir "subdir" "big-module.rkt")
               #<<EOF
 #lang racket/base
@@ -94,6 +95,15 @@ EOF
 #lang racket/base
 (define skipped-compiled #t)
 EOF
+              )
+  ;; Module with all-defined-out
+  (write-file (build-path base-dir "subdir" "ado-module.rkt")
+              #<<EOF
+#lang racket/base
+(provide (all-defined-out))
+(define (helper x) x)
+(define (other y) y)
+EOF
               ))
 
 (define (cleanup-fixture-tree base-dir)
@@ -112,7 +122,10 @@ EOF
    (check-true (procedure? (audit-ref 'jsexpr->json-string)) "jsexpr->json-string is a procedure")
    (check-true (procedure? (audit-ref 'find-rkt-files)) "find-rkt-files is a procedure")
    (check-true (procedure? (audit-ref 'count-exports)) "count-exports is a procedure")
-   (check-true (procedure? (audit-ref 'has-io-effects?)) "has-io-effects? is a procedure")))
+   (check-true (procedure? (audit-ref 'has-io-effects?)) "has-io-effects? is a procedure")
+   (check-true (procedure? (audit-ref 'count-io-effects)) "count-io-effects is a procedure")
+   (check-true (procedure? (audit-ref 'detect-provide-shapes)) "detect-provide-shapes is a procedure")
+   (check-true (procedure? (audit-ref 'count-struct-outs)) "count-struct-outs is a procedure")))
 
 (define-test-suite
  audit-module-tests
@@ -130,6 +143,11 @@ EOF
    (check-true (hash-has-key? finding 'macro-count) "finding has macro-count")
    (check-true (hash-has-key? finding 'has-struct-out?) "finding has has-struct-out?")
    (check-true (hash-has-key? finding 'io-mixed-with-logic?) "finding has io-mixed-with-logic?")
+   (check-true (hash-has-key? finding 'struct-out-count) "finding has struct-out-count")
+   (check-true (hash-has-key? finding 'io-count) "finding has io-count")
+   (check-true (hash-has-key? finding 'error-count) "finding has error-count")
+   (check-true (hash-has-key? finding 'provide-shapes) "finding has provide-shapes")
+   (check-true (hash-has-key? finding 'handler-count) "finding has handler-count")
 
    ;; Verify the big fixture module has expected properties
    (check-pred positive? (hash-ref finding 'line-count) "big-module has positive line count")
@@ -138,6 +156,17 @@ EOF
    (check-pred positive? (hash-ref finding 'macro-count) "big-module has macro usage")
    (check-true (hash-ref finding 'has-struct-out?) "big-module has struct-out")
    (check-true (hash-ref finding 'io-mixed-with-logic?) "big-module mixes I/O with logic")
+   (check-pred positive?
+               (hash-ref finding 'struct-out-count)
+               "big-module has positive struct-out-count")
+   (check-pred positive? (hash-ref finding 'io-count) "big-module has positive io-count")
+   (check-pred positive? (hash-ref finding 'error-count) "big-module has positive error-count")
+   (check-true (and (member 'struct-out (hash-ref finding 'provide-shapes)) #t)
+               "big-module provide-shapes includes struct-out")
+   (check-true (and (member 'explicit (hash-ref finding 'provide-shapes)) #t)
+               "big-module provide-shapes includes explicit")
+   (check-false (and (member 'all-defined-out (hash-ref finding 'provide-shapes)) #t)
+                "big-module does NOT use all-defined-out")
 
    (cleanup-fixture-tree tmpdir))
  (test-case "audit-module returns #f for nonexistent file"
@@ -180,13 +209,22 @@ EOF
    (check-true (hash-has-key? summary 'io-mixed-with-logic) "summary has io-mixed-with-logic")
    (check-true (hash-has-key? summary 'serialization-hotspots) "summary has serialization-hotspots")
    (check-true (hash-has-key? summary 'total-modules) "summary has total-modules")
+   (check-true (hash-has-key? summary 'error-density) "summary has error-density")
+   (check-true (hash-has-key? summary 'handler-density) "summary has handler-density")
+   (check-true (hash-has-key? summary 'all-defined-out-modules) "summary has all-defined-out-modules")
 
-   ;; Should find exactly 2 production/source modules in fixture. The tests/
-   ;; and compiled/ files are intentional sentinels and must be skipped.
-   (check-equal? (hash-ref summary 'total-modules) 2 "fixture has 2 production modules")
+   ;; Should find exactly 3 production/source modules in fixture (clean, big-module, ado-module).
+   (check-equal? (hash-ref summary 'total-modules) 3 "fixture has 3 production modules")
 
    ;; Should find struct-out in fixture
    (check-true (and (hash-ref summary 'struct-out-exports) #t) "struct-out-exports is non-empty")
+
+   ;; Should find all-defined-out in ado-module
+   (check-true (and (hash-ref summary 'all-defined-out-modules) #t)
+               "all-defined-out-modules is non-empty")
+
+   ;; Should find error density in big-module
+   (check-true (and (hash-ref summary 'error-density) #t) "error-density is non-empty")
 
    (cleanup-fixture-tree tmpdir))
  (test-case "find-rkt-files excludes tests and compiled directories by default"
@@ -194,7 +232,7 @@ EOF
    (setup-fixture-tree tmpdir)
 
    (define files (map path->string ((audit-ref 'find-rkt-files) (path->string tmpdir))))
-   (check-equal? (length files) 2 "fixture scan excludes skipped directories")
+   (check-equal? (length files) 3 "fixture scan excludes skipped directories")
    (check-false (ormap (lambda (p) (string-contains? p "/tests/")) files)
                 "default scan excludes tests/")
    (check-false (ormap (lambda (p) (string-contains? p "/compiled/")) files)
@@ -243,6 +281,63 @@ EOF
                      (check-true (>= ((audit-ref 'count-exports) text) 2)
                                  "struct-out counts as at least 2")))
 
+(define-test-suite
+ red-flag-signal-tests
+ (test-case "count-struct-outs counts struct-out forms"
+   (define text "(provide (struct-out a) (struct-out b))")
+   (check-equal? ((audit-ref 'count-struct-outs) text) 2 "counts 2 struct-out forms"))
+ (test-case "count-struct-outs returns 0 for no struct-out"
+   (define text "(provide greet)")
+   (check-equal? ((audit-ref 'count-struct-outs) text) 0 "no struct-out returns 0"))
+ (test-case "count-io-effects counts I/O pattern occurrences"
+   (define text "(call-with-output-file \"a\" f)\n(file->string \"b\")")
+   (check-true (>= ((audit-ref 'count-io-effects) text) 2) "counts >= 2 I/O occurrences"))
+ (test-case "count-io-effects returns 0 for clean text"
+   (define text "(define (f x) x)")
+   (check-equal? ((audit-ref 'count-io-effects) text) 0 "no I/O returns 0"))
+ (test-case "detect-provide-shapes detects all-defined-out"
+   (define text "(provide (all-defined-out))")
+   (define shapes ((audit-ref 'detect-provide-shapes) text))
+   (check-true (and (member 'all-defined-out shapes) #t) "detects all-defined-out"))
+ (test-case "detect-provide-shapes detects struct-out"
+   (define text "(provide (struct-out widget))")
+   (define shapes ((audit-ref 'detect-provide-shapes) text))
+   (check-true (and (member 'struct-out shapes) #t) "detects struct-out"))
+ (test-case "detect-provide-shapes detects contract-out"
+   (define text "(provide (contract-out [f (-> number? number?)]))")
+   (define shapes ((audit-ref 'detect-provide-shapes) text))
+   (check-true (and (member 'contract-out shapes) #t) "detects contract-out"))
+ (test-case "detect-provide-shapes detects explicit IDs"
+   (define text "(provide greet farewell)")
+   (define shapes ((audit-ref 'detect-provide-shapes) text))
+   (check-true (and (member 'explicit shapes) #t) "detects explicit"))
+ (test-case "detect-provide-shapes on empty returns empty list"
+   (define text "(define x 1)")
+   (check-equal? ((audit-ref 'detect-provide-shapes) text) '() "no provide returns empty list"))
+ (test-case "audit-module detects error-count in big fixture"
+   (define tmpdir (make-temporary-file "abstraction-audit-~a" 'directory))
+   (setup-fixture-tree tmpdir)
+   (define big-path (build-path tmpdir "subdir" "big-module.rkt"))
+   (define finding ((audit-ref 'audit-module) (path->string big-path)))
+   (check-pred positive? (hash-ref finding 'error-count) "big-module has error calls")
+   (cleanup-fixture-tree tmpdir))
+ (test-case "audit-module detects all-defined-out in ado fixture"
+   (define tmpdir (make-temporary-file "abstraction-audit-~a" 'directory))
+   (setup-fixture-tree tmpdir)
+   (define ado-path (build-path tmpdir "subdir" "ado-module.rkt"))
+   (define finding ((audit-ref 'audit-module) (path->string ado-path)))
+   (define shapes (hash-ref finding 'provide-shapes))
+   (check-true (and (member 'all-defined-out shapes) #t) "ado-module has all-defined-out"))
+ (test-case "audit-module on clean file has zero error count"
+   (define tmpdir (make-temporary-file "abstraction-audit-~a" 'directory))
+   (setup-fixture-tree tmpdir)
+   (define clean-path (build-path tmpdir "clean.rkt"))
+   (define finding ((audit-ref 'audit-module) (path->string clean-path)))
+   (check-equal? (hash-ref finding 'error-count) 0 "clean module has 0 error calls")
+   (check-equal? (hash-ref finding 'io-count) 0 "clean module has 0 io-count")
+   (check-equal? (hash-ref finding 'struct-out-count) 0 "clean module has 0 struct-out-count")
+   (cleanup-fixture-tree tmpdir)))
+
 ;; ============================================================
 ;; Run all tests
 ;; ============================================================
@@ -253,7 +348,8 @@ EOF
                    audit-directory-tests
                    json-serialization-tests
                    no-mutation-tests
-                   count-exports-tests)
+                   count-exports-tests
+                   red-flag-signal-tests)
 
 (module+ test
   (run-tests all-abstraction-audit-tests))
