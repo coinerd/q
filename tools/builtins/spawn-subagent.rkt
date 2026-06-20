@@ -61,7 +61,9 @@
          ;; v0.99.21 §4.3: Blackboard context injection for subagents
          (only-in "../../runtime/context-assembly/blackboard-context.rkt"
                   build-blackboard-context-snippet)
-         (only-in "../../agent/blackboard.rkt" current-blackboard))
+         (only-in "../../agent/blackboard.rkt" current-blackboard)
+         ;; W2 v0.99.35: Pure helpers extracted for testability
+         "spawn-subagent-helpers.rkt")
 
 (provide (contract-out [resolve-role-prompt (-> (or/c string? #f) string?)]
                        [parse-subagent-config (-> any/c subagent-config?)])
@@ -91,7 +93,11 @@
          current-spawn-approval-result
          run-subagent-with-config
          ;; v0.99.23 §5.1: Session-wide agent pool limit
-         current-agent-pool-limit)
+         current-agent-pool-limit
+         ;; W2 v0.99.35: Re-export pure helpers for backward compat
+         normalize-capabilities
+         extract-assistant-text
+         extract-text-summary)
 
 ;; Subagent configuration struct — replaces ad-hoc hash extraction
 ;; v0.99.21 §4.2: Added capabilities field (6th, default #f for backward compat)
@@ -122,13 +128,8 @@
 ;; Tests can parameterize this to #f to simulate denial.
 (define current-spawn-approval-result (make-parameter #t))
 
-;; v0.99.23 §5.3: Check if subagent spawn requires HITL approval.
-;; Returns #t when capabilities include shell-exec or git-write.
-;; Returns #f for #f, '(), or read-only capabilities.
-(define (requires-hitl-approval? capabilities)
-  (and (list? capabilities)
-       (pair? capabilities)
-       (or (memq 'shell-exec capabilities) (memq 'git-write capabilities))))
+;; W2 v0.99.35: requires-hitl-approval? moved to spawn-subagent-helpers.rkt
+;; (pure function — no I/O, no mutation)
 
 ;; v0.99.23 §5.3: Request HITL approval via exec-ctx event system.
 ;; Returns #t when approved, #f when denied.
@@ -183,26 +184,15 @@
 
 ;; Parse subagent-config from tool call args hash.
 ;; v0.99.21 §4.2: Added capabilities parsing.
+;; W2 v0.99.35: Uses normalize-capabilities from helpers for deduplicated parsing.
 (define (parse-subagent-config args)
-  (define caps-raw (hash-ref args 'capabilities #f))
-  (define caps
-    (cond
-      [(not caps-raw) #f]
-      [(list? caps-raw)
-       (filter valid-capability?
-               (map (lambda (c)
-                      (if (string? c)
-                          (string->symbol c)
-                          c))
-                    caps-raw))]
-      [(string? caps-raw) (list (string->symbol caps-raw))]
-      [else #f]))
+  (define caps (normalize-capabilities (hash-ref args 'capabilities #f)))
   (subagent-config (hash-ref args 'task #f)
                    (resolve-role-prompt (hash-ref args 'role default-role-prompt))
                    (hash-ref args 'max-turns 10)
                    (hash-ref args 'tools #f)
                    (hash-ref args 'model #f)
-                   (and caps (pair? caps) caps)))
+                   caps))
 
 ;; Execute subagent using typed config struct.
 ;; v0.99.23 §5.3: HITL approval gate for dangerous capabilities.
@@ -451,39 +441,9 @@
     (define-values (result-messages final-status)
       (run-subagent-loop provider registry (list system-msg user-msg) child-ctx max-turns))
 
-    ;; Extract final text from result — ONLY text content, not tool-call-parts.
-    ;; Bug fix: (format "~a" content) on mixed lists containing tool-call-part
-    ;; structs produces #hasheq() / #(struct:...) garbage that the parent LLM
-    ;; cannot parse. Extract string items + text-parts from content.
-    ;; When no text is present (tool-call-only message), summarize tool names.
-    (define result-text
-      (string-join (for/list ([m (in-list result-messages)]
-                              #:when (eq? (message-role m) 'assistant))
-                     (define content (message-content m))
-                     (cond
-                       [(string? content) content]
-                       [(list? content)
-                        (define strings-only
-                          (for/list ([c (in-list content)]
-                                     #:when (string? c))
-                            c))
-                        (define text-parts
-                          (for/list ([c (in-list content)]
-                                     #:when (text-part? c))
-                            (text-part-text c)))
-                        (define tool-parts
-                          (for/list ([c (in-list content)]
-                                     #:when (tool-call-part? c))
-                            (tool-call-part-name c)))
-                        (define all-text (append strings-only text-parts))
-                        (cond
-                          [(pair? all-text) (string-join all-text "\n")]
-                          ;; No text — summarize what tools were called
-                          [(pair? tool-parts) (format "[called: ~a]" (string-join tool-parts ", "))]
-                          [else ""])]
-                       [else (format "~a" content)]))
-                   "\n"))
-
+    ;; W2 v0.99.35: Extract assistant text via pure helper.
+    ;; Previously inline — logic now in spawn-subagent-helpers.rkt.
+    (define result-text (extract-assistant-text result-messages))
     (make-success-result
      (list (hasheq 'type "text" 'text result-text))
      (hasheq 'turns-used max-turns 'status (symbol->string final-status) 'session-id session-id))))
@@ -624,22 +584,10 @@
 ;; ============================================================
 
 ;; v0.99.22 A-2: Parse capabilities from a job hash (for batch spawn path).
-;; Mirrors the capability parsing in parse-subagent-config.
+;; W2 v0.99.35: Now delegates to normalize-capabilities from helpers.
 ;; Returns #f when no valid capabilities, or a list of symbols.
 (define (parse-job-capabilities job)
-  (define caps-raw (hash-ref job 'capabilities #f))
-  (cond
-    [(not caps-raw) #f]
-    [(list? caps-raw)
-     (define filtered
-       (filter valid-capability?
-               (map (lambda (c)
-                      (if (string? c)
-                          (string->symbol c)
-                          c))
-                    caps-raw)))
-     (if (null? filtered) #f filtered)]
-    [else #f]))
+  (normalize-capabilities (hash-ref job 'capabilities #f)))
 
 ;; Run a single job and return (cons job-id result) or (cons job-id error)
 (define (run-single-job job provider parent-ctx)
@@ -741,24 +689,8 @@
                                     'jobs
                                     job-results)))]))
 
-;; Extract a text summary from tool result content.
-;; Bug fix: Raised from 200→4000 chars — the old 200-char limit destroyed
-;; nearly all useful content from subagent tasks.
-(define SUBAGENT-SUMMARY-MAX-CHARS 4000)
-
-(define (extract-text-summary content [max-chars SUBAGENT-SUMMARY-MAX-CHARS])
-  (define full-text
-    (string-join (for/list ([c (in-list (if (list? content)
-                                            content
-                                            '()))])
-                   (cond
-                     [(and (hash? c) (hash-ref c 'text #f)) (hash-ref c 'text "")]
-                     [(string? c) c]
-                     [else ""]))
-                 "\n"))
-  (if (> (string-length full-text) max-chars)
-      (string-append (substring full-text 0 (- max-chars 3)) "...")
-      full-text))
+;; W2 v0.99.35: extract-text-summary and SUBAGENT-SUMMARY-MAX-CHARS
+;; moved to spawn-subagent-helpers.rkt (pure functions).
 
 ;; Run jobs in parallel with bounded concurrency using threads + channel
 (define (run-jobs-parallel jobs provider exec-ctx max-parallel)
