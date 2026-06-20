@@ -104,6 +104,19 @@
   (hash-keys providers-hash))
 
 ;; ============================================================
+;; Boolean coercion helper (v0.99.36 W8: extracted from 12 duplicated instances)
+;; ============================================================
+
+;; Coerce a raw config value to boolean.
+;; Accepts: #t/#f, or strings "true"/"1"/"yes" (case-insensitive).
+;; Returns the default for any other value.
+(define (coerce-config-boolean raw [default #f])
+  (cond
+    [(boolean? raw) raw]
+    [(string? raw) (and (member (string-downcase raw) '("true" "1" "yes")) #t)]
+    [else default]))
+
+;; ============================================================
 ;; Parallel execution setting
 ;; ============================================================
 
@@ -268,11 +281,7 @@
 ;; Reads (memory auto-extraction enabled) from config.
 ;; Default: #f (disabled).
 (define (setting-memory-auto-extraction-enabled? settings)
-  (define raw (setting-ref* settings '(memory auto-extraction enabled) #f))
-  (cond
-    [(boolean? raw) raw]
-    [(string? raw) (and (member (string-downcase raw) '("true" "1" "yes")) #t)]
-    [else #f]))
+  (coerce-config-boolean (setting-ref* settings '(memory auto-extraction enabled) #f)))
 
 ;; v0.95.16 W1: Auto-extraction min-confidence from settings
 ;; Reads (memory auto-extraction min-confidence) from config.
@@ -290,21 +299,13 @@
 ;; Reads (memory user-scope enabled) from config.
 ;; Default: #f (disabled).
 (define (setting-memory-user-scope-enabled? settings)
-  (define raw (setting-ref* settings '(memory user-scope enabled) #f))
-  (cond
-    [(boolean? raw) raw]
-    [(string? raw) (and (member (string-downcase raw) '("true" "1" "yes")) #t)]
-    [else #f]))
+  (coerce-config-boolean (setting-ref* settings '(memory user-scope enabled) #f)))
 
 ;; v0.95.21 W2: Auto-reflection enabled from settings
 ;; Reads (memory auto-reflection enabled) from config.
 ;; Default: #f (disabled).
 (define (setting-memory-auto-reflection-enabled? settings)
-  (define raw (setting-ref* settings '(memory auto-reflection enabled) #f))
-  (cond
-    [(boolean? raw) raw]
-    [(string? raw) (and (member (string-downcase raw) '("true" "1" "yes")) #t)]
-    [else #f]))
+  (coerce-config-boolean (setting-ref* settings '(memory auto-reflection enabled) #f)))
 
 ;; v0.95.21 W2: Auto-reflection min-items from settings
 ;; Reads (memory auto-reflection min-items) from config.
@@ -322,22 +323,16 @@
 ;; Reads (reflection-prompt-enabled) from config.
 ;; Default: #f (disabled).
 (define (setting-reflection-prompt-enabled? settings)
-  (define raw (setting-ref* settings '(reflection-prompt-enabled) #f))
-  (cond
-    [(boolean? raw) raw]
-    [(string? raw) (and (member (string-downcase raw) '("true" "1" "yes")) #t)]
-    [else #f]))
+  (coerce-config-boolean (setting-ref* settings '(reflection-prompt-enabled) #f)))
 
 ;; v0.96.14: Auto-distillation enabled from settings (overrides profile default)
 ;; Reads (auto-distillation-enabled) from config.
 ;; When not set, falls back to the context-assembly profile.
 (define (setting-auto-distillation-enabled? settings)
   (define raw (setting-ref* settings '(auto-distillation-enabled) 'unset))
-  (cond
-    [(eq? raw 'unset) 'unset] ; caller uses profile default
-    [(boolean? raw) raw]
-    [(string? raw) (and (member (string-downcase raw) '("true" "1" "yes")) #t)]
-    [else 'unset]))
+  (if (eq? raw 'unset)
+      'unset
+      (coerce-config-boolean raw 'unset)))
 
 ;; ============================================================
 ;; Credential policy (v0.70.1)
@@ -404,11 +399,7 @@
 ;; a verifier provider configured; non-GSD sessions are unaffected.
 ;; Safe fallback chain: no provider → auto-approve, error → escalate, timeout → escalate.
 (define (verifier-enabled? settings)
-  (define raw (setting-ref* settings '(mas verifier enabled) #t))
-  (cond
-    [(boolean? raw) raw]
-    [(string? raw) (and (member (string-downcase raw) '("true" "1" "yes")) #t)]
-    [else #t]))
+  (coerce-config-boolean (setting-ref* settings '(mas verifier enabled) #t) #t))
 
 ;; Config key: mas.verifier.model (default #f = use session model)
 ;; When set, verification uses a specific model instead of the session default.
@@ -455,21 +446,13 @@
 ;; context injection is enabled, and crash recovery runs from trace.jsonl.
 ;; v0.99.14: Flipped default from #f to #t (MAS Phase 1: Blackboard Default-On).
 (define (blackboard-enabled? settings)
-  (define raw (setting-ref* settings '(mas blackboard enabled) #t))
-  (cond
-    [(boolean? raw) raw]
-    [(string? raw) (and (member (string-downcase raw) '("true" "1" "yes")) #t)]
-    [else #f]))
+  (coerce-config-boolean (setting-ref* settings '(mas blackboard enabled) #t)))
 
 ;; Check whether hot-swap (registry-based dispatch) is enabled.
 ;; Config path: mas.hot-swap.enabled
 ;; Default: #t (Phase 4 activation — enabled by default since v0.99.18)
 (define (hot-swap-enabled? settings)
-  (define raw (setting-ref* settings '(mas hot-swap enabled) #t))
-  (cond
-    [(boolean? raw) raw]
-    [(string? raw) (and (member (string-downcase raw) '("true" "1" "yes")) #t)]
-    [else #t]))
+  (coerce-config-boolean (setting-ref* settings '(mas hot-swap enabled) #t) #t))
 
 ;; v0.99.20 W3 (§3.4): Check whether auto-reload (filesystem watcher) is enabled.
 ;; Config path: mas.hot-swap.auto-reload.enabled
@@ -477,11 +460,7 @@
 ;; When #t, the registry watcher monitors agent/roles/ for file changes
 ;; and automatically registers new agent versions for hot-swap.
 (define (auto-reload-enabled? settings)
-  (define raw (setting-ref* settings '(mas hot-swap auto-reload enabled) #f))
-  (cond
-    [(boolean? raw) raw]
-    [(string? raw) (and (member (string-downcase raw) '("true" "1" "yes")) #t)]
-    [else #f]))
+  (coerce-config-boolean (setting-ref* settings '(mas hot-swap auto-reload enabled) #f)))
 
 ;; ============================================================
 ;; MCP Settings (v0.99.10 MAS Schritt 6)
@@ -490,20 +469,12 @@
 ;; Config key: mas.mcp.enabled (default #f — MCP feature gate)
 ;; Master switch for all MCP functionality.
 (define (mcp-enabled? settings)
-  (define raw (setting-ref* settings '(mas mcp enabled) #f))
-  (cond
-    [(boolean? raw) raw]
-    [(string? raw) (and (member (string-downcase raw) '("true" "1" "yes")) #t)]
-    [else #f]))
+  (coerce-config-boolean (setting-ref* settings '(mas mcp enabled) #f)))
 
 ;; Config key: mas.mcp.server.enabled (default #f)
 ;; When #t, q runs as an MCP server over stdio.
 (define (mcp-server-enabled? settings)
-  (define raw (setting-ref* settings '(mas mcp server enabled) #f))
-  (cond
-    [(boolean? raw) raw]
-    [(string? raw) (and (member (string-downcase raw) '("true" "1" "yes")) #t)]
-    [else #f]))
+  (coerce-config-boolean (setting-ref* settings '(mas mcp server enabled) #f)))
 
 ;; Config key: mas.mcp.server.transport (default "stdio")
 ;; Phase 1 only supports local stdio. All other values fall back to stdio.
@@ -530,11 +501,7 @@
 ;; When #t, high-risk tool execution can be routed to remote executor nodes
 ;; via mTLS TCP broker.
 (define (broker-enabled? settings)
-  (define raw (setting-ref* settings '(mas broker enabled) #f))
-  (cond
-    [(boolean? raw) raw]
-    [(string? raw) (and (member (string-downcase raw) '("true" "1" "yes")) #t)]
-    [else #f]))
+  (coerce-config-boolean (setting-ref* settings '(mas broker enabled) #f)))
 
 ;; Config key: mas.broker.remote-host (default "localhost")
 ;; Hostname of the remote executor node.
