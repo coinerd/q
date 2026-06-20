@@ -1,5 +1,23 @@
 # v0.99.33 Post-Remediation Audit Report
 
+> **Correction addendum — v0.99.34 W2 (2026-06-20)**
+>
+> This report is retained as the original v0.99.33 post-remediation report, but
+> its broad/focused conclusions were too broad for release-gate truthfulness.
+> A later independent v0.99.33 audit reran the gates from fresh bytecode and
+> found:
+>
+> - local fast PASS: `948/948 files`, `12873/12873 tests`;
+> - local broad ledger PASS: `1040/1040 files`, `13799/13799 tests`,
+>   `Known=0`, `New=0`, `Unclassified=0`, `Release-blocking=0`;
+> - focused 9-file set FAIL due intermittent
+>   `tests/test-tool-edit-builtin.rkt` (`8/9 files`, `62/63 tests`).
+>
+> Therefore the original focused 9-file PASS and universal broad PASS wording
+> below should be read as wave-local evidence only, not as final independent
+> release-gate approval. v0.99.34 W0 fixed the edit-builtin focused/direct flake
+> and v0.99.34 W1 fixed the subprocess pipe-drain production debt.
+
 **Date**: 2026-06-19  
 **Milestone**: #819 (v0.99.33 — v0.99.32 Audit Remediation)  
 **Wave**: W2 (#8373)  
@@ -171,18 +189,20 @@ The broad gate = fast suite (948 files, all PASS) + 92 slow-only files.
 
 ## Conclusion
 
-All required gates pass:
+Original wave-local conclusion, superseded in part by the v0.99.34 W2 correction addendum:
+
 - **Build**: ✅ PASS
 - **Unit-fast**: ✅ PASS (10/10 files, 102/102 tests)
 - **Smoke**: ✅ PASS (19/19 files, 286/286 tests)
-- **Focused 9-file**: ✅ PASS (9/9 files, 63/63 tests)
-- **Fast**: ✅ PASS (948/948 files, 12,866/12,866 tests)
-- **Broad**: ✅ PASS (1038/1040 files; 2 VPS-performance timeouts documented)
-- **Ledger**: Known=0, New=0, Unclassified=0, Release-blocking=0
+- **Focused 9-file**: ⚠️ Superseded — this report observed PASS, but independent v0.99.33 audit later reproduced an intermittent `tests/test-tool-edit-builtin.rkt` failure. Fixed in v0.99.34 W0.
+- **Fast**: ✅ PASS locally in later independent audit (948/948 files, 12,873/12,873 tests)
+- **Broad ledger**: ✅ PASS locally in later independent audit (1040/1040 files, 13,799/13,799 tests; Known=0, New=0, Unclassified=0, Release-blocking=0)
+- **VPS slow-only broad observations**: environment-specific and not universal broad PASS evidence.
 
-The v0.99.33 milestone successfully closes the v0.99.32 audit findings:
+The v0.99.33 milestone closed or tracked the v0.99.32 audit findings as follows:
 1. Doctor credential contract violation — **fixed** (W0)
 2. v0.99.32 final report false positive — **corrected** (W1)
-3. Subprocess pipe-buffer deadlock — **tracked as tech debt** (W1)
+3. Subprocess pipe-buffer deadlock — **tracked as tech debt in v0.99.33 W1; fixed in v0.99.34 W1**
 4. Playwright test misclassification — **fixed** (W2)
 5. README metrics drift — **fixed** (W2)
+6. Edit-builtin direct/focused flake — **discovered by later independent audit; fixed in v0.99.34 W0**

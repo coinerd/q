@@ -3,7 +3,7 @@
 **Date**: 2026-06-20  
 **Discovered**: v0.99.32 W5 (#8356, PR #8362)  
 **Severity**: Medium (production impact under large stdout)  
-**Tracking**: v0.99.33 W1 (#8372); fixed in v0.99.34 W1 (#8379, PR pending)
+**Tracking**: v0.99.33 W1 (#8372); fixed in v0.99.34 W1 (#8379, PR #8383)
 **Status**: Fixed in v0.99.34 W1 — `run-subprocess` now starts bounded stdout/stderr drain readers before waiting for process exit.
 
 ## Problem
