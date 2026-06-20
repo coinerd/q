@@ -16,7 +16,8 @@
 (require racket/file
          racket/string
          racket/list
-         racket/match)
+         racket/match
+         "status-result.rkt")
 
 ;; ---------------------------------------------------------------------------
 ;; Version extraction
@@ -177,47 +178,18 @@
     [(list "--version") (displayln (read-version))]
 
     [(or (list "--check") (list "--check" _))
+     ;; W5 (#8418): Refactored to use structured result types from status-result.rkt
+     ;; instead of inline printf + exit for each failure mode.
      (define version (read-version))
      (define path (readme-path))
      (unless (file-exists? path)
-       (printf "ERROR: ~a not found~n" path)
+       (displayln (format-status-result (status-file-not-found path)))
        (exit 1))
      (define lines (file->lines path))
-     (define result (find-status-version lines))
-     (cond
-       [(not result)
-        (printf "MISSING: No version found in Status section of ~a~n" path)
-        (exit 1)]
-       [else
-        (define status-ver (car result))
-        (cond
-          [(not (equal? status-ver version))
-           (printf "MISMATCH: README Status says v~a, q-version is v~a~n" status-ver version)
-           (exit 1)]
-          [else
-           ;; Also check description matches CHANGELOG
-           (define-values (cl-version cl-summary) (parse-changelog-top-entry))
-           (define status-line (find-status-entry-line lines))
-           (cond
-             [(and cl-version cl-summary status-line)
-              (define expected-entry (format "**v~a** — ~a" cl-version cl-summary))
-              (define norm-status (normalize-entry status-line))
-              (define norm-expected (normalize-entry expected-entry))
-              (if (string=? norm-status norm-expected)
-                  (begin
-                    (printf "OK: README Status block version (~a) and description match CHANGELOG~n"
-                            version)
-                    (exit 0))
-                  (begin
-                    (printf "MISMATCH: Status description differs from CHANGELOG~n")
-                    (printf "  Status: ~a~n"
-                            (substring status-line 0 (min 80 (string-length status-line))))
-                    (printf "  Expected: ~a~n"
-                            (substring expected-entry 0 (min 80 (string-length expected-entry))))
-                    (exit 1)))]
-             [else
-              (printf "OK: README Status block version (~a) matches q-version~n" version)
-              (exit 0)])])])]
+     (define-values (cl-version cl-summary) (parse-changelog-top-entry))
+     (define result (check-readme-status lines version cl-version cl-summary path))
+     (displayln (format-status-result result))
+     (exit (status-result-exit-code result))]
 
     [(or (list "--sync") (list "--sync" _))
      (define version (read-version))
