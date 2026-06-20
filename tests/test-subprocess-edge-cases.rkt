@@ -123,7 +123,32 @@
       (check-not-false (regexp-match? #rx"stdout-msg" (subprocess-result-stdout result))
                        "stdout contains stdout-msg")
       (check-not-false (regexp-match? #rx"stderr-msg" (subprocess-result-stderr result))
-                       "stderr contains stderr-msg"))))
+                       "stderr contains stderr-msg"))
+
+    ;; ============================================================
+    ;; SP7: child output larger than pipe buffer must not deadlock
+    ;; ============================================================
+    (test-case "SP7: large stdout larger than pipe buffer completes without timeout"
+      (define result
+        (run-subprocess "/bin/sh"
+                        #:args '("-c" "yes x | head -c 200000")
+                        #:limits (fast-limits #:timeout 5 #:max-output 4096)))
+      (check-equal? (subprocess-result-exit-code result) 0 "large stdout command succeeds")
+      (check-false (subprocess-result-timed-out? result) "large stdout does not deadlock")
+      (check-true (subprocess-result-truncated? result) "large stdout is marked truncated")
+      (check-true (<= (string-length (subprocess-result-stdout result)) 4096)
+                  "large stdout is capped at the byte budget"))
+
+    (test-case "SP7: large stderr larger than pipe buffer completes without timeout"
+      (define result
+        (run-subprocess "/bin/sh"
+                        #:args '("-c" "yes e | head -c 200000 >&2")
+                        #:limits (fast-limits #:timeout 5 #:max-output 4096)))
+      (check-equal? (subprocess-result-exit-code result) 0 "large stderr command succeeds")
+      (check-false (subprocess-result-timed-out? result) "large stderr does not deadlock")
+      (check-true (subprocess-result-truncated? result) "large stderr is marked truncated")
+      (check-true (<= (string-length (subprocess-result-stderr result)) 4096)
+                  "large stderr is capped at the byte budget"))))
 
 (module+ main
   (run-tests subprocess-edge-tests))

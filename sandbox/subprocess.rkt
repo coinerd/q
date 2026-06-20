@@ -93,28 +93,58 @@
         (get-output-string acc))))
 
 (define (read-port-bounded p max-bytes)
-  (if (or (not p) (port-closed? p))
-      ""
-      (let loop ([acc (open-output-bytes)]
-                 [remaining max-bytes])
-        (define buf-size (min 4096 remaining))
-        (if (<= remaining 0)
-            ;; Output hit the byte budget — drain rest and mark truncated
-            ;; Discard remainder past byte budget; port may already be
-            ;; closed by custodian, so silently swallow errors.
-            (begin
+  (define-values (reader get-result) (start-bounded-reader p max-bytes "read-port-bounded"))
+  (sync reader)
+  (define-values (text truncated?) (get-result))
+  (if truncated?
+      (string-append text (format "\n[output truncated at ~a bytes]" max-bytes))
+      text))
+
+;; Start a reader thread immediately after subprocess launch.  This prevents a
+;; child that writes more than the OS pipe buffer from blocking forever while
+;; the parent is still waiting for process exit.  The reader stores at most
+;; max-bytes and drains the remainder so the child can finish; callers can ask
+;; for the latest captured value even if timeout cleanup interrupts the thread.
+(define (start-bounded-reader p max-bytes label)
+  (define acc (open-output-bytes))
+  (define lock (make-semaphore 1))
+  (define truncated? #f)
+  (define (record-bytes! bs [start 0] [end (bytes-length bs)])
+    (call-with-semaphore lock (lambda () (write-bytes bs acc start end))))
+  (define (mark-truncated!)
+    (call-with-semaphore lock (lambda () (set! truncated? #t))))
+  (define (snapshot)
+    (call-with-semaphore lock
+                         (lambda ()
+                           (values (bytes->string/utf-8 (get-output-bytes acc) #\uFFFD) truncated?))))
+  (define reader
+    (thread (lambda ()
               (with-handlers ([exn:fail? (lambda (e)
-                                           (log-subprocess-warning "read-port-bounded discard: ~a"
-                                                                   (exn-message e)))])
-                (copy-port p (open-output-bytes))) ; discard remainder
-              (string-append (get-output-string acc)
-                             (format "\n[output truncated at ~a bytes]" max-bytes)))
-            (let ([bs (read-bytes buf-size p)])
-              (cond
-                [(eof-object? bs) (get-output-string acc)]
-                [else
-                 (write-bytes bs acc)
-                 (loop acc (- remaining (bytes-length bs)))]))))))
+                                           (log-subprocess-warning "~a: ~a" label (exn-message e)))])
+                (unless (or (not p) (port-closed? p))
+                  (define buf (make-bytes 4096))
+                  (let loop ([remaining max-bytes])
+                    (sync p)
+                    (cond
+                      [(> remaining 0)
+                       (define n (read-bytes-avail! buf p))
+                       (cond
+                         [(eof-object? n) (void)]
+                         [(number? n)
+                          (define to-record (min n remaining))
+                          (record-bytes! buf 0 to-record)
+                          (when (> n remaining)
+                            (mark-truncated!))
+                          (loop (- remaining to-record))]
+                         [else (void)])]
+                      [else
+                       ;; Budget exhausted.  Keep draining to EOF without storing so
+                       ;; the child is not blocked by a full pipe.
+                       (mark-truncated!)
+                       (define n (read-bytes-avail! buf p))
+                       (unless (eof-object? n)
+                         (loop 0))])))))))
+  (values reader snapshot))
 
 ;; --------------------------------------------------
 ;; Kill helper
@@ -256,8 +286,27 @@
             ;; (previously used /bin/sh -c which was vulnerable to injection)
             (apply subprocess #f #f #f cmd-path args))))
 
-    ;; Close stdin immediately
+    ;; Close stdin immediately and start output drainers before waiting for the
+    ;; child.  Waiting first can deadlock when child output fills the OS pipe.
     (close-output-port stdin-out)
+    (define-values (stdout-reader get-stdout) (start-bounded-reader stdout-in max-output "stdout"))
+    (define-values (stderr-reader get-stderr) (start-bounded-reader stderr-in max-output "stderr"))
+
+    (define (reader-results)
+      (define-values (out-str out-truncated?) (get-stdout))
+      (define-values (err-str err-truncated?) (get-stderr))
+      (values out-str err-str (or out-truncated? err-truncated?)))
+
+    (define (finish-reader! reader port label)
+      (unless (sync/timeout 1 reader)
+        ;; A backgrounded grandchild can inherit stdout/stderr after the direct
+        ;; subprocess exits.  Close our read end instead of waiting forever for
+        ;; an EOF that may not arrive until the grandchild exits.
+        (with-handlers ([exn:fail?
+                         (lambda (e)
+                           (log-subprocess-warning "close inherited ~a: ~a" label (exn-message e)))])
+          (close-input-port port))
+        (sync/timeout 0.25 reader)))
 
     ;; Wait with timeout
     (define evt-result (sync/timeout effective-timeout sp))
@@ -265,24 +314,17 @@
     (cond
       ;; Timeout
       [(not evt-result)
-       ;; Collect partial output BEFORE killing — ports are still readable
-       ;; Collect partial output before killing; ports may be closed
-       ;; by the OS if the process already exited.
-       (define partial-out
-         (with-handlers ([exn:fail? (lambda (e)
-                                      (log-subprocess-warning "partial stdout: ~a" (exn-message e))
-                                      "")])
-           (read-available-bounded stdout-in max-output)))
-       (define partial-err
-         (with-handlers ([exn:fail? (lambda (e)
-                                      (log-subprocess-warning "partial stderr: ~a" (exn-message e))
-                                      "")])
-           (read-available-bounded stderr-in max-output)))
        ;; Kill the subprocess explicitly before shutting custodian.
        ;; May fail if process already dead.
        (with-handlers ([exn:fail? (lambda (e)
                                     (log-subprocess-warning "subprocess-kill: ~a" (exn-message e)))])
          (subprocess-kill sp))
+       ;; Give reader threads a bounded chance to observe EOF and flush their
+       ;; latest snapshots.  If they do not finish, snapshot still returns the
+       ;; latest captured bytes.
+       (sync/timeout 1 stdout-reader)
+       (sync/timeout 1 stderr-reader)
+       (define-values (partial-out partial-err partial-truncated?) (reader-results))
        (define end-ms (current-inexact-milliseconds))
        (custodian-shutdown-all cust)
        (subprocess-result
@@ -294,29 +336,18 @@
                  effective-timeout))
         #t
         (inexact->exact (round (- end-ms start-ms)))
-        #f)] ; truncated? — partial read, not byte-budget truncation
+        partial-truncated?)]
 
       ;; Completed
-      ;; BUGFIX: Use read-available-bounded (non-blocking) instead of
-      ;; read-port-bounded (blocking) because a backgrounded child process
-      ;; may have inherited the pipe — blocking read-bytes would hang forever
-      ;; waiting for EOF that never comes. Since the subprocess already exited,
-      ;; all its output is available in the pipe buffer.
       [else
-       (define out-str
-         (with-handlers ([exn:fail? (lambda (e)
-                                      (log-subprocess-warning "completed stdout: ~a" (exn-message e))
-                                      "")])
-           (read-available-bounded stdout-in max-output)))
-       (define err-str
-         (with-handlers ([exn:fail? (lambda (e)
-                                      (log-subprocess-warning "completed stderr: ~a" (exn-message e))
-                                      "")])
-           (read-available-bounded stderr-in max-output)))
+       ;; Process exited; readers should finish after draining stdout/stderr.
+       ;; Bound the join to preserve the background-child inherited-pipe fix.
+       (finish-reader! stdout-reader stdout-in "stdout")
+       (finish-reader! stderr-reader stderr-in "stderr")
+       (define-values (out-str err-str output-truncated?) (reader-results))
        (define exit-code (subprocess-status sp))
-       (define out-truncated? (string-contains? out-str "[output truncated at"))
 
-       ;; Close ports; may already be closed by custodian shutdown.
+       ;; Close ports; may already be closed by EOF/custodian shutdown.
        (with-handlers ([exn:fail? (lambda (e)
                                     (log-subprocess-warning "close stdout: ~a" (exn-message e)))])
          (close-input-port stdout-in))
@@ -331,4 +362,4 @@
                           err-str
                           #f
                           (inexact->exact (round (- end-ms start-ms)))
-                          out-truncated?)])))
+                          output-truncated?)])))

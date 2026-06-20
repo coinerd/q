@@ -3,7 +3,8 @@
 **Date**: 2026-06-20  
 **Discovered**: v0.99.32 W5 (#8356, PR #8362)  
 **Severity**: Medium (production impact under large stdout)  
-**Tracking**: v0.99.33 W1 (#8372)
+**Tracking**: v0.99.33 W1 (#8372); fixed in v0.99.34 W1 (#8379, PR pending)
+**Status**: Fixed in v0.99.34 W1 — `run-subprocess` now starts bounded stdout/stderr drain readers before waiting for process exit.
 
 ## Problem
 
@@ -45,7 +46,17 @@ hung for 120s (runner timeout). The workaround was changing the command to
 - This affects real-world usage (e.g., `find / -name '*.log'`, large build
   output, `cat` on large files).
 
-## Proposed Fix
+## Fix Implemented in v0.99.34 W1
+
+`run-subprocess` now starts bounded stdout/stderr reader threads immediately after subprocess launch and before `(sync/timeout effective-timeout sp)`. The readers store at most the configured byte budget while continuing to drain excess output so child processes do not block on full OS pipes. On timeout, the subprocess is killed and the latest reader snapshots are returned with the timeout error.
+
+Regression coverage was added in `tests/test-subprocess-edge-cases.rkt`:
+
+- large stdout (`yes x | head -c 200000`) completes without timeout and is marked truncated;
+- large stderr (`yes e | head -c 200000 >&2`) completes without timeout and is marked truncated;
+- existing timeout partial-output behavior remains covered.
+
+## Original Proposed Fix
 
 Drain stdout/stderr **concurrently** with waiting for process exit, instead
 of sequentially. The pattern:
@@ -78,11 +89,14 @@ data becomes available.
 
 ## Workaround (Applied in v0.99.32 W5)
 
+**Superseded by v0.99.34 W1 fix.** The workaround below is retained as historical context.
+
 Changed the test mock command from `ls /tmp` (81KB) to `echo done` (9 bytes).
 This avoids the deadlock for the test but does **not** fix the production bug.
 
 ## Related Issues
 
 - v0.99.32 W5 (#8356, PR #8362) — discovered and worked around in test
-- v0.99.33 W1 (#8372) — this tracking report
-- `sandbox/subprocess.rkt:255-316` — the buggy code path
+- v0.99.33 W1 (#8372) — tracking report introduced
+- v0.99.34 W1 (#8379) — production fix and regression coverage
+- `sandbox/subprocess.rkt` — fixed code path starts drain readers before waiting for process exit
