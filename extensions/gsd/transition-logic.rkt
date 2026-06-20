@@ -19,8 +19,18 @@
          "runtime-state-types.rkt")
 
 ;; Result type structs
-(provide (struct-out ok-result)
-         (struct-out err-result)
+;; W3 v0.99.36: Explicit exports replace struct-out for ok-result and err-result.
+;; This documents the exact public surface and prevents accidental exposure
+;; of internal fields when struct definitions evolve.
+(provide ok-result
+         ok-result?
+         ok-result-from
+         ok-result-to
+         err-result
+         err-result?
+         err-result-reason
+         err-result-from
+         err-result-attempted
          ;; Result type wrapper functions
          ok?
          ok-from
