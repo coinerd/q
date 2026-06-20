@@ -20,7 +20,19 @@
          racket/string
          racket/port
          "version-guard.rkt"
-         "version-surface.rkt")
+         "version-surface.rkt"
+         "lint-version-io.rkt")
+
+;; W6 (#8419): Pure check functions are exported for unit testing.
+;; I/O wrappers use lint-version-io.rkt parameters for injectable file access.
+(provide check-info-content
+         check-readme-content
+         check-changelog-content
+         find-mismatched-versions
+         check-info-rkt
+         check-readme-badge
+         check-md-files
+         check-changelog-integrity)
 
 ;; ---------------------------------------------------------------------------
 ;; Parsing helpers
@@ -116,17 +128,67 @@
                (list lineno v)))))
 
 ;; ---------------------------------------------------------------------------
-;; Checks
+;; CHANGELOG integrity threshold
+;; ---------------------------------------------------------------------------
+
+(define MIN-UNIQUE-VERSIONS 50)
+
+;; ---------------------------------------------------------------------------
+;; Pure check functions (no I/O, no side effects)
+;; W6 (#8419): Extracted from I/O wrappers for testability.
+;; Each returns a list of errors: (list path lineno found expected) or '()
+;; ---------------------------------------------------------------------------
+
+;; Pure: check info.rkt content for version match.
+(define (check-info-content content canonical)
+  (define info-v (parse-info-version content))
+  (cond
+    [(not info-v) (list (list 'info.rkt 0 "<unparseable>" canonical))]
+    [(equal? info-v canonical) '()]
+    [else (list (list 'info.rkt 0 info-v canonical))]))
+
+;; Pure: check README content for badge + verify snippet version match.
+(define (check-readme-content content canonical)
+  (define badge-m (regexp-match #rx"badge/version-([0-9]+\\.[0-9]+\\.[0-9]+)" content))
+  (define badge-v (and badge-m (cadr badge-m)))
+  (define verify-m (regexp-match #rx"q version ([0-9]+\\.[0-9]+\\.[0-9]+)" content))
+  (define verify-v (and verify-m (cadr verify-m)))
+  (append (if (and badge-v (not (equal? badge-v canonical)))
+              (list (list 'README.md 0 badge-v canonical))
+              '())
+          (if (and verify-v (not (equal? verify-v canonical)))
+              (list (list 'README.md 0 verify-v canonical))
+              '())))
+
+;; Pure: check CHANGELOG content for version header count integrity.
+(define (check-changelog-content content)
+  (define lines (string-split content "\n"))
+  (define versions
+    (for/list ([line (in-list lines)])
+      (define m (regexp-match #rx"^## v([0-9]+\\.[0-9]+\\.[0-9]+)" line))
+      (and m (cadr m))))
+  (define unique (remove-duplicates (filter (lambda (x) x) versions)))
+  (if (< (length unique) MIN-UNIQUE-VERSIONS)
+      (list (list 'CHANGELOG.md
+                  0
+                  (format "~a unique versions (< ~a)" (length unique) MIN-UNIQUE-VERSIONS)
+                  (format ">= ~a unique versions" MIN-UNIQUE-VERSIONS)))
+      '()))
+
+;; ---------------------------------------------------------------------------
+;; I/O wrappers (use parameters from lint-version-io.rkt)
 ;; ---------------------------------------------------------------------------
 
 (define (check-info-rkt canonical)
+  (define exists? (current-lint-file-exists?))
+  (define read-string (current-lint-file->string))
   (define info-path (build-path (current-directory) "info.rkt"))
   (cond
-    [(not (file-exists? info-path))
+    [(not (exists? info-path))
      (displayln "  WARN: info.rkt not found")
      '()]
     [else
-     (define info-content (file->string info-path))
+     (define info-content (read-string info-path))
      (define info-v (parse-info-version info-content))
      (cond
        [(not info-v)
@@ -140,13 +202,15 @@
         (list (list info-path 0 info-v canonical))])]))
 
 (define (check-readme-badge canonical)
+  (define exists? (current-lint-file-exists?))
+  (define read-string (current-lint-file->string))
   (define readme-path (build-path (current-directory) "README.md"))
   (cond
-    [(not (file-exists? readme-path))
+    [(not (exists? readme-path))
      (displayln "  WARN: README.md not found")
      '()]
     [else
-     (define content (file->string readme-path))
+     (define content (read-string readme-path))
      (define badge-m (regexp-match #rx"badge/version-([0-9]+\\.[0-9]+\\.[0-9]+)" content))
      (define badge-v (and badge-m (cadr badge-m)))
      (define verify-m (regexp-match #rx"q version ([0-9]+\\.[0-9]+\\.[0-9]+)" content))
@@ -169,34 +233,38 @@
                    '())))]))
 
 (define (check-md-files canonical)
-  (define md-files (collect-md-files (current-directory)))
+  (define read-string (current-lint-file->string))
+  (define custom-paths (current-lint-read-md-paths))
+  (define md-files
+    (if custom-paths
+        (custom-paths (current-directory))
+        (collect-md-files (current-directory))))
   (append* (for/list ([f (in-list md-files)])
-             (define lines (string-split (file->string f) "\n"))
+             (define lines (string-split (read-string f) "\n"))
              (define mismatches (find-mismatched-versions lines canonical f))
              (for/list ([m (in-list mismatches)])
                (printf "  ERROR: ~a:~a: \"~a\" ≠ canonical ~a~n"
-                       (path->string f)
+                       (if (path? f)
+                           (path->string f)
+                           f)
                        (first m)
                        (second m)
                        canonical)
                (list f (first m) (second m))))))
 
-;; ---------------------------------------------------------------------------
-;; CHANGELOG integrity check (AX1-NEW-1 corruption guard)
-;; ---------------------------------------------------------------------------
-
-(define MIN-UNIQUE-VERSIONS 50)
-
 (define (check-changelog-integrity)
   ;; Validate CHANGELOG.md has sufficient unique version headers.
   ;; Returns list of errors (empty = OK).
+  (define exists? (current-lint-file-exists?))
+  (define read-string (current-lint-file->string))
   (define changelog-path (build-path (current-directory) "CHANGELOG.md"))
   (cond
-    [(not (file-exists? changelog-path))
+    [(not (exists? changelog-path))
      (displayln "  WARN: CHANGELOG.md not found")
      '()]
     [else
-     (define content (file->string changelog-path))
+     (define content (read-string changelog-path))
+     (define errors (check-changelog-content content))
      (define lines (string-split content "\n"))
      (define versions
        (for/list ([line (in-list lines)])
@@ -204,19 +272,16 @@
          (and m (cadr m))))
      (define unique (remove-duplicates (filter (lambda (x) x) versions)))
      (printf "  CHANGELOG.md: ~a unique version headers~n" (length unique))
-     (cond
-       [(< (length unique) MIN-UNIQUE-VERSIONS)
-        (printf
-         "  ERROR: CHANGELOG.md appears corrupted (< ~a unique versions). ~
-                 Historical entries may have been overwritten.~n"
-         MIN-UNIQUE-VERSIONS)
-        (list (list changelog-path
-                    0
-                    (format "~a unique versions (< ~a)" (length unique) MIN-UNIQUE-VERSIONS)
-                    (format ">= ~a unique versions" MIN-UNIQUE-VERSIONS)))]
-       [else
-        (displayln "  CHANGELOG integrity: OK")
-        '()])]))
+     (if (null? errors)
+         (begin
+           (displayln "  CHANGELOG integrity: OK")
+           '())
+         (begin
+           (printf
+            "  ERROR: CHANGELOG.md appears corrupted (< ~a unique versions). ~
+                    Historical entries may have been overwritten.~n"
+            MIN-UNIQUE-VERSIONS)
+           errors))]))
 
 ;; ---------------------------------------------------------------------------
 ;; Main
@@ -224,12 +289,14 @@
 
 (define (main)
   ;; --- Read canonical version from util/version.rkt ---
+  (define exists? (current-lint-file-exists?))
+  (define read-string (current-lint-file->string))
   (define util-path (build-path (current-directory) "util" "version.rkt"))
-  (unless (file-exists? util-path)
+  (unless (exists? util-path)
     (displayln "ERROR: util/version.rkt not found in current directory")
     (exit 1))
 
-  (define util-content (file->string util-path))
+  (define util-content (read-string util-path))
   (define canonical (parse-q-version util-content))
   (unless canonical
     (displayln "ERROR: could not parse q-version from util/version.rkt")
@@ -264,4 +331,5 @@
         (displayln "Version lint FAILED")
         (exit 1))))
 
-(main)
+(module+ main
+  (main))
