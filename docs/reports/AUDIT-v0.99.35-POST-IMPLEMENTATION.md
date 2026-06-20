@@ -61,7 +61,7 @@ unit-fast + smoke gates.
 | W7 | #8396 | TUI core-handlers pure helper extraction | Done | #8406 |
 | W8 | #8397 | Anthropic provider narrow pure helper extraction | Done | #8407 |
 | W9 | #8398 | Final gates, docs, and in-depth audit | Done, corrected by #8409 | #8408 |
-| Hotfix | #8409 | Remediate post-closure audit blockers | Done after #8409 merge | pending |
+| Hotfix | #8409 | Remediate post-closure audit blockers | Done | #8410 |
 
 ---
 
