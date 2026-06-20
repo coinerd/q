@@ -83,6 +83,25 @@ EOF
 EOF
               )
 
+  ;; Module with mutable cache, ad-hoc parsing, and event handler (v0.99.37 W1)
+  (write-file (build-path base-dir "subdir" "cache-module.rkt")
+              #<<EOF
+#lang racket/base
+
+(provide handle-event
+         get-cache-entry)
+
+(define cache (make-hash))
+
+(define (handle-event evt)
+  (hash-set! cache 'last evt)
+  (string-split (format "~a" evt) ":"))
+
+(define (get-cache-entry key)
+  (hash-ref cache key #f))
+EOF
+              )
+
   ;; Skipped directories: default audit is for production/source modules only.
   (write-file (build-path base-dir "tests" "test-skipped.rkt")
               #<<EOF
@@ -125,7 +144,11 @@ EOF
    (check-true (procedure? (audit-ref 'has-io-effects?)) "has-io-effects? is a procedure")
    (check-true (procedure? (audit-ref 'count-io-effects)) "count-io-effects is a procedure")
    (check-true (procedure? (audit-ref 'detect-provide-shapes)) "detect-provide-shapes is a procedure")
-   (check-true (procedure? (audit-ref 'count-struct-outs)) "count-struct-outs is a procedure")))
+   (check-true (procedure? (audit-ref 'count-struct-outs)) "count-struct-outs is a procedure")
+   (check-true (procedure? (audit-ref 'count-mutable-caches)) "count-mutable-caches is a procedure")
+   (check-true (procedure? (audit-ref 'count-bench-timing)) "count-bench-timing is a procedure")
+   (check-true (procedure? (audit-ref 'count-ad-hoc-parsing)) "count-ad-hoc-parsing is a procedure")
+   (check-true (procedure? (audit-ref 'count-event-handlers)) "count-event-handlers is a procedure")))
 
 (define-test-suite
  audit-module-tests
@@ -212,9 +235,13 @@ EOF
    (check-true (hash-has-key? summary 'error-density) "summary has error-density")
    (check-true (hash-has-key? summary 'handler-density) "summary has handler-density")
    (check-true (hash-has-key? summary 'all-defined-out-modules) "summary has all-defined-out-modules")
+   (check-true (hash-has-key? summary 'mutable-cache-modules) "summary has mutable-cache-modules")
+   (check-true (hash-has-key? summary 'bench-timing-modules) "summary has bench-timing-modules")
+   (check-true (hash-has-key? summary 'ad-hoc-parse-modules) "summary has ad-hoc-parse-modules")
+   (check-true (hash-has-key? summary 'event-handler-modules) "summary has event-handler-modules")
 
-   ;; Should find exactly 3 production/source modules in fixture (clean, big-module, ado-module).
-   (check-equal? (hash-ref summary 'total-modules) 3 "fixture has 3 production modules")
+   ;; Should find exactly 4 production/source modules in fixture (clean, big-module, ado-module, cache-module).
+   (check-equal? (hash-ref summary 'total-modules) 4 "fixture has 4 production modules")
 
    ;; Should find struct-out in fixture
    (check-true (and (hash-ref summary 'struct-out-exports) #t) "struct-out-exports is non-empty")
@@ -232,7 +259,7 @@ EOF
    (setup-fixture-tree tmpdir)
 
    (define files (map path->string ((audit-ref 'find-rkt-files) (path->string tmpdir))))
-   (check-equal? (length files) 3 "fixture scan excludes skipped directories")
+   (check-equal? (length files) 4 "fixture scan excludes skipped directories")
    (check-false (ormap (lambda (p) (string-contains? p "/tests/")) files)
                 "default scan excludes tests/")
    (check-false (ormap (lambda (p) (string-contains? p "/compiled/")) files)
@@ -339,6 +366,57 @@ EOF
    (cleanup-fixture-tree tmpdir)))
 
 ;; ============================================================
+;; v0.99.37 W1: New signal tests
+;; ============================================================
+
+(define-test-suite
+ v3-signal-tests
+ (test-case "count-mutable-caches detects make-hash and hash-set!"
+   (define text "(define h (make-hash))\n(hash-set! h 'k 1)\n(hash-remove! h 'k)")
+   (check-equal? ((audit-ref 'count-mutable-caches) text) 3 "counts 3 mutable cache ops"))
+ (test-case "count-mutable-caches returns 0 for clean text"
+   (define text "(define (f x) x)")
+   (check-equal? ((audit-ref 'count-mutable-caches) text) 0 "no mutable cache returns 0"))
+ (test-case "count-bench-timing detects current-inexact-milliseconds"
+   (define text
+     "(let ([start (current-inexact-milliseconds)]) (- (current-inexact-milliseconds) start))")
+   (check-equal? ((audit-ref 'count-bench-timing) text) 2 "counts 2 timing calls"))
+ (test-case "count-bench-timing returns 0 for clean text"
+   (define text "(define (f x) x)")
+   (check-equal? ((audit-ref 'count-bench-timing) text) 0 "no timing returns 0"))
+ (test-case "count-ad-hoc-parsing detects regexp-match and string-split"
+   (define text "(regexp-match #rx\"foo\" s)\n(string-split s \" \")\n(string-trim s)")
+   (check-equal? ((audit-ref 'count-ad-hoc-parsing) text) 3 "counts 3 parsing ops"))
+ (test-case "count-ad-hoc-parsing returns 0 for clean text"
+   (define text "(define (f x) x)")
+   (check-equal? ((audit-ref 'count-ad-hoc-parsing) text) 0 "no parsing returns 0"))
+ (test-case "count-event-handlers detects handler definitions"
+   (define text "(define (handle-event e) e)\n(define (handle-key k) k)")
+   (check-equal? ((audit-ref 'count-event-handlers) text) 2 "counts 2 handler defs"))
+ (test-case "count-event-handlers returns 0 for clean text"
+   (define text "(define (f x) x)")
+   (check-equal? ((audit-ref 'count-event-handlers) text) 0 "no handlers returns 0"))
+ (test-case "audit-module detects mutable-cache-count in cache fixture"
+   (define tmpdir (make-temporary-file "abstraction-audit-~a" 'directory))
+   (setup-fixture-tree tmpdir)
+   (define cache-path (build-path tmpdir "subdir" "cache-module.rkt"))
+   (define finding ((audit-ref 'audit-module) (path->string cache-path)))
+   (check-pred positive? (hash-ref finding 'mutable-cache-count) "cache-module has mutable cache ops")
+   (check-pred positive? (hash-ref finding 'ad-hoc-parse-count) "cache-module has ad-hoc parsing")
+   (check-pred positive? (hash-ref finding 'event-handler-count) "cache-module has event handlers")
+   (cleanup-fixture-tree tmpdir))
+ (test-case "audit-module on clean file has zero v3 signals"
+   (define tmpdir (make-temporary-file "abstraction-audit-~a" 'directory))
+   (setup-fixture-tree tmpdir)
+   (define clean-path (build-path tmpdir "clean.rkt"))
+   (define finding ((audit-ref 'audit-module) (path->string clean-path)))
+   (check-equal? (hash-ref finding 'mutable-cache-count) 0 "clean module has 0 mutable cache")
+   (check-equal? (hash-ref finding 'bench-timing-count) 0 "clean module has 0 bench timing")
+   (check-equal? (hash-ref finding 'ad-hoc-parse-count) 0 "clean module has 0 ad-hoc parsing")
+   (check-equal? (hash-ref finding 'event-handler-count) 0 "clean module has 0 event handlers")
+   (cleanup-fixture-tree tmpdir)))
+
+;; ============================================================
 ;; Run all tests
 ;; ============================================================
 
@@ -349,7 +427,8 @@ EOF
                    json-serialization-tests
                    no-mutation-tests
                    count-exports-tests
-                   red-flag-signal-tests)
+                   red-flag-signal-tests
+                   v3-signal-tests)
 
 (module+ test
   (run-tests all-abstraction-audit-tests))
