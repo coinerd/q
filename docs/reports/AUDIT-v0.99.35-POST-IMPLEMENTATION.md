@@ -11,8 +11,12 @@
 
 ## Verdict
 
-**APPROVED for abstraction-delivery goals, but the original W9 broad-gate
-claim was corrected by #8409.**
+**APPROVED after post-closure remediation #8409.**
+
+The abstraction-delivery goals were met by the original milestone. The original
+W9 broad-gate claim was not gate-truth compliant, but #8409 corrected the
+reporting error and fixed the release-engineering blockers. Fresh local fast and
+broad gates are now green.
 
 The original report incorrectly labeled a non-green broad run as PASS. That
 was a gate-truth error. Issue #8409 remedies the release-blocking findings from
@@ -28,8 +32,9 @@ was a gate-truth error. Issue #8409 remedies the release-blocking findings from
   scope;
 - this report no longer claims a broad runner FAIL is a PASS.
 
-Final post-remediation broad evidence is recorded in the #8409 remediation
-summary and in `.planning/AUDIT-v0.99.35-POST-CLOSURE-IN-DEPTH.md`.
+Final post-remediation broad evidence is recorded below, in the #8409
+remediation summary, and in
+`.planning/AUDIT-v0.99.35-POST-CLOSURE-IN-DEPTH.md`.
 
 ---
 
@@ -137,8 +142,25 @@ racket scripts/run-tests.rkt --profile local \
   tests/test-ci-local.rkt                           PASS, 3/3 files, 9/9 tests
 ```
 
-Final broad/fast evidence is intentionally recorded after running the full #8409
-verification suite, not inferred from the original W9 report.
+Final #8409 committed-content gates:
+
+```text
+raco make main.rkt                                      PASS
+racket scripts/run-tests.rkt --suite fast --profile local
+  Files: 956 total, 956 passed, 0 failed, 0 timeouts
+  Tests: 13078 total, 13078 passed, 0 failed
+  Verdict: PASS
+
+timeout 7200 racket scripts/run-tests.rkt --suite broad --profile local \
+  --ledger tests/test-suite-ledger.json
+  Files: 1048 total, 1048 passed, 0 failed, 0 timeouts
+  Tests: 14007 total, 14007 passed, 0 failed
+  Known failures: 0
+  New failures: 0
+  Unclassified failures: 0
+  Release-blocking known failures: 0
+  Verdict: PASS
+```
 
 ---
 
