@@ -67,3 +67,23 @@ Many modules mix I/O with logic — this is expected for adapter/shell modules. 
 ## Advisory
 
 This report is advisory. Use with the Racket Abstraction Instruction Manual to identify candidates for boundary clarification. The tool does NOT fail the build unless invoked with `--strict`.
+
+---
+
+## Post-Extraction Update (W9)
+
+After completing all W2–W8 extractions, the modules listed as targets
+above have been addressed:
+
+| Module | Before | After | Helper Module | Wave |
+|--------|--------|-------|---------------|------|
+| spawn-subagent.rkt | 809 | 741 | spawn-subagent-helpers.rkt (139) | W2 |
+| subprocess.rkt | 370 | 334 | subprocess-helpers.rkt (152) | W3 |
+| event-json.rkt | 359 | 121 | event-json-helpers.rkt (303) | W4 |
+| state-machine.rkt | 586 | 429 | transition-logic.rkt (209) | W5 |
+| state-aware-builder.rkt | 584 | 441 | state-aware-helpers.rkt (182) | W6 |
+| core-handlers.rkt | 549 | 511 | handler-helpers.rkt (78) | W7 |
+| anthropic.rkt | 662 | 639 | anthropic-helpers.rkt (64) | W8 |
+
+All modules now have cleaner pure/effect separation with dedicated
+unit tests for the extracted pure functions.

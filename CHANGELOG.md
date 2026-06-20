@@ -1,3 +1,79 @@
+## 0.99.35
+
+Released: 2026-06-21
+
+### Overview
+Racket Abstraction Manual Roadmap. This release applies disciplined
+abstraction patterns across 7 production modules, extracting pure
+helper functions into dedicated modules to improve testability,
+reduce cognitive load, and clarify module boundaries. All extractions
+are backward-compatible — public API surfaces are unchanged.
+
+### New Modules
+
+- **W1: `scripts/abstraction-audit.rkt` (392 lines).** Advisory
+  scanner that collects abstraction fitness signals (line count,
+  export count, parameter/macro usage, I/O mixing, serialization
+  hotspots, exception density, dependency fan-out). Supports
+  `--strict` mode for CI integration.
+
+- **W2: `tools/builtins/spawn-subagent-helpers.rkt` (139 lines).**
+  5 pure functions extracted from spawn-subagent.rkt.
+
+- **W3: `sandbox/subprocess-helpers.rkt` (152 lines).** Subprocess
+  result struct, constructors, and classifiers plus secret detection.
+
+- **W4: `agent/event-json-helpers.rkt` (303 lines).** 16 pure
+  serializer and deserializer functions for event JSON round-tripping.
+
+- **W5: `extensions/gsd/transition-logic.rkt` (209 lines).** Pure
+  state machine logic: valid-transition?, valid-targets,
+  find-transition-path, compute-next-gsm-state, check-state-invariants.
+  Bugfix in find-transition-path path generation.
+
+- **W6: `runtime/context-assembly/state-aware-helpers.rkt` (182 lines).**
+  6 pure functions for state-aware context assembly.
+
+- **W7: `tui/state-events/handler-helpers.rkt` (78 lines).** 5 pure
+  functions including deduplicated retry-error-type-label.
+
+- **W8: `llm/anthropic-helpers.rkt` (64 lines).** Narrow extraction
+  of 3 pure functions from the HIGH RISK Anthropic provider.
+
+### Documentation
+
+- **W0: Abstraction inventory.** Scored 12 modules across reward/risk
+  axes. Reports in `docs/reports/`.
+
+### Bug Fixes
+
+- W5: Fixed `find-transition-path` path generation bug.
+- W1: Fixed `#rx` regex bugs (`\\|` literal pipe → `#px` alternation).
+
+### User-Visible Changes
+
+- None. This is an internal refactoring release. All public APIs unchanged.
+
+### Breaking / Behavior Changes
+
+- None. All extractions preserve the full public API surface.
+
+### Migration Notes
+
+- No migration required. All existing imports continue to work unchanged.
+
+### Testing
+
+- 204 new tests across 8 new test files.
+- All existing tests pass — zero regressions.
+
+### Operational / Release
+
+- Version bumped to 0.99.35 in util/version.rkt, info.rkt, README.md.
+- Metrics synced.
+
+---
+
 ## 0.99.29
 
 Released: 2026-07-22
