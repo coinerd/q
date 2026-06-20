@@ -231,8 +231,20 @@
 
 ;; ── Exports ──
 
-(provide (struct-out rollback-action)
-         (struct-out rollback-actions-config)
+;; W3 v0.99.36: Explicit exports replace struct-out for rollback-action and
+;; rollback-actions-config. Documents the exact public surface.
+(provide rollback-action
+         rollback-action?
+         rollback-action-type
+         rollback-action-reason
+         rollback-action-severity
+         rollback-action-metadata
+         rollback-actions-config
+         rollback-actions-config?
+         rollback-actions-config-execution?
+         rollback-actions-config-force-distill
+         rollback-actions-config-expand-context
+         rollback-actions-config-revert-state
          current-rollback-actions-config
          make-default-rollback-config
          current-rollback-action-execution?
