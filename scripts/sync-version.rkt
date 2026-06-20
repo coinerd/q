@@ -31,7 +31,8 @@
          racket/port
          racket/string
          racket/path
-         "version-guard.rkt")
+         "version-guard.rkt"
+         "version-surface.rkt")
 
 ;; ---------------------------------------------------------------------------
 ;; Parsing
@@ -43,23 +44,9 @@
 (define STATUS-GUARD
   "<!-- DO NOT EDIT: Status section is historical. Use sync-version.rkt for version bumps. -->")
 
-;; Extract q-version from util/version.rkt content.
-;; Handles both `#lang racket` and `#lang typed/racket` formats.
-;; Typed Racket may split `(define q-version : String "X.Y.Z")` across lines.
-(define (parse-q-version content)
-  ;; Find the version string after `(define q-version` — handles multi-line Typed Racket format
-  (define start (regexp-match-positions #rx"\\(define q-version" content))
-  (cond
-    [(not start) #f]
-    [else
-     (define after (substring content (cdar start)))
-     (define m (regexp-match #rx"([0-9]+\\.[0-9]+\\.[0-9]+)" after))
-     (and m (cadr m))]))
-
-;; Extract version from info.rkt content.
-(define (parse-info-version content)
-  (define m (regexp-match #rx"\\(define version \"([0-9]+\\.[0-9]+\\.[0-9]+)\"" content))
-  (and m (cadr m)))
+;; Version parsing centralized in version-surface.rkt (W2 #8415).
+(define parse-q-version parse-q-version-from-content)
+(define parse-info-version parse-info-version-from-content)
 
 ;; ---------------------------------------------------------------------------
 ;; Sync info.rkt

@@ -18,39 +18,20 @@
          racket/string
          racket/list
          racket/path
-         racket/match)
+         racket/match
+         "version-surface.rkt")
 
 ;; ---------------------------------------------------------------------------
-;; Version comparison
+;; Version comparison — centralized in version-surface.rkt (W2 #8415).
+;; version<=? and parse-version-components are imported and re-exported.
 ;; ---------------------------------------------------------------------------
-
-(define (parse-version s)
-  (map string->number (string-split s ".")))
-
-(define (version<=? a b)
-  (let loop ([as (parse-version a)]
-             [bs (parse-version b)])
-    (cond
-      [(and (null? as) (null? bs)) #t]
-      [(null? as) #t] ; shorter version is "earlier"
-      [(null? bs) #f]
-      [(< (car as) (car bs)) #t]
-      [(> (car as) (car bs)) #f]
-      [else (loop (cdr as) (cdr bs))])))
 
 ;; ---------------------------------------------------------------------------
 ;; Read current project version
 ;; ---------------------------------------------------------------------------
 
 (define (get-current-version)
-  (define path "util/version.rkt")
-  (if (file-exists? path)
-      (let* ([content (file->string path)]
-             [m (regexp-match #rx"define q-version \"([^\"]+)\"" content)])
-        (if m
-            (cadr m)
-            "0.0.0"))
-      "0.0.0"))
+  (read-canonical-version))
 
 ;; ---------------------------------------------------------------------------
 ;; Parse ledger table

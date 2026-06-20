@@ -19,35 +19,19 @@
          racket/path
          racket/string
          racket/port
-         "version-guard.rkt")
+         "version-guard.rkt"
+         "version-surface.rkt")
 
 ;; ---------------------------------------------------------------------------
 ;; Parsing helpers
 ;; ---------------------------------------------------------------------------
 
+;; Version parsing centralized in version-surface.rkt (W2 #8415).
+;; Locally re-exported under original names for backward compatibility.
+(define parse-q-version parse-q-version-from-content)
+(define parse-info-version parse-info-version-from-content)
+
 (define VERSION-PAT #rx"[0-9]+\\.[0-9]+\\.[0-9]+")
-
-;; Parse `(define q-version "X.Y.Z")` from util/version.rkt content.
-(define (parse-q-version content)
-  ;; Handles both #lang racket and #lang typed/racket (multi-line) formats.
-  (define start (regexp-match-positions #rx"\\(define q-version" content))
-  (cond
-    [(not start) #f]
-    [else
-     (define after (substring content (cdar start)))
-     (define m (regexp-match #rx"([0-9]+\\.[0-9]+\\.[0-9]+)" after))
-     (and m (cadr m))]))
-
-;; Parse `(define version "X.Y.Z")` from info.rkt content.
-(define (parse-info-version content)
-  (define lines (string-split content "\n"))
-  (for/or ([line (in-list lines)])
-    (define trimmed (string-trim line))
-    (cond
-      [(and (string-prefix? trimmed "(define version") (string-suffix? trimmed ")"))
-       (define m (regexp-match #rx"\"([0-9]+\\.[0-9]+\\.[0-9]+)\"" trimmed))
-       (and m (cadr m))]
-      [else #f])))
 
 ;; ---------------------------------------------------------------------------
 ;; File scanning
