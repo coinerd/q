@@ -9,6 +9,9 @@
 ;; Usage:
 ;;   racket scripts/abstraction-audit.rkt [--root DIR] [--out FILE] [--json-out FILE] [--strict]
 ;;
+;; By default this scanner reports production/source modules and skips tests/,
+;; compiled/, .git/, .planning/, and .pi/ trees.
+;;
 ;; Signals collected per module:
 ;;   - Line count
 ;;   - Public export count
@@ -157,12 +160,17 @@
 ;; ============================================================
 
 (define (find-rkt-files root)
-  "Find all .rkt files under root, excluding compiled/ and tests/."
+  "Find production .rkt files under root, excluding tests/, compiled/, .git/, .planning/, and .pi/."
   (define (skip-path? p)
-    (define str (path->string p))
-    (or (string-contains? str "/compiled/")
-        (string-contains? str "/.git/")
-        (string-contains? str "compiled/")))
+    (define str (path->string (simple-form-path p)))
+    (define normalized (regexp-replace* #rx"\\\\" str "/"))
+    (define (has-path-segment? segment)
+      (regexp-match? (pregexp (format "(^|/)~a(/|$)" (regexp-quote segment))) normalized))
+    (or (has-path-segment? "compiled")
+        (has-path-segment? "tests")
+        (has-path-segment? ".git")
+        (has-path-segment? ".planning")
+        (has-path-segment? ".pi")))
   (filter (lambda (f) (not (skip-path? f)))
           (find-files (lambda (p)
                         (and (file-exists? p)
