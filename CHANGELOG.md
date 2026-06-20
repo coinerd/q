@@ -1,3 +1,98 @@
+## 0.99.36
+
+Released: 2026-06-22
+
+### Overview
+Racket Abstraction Manual Roadmap II. This release continues the
+systematic abstraction improvement program started in v0.99.35 with
+11 waves (W0–W10) covering ownership inventory, API surface analysis,
+version centralization, I/O abstraction, result-type boundaries,
+representation boundary audits, design-it-twice reviews, and macro
+safety. All changes are backward-compatible — public API surfaces are
+unchanged.
+
+### Documentation & Audits
+
+- **W0: Abstraction ownership inventory.** Scanned 692 modules,
+  classified 60 struct-out forms, identified 8 GREEN + 2 YELLOW +
+  4 RED abstraction candidates. Report:
+  `docs/reports/ABSTRACTION-OWNERSHIP-v0.99.36-SUMMARY.md`.
+
+- **W1: Red-flag tooling.** Extended `scripts/abstraction-audit.rkt`
+  with 8 red-flag detection signals (mixed I/O, export-to-line ratio,
+  parameter density, struct-out count, etc.). Generated inventory of
+  274 modules with at least one red flag. Reports:
+  `ABSTRACTION-RED-FLAGS-v0.99.36.md`,
+  `ABSTRACTION-REVIEW-CHECKLIST-v0.99.36.md`.
+
+- **W2: Version surface centralization.** Created
+  `scripts/version-surface.rkt` as the single source of truth for
+  version parsing and comparison. All version utilities now import
+  from one module. Backward compatibility preserved via local aliases.
+
+- **W3: Struct-out inventory + explicit exports.** Complete
+  inventory of 60 struct-out forms. Converted 2 transparent structs
+  to explicit exports (`transition-logic.rkt`,
+  `rollback-actions.rkt`) for improved API clarity. Report:
+  `ABSTRACTION-API-INVENTORY-v0.99.36.md`.
+
+- **W4: Parameter/dynamic-context ownership map.** Mapped 189
+  `make-parameter` sites across 78 modules. Identified 7 ownership
+  patterns, flagged Pattern D (direct mutation) as anti-pattern.
+  Report: `PARAMETER-OWNERSHIP-v0.99.36.md`.
+
+- **W7: CLI/run-mode design-it-twice audit.** Produced design
+  document for RED modules (`cli/args.rkt`, `wiring/run-modes.rkt`)
+  with two alternative architectures compared. Recommended Design A
+  (Builder Pipeline). Report: `CLI-RUNMODE-DESIGN-v0.99.36.md`.
+
+- **W8: Session/TUI/settings boundary audit.** Audited representation
+  boundaries across session state, TUI state, and settings query.
+  Two narrow cleanups: extracted `coerce-config-boolean` helper,
+  fixed `ui-state` struct field comment mismatch. Report:
+  `SESSION-TUI-SETTINGS-AUDIT-v0.99.36.md`.
+
+- **W9: Macro/DSL/parser safety audit.** Audited 3 complex macros
+  (`define-typed-event`, `define-fsm-machine`, `define-tool`) for
+  hygiene, evaluation count, error messages, and edge cases. All
+  found safe. 15 expansion tests added. Report:
+  `MACRO-DSL-SAFETY-v0.99.36.md`.
+
+### New Modules
+
+- **W2: `scripts/version-surface.rkt`.** Centralized version parsing
+  (`parse-version`, `version<=?`, `version>=?`, `version=?`).
+
+- **W5: `scripts/status-result.rkt`.** Structured result types for
+  status checking (5 transparent struct variants replacing ad-hoc
+  `printf + exit 1` patterns).
+
+- **W6: `scripts/lint-version-io.rkt`.** I/O abstraction pilot:
+  parameterized file I/O functions with mock file system support.
+  Pure check functions extracted from lint-version.rkt.
+
+### Code Improvements
+
+- W3: Converted `transition-logic.rkt` and `rollback-actions.rkt`
+  from `struct-out` to explicit exports.
+- W5: Refactored `sync-readme-status.rkt` `--check` to use
+  result-type dispatch.
+- W6: Refactored `lint-version.rkt` to use parameterized I/O.
+  Guarded `(main)` in `(module+ main ...)` for testability.
+- W8: Extracted `coerce-config-boolean` helper in
+  `settings-query.rkt`, replacing 12 boilerplate instances.
+- W8: Fixed `ui-state` struct field comment mismatch in
+  `state-types.rkt`.
+
+### New Tests
+
+- W2: `tests/test-version-surface.rkt` — version parsing and comparison.
+- W3: `tests/test-transition-logic.rkt` — explicit export round-trip.
+- W5: `tests/test-status-result.rkt` — result-type dispatch.
+- W6: `tests/test-lint-version-io.rkt` — I/O abstraction with mocks.
+- W6: `tests/test-lint-version-pure.rkt` — pure check functions.
+- W9: `tests/test-macro-dsl-safety-w9.rkt` — 15 macro expansion tests.
+
 ## 0.99.35
 
 Released: 2026-06-21

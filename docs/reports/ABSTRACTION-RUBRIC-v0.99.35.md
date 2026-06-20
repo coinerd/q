@@ -1,4 +1,4 @@
-# Abstraction Audit Rubric — v0.99.35
+# Abstraction Audit Rubric — v0.99.36
 
 **Date:** 2026-06-20
 
