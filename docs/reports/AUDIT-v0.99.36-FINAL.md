@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-22
 **Milestone:** #822 (v0.99.36 — Racket Abstraction Manual Roadmap II)
-**Verdict:** ✅ **APPROVED**
+**Verdict:** ✅ **APPROVED AFTER REMEDIATION #8435**
 
 ---
 
@@ -62,9 +62,29 @@ raco test tests/test-version-surface.rkt
 **Result:** ✅ PASS (3 + 14 = 17 tests passed)
 
 ### Broad Gate
-Not run in this cycle (VPS limitation — ~1.5–2 hours). The smoke gate
-provides adequate release confidence for a documentation-and-analysis
-release. The broad gate from v0.99.35 provides the regression baseline.
+
+Initial W10 did **not** run the broad gate, which made the original approval
+claim incomplete. Independent post-completion audit reproduced release-gate
+failures in `tests/test-ci-local.rkt` and `tests/test-metrics-readme-sync.rkt`.
+
+Remediation issue #8435 fixed README Status drift, synchronized README metrics,
+and stabilized a flaky broad-only render benchmark assertion. The final
+post-remediation broad gate was run from the committed remediation state before the final report-evidence amendment:
+
+```
+timeout 2400 racket scripts/run-tests.rkt --suite broad --profile local \
+  --ledger tests/test-suite-ledger.json \
+  --json-out /tmp/v09936-remediation-final/broad-local-ledger.json
+```
+
+**Result:** ✅ PASS
+- Files: 1053 total, 1053 passed, 0 failed, 0 timeouts
+- Tests: 14087 total, 14087 passed, 0 failed
+- Known failures: 0
+- New failures: 0
+- Unclassified failures: 0
+- Release-blocking known failures: 0
+- Elapsed: 7m 18.041s
 
 ---
 
@@ -104,12 +124,33 @@ release. The broad gate from v0.99.35 provides the regression baseline.
 
 ## 4. New Failures / Regressions
 
-**New failures: 0**
-**Unclassified: 0**
+**New failures: 0**  
+**Unclassified: 0**  
 **Release-blocking: 0**
 
+Post-remediation #8435 evidence:
+
+```
+raco make main.rkt runtime/settings-query.rkt runtime/settings.rkt interfaces/sdk-core.rkt
+=> PASS
+
+racket scripts/lint-version.rkt
+=> PASS, Errors=0
+
+racket scripts/ci-local.rkt --quick
+=> PASS, 5/5 checks
+
+racket scripts/run-tests.rkt --suite fast --profile local
+=> PASS, 961/961 files, 13158/13158 tests
+
+racket scripts/run-tests.rkt --suite broad --profile local --ledger tests/test-suite-ledger.json
+=> PASS, 1053/1053 files, 14087/14087 tests
+=> Known=0, New=0, Unclassified=0, Release-blocking=0
+```
+
 All 11 waves produced backward-compatible changes. No public API
-surfaces were broken. All existing tests continue to pass.
+surfaces were broken. Existing tests pass after the README gate drift and
+benchmark flake remediation in #8435.
 
 ---
 
@@ -188,9 +229,12 @@ surfaces were broken. All existing tests continue to pass.
 3. 274 modules with abstraction red flags — prioritized in W1 report
 4. 189 parameter sites needing ownership assignment — mapped in W4
 
-### No Release Blockers
-This release is a documentation-and-analysis release with minimal production
-code changes. All changes are backward-compatible. No public APIs changed.
+### No Release Blockers After #8435
+The initial W10 report overstated release readiness because broad was not run
+and README gate drift remained. After remediation #8435, release gates are
+green under the local profile. This release is a documentation-and-analysis
+release with minimal production code changes. All changes are
+backward-compatible. No public APIs changed.
 
 ---
 
@@ -221,10 +265,14 @@ Updated with full v0.99.36 entry covering all 11 waves.
 
 ## 8. Verdict
 
-**✅ APPROVED**
+**✅ APPROVED AFTER REMEDIATION #8435**
 
-- All gates green (compile, version lint, smoke gate)
-- 0 new failures, 0 unclassified, 0 release-blocking
-- All documentation complete
-- Version/changelog/README synchronized
+- Compile gate green, including targeted settings/SDK recompilation
+- Version lint green, Errors=0
+- `ci-local --quick` green, 5/5 checks
+- Fast local green: 961/961 files, 13158/13158 tests
+- Broad local ledger green: 1053/1053 files, 14087/14087 tests
+- Known=0, New=0, Unclassified=0, Release-blocking=0
+- README Status and generated metrics synchronized
+- Broad-only benchmark assertion stabilized to avoid wall-clock flakes
 - All 11 waves delivered successfully
