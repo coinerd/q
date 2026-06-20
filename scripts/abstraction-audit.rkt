@@ -51,7 +51,11 @@
          has-io-effects?
          count-io-effects
          detect-provide-shapes
-         count-struct-outs)
+         count-struct-outs
+         count-mutable-caches
+         count-bench-timing
+         count-ad-hoc-parsing
+         count-event-handlers)
 
 ;; ============================================================
 ;; Core data structures
@@ -122,7 +126,15 @@
               'provide-shapes
               provide-shapes
               'require-count
-              require-count))))
+              require-count
+              'mutable-cache-count
+              (count-mutable-caches text)
+              'bench-timing-count
+              (count-bench-timing text)
+              'ad-hoc-parse-count
+              (count-ad-hoc-parsing text)
+              'event-handler-count
+              (count-event-handlers text)))))
 
 ;; Count exported identifiers in (provide ...) forms.
 ;; Handles: provide id, provide (contract-out ...), provide (struct-out ...)
@@ -152,12 +164,35 @@
 (define all-defined-out-rx #px"all-defined-out")
 (define contract-out-rx #px"contract-out")
 
+;; v0.99.37 W1: New boundary-semantics signals
+(define mutable-cache-rx #px"make-hash|hash-set!|hash-remove!|hash-update!")
+(define bench-timing-rx #px"current-inexact-milliseconds")
+(define ad-hoc-parse-rx #px"regexp-match|string-split|string-trim|regexp-replace")
+;; Handler/model risk: defines functions AND dispatches on event/state types
+(define event-handler-rx #px"define.*handler|handle-event|handle-key|dispatch")
+
 (define (count-matches text rx)
   (length (regexp-match* rx text)))
 
 (define (count-struct-outs text)
   "Count the number of struct-out forms in the text."
   (length (regexp-match* struct-out-rx text)))
+
+(define (count-mutable-caches text)
+  "Count mutable cache operations in text."
+  (count-matches text mutable-cache-rx))
+
+(define (count-bench-timing text)
+  "Count benchmark timing assertions in text."
+  (count-matches text bench-timing-rx))
+
+(define (count-ad-hoc-parsing text)
+  "Count ad-hoc string parsing operations in text."
+  (count-matches text ad-hoc-parse-rx))
+
+(define (count-event-handlers text)
+  "Count event handler definitions in text."
+  (count-matches text event-handler-rx))
 
 (define (count-io-effects text)
   "Count I/O effect occurrences in text."
@@ -264,6 +299,10 @@
               (and (list? (hash-ref f 'provide-shapes '()))
                    (member 'all-defined-out (hash-ref f 'provide-shapes '()))))
             findings))
+  (define all-mutable-cache (filter (lambda (f) (> (hash-ref f 'mutable-cache-count 0) 0)) findings))
+  (define all-bench-timing (filter (lambda (f) (> (hash-ref f 'bench-timing-count 0) 0)) findings))
+  (define all-ad-hoc-parse (filter (lambda (f) (> (hash-ref f 'ad-hoc-parse-count 0) 0)) findings))
+  (define all-event-handlers (filter (lambda (f) (> (hash-ref f 'event-handler-count 0) 0)) findings))
 
   (hash 'total-modules
         (length findings)
@@ -298,7 +337,19 @@
         (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'handler-count 0)))
              (sort all-handlers > #:key (lambda (f) (hash-ref f 'handler-count 0))))
         'all-defined-out-modules
-        (map (lambda (f) (hash-ref f 'path)) all-all-defined-out)))
+        (map (lambda (f) (hash-ref f 'path)) all-all-defined-out)
+        'mutable-cache-modules
+        (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'mutable-cache-count 0)))
+             (sort all-mutable-cache > #:key (lambda (f) (hash-ref f 'mutable-cache-count 0))))
+        'bench-timing-modules
+        (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'bench-timing-count 0)))
+             (sort all-bench-timing > #:key (lambda (f) (hash-ref f 'bench-timing-count 0))))
+        'ad-hoc-parse-modules
+        (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'ad-hoc-parse-count 0)))
+             (sort all-ad-hoc-parse > #:key (lambda (f) (hash-ref f 'ad-hoc-parse-count 0))))
+        'event-handler-modules
+        (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'event-handler-count 0)))
+             (sort all-event-handlers > #:key (lambda (f) (hash-ref f 'event-handler-count 0))))))
 
 (define (take-at-most lst n)
   (if (> (length lst) n)
@@ -408,6 +459,54 @@
       (begin
         (for ([p ado])
           (fprintf out "- ~a\n" p))
+        (fprintf out "\n")))
+
+  ;; Mutable cache usage (v0.99.37 W1)
+  (fprintf out "## Mutable Cache Usage (make-hash / hash-set!)\n\n")
+  (define mc (hash-ref summary 'mutable-cache-modules '()))
+  (if (null? mc)
+      (fprintf out "None found.\n\n")
+      (begin
+        (fprintf out "| Count | Path |\n")
+        (fprintf out "|-------|------|\n")
+        (for ([p mc])
+          (fprintf out "| ~a | ~a |\n" (hash-ref p 'count) (hash-ref p 'path)))
+        (fprintf out "\n")))
+
+  ;; Benchmark timing assertions (v0.99.37 W1)
+  (fprintf out "## Benchmark Timing Assertions (current-inexact-milliseconds)\n\n")
+  (define bt (hash-ref summary 'bench-timing-modules '()))
+  (if (null? bt)
+      (fprintf out "None found.\n\n")
+      (begin
+        (fprintf out "| Count | Path |\n")
+        (fprintf out "|-------|------|\n")
+        (for ([p bt])
+          (fprintf out "| ~a | ~a |\n" (hash-ref p 'count) (hash-ref p 'path)))
+        (fprintf out "\n")))
+
+  ;; Ad-hoc string parsing (v0.99.37 W1)
+  (fprintf out "## Ad-Hoc String Parsing (regexp-match / string-split)\n\n")
+  (define ap (hash-ref summary 'ad-hoc-parse-modules '()))
+  (if (null? ap)
+      (fprintf out "None found.\n\n")
+      (begin
+        (fprintf out "| Count | Path |\n")
+        (fprintf out "|-------|------|\n")
+        (for ([p (take-at-most ap 20)])
+          (fprintf out "| ~a | ~a |\n" (hash-ref p 'count) (hash-ref p 'path)))
+        (fprintf out "\n")))
+
+  ;; Event handler modules (v0.99.37 W1)
+  (fprintf out "## Event Handler Modules (handler/model boundary risk)\n\n")
+  (define eh (hash-ref summary 'event-handler-modules '()))
+  (if (null? eh)
+      (fprintf out "None found.\n\n")
+      (begin
+        (fprintf out "| Count | Path |\n")
+        (fprintf out "|-------|------|\n")
+        (for ([p eh])
+          (fprintf out "| ~a | ~a |\n" (hash-ref p 'count) (hash-ref p 'path)))
         (fprintf out "\n")))
 
   ;; Advisory
