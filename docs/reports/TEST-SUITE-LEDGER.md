@@ -1,5 +1,23 @@
 # TEST-SUITE LEDGER — v0.99.30 W5
 
+> **Current status addendum — v0.99.34 W2 (2026-06-20)**
+>
+> This file is historical. It documents how the v0.99.30 W5 known-failure
+> ledger was created and how debt was retired in later waves. It is **not** the
+> current source of known failures.
+>
+> The current machine-readable ledger is `tests/test-suite-ledger.json`; as of
+> `main@d2565bc8` it contains `"entries": []`. Fresh v0.99.34 W1 local gates
+> confirmed:
+>
+> - fast local: `948/948 files`, `12873/12873 tests`, PASS;
+> - broad local with ledger: `1040/1040 files`, `13801/13801 tests`, PASS;
+> - ledger summary: `Known=0`, `New=0`, `Unclassified=0`, `Release-blocking=0`.
+>
+> Historical entries below must not be read as active known failures. If broad
+> failures reappear, update `tests/test-suite-ledger.json` and add a new dated
+> report/addendum with command evidence.
+
 This report documents the initial known-failure ledger for broad-suite debt.
 
 ## Source evidence
@@ -166,7 +184,7 @@ W7 (#8315) resolved a bounded deterministic batch from the broad ledger:
 - `tests/test-gap5-conclusion-bridge.rkt`
 - `tests/test-util-reclassification.rkt`
 
-The entries remain in `tests/test-suite-ledger.json` as historical known failures with `issue: "#8315"`; when these files pass, the runner reports them under `Resolved known failures` rather than known/new/unclassified failures.
+At W7 time, the entries remained in `tests/test-suite-ledger.json` as historical known failures with `issue: "#8315"`; when these files passed, the runner reported them under `Resolved known failures` rather than known/new/unclassified failures. This is now historical: the current ledger has no active entries.
 
 W7 also fixed the strict zero-parsed sentinel for `tests/test-benchmarks.rkt` by adding an explicit RackUnit text-ui runner. Focused runner verification:
 
