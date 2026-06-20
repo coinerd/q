@@ -21,6 +21,8 @@
 ;;   - I/O effects mixed with pure logic definitions
 ;;   - Serialization hotspots (->jsexpr / jsexpr-> / hash-> / ->hash)
 ;;   - Exception handler density (with-handlers)
+;;   - Error/raise density (error, raise)
+;;   - Provide form shapes (all-defined-out, struct-out, contract-out, explicit)
 ;;   - Dependency fan-out (require forms)
 ;;
 ;; Output:
@@ -46,7 +48,10 @@
          count-exports
          count-requires
          count-matches
-         has-io-effects?)
+         has-io-effects?
+         count-io-effects
+         detect-provide-shapes
+         count-struct-outs)
 
 ;; ============================================================
 ;; Core data structures
@@ -54,8 +59,9 @@
 
 ;; A module-finding is a hash with keys:
 ;;   path, line-count, export-count, parameter-count, macro-count,
-;;   has-struct-out?, io-mixed-with-logic?, serialization-count,
-;;   handler-count, require-count
+;;   struct-out-count, has-struct-out?, io-count, io-mixed-with-logic?,
+;;   serialization-count, handler-count, error-count, provide-shapes,
+;;   require-count
 
 ;; An audit-report is a hash with keys:
 ;;   modules   — list of module-finding hashes
@@ -78,10 +84,14 @@
              [export-count (count-exports text)]
              [parameter-count (count-matches text parameter-rx)]
              [macro-count (count-matches text macro-rx)]
-             [has-struct-out? (regexp-match? struct-out-rx text)]
-             [io? (has-io-effects? text)]
+             [struct-out-count (count-struct-outs text)]
+             [has-struct-out? (> struct-out-count 0)]
+             [io-count (count-io-effects text)]
+             [io? (> io-count 0)]
              [serialization-count (count-matches text serialization-rx)]
              [handler-count (count-matches text handler-rx)]
+             [error-count (count-matches text error-rx)]
+             [provide-shapes (detect-provide-shapes text)]
              [require-count (count-requires text)])
         (hash 'path
               (if (path? path)
@@ -95,14 +105,22 @@
               parameter-count
               'macro-count
               macro-count
+              'struct-out-count
+              struct-out-count
               'has-struct-out?
               has-struct-out?
+              'io-count
+              io-count
               'io-mixed-with-logic?
               io?
               'serialization-count
               serialization-count
               'handler-count
               handler-count
+              'error-count
+              error-count
+              'provide-shapes
+              provide-shapes
               'require-count
               require-count))))
 
@@ -130,9 +148,41 @@
 (define struct-out-rx #px"struct-out\\s")
 (define serialization-rx #px"->jsexpr|jsexpr->|->hash|hash->")
 (define handler-rx #rx"with-handlers")
+(define error-rx #px"\\(error\\b|\\(raise\\b")
+(define all-defined-out-rx #px"all-defined-out")
+(define contract-out-rx #px"contract-out")
 
 (define (count-matches text rx)
   (length (regexp-match* rx text)))
+
+(define (count-struct-outs text)
+  "Count the number of struct-out forms in the text."
+  (length (regexp-match* struct-out-rx text)))
+
+(define (count-io-effects text)
+  "Count I/O effect occurrences in text."
+  (apply +
+         (map (lambda (pat) (length (regexp-match* (regexp (regexp-quote pat)) text))) io-patterns)))
+
+(define (detect-provide-shapes text)
+  "Detect which provide form shapes are present. Returns a list of symbols."
+  (define shapes '())
+  (when (regexp-match? all-defined-out-rx text)
+    (set! shapes (cons 'all-defined-out shapes)))
+  (when (regexp-match? struct-out-rx text)
+    (set! shapes (cons 'struct-out shapes)))
+  (when (regexp-match? contract-out-rx text)
+    (set! shapes (cons 'contract-out shapes)))
+  ;; Explicit IDs: detect bare identifiers in provide forms.
+  ;; Flatten newlines so multi-line provides can be checked.
+  ;; Pattern 1: (provide bare-id ...) — first token is a bare identifier.
+  ;; Pattern 2: (provide (sub-form) bare-id ...) — bare ID after a sub-form.
+  (define flat (regexp-replace* #rx"\n" text " "))
+  (when (or (regexp-match? #px"\\(provide\\s+[a-zA-Z!_@%-]" flat)
+            (regexp-match? #px"\\(provide\\s.*?\\)\\s+[a-zA-Z!_@%-]" flat))
+    (set! shapes (cons 'explicit shapes)))
+  (reverse shapes) ; preserve discovery order
+  )
 
 (define io-patterns
   '("call-with-output-file" "call-with-input-file"
@@ -207,6 +257,13 @@
   (define all-struct-out (filter (lambda (f) (hash-ref f 'has-struct-out? #f)) findings))
   (define all-io-mixed (filter (lambda (f) (hash-ref f 'io-mixed-with-logic? #f)) findings))
   (define all-serialization (filter (lambda (f) (> (hash-ref f 'serialization-count 0) 0)) findings))
+  (define all-errors (filter (lambda (f) (> (hash-ref f 'error-count 0) 0)) findings))
+  (define all-handlers (filter (lambda (f) (> (hash-ref f 'handler-count 0) 0)) findings))
+  (define all-all-defined-out
+    (filter (lambda (f)
+              (and (list? (hash-ref f 'provide-shapes '()))
+                   (member 'all-defined-out (hash-ref f 'provide-shapes '()))))
+            findings))
 
   (hash 'total-modules
         (length findings)
@@ -226,12 +283,22 @@
         (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'macro-count)))
              (sort all-macros > #:key (lambda (f) (hash-ref f 'macro-count 0))))
         'struct-out-exports
-        (map (lambda (f) (hash-ref f 'path)) all-struct-out)
+        (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'struct-out-count 0)))
+             (sort all-struct-out > #:key (lambda (f) (hash-ref f 'struct-out-count 0))))
         'io-mixed-with-logic
-        (map (lambda (f) (hash-ref f 'path)) all-io-mixed)
+        (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'io-count 0)))
+             (sort all-io-mixed > #:key (lambda (f) (hash-ref f 'io-count 0))))
         'serialization-hotspots
         (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'serialization-count)))
-             (sort all-serialization > #:key (lambda (f) (hash-ref f 'serialization-count 0))))))
+             (sort all-serialization > #:key (lambda (f) (hash-ref f 'serialization-count 0))))
+        'error-density
+        (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'error-count 0)))
+             (sort all-errors > #:key (lambda (f) (hash-ref f 'error-count 0))))
+        'handler-density
+        (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'handler-count 0)))
+             (sort all-handlers > #:key (lambda (f) (hash-ref f 'handler-count 0))))
+        'all-defined-out-modules
+        (map (lambda (f) (hash-ref f 'path)) all-all-defined-out)))
 
 (define (take-at-most lst n)
   (if (> (length lst) n)
@@ -243,8 +310,15 @@
 ;; ============================================================
 
 (define (report->jsexpr report)
-  "Convert audit-report to a JSON-serializable jsexpr."
-  report) ; Already hash-based jsexpr-compatible
+  "Convert audit-report to a JSON-serializable jsexpr.
+   Converts symbol values in provide-shapes to strings for JSON compatibility."
+  (define modules (hash-ref report 'modules))
+  (define json-modules
+    (map (lambda (m)
+           (define shapes (hash-ref m 'provide-shapes '()))
+           (hash-set m 'provide-shapes (map (lambda (s) (symbol->string s)) shapes)))
+         modules))
+  (hash 'modules json-modules 'summary (hash-ref report 'summary)))
 
 (define (jsexpr->json-string js)
   "Convert jsexpr to a JSON string."
@@ -288,14 +362,18 @@
 
   ;; struct-out exports
   (fprintf out "## struct-out Exports\n\n")
+  (fprintf out "| Count | Path |\n")
+  (fprintf out "|-------|------|\n")
   (for ([s (hash-ref summary 'struct-out-exports)])
-    (fprintf out "- ~a\n" s))
+    (fprintf out "| ~a | ~a |\n" (hash-ref s 'count) (hash-ref s 'path)))
   (fprintf out "\n")
 
   ;; I/O mixed with logic
   (fprintf out "## I/O Mixed With Pure Logic\n\n")
+  (fprintf out "| Count | Path |\n")
+  (fprintf out "|-------|------|\n")
   (for ([p (hash-ref summary 'io-mixed-with-logic)])
-    (fprintf out "- ~a\n" p))
+    (fprintf out "| ~a | ~a |\n" (hash-ref p 'count) (hash-ref p 'path)))
   (fprintf out "\n")
 
   ;; Serialization hotspots
@@ -306,6 +384,32 @@
     (fprintf out "| ~a | ~a |\n" (hash-ref s 'count) (hash-ref s 'path)))
   (fprintf out "\n")
 
+  ;; Error/raise density
+  (fprintf out "## Error/Raise Density (top 20)\n\n")
+  (fprintf out "| Count | Path |\n")
+  (fprintf out "|-------|------|\n")
+  (for ([e (take-at-most (hash-ref summary 'error-density) 20)])
+    (fprintf out "| ~a | ~a |\n" (hash-ref e 'count) (hash-ref e 'path)))
+  (fprintf out "\n")
+
+  ;; Handler density
+  (fprintf out "## Handler Density (with-handlers, top 20)\n\n")
+  (fprintf out "| Count | Path |\n")
+  (fprintf out "|-------|------|\n")
+  (for ([h (take-at-most (hash-ref summary 'handler-density) 20)])
+    (fprintf out "| ~a | ~a |\n" (hash-ref h 'count) (hash-ref h 'path)))
+  (fprintf out "\n")
+
+  ;; all-defined-out modules
+  (fprintf out "## all-defined-out Usage\n\n")
+  (define ado (hash-ref summary 'all-defined-out-modules '()))
+  (if (null? ado)
+      (fprintf out "None found.\n\n")
+      (begin
+        (for ([p ado])
+          (fprintf out "- ~a\n" p))
+        (fprintf out "\n")))
+
   ;; Advisory
   (fprintf out "## Advisory\n\n")
   (fprintf out "This report is advisory. Use with the Abstraction Instruction Manual\n")
@@ -315,7 +419,17 @@
 ;; Strict mode thresholds
 ;; ============================================================
 
-(define strict-thresholds (hash 'max-lines 800 'max-exports 40 'max-require-count 30))
+(define strict-thresholds
+  (hash 'max-lines
+        800
+        'max-exports
+        40
+        'max-require-count
+        30
+        'max-handler-count
+        12
+        'max-error-count
+        20))
 
 (define (strict-violations report)
   "Return list of strict-mode violations. Empty list = pass."
@@ -325,6 +439,8 @@
              (define lines (hash-ref m 'line-count))
              (define exports (hash-ref m 'export-count))
              (define reqs (hash-ref m 'require-count))
+             (define handlers (hash-ref m 'handler-count 0))
+             (define errors (hash-ref m 'error-count 0))
              (append (if (> lines (hash-ref strict-thresholds 'max-lines))
                          (list (format "~a: ~a lines exceeds max ~a"
                                        path
@@ -342,6 +458,18 @@
                                        path
                                        reqs
                                        (hash-ref strict-thresholds 'max-require-count)))
+                         '())
+                     (if (> handlers (hash-ref strict-thresholds 'max-handler-count))
+                         (list (format "~a: ~a handlers exceeds max ~a"
+                                       path
+                                       handlers
+                                       (hash-ref strict-thresholds 'max-handler-count)))
+                         '())
+                     (if (> errors (hash-ref strict-thresholds 'max-error-count))
+                         (list (format "~a: ~a error/raise calls exceeds max ~a"
+                                       path
+                                       errors
+                                       (hash-ref strict-thresholds 'max-error-count)))
                          '())))))
 
 ;; ============================================================
