@@ -25,7 +25,8 @@
          "provider.rkt"
          "stream.rkt"
          "http-helpers.rkt"
-         (only-in "vision-helpers.rkt" parse-data-url))
+         ;; W8 v0.99.35: Pure helpers extracted from this module
+         "anthropic-helpers.rkt")
 
 ;; Provider constructor
 (provide (contract-out [make-anthropic-provider (-> hash? provider?)])
@@ -59,17 +60,7 @@
 ;; Image block conversion (GAP-V1: cross-provider vision)
 ;; ============================================================
 
-;; Convert OpenAI-format content blocks to Anthropic content blocks.
-(define (openai-block->anthropic block)
-  (define btype (hash-ref block 'type "text"))
-  (cond
-    [(equal? btype "text") block]
-    [(equal? btype "image_url")
-     (define image-url-hash (hash-ref block 'image_url (hasheq)))
-     (define url (hash-ref image-url-hash 'url ""))
-     (define-values (mime data) (parse-data-url url))
-     (hasheq 'type "image" 'source (hasheq 'type "base64" 'media_type mime 'data data))]
-    [else block]))
+;; W8 v0.99.35: openai-block->anthropic extracted to anthropic-helpers.rkt
 
 ;; Convert normalized model-request to Anthropic Messages API body.
 (define (anthropic-build-request-body req #:stream? [stream? #f])
@@ -262,15 +253,7 @@
 
   with-tools)
 
-;; Translate a normalized tool definition to Anthropic format.
-;; Input: {"type":"function","function":{"name":"...","description":"...","parameters":{}}}
-;; Output: {"name":"...","description":"...","input_schema":{...}}
-(define (anthropic-translate-tool tool)
-  (define fn (hash-ref tool 'function tool))
-  (define name (hash-ref fn 'name "unknown"))
-  (define description (hash-ref fn 'description ""))
-  (define parameters (hash-ref fn 'parameters (hasheq)))
-  (hasheq 'name name 'description description 'input_schema parameters))
+;; W8 v0.99.35: anthropic-translate-tool extracted to anthropic-helpers.rkt
 
 ;; ============================================================
 ;; Response parsing
@@ -286,14 +269,8 @@
   ;; Translate stop reason
   (define stop-reason (translate-stop-reason 'anthropic stop-reason-raw))
 
-  ;; Translate usage: input_tokens → prompt_tokens, output_tokens → completion_tokens
-  (define usage
-    (hasheq 'prompt_tokens
-            (hash-ref usage-raw 'input_tokens 0)
-            'completion_tokens
-            (hash-ref usage-raw 'output_tokens 0)
-            'total_tokens
-            (+ (hash-ref usage-raw 'input_tokens 0) (hash-ref usage-raw 'output_tokens 0))))
+  ;; W8 v0.99.35: Usage translation extracted to anthropic-helpers.rkt
+  (define usage (translate-anthropic-usage usage-raw))
 
   ;; Translate content blocks
   (define content
