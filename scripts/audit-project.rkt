@@ -20,7 +20,8 @@
          racket/match
          racket/date
          racket/path
-         json)
+         json
+         "version-surface.rkt")
 
 ;; ── Configuration ──
 
@@ -270,12 +271,10 @@
 ;; ── JSON output ──
 
 (define (read-version-string)
-  (with-handlers ([exn:fail? (lambda (e) "unknown")])
-    (define content (file->string (build-path Q-DIR "util" "version.rkt")))
-    (define m (regexp-match #rx"q-version \"([0-9]+\\.[0-9]+\\.[0-9]+)\"" content))
-    (if m
-        (cadr m)
-        "unknown")))
+  ;; Centralized via version-surface.rkt (W2 #8415).
+  ;; Uses Q-DIR as base, returns "unknown" on failure for backward compat.
+  (define v (read-canonical-version (path->string Q-DIR)))
+  (if (equal? v "0.0.0") "unknown" v))
 
 (define (generate-json-report report-text critical-count findings inv)
   (define risky (filter (lambda (f) (equal? (finding-category f) "risky-api")) findings))
