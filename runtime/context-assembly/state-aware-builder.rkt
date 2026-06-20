@@ -5,6 +5,12 @@
 ;;
 ;; v0.95.14: Observe-only memory telemetry is wired behind session-config gates;
 ;; prompt injection remains explicit in memory-builder.rkt.
+;;
+;; W6 v0.99.35: Pure helper functions (state coercion, text extraction,
+;; rollback trigger computation, conclusion-first replacement, state guidance)
+;; extracted to state-aware-helpers.rkt. This module focuses on the stateful
+;; orchestrator: memory observation/injection, trace callbacks, rollback action
+;; execution, and preamble generation with parameter side-effects.
 
 (require racket/list
          racket/runtime-path
@@ -26,8 +32,13 @@
                   task-conclusion-fsm-state-origin)
          (only-in "state-relevance.rkt" context-level-for-state)
          (only-in "../../util/ids.rkt" generate-id)
-         (only-in "../../util/fsm/fsm.rkt" fsm-state? fsm-state-name)
-         (only-in "../../util/content/content-parts.rkt" text-part-text text-part? text-part)
+         (only-in "state-aware-helpers.rkt"
+                  coerce-task-state
+                  extract-recent-text
+                  check-rollback-triggers
+                  check-rollback-triggers-with-actions
+                  ws-entry->conclusion-or-self
+                  state-guidance-table)
          "context-floor.rkt"
          (only-in "conclusion-graph.rkt"
                   build-conclusion-graph
@@ -35,8 +46,6 @@
                   graph-detect-cycles)
          (only-in "conclusion-ranker.rkt" rank-and-budget)
          (only-in "rollback-actions.rkt"
-                  warnings->actions
-                  select-highest-priority-action
                   maybe-execute-action
                   current-force-distill-fn
                   current-expand-context-fn
@@ -75,59 +84,6 @@
 
 ;; v0.99.7 W5: Blackboard context injection into system prompt preamble
 (define current-blackboard-injection-enabled (make-parameter #f))
-
-;; v0.96.13 WP-1: Extract recent assistant message text for memory query context.
-;; Takes a list of messages and count N, returns concatenated text of the last N
-;; assistant/user messages truncated to 200 chars. Returns #f if no text found.
-(define (extract-recent-text messages n)
-  (define assistant-msgs
-    (for/list ([m (in-list messages)]
-               #:when (and (message? m) (memq (message-role m) '(assistant user))))
-      (define content-parts (message-content m))
-      (define text
-        (for/fold ([acc ""])
-                  ([part (in-list (if (list? content-parts)
-                                      content-parts
-                                      '()))])
-          (if (text-part? part)
-              (string-append acc (if (string=? acc "") "" " ") (text-part-text part))
-              acc)))
-      text))
-  (define recent (take (reverse assistant-msgs) (min n (length assistant-msgs))))
-  (define joined (string-join (filter (lambda (s) (> (string-length s) 0)) recent) ". "))
-  (if (> (string-length joined) 0)
-      (substring joined 0 (min (string-length joined) 200))
-      #f))
-
-;; State-specific guidance strings (action-oriented instructions)
-(define state-guidance-table
-  (hasheq 'idle
-          "Awaiting instructions."
-          'exploration
-          (string-append "Focus on reading and understanding the codebase. "
-                         "Record key findings with record_conclusion before moving on.")
-          'planning
-          (string-append "Break down the task into steps. "
-                         "Save your plan as conclusions with record_conclusion.")
-          'implementation
-          (string-append "Focus on editing files. "
-                         "Record key decisions with record_conclusion. "
-                         "Prefer existing conclusions over re-reading files.")
-          'verification
-          (string-append "Run tests and verify correctness. "
-                         "Record test results as conclusions with record_conclusion.")
-          'debugging
-          (string-append "Focus on error-related files. "
-                         "Save error analysis as conclusions with record_conclusion.")))
-
-;; GAP-I v0.97.11: Extracted state coercion helper (was duplicated ×4).
-;; Converts task-state (symbol, fsm-state struct, or #f) to a bare symbol or #f.
-(define (coerce-task-state ts)
-  (cond
-    [(not ts) #f]
-    [(symbol? ts) ts]
-    [(fsm-state? ts) (fsm-state-name ts)]
-    [else #f]))
 
 ;; build-tiered-context/state-aware :
 ;;   Same signature as build-tiered-context, plus optional task-state and conclusions.
@@ -405,7 +361,7 @@
             (lambda (a)
               (define current-budget (current-conclusion-token-budget))
               (define expanded (* current-budget 2))
-              (log-warning "context-assembly: expanding budget ~a â ~a" current-budget expanded)
+              (log-warning "context-assembly: expanding budget ~a → ~a" current-budget expanded)
               (current-conclusion-token-budget expanded))]
            [current-revert-state-fn
             (lambda (a)
@@ -483,102 +439,3 @@
                    (list (make-text-part preamble-text))
                    (current-seconds)
                    (hasheq))]))
-
-;; ════════════════════════════════════════════════════════════════
-;; v0.76.3 W2: Rollback trigger checks (observational only)
-;; ════════════════════════════════════════════════════════════════
-
-;; check-rollback-triggers :
-;;   #:before-messages number? #:after-messages number?
-;;   #:conclusion-coverage number? #:repeat-tool-count exact-nonnegative-integer?
-;;   -> (listof (list/c symbol? string?))
-;;
-;; Returns a list of warning tuples: (trigger-type message).
-;; Triggers are observational — callers decide what to do.
-(define (check-rollback-triggers #:before-messages before-messages
-                                 #:after-messages after-messages
-                                 #:conclusion-coverage conclusion-coverage
-                                 #:repeat-tool-count repeat-tool-count)
-  ;; M6 (v0.97.15): Converted from imperative set! accumulation to
-  ;; pure for/fold. Each trigger conditionally appends a warning tuple.
-  (define warnings
-    (reverse
-     (for/fold ([acc '()])
-               ([trigger
-                 (in-list
-                  ;; Trigger 1: Excessive savings (>50% messages cut)
-                  (list (and (and (> before-messages 0)
-                                  (> after-messages 0)
-                                  (< after-messages (* before-messages 0.50)))
-                             (list 'excessive-savings
-                                   (format "Context reduced by >50%: ~a → ~a messages"
-                                           before-messages
-                                           after-messages)))
-                        ;; Trigger 2: Low conclusion coverage (amnesia risk)
-                        (and (< conclusion-coverage 0.20)
-                             (list 'amnesia-risk
-                                   (format "Conclusion coverage too low: ~a" conclusion-coverage)))
-                        ;; Trigger 3: Repeated tool calls (same file re-read > 2x)
-                        (and (> repeat-tool-count 2)
-                             (list 'task-amnesia-detected
-                                   (format "Repeated tool calls detected: ~a re-reads"
-                                           repeat-tool-count)))
-                        ;; Trigger 4 — Stuck detection (>=6 tool calls, 0 conclusions)
-                        ;; NOTE: this AND Trigger 3 both fire when repeat>=6 and coverage=0.
-                        (and (>= repeat-tool-count 6)
-                             (= conclusion-coverage 0)
-                             (list 'stuck-detected
-                                   (format "stuck: ~a tool calls without recording conclusions"
-                                           repeat-tool-count)))))])
-       (if trigger
-           (cons trigger acc)
-           acc))))
-  warnings)
-
-;; v0.77.6 W6.2: Extended trigger output with recommended actions.
-;; Returns (values warnings recommended-action) where recommended-action
-;; is the highest-priority rollback-action or #f.
-(define (check-rollback-triggers-with-actions #:before-messages before-messages
-                                              #:after-messages after-messages
-                                              #:conclusion-coverage conclusion-coverage
-                                              #:repeat-tool-count repeat-tool-count)
-  (define warnings
-    (check-rollback-triggers #:before-messages before-messages
-                             #:after-messages after-messages
-                             #:conclusion-coverage conclusion-coverage
-                             #:repeat-tool-count repeat-tool-count))
-  ;; Pass full (symbol . string) pairs to warnings->actions for symbol-based matching.
-  (define actions (warnings->actions warnings))
-  (define recommended (select-highest-priority-action actions))
-  (values warnings recommended))
-
-;; ════════════════════════════════════════════════════════════════
-;; v0.76.4 M5 W0: Conclusion-first working-set replacement
-;; ════════════════════════════════════════════════════════════════
-
-;; ws-entry->conclusion-or-self :
-;;   message? (listof task-conclusion?) -> message?
-;; If a conclusion references this message's ID via origin-message-ids,
-;; returns a compact replacement message with conclusion text.
-;; Otherwise returns the original message unchanged.
-(define (ws-entry->conclusion-or-self ws-msg conclusions)
-  (define msg-id-val (message-id ws-msg))
-  ;; v0.76.7 C1+C2: Use ormap+equal? for robust matching across types
-  (define (origin-matches? c)
-    (define oids (task-conclusion-origin-message-ids c))
-    (and (pair? oids) (ormap (lambda (oid) (equal? msg-id-val oid)) oids)))
-  (define matching-conclusion
-    (for/first ([c (in-list conclusions)]
-                #:when (and (task-conclusion? c) (origin-matches? c)))
-      c))
-  (cond
-    [matching-conclusion
-     (make-message (message-id ws-msg)
-                   #f
-                   'system
-                   'system-instruction
-                   (list (make-text-part (format "[Conclusion replaces context] ~a"
-                                                 (task-conclusion-text matching-conclusion))))
-                   (current-seconds)
-                   (hasheq))]
-    [else ws-msg]))
