@@ -80,6 +80,20 @@ EOF
         (widget-name w))
       (error "not a widget")))
 EOF
+              )
+
+  ;; Skipped directories: default audit is for production/source modules only.
+  (write-file (build-path base-dir "tests" "test-skipped.rkt")
+              #<<EOF
+#lang racket/base
+(define skipped-test #t)
+EOF
+              )
+  (write-file (build-path base-dir "compiled" "skipped-compiled.rkt")
+              #<<EOF
+#lang racket/base
+(define skipped-compiled #t)
+EOF
               ))
 
 (define (cleanup-fixture-tree base-dir)
@@ -167,11 +181,24 @@ EOF
    (check-true (hash-has-key? summary 'serialization-hotspots) "summary has serialization-hotspots")
    (check-true (hash-has-key? summary 'total-modules) "summary has total-modules")
 
-   ;; Should find exactly 2 modules in fixture
-   (check-equal? (hash-ref summary 'total-modules) 2 "fixture has 2 modules")
+   ;; Should find exactly 2 production/source modules in fixture. The tests/
+   ;; and compiled/ files are intentional sentinels and must be skipped.
+   (check-equal? (hash-ref summary 'total-modules) 2 "fixture has 2 production modules")
 
    ;; Should find struct-out in fixture
    (check-true (and (hash-ref summary 'struct-out-exports) #t) "struct-out-exports is non-empty")
+
+   (cleanup-fixture-tree tmpdir))
+ (test-case "find-rkt-files excludes tests and compiled directories by default"
+   (define tmpdir (make-temporary-file "abstraction-audit-~a" 'directory))
+   (setup-fixture-tree tmpdir)
+
+   (define files (map path->string ((audit-ref 'find-rkt-files) (path->string tmpdir))))
+   (check-equal? (length files) 2 "fixture scan excludes skipped directories")
+   (check-false (ormap (lambda (p) (string-contains? p "/tests/")) files)
+                "default scan excludes tests/")
+   (check-false (ormap (lambda (p) (string-contains? p "/compiled/")) files)
+                "default scan excludes compiled/")
 
    (cleanup-fixture-tree tmpdir)))
 
