@@ -222,7 +222,8 @@
 ;;   Input:       focused-component, editor-component
 ;;   Session:     session-id, model-name, mode, mock-provider?
 ;;   Queue:       queue-counts
-;;   Budget:      context-tokens, cost-tracker
+;;   Budget:      context-tokens, cost-tracker, context-pressure-level,
+;;                context-pressure-percent
 ;;
 ;; --- Transcript group ---
 (struct ui-state
@@ -258,9 +259,9 @@
          editor-component ; (or/c #f q-component?) — custom editor for input area (#1150)
          ;; --- Budget group ---
          context-tokens ; (or/c #f integer?) — estimated token count from context events (v0.19.12 W1)
-         cost-tracker
-         context-pressure-level
-         context-pressure-percent ; (or/c #f cost-tracker?) — mutable cost accumulator (G8.4)
+         cost-tracker ; cost-tracker? — mutable cost accumulator (G8.4)
+         context-pressure-level ; (or/c #f symbol?) — context pressure level ('low 'medium 'high 'critical)
+         context-pressure-percent ; (or/c #f real?) — context pressure percentage (0–100)
          ;; --- Goal group ---
          active-goal) ; (or/c goal-display-info? #f) — active autonomous goal display info
   #:transparent)
