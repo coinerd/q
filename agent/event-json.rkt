@@ -5,46 +5,24 @@
 ;; H-01: Replaced 474-line manual dual-match with registry dispatch.
 ;; Event types auto-register serializers/deserializers via define-typed-event.
 ;; Per-tool events (manual structs) register explicitly below.
+;;
+;; W4 v0.99.35: Pure serialization logic extracted to event-json-helpers.rkt.
+;; This module now focuses on registry registration + dispatch, delegating
+;; pure data extraction/conversion to the helpers module.
 
 (require racket/contract
          racket/match
          "event-structs/typed-event-predicates.rkt"
+         (only-in "event-structs/base.rkt"
+                  typed-event
+                  typed-event-type
+                  typed-event-timestamp
+                  typed-event-session-id
+                  typed-event-turn-id)
          ;; Browser event module registers browser serializers/deserializers.
          (prefix-in browser: "../browser/events.rkt")
-         ;; Per-tool event imports for manual serializer registration
-         (only-in "event-structs/tool-events.rkt"
-                  bash-tool-call-event
-                  bash-tool-call-event-command
-                  bash-tool-call-event-timeout
-                  bash-tool-call-event-cwd
-                  bash-tool-call-event?
-                  edit-tool-call-event
-                  edit-tool-call-event-path
-                  edit-tool-call-event-edits
-                  edit-tool-call-event?
-                  write-tool-call-event
-                  write-tool-call-event-path
-                  write-tool-call-event-content
-                  write-tool-call-event?
-                  read-tool-call-event
-                  read-tool-call-event-path
-                  read-tool-call-event-offset
-                  read-tool-call-event-limit
-                  read-tool-call-event?
-                  grep-tool-call-event
-                  grep-tool-call-event-pattern
-                  grep-tool-call-event-path
-                  grep-tool-call-event-glob
-                  grep-tool-call-event?
-                  find-tool-call-event
-                  find-tool-call-event-pattern
-                  find-tool-call-event-path
-                  find-tool-call-event?
-                  custom-tool-call-event
-                  custom-tool-call-event?
-                  tool-call-event-tool-call-id
-                  tool-call-event-tool-name
-                  tool-call-event-arguments)
+         ;; W4 v0.99.35: Pure serialization helpers
+         "event-json-helpers.rkt"
          ;; Registry functions
          (only-in "../util/event/event-macro.rkt"
                   lookup-event-serializer
@@ -69,181 +47,33 @@
      (hash-set (base-serializer evt) 'schemaVersion (lookup-event-schema-version event-type)))))
 
 ;; ============================================================
-;; Per-tool event serializer registration (manual structs)
+;; Per-tool event serializer/deserializer registration
+;;
+;; W4 v0.99.35: Pure serializer/deserializer logic now lives in
+;; event-json-helpers.rkt. This section registers them with the global
+;; registry at module-load time.
 ;; ============================================================
 
-;; bash-tool-call-event
-(register-tool-event-serializer! "tool.bash.called"
-                                 (lambda (evt)
-                                   (hasheq 'toolName
-                                           "bash"
-                                           'toolCallId
-                                           (tool-call-event-tool-call-id evt)
-                                           'command
-                                           (bash-tool-call-event-command evt)
-                                           'timeout
-                                           (bash-tool-call-event-timeout evt)
-                                           'cwd
-                                           (bash-tool-call-event-cwd evt))))
+(register-tool-event-serializer! "tool.bash.called" serialize-bash-tool-call)
+(register-event-deserializer! "tool.bash.called" deserialize-bash-tool-call)
 
-(register-event-deserializer! "tool.bash.called"
-                              (lambda (type ts sid tid h)
-                                (bash-tool-call-event type
-                                                      ts
-                                                      sid
-                                                      tid
-                                                      "bash"
-                                                      (hasheq)
-                                                      (hash-ref h 'toolCallId "")
-                                                      (hash-ref h 'command "")
-                                                      (hash-ref h 'timeout 30)
-                                                      (hash-ref h 'cwd ""))))
+(register-tool-event-serializer! "tool.edit.called" serialize-edit-tool-call)
+(register-event-deserializer! "tool.edit.called" deserialize-edit-tool-call)
 
-;; edit-tool-call-event
-(register-tool-event-serializer! "tool.edit.called"
-                                 (lambda (evt)
-                                   (hasheq 'toolName
-                                           "edit"
-                                           'toolCallId
-                                           (tool-call-event-tool-call-id evt)
-                                           'path
-                                           (edit-tool-call-event-path evt)
-                                           'edits
-                                           (edit-tool-call-event-edits evt))))
+(register-tool-event-serializer! "tool.write.called" serialize-write-tool-call)
+(register-event-deserializer! "tool.write.called" deserialize-write-tool-call)
 
-(register-event-deserializer! "tool.edit.called"
-                              (lambda (type ts sid tid h)
-                                (edit-tool-call-event type
-                                                      ts
-                                                      sid
-                                                      tid
-                                                      "edit"
-                                                      (hasheq)
-                                                      (hash-ref h 'toolCallId "")
-                                                      (hash-ref h 'path "")
-                                                      (hash-ref h 'edits '()))))
+(register-tool-event-serializer! "tool.read.called" serialize-read-tool-call)
+(register-event-deserializer! "tool.read.called" deserialize-read-tool-call)
 
-;; write-tool-call-event
-(register-tool-event-serializer! "tool.write.called"
-                                 (lambda (evt)
-                                   (hasheq 'toolName
-                                           "write"
-                                           'toolCallId
-                                           (tool-call-event-tool-call-id evt)
-                                           'path
-                                           (write-tool-call-event-path evt)
-                                           'content
-                                           (write-tool-call-event-content evt))))
+(register-tool-event-serializer! "tool.grep.called" serialize-grep-tool-call)
+(register-event-deserializer! "tool.grep.called" deserialize-grep-tool-call)
 
-(register-event-deserializer! "tool.write.called"
-                              (lambda (type ts sid tid h)
-                                (write-tool-call-event type
-                                                       ts
-                                                       sid
-                                                       tid
-                                                       "write"
-                                                       (hasheq)
-                                                       (hash-ref h 'toolCallId "")
-                                                       (hash-ref h 'path "")
-                                                       (hash-ref h 'content ""))))
+(register-tool-event-serializer! "tool.find.called" serialize-find-tool-call)
+(register-event-deserializer! "tool.find.called" deserialize-find-tool-call)
 
-;; read-tool-call-event
-(register-tool-event-serializer! "tool.read.called"
-                                 (lambda (evt)
-                                   (hasheq 'toolName
-                                           "read"
-                                           'toolCallId
-                                           (tool-call-event-tool-call-id evt)
-                                           'path
-                                           (read-tool-call-event-path evt)
-                                           'offset
-                                           (read-tool-call-event-offset evt)
-                                           'limit
-                                           (read-tool-call-event-limit evt))))
-
-(register-event-deserializer! "tool.read.called"
-                              (lambda (type ts sid tid h)
-                                (read-tool-call-event type
-                                                      ts
-                                                      sid
-                                                      tid
-                                                      "read"
-                                                      (hasheq)
-                                                      (hash-ref h 'toolCallId "")
-                                                      (hash-ref h 'path "")
-                                                      (hash-ref h 'offset #f)
-                                                      (hash-ref h 'limit #f))))
-
-;; grep-tool-call-event
-(register-tool-event-serializer! "tool.grep.called"
-                                 (lambda (evt)
-                                   (hasheq 'toolName
-                                           "grep"
-                                           'toolCallId
-                                           (tool-call-event-tool-call-id evt)
-                                           'pattern
-                                           (grep-tool-call-event-pattern evt)
-                                           'path
-                                           (grep-tool-call-event-path evt)
-                                           'glob
-                                           (grep-tool-call-event-glob evt))))
-
-(register-event-deserializer! "tool.grep.called"
-                              (lambda (type ts sid tid h)
-                                (grep-tool-call-event type
-                                                      ts
-                                                      sid
-                                                      tid
-                                                      "grep"
-                                                      (hasheq)
-                                                      (hash-ref h 'toolCallId "")
-                                                      (hash-ref h 'pattern "")
-                                                      (hash-ref h 'path "")
-                                                      (hash-ref h 'glob ""))))
-
-;; find-tool-call-event
-(register-tool-event-serializer! "tool.find.called"
-                                 (lambda (evt)
-                                   (hasheq 'toolName
-                                           "find"
-                                           'toolCallId
-                                           (tool-call-event-tool-call-id evt)
-                                           'pattern
-                                           (find-tool-call-event-pattern evt)
-                                           'path
-                                           (find-tool-call-event-path evt))))
-
-(register-event-deserializer! "tool.find.called"
-                              (lambda (type ts sid tid h)
-                                (find-tool-call-event type
-                                                      ts
-                                                      sid
-                                                      tid
-                                                      "find"
-                                                      (hasheq)
-                                                      (hash-ref h 'toolCallId "")
-                                                      (hash-ref h 'pattern "")
-                                                      (hash-ref h 'path ""))))
-
-;; custom-tool-call-event
-(register-tool-event-serializer! "tool.custom.called"
-                                 (lambda (evt)
-                                   (hasheq 'toolName
-                                           (tool-call-event-tool-name evt)
-                                           'toolCallId
-                                           (tool-call-event-tool-call-id evt)
-                                           'arguments
-                                           (tool-call-event-arguments evt))))
-
-(register-event-deserializer! "tool.custom.called"
-                              (lambda (type ts sid tid h)
-                                (custom-tool-call-event type
-                                                        ts
-                                                        sid
-                                                        tid
-                                                        (hash-ref h 'toolName "unknown")
-                                                        (hash-ref h 'arguments (hasheq))
-                                                        (hash-ref h 'toolCallId ""))))
+(register-tool-event-serializer! "tool.custom.called" serialize-custom-tool-call)
+(register-event-deserializer! "tool.custom.called" deserialize-custom-tool-call)
 
 ;; ============================================================
 ;; JSON Serialization (H-01: registry dispatch)
@@ -289,71 +119,3 @@
   (if deserializer
       (deserializer type ts sid tid h)
       (typed-event type ts sid tid)))
-
-;; ============================================================
-;; Registry
-;; ============================================================
-
-(define (all-known-event-types)
-  '("turn.started" "turn.completed"
-                   "message.started"
-                   "message.updated"
-                   "message.completed"
-                   "tool.execution.started"
-                   "tool.execution.updated"
-                   "tool.execution.completed"
-                   "tool.called"
-                   "tool.result"
-                   "tool.bash.called"
-                   "tool.edit.called"
-                   "tool.write.called"
-                   "tool.read.called"
-                   "tool.grep.called"
-                   "tool.find.called"
-                   "tool.custom.called"
-                   "model.request.started"
-                   "model.request.completed"
-                   "session.started"
-                   "session.shutdown"
-                   "input"
-                   "model.selected"
-                   "agent.started"
-                   "agent.completed"
-                   "context.built"
-                   "context.assembled"
-                   "context.assembly.blocked"
-                   "working-set.injected"
-                   "iteration.decision"
-                   "auto-retry.start"
-                   "model.stream.delta"
-                   "model.stream.delta.tool-call"
-                   "model.stream.thinking"
-                   "model.stream.completed"
-                   "tool.call.started"
-                   "provider.stream.delta"
-                   "provider.stream.thinking"
-                   "provider.stream.completed"
-                   "model.request.blocked"
-                   "message.blocked"
-                   "turn.cancelled"
-                   "assistant.message.completed"
-                   "browser.session.opened"
-                   "browser.session.closed"
-                   "browser.action.started"
-                   "browser.action.completed"
-                   "browser.action.failed"
-                   "browser.page.loaded"
-                   "browser.policy.blocked"
-                   "browser.sidecar.started"
-                   "browser.sidecar.stopped"
-                   "browser.screenshot.captured"))
-
-(define (event-name->tool-name type)
-  (match type
-    ["tool.bash.called" "bash"]
-    ["tool.edit.called" "edit"]
-    ["tool.write.called" "write"]
-    ["tool.read.called" "read"]
-    ["tool.grep.called" "grep"]
-    ["tool.find.called" "find"]
-    [_ #f]))
