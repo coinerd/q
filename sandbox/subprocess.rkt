@@ -11,11 +11,13 @@
          racket/string
          "limits.rkt"
          ;; SEC-16 (v0.22.0): consolidated shell-quote
-         (only-in "../util/shell-quote.rkt" shell-quote))
+         (only-in "../util/shell-quote.rkt" shell-quote)
+         ;; W3 v0.99.35: Pure result-boundary helpers
+         "subprocess-helpers.rkt")
 
 (define-logger subprocess)
 
-;; Struct accessors (no contract needed for transparent struct)
+;; Struct accessors (re-exported from subprocess-helpers.rkt)
 (provide subprocess-result
          subprocess-result?
          subprocess-result-exit-code
@@ -24,6 +26,14 @@
          subprocess-result-timed-out?
          subprocess-result-elapsed-ms
          subprocess-result-truncated?
+         ;; W3 v0.99.35: Pure result-boundary helpers (re-exported)
+         ;; Note: make-error-result/make-success-result NOT re-exported here
+         ;; to avoid conflict with tool.rkt's exports of the same names.
+         exit-success?
+         exit-timeout?
+         exit-error?
+         EXIT-CODE-TIMEOUT
+         EXIT-CODE-ERROR
          ;; Parameters (no contract needed)
          default-timeout-seconds
          default-max-output-bytes
@@ -43,18 +53,8 @@
                        [sanitize-env (->* () (any/c) any/c)]
                        [secret-env-var? (-> string? boolean?)]))
 
-;; --------------------------------------------------
-;; Result struct
-;; --------------------------------------------------
-
-(struct subprocess-result
-        (exit-code ; integer
-         stdout ; string
-         stderr ; string
-         timed-out? ; boolean
-         elapsed-ms ; number
-         truncated?) ; boolean — output was cut at byte budget
-  #:transparent)
+;; W3 v0.99.35: subprocess-result struct moved to subprocess-helpers.rkt.
+;; All struct exports above are re-exported from there.
 
 ;; --------------------------------------------------
 ;; Bounded port reader — reads incrementally with a byte budget
@@ -178,20 +178,8 @@
 ;; Environment sanitization — strip sensitive env vars
 ;; --------------------------------------------------
 
-;; Patterns that indicate sensitive env vars
-(define secret-patterns
-  (list #rx"(?i:API.?KEY)"
-        #rx"(?i:SECRET)"
-        #rx"(?i:TOKEN)"
-        #rx"(?i:PASSWORD)"
-        #rx"(?i:CREDENTIAL)"
-        #rx"(?i:^AUTH$|^AUTH_|_AUTH_)"
-        #rx"(?i:GH_PAT)"
-        #rx"(?i:_PAT$)"))
-
-;; Built-in implicit allowlist: well-known non-secret env vars that should
-;; never be scrubbed even if they partially match a secret pattern.
-(define SECRET-IMPLICIT-ALLOWLIST '("XAUTHORITY" "GPG_AUTH_INFO" "AUTHOR" "GPG_TTY" "SSH_AUTH_SOCK"))
+;; W3 v0.99.35: secret-patterns and SECRET-IMPLICIT-ALLOWLIST moved to
+;; subprocess-helpers.rkt. secret-env-var? delegates to check-secret-var?.
 
 ;; ── RA-2 (v0.24.7): Configurable secret scrubbing ──
 ;; Extra denylist: additional regex patterns to scrub (extends secret-patterns).
@@ -205,21 +193,7 @@
     (if (bytes? name)
         (bytes->string/utf-8 name)
         name))
-  ;; Check implicit allowlist first — well-known non-secret vars
-  (cond
-    [(member name-str SECRET-IMPLICIT-ALLOWLIST) #f]
-    [else
-     ;; Check user allowlist — if matched, never scrub
-     (define allowed?
-       (for/or ([pat (in-list (current-secret-scrub-allowlist))])
-         (regexp-match? pat name-str)))
-     (cond
-       [allowed? #f]
-       [else
-        ;; Check default patterns + extra denylist
-        (define all-patterns (append secret-patterns (current-secret-scrub-denylist)))
-        (for/or ([pat (in-list all-patterns)])
-          (regexp-match? pat name-str))])]))
+  (check-secret-var? name-str (current-secret-scrub-denylist) (current-secret-scrub-allowlist)))
 
 (define (sanitize-env [env (current-environment-variables)])
   (define clean (make-environment-variables))
@@ -261,13 +235,10 @@
 
   (with-handlers ([exn:fail? (lambda (e)
                                (custodian-shutdown-all cust)
-                               (subprocess-result
-                                -1
-                                ""
+                               (make-error-result
                                 (format "Failed to execute: ~a" (exn-message e))
-                                #f
-                                (inexact->exact (round (- (current-inexact-milliseconds) start-ms)))
-                                #f))])
+                                (inexact->exact (round (- (current-inexact-milliseconds)
+                                                          start-ms)))))])
 
     (define cmd-path (resolve-command command))
     (unless cmd-path
@@ -331,16 +302,11 @@
        (define-values (partial-out partial-err partial-truncated?) (reader-results))
        (define end-ms (current-inexact-milliseconds))
        (custodian-shutdown-all cust)
-       (subprocess-result
-        -9
-        partial-out
-        (string-append
-         partial-err
-         (format "\n[SYS] Command timed out after ~a seconds. Partial output shown above."
-                 effective-timeout))
-        #t
-        (inexact->exact (round (- end-ms start-ms)))
-        partial-truncated?)]
+       (make-timeout-result partial-out
+                            partial-err
+                            effective-timeout
+                            (inexact->exact (round (- end-ms start-ms)))
+                            partial-truncated?)]
 
       ;; Completed
       [else
@@ -361,9 +327,8 @@
        (custodian-shutdown-all cust)
 
        (define end-ms (current-inexact-milliseconds))
-       (subprocess-result exit-code
-                          out-str
-                          err-str
-                          #f
-                          (inexact->exact (round (- end-ms start-ms)))
-                          output-truncated?)])))
+       (make-success-result exit-code
+                            out-str
+                            err-str
+                            (inexact->exact (round (- end-ms start-ms)))
+                            output-truncated?)])))
