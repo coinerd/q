@@ -1,4 +1,4 @@
-# Abstraction Fitness Report — v0.99.35
+# Abstraction Fitness Report — v0.99.36
 
 **Date:** 2026-06-20  
 **Post-closure update:** 2026-06-20, issue #8409  
@@ -16,7 +16,7 @@ racket scripts/abstraction-audit.rkt --root . --out <report> --json-out <json>
 ```
 
 The tool supplements the hand-curated abstraction inventory
-(`.planning/ABSTRACTION-INVENTORY-v0.99.35.md`). It is advisory by default and
+(`.planning/ABSTRACTION-INVENTORY-v0.99.36.md`). It is advisory by default and
 only fails the build when invoked with `--strict`.
 
 ## Signal Categories

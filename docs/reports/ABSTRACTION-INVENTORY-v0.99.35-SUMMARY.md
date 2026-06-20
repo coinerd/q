@@ -1,8 +1,8 @@
-# Abstraction Inventory Summary — v0.99.35
+# Abstraction Inventory Summary — v0.99.36
 
 **Date:** 2026-06-20  
 **Source HEAD:** `b709f7ee`  
-**Full inventory:** `.planning/ABSTRACTION-INVENTORY-v0.99.35.md` (local-only)
+**Full inventory:** `.planning/ABSTRACTION-INVENTORY-v0.99.36.md` (local-only)
 
 ## Scorecard
 

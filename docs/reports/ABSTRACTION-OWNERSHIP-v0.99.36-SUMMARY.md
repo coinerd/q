@@ -6,7 +6,7 @@
 
 ## Purpose
 
-v0.99.36 moves from pure-helper extraction (v0.99.35) to abstraction
+v0.99.36 moves from pure-helper extraction (v0.99.36) to abstraction
 **ownership discipline**: API surface boundaries, information hiding,
 expected-failure design, port/I/O abstraction, parameter ownership,
 and macro/DSL safety.

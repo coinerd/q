@@ -1,8 +1,8 @@
-# Audit Report — v0.99.35 Post-Implementation
+# Audit Report — v0.99.36 Post-Implementation
 
 **Date:** 2026-06-21  
 **Post-closure correction:** 2026-06-20, issue #8409  
-**Milestone:** #821 (v0.99.35 — Racket Abstraction Manual Roadmap)  
+**Milestone:** #821 (v0.99.36 — Racket Abstraction Manual Roadmap)  
 **Original W9 source HEAD:** `e71fd680`  
 **Remediation branch:** `fix/v09935-post-closure-audit-8409`  
 **Parent Issue:** #8388  
@@ -20,9 +20,9 @@ broad gates are now green.
 
 The original report incorrectly labeled a non-green broad run as PASS. That
 was a gate-truth error. Issue #8409 remedies the release-blocking findings from
-`.planning/AUDIT-v0.99.35-POST-CLOSURE-IN-DEPTH.md`:
+`.planning/AUDIT-v0.99.36-POST-CLOSURE-IN-DEPTH.md`:
 
-- version surfaces are synchronized to canonical `0.99.35`;
+- version surfaces are synchronized to canonical `0.99.36`;
 - `lint-version`, `ci-local --quick`, `test-bump-version`, and
   `test-ci-local` pass;
 - README Status/metrics are synchronized;
@@ -34,13 +34,13 @@ was a gate-truth error. Issue #8409 remedies the release-blocking findings from
 
 Final post-remediation broad evidence is recorded below, in the #8409
 remediation summary, and in
-`.planning/AUDIT-v0.99.35-POST-CLOSURE-IN-DEPTH.md`.
+`.planning/AUDIT-v0.99.36-POST-CLOSURE-IN-DEPTH.md`.
 
 ---
 
 ## Milestone Summary
 
-v0.99.35 applied the abstraction patterns identified in the W0 inventory
+v0.99.36 applied the abstraction patterns identified in the W0 inventory
 across 7 production modules, creating 7 new pure-helper modules and 1 new
 tooling script. Every extraction followed the same disciplined pattern:
 identify pure functions, extract to a new module, update the original to import
@@ -195,14 +195,14 @@ document-only items:
 2. `wiring/run-modes.rkt` (RED) — high-risk wiring/initialization module.
 3. `scripts/run-tests.rkt` (YELLOW) — stable test runner, documented only.
 
-These are tracked in `.planning/ABSTRACTION-INVENTORY-v0.99.35.md` for future
+These are tracked in `.planning/ABSTRACTION-INVENTORY-v0.99.36.md` for future
 reference and are not release blockers.
 
 ---
 
 ## Conclusion
 
-v0.99.35 successfully demonstrated the abstraction pattern across modules with
+v0.99.36 successfully demonstrated the abstraction pattern across modules with
 varying risk profiles. The post-closure audit correctly identified that the
 implementation report and release metadata were not yet gate-truth compliant.
 Issue #8409 remediates those findings and restores the requirement that release
