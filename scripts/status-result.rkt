@@ -19,7 +19,8 @@
 ;;   - Build verification steps with structured outcomes
 ;;   - Any "printf + exit 1" error path that callers need to handle
 
-(require racket/match
+(require racket/contract
+         racket/match
          racket/string)
 
 ;; ---------------------------------------------------------------------------
@@ -31,12 +32,17 @@
          (struct-out status-description-mismatch)
          (struct-out status-missing-section)
          (struct-out status-file-not-found)
-         status-check-result?
-         status-result-kind
-         status-ok?
-         format-status-result
-         status-result-exit-code
-         check-readme-status)
+         (contract-out [status-check-result? (-> any/c boolean?)]
+                       [status-result-kind (-> status-check-result? symbol?)]
+                       [format-status-result (-> status-check-result? string?)]
+                       [status-result-exit-code (-> status-check-result? (or/c 0 1))]
+                       [check-readme-status
+                        (-> (listof string?)
+                            string?
+                            (or/c string? #f)
+                            (or/c string? #f)
+                            string?
+                            status-check-result?)]))
 
 ;; Everything matches: version and description agree.
 ;; Fields: version (string), description (string)

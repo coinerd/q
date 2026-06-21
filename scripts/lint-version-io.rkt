@@ -17,7 +17,8 @@
 ;; A "mock file system" is a hash: path-string -> content-string.
 ;; Use `make-mock-fs` to create one from an alist of (path . content).
 
-(require racket/file
+(require racket/contract
+         racket/file
          racket/string)
 
 ;; Parameters
@@ -25,12 +26,12 @@
          current-lint-file->string
          current-lint-file->lines
          current-lint-read-md-paths
-         ;; Mock file system
-         make-mock-fs
-         make-mock-exists
-         make-mock-read-string
-         make-mock-read-lines
-         make-mock-md-paths)
+         ;; Mock file system constructors
+         (contract-out [make-mock-fs (-> (listof (cons/c path-string? string?)) hash?)]
+                       [make-mock-exists (-> hash? (-> any/c boolean?))]
+                       [make-mock-read-string (-> hash? (-> any/c string?))]
+                       [make-mock-read-lines (-> hash? (-> any/c (listof string?)))]
+                       [make-mock-md-paths (-> (listof string?) procedure?)]))
 
 ;; ---------------------------------------------------------------------------
 ;; Parameters (default: real file I/O)

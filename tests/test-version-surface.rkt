@@ -89,7 +89,14 @@
                    (test-case "read-canonical-version/strict: returns #f for nonexistent dir"
                      (define rcvs (vs-ref 'read-canonical-version/strict))
                      (define v (rcvs "/nonexistent/path"))
-                     (check-false v)))
+                     (check-false v))
+                   ;; v0.99.37 W5: Contract enforcement tests
+                   (test-case "contract: parse-q-version-from-content rejects non-string"
+                     (define parse (vs-ref 'parse-q-version-from-content))
+                     (check-exn exn:fail:contract? (λ () (parse 42))))
+                   (test-case "contract: version->string rejects non-list"
+                     (define v->s (vs-ref 'version->string))
+                     (check-exn exn:fail:contract? (λ () (v->s "not-a-list")))))
 
 (module+ test
   (run-tests version-surface-tests))
