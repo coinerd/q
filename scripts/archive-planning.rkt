@@ -134,4 +134,5 @@
 
   (printf "~nArchive complete. ~a files moved.~n" (length candidates)))
 
-(main)
+(module+ main
+  (main))

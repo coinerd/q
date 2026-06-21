@@ -12,7 +12,8 @@
          racket/string
          racket/file
          racket/list
-         (only-in "../runtime/auth/auth-store.rkt" save-credential-file!))
+         (only-in "../runtime/auth/auth-store.rkt" save-credential-file!)
+         "../util/config-paths.rkt")
 
 (require racket/contract)
 (provide (contract-out
@@ -28,7 +29,7 @@
 (define (run-init-wizard #:in [in (current-input-port)]
                          #:out [out (current-output-port)]
                          #:config-dir [config-dir #f])
-  (define effective-config-dir (or config-dir (build-path (find-system-path 'home-dir) ".q")))
+  (define effective-config-dir (or config-dir (global-config-dir)))
   (define config-path (build-path effective-config-dir "config.json"))
 
   ;; Helper: read a line, handling EOF

@@ -39,7 +39,8 @@
          (only-in "../ui-core/ui-actions.rkt"
                   current-ui-event-actions-enabled?
                   wire-ui-event-actions-from-config!)
-         (only-in "../runtime/settings-query.rkt" setting-ref*))
+         (only-in "../runtime/settings-query.rkt" setting-ref*)
+         "../util/config-paths.rkt")
 
 ;; TUI entry point contracts.
 ;; Most params use any/c because runtime/tui-ctx are opaque structs
@@ -199,7 +200,7 @@
   ;; Returns updated state.
   (define prov (dict-ref rt-config 'provider #f))
   (define mock? (provider-is-mock? prov))
-  (define q-config-dir (build-path (find-system-path 'home-dir) ".q"))
+  (define q-config-dir (global-config-dir))
   (define first-run?
     (not (or (directory-exists? q-config-dir)
              (file-exists? (build-path q-config-dir "config.json")))))

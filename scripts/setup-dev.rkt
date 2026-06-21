@@ -98,4 +98,5 @@
         (printf "Some setup steps failed. Please fix the issues above.~n")
         (exit 1))))
 
-(main)
+(module+ main
+  (main))

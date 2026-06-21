@@ -83,4 +83,5 @@
         (printf "~nLint alignment: FAIL ✗~n")
         (exit 1))))
 
-(main)
+(module+ main
+  (main))

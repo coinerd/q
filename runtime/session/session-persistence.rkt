@@ -11,6 +11,7 @@
          "session-types.rkt"
          "session-mutation.rkt"
          "session-store.rkt"
+         "../../util/config-paths.rkt"
          (only-in "../../util/message/message.rkt" message?))
 
 (provide current-crash-log-dir
@@ -28,7 +29,7 @@
   (with-handlers ([exn:fail? (lambda (e)
                                (log-warning "session-persistence: crash log write failed: ~a"
                                             (exn-message e)))])
-    (define q-dir (or (current-crash-log-dir) (build-path (find-system-path 'home-dir) ".q")))
+    (define q-dir (or (current-crash-log-dir) (global-config-dir)))
     (make-directory* q-dir)
     (define crash-path (build-path q-dir (format "crash-~a.jsonl" (current-seconds))))
     (call-with-output-file

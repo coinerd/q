@@ -191,4 +191,5 @@
      (printf "~nFix: add to (build-deps '(...)) in info.rkt~n")
      (exit 1)]))
 
-(main)
+(module+ main
+  (main))

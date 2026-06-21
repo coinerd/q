@@ -249,3 +249,31 @@
   (check-equal? (hash-ref j 'failed) 0)
   (check-equal? (hash-ref j 'total) 5)
   (check-equal? (hash-ref j 'category) "PASS"))
+
+;; ═══════════════════════════════════════════════════════════════
+;; §8: F1 regex fix — FAILURE-END now matches with #px
+;; ═══════════════════════════════════════════════════════════════
+
+;; F1 fix verified: #px"^-{20,}$" matches 20+ dash lines
+;; (old #rx mode treated {20,} as literal characters)
+(define F1-REGEX #px"^-{20,}$")
+
+(test-case "F1 fix: #px regex matches 20+ dashes"
+  (check-true (regexp-match? F1-REGEX "--------------------"))
+  (check-true (regexp-match? F1-REGEX "------------------------------")))
+
+(test-case "F1 fix: #px regex does not match <20 dashes"
+  (check-false (regexp-match? F1-REGEX "---"))
+  (check-false (regexp-match? F1-REGEX "-----------------")))
+
+(test-case "F1 fix: old #rx regex does NOT match (regression proof)"
+  (define old-regex #rx"^-{20,}$")
+  (check-false (regexp-match? old-regex "--------------------"))
+  (check-false (regexp-match? old-regex "------------------------------")))
+
+(test-case "F1 fix: extract-failure-lines detects dash-delimited blocks"
+  (define output
+    (string->bytes/utf-8
+     "-------- FAILURE --------\nFAILURE\nfoo.rkt:12: test failed\n--------------------\n"))
+  (define lines (extract-failure-lines output))
+  (check-true (> (length lines) 0) "should extract failure lines from dash-delimited block"))

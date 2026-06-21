@@ -173,4 +173,5 @@
         (printf "~nSome checks failed. ✗~n")
         (exit 1))))
 
-(main)
+(module+ main
+  (main))

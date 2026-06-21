@@ -117,4 +117,5 @@
   (printf "~n── IVG Summary: ~a passed, ~a failed ──~n" passed failed)
   (exit (if (positive? failed) 1 0)))
 
-(main)
+(module+ main
+  (main))

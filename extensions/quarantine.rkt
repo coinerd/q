@@ -20,7 +20,8 @@
          racket/match
          racket/port
          racket/string
-         json)
+         json
+         "../util/config-paths.rkt")
 
 ;; Quarantine state
 (provide current-quarantine-dir
@@ -37,8 +38,7 @@
 ;; Parameters
 ;; ============================================================
 
-(define current-quarantine-dir
-  (make-parameter (build-path (find-system-path 'home-dir) ".q" "quarantine")))
+(define current-quarantine-dir (make-parameter (build-path (global-config-dir) "quarantine")))
 
 ;; ============================================================
 ;; quarantine-state-file : -> path?

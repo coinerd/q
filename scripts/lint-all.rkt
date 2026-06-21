@@ -156,4 +156,5 @@
 
   (exit (if (positive? failed) 1 0)))
 
-(main)
+(module+ main
+  (main))

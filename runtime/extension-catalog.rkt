@@ -20,6 +20,7 @@
          "../extensions/api.rkt"
          (only-in "../extensions/loader.rkt" get-extension-name-from-path))
 (require (only-in "../util/error/error-helpers.rkt" with-safe-fallback))
+(require "../util/config-paths.rkt")
 
 (provide ext-info
          ext-info?
@@ -53,8 +54,7 @@
 ;; config-source-dir : -> (or/c path? #f)
 ;; Read ~/.q/config.json for extensions.source_dir override.
 (define (config-source-dir)
-  (define home-dir (find-system-path 'home-dir))
-  (define cfg-path (build-path home-dir ".q" "config.json"))
+  (define cfg-path (build-path (global-config-dir) "config.json"))
   (and (file-exists? cfg-path)
        (with-safe-fallback #f
                            (define cfg (read-json-file cfg-path))

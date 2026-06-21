@@ -20,7 +20,8 @@
          racket/match
          racket/file
          racket/list
-         racket/path)
+         racket/path
+         "config-paths.rkt")
 
 (require racket/contract)
 
@@ -88,8 +89,7 @@
 ;;; -------------------------------------------------------------------
 
 ;; Parameter for overflow directory (overridable for testing)
-(define output-overflow-dir
-  (make-parameter (build-path (find-system-path 'home-dir) ".q" "output-overflow")))
+(define output-overflow-dir (make-parameter (build-path (global-config-dir) "output-overflow")))
 
 ;; Maximum overflow files to keep per basename
 (define MAX-OVERFLOW-FILES-PER-BASE 10)

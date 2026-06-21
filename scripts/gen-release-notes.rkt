@@ -91,4 +91,5 @@
    "**Install**: `curl -fsSL https://raw.githubusercontent.com/coinerd/q/main/scripts/install.sh | bash`~n")
   (printf "**Verify**: `racket main.rkt --version`~n"))
 
-(main)
+(module+ main
+  (main))

@@ -95,4 +95,5 @@
      (printf "Written to ~a~n" (path->string out-path))]
     [else (displayln catalog)]))
 
-(main)
+(module+ main
+  (main))

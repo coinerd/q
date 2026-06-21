@@ -14,7 +14,8 @@
          (only-in "../extensions/loader.rkt" load-extension!)
          (only-in "../extensions/hooks.rkt" dispatch-hooks)
          (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload)
-         (only-in "../tui/palette.rkt" commands-from-hashes merge-extension-commands))
+         (only-in "../tui/palette.rkt" commands-from-hashes merge-extension-commands)
+         "../util/config-paths.rkt")
 
 (provide (contract-out
           [make-wired-extension-registry (-> any/c path-string? (values any/c any/c any/c))]
@@ -32,7 +33,7 @@
 ;;; commands and shortcuts.
 (define (make-wired-extension-registry bus project-dir)
   (define ext-reg (make-extension-registry))
-  (define q-home (build-path (find-system-path 'home-dir) ".q"))
+  (define q-home (global-config-dir))
   (load-extensions-from-dir! ext-reg (build-path q-home "extensions") #:event-bus bus)
   (load-extensions-from-dir! ext-reg (build-path project-dir ".q" "extensions") #:event-bus bus)
 

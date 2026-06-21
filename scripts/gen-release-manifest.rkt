@@ -114,4 +114,5 @@
 
   (emit-manifest version commit date tarball-path))
 
-(main)
+(module+ main
+  (main))

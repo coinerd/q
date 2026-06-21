@@ -107,4 +107,5 @@
             (printf "  ~a:~a [~a] ~a~n" file lineno name line)))
         (exit 1))))
 
-(main)
+(module+ main
+  (main))

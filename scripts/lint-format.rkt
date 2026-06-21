@@ -135,4 +135,5 @@
         (displayln "Format lint FAILED")
         (exit 1))))
 
-(main)
+(module+ main
+  (main))
