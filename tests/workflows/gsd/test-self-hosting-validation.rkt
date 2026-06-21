@@ -20,17 +20,8 @@
          "../../../util/event/event.rkt"
          (only-in "../../../tools/builtins/skill-router.rkt" tool-skill-route)
          "../fixtures/mock-provider.rkt"
-         "../fixtures/workflow-runner.rkt")
-
-(define (with-temp-dir proc)
-  (define dir (make-temporary-file "self-host-~a" 'directory))
-  (with-handlers ([exn:fail? (lambda (e)
-                               (when (directory-exists? dir)
-                                 (delete-directory/files dir))
-                               (raise e))])
-    (begin0 (proc dir)
-      (when (directory-exists? dir)
-        (delete-directory/files dir)))))
+         "../fixtures/workflow-runner.rkt"
+         (only-in "../../helpers/fixtures.rkt" with-temp-dir))
 
 (define gsd-ext-path
   (build-path (or (current-load-relative-directory) (current-directory))

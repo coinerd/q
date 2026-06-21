@@ -75,7 +75,7 @@
          "session-bytes-written parameter should be removed")
    ;; v0.29.13 W2: session-switch must use emit-typed-event! (not raw make-event)
    (list "session-switch-typed-events"
-         (lambda () (>= (grep-count "emit-typed-event!" "runtime/session-switch.rkt") 2))
+         (lambda () (>= (grep-count "emit-typed-event!" "runtime/session/session-switch.rkt") 2))
          "session-switch.rkt must use emit-typed-event! (≥2 calls)")
    ;; v0.29.14 W2: tool-coordinator must use emit-typed-event! (≥2 calls)
    (list "tool-coordinator-typed-events"

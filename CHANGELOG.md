@@ -1901,7 +1901,7 @@ Released: 2026-06-15
 - **C1**: Fixed temp file leaks in 15 test files — wrapped all `make-temporary-file` calls in `with-temp-dir` for guaranteed cleanup
 - **C2**: Fixed module-level mutable state in 5 test files — converted `set!` counters to `make-parameter` with per-test reset
 - **C3**: Fixed firecrawl env test to use `dynamic-wind` for guaranteed env var restore
-## v0.96.5 — Phase 1 Quick Wins (2026-06-08)
+## v0.96.5 — 2026-06-08 — Phase 1 Quick Wins ()
 
 ### Architecture
 - **F7 (dependency cycle) — RESOLVED**: Extracted 4 context-assembly parameters into new `runtime/context-assembly/config.rkt`, breaking the `session-config` → `state-aware-builder` → `memory-builder` cycle.
@@ -1914,7 +1914,7 @@ Released: 2026-06-15
 | Dependency cycles | 1 | 0 | -1 |
 | Stability markers | 89 | 116+ | +27 |
 
-## v0.96.4 — Audit Hotfix (2026-06-08)
+## v0.96.4 — 2026-06-08 — Audit Hotfix ()
 
 ### Architecture
 - **BF1 (dead imports) — RESOLVED**: Removed 4 remaining dead imports from `turn-orchestrator.rkt`: `racket/list`, `cancellation-token-cancelled?`, `tool-result?`, `hook-result-payload`.
@@ -1926,7 +1926,7 @@ Released: 2026-06-15
 | turn-orchestrator dead imports | 4 | 0 | -100% |
 | turn-orchestrator import count | 25 | 21 | -16% |
 
-## v0.96.3 — Architecture Audit Hotfix (2026-06-08)
+## v0.96.3 — 2026-06-08 — Architecture Audit Hotfix ()
 
 ### Architecture
 - **AF1 (dead imports) — RESOLVED**: Removed 8 dead import entries from `turn-orchestrator.rkt` (33→25 imports).
@@ -1943,7 +1943,7 @@ Released: 2026-06-15
 | Behavioral tests for extracted fns | 0 | 3 | +3 |
 | Event stability markers | 0 | 4 | +4 |
 
-## v0.96.2 — Module Sizing + Low-Priority Cleanups (2026-06-08)
+## v0.96.2 — 2026-06-08 — Module Sizing + Low-Priority Cleanups ()
 
 ### Architecture
 - **F4 (memory-tools god module) — RESOLVED**: Split 928-line `memory-tools.rkt` into 5 focused modules:
@@ -1966,7 +1966,7 @@ Released: 2026-06-15
 | Files without headers | 7 | 0 | -7 |
 | God-modules (>500 LOC) | 14 | 13 | -1 |
 
-## v0.96.1 — Representation Hiding + Parameter Reduction (2026-06-08)
+## v0.96.1 — 2026-06-08 — Representation Hiding + Parameter Reduction ()
 
 ### Architecture
 - **F2 (Event struct-out over-exposure) — DOCUMENTED**: Classified 60 event types as PUBLIC (4) vs INTERNAL (56). PUBLIC events marked with stability commitment. Assessment: `struct-out` for `#:transparent` immutable structs is idiomatic Racket; explicit provides would be more verbose with no security benefit.
@@ -1979,7 +1979,7 @@ Released: 2026-06-15
 | Event types classified | 0 | 60 | +60 |
 | Dead parameters | 1 | 0 | -1 |
 
-## v0.96.0 — Turn Orchestrator Decomposition (2026-06-08)
+## v0.96.0 — 2026-06-08 — Turn Orchestrator Decomposition ()
 
 ### Architecture
 - **F1 (God Module) — RESOLVED**: `turn-orchestrator.rkt` reduced from 534 LOC / 42 imports to **286 LOC / 24 imports** (47% LOC reduction, 43% import reduction).
@@ -1996,7 +1996,7 @@ Released: 2026-06-15
 | build-assembled-context LOC | ~169 | ~42 (coordinator) | -75% |
 | New modules | 0 | 2 | +2 |
 
-## v0.95.21 — Memory Lifecycle Completion (2026-06-08)
+## v0.95.21 — 2026-06-08 — Memory Lifecycle Completion ()
 
 ### New Features
 - **G1 — Background Reflection Trigger**: Auto-reflection now fires per-turn after auto-extraction when `memory.auto-reflection.enabled` is set to `true`. Non-fatal wrapper `maybe-reflect-session-memories!` catches all exceptions. Defaults to disabled.
@@ -2011,7 +2011,7 @@ Released: 2026-06-15
 - 18 lifecycle tests, 18 policy tests passing
 - All new features default off — no behavioral change for existing users
 
-## v0.95.20 — Memory Tools Event Publisher Fix (2026-06-08)
+## v0.95.20 — 2026-06-08 — Memory Tools Event Publisher Fix ()
 
 ### Bug Fixes
 - **Event publisher arity mismatch**: `publish-memory-event!` in `memory-tools.rkt` called the event publisher with 1 arg (combined hash) but `tool-coordinator.rkt` provides a `(event-type payload)` 2-arg lambda. All memory tool events failed with arity mismatch, leaking errors into the TUI prompt area.
@@ -2021,7 +2021,7 @@ Released: 2026-06-15
 - 1 new regression test verifying 2-arg publisher contract
 - 5 test publisher lambdas updated from 1-arg to 2-arg
 
-## v0.95.19 — Memory Injection Hotfix (2026-06-07)
+## v0.95.19 — 2026-06-07 — Memory Injection Hotfix ()
 
 ### Bug Fixes
 - **HF1 (HIGH)**: Thread `#:session-config config` to `build-tiered-context/state-aware` in `turn-orchestrator.rkt` — enables memory injection in production context assembly path
@@ -2033,7 +2033,7 @@ Released: 2026-06-15
 - 174+ focused memory tests passing across 10+ test files
 - 4 new regression tests (3 previously failing, now green)
 
-## v0.95.18 — Memory Quality Remediation (2026-06-07)
+## v0.95.18 — 2026-06-07 — Memory Quality Remediation ()
 
 ### Regression Harness
 - **W0**: Red/regression harness and validation baseline — 9 test files mapping F1-F9 audit findings (4 pass, 5 expected-fail)
@@ -2054,7 +2054,7 @@ Released: 2026-06-15
 - `tests/test-memory-regression.rkt` — F1-F9 regression harness
 - `tests/test-memory-consolidation-tool-g3.rkt` — consolidation edge-case tests
 
-## v0.95.17 — Memory Quality (2026-06-06)
+## v0.95.17 — 2026-06-06 — Memory Quality ()
 
 ### Characterization & Bug Fixes
 - **W0**: Characterization tests for remaining gaps — tool-call turn extraction, non-streaming hook, Mem0 transport, consolidation tool (4 test files)
@@ -2075,7 +2075,7 @@ Released: 2026-06-15
 - `tests/test-mem0-http-transport-g2.rkt`, `tests/test-memory-consolidation-tool-g3.rkt`
 - `tests/test-memory-reflection-w5.rkt`
 
-## v0.95.12 — Modular Memory System (2026-06-03)
+## v0.95.12 — 2026-06-03 — Modular Memory System ()
 
 ### Memory System Foundation
 - **W1**: Protocol and types foundation — `memory-item`, `memory-query`, `memory-result`, `memory-backend` structs with validators (14 tests)
@@ -2112,7 +2112,7 @@ Released: 2026-06-15
 - 14 test files in `tests/test-memory-*.rkt`
 
 
-## v0.95.16 — Memory Gap Closure
+## v0.95.16 — 2026-06-05 — Memory Gap Closure
 
 ### Auto-Extraction Integration
 - **W1**: Config/session-config accessors for auto-extraction
@@ -2133,7 +2133,7 @@ Released: 2026-06-15
 - **W8**: Documentation, focused test gate, milestone closure
 - 24 files changed, +1860/-78 lines, 79 new tests
 
-## v0.94.9 — GUI-TUI Output Parity (2026-06-03)
+## v0.94.9 — 2026-06-03 — GUI-TUI Output Parity ()
 
 ### GUI Enhancements
 - **W1**: Typed GUI messages — `kind` field on `gui-message` (message, tool-start, tool-end, tool-fail, thinking, system, error)
@@ -2153,7 +2153,7 @@ Released: 2026-06-15
 ### PRs
 - #7109 (W1), #7110 (W2), #7111 (W3), #7112 (W4), #7113 (W5)
 
-## v0.93.2 — Browser Feature Audit Closure (2026-06-03)
+## v0.93.2 — 2026-06-03 — Browser Feature Audit Closure ()
 
 ### Security Fixes (Critical)
 - **F1**: All 10 browser tools blocked in safe-mode
@@ -2185,7 +2185,7 @@ Released: 2026-06-15
 - 49 new tests across 6 new test files + 8 existing files updated
 - Total browser tests: 282+
 
-## v0.93.1 (2026-06-03)
+## v0.93.1 — 2026-06-03
 
 ### Final Audit Closure (Phase 7)
 
@@ -2196,7 +2196,7 @@ Released: 2026-06-15
 - Documentation: browser-guide.md + ADR 0020
 - **Browser Feature Complete**: 11 source modules, 10 registered tools, Playwright sidecar
 
-## v0.92.2 (2026-06-03)
+## v0.92.2 — 2026-06-03
 
 ### Workflow Tool + Documentation (Phase 6)
 
@@ -2209,7 +2209,7 @@ Released: 2026-06-15
 - 15 workflow + integration tests
 - **240 total browser tests**
 
-## v0.91.3 (2026-06-03)
+## v0.91.3 — 2026-06-03
 
 ### Playwright Sidecar + Real Adapter (Phase 5)
 
@@ -2225,7 +2225,7 @@ Released: 2026-06-15
 - 4 new Racket unit tests + 3 integration tests (skipped without Node.js)
 - **225 total browser tests**
 
-## v0.90.2 (2026-06-03)
+## v0.90.2 — 2026-06-03
 
 ### Browser Tool Registry Integration (Phase 4)
 
@@ -2235,7 +2235,7 @@ Released: 2026-06-15
 - 16 new tool handler tests
 - **217 total browser tests**
 
-## v0.89.3 (2026-06-03)
+## v0.89.3 — 2026-06-03
 
 ### Browser Secure Service + Audit + Mock Adapter (Phase 3)
 
@@ -2246,7 +2246,7 @@ Released: 2026-06-15
 - 48 new tests: 16 mock adapter, 6 audit, 26 service
 - **185 total browser tests**
 
-## v0.88.3 (2026-06-03)
+## v0.88.3 — 2026-06-03
 
 ### Browser Policy Engine + Session Manager (Phase 2)
 
@@ -2255,7 +2255,7 @@ Released: 2026-06-15
 - Add `browser/session.rkt`: session lifecycle manager with create/destroy/get/list, max-sessions (3), max-actions-per-session (100) enforcement
 - 74 new tests: 43 policy, 17 settings, 14 session
 
-## v0.87.3 (2026-06-03)
+## v0.87.3 — 2026-06-03
 
 ### Browser Domain Model (Phase 1)
 
@@ -2267,7 +2267,7 @@ Released: 2026-06-15
 - Register 10 `browser.*` event types in `agent/event-json.rkt`
 - 63 new tests: 19 types, 13 errors, 11 events, 10 adapter, 10 contracts
 
-## v0.86.5 (2026-06-04)
+## v0.86.5 — 2026-06-04
 
 ### Audit Closure (Complete Remediation)
 
@@ -2284,7 +2284,7 @@ Released: 2026-06-15
 - Fix runner `file-has-rackunit-tests?` for self-running rackunit/text-ui files (F10)
 - Add `assistant.message.completed` + `stream.turn.completed` to event registry (F11)
 
-## v0.86.4 (2026-06-04)
+## v0.86.4 — 2026-06-04
 
 ### Audit Closure
 
@@ -2315,7 +2315,7 @@ Post-implementation audit closure for v0.86.xx Test Suite Remediation series.
 - Added doc comments for internal settings accessors
 - Updated dependency-policy.rktd with moved paths and new risk notes
 
-## v0.86.3 (2026-06-03)
+## v0.86.3 — 2026-06-03
 
 ### Performance & Parallel Safety
 
@@ -2323,7 +2323,7 @@ Post-implementation audit closure for v0.86.xx Test Suite Remediation series.
 - Replaced fixed /tmp/test* paths with unique paths using (random 1000000)
 - 6 files fixed: test-iteration, test-iteration-integration, test-iteration-working-set, test-iteration-transitions, test-tool-coordinator-duration, test-arch-01-regression
 
-## v0.86.2 (2026-06-03)
+## v0.86.2 — 2026-06-03
 
 ### Mock Updates & Logic Fixes
 
@@ -2333,7 +2333,7 @@ Post-implementation audit closure for v0.86.xx Test Suite Remediation series.
 - test-firecrawl: truncate-string format fix
 - test-pipeline-smoke: accept stream.turn.completed
 
-## v0.86.1 (2026-06-03)
+## v0.86.1 — 2026-06-03
 
 ### Contract & Structural Drift Remediation
 
@@ -2353,7 +2353,7 @@ Post-implementation audit closure for v0.86.xx Test Suite Remediation series.
 - Fixed 10 test files: preamble changes, struct arity, queue API, event types
 - Updated architecture tests: file paths, command list, thresholds
 
-## v0.86.0 (2026-06-03)
+## v0.86.0 — 2026-06-03
 
 ### Test Foundation: Module Paths, Exports, False Positives
 
@@ -2376,7 +2376,7 @@ Post-implementation audit closure for v0.86.xx Test Suite Remediation series.
 **W3 (#6862): False positive investigation (5 files)**
 - Confirmed: all 5 files pass individually or hang under raco test (no failure)
 
-## v0.85.3 (2026-06-03)
+## v0.85.3 — 2026-06-03
 
 ### God Struct Decomposition
 
@@ -2396,7 +2396,7 @@ Post-implementation audit closure for v0.86.xx Test Suite Remediation series.
 - 90+ session/lifecycle/compaction tests pass
 - `agent-session` struct now 16 fields (was 24)
 
-## v0.85.2 (2026-06-03)
+## v0.85.2 — 2026-06-03
 
 ### Layer Dependency Cleanup
 
@@ -2416,7 +2416,7 @@ Post-implementation audit closure for v0.86.xx Test Suite Remediation series.
 - reload-config!: any/c → session-config? → (values session-config? model-registry?)
 - Add 7 contract tests for wiring/run-modes
 
-## v0.85.1 (2026-06-03)
+## v0.85.1 — 2026-06-03
 
 ### Typed Racket Migration & Facade Assessment
 
@@ -2434,7 +2434,7 @@ Post-implementation audit closure for v0.86.xx Test Suite Remediation series.
 - Assessed tools/tool.rkt facade — KEEP as stable public API
 - Verified: zero consumers bypass facade to import sub-modules directly
 
-## v0.85.0 (2026-06-03)
+## v0.85.0 — 2026-06-03
 
 ### Test Quality & Quick Wins
 
@@ -2453,7 +2453,7 @@ Post-implementation audit closure for v0.86.xx Test Suite Remediation series.
 - Replace all-from-out in extensions/gsd/core.rkt with explicit list
 - Replace all-defined-out in extensions/gsd/event-structs.rkt with explicit list
 
-## v0.84.4 (2026-06-03)
+## v0.84.4 — 2026-06-03
 
 ### Fixed
 
@@ -2463,7 +2463,7 @@ Post-implementation audit closure for v0.86.xx Test Suite Remediation series.
 - **P2**: Tool execution CWD now falls back to `(current-directory)` instead of session directory when no project-dir is configured (BUG-4, `tool-coordinator.rkt`)
 - `find` result metadata now includes `scanned` count for observability
 
-## v0.84.3 (2026-06-03)
+## v0.84.3 — 2026-06-03
 
 ### Documentation Reconciliation
 
@@ -2490,7 +2490,7 @@ Post-implementation audit closure for v0.86.xx Test Suite Remediation series.
 - safe-mode-state.rkt: `allowed-path?` has `simplify-path` fallback when `resolve-path` fails
 - write.rkt + edit.rkt: `log-warning` on path canonicalization failure
 
-## v0.84.1 (2026-06-03)
+## v0.84.1 — 2026-06-03
 
 ### Contract Tightening
 
@@ -2506,7 +2506,7 @@ Post-implementation audit closure for v0.86.xx Test Suite Remediation series.
 - `queue.rkt`: define queue-element? as string?, tighten enqueue/dequeue contracts
 - 20 contract tests in `test-contract-tightening.rkt` (all pass)
 
-## v0.84.0 (2026-06-03)
+## v0.84.0 — 2026-06-03
 
 ### Facade Purge & Version Sync
 
@@ -2516,7 +2516,7 @@ Post-implementation audit closure for v0.86.xx Test Suite Remediation series.
   - 620 files changed, 1048 insertions(+), 1399 deletions(-)
   - Zero deprecated facades remain in q/
 
-## v0.83.12 (2026-06-03)
+## v0.83.12 — 2026-06-03
 
 ### TUI Status Bar Visual Gap
 
@@ -2539,7 +2539,7 @@ Post-implementation audit closure for v0.86.xx Test Suite Remediation series.
 - Prevents provider 500 "System message must be at the beginning" when first message was user role
 - Consecutive system messages already merged by `merge-consecutive-roles` in `build-raw-messages`
 
-## v0.83.11 (2026-06-03)
+## v0.83.11 — 2026-06-03
 
 ### Audit Closure Hotfix
 
@@ -2548,7 +2548,7 @@ Post-implementation audit closure for v0.86.xx Test Suite Remediation series.
 - Fix stale test: `spawn-subagents rejects maxParallel > 3` → `clamps maxParallel > 3`
   - Test now expects success since v0.83.10 T15 changed behavior to clamp
 
-## v0.83.10 (2026-06-03)
+## v0.83.10 — 2026-06-03
 
 ### Audit Closure — Runtime Fixes, Workflow Contracts, Metadata Tags
 
@@ -2572,27 +2572,27 @@ Post-implementation audit closure for v0.86.xx Test Suite Remediation series.
 - T6: Document 6 metadata tags in `TEST_CONVENTIONS.md` with reference table
 - T16: Version bump to v0.83.10
 
-## v0.83.9 (2026-06-03)
+## v0.83.9 — 2026-06-03
 
 ### Series Closure, Metrics, and Release Readiness
 - **Metrics report**: Before/after metrics for v0.83.xx series (10 milestones, 23 PRs, 176+ tests).
 - **Test conventions doc**: `docs/TEST_CONVENTIONS.md` with suite guide, metadata tags, sandbox, scenario harnesses, gate evidence.
 - **Series complete**: All 10 milestones (v0.83.0–v0.83.9) delivered.
 
-## v0.83.8 (2026-06-03)
+## v0.83.8 — 2026-06-03
 
 ### Process Cleanup, Output Bounds, and Flake Burn-In
 - **Unique failure log names**: `make-unique-log-name` uses path hash to avoid basename collisions.
 - **Output truncation**: `truncate-test-output` caps test output at 64KB with head+tail+marker.
 - **Timeout cleanup tests**: `test-run-tests-timeout-cleanup.rkt` with 7 tests.
 
-## v0.83.7 (2026-06-03)
+## v0.83.7 — 2026-06-03
 
 ### Workflow Contract Suite
 - **Command surface contracts**: `tests/workflows/test-command-surface-contract.rkt` with 12 tests covering cmd-ctx construction, command parsing, state transitions.
 - **Provider/tool workflow contracts**: `tests/workflows/test-provider-tool-workflow-contract.rkt` with 7 tests covering single tool roundtrip, blocked tool, multi-tool ordering, result/response structure, error scenarios.
 
-## v0.83.6 (2026-06-03)
+## v0.83.6 — 2026-06-03
 
 ### Goal and TUI Scenario Harnesses
 - **Goal scenario harness**: `tests/helpers/goal-scenarios.rkt` with event/status capture, fake run-prompt factories, goal provider factories (no-progress, tool-timeout), shutdown check helpers.
@@ -2601,7 +2601,7 @@ Post-implementation audit closure for v0.86.xx Test Suite Remediation series.
 - **TUI concurrency tests**: `test-tui-event-pipeline-concurrency.rkt` with 8 tests (thread-safe concurrent put!, concurrent put+read, frame snapshot).
 - **TUI frame integrity**: `test-tui-frame-integrity.rkt` with 6 tests (row independence, dirty flag determinism, concurrent snapshot creation).
 
-## v0.83.5 (2026-06-03)
+## v0.83.5 — 2026-06-03
 
 ### Provider and Tool-Turn Scenario Harnesses
 - **Provider scenario DSL**: `tests/helpers/provider-scenarios.rkt` with `scenario-text`, `scenario-tool-call`, `scenario-multi-tool`, `scenario-streaming`, `scenario-error`, `scenario-rate-limit`, `scenario-finish-length`, `make-scenario-provider` with request capture.
@@ -2609,7 +2609,7 @@ Post-implementation audit closure for v0.86.xx Test Suite Remediation series.
 - **Shell tokenizer progress tests**: `test-shell-tokenizer-progress.rkt` with 6 tests covering 45+ special character payloads, termination, nested bracket handling, mismatched quote resilience.
 - **Tests**: 16 provider scenario tests, 15 tool-turn scenario tests, 6 tokenizer tests.
 
-## v0.83.4 (2026-06-03)
+## v0.83.4 — 2026-06-03
 
 ### Suite Taxonomy Migration and No-New-Drift Lints
 - **Metadata-backed classification**: `slow-file?`, `tui-file?`, `mutating-file?` now check `@speed`/`@suite`/`@mutates` metadata tags before falling back to heuristics.
@@ -2618,7 +2618,7 @@ Post-implementation audit closure for v0.86.xx Test Suite Remediation series.
 - **Tests**: `test-run-tests-metadata-classification.rkt` (9 tests), `test-test-lint.rkt` (7 tests).
 - Report-only mode — no enforcement in this milestone.
 
-## v0.83.3 (2026-06-03)
+## v0.83.3 — 2026-06-03
 
 ### Canonical Test Sandbox and Isolation Pilot
 - **Sandbox helper**: new `tests/helpers/test-sandbox.rkt` with `with-test-sandbox`.
@@ -2630,7 +2630,7 @@ Post-implementation audit closure for v0.86.xx Test Suite Remediation series.
 - **Fixture adapter**: `with-isolated-temp-dir` in `tests/helpers/fixtures.rkt` wraps sandbox for existing tests.
 - No mass migration — all existing tests backward compatible.
 
-## v0.83.2 (2026-06-03)
+## v0.83.2 — 2026-06-03
 
 ### Metadata Parser and Fixture Self-Test Inclusion
 - **Metadata parser**: new `scripts/test-metadata.rkt` parses `@suite`, `@boundary`, `@speed`, `@mutates`, `@isolation`, `@timeout` annotations from test file headers.
@@ -2641,7 +2641,7 @@ Post-implementation audit closure for v0.86.xx Test Suite Remediation series.
 - `all` suite: 760→762 files, `workflows` suite: 24→26 files.
 - 10 new metadata parser tests.
 
-## v0.83.1 (2026-06-03)
+## v0.83.1 — 2026-06-03
 
 ### Runner Safety and Gate Evidence v2
 - **Strict argument validation**: reject unknown suite names, `--jobs 0`/negative, `--repeat 0`/negative, `--timeout 0`/negative, unknown `--flags`.
@@ -2650,7 +2650,7 @@ Post-implementation audit closure for v0.86.xx Test Suite Remediation series.
 - `run-suite-once` now returns `(values exit-code results)` for evidence capture.
 - 17 new runner tests (13 arg validation + 4 gate evidence).
 
-## v0.83.0 (2026-06-03)
+## v0.83.0 — 2026-06-03
 
 ### Test Truth Baseline and Inventory
 - Add `--inventory` report mode to `scripts/run-tests.rkt`.
@@ -2658,7 +2658,7 @@ Post-implementation audit closure for v0.86.xx Test Suite Remediation series.
 - 9 new runner inventory tests.
 - No suite selection behavior changed.
 
-## v0.82.6 (2026-06-02)
+## v0.82.6 — 2026-06-02
 
 ### Goal Feature Hotfix
 - **F-1 CRITICAL**: Wire `agent-session-box` through TUI context pipeline — was always `#f`, so `/goal` always failed.
@@ -2670,26 +2670,26 @@ Post-implementation audit closure for v0.86.xx Test Suite Remediation series.
 - Update `cmd-ctx` struct (12→13 fields) and `tui-ctx` struct (19→21 fields).
 - Update 10 test files for new cmd-ctx constructor arity.
 
-## v0.82.5 (2026-06-02)
+## v0.82.5 — 2026-06-02
 
 ### Feature Flag Activation
 - Flip `current-goal-loop-enabled?` default to `#t` — goal loop is now active by default.
 - Updated `docs/getting-started/goal.md` with activation note.
 
-## v0.82.4 (2026-06-02)
+## v0.82.4 — 2026-06-02
 
 ### GUI Activation + Integration Tests
 - Wire GUI `/goal` handler to `goal-run!` (mirrors TUI pattern).
 - Feature flag guard with session-null safety.
 - 2 new GUI goal tests (feature flag guard + enable path).
 
-## v0.82.3 (2026-06-02)
+## v0.82.3 — 2026-06-02
 
 ### System Instruction Injection
 - Prepend turn context and evidence instructions to every goal turn.
 - System instructions include turn count, max turns, and goal text.
 
-## v0.82.2 (2026-06-02)
+## v0.82.2 — 2026-06-02
 
 ### TUI /goal Core Activation
 - Wire `goal-run!` in `handle-goal-command` replacing stub message.
@@ -2697,27 +2697,27 @@ Post-implementation audit closure for v0.86.xx Test Suite Remediation series.
 - Event bridge adapter for goal-runner → event bus.
 - Feature flag guard (`current-goal-loop-enabled?` default `#f`).
 
-## v0.82.1 (2026-06-02)
+## v0.82.1 — 2026-06-02
 
 ### Goal Wiring Foundation
 - Add `agent-session-box` field to `cmd-ctx` struct for goal-runner access.
 - Create `tui/commands/goal-bridge.rkt` with `make-goal-event-bridge` and `make-goal-run-prompt!`.
 
-## v0.82.0 (2026-06-02)
+## v0.82.0 — 2026-06-02
 
 ### Goal Feature Foundation
 - Fix `extract-transcript-from-result` to handle `loop-result?` struct.
 - Add `current-goal-loop-enabled?` feature flag (default `#f`).
 - Remove all facade-dependent imports in `runtime/session/`, `runtime/compaction/`, `util/message/`.
 
-## v0.81.5 (2026-06-02)
+## v0.81.5 — 2026-06-02
 
 ### runtime/ Safe Sub-Packaging
 - Moved 10 compaction files into `runtime/compaction/` sub-package.
 - Moved 17 session core files into `runtime/session/` sub-package.
 - All re-export facades at original paths, deprecated for v0.83 removal.
 
-## v0.81.4 (2026-06-02)
+## v0.81.4 — 2026-06-02
 
 ### runtime/ Safe Sub-Packaging
 - Moved 8 goal files into `runtime/goal/` sub-package.
@@ -2725,7 +2725,7 @@ Post-implementation audit closure for v0.86.xx Test Suite Remediation series.
 - Moved 6 context surface files into `runtime/context/` sub-package.
 - All re-export facades at original paths, deprecated for v0.83 removal.
 
-## v0.81.3 (2026-06-02)
+## v0.81.3 — 2026-06-02
 
 ### util/ Event + Error + Message Sub-Packages
 - Moved 9 event files into `util/event/` sub-package.
@@ -2733,28 +2733,28 @@ Post-implementation audit closure for v0.86.xx Test Suite Remediation series.
 - Moved 3 message files into `util/message/` sub-package (including deprecated protocol-types.rkt).
 - All re-export facades at original paths, deprecated for v0.83 removal.
 
-## v0.81.2 (2026-06-02)
+## v0.81.2 — 2026-06-02
 
 ### util/ Safe Reclassification
 - Moved 20 files into 8 sub-packages with re-export facades.
 - `util/export/`, `util/tool/`, `util/json/`, `util/safe-mode/`, `util/path/`, `util/fsm/`, `util/content/`, `util/extension/`
 - All facades marked DEPRECATED with target removal in v0.83.
 
-## v0.81.1 (2026-06-02)
+## v0.81.1 — 2026-06-02
 
 ### Protocol-Types Migration
 - Migrated source imports away from `util/protocol-types.rkt` to focused canonical sub-modules.
 - Added source migration guardrail test for non-test facade references.
 - Marked `util/protocol-types.rkt` as deprecated with target removal in v0.82+.
 
-## v0.81.0 (2026-06-02)
+## v0.81.0 — 2026-06-02
 
 ### SSE Dedup + Contract Tightening
 - Azure OpenAI SSE inline loop migrated to shared stream-sse-events
 - any/c contracts tightened in stream-runner.rkt (7) and loop-phases.rkt (15)
 - with-safe-fallback logging + placeholder test fixes
 
-## v0.80.5 (2026-06-01)
+## v0.80.5 — 2026-06-01
 
 ### Architecture Polish
 - Protocol-types facade consumer migration (14 files migrated to direct imports)
@@ -2766,7 +2766,7 @@ Post-implementation audit closure for v0.86.xx Test Suite Remediation series.
 - Struct mutability tests (8 tests)
 
 
-## v0.79.0 (2026-06-01)
+## v0.79.0 — 2026-06-01
 
 ### Final Context Assembly Activation
 
@@ -2810,7 +2810,7 @@ Post-implementation audit closure for v0.86.xx Test Suite Remediation series.
 - session mutation: expanded (archive callback)
 - auto-distillation: 12 tests
 
-## v0.78.6 (2026-06-01)
+## v0.78.6 — 2026-06-01
 
 ### Post-Audit Remediation
 
@@ -2858,7 +2858,7 @@ All feature flags remain OFF by default — no behavior change without explicit 
 #### W4: README Sync (W2)
 - Synced README status section to reflect v0.78.6
 
-## v0.78.0 (2026-06-01)
+## v0.78.0 — 2026-06-01
 
 ### Comprehensive Context Assembly
 
@@ -2903,7 +2903,7 @@ All feature flags remain OFF by default -- no behavior change without explicit a
 #### Integration Tests
 - Expanded from 7 to 12 integration tests covering all 10 gaps
 
-## v0.77.10 (2026-06-01)
+## v0.77.10 — 2026-06-01
 
 ### Deep Audit Finding Resolution
 
@@ -2929,7 +2929,7 @@ All feature flags remain OFF by default — no behavior change without explicit 
 - New `test-context-assembly-integration.rkt` with 5 tests exercising full pipeline
 - Tests: graph selection with dependencies, bounded profile, rollback callbacks, WS evolution, auto-distill
 
-## v0.77.9 (2026-06-01)
+## v0.77.9 — 2026-06-01
 
 ### Post-v0.77.xx Audit Remediation
 
@@ -2961,7 +2961,7 @@ v0.77.0 delivered pure library modules; v0.77.9 wires them into the runtime.
 - `runtime/session-events.rkt` — WS evolution subscriber
 - `runtime/session-config.rkt` — config-context-assembly-profile accessor
 
-## v0.77.0 (2026-06-01)
+## v0.77.0 — 2026-06-01
 
 ### Advanced Context Assembly Completion
 
@@ -3004,7 +3004,7 @@ v0.77.0 delivered pure library modules; v0.77.9 wires them into the runtime.
 - record_conclusion gains optional dependencies arg; old calls unaffected.
 
 
-## v0.76.9 (2026-06-01)
+## v0.76.9 — 2026-06-01
 
 ### Post-v0.76.8 Audit Hotfix
 
@@ -3018,7 +3018,7 @@ Fixes 2 CRITICAL + 3 WARNING findings from v0.76.8 audit.
 - Updated HANDOFF.json current_version to 0.76.8
 - Moved 2 test-cases inside their test-suite forms (test-record-conclusion.rkt, test-session-task-state.rkt)
 
-## v0.76.8 (2026-06-01)
+## v0.76.8 — 2026-06-01
 
 ### Post-v0.76.7 Audit Closure
 
@@ -3041,7 +3041,7 @@ Fixes 2 CRITICAL + 3 WARNING findings from v0.76.8 audit.
 - Integration test for `tool.set-task-state.completed` → session state change (C3 regression guard)
 - Session handler test: `origin-message-ids` populated from event payload
 
-## v0.76.7 (2026-06-01)
+## v0.76.7 — 2026-06-01
 
 ### Audit Closure for v0.76.xx Context Assembly Activation
 
@@ -3074,7 +3074,7 @@ No behavior change (feature flag still defaults `#f`).
   migrated to shared `make-test-session` fixture
 
 
-## v0.76.6 (2026-05-31)
+## v0.76.6 — 2026-05-31
 
 ### Context Assembly Activation — Production Hardening (M7)
 
@@ -3094,7 +3094,7 @@ Final milestone: context efficiency dashboard, ADR, cleanup.
 - test-state-aware-assembly.rkt: end-to-end state-dependent assembly
 
 
-## v0.76.5 (2026-05-31)
+## v0.76.5 — 2026-05-31
 
 ### Context Assembly Activation — Conclusion Dependencies (M6)
 
@@ -3112,7 +3112,7 @@ Sixth milestone: track file dependencies on conclusions for traceability.
   backward compatibility
 
 
-## v0.76.4 (2026-05-31)
+## v0.76.4 — 2026-05-31
 
 ### Context Assembly Activation — Working-Set Evolution (M5)
 
@@ -3133,7 +3133,7 @@ filters or excludes the WS.
 - test-ws-evolution.rkt: per-state WS levels, conclusion overlay
 
 
-## v0.76.3 (2026-05-31)
+## v0.76.3 — 2026-05-31
 
 ### Context Assembly Activation — Graduated Activation (M4)
 
@@ -3153,7 +3153,7 @@ A/B comparison harness, and rollback triggers.
 - test-rollback-triggers.rkt: all 3 trigger conditions, threshold boundaries
 
 
-## v0.76.2 (2026-05-31)
+## v0.76.2 — 2026-05-31
 
 ### Context Assembly Activation — Measurement Infrastructure (M3)
 
@@ -3175,7 +3175,7 @@ Purely additive — no behavior change.
   assembly wrapper)
 
 
-## v0.76.1 (2026-05-31)
+## v0.76.1 — 2026-05-31
 
 ### Context Assembly Activation — System Prompt Integration (M2)
 
@@ -3196,7 +3196,7 @@ state-aware instructions into the system prompt.
   record_conclusion references, conclusion count, no duplicates)
 
 
-## v0.76.0 (2026-05-31)
+## v0.76.0 — 2026-05-31
 
 ### Context Assembly Activation — Gap Closure (M1)
 
@@ -3225,7 +3225,7 @@ so state-aware context assembly is technically complete.
 - test-state-relevance.rkt: 11 tests (all states × categories)
 
 
-## v0.75.9 (2026-05-31)
+## v0.75.9 — 2026-05-31
 
 ### Post-v0.75.8 Audit Fix
 
@@ -3238,7 +3238,7 @@ so state-aware context assembly is technically complete.
 - test-gui-state-sync.rkt: 27 tests (+3: parallel tool correlation, mixed OK/FAIL, orphan completion)
 - test-save-conclusion.rkt: 16 tests (+2: string args for set-task-state)
 
-## v0.75.8 (2026-05-31)
+## v0.75.8 — 2026-05-31
 
 ### Post-v0.75.7 Audit Fix
 
@@ -3253,7 +3253,7 @@ so state-aware context assembly is technically complete.
 - test-gsd-plan-validator.rkt: 10 tests (updated docs-only plan expectation)
 - test-gsd-plan-validator-unit.rkt: 14 tests (updated docs-only plan expectations)
 
-## v0.75.7 (2026-05-30)
+## v0.75.7 — 2026-05-30
 
 ### GUI/GSD Workflow Usability Fixes
 
@@ -3276,7 +3276,7 @@ so state-aware context assembly is technically complete.
 - 6 tests in serialization.rkt module+test (execution instruction pinning)
 
 
-## v0.75.6 (2026-05-30)
+## v0.75.6 — 2026-05-30
 
 ### Audit Closure (v0.75.6)
 
@@ -3289,7 +3289,7 @@ so state-aware context assembly is technically complete.
 - **Dual Input**: Context assembly accepts both fsm-state structs and bare symbols.
 - **14 new tests** in `test-v0756-audit-closure.rkt`.
 
-## v0.75.5 (2026-05-30)
+## v0.75.5 — 2026-05-30
 
 ### Advanced Context Assembly (v0.75.0-v0.75.5)
 
@@ -3302,7 +3302,7 @@ so state-aware context assembly is technically complete.
 - ~106 new tests across 7 test files
 
 
-## v0.74.8 (2026-05-31)
+## v0.74.8 — 2026-05-31
 
 ### Context-Assembly Contract Bugfix + Test Quality Remediation
 
@@ -3314,7 +3314,7 @@ so state-aware context assembly is technically complete.
 - Test count: 6 → 13 (all meaningful assertions, temp-dir isolated)
 - Version bump 0.74.7 → 0.74.8
 
-## v0.74.7 -- 2026-05-31
+## v0.74.7 — 2026-05-31
 
 ### Audit Closure (W0 + W1 + W2)
 - **W0**: Fixed stale `loop-state.rkt` references (moved from `runtime/` to `agent/` in v0.73.4)
@@ -3334,7 +3334,7 @@ so state-aware context assembly is technically complete.
   - Version bump 0.74.6 → 0.74.7
 
 
-## v0.74.6 -- 2026-05-30
+## v0.74.6 — 2026-05-30
 
 ### Architecture Controls & Release (M7)
 - **W0**: Activated CI gates
@@ -3356,7 +3356,7 @@ so state-aware context assembly is technically complete.
 - Architecture controls activation
 
 
-## v0.74.5 -- 2026-05-30
+## v0.74.5 — 2026-05-30
 
 ### GSD Boundary Clarification + TUI Render Extraction (M6)
 - **W0**: Added 8 boundary tests for gsd/core.rkt contract-out API
@@ -3366,7 +3366,7 @@ so state-aware context assembly is technically complete.
   - Version bump 0.74.4 → 0.74.5
 
 
-## v0.74.4 -- 2026-05-30
+## v0.74.4 — 2026-05-30
 
 ### Session Lifecycle FSM Extraction (M5)
 - **W0**: Expanded pure function tests (8 test cases, 19 assertions)
@@ -3379,7 +3379,7 @@ so state-aware context assembly is technically complete.
   - Special characters, long strings, malformed entries, message order preservation
 
 
-## v0.74.3 -- 2026-05-30
+## v0.74.3 — 2026-05-30
 
 ### Widened Contract Reconciliation — Investigation Batch (M4)
 - Deep caller analysis of 17 investigate-category contracts
@@ -3396,7 +3396,7 @@ so state-aware context assembly is technically complete.
   - `gsd/wave-docs.rkt`: parse-wave-doc-from-string → specific arg types
 
 
-## v0.74.2 -- 2026-05-30
+## v0.74.2 — 2026-05-30
 
 ### Widened Contract Reconciliation (M3)
 - **W0**: Audited 120+ `any/c` positions in contract-out forms across all layers
@@ -3416,7 +3416,7 @@ so state-aware context assembly is technically complete.
 - Reverted 2 auth-store tightenings that broke intentional polymorphic tests
 
 
-## v0.74.1 -- 2026-05-30
+## v0.74.1 — 2026-05-30
 
 ### Session Store Cycle Elimination (M2)
 - **W0**: Eliminated `lazy-require` circular dependency between `session-store.rkt`
@@ -3426,7 +3426,7 @@ so state-aware context assembly is technically complete.
 - **W2**: Version bump to 0.74.1
 
 
-## v0.74.0 -- 2026-05-30
+## v0.74.0 — 2026-05-30
 
 ### Fitness Functions & Quick Wins (M1 W0)
 
@@ -3437,7 +3437,7 @@ so state-aware context assembly is technically complete.
 - **Clean** README — remove 214 excess blank lines
 - **New** 11 tool security edge-case tests using shell-risk classifier
 
-## v0.73.8 -- 2026-05-30
+## v0.73.8 — 2026-05-30
 
 ### Audit Closure (A-7)
 
@@ -3446,7 +3446,7 @@ so state-aware context assembly is technically complete.
 - **W2:** Complete shared timing adoption — fix `timing.rkt` contract to accept `real?`, replace inline timing logs in `anthropic.rkt` and `gemini.rkt`
 - **W3:** Add `contract-out` to `step-interpreter.rkt` for `interpret-step`, `handle-stop-action`, `execute-pending-tool-calls`, `sink-append-entries!`
 
-## v0.73.7 -- 2026-05-30
+## v0.73.7 — 2026-05-30
 
 ### Extension Tests + Contract Completion (T-6/A-6b)
 
@@ -3459,7 +3459,7 @@ so state-aware context assembly is technically complete.
 
 41 new test cases. Sandbox security boundary now has typed contracts.
 
-## v0.73.6 -- 2026-05-30
+## v0.73.6 — 2026-05-30
 
 ### Observability Infrastructure (T-3/T-4/T-5)
 
@@ -3472,7 +3472,7 @@ so state-aware context assembly is technically complete.
 **New loggers:** `q-loop-fsm`, `q-main-loop`, `q-tool-registry`, `q-openai`,
 `q-turn-orch`, `q-session-lifecycle`. All additive — no behavior changes.
 
-## v0.73.5 -- 2026-05-30
+## v0.73.5 — 2026-05-30
 
 ### Credential Backend Decomposition (A-4)
 
@@ -3491,7 +3491,7 @@ modules under `runtime/credentials/`:
 
 `credential-backend.rkt` becomes a re-export facade. Zero API changes.
 
-## v0.73.4 -- 2026-05-30
+## v0.73.4 — 2026-05-30
 
 ### Iteration Layer Migration (A-1)
 
@@ -3506,7 +3506,7 @@ mechanics. Moving them aligns code location with conceptual ownership.
 **~80 import paths** updated across source and test files.
 Zero logic changes. All existing tests pass.
 
-## v0.73.3 -- 2026-05-30
+## v0.73.3 — 2026-05-30
 
 ### Core Loop Tests: State Machines + Dispatch (T-1b)
 
@@ -3518,7 +3518,7 @@ Zero logic changes. All existing tests pass.
 
 **38 new test cases** across 3 test files. Zero logic changes.
 
-## v0.73.2 -- 2026-05-30
+## v0.73.2 — 2026-05-30
 
 ### Tool Builtins + Security Tests (T-2/T-7/S-1/S-2)
 
@@ -3533,7 +3533,7 @@ Zero logic changes. All existing tests pass.
 
 **47 new test cases** across 6 test files. Zero logic changes.
 
-## v0.73.1 -- 2026-05-30
+## v0.73.1 — 2026-05-30
 
 ### Architecture Fixes + Code Quality (A-2/A-3/Q-1/Q-2/Q-3)
 
@@ -3559,7 +3559,7 @@ Zero logic changes. Pure mechanical refactoring.
 
 **43 new test cases** across 3 previously untested modules. Zero source changes.
 
-## v0.72.8 — 
+## v0.72.8 — 2026-05-30
 
 ### Audit Closure
 
@@ -3575,7 +3575,7 @@ Close 5 remaining findings from v0.72.xx post-implementation audit.
 
 **Files changed:** directive.rkt, tool-coordinator.rkt, event-bus.rkt, in-memory.rkt, turn-reducer.rkt, session-mutation.rkt, state-types.rkt, test-step-directive.rkt, test-turn-reducer.rkt, test-component-model.rkt
 
-## v0.72.7 — 
+## v0.72.7 — 2026-05-30
 
 ### Phase 5: Long-Term Patterns + Sweep
 
@@ -3596,7 +3596,7 @@ TUI reducer pattern + event registry lifecycle + mutable hash audit + naming cle
 
 **Files changed:** commands.rkt, state-events.rkt, component.rkt, tui-render-loop.rkt, goal-types.rkt, goal-runner.rkt, define-tool.rkt, compactor.rkt, core.rkt, scheduler.rkt, event-macro.rkt, settings.rkt, model-registry.rkt
 
-## v0.72.6 — 
+## v0.72.6 — 2026-05-30
 
 ### Phase 4b: Module Decomposition II
 
@@ -3610,7 +3610,7 @@ Event-structs explicit provides + event-bus documentation.
 
 **Files changed:** event-structs.rkt, extensions/api.rkt, context-assembly.rkt
 
-## v0.72.5 — 
+## v0.72.5 — 2026-05-30
 
 ### Phase 4a: Module Decomposition I
 
@@ -3624,7 +3624,7 @@ Session-store split + errors split + protocol-types documentation.
 
 **Files changed:** session-store/versioning.rkt (new), session-store/in-memory.rkt (new), session-store.rkt (facade), deprecation.rkt (new), errors.rkt, protocol-types.rkt
 
-## v0.72.4 — 
+## v0.72.4 — 2026-05-30
 
 ### Phase 3b: Opaque Representations
 
@@ -3639,7 +3639,7 @@ Struct opacity + goal-state split + mutable-set elimination.
 
 **Files changed:** `goal-types.rkt` (new), `goal-codec.rkt` (new), `goal-state.rkt` (facade), `turn-model.rkt`, `compactor.rkt`
 
-## v0.72.3 — 
+## v0.72.3 — 2026-05-30
 
 ### Phase 3a: Purity Enforcement
 
@@ -3652,7 +3652,7 @@ Pure/impure separation in agent loop.
 
 **Files changed:** `loop-dispatch.rkt` (new), `loop-phases.rkt`, `loop.rkt`, `tool-coordinator.rkt`
 
-## v0.72.2 — 
+## v0.72.2 — 2026-05-30
 
 ### Phase 2b: Boundary Contract Precision
 
@@ -3667,7 +3667,7 @@ Boundary tightening for tool-registry, settings, and state-types.
 
 **Files changed:** `tool-registry-struct.rkt`, `registry.rkt`, `settings.rkt`, `state-types.rkt`
 
-## v0.72.1 — 
+## v0.72.1 — 2026-05-30
 
 ### Phase 2a: Core Contract Precision
 
@@ -3681,7 +3681,7 @@ Contract tightening for core modules.
 
 **Files changed:** `loop-phases.rkt`, `session-mutation.rkt`
 
-## v0.72.0 — 
+## v0.72.0 — 2026-05-30
 
 ### Phase 1: Zero-Cost Fixes
 
@@ -3697,7 +3697,7 @@ Abstraction quality remediation — zero-risk fixes.
 
 **Files changed:** `session-types.rkt`, `session-mutation.rkt`, `session-compaction.rkt`, `effect-types.rkt`, `errors.rkt`, `goal-runner.rkt`, `util/time.rkt` (new)
 
-## v0.71.8 — 
+## v0.71.8 — 2026-05-30
 
 ### v0.71.7 Audit Closure
 
@@ -3717,7 +3717,7 @@ Post-implementation audit closure for the v0.71.7 hotfix. Test gaps + event payl
 **Files changed:** `goal-state.rkt`, `goal-runner.rkt` + 2 test files
 **Tests added:** 4 new/enhanced tests
 
-## v0.71.7 — 
+## v0.71.7 — 2026-05-30
 
 ### Goal Audit Hotfix
 
@@ -3974,7 +3974,7 @@ First milestone of the `/goal` autonomous goal-driven loop feature.
 ### Cross-Platform Credential Backends + Windows Install
 
 
-## v0.94.8 — Audit remediation, UX hardening, release closure
+## v0.94.8 — 2026-06-05 — Audit remediation, UX hardening, release closure
 
 ### Fixed
 - **W1 Null-safety**: Guard all callback invocations in `ui-surface.rkt` with `when cb`; fix `ui-callbacks-installed?` to check all 10 fields

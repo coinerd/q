@@ -13,19 +13,8 @@
          racket/port
          json
          "../../../scripts/run-dogfood-session.rkt"
-         "../../../scripts/capture-regression.rkt")
-
-;; ── Helpers ──
-
-(define (with-temp-dir proc)
-  (define dir (make-temporary-file "dogfood-test-~a" 'directory))
-  (with-handlers ([exn:fail? (lambda (e)
-                               (when (directory-exists? dir)
-                                 (delete-directory/files dir))
-                               (raise e))])
-    (begin0 (proc dir)
-      (when (directory-exists? dir)
-        (delete-directory/files dir)))))
+         "../../../scripts/capture-regression.rkt"
+         (only-in "../../helpers/fixtures.rkt" with-temp-dir))
 
 (define (write-task-json dir name spec)
   (define path (build-path dir (format "~a.json" name)))

@@ -28,19 +28,8 @@
          "../../../runtime/compaction/compactor.rkt"
          "../../../runtime/session/session-store.rkt"
          "../../../util/json/jsonl.rkt"
-         (only-in "../../../util/event/event.rkt" make-event))
-
-;; ── Helpers ──
-
-(define (with-temp-dir proc)
-  (define dir (make-temporary-file "ext-harden-~a" 'directory))
-  (with-handlers ([exn:fail? (lambda (e)
-                               (when (directory-exists? dir)
-                                 (delete-directory/files dir))
-                               (raise e))])
-    (begin0 (proc dir)
-      (when (directory-exists? dir)
-        (delete-directory/files dir)))))
+         (only-in "../../../util/event/event.rkt" make-event)
+         (only-in "../../helpers/fixtures.rkt" with-temp-dir))
 
 (define (result-text result)
   (string-join (for/list ([c (in-list (tool-result-content result))]

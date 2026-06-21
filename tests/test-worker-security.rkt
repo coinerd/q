@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite security
+
 ;; tests/test-worker-security.rkt
 ;; v0.99.3 W1: Worker security hardening regression tests.
 ;;

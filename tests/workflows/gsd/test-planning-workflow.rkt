@@ -23,19 +23,8 @@
          "../../../tools/tool.rkt"
          "../../../util/event/event-bus.rkt"
          "../fixtures/mock-provider.rkt"
-         "../fixtures/workflow-runner.rkt")
-
-;; ── Helpers ──
-
-(define (with-temp-dir proc)
-  (define dir (make-temporary-file "plan-workflow-~a" 'directory))
-  (with-handlers ([exn:fail? (lambda (e)
-                               (when (directory-exists? dir)
-                                 (delete-directory/files dir))
-                               (raise e))])
-    (begin0 (proc dir)
-      (when (directory-exists? dir)
-        (delete-directory/files dir)))))
+         "../fixtures/workflow-runner.rkt"
+         (only-in "../../helpers/fixtures.rkt" with-temp-dir))
 
 (define-runtime-path here-dir ".")
 (define gsd-ext-path (build-path here-dir ".." ".." ".." "extensions" "gsd-planning.rkt"))

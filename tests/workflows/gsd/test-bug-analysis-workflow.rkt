@@ -24,19 +24,8 @@
          "../../../extensions/ext-commands.rkt"
          "../../../extensions/hooks.rkt"
          "../../../tools/tool.rkt"
-         "../../../util/event/event-bus.rkt")
-
-;; ── Helpers ──
-
-(define (with-temp-dir proc)
-  (define dir (make-temporary-file "bug-workflow-~a" 'directory))
-  (with-handlers ([exn:fail? (lambda (e)
-                               (when (directory-exists? dir)
-                                 (delete-directory/files dir))
-                               (raise e))])
-    (begin0 (proc dir)
-      (when (directory-exists? dir)
-        (delete-directory/files dir)))))
+         "../../../util/event/event-bus.rkt"
+         (only-in "../../helpers/fixtures.rkt" with-temp-dir))
 
 (define (result-text result)
   (string-join (for/list ([c (in-list (tool-result-content result))]

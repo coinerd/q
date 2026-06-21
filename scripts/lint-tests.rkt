@@ -69,10 +69,17 @@
       (string-contains? str "/foo/bar.txt")
       (string-contains? str "/src/foo.rkt")
       (string-contains? str "/path/file.rkt")
+      (string-contains? str "/path/to/")
       (string-contains? str "/test/project")
       (string-contains? str "/plan.md")
       (string-contains? str "/compiled/")
       (string-contains? str "/tests/")
+      ;; Generic fake path prefixes used in test fixtures
+      (string-contains? str "/some/")
+      (string-contains? str "/other/")
+      (string-contains? str "/sess")
+      ;; Short fake filenames like /out.txt /in.txt /out2.txt /in2.txt
+      (regexp-match? #rx"^/(out|in)[0-9]?\\.[a-z]+$" str)
       ;; Regex patterns in test strings (contain character classes)
       (string-contains? str "[.]")
       ;; Single-char filenames like /a.rkt /b.rkt — clearly test fixtures

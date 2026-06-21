@@ -135,6 +135,7 @@
  (test-case "run-subprocess default env strips secrets"
    ;; Set a sensitive env var, run a subprocess that prints env,
    ;; and verify the secret is NOT present in the subprocess env.
+   ;; @mutates Q_TEST_SECRET_API_KEY
    (putenv "Q_TEST_SECRET_API_KEY" "should-be-stripped")
    (define result (run-subprocess "/bin/sh" #:args '("-c" "env")))
    (check-equal? (subprocess-result-exit-code result) 0)
