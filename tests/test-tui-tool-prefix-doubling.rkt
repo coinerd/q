@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite tui
+
 ;; test-tui-tool-prefix-doubling.rkt — Regression test for doubled tool name prefixes
 ;;
 ;; Bug: core-handlers embedded "[TOOL: name]" and "[OK: name]" in transcript entry text,

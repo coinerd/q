@@ -17,19 +17,12 @@
                   tool-result?
                   tool-result-content
                   tool-result-details
-                  tool-result-is-error?))
+                  tool-result-is-error?)
+         (only-in "helpers/fixtures.rkt" with-temp-dir))
 
 ;; ============================================================
 ;; Helpers
 ;; ============================================================
-
-(define (with-temp-dir thunk)
-  (define d (make-temporary-file "q-test-edge-~a" 'directory))
-  (dynamic-wind void
-                (λ () (thunk d))
-                (λ ()
-                  (with-handlers ([exn:fail? void])
-                    (delete-directory/files d)))))
 
 (define (result-content r)
   (define parts (tool-result-content r))

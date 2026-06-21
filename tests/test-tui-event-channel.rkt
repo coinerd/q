@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite tui
+
 ;; tests/test-tui-event-channel.rkt — BF1-ROOT regression test
 ;;
 ;; Verifies that the TUI event channel no longer has a bounded counter
