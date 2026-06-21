@@ -1,7 +1,7 @@
-<!-- verified-against: 0.99.36 -->
+<!-- verified-against: 0.99.37 -->
 # Distributed Execution Guide
 
-This guide covers q's **opt-in** distributed execution feature (v0.99.36, MAS Schritt 6 Phase 2). High-risk tool execution can be routed to a remote executor node over mTLS-secured TCP, isolating hostile code from the developer machine.
+This guide covers q's **opt-in** distributed execution feature (v0.99.37, MAS Schritt 6 Phase 2). High-risk tool execution can be routed to a remote executor node over mTLS-secured TCP, isolating hostile code from the developer machine.
 
 > **Default is local-only.** No configuration changes are needed for local development. The broker is strictly opt-in behind `mas.broker.enabled = false`.
 
