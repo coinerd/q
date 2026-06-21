@@ -100,6 +100,48 @@
       (check-equal? (transcript-entry-text (first loaded)) "entry 0")
       (check-equal? (transcript-entry-text (last loaded)) "entry 4")
       ;; Cleanup
-      (delete-directory/files tmp-dir))))
+      (delete-directory/files tmp-dir))
+
+    ;; v0.99.37 W3: Invalid-input boundary tests for scrollback deserialization
+    ;; §28: Deserialization must degrade gracefully on malformed input.
+
+    (test-case "SR5: empty hash produces default entry"
+      (reset-scrollback-id-counter!)
+      (define rt (jsexpr->transcript-entry (hash)))
+      (check-not-false rt "empty hash should not crash")
+      (check-equal? (transcript-entry-kind rt) 'system "missing kind defaults to system")
+      (check-equal? (transcript-entry-text rt) "" "missing text defaults to empty"))
+
+    (test-case "SR6: missing text key uses empty-string default"
+      (reset-scrollback-id-counter!)
+      (define h (hasheq 'kind "assistant" 'timestamp 100))
+      (define rt (jsexpr->transcript-entry h))
+      (check-equal? (transcript-entry-text rt) ""))
+
+    (test-case "SR7: missing meta key produces empty hash"
+      (reset-scrollback-id-counter!)
+      (define h (hasheq 'kind "assistant" 'text "hello" 'timestamp 100))
+      (define rt (jsexpr->transcript-entry h))
+      (check-equal? (hash-count (transcript-entry-meta rt)) 0))
+
+    (test-case "SR8: extra unknown keys are ignored"
+      (reset-scrollback-id-counter!)
+      (define h (hasheq 'kind "assistant" 'text "hello" 'timestamp 100 'bogusKey 'whatever))
+      (define rt (jsexpr->transcript-entry h))
+      (check-equal? (transcript-entry-text rt) "hello")
+      (check-not-false rt))
+
+    (test-case "SR9: load non-existent file returns empty list"
+      (define loaded (load-scrollback "/tmp/nonexistent-scrollback-12345.jsonl"))
+      (check-equal? loaded '()))
+
+    (test-case "SR10: round-trip preserves meta with nested hashes"
+      (reset-scrollback-id-counter!)
+      (define meta (hasheq 'a 1 'nested (hasheq 'b 2)))
+      (define original (transcript-entry 'tool-start "[TOOL: read]" 500 meta 10))
+      (define jsexpr (transcript-entry->jsexpr original))
+      (define restored (jsexpr->transcript-entry jsexpr))
+      (check-equal? (hash-ref (transcript-entry-meta restored) 'a) 1)
+      (check-equal? (hash-ref (hash-ref (transcript-entry-meta restored) 'nested) 'b) 2))))
 
 (run-tests scrollback-roundtrip-tests)

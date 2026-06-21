@@ -352,3 +352,43 @@
   (define rt (jsexpr->typed-event h))
   (check-equal? (typed-event-type rt) "bogus.event")
   (check-equal? (typed-event-session-id rt) "s1"))
+
+;; ============================================================
+;; v0.99.37 W3: Invalid-input boundary tests
+;; ============================================================
+;; §28: Deserialization must degrade gracefully on malformed input.
+;; These tests document the current behavior and ensure it doesn't crash.
+
+(test-case "invalid-input: empty hash produces base event with #f type"
+  (define rt (jsexpr->typed-event (hash)))
+  (check-not-false rt "empty hash should not crash")
+  (check-false (typed-event-type rt) "missing type yields #f"))
+
+(test-case "invalid-input: missing type key degrades gracefully"
+  (define h (hasheq 'timestamp 100 'sessionId "s1" 'turnId "t1"))
+  (define rt (jsexpr->typed-event h))
+  (check-not-false rt)
+  (check-false (typed-event-type rt)))
+
+(test-case "invalid-input: missing sessionId uses default empty string"
+  (define h (hasheq 'type "turn.start" 'timestamp 100))
+  (define rt (jsexpr->typed-event h))
+  (check-equal? (typed-event-type rt) "turn.start")
+  (check-equal? (typed-event-session-id rt) ""))
+
+(test-case "invalid-input: missing timestamp defaults to 0"
+  (define h (hasheq 'type "turn.start" 'sessionId "s1"))
+  (define rt (jsexpr->typed-event h))
+  (check-equal? (typed-event-timestamp rt) 0))
+
+(test-case "invalid-input: extra unknown keys are ignored"
+  (define h (hasheq 'type "turn.start" 'timestamp 100 'sessionId "s1" 'bogusKey 'whatever 'extra 42))
+  (define rt (jsexpr->typed-event h))
+  (check-equal? (typed-event-type rt) "turn.start")
+  (check-not-false rt))
+
+(test-case "invalid-input: schemaVersion higher than current logs warning but succeeds"
+  (define h (hasheq 'type "turn.start" 'timestamp 100 'sessionId "s1" 'schemaVersion 999))
+  (define rt (jsexpr->typed-event h))
+  (check-not-false rt)
+  (check-equal? (typed-event-type rt) "turn.start"))
