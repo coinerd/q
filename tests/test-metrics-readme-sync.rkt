@@ -118,3 +118,24 @@ EOF
   (check-true (string-contains? updated "Core types"))
   (check-true (string-contains? updated "Tool registry"))
   (check-true (string-contains? updated "Some other text here.")))
+
+(test-case "metrics: ignores untracked temp files (git ls-files fix)"
+  ;; Create an untracked temp .rkt file that should NOT inflate counts.
+  ;; The metrics script should use git ls-files, so this file is invisible.
+  (define-values (out-before err-before) (run-metrics))
+  (define source-before
+    (let ([m (regexp-match #rx"| Source modules | ([0-9]+) |" out-before)]) (and m (cadr m))))
+  ;; Create untracked file
+  (define tmp-path (build-path (simplify-path q-root) "tmp-metrics-inflation-test.rkt"))
+  (call-with-output-file tmp-path
+                         (lambda (out) (display "#lang racket/base\n(define bogus 42)\n" out))
+                         #:exists 'replace)
+  (define-values (out-after err-after) (run-metrics))
+  (define source-after
+    (let ([m (regexp-match #rx"| Source modules | ([0-9]+) |" out-after)]) (and m (cadr m))))
+  ;; Clean up
+  (delete-file tmp-path)
+  (check-equal?
+   source-before
+   source-after
+   (format "Source module count changed with temp file: ~a -> ~a" source-before source-after)))

@@ -34,18 +34,73 @@
 
 ;; --- Counting helpers ---
 
+;; Enumerate only git-tracked .rkt files to prevent untracked temp/debug
+;; files from inflating source/test counts.  Returns a list of path strings,
+;; or #f if git is unavailable or not in a repository.
+(define (git-tracked-rkt-files)
+  (define git-bin (find-executable-path "git"))
+  (and git-bin
+       (with-handlers ([exn:fail? (lambda (_) #f)])
+         (define out (open-output-string))
+         (define ok?
+           (parameterize ([current-output-port out]
+                          [current-error-port out])
+             (system* git-bin "ls-files" "--cached" "*.rkt")))
+         (and ok?
+              (let ([output (get-output-string out)])
+                (define parts (string-split output "\n"))
+                (define non-empty (filter non-empty-string? parts))
+                (and (pair? non-empty) non-empty))))))
+
+;; Check whether a path string refers to a file under the tests/ directory.
+;; Handles both "tests/foo.rkt" (git ls-files style) and
+;; "./tests/foo.rkt" (in-directory style).
+(define (path-under-tests? s)
+  (or (string-prefix? s "tests/") (string-contains? s "/tests/")))
+
+;; Predicate: should this file string be included in the count?
+(define (rkt-file-keep? s dir exclude?)
+  (and (string-suffix? s ".rkt")
+       (not (string-contains? s "/compiled/"))
+       (not (string-contains? s ".zo"))
+       (not (string-contains? s "/__pycache__/"))
+       (not (string-contains? s "/.git/"))
+       (if exclude?
+           (not (path-under-tests? s))
+           (if (equal? dir "tests")
+               (path-under-tests? s)
+               #t))))
+
+;; Return a list of .rkt file paths.
+;;
+;; When git is available, uses `git ls-files` so only **tracked** files are
+;; counted — untracked temp/debug files (e.g. tmp-debug-*.rkt) are excluded.
+;; Falls back to filesystem traversal via `in-directory` if git is absent.
+;;
+;; The `dir` argument controls the subset:
+;;   "tests" → only files under tests/
+;;   "."     → all tracked .rkt files
+;; When `#:exclude-tests?` is #t, files under tests/ are excluded
+;; (used for counting *source* modules only).
 (define (rkt-files dir #:exclude-tests? [exclude? #f])
-  (for/list ([f (in-directory dir)]
-             #:when (and (file-exists? f)
-                         (string-suffix? (path->string f) ".rkt")
-                         (not (string-contains? (path->string f) "/compiled/"))
-                         (not (string-contains? (path->string f) ".zo"))
-                         (not (string-contains? (path->string f) "/__pycache__/"))
-                         (not (string-contains? (path->string f) "/.git/"))
-                         (if exclude?
-                             (not (string-contains? (path->string f) "/tests/"))
-                             #t)))
-    f))
+  (define tracked (git-tracked-rkt-files))
+  (define candidates
+    (or tracked
+        ;; Fallback: walk the filesystem if git is unavailable
+        (for/list ([f (in-directory dir)]
+                   #:when (file-exists? f))
+          (path->string f))))
+  (filter (lambda (f)
+            (define s
+              (if (path? f)
+                  (path->string f)
+                  f))
+            (rkt-file-keep? s dir exclude?))
+          (map (lambda (f)
+                 (if (path? f)
+                     f
+                     (string->path f)))
+               candidates)))
 
 (define (line-count files)
   (for/sum ([f files])
