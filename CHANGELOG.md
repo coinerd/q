@@ -1,3 +1,113 @@
+## 0.99.37
+
+Released: 2026-06-23
+
+### Overview
+Racket Abstraction Manual Roadmap III — Boundary Semantics. This
+release continues the systematic abstraction improvement program with
+12 waves (W0–W11) focused on moving from ownership inventories to
+boundary semantics. The central theme is defining and hardening the
+boundaries between pure logic, I/O effects, serialization, and
+contract enforcement across the codebase. All changes are
+backward-compatible — public API surfaces are unchanged.
+
+### Documentation & Audits
+
+- **W0: Boundary semantics inventory + scorecard.** Scanned 695
+  modules, classified 40 struct-out forms, identified boundary
+  semantics patterns across 10 domains. Produced risk/reward
+  scorecard with GREEN, YELLOW, and RED candidates. Report:
+  `docs/reports/ABSTRACTION-BOUNDARY-SEMANTICS-v0.99.37-SUMMARY.md`.
+
+- **W1: Scanner v3 + review checklist.** Extended the abstraction
+  audit scanner with boundary-semantics detection (I/O boundary,
+  serializer boundary, result-type boundary). Updated review
+  checklist with boundary-semantics checks. Report:
+  `ABSTRACTION-REVIEW-CHECKLIST-v0.99.37.md`.
+
+- **W2: Benchmark/performance semantics boundary (P0).** Fixed the
+  `#8435` pattern where timing assertions cause false release
+  blockers. Replaced `check-true` timing assertions with correctness
+  checks + advisory `printf` timing output. Report:
+  `BENCHMARK-GATE-POLICY-v0.99.37.md`.
+
+- **W3: Serialization ownership boundary.** Mapped 10 serialization
+  domains. Fixed real bug in `agent/event-json.rkt` where
+  deserializer registration used wrong key. Hardened JSON round-trip
+  tests. Report: `SERIALIZATION-BOUNDARIES-v0.99.37.md`.
+
+- **W4: Result-type boundary pilot for metrics lint.** Created
+  `scripts/metrics-lint-result.rkt` with structured result types for
+  the metrics lint command. Report:
+  `RESULT-BOUNDARY-PILOT-v0.99.37.md`.
+
+- **W5: Contract hardening on boundary modules.** Added `contract-out`
+  to version-surface.rkt (9 fns), status-result.rkt (5 fns), and
+  lint-version-io.rkt (5 constructors). Mixed `struct-out` +
+  `contract-out` provide pattern established.
+
+- **W6: Port/effect-shell II.** Extended the port/effect-shell pattern
+  to the audit writer path. Extracted pure `audit-content` function,
+  added `current-audit-file->lines` parameter for mock I/O. Report:
+  `PORT-EFFECT-SHELL-v0.99.37.md`.
+
+- **W7: Parameter/private-state ownership.** Classified 8 parameter
+  ownership patterns (A–H). Confirmed only Pattern D (direct mutation)
+  is thread-unsafe. Pattern H (I/O Effect-Shell) identified as
+  healthiest. 5 parameters across lint-version-io.rkt and
+  abstraction-audit.rkt. Report:
+  `PARAMETER-PRIVATE-STATE-v0.99.37.md`.
+
+- **W8: TUI event handler boundary tests.** 32 boundary tests across
+  6 suites covering TUI state event handlers, handler helpers, and
+  registry isolation. Report:
+  `TUI-EVENT-BOUNDARIES-v0.99.37.md`.
+
+- **W9: Data-structure/cache/index encapsulation audit.** Mapped 12
+  global mutable hashes, 49 box state sites, 5 encapsulation patterns
+  (Semaphore-Guarded Box Swap, Parameterized Registry, Global
+  Cache+Clear, Self-Cleaning Lock Table, One-Shot Flag). 20 boundary
+  tests across 6 suites. Report:
+  `DATA-STRUCTURE-ENCAPSULATION-v0.99.37.md`.
+
+- **W10: RED module design docs.** Design-it-twice migration packages
+  for 4 high-risk modules (cli/args.rkt, wiring/run-modes.rkt,
+  scripts/run-tests.rkt, agent/event-structs.rkt). 31 golden-master
+  characterization tests. Recommendation: none need migration in
+  v0.99.37. Report: `RED-MODULE-DESIGN-v0.99.37.md`.
+
+### Code Improvements
+
+- W2: Replaced timing assertions with advisory output in benchmark
+  tests.
+- W3: Fixed event-json deserializer key bug.
+- W4: Extracted pure check function from metrics lint.
+- W5: Added contracts to 3 boundary modules (19 functions total).
+- W6: Extracted pure `audit-content` + I/O parameter.
+- W7: Documented parameter ownership patterns A–H.
+- W8: Added 32 boundary tests for TUI event handlers.
+- W9: Added 20 boundary tests for data structures.
+- W10: Added 31 characterization tests for RED modules.
+
+### New Modules
+
+- `scripts/metrics-lint-result.rkt` (W4): Result-type boundary for
+  metrics lint.
+
+### Reports Added
+
+- `ABSTRACTION-BOUNDARY-SEMANTICS-v0.99.37-SUMMARY.md`
+- `ABSTRACTION-REVIEW-CHECKLIST-v0.99.37.md`
+- `ABSTRACTION-RED-FLAGS-v0.99.37.md`
+- `BENCHMARK-GATE-POLICY-v0.99.37.md`
+- `SERIALIZATION-BOUNDARIES-v0.99.37.md`
+- `RESULT-BOUNDARY-PILOT-v0.99.37.md`
+- `PORT-EFFECT-SHELL-v0.99.37.md`
+- `PARAMETER-PRIVATE-STATE-v0.99.37.md`
+- `TUI-EVENT-BOUNDARIES-v0.99.37.md`
+- `DATA-STRUCTURE-ENCAPSULATION-v0.99.37.md`
+- `RED-MODULE-DESIGN-v0.99.37.md`
+
 ## 0.99.36
 
 Released: 2026-06-22
