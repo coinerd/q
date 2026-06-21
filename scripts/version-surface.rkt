@@ -11,24 +11,26 @@
 ;; W2 (#8415): Created during v0.99.36 to establish a single source of truth
 ;; for version-surface parsing.
 
-(require racket/file
+(require racket/contract
+         racket/file
          racket/match
          racket/path
          racket/string)
 
 ;; Content-level parsing (no I/O)
-(provide parse-q-version-from-content
-         parse-info-version-from-content
-         parse-version-components
-         ;; Comparison
-         version<=?
-         version<?
-         version=?
-         ;; File-level reading (with I/O)
-         read-canonical-version
-         read-canonical-version/strict
-         ;; Version formatting
-         version->string)
+(provide (contract-out [parse-q-version-from-content (-> string? (or/c string? #f))]
+                       [parse-info-version-from-content (-> string? (or/c string? #f))]
+                       [parse-version-components (-> string? (listof exact-nonnegative-integer?))]
+                       ;; Comparison
+                       [version<=? (-> string? string? boolean?)]
+                       [version<? (-> string? string? boolean?)]
+                       [version=? (-> string? string? boolean?)]
+                       ;; File-level reading (with I/O)
+                       [read-canonical-version (->* () ((or/c path-string? #f)) string?)]
+                       [read-canonical-version/strict
+                        (->* () ((or/c path-string? #f)) (or/c string? #f))]
+                       ;; Version formatting
+                       [version->string (-> (listof exact-nonnegative-integer?) string?)]))
 
 ;; ---------------------------------------------------------------------------
 ;; Constants
