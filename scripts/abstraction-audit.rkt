@@ -55,7 +55,15 @@
          count-mutable-caches
          count-bench-timing
          count-ad-hoc-parsing
-         count-event-handlers)
+         count-event-handlers
+         audit-content
+         current-audit-file->lines)
+
+;; ============================================================
+;; I/O parameter (W6 v0.99.37)
+;; ============================================================
+
+(define current-audit-file->lines (make-parameter file->lines))
 
 ;; ============================================================
 ;; Core data structures
@@ -77,64 +85,71 @@
 
 (define (audit-module path)
   "Analyze a single .rkt file and return a module-finding hash.
-   Returns #f if the file cannot be read."
+   Returns #f if the file cannot be read.
+   Uses current-audit-file->lines parameter for I/O (W6 v0.99.37)."
+  (define reader (current-audit-file->lines))
   (define lines
     (with-handlers ([exn:fail:filesystem? (lambda (_) #f)])
-      (file->lines path)))
+      (reader path)))
   (if (not lines)
       #f
-      (let* ([text (string-join lines "\n")]
-             [line-count (length lines)]
-             [export-count (count-exports text)]
-             [parameter-count (count-matches text parameter-rx)]
-             [macro-count (count-matches text macro-rx)]
-             [struct-out-count (count-struct-outs text)]
-             [has-struct-out? (> struct-out-count 0)]
-             [io-count (count-io-effects text)]
-             [io? (> io-count 0)]
-             [serialization-count (count-matches text serialization-rx)]
-             [handler-count (count-matches text handler-rx)]
-             [error-count (count-matches text error-rx)]
-             [provide-shapes (detect-provide-shapes text)]
-             [require-count (count-requires text)])
-        (hash 'path
-              (if (path? path)
-                  (path->string path)
-                  path)
-              'line-count
-              line-count
-              'export-count
-              export-count
-              'parameter-count
-              parameter-count
-              'macro-count
-              macro-count
-              'struct-out-count
-              struct-out-count
-              'has-struct-out?
-              has-struct-out?
-              'io-count
-              io-count
-              'io-mixed-with-logic?
-              io?
-              'serialization-count
-              serialization-count
-              'handler-count
-              handler-count
-              'error-count
-              error-count
-              'provide-shapes
-              provide-shapes
-              'require-count
-              require-count
-              'mutable-cache-count
-              (count-mutable-caches text)
-              'bench-timing-count
-              (count-bench-timing text)
-              'ad-hoc-parse-count
-              (count-ad-hoc-parsing text)
-              'event-handler-count
-              (count-event-handlers text)))))
+      (audit-content path (string-join lines "\n"))))
+
+(define (audit-content path text)
+  "Analyze module text content and return a module-finding hash.
+   Pure function: no I/O. W6 v0.99.37."
+  (let* ([lines (string-split text "\n")]
+         [line-count (length lines)]
+         [export-count (count-exports text)]
+         [parameter-count (count-matches text parameter-rx)]
+         [macro-count (count-matches text macro-rx)]
+         [struct-out-count (count-struct-outs text)]
+         [has-struct-out? (> struct-out-count 0)]
+         [io-count (count-io-effects text)]
+         [io? (> io-count 0)]
+         [serialization-count (count-matches text serialization-rx)]
+         [handler-count (count-matches text handler-rx)]
+         [error-count (count-matches text error-rx)]
+         [provide-shapes (detect-provide-shapes text)]
+         [require-count (count-requires text)])
+    (hash 'path
+          (if (path? path)
+              (path->string path)
+              path)
+          'line-count
+          line-count
+          'export-count
+          export-count
+          'parameter-count
+          parameter-count
+          'macro-count
+          macro-count
+          'struct-out-count
+          struct-out-count
+          'has-struct-out?
+          has-struct-out?
+          'io-count
+          io-count
+          'io-mixed-with-logic?
+          io?
+          'serialization-count
+          serialization-count
+          'handler-count
+          handler-count
+          'error-count
+          error-count
+          'provide-shapes
+          provide-shapes
+          'require-count
+          require-count
+          'mutable-cache-count
+          (count-mutable-caches text)
+          'bench-timing-count
+          (count-bench-timing text)
+          'ad-hoc-parse-count
+          (count-ad-hoc-parsing text)
+          'event-handler-count
+          (count-event-handlers text))))
 
 ;; Count exported identifiers in (provide ...) forms.
 ;; Handles: provide id, provide (contract-out ...), provide (struct-out ...)
