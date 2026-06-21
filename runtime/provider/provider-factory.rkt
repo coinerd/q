@@ -25,7 +25,8 @@
          "../../llm/openrouter.rkt"
          racket/string
          net/url)
-(require (only-in "../../util/error/error-helpers.rkt" with-safe-fallback))
+(require (only-in "../../util/error/error-helpers.rkt" with-safe-fallback)
+         (only-in "../../util/config-paths.rkt" global-config-dir))
 
 (provide provider-name ;; re-export for tui-init.rkt (A1 fix)
          (contract-out [build-provider (-> hash? q-settings? provider?)]
@@ -111,7 +112,8 @@
 (define (build-provider config settings)
   (define project-dir (or (hash-ref config 'project-dir #f) (current-directory)))
   ;; v0.14.4 Wave 0: Check for config parse errors before falling back to mock
-  (define global-cfg-path (build-path (find-system-path 'home-dir) ".q" "config.json"))
+  ;; W6 (#8480): Use shared global-config-dir helper instead of inline find-system-path
+  (define global-cfg-path (build-path (global-config-dir) "config.json"))
   (define project-cfg-path (build-path project-dir ".q" "config.json"))
   (define global-parse-err (config-parse-error global-cfg-path))
   (define project-parse-err (config-parse-error project-cfg-path))
