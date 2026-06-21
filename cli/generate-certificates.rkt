@@ -13,6 +13,8 @@
          racket/cmdline
          racket/file
          racket/port
+         racket/string
+         "../util/config-paths.rkt"
          "../util/security/cert-generator.rkt")
 
 ;; ── Main ──

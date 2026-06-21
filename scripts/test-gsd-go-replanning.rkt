@@ -12,6 +12,11 @@
          "../util/event/event-bus.rkt"
          (only-in "../tools/tool.rkt" make-tool-registry tool-registry?)
          (only-in "../tools/registry-defaults.rkt" register-default-tools!)
+         (only-in "../extensions/gsd/session-state.rkt"
+                  current-gsd-mode
+                  current-gsd-state
+                  set-gsd-state!
+                  current-gsd-ctx)
          (only-in "../extensions/gsd/state-machine.rkt"
                   gsm-ctx-current
                   gsm-ctx-reset!
@@ -83,18 +88,18 @@
   (displayln "\n=== Test 2: GSD mode transitions ===")
   (define-values (bus reg ext-reg) (setup))
 
-  (printf "Initial mode: ~a\n" (gsd-mode))
-  (set-gsd-mode! 'planning)
-  (printf "After set planning: ~a\n" (gsd-mode))
-  (set-gsd-mode! 'plan-written)
-  (printf "After set plan-written: ~a\n" (gsd-mode))
-  (set-gsd-mode! 'executing)
-  (printf "After set executing: ~a\n" (gsd-mode)))
+  (printf "Initial mode: ~a\n" (current-gsd-mode))
+  (set-gsd-state! 'planning)
+  (printf "After set planning: ~a\n" (current-gsd-mode))
+  (set-gsd-state! 'plan-written)
+  (printf "After set plan-written: ~a\n" (current-gsd-mode))
+  (set-gsd-state! 'executing)
+  (printf "After set executing: ~a\n" (current-gsd-mode)))
 
 (define (test-tool-blocking)
   (displayln "\n=== Test 3: Tool blocking during executing ===")
   (define-values (bus reg ext-reg) (setup))
-  (set-gsd-mode! 'executing)
+  (set-gsd-state! 'executing)
 
   ;; planning-write should be blocked
   (define pw-payload
@@ -150,7 +155,7 @@
 (define (test-write-bypass-plan)
   (displayln "\n=== Test 4: Can agent bypass planning-write guard via write tool? ===")
   (define-values (bus reg ext-reg) (setup))
-  (set-gsd-mode! 'executing)
+  (set-gsd-state! 'executing)
 
   ;; Agent uses write tool to overwrite PLAN.md
   (define plan-path "/home/user/src/q-agent/q/.planning/PLAN.md")
