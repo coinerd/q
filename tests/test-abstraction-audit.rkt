@@ -417,6 +417,53 @@ EOF
    (cleanup-fixture-tree tmpdir)))
 
 ;; ============================================================
+;; W6 v0.99.37: Pure audit-content tests (no filesystem I/O)
+;; ============================================================
+
+(define-test-suite
+ pure-audit-content-tests
+ (test-case "audit-content analyzes text without I/O"
+   (define text
+     "#lang racket/base\n(provide greet)\n(define (greet name)\n  (string-append \"Hello, \" name \"!\"))")
+   (define finding ((audit-ref 'audit-content) "test.rkt" text))
+   (check-true (hash? finding) "returns a hash")
+   (check-equal? (hash-ref finding 'path) "test.rkt" "path preserved")
+   (check-true (> (hash-ref finding 'line-count) 0) "positive line count"))
+ (test-case "audit-content detects struct-out without I/O"
+   (define text "#lang racket/base\n(provide (struct-out widget))\n(struct widget (name))")
+   (define finding ((audit-ref 'audit-content) "w.rkt" text))
+   (check-true (hash-ref finding 'has-struct-out?) "detects struct-out")
+   (check-pred positive? (hash-ref finding 'struct-out-count) "struct-out count > 0"))
+ (test-case "audit-content detects I/O mixed with logic"
+   (define text
+     "#lang racket/base\n(define (f x)\n  (call-with-output-file \"a\" (lambda (o) (display x o))))")
+   (define finding ((audit-ref 'audit-content) "io.rkt" text))
+   (check-true (hash-ref finding 'io-mixed-with-logic?) "detects I/O mixed with logic")
+   (check-pred positive? (hash-ref finding 'io-count) "io count > 0"))
+ (test-case "audit-content detects mutable-cache without I/O"
+   (define text
+     "#lang racket/base\n(define cache (make-hash))\n(define (handle-event e)\n  (hash-set! cache 'last e))")
+   (define finding ((audit-ref 'audit-content) "cache.rkt" text))
+   (check-pred positive? (hash-ref finding 'mutable-cache-count) "mutable cache count > 0")
+   (check-pred positive? (hash-ref finding 'event-handler-count) "event handler count > 0"))
+ (test-case "audit-content on empty text returns hash with 0 lines"
+   (define finding ((audit-ref 'audit-content) "empty.rkt" ""))
+   (check-true (hash? finding) "returns hash for empty text")
+   (check-equal? (hash-ref finding 'line-count) 0 "empty string splits to 0 lines"))
+ (test-case "audit-content: path string preserved as-is"
+   (define finding ((audit-ref 'audit-content) "foo/bar.rkt" "(define x 1)"))
+   (check-equal? (hash-ref finding 'path) "foo/bar.rkt"))
+ (test-case "audit-module with mocked I/O parameter"
+   (define mock-text "#lang racket/base\n(provide f)\n(define (f x) x)")
+   (define mock-reader (lambda (path) (string-split mock-text "\n")))
+   ;; Use eval to parameterize since audit-ref uses dynamic-require
+   (define orig-param (audit-ref 'current-audit-file->lines))
+   (parameterize ([orig-param mock-reader])
+     (define finding ((audit-ref 'audit-module) "mock.rkt"))
+     (check-true (hash? finding) "mocked audit-module returns hash")
+     (check-true (> (hash-ref finding 'line-count) 0) "mocked module has positive lines"))))
+
+;; ============================================================
 ;; Run all tests
 ;; ============================================================
 
@@ -428,7 +475,8 @@ EOF
                    no-mutation-tests
                    count-exports-tests
                    red-flag-signal-tests
-                   v3-signal-tests)
+                   v3-signal-tests
+                   pure-audit-content-tests)
 
 (module+ test
   (run-tests all-abstraction-audit-tests))
