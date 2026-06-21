@@ -195,6 +195,10 @@
         name))
   (check-secret-var? name-str (current-secret-scrub-denylist) (current-secret-scrub-allowlist)))
 
+;; DESIGN FACT (W6, v0.99.38 adapter audit): sanitize-env is the sole mutation
+;; boundary for environment variables crossing into subprocesses. The pure
+;; predicate (secret-env-var? / check-secret-var?) lives in subprocess-helpers.rkt.
+;; This split follows the same pure-helpers + thin-shell pattern as metrics.rkt.
 (define (sanitize-env [env (current-environment-variables)])
   (define clean (make-environment-variables))
   (define scrubbed-names '())

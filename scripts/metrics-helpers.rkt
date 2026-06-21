@@ -13,6 +13,12 @@
 ;; Pattern: same as sync-version.rkt (pure string→string + thin I/O shell).
 ;;
 ;; All functions are pure: no file I/O, no displayln, no exit.
+;; DESIGN FACT (W5, v0.99.38): This module establishes the pure-helpers +
+;; thin-I/O-shell pattern. Other mutating scripts (sync-readme-status.rkt,
+;; sync-version.rkt) should follow the same extraction when refactored.
+;; The --check-only flag in metrics.rkt depends on this separation.
+;; W8 scanner `mutation-site-rx` flags modules that write files outside
+;; this pattern.
 
 (require racket/contract
          racket/string

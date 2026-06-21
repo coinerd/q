@@ -199,6 +199,12 @@
 (define event-handler-rx #px"define.*handler|handle-event|handle-key|dispatch")
 
 ;; v0.99.38 W8: Change-locality signals
+;; DESIGN FACT: Each signal encodes a concrete audit finding from W0–W7:
+;;   cwd-sensitive-rx  ← W2 audit: all dynamic-require sites checked for CWD safety
+;;   mutation-site-rx  ← W5 mutation boundary: file-writing ops should use write-or-check
+;;   hash-ref-chain-rx ← W1 scorecard P5: nested hash-ref chains are fragile
+;;   inline-config-path-rx ← W6 adapter audit: ~19 modules inline home-dir ".q" path
+;; All signals are advisory only (no --strict thresholds).
 ;; CWD-sensitive: dynamic-require with relative-path string, file->* without build-path
 (define cwd-sensitive-rx
   #px"dynamic-require\\s+\"[^/]|file->string\\s+\"[^/]|file->lines\\s+\"[^/]|file->bytes\\s+\"[^/]|file->list\\s+\"[^/]")

@@ -22,6 +22,10 @@
 (define (project-config-dirs project-dir)
   (list (build-path project-dir ".q") (build-path project-dir ".pi")))
 
+;; DESIGN FACT (W6, v0.99.38 adapter audit): This helper centralizes the
+;; (build-path (find-system-path 'home-dir) ".q") pattern. ~19 modules still
+;; inline this construction; they should be migrated to use this function.
+;; The provider-factory.rkt was the first consolidation (W6).
 ;; Returns global config directory path (~/.q).
 (define (global-config-dir)
   (build-path (find-system-path 'home-dir) ".q"))

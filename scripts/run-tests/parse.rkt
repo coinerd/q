@@ -162,6 +162,10 @@
           (truncate-test-output (result-output-string r) DEFAULT-OUTPUT-CAP)))
 
 (define FAILURE-START #rx"^-+ FAILURE -+$")
+;; DESIGN FACT (W3 F1, v0.99.38 audit): The {20,} quantifier in #rx mode is
+;; treated as literal characters, NOT as a repetition count. This regex
+;; therefore never matches "--------------------" lines. Use #px mode for
+;; {n,} quantifier support. Scheduled for a future fix wave.
 (define FAILURE-END #rx"^-{20,}$")
 
 (define (extract-failure-lines stdout-bytes)
