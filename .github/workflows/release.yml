@@ -43,7 +43,7 @@ jobs:
         run: racket scripts/run-tests.rkt --suite fast --jobs 4 --timeout 120 --record-gate-evidence
 
       - name: Strict release readiness
-        run: racket scripts/lint-release-readiness.rkt --strict
+        run: racket scripts/lint-release-readiness.rkt --strict --context tag-publish
 
       - name: Test failure summary
         if: failure()

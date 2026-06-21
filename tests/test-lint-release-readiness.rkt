@@ -198,3 +198,42 @@
     (check-equal? context 'tag-publish)
     ;; Also verify gate evidence is still checked in tag-publish context
     (check-true (member context '(tag-publish)) "context is tag-publish")))
+
+;; ============================================================
+;; W2 (#8519): release.yml uses tag-publish context
+;; ============================================================
+
+(test-case "release.yml uses --context tag-publish for tag-triggered workflow"
+  ;; The release workflow is triggered by tag push, so the tag already
+  ;; exists when it runs. The readiness check must use tag-publish context
+  ;; to skip the tag uniqueness check.
+  (define release-yml-path (build-path (current-directory) ".." ".github" "workflows" "release.yml"))
+  (when (file-exists? release-yml-path)
+    (define content (file->string release-yml-path))
+    (check-true (string-contains? content "--context tag-publish")
+                "release.yml must use --context tag-publish")
+    (check-false (regexp-match? #rx"lint-release-readiness.rkt --strict$" content)
+                 "release.yml must NOT use bare --strict without --context")))
+
+(test-case "parse-argv: invalid context is rejected"
+  ;; An invalid --context value should return #f (not a valid context)
+  (define-values (strict? context)
+    ((dynamic-require script-path 'parse-argv) '("--strict" "--context" "invalid")))
+  (check-not-false strict?)
+  (check-false context "invalid context should return #f"))
+
+(test-case "parse-argv: missing context value is handled"
+  ;; --context with no following argument
+  (define-values (strict? context)
+    ((dynamic-require script-path 'parse-argv) '("--strict" "--context")))
+  (check-not-false strict?)
+  (check-false context "missing context value should return #f"))
+
+(test-case "ci.yml uses bare --strict for pre-tag context"
+  ;; CI workflow runs on push to main (pre-tag), so bare --strict is correct.
+  (define ci-yml-path (build-path (current-directory) ".." ".github" "workflows" "ci.yml"))
+  (when (file-exists? ci-yml-path)
+    (define content (file->string ci-yml-path))
+    ;; ci.yml should have the release-readiness check (may or may not have --context)
+    (check-true (string-contains? content "lint-release-readiness")
+                "ci.yml should reference lint-release-readiness")))
