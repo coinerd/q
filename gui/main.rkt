@@ -9,6 +9,7 @@
          racket/dict
          racket/format
          racket/class
+         racket/runtime-path
          racket/string
          "../util/event/event-bus.rkt"
          "../runtime/agent-session.rkt"
@@ -34,7 +35,16 @@
 
 (provide (contract-out [run-gui-with-runtime (-> any/c any/c void?)]
                        [run-gui (-> void?)]
-                       [gui-available? (-> boolean?)]))
+                       [gui-available? (-> boolean?)]
+                       [load-gui-action-handler-factory (-> procedure?)]))
+
+;; Stable module-path index for the GUI action adapter.  A plain string passed
+;; to dynamic-require is resolved relative to the process current-directory;
+;; this index resolves relative to this source module instead.
+(define-runtime-module-path-index gui-action-adapter-module "ui-action-adapter.rkt")
+
+(define (load-gui-action-handler-factory)
+  (dynamic-require gui-action-adapter-module 'make-gui-action-handler))
 
 ;; --------------------------------------------------
 ;; Check if GUI is available
@@ -300,10 +310,7 @@
                                  (fprintf (current-error-port)
                                           "v0.98.13: GUI action handler load failed: ~a\n"
                                           (exn-message e)))])
-      (define gui-action-handler
-        ((dynamic-require "../gui/ui-action-adapter.rkt" 'make-gui-action-handler)
-         state-box
-         notify-callback-box))
+      (define gui-action-handler ((load-gui-action-handler-factory) state-box notify-callback-box))
       (subscribe! bus
                   (lambda (evt)
                     (define ev (event-ev evt))
