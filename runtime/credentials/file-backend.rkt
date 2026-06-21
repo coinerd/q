@@ -10,14 +10,13 @@
          racket/path
          "../../util/json/json-helpers.rkt"
          "../../util/error/error-helpers.rkt"
-         (only-in "protocol.rkt"
-                  credential-backend
-                  credential-backend?))
+         "../../util/config-paths.rkt"
+         (only-in "protocol.rkt" credential-backend credential-backend?))
 
 (provide make-file-credential-backend)
 
 (define (make-file-credential-backend [path #f])
-  (define cred-path (or path (build-path (find-system-path 'home-dir) ".q" "credentials.json")))
+  (define cred-path (or path (build-path (global-config-dir) "credentials.json")))
   (credential-backend "file"
                       ;; store!
                       (λ (be provider-name api-key) (file-store! cred-path provider-name api-key))

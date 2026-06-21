@@ -116,4 +116,5 @@
         (displayln "CI readiness: FAIL")
         (exit 1))))
 
-(main)
+(module+ main
+  (main))

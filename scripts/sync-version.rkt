@@ -300,4 +300,5 @@
      (printf "~a change(s) out of sync. Run with --write to fix.~n" changes)
      (exit 1)]))
 
-(main)
+(module+ main
+  (main))

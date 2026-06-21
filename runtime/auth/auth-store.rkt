@@ -12,7 +12,8 @@
          racket/file
          racket/string
          racket/generic
-         racket/path)
+         racket/path
+         "../../util/config-paths.rkt")
 
 ;; Structs
 (provide credential
@@ -266,7 +267,7 @@
 
 ;; Default credential file path: ~/.q/credentials.json
 (define (credential-file-path)
-  (build-path (find-system-path 'home-dir) ".q" "credentials.json"))
+  (build-path (global-config-dir) "credentials.json"))
 
 ;; Load credentials from a dedicated JSON file.
 ;; File format: { "providers": { "name": { "api-key": "..." }, ... } }

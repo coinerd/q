@@ -19,6 +19,7 @@
          net/http-client
          net/url)
 (require (only-in "../../util/error/error-helpers.rkt" with-safe-fallback))
+(require "../../util/config-paths.rkt")
 
 ;; OAuth config struct
 (provide oauth-config
@@ -274,7 +275,7 @@
 
 ;; Default OAuth token file path: ~/.q/oauth-tokens.json
 (define (oauth-token-file-path)
-  (build-path (find-system-path 'home-dir) ".q" "oauth-tokens.json"))
+  (build-path (global-config-dir) "oauth-tokens.json"))
 
 ;; Load all OAuth tokens from the token file.
 ;; Returns a hash: provider-name (string) → oauth-token

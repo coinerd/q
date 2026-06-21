@@ -16,6 +16,7 @@
          racket/path
          "../extensions/manifest.rkt")
 (require (only-in "../util/error/error-helpers.rkt" with-safe-fallback))
+(require "../util/config-paths.rkt")
 
 ;; ============================================================
 ;; Provides
@@ -46,8 +47,7 @@
 ;; Parameter
 ;; ============================================================
 
-(define current-packages-dir
-  (make-parameter (build-path (find-system-path 'home-dir) ".q" "packages")))
+(define current-packages-dir (make-parameter (build-path (global-config-dir) "packages")))
 
 ;; ============================================================
 ;; Internal helpers

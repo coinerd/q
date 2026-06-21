@@ -12,7 +12,8 @@
 (require racket/contract
          racket/file
          racket/port
-         racket/string)
+         racket/string
+         "config-paths.rkt")
 
 (provide (contract-out [call-with-lock
                         (->* (path-string? (-> any/c))
@@ -63,7 +64,7 @@
 (define current-locks-dir (make-parameter #f (lambda (v) v)))
 
 (define (locks-dir)
-  (or (current-locks-dir) (build-path (find-system-path 'home-dir) ".q" "locks")))
+  (or (current-locks-dir) (build-path (global-config-dir) "locks")))
 
 ;; Ensure lock directory exists
 (define (ensure-locks-dir!)
@@ -107,7 +108,8 @@
     (define existing-pid (read-lock-pid lock-file))
     (when (and existing-pid (not (pid-alive? existing-pid)))
       (with-handlers ([exn:fail? (lambda (e)
-                                   (log-debug "lockfile: stale lock delete failed: ~a" (exn-message e)))])
+                                   (log-debug "lockfile: stale lock delete failed: ~a"
+                                              (exn-message e)))])
         (delete-file lock-file))))
   ;; Try to create lock file exclusively
   (with-safe-fallback #f
@@ -120,8 +122,7 @@
 
 ;; Release lock by deleting the file (only if we own it)
 (define (release-lock! lock-file)
-  (with-handlers ([exn:fail? (lambda (e)
-                               (log-debug "lockfile: release failed: ~a" (exn-message e)))])
+  (with-handlers ([exn:fail? (lambda (e) (log-debug "lockfile: release failed: ~a" (exn-message e)))])
     (when (file-exists? lock-file)
       (define our-pid (getpid))
       (define owner-pid (read-lock-pid lock-file))

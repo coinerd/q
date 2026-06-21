@@ -19,7 +19,8 @@
          "../util/readline.rkt"
          "../cli/args.rkt"
          "../cli/render.rkt"
-         "../util/ansi.rkt")
+         "../util/ansi.rkt"
+         "../util/config-paths.rkt")
 
 (require racket/contract)
 (provide readline-available?
@@ -126,7 +127,7 @@
                              #:in [in (current-input-port)]
                              #:out [out (current-output-port)])
   ;; First-run welcome detection
-  (define q-config-dir (build-path (find-system-path 'home-dir) ".q"))
+  (define q-config-dir (global-config-dir))
   (define first-run?
     (not (or (directory-exists? q-config-dir)
              (file-exists? (build-path q-config-dir "config.json")))))

@@ -15,6 +15,7 @@
          "../../extensions/hooks.rkt"
          "../../extensions/loader.rkt"
          "../../extensions/api.rkt"
+         "../../util/config-paths.rkt"
          "context.rkt")
 
 (provide handle-activate-command
@@ -94,7 +95,7 @@
             [(not (valid-extension-name? name))
              (list (make-entry 'error (format "Invalid extension name: ~a" name) 0 (hash)))]
             [else
-             (define q-home (build-path (find-system-path 'home-dir) ".q"))
+             (define q-home (global-config-dir))
              (define target-dir (build-path q-home "extensions"))
              (with-handlers ([exn:fail? (λ (e)
                                           (log-warning "extension activate failed for ~a: ~a"
@@ -161,7 +162,7 @@
      'continue]
     [else
      ;; Discover extension directories: global + project-local
-     (define q-home (build-path (find-system-path 'home-dir) ".q"))
+     (define q-home (global-config-dir))
      (define project-dir (current-directory))
      (define global-ext-dir (build-path q-home "extensions"))
      (define local-ext-dir (build-path project-dir ".q" "extensions"))
@@ -213,7 +214,7 @@
             [(not (valid-extension-name? name))
              (list (make-entry 'error (format "Invalid extension name: ~a" name) 0 (hash)))]
             [else
-             (define q-home (build-path (find-system-path 'home-dir) ".q"))
+             (define q-home (global-config-dir))
              (define target-dir (build-path q-home "extensions"))
              (with-handlers ([exn:fail? (λ (e)
                                           (log-warning "extension deactivate failed for ~a: ~a"
@@ -255,7 +256,7 @@
 ;; list-status-entries : path? -> (listof entry?)
 (define (list-status-entries project-dir)
   (define local-dir (build-path project-dir ".q" "extensions"))
-  (define global-dir (build-path (find-system-path 'home-dir) ".q" "extensions"))
+  (define global-dir (build-path (global-config-dir) "extensions"))
   (define active-local
     (if (directory-exists? local-dir)
         (map path->string (directory-list local-dir))

@@ -20,6 +20,7 @@
          net/url
          net/head)
 (require (only-in "../util/error/error-helpers.rkt" with-safe-fallback))
+(require "../util/config-paths.rkt")
 
 ;; Functions (contracted)
 ;; Contract aliases for package registry types
@@ -60,8 +61,7 @@
   (or (getenv "Q_PACKAGE_INDEX_URL") DEFAULT-INDEX-URL))
 
 (define (installed-pkg-dir)
-  (define base
-    (or (getenv "Q_PACKAGE_DIR") (build-path (find-system-path 'home-dir) ".q" "packages")))
+  (define base (or (getenv "Q_PACKAGE_DIR") (build-path (global-config-dir) "packages")))
   (if (string? base)
       (string->path base)
       base))

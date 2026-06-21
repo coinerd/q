@@ -23,7 +23,8 @@
          (only-in "../tool.rkt" make-success-result make-error-result)
          (only-in "../../util/path/path-helpers.rkt" expand-home-path)
          (only-in "builtin-helpers.rkt" require-safe-path!)
-         (only-in "../../util/error/error-sanitizer.rkt" sanitize-error-message))
+         (only-in "../../util/error/error-sanitizer.rkt" sanitize-error-message)
+         "../../util/config-paths.rkt")
 
 (require racket/contract)
 (provide (contract-out [tool-delete-lines (->* (hash?) (any/c) any/c)]))
@@ -39,7 +40,7 @@
 ;; --------------------------------------------------
 
 (define (ensure-backup-dir)
-  (define dir (build-path (find-system-path 'home-dir) ".q" "edit-backups"))
+  (define dir (build-path (global-config-dir) "edit-backups"))
   (unless (directory-exists? dir)
     (make-directory* dir)
     (file-or-directory-permissions dir #o700))

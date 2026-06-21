@@ -340,4 +340,5 @@
         (displayln "Lint FAILED")
         (exit 1))))
 
-(main)
+(module+ main
+  (main))

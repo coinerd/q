@@ -236,4 +236,5 @@
      (displayln "Usage: racket scripts/sync-readme-status.rkt [--version|--check|--sync] [FILE]")
      (exit 1)]))
 
-(main)
+(module+ main
+  (main))

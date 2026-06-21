@@ -131,4 +131,5 @@
 
   (printf "~nBump complete (--no-verify).~n"))
 
-(main)
+(module+ main
+  (main))

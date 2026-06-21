@@ -24,7 +24,8 @@
          (only-in "../../util/path/path-helpers.rkt" expand-home-path)
          (only-in "../../util/error/error-sanitizer.rkt" sanitize-error-message)
          (only-in "builtin-helpers.rkt" require-safe-path!)
-         "edit-normalize.rkt")
+         "edit-normalize.rkt"
+         "../../util/config-paths.rkt")
 
 (define current-fuzzy-edit-enabled? (make-parameter #f))
 
@@ -46,7 +47,7 @@
 ;; --------------------------------------------------
 
 (define (ensure-backup-dir)
-  (define dir (build-path (find-system-path 'home-dir) ".q" "edit-backups"))
+  (define dir (build-path (global-config-dir) "edit-backups"))
   (unless (directory-exists? dir)
     (make-directory* dir)
     ;; SEC-D: Restrict backup dir to owner only (0700)

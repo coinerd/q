@@ -41,7 +41,10 @@
 
 (define (string-spans-on-line line)
   (let ([len (string-length line)])
-    (let loop ([i 0] [in-string? #f] [string-start 0] [acc '()])
+    (let loop ([i 0]
+               [in-string? #f]
+               [string-start 0]
+               [acc '()])
       (cond
         [(>= i len)
          ;; If we ended inside a string (multi-line), treat rest as string
@@ -50,23 +53,24 @@
              (reverse acc))]
         ;; Check for comment start — everything after ; is a comment
         [(and (not in-string?) (char=? (string-ref line i) #\;))
-         (reverse acc)]  ;; rest is comment, stop scanning
-        [(and (not in-string?) (char=? (string-ref line i) #\"))
-         ;; Start of a string
-         (loop (add1 i) #t i acc)]
+         (reverse acc)] ;; rest is comment, stop scanning
+        ;; Start of a string
+        [(and (not in-string?) (char=? (string-ref line i) #\")) (loop (add1 i) #t i acc)]
         [(and in-string? (char=? (string-ref line i) #\"))
          ;; Check if escaped (preceded by odd number of backslashes)
          (if (escaped-backslash-count line i)
-             (loop (add1 i) in-string? string-start acc)  ;; escaped quote
-             (loop (add1 i) #f string-start
-                   (cons (cons string-start (add1 i)) acc)))]  ;; end of string
-        [else
-         (loop (add1 i) in-string? string-start acc)]))))
+             (loop (add1 i) in-string? string-start acc) ;; escaped quote
+             (loop (add1 i)
+                   #f
+                   string-start
+                   (cons (cons string-start (add1 i)) acc)))] ;; end of string
+        [else (loop (add1 i) in-string? string-start acc)]))))
 
 ;; Count consecutive backslashes before position i. Returns #t if the
 ;; char at i is escaped (odd number of preceding backslashes).
 (define (escaped-backslash-count line i)
-  (let loop ([j (sub1 i)] [count 0])
+  (let loop ([j (sub1 i)]
+             [count 0])
     (cond
       [(< j 0) (odd? count)]
       [(char=? (string-ref line j) #\\) (loop (sub1 j) (add1 count))]
@@ -75,8 +79,7 @@
 ;; Return #t if column `col` falls inside any string span on the line.
 (define (inside-string? line col)
   (for/or ([sp (string-spans-on-line line)])
-    (and (>= col (car sp))
-         (<  col (cdr sp)))))
+    (and (>= col (car sp)) (< col (cdr sp)))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Line classification helpers
@@ -87,13 +90,11 @@
 
 (define (comment-line? line)
   (define trimmed (string-trim line))
-  (or (string-prefix? trimmed ";;")
-      (string-prefix? trimmed "#;")))
+  (or (string-prefix? trimmed ";;") (string-prefix? trimmed "#;")))
 
 ;; Pure comment decoration lines like  ;; ═══════════
 (define (comment-decoration? line)
-  (and (comment-line? line)
-       (regexp-match? #px"[═─━┅┄_]{5,}" line)))
+  (and (comment-line? line) (regexp-match? #px"[═─━┅┄_]{5,}" line)))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Wrapping strategies
@@ -108,15 +109,17 @@
 ;; near the limit, preserving the ;; prefix.
 (define (wrap-comment line)
   (define indent (regexp-match #rx"^[ \t]*" line))
-  (define prefix (if indent (car indent) ""))
+  (define prefix
+    (if indent
+        (car indent)
+        ""))
   (define trimmed (string-trim line))
   ;; Check if it starts with ;;
   (define comment-prefix
     (if (string-prefix? trimmed ";;")
-        (substring trimmed 0 (min 3 (string-length trimmed)))  ;; ";;" or ";; "
+        (substring trimmed 0 (min 3 (string-length trimmed))) ;; ";;" or ";; "
         ""))
-  (if (or (string=? comment-prefix "")
-          (<= (string-length line) (+ MAX-LINE-LENGTH 40)))
+  (if (or (string=? comment-prefix "") (<= (string-length line) (+ MAX-LINE-LENGTH 40)))
       ;; Not worth wrapping or too short to bother — just truncate decoration chars
       (if (comment-decoration? line)
           (wrap-comment-decoration line)
@@ -125,10 +128,7 @@
       (let ()
         (define content (substring trimmed (string-length comment-prefix)))
         (define content-len (string-length content))
-        (define target (- MAX-LINE-LENGTH
-                          (string-length prefix)
-                          (string-length comment-prefix)
-                          1))
+        (define target (- MAX-LINE-LENGTH (string-length prefix) (string-length comment-prefix) 1))
         (define break-pos (find-word-break content (max 20 target)))
         (if (and break-pos (> content-len target))
             (let* ([part1 (substring content 0 break-pos)]
@@ -157,7 +157,7 @@
 (define (wrap-string-line line)
   (let ([spans (string-spans-on-line line)])
     (cond
-      [(null? spans) (wrap-code-line line)]  ;; no strings, use code strategy
+      [(null? spans) (wrap-code-line line)] ;; no strings, use code strategy
       [(= (length spans) 1)
        ;; Single string span — decompose
        (let* ([sp (car spans)]
@@ -167,40 +167,35 @@
               [prefix (substring line 0 start)]
               ;; Max length for each string part, accounting for prefix + overhead
               ;; prefix + "(string-append " + "\"...\"" + ")" ≈ prefix + 18 + part
-              [max-part (max 20 (- MAX-LINE-LENGTH
-                                   (string-length prefix)
-                                   (string-length "(string-append ")
-                                   2   ;; quotes
-                                   1))] ;; closing paren
+              [max-part (max 20
+                             (- MAX-LINE-LENGTH
+                                (string-length prefix)
+                                (string-length "(string-append ")
+                                2 ;; quotes
+                                1))] ;; closing paren
               [parts (split-string-literal str-content max-part)])
          (cond
-           [(<= (length parts) 1)
-            ;; Can't split string — try code-level wrapping instead
-            (wrap-code-line line)]
+           ;; Can't split string — try code-level wrapping instead
+           [(<= (length parts) 1) (wrap-code-line line)]
            [else
             ;; Build (string-append "p1" "p2" ...)
             ;; Format: prefix(string-append "part1"
             ;;                         "part2"
             ;;                         "part3")
-            (let* ([indent (make-string (+ (string-length prefix)
-                                           (string-length "(string-append "))
-                                       #\space)]
-                   [quoted-parts
-                    (for/list ([p (in-list parts)])
-                      (string-append "\"" p "\""))]
+            (let* ([indent (make-string (+ (string-length prefix) (string-length "(string-append "))
+                                        #\space)]
+                   [quoted-parts (for/list ([p (in-list parts)])
+                                   (string-append "\"" p "\""))]
                    [first-part (car quoted-parts)]
                    [rest-parts (cdr quoted-parts)]
                    [line1 (string-append prefix "(string-append " first-part)]
-                   [rest-lines
-                    (for/list ([p (in-list rest-parts)])
-                      (string-append indent p))]
-                   [last-line (string-append (substring indent 0
-                                                        (max 0 (sub1 (string-length indent))))
-                                             ")")])
+                   [rest-lines (for/list ([p (in-list rest-parts)])
+                                 (string-append indent p))]
+                   [last-line
+                    (string-append (substring indent 0 (max 0 (sub1 (string-length indent)))) ")")])
               (append (list line1) rest-lines (list last-line)))]))]
-      [else
-       ;; Multiple strings — leave as-is for safety
-       line])))
+      ;; Multiple strings — leave as-is for safety
+      [else line])))
 
 ;; Split a string literal content at natural boundaries.
 ;; Tries: newlines, then JSON structural boundaries, then at a safe length.
@@ -209,16 +204,12 @@
   (cond
     [(<= len target-len) (list content)]
     ;; Try splitting at \n
-    [(string-contains? content "\n")
-     (split-at-boundary content "\n")]
+    [(string-contains? content "\n") (split-at-boundary content "\n")]
     ;; Try splitting at JSON boundaries: "," or "},{"
-    [(string-contains? content "\",\"")
-     (split-at-boundary content "\",\"")]
-    [(string-contains? content "\"},{\"")
-     (split-at-boundary content "\"},{\"")]
+    [(string-contains? content "\",\"") (split-at-boundary content "\",\"")]
+    [(string-contains? content "\"},{\"") (split-at-boundary content "\"},{\"")]
     ;; Try splitting at comma
-    [(string-contains? content ", ")
-     (split-at-boundary content ", ")]
+    [(string-contains? content ", ") (split-at-boundary content ", ")]
     ;; Hard split at safe length
     [else (hard-split-string content target-len)]))
 
@@ -242,8 +233,7 @@
          (cond
            [(<= i 0) target-len]
            ;; Don't split right after a backslash
-           [(char=? (string-ref content (max 0 (sub1 i))) #\\)
-            (loop (sub1 i))]
+           [(char=? (string-ref content (max 0 (sub1 i))) #\\) (loop (sub1 i))]
            [else i])))
      (cons (substring content 0 break-pos)
            (hard-split-string (substring content break-pos) target-len))]))
@@ -255,12 +245,12 @@
       line
       (let ([break-col (find-safe-break line)])
         (if (not break-col)
-            line  ;; can't safely break
+            line ;; can't safely break
             (let* ([indent (or (regexp-match #rx"^[ \t]+" line) '(""))]
-                   [indent-str (let ([base (car indent)])
-                                 (if (string=? base "") "  " base))]
+                   [indent-str (let ([base (car indent)]) (if (string=? base "") "  " base))]
                    [line1 (substring line 0 break-col)]
-                   [line2 (string-append (string-trim indent-str) "  "
+                   [line2 (string-append (string-trim indent-str)
+                                         "  "
                                          (string-trim (substring line break-col)))])
               (list line1 line2))))))
 
@@ -271,12 +261,10 @@
   ;; Search backwards from MAX-LINE-LENGTH - 1 to leave margin
   (let loop ([col (min (sub1 len) (sub1 MAX-LINE-LENGTH))])
     (cond
-      [(<= col 20) #f]  ;; don't break too early
+      [(<= col 20) #f] ;; don't break too early
       [(inside-string? line col) (loop (sub1 col))]
-      [(char=? (string-ref line col) #\space)
-       col]
-      [(char=? (string-ref line col) #\))
-       (add1 col)]  ;; break after the close paren
+      [(char=? (string-ref line col) #\space) col]
+      [(char=? (string-ref line col) #\)) (add1 col)] ;; break after the close paren
       [else (loop (sub1 col))])))
 
 ;;; ---------------------------------------------------------------------------
@@ -288,19 +276,17 @@
   (cond
     [(<= (string-length line) MAX-LINE-LENGTH) (list line)]
     [(blank-line? line) (list line)]
-    [(comment-decoration? line)
-     (list (wrap-comment-decoration line))]
-    [(comment-line? line)
-     (ensure-list (wrap-comment line))]
-    [(not (null? (string-spans-on-line line)))
-     ;; Has string literal(s) — use string-safe wrapping
-     (ensure-list (wrap-string-line line))]
-    [else
-     ;; Plain code — use code wrapping
-     (ensure-list (wrap-code-line line))]))
+    [(comment-decoration? line) (list (wrap-comment-decoration line))]
+    [(comment-line? line) (ensure-list (wrap-comment line))]
+    ;; Has string literal(s) — use string-safe wrapping
+    [(not (null? (string-spans-on-line line))) (ensure-list (wrap-string-line line))]
+    ;; Plain code — use code wrapping
+    [else (ensure-list (wrap-code-line line))]))
 
 (define (ensure-list v)
-  (if (list? v) v (list v)))
+  (if (list? v)
+      v
+      (list v)))
 
 ;;; ---------------------------------------------------------------------------
 ;;; File processing
@@ -313,13 +299,12 @@
       (string-contains? s "/benchmarks/")))
 
 (define (collect-rkt-files base-dir)
-  (sort
-   (for/list ([f (in-directory base-dir)]
-              #:when (and (not (skip-path? f))
-                          (let ([ext (filename-extension f)])
-                            (and ext (equal? (bytes->string/utf-8 ext) "rkt")))))
-     f)
-   path<?))
+  (sort (for/list ([f (in-directory base-dir)]
+                   #:when (and (not (skip-path? f))
+                               (let ([ext (filename-extension f)])
+                                 (and ext (equal? (bytes->string/utf-8 ext) "rkt")))))
+          f)
+        path<?))
 
 (define (process-file filepath mode)
   ;; mode: 'fix, 'dry-run, 'check
@@ -334,13 +319,10 @@
       (set! long-count (add1 long-count))
       (define wrapped (wrap-line line))
       (cond
-        [(eq? mode 'check)
-         (printf "  ~a:~a: ~a chars~n" rel lineno (string-length line))]
+        [(eq? mode 'check) (printf "  ~a:~a: ~a chars~n" rel lineno (string-length line))]
         [else
-         (unless (and (= (length wrapped) 1)
-                        (string=? (car wrapped) line))
-           (set! changes
-                 (cons (list lineno line wrapped) changes)))])))
+         (unless (and (= (length wrapped) 1) (string=? (car wrapped) line))
+           (set! changes (cons (list lineno line wrapped) changes)))])))
 
   (cond
     [(eq? mode 'check)
@@ -353,19 +335,23 @@
        (for ([c (in-list (reverse changes))])
          (match-define (list lineno original wrapped) c)
          (printf "  line ~a:~n" lineno)
-         (printf "    - ~a~n" (if (> (string-length original) 80)
-                                 (string-append (substring original 0 77) "...")
-                                 original))
+         (printf "    - ~a~n"
+                 (if (> (string-length original) 80)
+                     (string-append (substring original 0 77) "...")
+                     original))
          (for ([w (in-list wrapped)])
-           (printf "    + ~a~n" (if (> (string-length w) 80)
-                                   (string-append (substring w 0 77) "...")
-                                   w)))))
+           (printf "    + ~a~n"
+                   (if (> (string-length w) 80)
+                       (string-append (substring w 0 77) "...")
+                       w)))))
      0]
-    [else  ;; 'fix
+    [else ;; 'fix
      (when (not (null? changes))
        ;; Rebuild the file
        (define result-lines
-         (let loop ([remaining lines] [lineno 1] [acc '()])
+         (let loop ([remaining lines]
+                    [lineno 1]
+                    [acc '()])
            (cond
              [(null? remaining) (reverse acc)]
              [else
@@ -373,16 +359,10 @@
               (cond
                 [(and (> (string-length line) MAX-LINE-LENGTH)
                       (let ([c (assoc lineno changes)])
-                        (and c (not (and (= (length (caddr c)) 1)
-                                         (string=? (car (caddr c)) line))))))
+                        (and c (not (and (= (length (caddr c)) 1) (string=? (car (caddr c)) line))))))
                  (define c (assoc lineno changes))
-                 (loop (cdr remaining)
-                       (add1 lineno)
-                       (append (reverse (caddr c)) acc))]
-                [else
-                 (loop (cdr remaining)
-                       (add1 lineno)
-                       (cons line acc))])])))
+                 (loop (cdr remaining) (add1 lineno) (append (reverse (caddr c)) acc))]
+                [else (loop (cdr remaining) (add1 lineno) (cons line acc))])])))
        (display-lines-to-file result-lines filepath #:exists 'truncate)
        (printf "FIXED: ~a (~a lines wrapped)~n" rel (length changes)))
      0]))
@@ -406,9 +386,7 @@
 (define (main)
   (define args (vector->list (current-command-line-arguments)))
 
-  (when (or (null? args)
-            (member "--help" args)
-            (member "-h" args))
+  (when (or (null? args) (member "--help" args) (member "-h" args))
     (usage)
     (exit 0))
 
@@ -416,20 +394,18 @@
   (define mode
     (cond
       [(member "--dry-run" args) 'dry-run]
-      [(member "--check" args)   'check]
-      [else                      'fix]))
+      [(member "--check" args) 'check]
+      [else 'fix]))
 
   ;; Collect file paths
-  (define file-args
-    (filter (λ (a) (not (string-prefix? a "--"))) args))
+  (define file-args (filter (λ (a) (not (string-prefix? a "--"))) args))
 
   (define files
     (cond
-      [(member "--all" args)
-       (collect-rkt-files (current-directory))]
+      [(member "--all" args) (collect-rkt-files (current-directory))]
       [(null? file-args)
        (if (eq? mode 'check)
-           (collect-rkt-files (current-directory))  ;; --check alone defaults to --all
+           (collect-rkt-files (current-directory)) ;; --check alone defaults to --all
            (begin
              (displayln "Error: no files specified. Use --all or provide file paths.")
              (exit 2)))]
@@ -450,20 +426,20 @@
     [(dry-run) (displayln "Dry run — showing what would change:")]
     [else (displayln "Wrapping long lines...")])
 
-  (define total-long
-    (for/sum ([f (in-list files)])
-      (process-file f mode)))
+  (define total-long (for/sum ([f (in-list files)]) (process-file f mode)))
 
   (case mode
     [(check)
      (if (zero? total-long)
          (begin
-           (displayln (format "All ~a files OK — no lines exceed ~a chars."
-                              (length files) MAX-LINE-LENGTH))
+           (displayln
+            (format "All ~a files OK — no lines exceed ~a chars." (length files) MAX-LINE-LENGTH))
            (exit 0))
          (begin
            (displayln (format "FAILED: ~a lines exceed ~a chars across ~a files."
-                              total-long MAX-LINE-LENGTH (length files)))
+                              total-long
+                              MAX-LINE-LENGTH
+                              (length files)))
            (exit 1)))]
     [(dry-run)
      (displayln "Done (dry run — no files modified).")
@@ -472,4 +448,5 @@
      (displayln "Done.")
      (exit 0)]))
 
-(main)
+(module+ main
+  (main))

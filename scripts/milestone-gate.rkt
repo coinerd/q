@@ -163,4 +163,5 @@
 
   (exit (if (andmap cadr results) 0 1)))
 
-(main)
+(module+ main
+  (main))

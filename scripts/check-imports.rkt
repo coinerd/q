@@ -189,4 +189,5 @@
         (printf "~n~a conflict(s) found.~n" (length all-conflicts))
         (exit 1))))
 
-(main)
+(module+ main
+  (main))

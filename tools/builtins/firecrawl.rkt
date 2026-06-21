@@ -13,7 +13,8 @@
          (only-in "../tool.rkt" make-success-result make-error-result exec-context? tool-result?)
          (only-in "../../util/error/errors.rkt" raise-tool-error)
          "../../util/string-helpers.rkt"
-         (only-in "../../util/truncation.rkt" MAX-OUTPUT-CHARS))
+         (only-in "../../util/truncation.rkt" MAX-OUTPUT-CHARS)
+         "../../util/config-paths.rkt")
 
 (provide (contract-out [tool-firecrawl (->* (hash?) ((or/c exec-context? #f)) tool-result?)]
                        [firecrawl-api-key (-> (or/c string? #f))]
@@ -66,7 +67,7 @@
   (define env-key (getenv "FIRECRAWL_API_KEY"))
   (if (and env-key (> (string-length env-key) 0))
       env-key
-      (let ([cfg-path (build-path (find-system-path 'home-dir) ".q" "config.json")])
+      (let ([cfg-path (build-path (global-config-dir) "config.json")])
         (and (file-exists? cfg-path)
              (let ([cfg (with-safe-fallback #f (read-json-file cfg-path))])
                (and (hash? cfg)

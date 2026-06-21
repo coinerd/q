@@ -12,6 +12,7 @@
          racket/port
          racket/file
          racket/path
+         "config-paths.rkt"
          (only-in "error/error-helpers.rkt" with-logged-error))
 
 (provide audit-log!
@@ -28,7 +29,7 @@
 
 ;; Returns the audit log path: ~/.q/audit.log
 (define (audit-log-path)
-  (build-path (find-system-path 'home-dir) ".q" "audit.log"))
+  (build-path (global-config-dir) "audit.log"))
 
 ;; ============================================================
 ;; ISO-8601 timestamp

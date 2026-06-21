@@ -28,14 +28,14 @@
 
 (define (load-protocols)
   (call-with-input-file protocols-file
-    (lambda (in)
-      (define form (read in))
-      (unless (list? form)
-        (error 'load-protocols "expected alist, got ~a" form))
-      (for/list ([entry (in-list form)])
-        (unless (and (pair? entry) (symbol? (car entry)) (symbol? (cdr entry)))
-          (error 'load-protocols "bad entry: ~a" entry))
-        entry))))
+                        (lambda (in)
+                          (define form (read in))
+                          (unless (list? form)
+                            (error 'load-protocols "expected alist, got ~a" form))
+                          (for/list ([entry (in-list form)])
+                            (unless (and (pair? entry) (symbol? (car entry)) (symbol? (cdr entry)))
+                              (error 'load-protocols "bad entry: ~a" entry))
+                            entry))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; File discovery
@@ -44,8 +44,7 @@
 (define (find-rkt-files root)
   (for/list ([f (in-directory root)]
              #:when (and (file-exists? f)
-                         (let ([ext (filename-extension f)])
-                           (and ext (bytes=? ext #"rkt")))
+                         (let ([ext (filename-extension f)]) (and ext (bytes=? ext #"rkt")))
                          (not (regexp-match? #px"/benchmarks/" (path->string f)))
                          ;; Exclude this script itself
                          (not (regexp-match? #px"check-protocols\\.rkt$" (path->string f)))))
@@ -73,7 +72,9 @@
       ;; Collect the define body — may span multiple lines.
       (define join-end (min (+ i 8) len))
       (define body-text
-        (string-join (for/list ([j (in-range i join-end)]) (list-ref lines j)) " "))
+        (string-join (for/list ([j (in-range i join-end)])
+                       (list-ref lines j))
+                     " "))
       (when (regexp-match? func-pat body-text)
         (set! vars (cons (cadr define-m) vars)))))
   (reverse vars))
@@ -81,8 +82,8 @@
 ;; Find lines where a result variable is accessed with car/cadr (list access)
 (define (find-list-accesses lines var-name)
   (define var-str (symbol->string var-name))
-  (define pat (pregexp (format "\\b(car|cadr|caddr|cadddr|cdr|cddr)\\s+~a\\b"
-                          (regexp-quote var-str))))
+  (define pat
+    (pregexp (format "\\b(car|cadr|caddr|cadddr|cdr|cddr)\\s+~a\\b" (regexp-quote var-str))))
   (for/list ([i (in-range (length lines))]
              #:when (regexp-match? pat (list-ref lines i)))
     (+ i 1)))
@@ -90,8 +91,7 @@
 ;; Find lines where a result variable is accessed with struct accessors
 (define (find-struct-accesses lines var-name)
   (define var-str (symbol->string var-name))
-  (define pat (pregexp (format "hook-result-(action|payload)\\s+~a\\b"
-                          (regexp-quote var-str))))
+  (define pat (pregexp (format "hook-result-(action|payload)\\s+~a\\b" (regexp-quote var-str))))
   (for/list ([i (in-range (length lines))]
              #:when (regexp-match? pat (list-ref lines i)))
     (+ i 1)))
@@ -101,8 +101,10 @@
 ;;   (hook-result-action (hook-dispatcher ...)) — struct
 (define (find-inline-accesses lines func-name)
   (define func-str (symbol->string func-name))
-  (define list-inline (pregexp (format "\\b(car|cadr|caddr|cadddr)\\s+\\(~a " (regexp-quote func-str))))
-  (define struct-inline (pregexp (format "hook-result-(action|payload)\\s+\\(~a " (regexp-quote func-str))))
+  (define list-inline
+    (pregexp (format "\\b(car|cadr|caddr|cadddr)\\s+\\(~a " (regexp-quote func-str))))
+  (define struct-inline
+    (pregexp (format "hook-result-(action|payload)\\s+\\(~a " (regexp-quote func-str))))
   (define list-lines '())
   (define struct-lines '())
   (for ([i (in-range (length lines))])
@@ -139,8 +141,10 @@
       (define file-struct-lines '())
 
       (for ([var (in-list result-vars)])
-        (set! file-list-lines (append file-list-lines (find-list-accesses lines (string->symbol var))))
-        (set! file-struct-lines (append file-struct-lines (find-struct-accesses lines (string->symbol var)))))
+        (set! file-list-lines
+              (append file-list-lines (find-list-accesses lines (string->symbol var))))
+        (set! file-struct-lines
+              (append file-struct-lines (find-struct-accesses lines (string->symbol var)))))
 
       ;; Phase 3: Check inline accesses
       (define-values (inline-list inline-struct) (find-inline-accesses lines func-name))
@@ -153,8 +157,7 @@
 
       (when (and has-list? (eq? expected-type 'struct))
         (for ([ln (in-list (sort (remove-duplicates file-list-lines) <))])
-          (set! findings
-                (cons (list 'list-access rel-path ln func-name expected-type) findings))))
+          (set! findings (cons (list 'list-access rel-path ln func-name expected-type) findings))))
 
       (when (and has-struct? (eq? expected-type 'list))
         (for ([ln (in-list (sort (remove-duplicates file-struct-lines) <))])
@@ -171,13 +174,16 @@
   (match-define (list access-type rel-path line-num func-name expected) finding)
   (define access-label (if (eq? access-type 'list-access) "list" "struct"))
   (printf "[WARN] ~a:~a uses ~a access for ~a (expected ~a per protocols.rktd)~n"
-          rel-path line-num access-label func-name expected))
+          rel-path
+          line-num
+          access-label
+          func-name
+          expected))
 
 (define (report-summary count)
   (if (zero? count)
       (displayln "All protocol accesses consistent.")
-      (printf "Found ~a protocol inconsistenc~a~n"
-              count (if (= count 1) "y" "ies"))))
+      (printf "Found ~a protocol inconsistenc~a~n" count (if (= count 1) "y" "ies"))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Main
@@ -193,8 +199,7 @@
     (displayln "No protocols defined in protocols.rktd")
     (exit 0))
 
-  (printf "Checking ~a protocol(s) against ~a~n"
-          (length protocols) (path->string project-root))
+  (printf "Checking ~a protocol(s) against ~a~n" (length protocols) (path->string project-root))
 
   (define files (find-rkt-files project-root))
   (printf "Scanning ~a .rkt files~n" (length files))
@@ -215,4 +220,5 @@
 
   (exit (if (null? all-findings) 0 1)))
 
-(main)
+(module+ main
+  (main))
