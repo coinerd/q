@@ -32,3 +32,35 @@
   (check-pred path? dir)
   (check-true (string? (path->string dir)))
   (check-true (string-contains? (path->string dir) ".q")))
+
+;; ============================================================
+;; resolve-project-dir-from-args  (v0.99.38 W1)
+;; ============================================================
+
+(test-case "resolve-project-dir-from-args: symbol key with string value"
+  (define args (hash 'project_dir "/some/path"))
+  (check-equal? (resolve-project-dir-from-args args) (string->path "/some/path")))
+
+(test-case "resolve-project-dir-from-args: string key with string value"
+  (define args (hash "project_dir" "/other/path"))
+  (check-equal? (resolve-project-dir-from-args args) (string->path "/other/path")))
+
+(test-case "resolve-project-dir-from-args: symbol key with path value"
+  (define args (hash 'project_dir (string->path "/some/path")))
+  (check-equal? (resolve-project-dir-from-args args) (string->path "/some/path")))
+
+(test-case "resolve-project-dir-from-args: falls back to current-directory"
+  (define args (hash))
+  (check-equal? (resolve-project-dir-from-args args) (current-directory)))
+
+(test-case "resolve-project-dir-from-args: prefers symbol key over string key"
+  (define args (hash 'project_dir "/sym" "project_dir" "/str"))
+  (check-equal? (resolve-project-dir-from-args args) (string->path "/sym")))
+
+(test-case "resolve-project-dir-from-args: returns path for string input"
+  (define args (hash 'project_dir "/some/path"))
+  (check-pred path? (resolve-project-dir-from-args args)))
+
+(test-case "resolve-project-dir-from-args: handles #f value gracefully"
+  (define args (hash 'project_dir #f))
+  (check-equal? (resolve-project-dir-from-args args) (current-directory)))
