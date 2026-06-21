@@ -113,8 +113,9 @@
                  type
                  schema-version
                  (current-schema-version)))
-  (define deserializer (lookup-event-deserializer type))
-  (when (and (not deserializer) (> (hash-count h) 4))
+  ;; Guard: missing/invalid type cannot be looked up — return base event.
+  (define deserializer (and type (lookup-event-deserializer type)))
+  (when (and (not deserializer) type (> (hash-count h) 4))
     (log-warning "q/event-json: no deserializer for event type '~a'" type))
   (if deserializer
       (deserializer type ts sid tid h)
