@@ -27,16 +27,60 @@ runs:
       with:
         version: ${{ inputs.racket-version }}
 
-    - name: Install dependencies
+    # ------------------------------------------------------------------
+    # Package setup: install/update the q package, which triggers raco
+    # setup to compile ALL package-visible modules. This is the hidden
+    # compile boundary that catches modules outside main.rkt's
+    # dependency graph (scripts, CLI tools, etc.).
+    # ------------------------------------------------------------------
+    - name: Install q package and compile package-visible modules
       shell: bash
       run: |
+        # Diagnostic: toolchain versions
+        echo "=== Package Setup Diagnostics ==="
+        echo ""
+        echo "Racket version:"
+        racket --version
+        echo ""
+        echo "raco version:"
+        raco --version || true
+        echo ""
+        echo "Working directory: $PWD"
+        echo "PLTUSERHOME: ${PLTUSERHOME:-<not set>}"
+        echo ""
+
         # Idempotent local package setup: install if absent, update if present.
         # Use $PWD instead of '.' to avoid macOS "invalid package source" errors.
         if raco pkg show q 2>/dev/null | grep -q "q"; then
-          echo "Package q already installed, updating..."
+          echo "Package state: q already installed"
+          echo ""
+          echo "::group::Updating q package (raco pkg update --auto q)"
           raco pkg update --auto q
+          UPDATE_RC=$?
+          echo "::endgroup::"
+          if [ $UPDATE_RC -ne 0 ]; then
+            echo ""
+            echo "::error::raco pkg update failed with exit code $UPDATE_RC"
+            echo "This indicates a compile error in a package-visible module."
+            echo "Run locally: racket scripts/ci-package-setup.rkt --preflight"
+            exit $UPDATE_RC
+          fi
         else
-          echo "Installing local package from $PWD ..."
+          echo "Package state: q not installed"
+          echo ""
+          echo "::group::Installing q package (raco pkg install --auto --batch $PWD)"
           raco pkg install --auto --batch "$PWD"
+          INSTALL_RC=$?
+          echo "::endgroup::"
+          if [ $INSTALL_RC -ne 0 ]; then
+            echo ""
+            echo "::error::raco pkg install failed with exit code $INSTALL_RC"
+            echo "This indicates a compile error in a package-visible module."
+            echo "Run locally: racket scripts/ci-package-setup.rkt --preflight"
+            exit $INSTALL_RC
+          fi
         fi
+
+        echo ""
+        echo "=== Package setup completed successfully ==="
         # TUI uses native Racket implementations (no external deps needed)
