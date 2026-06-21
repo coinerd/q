@@ -56,6 +56,10 @@
          count-bench-timing
          count-ad-hoc-parsing
          count-event-handlers
+         count-cwd-sensitive-paths
+         count-mutation-sites
+         count-hash-ref-chains
+         count-inline-config-paths
          audit-content
          current-audit-file->lines)
 
@@ -149,7 +153,15 @@
           'ad-hoc-parse-count
           (count-ad-hoc-parsing text)
           'event-handler-count
-          (count-event-handlers text))))
+          (count-event-handlers text)
+          'cwd-sensitive-path-count
+          (count-cwd-sensitive-paths text)
+          'mutation-site-count
+          (count-mutation-sites text)
+          'hash-ref-chain-count
+          (count-hash-ref-chains text)
+          'inline-config-path-count
+          (count-inline-config-paths text))))
 
 ;; Count exported identifiers in (provide ...) forms.
 ;; Handles: provide id, provide (contract-out ...), provide (struct-out ...)
@@ -186,6 +198,18 @@
 ;; Handler/model risk: defines functions AND dispatches on event/state types
 (define event-handler-rx #px"define.*handler|handle-event|handle-key|dispatch")
 
+;; v0.99.38 W8: Change-locality signals
+;; CWD-sensitive: dynamic-require with relative-path string, file->* without build-path
+(define cwd-sensitive-rx
+  #px"dynamic-require\\s+\"[^/]|file->string\\s+\"[^/]|file->lines\\s+\"[^/]|file->bytes\\s+\"[^/]|file->list\\s+\"[^/]")
+;; Mutation sites: file-writing calls that modify the filesystem
+(define mutation-site-rx
+  #px"call-with-output-file|with-output-to-file|display-to-file|write-to-file|open-output-file")
+;; Hash-ref chains: nested hash-ref calls (common-case API pain point P5)
+(define hash-ref-chain-rx #px"hash-ref\\s+\\(hash-ref")
+;; Inline config paths: (build-path (find-system-path 'home-dir) ...) pattern
+(define inline-config-path-rx #px"build-path\\s+\\(find-system-path\\s+'home-dir")
+
 (define (count-matches text rx)
   (length (regexp-match* rx text)))
 
@@ -208,6 +232,25 @@
 (define (count-event-handlers text)
   "Count event handler definitions in text."
   (count-matches text event-handler-rx))
+
+;; v0.99.38 W8: Change-locality signal counters
+(define (count-cwd-sensitive-paths text)
+  "Count CWD-sensitive dynamic-require / file->* patterns in text.
+   These are relative-path string arguments that break if CWD changes."
+  (count-matches text cwd-sensitive-rx))
+
+(define (count-mutation-sites text)
+  "Count file-writing mutation sites (call-with-output-file, etc.) in text."
+  (count-matches text mutation-site-rx))
+
+(define (count-hash-ref-chains text)
+  "Count nested hash-ref chains in text (common-case API pain point P5)."
+  (count-matches text hash-ref-chain-rx))
+
+(define (count-inline-config-paths text)
+  "Count inline (build-path (find-system-path 'home-dir) ...) patterns in text.
+   These should use the shared global-config-dir helper instead."
+  (count-matches text inline-config-path-rx))
 
 (define (count-io-effects text)
   "Count I/O effect occurrences in text."
@@ -319,52 +362,75 @@
   (define all-ad-hoc-parse (filter (lambda (f) (> (hash-ref f 'ad-hoc-parse-count 0) 0)) findings))
   (define all-event-handlers (filter (lambda (f) (> (hash-ref f 'event-handler-count 0) 0)) findings))
 
-  (hash 'total-modules
-        (length findings)
-        'largest-modules
-        (map (lambda (f)
-               (hash 'path
-                     (hash-ref f 'path)
-                     'lines
-                     (hash-ref f 'line-count)
-                     'exports
-                     (hash-ref f 'export-count)))
-             largest)
-        'parameter-usage
-        (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'parameter-count)))
-             (sort all-params > #:key (lambda (f) (hash-ref f 'parameter-count 0))))
-        'macro-usage
-        (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'macro-count)))
-             (sort all-macros > #:key (lambda (f) (hash-ref f 'macro-count 0))))
-        'struct-out-exports
-        (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'struct-out-count 0)))
-             (sort all-struct-out > #:key (lambda (f) (hash-ref f 'struct-out-count 0))))
-        'io-mixed-with-logic
-        (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'io-count 0)))
-             (sort all-io-mixed > #:key (lambda (f) (hash-ref f 'io-count 0))))
-        'serialization-hotspots
-        (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'serialization-count)))
-             (sort all-serialization > #:key (lambda (f) (hash-ref f 'serialization-count 0))))
-        'error-density
-        (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'error-count 0)))
-             (sort all-errors > #:key (lambda (f) (hash-ref f 'error-count 0))))
-        'handler-density
-        (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'handler-count 0)))
-             (sort all-handlers > #:key (lambda (f) (hash-ref f 'handler-count 0))))
-        'all-defined-out-modules
-        (map (lambda (f) (hash-ref f 'path)) all-all-defined-out)
-        'mutable-cache-modules
-        (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'mutable-cache-count 0)))
-             (sort all-mutable-cache > #:key (lambda (f) (hash-ref f 'mutable-cache-count 0))))
-        'bench-timing-modules
-        (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'bench-timing-count 0)))
-             (sort all-bench-timing > #:key (lambda (f) (hash-ref f 'bench-timing-count 0))))
-        'ad-hoc-parse-modules
-        (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'ad-hoc-parse-count 0)))
-             (sort all-ad-hoc-parse > #:key (lambda (f) (hash-ref f 'ad-hoc-parse-count 0))))
-        'event-handler-modules
-        (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'event-handler-count 0)))
-             (sort all-event-handlers > #:key (lambda (f) (hash-ref f 'event-handler-count 0))))))
+  ;; v0.99.38 W8: Change-locality signals
+  (define all-cwd-sensitive
+    (filter (lambda (f) (> (hash-ref f 'cwd-sensitive-path-count 0) 0)) findings))
+  (define all-mutation-sites (filter (lambda (f) (> (hash-ref f 'mutation-site-count 0) 0)) findings))
+  (define all-hash-ref-chains
+    (filter (lambda (f) (> (hash-ref f 'hash-ref-chain-count 0) 0)) findings))
+  (define all-inline-config-paths
+    (filter (lambda (f) (> (hash-ref f 'inline-config-path-count 0) 0)) findings))
+
+  (hash
+   'total-modules
+   (length findings)
+   'largest-modules
+   (map (lambda (f)
+          (hash 'path
+                (hash-ref f 'path)
+                'lines
+                (hash-ref f 'line-count)
+                'exports
+                (hash-ref f 'export-count)))
+        largest)
+   'parameter-usage
+   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'parameter-count)))
+        (sort all-params > #:key (lambda (f) (hash-ref f 'parameter-count 0))))
+   'macro-usage
+   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'macro-count)))
+        (sort all-macros > #:key (lambda (f) (hash-ref f 'macro-count 0))))
+   'struct-out-exports
+   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'struct-out-count 0)))
+        (sort all-struct-out > #:key (lambda (f) (hash-ref f 'struct-out-count 0))))
+   'io-mixed-with-logic
+   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'io-count 0)))
+        (sort all-io-mixed > #:key (lambda (f) (hash-ref f 'io-count 0))))
+   'serialization-hotspots
+   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'serialization-count)))
+        (sort all-serialization > #:key (lambda (f) (hash-ref f 'serialization-count 0))))
+   'error-density
+   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'error-count 0)))
+        (sort all-errors > #:key (lambda (f) (hash-ref f 'error-count 0))))
+   'handler-density
+   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'handler-count 0)))
+        (sort all-handlers > #:key (lambda (f) (hash-ref f 'handler-count 0))))
+   'all-defined-out-modules
+   (map (lambda (f) (hash-ref f 'path)) all-all-defined-out)
+   'mutable-cache-modules
+   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'mutable-cache-count 0)))
+        (sort all-mutable-cache > #:key (lambda (f) (hash-ref f 'mutable-cache-count 0))))
+   'bench-timing-modules
+   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'bench-timing-count 0)))
+        (sort all-bench-timing > #:key (lambda (f) (hash-ref f 'bench-timing-count 0))))
+   'ad-hoc-parse-modules
+   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'ad-hoc-parse-count 0)))
+        (sort all-ad-hoc-parse > #:key (lambda (f) (hash-ref f 'ad-hoc-parse-count 0))))
+   'event-handler-modules
+   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'event-handler-count 0)))
+        (sort all-event-handlers > #:key (lambda (f) (hash-ref f 'event-handler-count 0))))
+   'cwd-sensitive-path-modules
+   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'cwd-sensitive-path-count 0)))
+        (sort all-cwd-sensitive > #:key (lambda (f) (hash-ref f 'cwd-sensitive-path-count 0))))
+   'mutation-site-modules
+   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'mutation-site-count 0)))
+        (sort all-mutation-sites > #:key (lambda (f) (hash-ref f 'mutation-site-count 0))))
+   'hash-ref-chain-modules
+   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'hash-ref-chain-count 0)))
+        (sort all-hash-ref-chains > #:key (lambda (f) (hash-ref f 'hash-ref-chain-count 0))))
+   'inline-config-path-modules
+   (map
+    (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'inline-config-path-count 0)))
+    (sort all-inline-config-paths > #:key (lambda (f) (hash-ref f 'inline-config-path-count 0))))))
 
 (define (take-at-most lst n)
   (if (> (length lst) n)
@@ -521,6 +587,51 @@
         (fprintf out "| Count | Path |\n")
         (fprintf out "|-------|------|\n")
         (for ([p eh])
+          (fprintf out "| ~a | ~a |\n" (hash-ref p 'count) (hash-ref p 'path)))
+        (fprintf out "\n")))
+
+  ;; v0.99.38 W8: Change-locality signals
+  (fprintf out "## CWD-Sensitive Path Patterns (dynamic-require / file->* with relative paths)\n\n")
+  (define csp (hash-ref summary 'cwd-sensitive-path-modules '()))
+  (if (null? csp)
+      (fprintf out "None found.\n\n")
+      (begin
+        (fprintf out "| Count | Path |\n")
+        (fprintf out "|-------|------|\n")
+        (for ([p csp])
+          (fprintf out "| ~a | ~a |\n" (hash-ref p 'count) (hash-ref p 'path)))
+        (fprintf out "\n")))
+
+  (fprintf out "## File Mutation Sites (call-with-output-file / write-to-file / display-to-file)\n\n")
+  (define ms (hash-ref summary 'mutation-site-modules '()))
+  (if (null? ms)
+      (fprintf out "None found.\n\n")
+      (begin
+        (fprintf out "| Count | Path |\n")
+        (fprintf out "|-------|------|\n")
+        (for ([p (take-at-most ms 20)])
+          (fprintf out "| ~a | ~a |\n" (hash-ref p 'count) (hash-ref p 'path)))
+        (fprintf out "\n")))
+
+  (fprintf out "## Hash-Ref Chains (nested hash-ref — common-case API pain point)\n\n")
+  (define hrc (hash-ref summary 'hash-ref-chain-modules '()))
+  (if (null? hrc)
+      (fprintf out "None found.\n\n")
+      (begin
+        (fprintf out "| Count | Path |\n")
+        (fprintf out "|-------|------|\n")
+        (for ([p (take-at-most hrc 20)])
+          (fprintf out "| ~a | ~a |\n" (hash-ref p 'count) (hash-ref p 'path)))
+        (fprintf out "\n")))
+
+  (fprintf out "## Inline Config Paths ((build-path (find-system-path 'home-dir) ...))\n\n")
+  (define icp (hash-ref summary 'inline-config-path-modules '()))
+  (if (null? icp)
+      (fprintf out "None found.\n\n")
+      (begin
+        (fprintf out "| Count | Path |\n")
+        (fprintf out "|-------|------|\n")
+        (for ([p icp])
           (fprintf out "| ~a | ~a |\n" (hash-ref p 'count) (hash-ref p 'path)))
         (fprintf out "\n")))
 
