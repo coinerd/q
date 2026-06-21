@@ -48,6 +48,10 @@
 
 ;; --------------------------------------------------
 ;; Check if GUI is available
+;; DESIGN FACT (W6, v0.99.38 adapter audit): This is the GUI adapter layer's
+;; environment gate. DISPLAY or WAYLAND_DISPLAY must be set, and the gui/easy
+;; libraries must be loadable. The dynamic-require with #f probe avoids hard
+;; dependency on racket/gui at compile time (optional adapter pattern).
 ;; --------------------------------------------------
 (define (gui-available?)
   (and (or (getenv "DISPLAY") (getenv "WAYLAND_DISPLAY"))
