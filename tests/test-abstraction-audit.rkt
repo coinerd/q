@@ -464,6 +464,98 @@ EOF
      (check-true (> (hash-ref finding 'line-count) 0) "mocked module has positive lines"))))
 
 ;; ============================================================
+;; v0.99.38 W8: Change-locality signal tests
+;; ============================================================
+
+(define-test-suite
+ v4-change-locality-signal-tests
+ (test-case "count-cwd-sensitive-paths detects dynamic-require with relative path"
+   (define text "(dynamic-require \"foo/bar.rkt\" 'x)")
+   (check-equal? ((audit-ref 'count-cwd-sensitive-paths) text) 1 "detects relative dynamic-require"))
+ (test-case "count-cwd-sensitive-paths detects file->string with relative path"
+   (define text "(file->string \"config.json\")")
+   (check-equal? ((audit-ref 'count-cwd-sensitive-paths) text) 1 "detects relative file->string"))
+ (test-case "count-cwd-sensitive-paths does NOT flag absolute paths"
+   (define text "(file->string \"/etc/config.json\")")
+   (check-equal? ((audit-ref 'count-cwd-sensitive-paths) text) 0 "absolute path not flagged"))
+ (test-case "count-cwd-sensitive-paths does NOT flag build-path"
+   (define text "(file->string (build-path dir \"config.json\"))")
+   (check-equal? ((audit-ref 'count-cwd-sensitive-paths) text) 0 "build-path not flagged"))
+ (test-case "count-cwd-sensitive-paths returns 0 for clean text"
+   (define text "(define (f x) x)")
+   (check-equal? ((audit-ref 'count-cwd-sensitive-paths) text) 0 "clean text returns 0"))
+ (test-case "count-mutation-sites detects call-with-output-file"
+   (define text "(call-with-output-file \"a.txt\" f #:exists 'truncate)")
+   (check-pred positive? ((audit-ref 'count-mutation-sites) text) "detects call-with-output-file"))
+ (test-case "count-mutation-sites detects write-to-file"
+   (define text "(write-to-file \"out.txt\" data)")
+   (check-pred positive? ((audit-ref 'count-mutation-sites) text) "detects write-to-file"))
+ (test-case "count-mutation-sites returns 0 for read-only text"
+   (define text "(file->string \"input.txt\")")
+   (check-equal? ((audit-ref 'count-mutation-sites) text) 0 "read-only returns 0"))
+ (test-case "count-mutation-sites returns 0 for clean text"
+   (define text "(define (f x) x)")
+   (check-equal? ((audit-ref 'count-mutation-sites) text) 0 "clean text returns 0"))
+ (test-case "count-hash-ref-chains detects nested hash-ref"
+   (define text "(hash-ref (hash-ref h 'a) 'b)")
+   (check-equal? ((audit-ref 'count-hash-ref-chains) text) 1 "detects 1 nested hash-ref chain"))
+ (test-case "count-hash-ref-chains detects multiple nested hash-ref"
+   (define text "(hash-ref (hash-ref (hash-ref h 'a) 'b) 'c) (hash-ref (hash-ref h 'x) 'y)")
+   (check-true (>= ((audit-ref 'count-hash-ref-chains) text) 2)
+               "detects >= 2 nested hash-ref chains"))
+ (test-case "count-hash-ref-chains returns 0 for single hash-ref"
+   (define text "(hash-ref h 'a)")
+   (check-equal? ((audit-ref 'count-hash-ref-chains) text) 0 "single hash-ref returns 0"))
+ (test-case "count-hash-ref-chains returns 0 for clean text"
+   (define text "(define (f x) x)")
+   (check-equal? ((audit-ref 'count-hash-ref-chains) text) 0 "clean text returns 0"))
+ (test-case "count-inline-config-paths detects build-path find-system-path home-dir"
+   (define text "(build-path (find-system-path 'home-dir) \".q\")")
+   (check-equal? ((audit-ref 'count-inline-config-paths) text) 1 "detects inline config path"))
+ (test-case "count-inline-config-paths returns 0 for global-config-dir usage"
+   (define text "(global-config-dir)")
+   (check-equal? ((audit-ref 'count-inline-config-paths) text) 0 "global-config-dir not flagged"))
+ (test-case "count-inline-config-paths returns 0 for clean text"
+   (define text "(define (f x) x)")
+   (check-equal? ((audit-ref 'count-inline-config-paths) text) 0 "clean text returns 0")))
+
+(define-test-suite
+ v4-audit-content-integration-tests
+ (test-case "audit-content includes all 4 new signal keys"
+   (define text "#lang racket/base\n(define (f x) x)")
+   (define finding ((audit-ref 'audit-content) "test.rkt" text))
+   (check-true (hash-has-key? finding 'cwd-sensitive-path-count) "has cwd-sensitive-path-count")
+   (check-true (hash-has-key? finding 'mutation-site-count) "has mutation-site-count")
+   (check-true (hash-has-key? finding 'hash-ref-chain-count) "has hash-ref-chain-count")
+   (check-true (hash-has-key? finding 'inline-config-path-count) "has inline-config-path-count"))
+ (test-case "audit-content detects cwd-sensitive in fixture"
+   (define text "#lang racket/base\n(define (load-config)\n  (file->string \"config.json\"))")
+   (define finding ((audit-ref 'audit-content) "cwd.rkt" text))
+   (check-pred positive? (hash-ref finding 'cwd-sensitive-path-count) "cwd-sensitive > 0"))
+ (test-case "audit-content detects mutation site in fixture"
+   (define text
+     "#lang racket/base\n(define (save! data)\n  (call-with-output-file \"out.txt\" (lambda (o) (write data o)) #:exists 'truncate))")
+   (define finding ((audit-ref 'audit-content) "mut.rkt" text))
+   (check-pred positive? (hash-ref finding 'mutation-site-count) "mutation-site > 0"))
+ (test-case "audit-content detects hash-ref chain in fixture"
+   (define text
+     "#lang racket/base\n(define (get-name config)\n  (hash-ref (hash-ref config 'user) 'name))")
+   (define finding ((audit-ref 'audit-content) "chain.rkt" text))
+   (check-pred positive? (hash-ref finding 'hash-ref-chain-count) "hash-ref-chain > 0"))
+ (test-case "audit-content detects inline config path in fixture"
+   (define text
+     "#lang racket/base\n(define (config-dir)\n  (build-path (find-system-path 'home-dir) \".q\"))")
+   (define finding ((audit-ref 'audit-content) "icp.rkt" text))
+   (check-pred positive? (hash-ref finding 'inline-config-path-count) "inline-config-path > 0"))
+ (test-case "audit-content on clean text has all 0 signals"
+   (define text "#lang racket/base\n(define (f x) x)")
+   (define finding ((audit-ref 'audit-content) "clean.rkt" text))
+   (check-equal? (hash-ref finding 'cwd-sensitive-path-count) 0 "clean: 0 cwd-sensitive")
+   (check-equal? (hash-ref finding 'mutation-site-count) 0 "clean: 0 mutation-sites")
+   (check-equal? (hash-ref finding 'hash-ref-chain-count) 0 "clean: 0 hash-ref-chains")
+   (check-equal? (hash-ref finding 'inline-config-path-count) 0 "clean: 0 inline-config-paths")))
+
+;; ============================================================
 ;; Run all tests
 ;; ============================================================
 
@@ -476,7 +568,9 @@ EOF
                    count-exports-tests
                    red-flag-signal-tests
                    v3-signal-tests
-                   pure-audit-content-tests)
+                   pure-audit-content-tests
+                   v4-change-locality-signal-tests
+                   v4-audit-content-integration-tests)
 
 (module+ test
   (run-tests all-abstraction-audit-tests))
