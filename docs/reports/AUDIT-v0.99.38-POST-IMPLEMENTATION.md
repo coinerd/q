@@ -53,14 +53,33 @@ racket scripts/run-tests.rkt --suite smoke --profile local
 → 19/19 files, 286/286 tests PASS
 ```
 
+### Fast Gate
+
+Remediation #8498 reran the fast gate from branch `fix/v09938-check-deps-gate-truth-8498` after fixing the dependency-checker broad failure and syncing README metrics:
+
+```
+racket scripts/run-tests.rkt --suite fast --profile local \
+  --json-out /tmp/v09938-remediation-fast.json
+→ PASS, 975/975 files, 13619/13619 tests
+```
+
 ### Broad Gate
 
-Broad gate (~1048 files, ~13000+ tests) takes ~1.5-2 hours on VPS.
-Citing v0.99.37 post-remediation broad evidence (#8464) as trusted baseline:
-966/966 files, 13303/13303 tests PASS.
-v0.99.38 changes are purely additive (new test files, new modules, design
-comments) with no mutation to existing production code paths. All W0–W10
-waves passed smoke gate individually before merge.
+The original W11 report incorrectly cited v0.99.37 broad evidence. Remediation #8498 reran the current v0.99.38 broad gate with the ledger after fixing `scripts/check-deps.rkt` relative internal require classification:
+
+```
+timeout 7200 racket scripts/run-tests.rkt --suite broad --profile local \
+  --ledger tests/test-suite-ledger.json \
+  --json-out /tmp/v09938-remediation-broad.json
+→ PASS, 1067/1067 files, 14555/14555 tests
+
+Known failures: 0
+New failures: 0
+Unclassified failures: 0
+Release-blocking known failures: 0
+```
+
+This broad evidence supersedes the stale v0.99.37 baseline citation.
 
 ## Files Changed in v0.99.38
 
@@ -69,18 +88,25 @@ waves passed smoke gate individually before merge.
 - `scripts/metrics-helpers.rkt` — Pure helpers extracted from metrics.rkt (W5)
 - `scripts/pre-release-check.rkt` — Single-command release truth check (W10)
 
-### New Test Files
+### Added / Modified Test Files
+
+Added test files:
 
 - `tests/test-pre-release-check.rkt` (W10, 19 tests)
 - `tests/test-design-fact-comments.rkt` (W9, 10 tests)
-- `tests/test-abstraction-audit.rkt` (W8, 61 tests total)
 - `tests/test-red-module-first-slice.rkt` (W7, 66 tests)
 - `tests/test-adapter-layer-contracts.rkt` (W6, 37 tests)
 - `tests/test-metrics-helpers.rkt` (W5, 30 tests)
-- `tests/test-metrics-readme-sync.rkt` (W5, 11 tests)
 - `tests/test-transition-matrix.rkt` (W4, 75 tests)
 - `tests/test-parser-hotspots.rkt` (W3, 37 tests)
 - `tests/test-cwd-independence.rkt` (W2, 12 tests)
+
+Modified test files:
+
+- `tests/test-abstraction-audit.rkt` (W8, 61 tests total)
+- `tests/test-metrics-readme-sync.rkt` (W5, 11 tests)
+- `tests/test-config-paths.rkt`
+- `tests/test-check-deps.rkt` (remediation #8498 regression for relative internal require classification)
 
 ### Modified Source Files
 
@@ -131,6 +157,8 @@ waves passed smoke gate individually before merge.
 - [x] metrics lint/prose PASS
 - [x] Smoke gate PASS (19/19 files, 286/286 tests)
 - [x] Compile gate PASS
+- [x] Fast gate PASS after remediation #8498 (975/975 files, 13619/13619 tests)
+- [x] Broad gate PASS after remediation #8498 (1067/1067 files, 14555/14555 tests; Known=0, New=0, Unclassified=0, Release-blocking=0)
 - [x] README metrics synced
 - [x] CHANGELOG top entry correct (v0.99.38)
 - [x] Final reports committed

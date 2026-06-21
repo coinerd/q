@@ -51,6 +51,7 @@
 ;; Internal q module prefixes — not external packages
 (define internal-prefixes
   '("agent" "cli"
+            "browser"
             "extensions"
             "interfaces"
             "llm"
@@ -65,6 +66,7 @@
             "benchmarks"
             "docs"
             "wiki"
+            "wiring"
             "collab"
             "helpers"
             "examples"
@@ -94,13 +96,26 @@
 ;; These are packages not in base that appear as (require pkgname)
 (define known-external-bare '("quickcheck"))
 
+(define require-token-rx #rx"[a-zA-Z_][a-zA-Z0-9_-]*/[a-zA-Z0-9_.-]+")
+
+(define (relative-path-token? line start)
+  ;; DESIGN FACT: `check-deps` scans require lines textually. A relative
+  ;; require like "../browser/adapter.rkt" contains the token
+  ;; "browser/adapter.rkt", but that token is an internal filesystem path, not
+  ;; an external package collection. If the character immediately before the
+  ;; token is `/` or `.`, classify it as path syntax and ignore it.
+  (and (> start 0)
+       (let ([prev (string-ref line (sub1 start))]) (or (char=? prev #\/) (char=? prev #\.)))))
+
 (define (extract-external-packages content)
-  ;; Find all name/subpath tokens in require forms
+  ;; Find all name/subpath tokens in require forms.
   (define slash-deps
     (for*/list ([line (in-list (string-split content "\n"))]
                 #:when (or (regexp-match? #rx"[(]require" line)
                            (regexp-match? (regexp "^\\s+[a-zA-Z]") line))
-                [tok (in-list (regexp-match* #rx"[a-zA-Z_][a-zA-Z0-9_-]*/[a-zA-Z0-9_.-]+" line))]
+                [span (in-list (regexp-match-positions* require-token-rx line))]
+                #:unless (relative-path-token? line (car span))
+                [tok (in-value (substring line (car span) (cdr span)))]
                 #:when (let ([prefix (car (string-split tok "/"))])
                          (and (not (set-member? base-packages prefix))
                               (not (member prefix internal-prefixes))

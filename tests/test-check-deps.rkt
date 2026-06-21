@@ -20,7 +20,11 @@
 (test-case "check-deps-passes-with-current-info-rkt"
   (define cmd (format "cd ~a && racket scripts/check-deps.rkt" q-dir))
   (define out (with-output-to-string (lambda () (void (system cmd)))))
-  (check-regexp-match #rx"All external packages declared" out))
+  (check-regexp-match #rx"All external packages declared" out)
+  (check-false (regexp-match? #rx"x browser" out)
+               "relative internal requires must not be classified as external browser package")
+  (check-false (regexp-match? #rx"x wiring" out)
+               "relative internal requires must not be classified as external wiring package"))
 
 (test-case "check-deps-detects-missing-dep"
   (define info-path (build-path q-dir "info.rkt"))
