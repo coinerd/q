@@ -24,12 +24,16 @@
 
 (define quick? #f)
 (define fix? #f)
+(define package-setup? #f)
+(define github-setup? #f)
 
 (define (parse-flags!)
   (for ([arg (in-vector (current-command-line-arguments))])
     (cond
       [(string=? arg "--quick") (set! quick? #t)]
       [(string=? arg "--fix") (set! fix? #t)]
+      [(string=? arg "--package-setup") (set! package-setup? #t)]
+      [(string=? arg "--github-setup") (set! github-setup? #t)]
       [else (printf "Unknown flag: ~a~n" arg)])))
 
 ;; ---------------------------------------------------------------------------
@@ -125,11 +129,39 @@
     (printf "ERROR: Run from the q/ directory (main.rkt not found).~n")
     (exit 1))
 
-  (printf "~n=== CI Local Lint Suite ===~n")
+  ;; Handle package-setup mode (Option B preflight)
+  (when package-setup?
+    (printf "=== CI Package Setup Gate (preflight) ===~n")
+    (printf "This gate compiles ALL package-visible modules, mirroring~n")
+    (printf "the hidden compile boundary in GitHub Actions setup-racket.~n~n")
+    (define exit-code (system/exit-code "racket scripts/ci-package-setup.rkt --preflight"))
+    (when (not (zero? exit-code))
+      (printf "~nPackage setup gate FAILED. Run ci-local without --package-setup for lint-only.~n")
+      (exit 1))
+    (printf "~n"))
+
+  ;; Handle github-setup mode (Option A full)
+  (when github-setup?
+    (printf "=== CI Package Setup Gate (full) ===~n")
+    (printf "Running raco pkg install in isolated PLTUSERHOME.~n")
+    (printf "This is the closest local equivalent to GitHub Actions.~n~n")
+    (define exit-code (system/exit-code "racket scripts/ci-package-setup.rkt --full"))
+    (when (not (zero? exit-code))
+      (printf "~nFull package setup gate FAILED.~n")
+      (exit 1))
+    (printf "~n"))
+
+  (printf "=== CI Local Lint Suite ===~n")
   (when quick?
-    (printf "Mode: --quick (skipping slow checks)~n"))
+    (printf "Mode: --quick (skipping slow checks)~n")
+    (printf "NOTE: --quick does NOT include package setup parity.~n")
+    (printf "      Use --package-setup for CI-equivalent compile gate.~n"))
   (when fix?
     (printf "Mode: --fix (auto-fixing drift before lint)~n"))
+  (when package-setup?
+    (printf "Mode: --package-setup (preflight compile gate included)~n"))
+  (when github-setup?
+    (printf "Mode: --github-setup (full package install gate included)~n"))
   (printf "~n")
 
   ;; Phase 1: Auto-fix (if --fix)
