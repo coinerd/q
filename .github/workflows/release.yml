@@ -74,6 +74,18 @@ jobs:
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
+      - name: Version context diagnostics
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          CANONICAL=$(racket -e '(require "util/version.rkt") (display q-version)')
+          echo "=== Release Context ==="
+          echo "GITHUB_REF:       ${GITHUB_REF}"
+          echo "GITHUB_SHA:       ${GITHUB_SHA}"
+          echo "Tag version:      ${VERSION}"
+          echo "Canonical q-ver:  ${CANONICAL}"
+          echo "Readiness ctx:    tag-publish"
+          echo "=== End Release Context ==="
+
       - name: Verify version consistency
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
@@ -110,12 +122,45 @@ jobs:
           cat /tmp/release-notes.md
 
       - name: Create GitHub Release
+        id: create_release
         uses: softprops/action-gh-release@v3
         with:
           body_path: /tmp/release-notes.md
           files: |
             /tmp/q-${{ steps.version.outputs.VERSION }}.tar.gz
             release-manifest.json
+
+      - name: Verify uploaded release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "Verifying release assets for ${TAG}..."
+          # Query the release by tag to confirm it exists
+          RELEASE_DATA=$(curl -sf -H "Authorization: token $GH_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/${TAG}")
+          if [ -z "$RELEASE_DATA" ]; then
+            echo "ERROR: Release for tag ${TAG} not found"
+            exit 1
+          fi
+          echo "Release found for ${TAG}"
+          # Verify tarball asset exists
+          TARBALL="q-${VERSION}.tar.gz"
+          TARBALL_URL=$(echo "$RELEASE_DATA" | jq -r ".assets[] | select(.name==\"${TARBALL}\") | .url")
+          if [ -z "$TARBALL_URL" ] || [ "$TARBALL_URL" = "null" ]; then
+            echo "ERROR: Asset ${TARBALL} not found in release ${TAG}"
+            exit 1
+          fi
+          echo "Asset verified: ${TARBALL}"
+          # Verify manifest asset exists
+          MANIFEST_URL=$(echo "$RELEASE_DATA" | jq -r '.assets[] | select(.name=="release-manifest.json") | .url')
+          if [ -z "$MANIFEST_URL" ] || [ "$MANIFEST_URL" = "null" ]; then
+            echo "ERROR: Asset release-manifest.json not found in release ${TAG}"
+            exit 1
+          fi
+          echo "Asset verified: release-manifest.json"
+          echo "All release assets verified successfully."
 
   smoke:
     needs: release
