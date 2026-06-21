@@ -26,6 +26,7 @@
 (define fix? #f)
 (define package-setup? #f)
 (define github-setup? #f)
+(define release-dry-run? #f)
 
 (define (parse-flags!)
   (for ([arg (in-vector (current-command-line-arguments))])
@@ -34,6 +35,7 @@
       [(string=? arg "--fix") (set! fix? #t)]
       [(string=? arg "--package-setup") (set! package-setup? #t)]
       [(string=? arg "--github-setup") (set! github-setup? #t)]
+      [(string=? arg "--release-dry-run") (set! release-dry-run? #t)]
       [else (printf "Unknown flag: ~a~n" arg)])))
 
 ;; ---------------------------------------------------------------------------
@@ -139,6 +141,18 @@
       (printf "~nPackage setup gate FAILED. Run ci-local without --package-setup for lint-only.~n")
       (exit 1))
     (printf "~n"))
+
+  ;; Handle release-dry-run mode
+  (when release-dry-run?
+    (printf "=== Release Dry-Run ===~n")
+    (printf "Validating release workflow semantics locally.~n")
+    (printf "No tags or releases will be created.~n~n")
+    (define exit-code (system/exit-code "racket scripts/release-dry-run.rkt --context tag-publish"))
+    (when (not (zero? exit-code))
+      (printf "~nRelease dry-run FAILED.~n")
+      (exit 1))
+    (printf "~nRelease dry-run PASSED.~n")
+    (exit 0))
 
   ;; Handle github-setup mode (Option A full)
   (when github-setup?
