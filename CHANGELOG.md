@@ -1,3 +1,113 @@
+## 0.99.38
+
+Released: 2026-06-23
+
+### Overview
+Racket Abstraction Manual Roadmap IV — Change Locality. This
+release continues the systematic abstraction improvement program with
+12 waves (W0–W11) focused on change-locality improvements: making it
+easier to understand, predict, and control the blast radius of code
+changes. The central themes are common-case APIs, source-relative
+path/module boundaries, parser pipelines, state-transition seams,
+adapter contracts, mutation-safe release checks, RED-module
+characterization, scanner signals, and release-truth hardening. All
+changes are backward-compatible — public API surfaces are unchanged.
+
+### Documentation & Audits
+
+- **W0: Baseline inventory + change-locality scorecard.** Scanned
+  696 modules, established the change-locality baseline with risk/
+  reward scoring across 8 dimensions. Report:
+  `docs/reports/ABSTRACTION-BASELINE-v0.99.38.md`.
+
+- **W1: Common-case API scorecard.** Mapped the common-case entry
+  points for all 6 adapter layers. Implemented Green fix:
+  `resolve-project-dir-from-args` pure function. Report:
+  `docs/reports/COMMON-CASE-API-SCORECARD-v0.99.38.md`.
+
+- **W2: Source-relative path/module-loading audit.** Verified all
+  15+ dynamic-require sites are CWD-safe using 4 patterns. 12
+  regression tests for CWD independence. Report:
+  `docs/reports/PATH-MODULE-LOADING-AUDIT-v0.99.38.md`.
+
+- **W3: Parser/string hotspot scorecard.** Mapped parser pipelines
+  in run-tests, version, and lint modules. 37 unit tests for pure
+  parser functions. Documented F1 regex bug. Report:
+  `docs/reports/PARSER-HOTSPOT-SCORECARD-v0.99.38.md`.
+
+- **W4: State-transition boundary matrix.** Mapped 9 transitions
+  across 5 GSD states. 75 tests in transition matrix suites (274
+  total checks). Report:
+  `docs/reports/STATE-TRANSITION-BOUNDARIES-v0.99.38.md`.
+
+- **W5: Non-mutating release/report/check boundary pilot.**
+  Extracted `metrics-helpers.rkt` (7 pure functions) from
+  `metrics.rkt`. Added `--check-only` dry-run flag. Thin I/O shell
+  pattern. Report:
+  `docs/reports/MUTATION-BOUNDARY-v0.99.38.md`.
+
+- **W6: Adapter layer contracts audit.** Verified all 6 adapter
+  layers at LOW risk. Consolidated `global-config-dir` in
+  provider-factory.rkt. 37 tests across 5 suites. Report:
+  `docs/reports/ADAPTER-LAYER-CONTRACTS-v0.99.38.md`.
+
+- **W7: RED-module first-slice characterization.** 66 golden-master
+  tests for 4 RED modules. Documented E6/E7 gaps (context-profile,
+  agent-pool not propagated). Report:
+  `docs/reports/RED-MODULE-FIRST-SLICE-v0.99.38.md`.
+
+- **W8: Scanner v4 change-locality signals.** Added 4 new signal
+  categories to the abstraction audit scanner (CWD-sensitive paths,
+  mutation sites, hash-ref chains, inline config paths). 22 new
+  tests. Report:
+  `docs/reports/SCANNER-V4-CHANGE-LOCALITY-v0.99.38.md`.
+
+- **W9: Design-facts cleanup.** Added 6 targeted DESIGN FACT
+  comments to source files, each tying to a concrete audit finding.
+  10 verification tests. No RED module edits, no cosmetic churn.
+  Report: `docs/reports/DESIGN-FACTS-CLEANUP-v0.99.38.md`.
+
+- **W10: Release-truth hardening.** Created `pre-release-check.rkt`
+  single-command check script (lint-version, sync-readme-status,
+  metrics lint/prose). 19 tests including dirty-worktree guards.
+  Report: `docs/reports/RELEASE-TRUTH-HARDENING-v0.99.38.md`.
+
+### Code Improvements
+
+- W1: Extracted `resolve-project-dir-from-args` pure function.
+- W2: 12 CWD-independence regression tests.
+- W3: 37 parser hotspot unit tests.
+- W4: 75 state-transition boundary tests (274 checks).
+- W5: Extracted 7 pure functions to `metrics-helpers.rkt`, added
+  `--check-only` flag.
+- W6: Consolidated `global-config-dir` in provider-factory.rkt.
+- W7: 66 RED-module characterization tests.
+- W8: Added 4 scanner signal categories + 22 tests.
+- W9: 6 design-fact comments + 10 verification tests.
+- W10: Pre-release check script + 19 tests.
+
+### New Modules
+
+- `scripts/metrics-helpers.rkt` (W5): Pure helpers extracted from
+  metrics.rkt.
+- `scripts/pre-release-check.rkt` (W10): Single-command release
+  truth check.
+
+### Reports Added
+
+- `ABSTRACTION-BASELINE-v0.99.38.md`
+- `COMMON-CASE-API-SCORECARD-v0.99.38.md`
+- `PATH-MODULE-LOADING-AUDIT-v0.99.38.md`
+- `PARSER-HOTSPOT-SCORECARD-v0.99.38.md`
+- `STATE-TRANSITION-BOUNDARIES-v0.99.38.md`
+- `MUTATION-BOUNDARY-v0.99.38.md`
+- `ADAPTER-LAYER-CONTRACTS-v0.99.38.md`
+- `RED-MODULE-FIRST-SLICE-v0.99.38.md`
+- `SCANNER-V4-CHANGE-LOCALITY-v0.99.38.md`
+- `DESIGN-FACTS-CLEANUP-v0.99.38.md`
+- `RELEASE-TRUTH-HARDENING-v0.99.38.md`
+
+
 ## 0.99.37
 
 Released: 2026-06-23
