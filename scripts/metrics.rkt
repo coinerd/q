@@ -9,6 +9,11 @@
 ;;   cd q/ && racket scripts/metrics.rkt --lint         # verify README.md metrics match reality
 ;;   cd q/ && racket scripts/metrics.rkt --lint-prose [FILE]  # verify prose counts match table
 ;;   cd q/ && racket scripts/metrics.rkt --sync-readme [FILE] # replace METRICS markers in file
+;;   cd q/ && racket scripts/metrics.rkt --sync-all [FILE]    # sync markers+table+prose
+;;   cd q/ && racket scripts/metrics.rkt --check-only [FILE]  # dry-run: show what would change
+;;
+;; The --check-only flag can be combined with --sync-* flags to compute
+;; the diff without writing to disk. Pure computation is in metrics-helpers.rkt.
 ;;
 ;; Output: markdown table suitable for copy-paste into README.md / CHANGELOG.md
 
@@ -17,7 +22,8 @@
          racket/list
          racket/string
          racket/dict
-         racket/system)
+         racket/system
+         "metrics-helpers.rkt")
 
 (define args (vector->list (current-command-line-arguments)))
 (define run-tests? (member "--tests" args))
@@ -25,6 +31,7 @@
 (define lint-prose? (member "--lint-prose" args))
 (define sync-readme? (member "--sync-readme" args))
 (define sync-all? (member "--sync-all" args))
+(define check-only? (member "--check-only" args))
 
 ;; Resolve optional file argument (first non-flag arg)
 (define (file-arg)
@@ -158,37 +165,9 @@
   (with-handlers ([exn:fail? (lambda (e)
                                (printf "ERROR: Could not read README.md: ~a~n" (exn-message e))
                                1)])
-    (define readme-lines (file->lines "README.md"))
-    (define in-section? (box #f))
-    (define section-lines
-      (filter values
-              (for/list ([line readme-lines])
-                (cond
-                  [(regexp-match? #rx"^## Test Suite" line)
-                   (set-box! in-section? #t)
-                   #f]
-                  [(and (unbox in-section?) (regexp-match? #rx"^##" line))
-                   (set-box! in-section? #f)
-                   #f]
-                  [(unbox in-section?) line]
-                  [else #f]))))
-    (define readme-values (make-hash))
-    (for ([line section-lines])
-      (define m (regexp-match #rx"^\\| *([^|]+?) *\\| *([^|]+?) *\\|$" line))
-      (when m
-        (define name (string-trim (cadr m)))
-        (define value (string-trim (caddr m)))
-        (when (regexp-match? #rx"^[0-9,.]+$" value)
-          (hash-set! readme-values name (string-replace value "," "")))))
-    (define errors
-      (for/fold ([errs '()]) ([(name value) (in-dict computed-metrics)])
-        (define readme-val (hash-ref readme-values name #f))
-        (cond
-          [(not readme-val)
-           (cons (format "ERROR: README.md: ~a: metric not found in README table" name) errs)]
-          [(not (equal? value readme-val))
-           (cons (format "ERROR: README.md: ~a: expected ~a, found ~a" name value readme-val) errs)]
-          [else errs])))
+    ;; Pure computation delegated to metrics-helpers.rkt
+    (define content (file->string "README.md"))
+    (define errors (lint-table-values content computed-metrics))
     (if (null? errors)
         (begin
           (displayln "All 5 static metrics match README.md.")
@@ -205,28 +184,11 @@
   (unless (file-exists? path)
     (printf "ERROR: ~a not found~n" path)
     1)
+  ;; Pure computation delegated to metrics-helpers.rkt
   (define content (file->string path))
-  (define errors '())
-  ;; Check for patterns like "Full test suite (NNN files)" in prose
-  (define prose-rxs
-    `(("test-files" . #rx"Full test suite \\(([0-9]+) files\\)")
-      ("test-files" . #rx"tests? suite:? \\(([0-9]+) files\\)")
-      ("source-modules" . #rx"([0-9]+) source modules")))
-  (for ([pr (in-list prose-rxs)])
-    (define key (car pr))
-    (define rx (cdr pr))
-    (define m (regexp-match rx content))
-    (when m
-      (define prose-val (cadr m))
-      (define computed
-        (cond
-          [(equal? key "test-files") (number->string (length test-files))]
-          [(equal? key "source-modules") (number->string (length source-files))]
-          [else "unknown"]))
-      (unless (equal? prose-val computed)
-        (set! errors
-              (cons (format "MISMATCH: prose says ~a but computed ~a is ~a" prose-val key computed)
-                    errors)))))
+  (define test-count (number->string (length test-files)))
+  (define src-count (number->string (length source-files)))
+  (define errors (lint-prose-values content test-count src-count))
   (if (null? errors)
       (begin
         (displayln "Prose metrics lint PASSED")
@@ -251,20 +213,27 @@
         "test-assertions"
         (number->string assertions)))
 
+;; Thin I/O shell: read → compute (pure) → write or display
+;; The --check-only flag prints the diff without writing.
+
+(define (write-or-check path updated label)
+  (if check-only?
+      (begin
+        (printf "[check-only] Would sync ~a in ~a~n" label path)
+        0)
+      (begin
+        (call-with-output-file path (λ (out) (display updated out)) #:exists 'replace)
+        (printf "Synced ~a in ~a~n" label path)
+        0)))
+
 (define (sync-readme-markers path)
   (unless (file-exists? path)
     (printf "ERROR: ~a not found~n" path)
     1)
+  ;; Pure computation delegated to metrics-helpers.rkt
   (define content (file->string path))
-  (define marker-rx #rx"<!-- METRICS: ([a-z-]+) -->")
-  (define updated
-    (regexp-replace*
-     marker-rx
-     content
-     (λ (match key) (hash-ref metrics-map key (λ () (format "<!-- METRICS: ~a (unknown) -->" key))))))
-  (call-with-output-file path (λ (out) (display updated out)) #:exists 'replace)
-  (printf "Synced METRICS markers in ~a~n" path)
-  0)
+  (define updated (compute-marker-sync content metrics-map))
+  (write-or-check path updated "METRICS markers"))
 
 ;; --- Sync table values: update metrics table in README ---
 
@@ -273,14 +242,9 @@
     (printf "ERROR: ~a not found~n" path)
     1)
   (define content (file->string path))
-  (define updated
-    (for/fold ([c content]) ([(name value) (in-dict computed-metrics)])
-      (regexp-replace* (regexp (format "\\| ~a \\| [0-9,]+ \\|" (regexp-quote name)))
-                       c
-                       (format "| ~a | ~a |" name value))))
-  (call-with-output-file path (λ (out) (display updated out)) #:exists 'replace)
-  (printf "Synced metrics table in ~a~n" path)
-  0)
+  ;; Pure computation delegated to metrics-helpers.rkt
+  (define updated (compute-table-sync content computed-metrics))
+  (write-or-check path updated "metrics table"))
 
 ;; --- Sync prose counts: update prose NNN counts in README ---
 
@@ -289,29 +253,23 @@
     (printf "ERROR: ~a not found~n" path)
     1)
   (define content (file->string path))
-  ;; Fix "Full test suite (NNN files)"
-  (define test-file-count (number->string (length test-files)))
-  (define updated
-    (regexp-replace* #rx"Full test suite \\([0-9]+ files\\)"
-                     content
-                     (format "Full test suite (~a files)" test-file-count)))
-  ;; Fix "NNN source modules"
-  (define src-mod-count (number->string (length source-files)))
-  (define updated2
-    (regexp-replace* #rx"[0-9]+ source modules" updated (format "~a source modules" src-mod-count)))
-  (call-with-output-file path (λ (out) (display updated2 out)) #:exists 'replace)
-  (printf "Synced prose counts in ~a~n" path)
-  0)
+  ;; Pure computation delegated to metrics-helpers.rkt
+  (define test-count (number->string (length test-files)))
+  (define src-mod (number->string (length source-files)))
+  (define updated (compute-prose-sync content test-count src-mod))
+  (write-or-check path updated "prose counts"))
 
 ;; --- Sync all: table + prose + markers ---
 
 (define (sync-all path)
   (define p (or path "README.md"))
-  (sync-readme-markers p)
-  (sync-table-values p)
-  (sync-prose-counts p)
-  (printf "--sync-all complete.~n")
-  0)
+  (unless (file-exists? p)
+    (printf "ERROR: ~a not found~n" p)
+    1)
+  ;; Single read-compute-write cycle (was 3 separate reads/writes)
+  (define content (file->string p))
+  (define updated (compute-all-sync content metrics-map computed-metrics))
+  (write-or-check p updated "all metrics"))
 
 ;; --- Output ---
 
@@ -320,6 +278,28 @@
   [lint-prose? (exit (lint-prose-metrics (or (file-arg) "README.md")))]
   [sync-all? (exit (sync-all (file-arg)))]
   [sync-readme? (exit (sync-readme-markers (or (file-arg) "README.md")))]
+  [check-only?
+   ;; --check-only without --sync-* : show what would change
+   (let* ([p (or (file-arg) "README.md")])
+     (unless (file-exists? p)
+       (printf "ERROR: ~a not found~n" p)
+       (exit 1))
+     (let* ([content (file->string p)]
+            [updated (compute-all-sync content metrics-map computed-metrics)])
+       (if (equal? content updated)
+           (begin
+             (displayln "No changes needed.")
+             (exit 0))
+           (begin
+             (displayln "Changes would be made (--check-only mode):")
+             (let* ([old-lines (string-split content "\n")]
+                    [new-lines (string-split updated "\n")])
+               (for ([old-l (in-list old-lines)]
+                     [new-l (in-list new-lines)]
+                     [i (in-naturals)])
+                 (unless (equal? old-l new-l)
+                   (printf "  Line ~a:~n    - ~a~n    + ~a~n" (add1 i) old-l new-l)))
+               (exit 0))))))]
   [else
    (printf "| Metric | Value |~n")
    (printf "|--------|-------|~n")
