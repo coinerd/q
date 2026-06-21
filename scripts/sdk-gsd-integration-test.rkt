@@ -5,8 +5,7 @@
 
 (require "../extensions/gsd-planning.rkt"
          "../extensions/gsd/state-machine.rkt"
-         "../extensions/gsd/session-state.rkt"
-         "../extensions/gsd/state-machine.rkt"
+         (only-in "../extensions/gsd/session-state.rkt" current-gsd-ctx current-gsd-mode)
          "../extensions/api.rkt"
          "../extensions/hooks.rkt"
          "../runtime/agent-session.rkt"
