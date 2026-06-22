@@ -236,3 +236,56 @@
       (define manifest-section (substring content start-idx end-idx))
       (check-false (string-contains? manifest-section "|| true")
                    "manifest download must NOT have '|| true' masking failures"))))
+
+;; ============================================================
+;; W3: release-smoke suite in release.yml smoke job
+;; ============================================================
+
+(test-case "release.yml smoke uses release-smoke suite"
+  (define content (read-release-yml))
+  (check-true (string-contains? content "--suite release-smoke")
+              "smoke job must use --suite release-smoke instead of default/all"))
+
+(test-case "release.yml smoke does NOT run default/all tests"
+  (define content (read-release-yml))
+  ;; The old invocation was just '--jobs 4' without --suite
+  ;; Verify the smoke step has --suite, not bare '--jobs 4'
+  (define smoke-section
+    (let* ([start-pos (regexp-match-positions #rx"Run release-smoke test suite" content)]
+           [end-pos (regexp-match-positions #rx"Upload smoke log" content)])
+      (if (and start-pos end-pos (< (caar start-pos) (caar end-pos)))
+          (substring content (caar start-pos) (caar end-pos))
+          "")))
+  (check-false (and (string-contains? smoke-section "run-tests.rkt")
+                    (not (string-contains? smoke-section "--suite")))
+               "smoke must NOT run run-tests.rkt without --suite"))
+
+(test-case "release.yml smoke step is blocking (no continue-on-error: true)"
+  (define content (read-release-yml))
+  ;; The smoke step must not have continue-on-error: true
+  (define smoke-section
+    (let* ([start-pos (regexp-match-positions #rx"Run release-smoke test suite" content)]
+           [end-pos (regexp-match-positions #rx"Upload smoke log" content)])
+      (if (and start-pos end-pos (< (caar start-pos) (caar end-pos)))
+          (substring content (caar start-pos) (caar end-pos))
+          "")))
+  (check-false (string-contains? smoke-section "continue-on-error: true")
+               "smoke step must NOT be continue-on-error: true"))
+
+(test-case "release.yml smoke uploads log on failure"
+  (define content (read-release-yml))
+  (check-true (string-contains? content "Upload smoke log on failure")
+              "must have step to upload smoke log on failure")
+  (check-true (string-contains? content "if: failure()") "log upload must trigger on failure"))
+
+(test-case "release.yml smoke logs selected suite"
+  (define content (read-release-yml))
+  (check-true (string-contains? content "Running release-smoke suite")
+              "smoke step must log which suite is being run"))
+
+(test-case "release.yml smoke has failure summary step"
+  (define content (read-release-yml))
+  (check-true (string-contains? content "Smoke failure summary")
+              "must have smoke failure summary step")
+  (check-true (string-contains? content "$GITHUB_STEP_SUMMARY")
+              "failure summary must write to GITHUB_STEP_SUMMARY"))

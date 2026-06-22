@@ -282,7 +282,29 @@ jobs:
           print('All manifest checks passed.')
           PYEOF
 
-      - name: Run test suite
+      - name: Run release-smoke test suite
+        id: smoke-tests
+        continue-on-error: false
         run: |
           cd /tmp/q
-          STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt --jobs 4
+          echo "Running release-smoke suite (deterministic, artifact-focused)"
+          STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
+            --suite release-smoke \
+            --jobs 4 \
+            --timeout 120 \
+            2>&1 | tee smoke-output.log
+        
+      - name: Upload smoke log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-output-log
+          path: /tmp/q/smoke-output.log
+          retention-days: 30
+        
+      - name: Smoke failure summary
+        if: failure()
+        run: |
+          echo "## Release Smoke Failures" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          grep -A 4 'FAILURE\|ERROR\|FAILED\|TIMEOUT' /tmp/q/smoke-output.log >> $GITHUB_STEP_SUMMARY || true
