@@ -13,7 +13,203 @@
          racket/port
          racket/string
          racket/system
-         racket/path)
+         racket/path
+         json)
+
+;; Provide W4 parse/validate/render boundary
+(provide (struct-out manifest)
+         (struct-out manifest-asset)
+         (struct-out manifest-trace)
+         (struct-out manifest-validation)
+         manifest-valid?
+         manifest-validation-errors
+         make-manifest
+         manifest->jsexpr
+         jsexpr->manifest
+         validate-manifest
+         parse-manifest-json
+         manifest->json-string)
+
+;; ---------------------------------------------------------------------------
+;; W4 (#8566): Manifest domain model — parse/validate/render boundary
+;; ---------------------------------------------------------------------------
+;; Isolates the manifest data model from both JSON I/O and shell effects.
+;; Pure functions: make-manifest, manifest->jsexpr, jsexpr->manifest,
+;; validate-manifest, parse-manifest-json, manifest->json-string.
+
+;; A single release asset (tarball).
+(struct manifest-asset (name size sha256) #:transparent)
+
+;; Traceability evidence linking tag to commit.
+(struct manifest-trace
+        (tag-name tag-commit-sha tag-object-sha manifest-commit-sha commit-matches-tag?)
+  #:transparent)
+
+;; The complete manifest domain object.
+(struct manifest (version tag commit date assets compatibility-min-racket verification traceability)
+  #:transparent)
+
+;; Validation result: valid? + list of error strings (empty if valid).
+(struct manifest-validation (valid? error-list) #:transparent)
+
+(define (manifest-valid? mv)
+  (and (manifest-validation? mv) (manifest-validation-valid? mv)))
+
+(define (manifest-validation-errors mv)
+  (if (manifest-validation? mv)
+      (manifest-validation-error-list mv)
+      '("not a manifest-validation")))
+
+;; ---------------------------------------------------------------------------
+;; Manifest constructor (pure — no I/O)
+;; ---------------------------------------------------------------------------
+
+(define (make-manifest #:version version
+                       #:commit commit
+                       #:date date
+                       #:assets assets
+                       #:compatibility-min-racket [min-racket "8.10"]
+                       #:verification [verification "racket main.rkt --version"]
+                       #:traceability [traceability #f])
+  (define tag-name (format "v~a" version))
+  (manifest version
+            tag-name
+            commit
+            date
+            assets
+            min-racket
+            verification
+            (or traceability (manifest-trace tag-name "unknown" #f commit #f))))
+
+;; ---------------------------------------------------------------------------
+;; Serialization: manifest → jsexpr (pure — no I/O)
+;; ---------------------------------------------------------------------------
+
+(define (manifest->jsexpr m)
+  (hasheq 'version
+          (manifest-version m)
+          'tag
+          (manifest-tag m)
+          'commit
+          (manifest-commit m)
+          'date
+          (manifest-date m)
+          'traceability
+          (hasheq 'tag_name
+                  (manifest-trace-tag-name (manifest-traceability m))
+                  'tag_commit_sha
+                  (manifest-trace-tag-commit-sha (manifest-traceability m))
+                  'tag_object_sha
+                  (manifest-trace-tag-object-sha (manifest-traceability m))
+                  'manifest_commit_sha
+                  (manifest-trace-manifest-commit-sha (manifest-traceability m))
+                  'commit_matches_tag
+                  (manifest-trace-commit-matches-tag? (manifest-traceability m)))
+          'assets
+          (for/list ([a (in-list (manifest-assets m))])
+            (hasheq 'name
+                    (manifest-asset-name a)
+                    'size
+                    (manifest-asset-size a)
+                    'sha256
+                    (manifest-asset-sha256 a)))
+          'compatibility
+          (hasheq 'min-racket (manifest-compatibility-min-racket m))
+          'verification
+          (manifest-verification m)))
+
+(define (manifest->json-string m)
+  (jsexpr->string (manifest->jsexpr m)))
+
+;; ---------------------------------------------------------------------------
+;; Parsing: jsexpr → manifest (pure — no I/O)
+;; ---------------------------------------------------------------------------
+
+(define (jsexpr->manifest j)
+  (define version (hash-ref j 'version #f))
+  (define tag (hash-ref j 'tag #f))
+  (define commit (hash-ref j 'commit #f))
+  (define date (hash-ref j 'date #f))
+  (define raw-assets (hash-ref j 'assets '()))
+  (define compat (hash-ref j 'compatibility (hasheq)))
+  (define verification (hash-ref j 'verification #f))
+  (define traceability-j (hash-ref j 'traceability #f))
+  (define assets
+    (for/list ([a (in-list (if (list? raw-assets)
+                               raw-assets
+                               '()))])
+      (manifest-asset (hash-ref a 'name "unknown") (hash-ref a 'size 0) (hash-ref a 'sha256 "n/a"))))
+  (define traceability
+    (if (hash? traceability-j)
+        (manifest-trace (hash-ref traceability-j 'tag_name "")
+                        (hash-ref traceability-j 'tag_commit_sha "unknown")
+                        (hash-ref traceability-j 'tag_object_sha #f)
+                        (hash-ref traceability-j 'manifest_commit_sha "unknown")
+                        (hash-ref traceability-j 'commit_matches_tag #f))
+        #f))
+  (make-manifest #:version version
+                 #:commit commit
+                 #:date date
+                 #:assets assets
+                 #:compatibility-min-racket (hash-ref compat 'min-racket "8.10")
+                 #:verification verification
+                 #:traceability traceability))
+
+;; Parse a JSON string directly into a manifest.
+(define (parse-manifest-json json-string)
+  (with-handlers ([exn:fail? (lambda (e) #f)])
+    (define j (string->jsexpr json-string))
+    (and (hash? j) (jsexpr->manifest j))))
+
+;; ---------------------------------------------------------------------------
+;; Validation (pure — no I/O)
+;; ---------------------------------------------------------------------------
+
+(define semver-rx #px"^[0-9]+\\.[0-9]+\\.[0-9]+$")
+(define sha256-rx #px"^[0-9a-fA-F]{64}$")
+
+(define (validate-manifest m)
+  (define errors '())
+  ;; Required fields
+  (unless (and (string? (manifest-version m)) (regexp-match? semver-rx (manifest-version m)))
+    (set! errors (cons (format "version must be semver X.Y.Z, got: ~a" (manifest-version m)) errors)))
+  (unless (and (string? (manifest-tag m)) (string-prefix? (manifest-tag m) "v"))
+    (set! errors (cons (format "tag must start with 'v', got: ~a" (manifest-tag m)) errors)))
+  (unless (string? (manifest-commit m))
+    (set! errors (cons "commit must be a string" errors)))
+  (unless (string? (manifest-date m))
+    (set! errors (cons "date must be a string" errors)))
+  ;; Assets
+  (for ([a (in-list (manifest-assets m))]
+        [i (in-naturals)])
+    (unless (string? (manifest-asset-name a))
+      (set! errors (cons (format "asset[~a]: name missing" i) errors)))
+    (unless (and (integer? (manifest-asset-size a)) (>= (manifest-asset-size a) 0))
+      (set! errors (cons (format "asset[~a]: size must be non-negative integer" i) errors)))
+    (unless (or (equal? (manifest-asset-sha256 a) "n/a")
+                (equal? (manifest-asset-sha256 a) "unknown")
+                (regexp-match? sha256-rx (manifest-asset-sha256 a)))
+      (set! errors
+            (cons (format "asset[~a]: sha256 must be 64 hex chars or 'n/a', got: ~a"
+                          i
+                          (manifest-asset-sha256 a))
+                  errors))))
+  ;; Traceability: only flag mismatch when both SHAs are known and differ
+  (define tr (manifest-traceability m))
+  (when (manifest-trace? tr)
+    (define tag-sha (manifest-trace-tag-commit-sha tr))
+    (define commit-sha (manifest-trace-manifest-commit-sha tr))
+    (unless (or (manifest-trace-commit-matches-tag? tr)
+                (equal? tag-sha "unknown")
+                (equal? commit-sha "unknown")
+                (not tag-sha)
+                (not commit-sha))
+      (set! errors
+            (cons (format "traceability: commit does not match tag (commit=~a, tag_sha=~a)"
+                          commit-sha
+                          tag-sha)
+                  errors))))
+  (manifest-validation (null? errors) (reverse errors)))
 
 ;; ---------------------------------------------------------------------------
 ;; Version parsing
@@ -80,40 +276,24 @@
   (define tag-name (format "v~a" version))
   (define tag-commit-sha (git-tag-sha tag-name))
   (define tag-obj-sha (git-tag-object-sha tag-name))
-  (displayln "{")
-  (printf "  \"version\": \"~a\",~n" version)
-  (printf "  \"tag\": \"v~a\",~n" version)
-  (printf "  \"commit\": \"~a\",~n" (or commit "unknown"))
-  (printf "  \"date\": \"~a\",~n" date)
-  ;; W6: Traceability fields
-  (printf "  \"traceability\": {~n")
-  (printf "    \"tag_name\": \"~a\",~n" tag-name)
-  (printf "    \"tag_commit_sha\": \"~a\",~n" tag-commit-sha)
-  (when tag-obj-sha
-    (printf "    \"tag_object_sha\": \"~a\",~n" tag-obj-sha))
-  (printf "    \"manifest_commit_sha\": \"~a\",~n" (or commit "unknown"))
-  (printf "    \"commit_matches_tag\": ~a~n"
-          (if (and commit
-                   (not (equal? commit "unknown"))
-                   (not (equal? tag-commit-sha "unknown"))
-                   (or (string=? commit tag-commit-sha)
-                       (string-prefix? tag-commit-sha commit)
-                       (string-prefix? commit tag-commit-sha)))
-              "true"
-              "false"))
-  (printf "  },~n")
-  (printf "  \"assets\": [~n")
-  (printf "    {~n")
-  (printf "      \"name\": \"~a\",~n" tarball-name)
-  (printf "      \"size\": ~a,~n" size)
-  (printf "      \"sha256\": \"~a\"~n" sha)
-  (printf "    }~n")
-  (printf "  ],~n")
-  (printf "  \"compatibility\": {~n")
-  (printf "    \"min-racket\": \"8.10\"~n")
-  (printf "  },~n")
-  (printf "  \"verification\": \"racket main.rkt --version\"~n")
-  (displayln "}"))
+  (define commit* (or commit "unknown"))
+  (define commit-matches?
+    (and commit
+         (not (equal? commit "unknown"))
+         (not (equal? tag-commit-sha "unknown"))
+         (or (string=? commit tag-commit-sha)
+             (string-prefix? tag-commit-sha commit)
+             (string-prefix? commit tag-commit-sha))))
+  ;; Build manifest struct (W4: parse/validate/render boundary)
+  (define m
+    (make-manifest #:version version
+                   #:commit commit*
+                   #:date date
+                   #:assets (list (manifest-asset tarball-name size sha))
+                   #:traceability
+                   (manifest-trace tag-name tag-commit-sha tag-obj-sha commit* commit-matches?)))
+  ;; Serialize to JSON
+  (displayln (manifest->json-string m)))
 
 ;; ---------------------------------------------------------------------------
 ;; Main
