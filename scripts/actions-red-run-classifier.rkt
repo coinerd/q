@@ -48,7 +48,17 @@
                                        "success_current"
                                        "unknown_due_api_error"))
 
-;; Verdicts that block milestone approval.
+;; DESIGN FACT (W9, v0.99.42 §44): `cancelled_superseded` is intentionally
+;; excluded from all-blocked-verdicts. A cancelled run is superseded — it
+;; does not block milestone approval because the workflow can be re-run.
+;;
+;; However, classify-red-run-set sets `'blocking #t` in the result hash for
+;; cancelled latest runs. This is intentional: the hash field signals
+;; "human attention needed" while blocking-verdict? controls the gate.
+;;
+;; DO NOT add `cancelled_superseded` to all-blocked-verdicts without
+;; also updating the gate logic — it would make cancelled runs
+;; unconditionally block milestones, which is wrong.
 (define all-blocked-verdicts
   '("current_blocking_red_release_run" "current_blocking_red_main_ci"
                                        "in_progress_blocking"

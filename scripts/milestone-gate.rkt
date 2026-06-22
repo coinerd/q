@@ -148,6 +148,14 @@
 ;; without changing any GitHub issue/board behavior.
 
 ;; All lifecycle states in order.
+;; DESIGN FACT (W9, v0.99.42 §44): The lifecycle is intentionally linear —
+;; no branching or skipping states. milestone-valid-transition? only allows
+;; forward by exactly one step. This is simpler than a full state machine
+;; and sufficient for the current release workflow.
+;;
+;; DO NOT add skip transitions (e.g., planned -> release_ready) without
+;; also updating can-close-milestone? — it assumes the predecessor state
+;; was reached through the normal sequence.
 (define milestone-lifecycle-states
   '(planned in_progress release_ready release_published ci_green closed))
 

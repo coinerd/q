@@ -48,6 +48,38 @@
                "gui-available? environment gate documented")))
 
 ;; ============================================================
+;; W9 (#8571): Design-fact comments for v0.99.42 boundary hardening
+;; ============================================================
+
+(define-test-suite
+ design-fact-w9-tests
+ (test-case "actions-red-run-classifier.rkt: cancelled_superseded exclusion comment"
+   (check-true (has-comment? (string-append root "scripts/actions-red-run-classifier.rkt")
+                             "DESIGN FACT (W9")
+               "cancelled_superseded exclusion from all-blocked-verdicts documented")
+   (check-true (has-comment? (string-append root "scripts/actions-red-run-classifier.rkt")
+                             "cancelled_superseded")
+               "comment references cancelled_superseded by name"))
+ (test-case "gen-release-manifest.rkt: validation tolerance design-fact comment"
+   (check-true (has-comment? (string-append root "scripts/gen-release-manifest.rkt")
+                             "DESIGN FACT (W9")
+               "manifest validation tolerance documented")
+   (check-true (has-comment? (string-append root "scripts/gen-release-manifest.rkt")
+                             "both SHAs are known")
+               "comment explains why unknown SHAs don't fail validation"))
+ (test-case "gen-release-manifest.rkt: pure/effect boundary design-fact comment"
+   (check-true (has-comment? (string-append root "scripts/gen-release-manifest.rkt")
+                             "build-manifest is pure")
+               "pure core boundary documented")
+   (check-true (has-comment? (string-append root "scripts/gen-release-manifest.rkt") "DO NOT add I/O")
+               "comment includes misuse prevention directive"))
+ (test-case "milestone-gate.rkt: lifecycle linearity design-fact comment"
+   (check-true (has-comment? (string-append root "scripts/milestone-gate.rkt") "DESIGN FACT (W9")
+               "lifecycle linearity constraint documented")
+   (check-true (has-comment? (string-append root "scripts/milestone-gate.rkt") "intentionally linear")
+               "comment explains why transitions are linear")))
+
+;; ============================================================
 ;; Design-fact content verification tests
 ;; ============================================================
 
@@ -69,7 +101,10 @@
    (check-true (string-contains? content "W1 scorecard P5") "references W1")
    (check-true (string-contains? content "W6 adapter") "references W6")))
 
-(define-test-suite all-design-fact-tests design-fact-comment-tests design-fact-content-tests)
+(define-test-suite all-design-fact-tests
+                   design-fact-comment-tests
+                   design-fact-content-tests
+                   design-fact-w9-tests)
 
 (module+ test
   (run-tests all-design-fact-tests))
