@@ -42,7 +42,7 @@
         (list "ci-readiness" "scripts/lint-ci-readiness.rkt" '() #f)
         (list "arch" "scripts/arch-report.rkt" '("--ci") #t)
         (list "ivg" "scripts/lint-ivg.rkt" '() #f)
-        (list "release-readiness" "scripts/lint-release-readiness.rkt" '() #f)
+        (list "release-readiness" "scripts/lint-release-readiness.rkt" '() #t)
         (list "doc-freshness" "scripts/lint-doc-freshness.rkt" '() #f)
         (list "widened-ledger" "scripts/lint-widened-ledger.rkt" '() #t)
         (list "contract-changes" "scripts/lint-contract-changes.rkt" '("--diff" "HEAD") #t)
