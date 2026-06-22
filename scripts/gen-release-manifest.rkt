@@ -201,6 +201,11 @@
                           (manifest-asset-sha256 a))
                   errors))))
   ;; Traceability: only flag mismatch when both SHAs are known and differ
+  ;; DESIGN FACT (W9, v0.99.42 §45): Traceability validation only flags
+  ;; commit/tag mismatch when BOTH SHAs are known and differ. An "unknown"
+  ;; or #f SHA means the data isn't available yet (pre-release, local dev,
+  ;; missing git tag). Failing validation on missing data would produce
+  ;; false positives that obscure genuine mismatches.
   (define tr (manifest-traceability m))
   (when (manifest-trace? tr)
     (define tag-sha (manifest-trace-tag-commit-sha tr))
@@ -220,6 +225,15 @@
 ;; ---------------------------------------------------------------------------
 ;; W5 (#8567): Pure-core / effect-shell I/O boundary
 ;; ---------------------------------------------------------------------------
+;; DESIGN FACT (W9, v0.99.42 §44): build-manifest is pure — no file reads,
+;; no git, no network. All side-effecting data collection lives in
+;; collect-release-inputs (the effect shell). This separation makes
+;; build-manifest unit-testable without subprocess mocking.
+;;
+;; DO NOT add I/O (file->string, system, getenv, etc.) to build-manifest.
+;; If new environment data is needed, add a field to release-inputs and
+;; collect it in collect-release-inputs instead.
+
 ;; Separates manifest construction (pure) from data collection (effects).
 ;; The pure core takes a release-inputs struct and produces a manifest.
 ;; The effect shell collects raw data from files, git, and the environment.
