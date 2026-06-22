@@ -343,3 +343,172 @@
 
 (test-case "gen-release-manifest.rkt exports manifest-valid?"
   (check-not-exn (lambda () (dynamic-require manifest-script-path 'manifest-valid?))))
+
+;; ============================================================
+;; W5 (#8567): Pure-core/effect-shell I/O boundary tests
+;; ============================================================
+
+(require (only-in "../scripts/gen-release-manifest.rkt"
+                  release-inputs
+                  release-inputs?
+                  release-inputs-version
+                  release-inputs-commit
+                  release-inputs-date
+                  release-inputs-tarball-name
+                  release-inputs-tarball-size
+                  release-inputs-tarball-sha256
+                  release-inputs-tag-commit-sha
+                  release-inputs-tag-object-sha
+                  build-manifest
+                  commits-match?
+                  parse-q-version))
+
+;; --- commits-match? predicate ---
+
+(test-case "commits-match?: exact match"
+  (check-true (commits-match? "abc1234" "abc1234")))
+
+(test-case "commits-match?: prefix match (tag longer)"
+  (check-true (commits-match? "abc1234" "abc123456789")))
+
+(test-case "commits-match?: prefix match (commit longer)"
+  (check-true (commits-match? "abc123456789" "abc1234")))
+
+(test-case "commits-match?: different commits"
+  (check-false (commits-match? "abc1234" "def5678")))
+
+(test-case "commits-match?: unknown commit"
+  (check-false (commits-match? "unknown" "abc1234")))
+
+(test-case "commits-match?: unknown tag sha"
+  (check-false (commits-match? "abc1234" "unknown")))
+
+(test-case "commits-match?: #f commit"
+  (check-false (commits-match? #f "abc1234")))
+
+(test-case "commits-match?: #f tag sha"
+  (check-false (commits-match? "abc1234" #f)))
+
+;; --- parse-q-version (pure) ---
+
+(test-case "parse-q-version: valid version line"
+  (check-equal? (parse-q-version "(define q-version \"0.99.42\")") "0.99.42"))
+
+(test-case "parse-q-version: returns #f for no match"
+  (check-false (parse-q-version "no version here")))
+
+(test-case "parse-q-version: handles multiline content"
+  (check-equal? (parse-q-version "#lang racket/base\n(define q-version \"1.2.3\")\n") "1.2.3"))
+
+;; --- release-inputs struct ---
+
+(test-case "release-inputs struct: all fields accessible"
+  (define ri
+    (release-inputs "1.0.0"
+                    "abc123"
+                    "2026-06-22"
+                    "q-1.0.0.tar.gz"
+                    999
+                    "deadbeef"
+                    "abc123"
+                    "tag-obj-sha"))
+  (check-equal? (release-inputs-version ri) "1.0.0")
+  (check-equal? (release-inputs-commit ri) "abc123")
+  (check-equal? (release-inputs-date ri) "2026-06-22")
+  (check-equal? (release-inputs-tarball-name ri) "q-1.0.0.tar.gz")
+  (check-equal? (release-inputs-tarball-size ri) 999)
+  (check-equal? (release-inputs-tarball-sha256 ri) "deadbeef")
+  (check-equal? (release-inputs-tag-commit-sha ri) "abc123")
+  (check-equal? (release-inputs-tag-object-sha ri) "tag-obj-sha"))
+
+(test-case "release-inputs struct: transparent equality"
+  (define ri1 (release-inputs "1.0.0" "c" "d" "n" 0 "s" "t" #f))
+  (define ri2 (release-inputs "1.0.0" "c" "d" "n" 0 "s" "t" #f))
+  (check-equal? ri1 ri2))
+
+;; --- build-manifest (pure core) ---
+
+(test-case "build-manifest: produces manifest from release-inputs"
+  (define ri
+    (release-inputs "0.99.42" "abc1234" "2026-06-22" "q-0.99.42.tar.gz" 12345 "n/a" "abc1234" #f))
+  (define m (build-manifest ri))
+  (check-pred manifest? m)
+  (check-equal? (manifest-version m) "0.99.42")
+  (check-equal? (manifest-tag m) "v0.99.42")
+  (check-equal? (manifest-commit m) "abc1234"))
+
+(test-case "build-manifest: tag auto-generated from version"
+  (define ri (release-inputs "1.2.3" "c" "d" "n" 0 "s" "unknown" #f))
+  (define m (build-manifest ri))
+  (check-equal? (manifest-tag m) "v1.2.3"))
+
+(test-case "build-manifest: commit defaults to unknown when #f"
+  (define ri (release-inputs "1.0.0" #f "d" "n" 0 "s" "unknown" #f))
+  (define m (build-manifest ri))
+  (check-equal? (manifest-commit m) "unknown"))
+
+(test-case "build-manifest: commit-matches-tag? true when SHAs match"
+  (define ri (release-inputs "1.0.0" "abc123" "d" "n" 0 "s" "abc123" #f))
+  (define m (build-manifest ri))
+  (define tr (manifest-traceability m))
+  (check-true (manifest-trace-commit-matches-tag? tr)))
+
+(test-case "build-manifest: commit-matches-tag? false when SHAs differ"
+  (define ri (release-inputs "1.0.0" "abc123" "d" "n" 0 "s" "def456" #f))
+  (define m (build-manifest ri))
+  (define tr (manifest-traceability m))
+  (check-false (manifest-trace-commit-matches-tag? tr)))
+
+(test-case "build-manifest: commit-matches-tag? false when tag SHA unknown"
+  (define ri (release-inputs "1.0.0" "abc123" "d" "n" 0 "s" "unknown" #f))
+  (define m (build-manifest ri))
+  (define tr (manifest-traceability m))
+  (check-false (manifest-trace-commit-matches-tag? tr)))
+
+(test-case "build-manifest: assets preserved from inputs"
+  (define ri (release-inputs "1.0.0" "c" "d" "q-1.0.0.tar.gz" 555 "some-sha" "unknown" #f))
+  (define m (build-manifest ri))
+  (define a (car (manifest-assets m)))
+  (check-equal? (manifest-asset-name a) "q-1.0.0.tar.gz")
+  (check-equal? (manifest-asset-size a) 555)
+  (check-equal? (manifest-asset-sha256 a) "some-sha"))
+
+(test-case "build-manifest: traceability captures all inputs"
+  (define ri (release-inputs "2.0.0" "c1" "d" "n" 0 "s" "c2" "obj-sha"))
+  (define m (build-manifest ri))
+  (define tr (manifest-traceability m))
+  (check-equal? (manifest-trace-tag-name tr) "v2.0.0")
+  (check-equal? (manifest-trace-tag-commit-sha tr) "c2")
+  (check-equal? (manifest-trace-tag-object-sha tr) "obj-sha")
+  (check-equal? (manifest-trace-manifest-commit-sha tr) "c1"))
+
+(test-case "build-manifest: result passes validation"
+  (define ri
+    (release-inputs "0.99.42" "abc1234" "2026-06-22" "q-0.99.42.tar.gz" 12345 "n/a" "abc1234" #f))
+  (define m (build-manifest ri))
+  (define mv (validate-manifest m))
+  (check-true (manifest-valid? mv)))
+
+;; --- build-manifest → manifest->json-string round-trip ---
+
+(test-case "build-manifest + json-string: produces valid JSON"
+  (define ri (release-inputs "0.99.42" "abc1234" "2026-06-22" "q.tar.gz" 100 "n/a" "abc1234" #f))
+  (define json-str (manifest->json-string (build-manifest ri)))
+  (define m2 (parse-manifest-json json-str))
+  (check-pred manifest? m2)
+  (check-equal? (manifest-version m2) "0.99.42")
+  (check-equal? (manifest-commit m2) "abc1234"))
+
+;; --- Export existence for W5 ---
+
+(test-case "gen-release-manifest.rkt exports release-inputs struct"
+  (check-not-exn (lambda () (dynamic-require manifest-script-path 'release-inputs))))
+
+(test-case "gen-release-manifest.rkt exports build-manifest"
+  (check-not-exn (lambda () (dynamic-require manifest-script-path 'build-manifest))))
+
+(test-case "gen-release-manifest.rkt exports commits-match?"
+  (check-not-exn (lambda () (dynamic-require manifest-script-path 'commits-match?))))
+
+(test-case "gen-release-manifest.rkt exports parse-q-version"
+  (check-not-exn (lambda () (dynamic-require manifest-script-path 'parse-q-version))))
