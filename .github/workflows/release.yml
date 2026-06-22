@@ -42,14 +42,19 @@ jobs:
         run: racket scripts/run-tests.rkt --suite tui --jobs 4 --timeout 60 --record-gate-evidence
 
       - name: Strict release readiness
-        run: racket scripts/lint-release-readiness.rkt --strict --context tag-publish
+        run: |
+          racket scripts/lint-release-readiness.rkt --strict --context tag-publish 2>&1 | tee release-readiness.log
+          echo "## Release Readiness" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat release-readiness.log >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
       - name: Test failure summary
         if: failure()
         run: |
           echo "## Test Failures" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          grep -A 4 'FAILURE\|ERROR\|FAILED\|TIMEOUT' test-output.log >> $GITHUB_STEP_SUMMARY || true
+          grep -A 4 'FAILURE\|ERROR\|FAILED\|TIMEOUT' test-output.log release-readiness.log >> $GITHUB_STEP_SUMMARY || true
           echo '```' >> $GITHUB_STEP_SUMMARY
 
       - name: Upload test log
@@ -57,7 +62,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: test-output-release
-          path: test-output.log
+          path: |
+            test-output.log
+            release-readiness.log
           retention-days: 7
 
   release:
