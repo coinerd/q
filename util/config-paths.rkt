@@ -15,7 +15,42 @@
 
 (provide (contract-out [project-config-dirs (-> (or/c path-string? #f) (listof path?))]
                        [global-config-dir (-> path?)]
-                       [resolve-project-dir-from-args (-> hash? path?)]))
+                       [resolve-project-dir-from-args (-> hash? path?)]
+                       [find-project-root (->* () ((or/c path-string? #f)) (or/c path? #f))]
+                       [project-root-or-cwd (->* () ((or/c path-string? #f)) path?)]))
+
+;; ---------------------------------------------------------------------------
+;; W7 (#8569): Project root detection via sentinel file
+;; ---------------------------------------------------------------------------
+;; DESIGN FACT (W7, v0.99.42): 26 script call-sites use
+;; (build-path (current-directory) "util" "version.rkt") assuming cwd
+;; is the project root. find-project-root eliminates this assumption
+;; by using util/version.rkt as a sentinel to locate the project root
+;; from any starting directory.
+
+;; Sentinel file used to identify the project root.
+;; Must exist only at the q/ project root.
+(define project-root-sentinel (build-path "util" "version.rkt"))
+
+;; find-project-root: walks up from a starting directory looking for
+;; the sentinel file. Returns the directory containing it, or #f.
+(define (find-project-root [start-dir #f])
+  (define start
+    (if start-dir
+        (path->complete-path (if (string? start-dir)
+                                 (string->path start-dir)
+                                 start-dir))
+        (current-directory)))
+  (let loop ([dir (simplify-path start)])
+    (if (file-exists? (build-path dir project-root-sentinel))
+        dir
+        (let-values ([(parent _name _dir?) (split-path dir)])
+          (and (path? parent) (loop parent))))))
+
+;; project-root-or-cwd: find-project-root with cwd fallback.
+;; Backward-compatible: if sentinel not found, returns (current-directory).
+(define (project-root-or-cwd [start-dir #f])
+  (or (find-project-root start-dir) (current-directory)))
 
 ;; Returns list of possible project config directory paths in priority order.
 ;; ".q/" first, then ".pi/" as fallback.
