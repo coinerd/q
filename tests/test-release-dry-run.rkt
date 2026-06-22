@@ -12,6 +12,13 @@
 ;; ── Helper: load the script as a module ──
 (define script-path "../scripts/release-dry-run.rkt")
 
+;; W3 (#8565): Require struct directly for constructor tests
+(require (only-in "../scripts/release-dry-run.rkt"
+                  dry-run-result
+                  dry-run-result-ok?
+                  dry-run-result-name
+                  dry-run-result-message))
+
 (define (dynamic-script sym)
   (dynamic-require script-path sym))
 
@@ -94,8 +101,15 @@
   (check-equal? context 'tag-publish))
 
 ;; ============================================================
-;; Integration: dry-run checks
+;; Integration: dry-run checks (W3: struct-based results)
 ;; ============================================================
+
+;; Helper: load result predicates
+(define dry-run-result-pass? (dynamic-script 'dry-run-result-pass?))
+(define dry-run-result-fail? (dynamic-script 'dry-run-result-fail?))
+(define dry-run-results-all-pass? (dynamic-script 'dry-run-results-all-pass?))
+(define dry-run-results-failures (dynamic-script 'dry-run-results-failures))
+(define dry-run-result-exit-code (dynamic-script 'dry-run-result-exit-code))
 
 (test-case "dry-run-checks: all pass with valid project state"
   ;; Provide mock implementations for file-exists?, file->string, run-subprocess
@@ -118,7 +132,7 @@
                                       mock-run-subprocess))
   (for ([c (in-list checks)])
     (define result ((cdr c)))
-    (check-equal? (car result) 'pass (format "check ~a should pass" (car c)))))
+    (check-true (dry-run-result-pass? result) (format "check ~a should pass" (car c)))))
 
 (test-case "dry-run-checks: fails on version mismatch"
   (define mock-file-exists? (lambda (path) #t))
@@ -137,7 +151,7 @@
   ;; Find the version-match check
   (define version-check (cdr (assoc "version-match" checks)))
   (define result (version-check))
-  (check-equal? (car result) 'fail))
+  (check-true (dry-run-result-fail? result)))
 
 (test-case "dry-run-checks: fails on missing CHANGELOG entry"
   (define mock-file-exists? (lambda (path) #t))
@@ -157,7 +171,7 @@
   ;; Find the changelog-entry check
   (define changelog-check (cdr (assoc "changelog-entry" checks)))
   (define result (changelog-check))
-  (check-equal? (car result) 'fail))
+  (check-true (dry-run-result-fail? result)))
 
 (test-case "dry-run-checks: fails when release notes generation fails"
   (define mock-file-exists? (lambda (path) #t))
@@ -175,7 +189,117 @@
                                       mock-run-subprocess))
   (define notes-check (cdr (assoc "release-notes" checks)))
   (define result (notes-check))
-  (check-equal? (car result) 'fail))
+  (check-true (dry-run-result-fail? result)))
+
+;; ============================================================
+;; W3 (#8565): Result-type boundary tests
+;; ============================================================
+
+;; --- Struct constructor and accessors ---
+
+(test-case "dry-run-result: pass result has ok? = #t"
+  (define r (dry-run-result "test" #t "ok"))
+  (check-true (dry-run-result-ok? r))
+  (check-equal? (dry-run-result-name r) "test")
+  (check-equal? (dry-run-result-message r) "ok"))
+
+(test-case "dry-run-result: fail result has ok? = #f"
+  (define r (dry-run-result "test" #f "bad"))
+  (check-false (dry-run-result-ok? r))
+  (check-equal? (dry-run-result-message r) "bad"))
+
+(test-case "dry-run-result: is transparent for equal?-based assertions"
+  (check-equal? (dry-run-result "test" #t "ok") (dry-run-result "test" #t "ok")))
+
+;; --- Predicates ---
+
+(test-case "dry-run-result-pass?: ok? = #t → #t"
+  (check-true (dry-run-result-pass? (dry-run-result "t" #t ""))))
+
+(test-case "dry-run-result-pass?: ok? = #f → #f"
+  (check-false (dry-run-result-pass? (dry-run-result "t" #f ""))))
+
+(test-case "dry-run-result-fail?: ok? = #f → #t"
+  (check-true (dry-run-result-fail? (dry-run-result "t" #f ""))))
+
+(test-case "dry-run-result-fail?: ok? = #t → #f"
+  (check-false (dry-run-result-fail? (dry-run-result "t" #t ""))))
+
+(test-case "dry-run-result-pass?: non-struct → #f"
+  (check-false (dry-run-result-pass? '(pass . "ok")))
+  (check-false (dry-run-result-pass? 'pass)))
+
+(test-case "dry-run-result-fail?: non-struct → #f"
+  (check-false (dry-run-result-fail? '(fail . "bad")))
+  (check-false (dry-run-result-fail? 'fail)))
+
+;; --- Batch helpers ---
+
+(test-case "dry-run-results-all-pass?: all passing → #t"
+  (define results (list (dry-run-result "a" #t "") (dry-run-result "b" #t "")))
+  (check-true (dry-run-results-all-pass? results)))
+
+(test-case "dry-run-results-all-pass?: one failing → #f"
+  (define results (list (dry-run-result "a" #t "") (dry-run-result "b" #f "")))
+  (check-false (dry-run-results-all-pass? results)))
+
+(test-case "dry-run-results-all-pass?: empty list → #t"
+  (check-true (dry-run-results-all-pass? '())))
+
+(test-case "dry-run-results-failures: returns only failures"
+  (define results
+    (list (dry-run-result "a" #t "") (dry-run-result "b" #f "") (dry-run-result "c" #f "")))
+  (define fails (dry-run-results-failures results))
+  (check-equal? (length fails) 2)
+  (check-equal? (dry-run-result-name (first fails)) "b")
+  (check-equal? (dry-run-result-name (second fails)) "c"))
+
+(test-case "dry-run-results-failures: all passing → empty"
+  (define results (list (dry-run-result "a" #t "")))
+  (check-equal? (dry-run-results-failures results) '()))
+
+;; --- Exit code mapping ---
+
+(test-case "dry-run-result-exit-code: all pass → 0"
+  (define results (list (dry-run-result "a" #t "") (dry-run-result "b" #t "")))
+  (check-equal? (dry-run-result-exit-code results) 0))
+
+(test-case "dry-run-result-exit-code: any fail → 1"
+  (define results (list (dry-run-result "a" #t "") (dry-run-result "b" #f "")))
+  (check-equal? (dry-run-result-exit-code results) 1))
+
+(test-case "dry-run-result-exit-code: empty list → 0"
+  (check-equal? (dry-run-result-exit-code '()) 0))
+
+;; --- CLI output compatibility ---
+
+(test-case "dry-run-result-message preserves exact pass message text"
+  (define r (dry-run-result "version-match" #t "version 0.99.40 matches canonical"))
+  (check-equal? (dry-run-result-message r) "version 0.99.40 matches canonical"))
+
+(test-case "dry-run-result-message preserves exact fail message text"
+  (define r (dry-run-result "version-match" #f "requested 0.99.39 ≠ canonical 0.99.40"))
+  (check-equal? (dry-run-result-message r) "requested 0.99.39 ≠ canonical 0.99.40"))
+
+;; --- Export existence ---
+
+(test-case "release-dry-run.rkt exports dry-run-result struct"
+  (check-not-exn (lambda () (dynamic-require script-path 'dry-run-result))))
+
+(test-case "release-dry-run.rkt exports dry-run-result-pass?"
+  (check-not-exn (lambda () (dynamic-require script-path 'dry-run-result-pass?))))
+
+(test-case "release-dry-run.rkt exports dry-run-result-fail?"
+  (check-not-exn (lambda () (dynamic-require script-path 'dry-run-result-fail?))))
+
+(test-case "release-dry-run.rkt exports dry-run-results-all-pass?"
+  (check-not-exn (lambda () (dynamic-require script-path 'dry-run-results-all-pass?))))
+
+(test-case "release-dry-run.rkt exports dry-run-results-failures"
+  (check-not-exn (lambda () (dynamic-require script-path 'dry-run-results-failures))))
+
+(test-case "release-dry-run.rkt exports dry-run-result-exit-code"
+  (check-not-exn (lambda () (dynamic-require script-path 'dry-run-result-exit-code))))
 
 ;; ============================================================
 ;; Script existence
