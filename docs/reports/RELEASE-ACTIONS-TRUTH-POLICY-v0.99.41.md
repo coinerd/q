@@ -84,11 +84,46 @@ Now includes workflow-level truth fields:
 
 - `workflow_conclusion`, `workflow_pass`, `workflow_verdict`, `workflow_jobs`
 
+## Red-Run Classification (W7)
+
+The `scripts/actions-red-run-classifier.rkt` tool classifies GitHub Actions
+runs into 7 categories, distinguishing current blocking red runs from
+historical superseded ones:
+
+| Verdict | Meaning | Blocks approval? |
+|---------|---------|------------------|
+| `current_blocking_red_release_run` | Latest release.yml run is red | Yes |
+| `current_blocking_red_main_ci` | Latest ci.yml run on main is red | Yes |
+| `historical_superseded_red` | Older red run superseded by later success | No |
+| `cancelled_superseded` | Cancelled run superseded by later success | No |
+| `in_progress_blocking` | A run is still in progress | Yes |
+| `success_current` | Latest runs are all green | No |
+| `unknown_due_api_error` | API query failed | Yes (until retried) |
+
+### Key principle
+
+Historical red runs (from iterative development) do NOT block milestone
+approval. Only the **latest** run matters. This prevents the situation
+where 37 historical failures among 80 runs obscure a current green state.
+
+The classifier queries both release workflow runs (filtered by tag) and
+main CI runs, then combines them for an overall blocking determination.
+
+### Audit template
+
+A reusable audit template is maintained at:
+`.planning/AUDIT-TEMPLATE-RELEASE-ACTIONS-TRUTH.md`
+
+This template prevents job/workflow conflation by requiring separate
+verdicts for workflow-level, job-level, asset-level, manifest-level,
+CI-level, red-run classification, and traceability sections.
+
 ## Test Coverage
 
 | Test file | Tests | Focus |
 |-----------|-------|-------|
 | `tests/test-release-audit-truth.rkt` | 24 | Release verdict + CI verdict pure functions |
 | `tests/test-milestone-gate.rkt` | 28 | Milestone gate contract + verdict classification |
+| `tests/test-actions-red-run-classifier.rkt` | 25 | Red-run classifier fixtures (7 verdicts) |
 | `tests/test-gh-helpers-release-aware.rkt` | 15 | Python contract for verify_milestone_release |
 | `scripts/test_gh_helpers_release.py` | 37 | Python verdict classification + release verification |
