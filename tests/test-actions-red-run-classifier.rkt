@@ -216,6 +216,64 @@
   (check-false (blocking-verdict? "cancelled_superseded")))
 
 ;; ===================================================================
+;; W2 (#8564): superseded-verdict? and success-verdict? predicate tests
+;; ===================================================================
+
+(define superseded-verdict? (dynamic-require script-path 'superseded-verdict?))
+(define success-verdict? (dynamic-require script-path 'success-verdict?))
+
+(test-case "superseded-verdict?: historical_superseded_red is superseded"
+  (check-true (superseded-verdict? "historical_superseded_red")))
+
+(test-case "superseded-verdict?: cancelled_superseded is superseded"
+  (check-true (superseded-verdict? "cancelled_superseded")))
+
+(test-case "superseded-verdict?: current_blocking_red is NOT superseded"
+  (check-false (superseded-verdict? "current_blocking_red_release_run")))
+
+(test-case "superseded-verdict?: success_current is NOT superseded"
+  (check-false (superseded-verdict? "success_current")))
+
+(test-case "superseded-verdict?: #f is NOT superseded"
+  (check-false (superseded-verdict? #f)))
+
+(test-case "success-verdict?: success_current is success"
+  (check-true (success-verdict? "success_current")))
+
+(test-case "success-verdict?: current_blocking_red is NOT success"
+  (check-false (success-verdict? "current_blocking_red_release_run")))
+
+(test-case "success-verdict?: historical_superseded_red is NOT success"
+  (check-false (success-verdict? "historical_superseded_red")))
+
+(test-case "success-verdict?: #f is NOT success"
+  (check-false (success-verdict? #f)))
+
+;; ===================================================================
+;; W2 (#8564): #581 vs #582 compatibility fixtures through predicates
+;; ===================================================================
+
+(test-case "#581 shape: verdict is blocking via blocking-verdict?"
+  (define verdict (classify-red-run fixture-581-release-fail "release" #t #f))
+  (check-true (blocking-verdict? verdict) "#581 must be classified as blocking"))
+
+(test-case "#581 shape: verdict is NOT success via success-verdict?"
+  (define verdict (classify-red-run fixture-581-release-fail "release" #t #f))
+  (check-false (success-verdict? verdict) "#581 must NOT be classified as success"))
+
+(test-case "#581 shape: verdict is NOT superseded via superseded-verdict?"
+  (define verdict (classify-red-run fixture-581-release-fail "release" #t #f))
+  (check-false (superseded-verdict? verdict) "#581 must NOT be classified as superseded"))
+
+(test-case "#582 shape: verdict is success via success-verdict?"
+  (define verdict (classify-red-run fixture-release-success "release" #t #f))
+  (check-true (success-verdict? verdict) "#582 must be classified as success"))
+
+(test-case "#582 shape: verdict is NOT blocking via blocking-verdict?"
+  (define verdict (classify-red-run fixture-release-success "release" #t #f))
+  (check-false (blocking-verdict? verdict) "#582 must NOT be classified as blocking"))
+
+;; ===================================================================
 ;; RED_RUN_VERDICTS — completeness tests
 ;; ===================================================================
 

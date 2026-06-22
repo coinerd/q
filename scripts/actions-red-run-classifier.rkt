@@ -24,6 +24,8 @@
          make-red-run-result
          all-blocked-verdicts
          blocking-verdict?
+         superseded-verdict?
+         success-verdict?
          RED_RUN_VERDICTS)
 
 (require racket/file
@@ -55,6 +57,17 @@
 ;; Check if a verdict string blocks approval.
 (define (blocking-verdict? verdict)
   (and verdict (member verdict all-blocked-verdicts) #t))
+
+;; W2 (#8564): Verdicts that indicate a superseded (historical) red run.
+(define superseded-verdicts '("historical_superseded_red" "cancelled_superseded"))
+
+;; Check if a verdict is historical/superseded (does not block approval).
+(define (superseded-verdict? verdict)
+  (and verdict (member verdict superseded-verdicts) #t))
+
+;; W2 (#8564): Check if a verdict indicates the latest run is green.
+(define (success-verdict? verdict)
+  (and verdict (equal? verdict "success_current") #t))
 
 ;; Build a structured red-run result hash for JSON output.
 (define (make-red-run-result verdict run-type run-id run-number conclusion detail blocking?)
