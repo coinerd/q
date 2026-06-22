@@ -29,6 +29,8 @@
                        [read-canonical-version (->* () ((or/c path-string? #f)) string?)]
                        [read-canonical-version/strict
                         (->* () ((or/c path-string? #f)) (or/c string? #f))]
+                       ;; Common-case API (W8 #8570): read + error-exit
+                       [read-canonical-version! (->* () ((or/c path-string? #f)) string?)]
                        ;; Version formatting
                        [version->string (-> (listof exact-nonnegative-integer?) string?)]))
 
@@ -112,6 +114,28 @@
   (define path (version-file-path base-dir))
   (and (file-exists? path)
        (let ([content (file->string path)]) (parse-q-version-from-content content))))
+
+;; W8 (#8570): Common-case API — read canonical version with error-exit.
+;; Replaces the 6-line boilerplate repeated in 6+ scripts:
+;;   (define util-path (build-path (current-directory) "util" "version.rkt"))
+;;   (unless (file-exists? util-path) (displayln "ERROR: ...") (exit 1))
+;;   (define version (parse-q-version (file->string util-path)))
+;;   (unless version (displayln "ERROR: ...") (exit 1))
+;;
+;; DESIGN FACT (W8 §11/§12): This wrapper is deep enough because:
+;; 1. It encapsulates the read+parse+error-exit contract as a single call
+;; 2. It prevents error-message drift across 6 independently-maintained scripts
+;; 3. The rare-case API (read-canonical-version/strict) remains available
+;;    for callers that need custom error handling
+(define (read-canonical-version! [base-dir #f])
+  (define v (read-canonical-version/strict base-dir))
+  (unless v
+    (define path (version-file-path base-dir))
+    (if (file-exists? path)
+        (eprintf "ERROR: could not parse q-version from ~a\n" path)
+        (eprintf "ERROR: ~a not found\n" path))
+    (exit 1))
+  v)
 
 ;; ---------------------------------------------------------------------------
 ;; Formatting
