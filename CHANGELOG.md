@@ -1,3 +1,61 @@
+## 0.99.41
+
+Released: 2026-06-24
+
+### Overview
+Release Smoke, CI Actions Truth, and Future Milestone Completion
+Hardening. This release remediates the v0.99.40 release workflow
+failure where the smoke job ran an unstable default/all suite.
+Introduces the release-smoke test profile, mandatory manifest
+verification, release workflow verdict classification, latest main
+CI green enforcement, tag/manifest/release traceability evidence,
+Actions red-run classifier, and the v0.99.40 Actions truth
+addendum correcting the historical audit record.
+
+### Release Smoke, CI Actions Truth Remediation
+
+- **W0: Actions baseline.** Captured v0.99.40 release #581
+  verdict: `publication_succeeded_smoke_failed`. All 20 release
+  runs failed.
+
+- **W1: Release-smoke suite.** Created curated 12-file,
+  ~150-assertion test suite for deterministic release smoke
+  validation. Added `@suite release-smoke` tag support.
+
+- **W2: Mandatory manifest verification.** Release.yml smoke
+  job now requires manifest download and verification.
+
+- **W3: release-smoke in release.yml.** Smoke step changed to
+  `--suite release-smoke`. Added log upload and failure summary.
+
+- **W4: Release verdict classification.** Added
+  `classify-release-verdict` (7 verdicts) and `check-release-workflow`
+  to milestone-gate.rkt. Enriched gh_helpers.py with
+  `classify_release_verdict`.
+
+- **W5: Latest main CI green enforcement.** Added
+  `classify-ci-verdict` (6 verdicts), `ci-required-jobs`, and
+  enriched `check-ci-green` with job-level API queries.
+
+- **W6: Traceability evidence.** Added `check-release-traceability`
+  gate condition. Manifest now includes tag_name, tag_commit_sha,
+  tag_object_sha, manifest_commit_sha, commit_matches_tag.
+
+- **W7: Actions red-run classifier.** Created
+  `scripts/actions-red-run-classifier.rkt` with 7-verdict taxonomy
+  distinguishing current blocking red runs from historical
+  superseded ones.
+
+- **W8: v0.99.40 Actions truth addendum.** Corrected the
+  historical audit record documenting the smoke job failure
+  conflation.
+
+- **W9: PR CI verification.** CI run #5653: 11/12 jobs passed.
+  Fixed lint failures (format + metrics sync).
+
+- **W10: v0.99.41 publication.** Version bump, tag, release
+  workflow, final audit.
+
 ## 0.99.40
 
 Released: 2026-06-23
