@@ -28,6 +28,8 @@
          workflows-file?
          unit-fast-file?
          smoke-excluded?
+         release-smoke-included?
+         release-smoke-curated-files
          file-has-suite-tag?
          support-test-module?
          file-has-rackunit-tests?
@@ -272,6 +274,35 @@
       (for/or ([curated (in-list smoke-curated-files)])
         (string-suffix? s curated))))
 
+;; Release-smoke suite: post-release artifact verification.
+;; Deterministic subset of smoke that focuses on verifying the installed
+;; artifact works correctly. No browser/playwright, no live network,
+;; no terminal, no mutating tests.
+;; Contract: tests that verify version, CLI, core system boot, and
+;; selected release-critical functionality only.
+(define release-smoke-curated-files
+  '("tests/test-version.rkt" "tests/test-safe-mode.rkt"
+                             "tests/test-error-classify.rkt"
+                             "tests/test-mutating-tool-taxonomy.rkt"
+                             "tests/test-verifier-gate.rkt"
+                             "tests/test-cli-flags.rkt"
+                             "tests/test-extension-tiers.rkt"
+                             "tests/test-capability-aware-spawn.rkt"
+                             "tests/test-frontmatter-extended.rkt"
+                             "tests/test-context-assembly-config.rkt"
+                             "tests/test-execution-plane-error-label.rkt"
+                             "tests/test-runtime-packages.rkt"
+                             "tests/test-spawn-subagent-serialization.rkt"))
+
+(define (release-smoke-included? f)
+  (define s
+    (if (path? f)
+        (path->string f)
+        f))
+  (or (file-has-suite-tag? f "release-smoke")
+      (for/or ([curated (in-list release-smoke-curated-files)])
+        (string-suffix? s curated))))
+
 (define (support-test-module? f)
   (define s
     (if (path? f)
@@ -385,6 +416,7 @@
        [(slow) (filter slow-file? all-files)]
        [(tui) (filter tui-file? all-files)]
        [(smoke) (filter smoke-included? all-files)]
+       [(release-smoke) (filter release-smoke-included? all-files)]
        [(security) (filter security-file? all-files)]
        [(arch) (filter arch-file? all-files)]
        [(runtime) (filter runtime-file? all-files)]
