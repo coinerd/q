@@ -10,8 +10,9 @@
 ;;   4. CHANGELOG.md has entry for this version
 ;;   5. Metrics synced (metrics.rkt --lint passes)
 ;;
-;; W5 (#8522): Release check now verifies assets (tarball + manifest)
-;; and provides structured JSON output with release fields.
+;; W5 (#8545): CI check now verifies job-level conclusions and
+;; blocks milestone closure on in-progress, failure, cancelled,
+;; or unexpectedly skipped required jobs.
 ;;
 ;; Usage:
 ;;   cd q/ && racket scripts/milestone-gate.rkt 65    # check milestone #65
@@ -22,7 +23,10 @@
          release-has-asset?
          make-release-check-result
          classify-release-verdict
-         make-workflow-verdict-result)
+         make-workflow-verdict-result
+         classify-ci-verdict
+         make-ci-check-result
+         ci-required-jobs)
 
 (require racket/file
          racket/list
@@ -109,6 +113,62 @@
              release-exists)
         'publication_succeeded_smoke_failed]
        [else 'unknown])]))
+
+;; Default required CI jobs for milestone closure.
+;; release-dry-run and release-readiness may be skipped on main.
+(define ci-required-jobs
+  '("lint" "lint-alignment" "test" "security" "smoke" "inter-wave-gate" "workflows"))
+
+;; Build a CI check result hash for JSON output.
+(define (make-ci-check-result run-id run-number status conclusion verdict pass detail)
+  (hasheq 'ci
+          (hasheq 'run_id
+                  (or run-id 0)
+                  'run_number
+                  (or run-number 0)
+                  'status
+                  (or status "unknown")
+                  'conclusion
+                  (or conclusion "unknown")
+                  'verdict
+                  (or verdict 'ci_no_runs)
+                  'pass
+                  pass
+                  'detail
+                  (or detail ""))))
+
+;; Classify a CI run for milestone closure purposes.
+;; Pure function — takes structured data, returns a verdict symbol.
+;;
+;; Inputs:
+;;   ci-run-data: hash or #f
+;;     'status → "completed" | "in_progress" | "queued" | #f
+;;     'conclusion → "success" | "failure" | "cancelled" | #f
+;;     'head_sha → string
+;;     'run_number → integer
+;;   jobs: hash of job-name (string) → conclusion string
+;;   required-jobs: list of strings (required job names)
+;;
+;; Returns one of:
+;;   ci_no_runs
+;;   ci_in_progress
+;;   ci_failure
+;;   ci_cancelled
+;;   ci_required_job_unexpectedly_skipped
+;;   ci_success
+(define (classify-ci-verdict ci-run-data jobs required-jobs)
+  (cond
+    [(not ci-run-data) 'ci_no_runs]
+    [(not (equal? (hash-ref ci-run-data 'status #f) "completed")) 'ci_in_progress]
+    [(equal? (hash-ref ci-run-data 'conclusion #f) "cancelled") 'ci_cancelled]
+    [(not (equal? (hash-ref ci-run-data 'conclusion #f) "success")) 'ci_failure]
+    [else
+     ;; Workflow succeeded — check required jobs for unexpected skips
+     (define skipped-required
+       (for/list ([job-name (in-list required-jobs)]
+                  #:when (equal? (hash-ref jobs job-name #f) "skipped"))
+         job-name))
+     (if (pair? skipped-required) 'ci_required_job_unexpectedly_skipped 'ci_success)]))
 
 ;; Extract version (X.Y.Z) from milestone title like "v0.99.40 ..." or "0.99.40 ..."
 ;; Returns string or #f.
@@ -223,20 +283,59 @@
 ;; --- Gate checks ---
 
 (define (check-ci-green)
-  ;; Check latest CI workflow run on main
+  ;; Check latest CI workflow run on main.
+  ;; W5: Enriched with job-level verification and required-job skip semantics.
   (define data (gh-api-json "actions/runs?branch=main&per_page=1"))
   (cond
-    [(not data) (list #f "Could not query GitHub Actions")]
+    [(not data) (list #f "Could not query GitHub Actions" #f)]
     [else
      (define runs (hash-ref data 'workflow_runs '()))
-     (if (null? runs)
-         (list #t "No CI runs found (pass)")
-         (let* ([run (car runs)]
-                [status (hash-ref run 'status "")]
-                [conclusion (hash-ref run 'conclusion "")])
-           (if (and (string=? status "completed") (string=? conclusion "success"))
-               (list #t (format "CI green (run ~a)" (hash-ref run 'run_number "?")))
-               (list #f (format "CI ~a/~a" status conclusion)))))]))
+     (cond
+       [(null? runs)
+        (list #t
+              "No CI runs found (pass)"
+              (make-ci-check-result #f #f "none" "none" 'ci_no_runs #t "No CI runs"))]
+       [else
+        (define run (car runs))
+        (define status (hash-ref run 'status ""))
+        (define conclusion (hash-ref run 'conclusion ""))
+        (define run-number (hash-ref run 'run_number 0))
+        (define run-id (hash-ref run 'id 0))
+        ;; Query jobs for this run
+        (define jobs-data (gh-api-json (format "actions/runs/~a/jobs" run-id)))
+        (define jobs-hash
+          (if (and jobs-data (hash? jobs-data))
+              (for/hash ([job (in-list (hash-ref jobs-data 'jobs '()))])
+                (values (hash-ref job 'name "") (hash-ref job 'conclusion "skipped")))
+              (hash)))
+        ;; Classify verdict
+        (define verdict
+          (classify-ci-verdict (hasheq 'status status 'conclusion conclusion 'run_number run-number)
+                               jobs-hash
+                               ci-required-jobs))
+        (define pass? (equal? verdict 'ci_success))
+        (define detail
+          (case verdict
+            [(ci_success)
+             (format "CI green (run ~a, all ~a required jobs passed)"
+                     run-number
+                     (length ci-required-jobs))]
+            [(ci_in_progress) (format "CI run ~a still ~a — blocks closure" run-number status)]
+            [(ci_failure)
+             (format "CI run ~a failed (conclusion: ~a) — blocks closure" run-number conclusion)]
+            [(ci_cancelled) (format "CI run ~a cancelled — blocks closure" run-number)]
+            [(ci_required_job_unexpectedly_skipped)
+             (define skipped
+               (for/list ([job-name (in-list ci-required-jobs)]
+                          #:when (equal? (hash-ref jobs-hash job-name #f) "skipped"))
+                 job-name))
+             (format "CI run ~a has unexpectedly skipped required jobs: ~a"
+                     run-number
+                     (string-join skipped ", "))]
+            [else (format "CI run ~a: ~a" run-number verdict)]))
+        (list pass?
+              detail
+              (make-ci-check-result run-id run-number status conclusion verdict pass? detail))])]))
 
 (define (check-milestone-issues-closed)
   ;; Get milestone issues
@@ -420,6 +519,13 @@
                                (>= (length r) 4)
                                (hash? (list-ref r 3))))
          (list-ref r 3)))
+     (define ci-info
+       (for/first ([r (in-list results)]
+                   #:when (and (string? (car r))
+                               (equal? (car r) "CI green")
+                               (>= (length r) 4)
+                               (hash? (list-ref r 3))))
+         (list-ref r 3)))
      (printf "~a~n"
              (jsexpr->string (hasheq 'milestone
                                      milestone-number
@@ -430,7 +536,9 @@
                                      (or release-info (hasheq 'release (hasheq 'exists #f)))
                                      'workflow_info
                                      (or workflow-info
-                                         (hasheq 'workflow (hasheq 'verdict 'no_release_run))))))]
+                                         (hasheq 'workflow (hasheq 'verdict 'no_release_run)))
+                                     'ci_info
+                                     (or ci-info (hasheq 'ci (hasheq 'verdict 'ci_no_runs))))))]
     [else
      (printf "=== Milestone #~a Gate Check ===~n~n" milestone-number)
      (for ([r (in-list results)])

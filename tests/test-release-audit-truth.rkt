@@ -199,3 +199,98 @@
 
 (test-case "milestone-gate.rkt exports make-workflow-verdict-result"
   (check-not-exn (lambda () (dynamic-require script-path 'make-workflow-verdict-result))))
+
+;; ============================================================
+;; W5: classify-ci-verdict tests
+;; ============================================================
+
+(define required-jobs '("lint" "test" "security" "smoke" "workflows"))
+
+(test-case "CI success: all required jobs passed"
+  (define verdict
+    ((dynamic-script 'classify-ci-verdict)
+     (hasheq 'status "completed" 'conclusion "success" 'run_number 600)
+     (make-hash '(("lint" . "success") ("test" . "success")
+                                       ("security" . "success")
+                                       ("smoke" . "success")
+                                       ("workflows" . "success")))
+     required-jobs))
+  (check-equal? verdict 'ci_success))
+
+(test-case "CI in_progress blocks closure"
+  (define verdict
+    ((dynamic-script 'classify-ci-verdict)
+     (hasheq 'status "in_progress" 'conclusion #f 'run_number 601)
+     (hash)
+     required-jobs))
+  (check-equal? verdict 'ci_in_progress))
+
+(test-case "CI failure blocks closure"
+  (define verdict
+    ((dynamic-script 'classify-ci-verdict)
+     (hasheq 'status "completed" 'conclusion "failure" 'run_number 602)
+     (hash)
+     required-jobs))
+  (check-equal? verdict 'ci_failure))
+
+(test-case "CI cancelled blocks closure"
+  (define verdict
+    ((dynamic-script 'classify-ci-verdict)
+     (hasheq 'status "completed" 'conclusion "cancelled" 'run_number 603)
+     (hash)
+     required-jobs))
+  (check-equal? verdict 'ci_cancelled))
+
+(test-case "CI no runs found"
+  (define verdict ((dynamic-script 'classify-ci-verdict) #f (hash) required-jobs))
+  (check-equal? verdict 'ci_no_runs))
+
+(test-case "CI required job unexpectedly skipped fails"
+  (define verdict
+    ((dynamic-script 'classify-ci-verdict)
+     (hasheq 'status "completed" 'conclusion "success" 'run_number 604)
+     (make-hash '(("lint" . "success") ("test" . "skipped")
+                                       ("security" . "success")
+                                       ("smoke" . "success")
+                                       ("workflows" . "success")))
+     required-jobs))
+  (check-equal? verdict 'ci_required_job_unexpectedly_skipped))
+
+(test-case "CI allowed job skipped passes (release-readiness not in required)"
+  ;; release-readiness is not in required-jobs, so skipping it is OK
+  (define verdict
+    ((dynamic-script 'classify-ci-verdict)
+     (hasheq 'status "completed" 'conclusion "success" 'run_number 605)
+     (make-hash '(("lint" . "success") ("test" . "success")
+                                       ("security" . "success")
+                                       ("smoke" . "success")
+                                       ("workflows" . "success")
+                                       ("release-readiness" . "skipped")))
+     required-jobs))
+  (check-equal? verdict 'ci_success))
+
+(test-case "make-ci-check-result structure"
+  (define result
+    ((dynamic-script 'make-ci-check-result) 12345
+                                            600
+                                            "completed"
+                                            "success"
+                                            'ci_success
+                                            #t
+                                            "All good"))
+  (define ci-hash (hash-ref result 'ci))
+  (check-equal? (hash-ref ci-hash 'run_number) 600)
+  (check-equal? (hash-ref ci-hash 'verdict) 'ci_success)
+  (check-true (hash-ref ci-hash 'pass)))
+
+(test-case "ci-required-jobs default list exported"
+  (define jobs (dynamic-script 'ci-required-jobs))
+  (check-not-false (member "test" jobs))
+  (check-not-false (member "security" jobs))
+  (check-not-false (member "smoke" jobs)))
+
+(test-case "milestone-gate.rkt exports classify-ci-verdict"
+  (check-not-exn (lambda () (dynamic-require script-path 'classify-ci-verdict))))
+
+(test-case "milestone-gate.rkt exports make-ci-check-result"
+  (check-not-exn (lambda () (dynamic-require script-path 'make-ci-check-result))))
