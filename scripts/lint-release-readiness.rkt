@@ -131,10 +131,14 @@
 ;; Check 5: On main branch
 ;; ---------------------------------------------------------------------------
 
-(define (check-main-branch)
+(define (check-main-branch context)
   (define branch
     (string-trim (with-output-to-string (lambda () (system "git rev-parse --abbrev-ref HEAD")))))
   (cond
+    ;; tag-publish context: detached HEAD is expected (tag checkout)
+    [(and (equal? context 'tag-publish) (equal? branch "HEAD"))
+     (printf "  [PASS] detached HEAD (tag-publish context)~n")
+     #t]
     [(equal? branch "main")
      (printf "  [PASS] on main branch~n")
      #t]
@@ -242,7 +246,7 @@
   (printf "~n── Release Readiness Check (v~a) ~a──~n" ver context-label)
 
   (define base-results
-    (list (check-version-sync) (check-changelog-entry) (check-git-clean) (check-main-branch)))
+    (list (check-version-sync) (check-changelog-entry) (check-git-clean) (check-main-branch context)))
 
   ;; Tag check: only in pre-tag context (not tag-publish, not dev)
   ;; tag-publish context: tag already exists by design
