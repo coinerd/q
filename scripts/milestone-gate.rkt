@@ -45,7 +45,14 @@
          GITHUB-CANCELLED
          GITHUB-SKIPPED
          GITHUB-COMPLETED
-         GITHUB-IN-PROGRESS)
+         GITHUB-IN-PROGRESS
+         ;; W6 (#8568): Lifecycle transition model
+         (struct-out milestone-lifecycle-transition-result)
+         milestone-lifecycle-states
+         milestone-lifecycle-next
+         milestone-valid-transition?
+         can-close-milestone?
+         milestone-lifecycle-transition-result)
 
 (require racket/file
          racket/list
@@ -131,7 +138,52 @@
     [else 'unknown]))
 
 ;; ---------------------------------------------------------------------------
-;; Pure logic (testable without network)
+;; W6 (#8568): Lifecycle transition model
+;; ---------------------------------------------------------------------------
+;; Explicit state machine for milestone/release closure.
+;; States: planned → in_progress → release_ready → release_published → ci_green → closed
+;;
+;; Transitions are guarded by release and CI verdicts.
+;; This makes the closure lifecycle explicit and testable
+;; without changing any GitHub issue/board behavior.
+
+;; All lifecycle states in order.
+(define milestone-lifecycle-states
+  '(planned in_progress release_ready release_published ci_green closed))
+
+;; Structured transition result.
+(struct milestone-lifecycle-transition-result (from to ok? reason) #:transparent)
+
+;; Next valid state in the lifecycle (linear progression).
+;; Returns #f if there is no next state (already closed).
+(define (milestone-lifecycle-next state)
+  (define idx (index-of milestone-lifecycle-states state))
+  (and idx
+       (< (add1 idx) (length milestone-lifecycle-states))
+       (list-ref milestone-lifecycle-states (add1 idx))))
+
+;; Check if a transition from one state to another is valid.
+;; Returns #t or #f.
+(define (milestone-valid-transition? from-state to-state)
+  (equal? (milestone-lifecycle-next from-state) to-state))
+
+;; Guard: can a milestone transition to `closed`?
+;; Requires release verdict to be success and CI verdict to be success.
+;; Returns a milestone-lifecycle-transition-result.
+(define (can-close-milestone? release-verdict ci-verdict)
+  (cond
+    [(not (release-verdict-success? release-verdict))
+     (milestone-lifecycle-transition-result 'ci_green
+                                            'closed
+                                            #f
+                                            (format "release verdict ~a blocks closing"
+                                                    release-verdict))]
+    [(not (ci-verdict-success? ci-verdict))
+     (milestone-lifecycle-transition-result 'ci_green
+                                            'closed
+                                            #f
+                                            (format "CI verdict ~a blocks closing" ci-verdict))]
+    [else (milestone-lifecycle-transition-result 'ci_green 'closed #t "all gates passed")]))
 ;; ---------------------------------------------------------------------------
 
 ;; Build a workflow verdict result hash for JSON output.
