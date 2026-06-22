@@ -25,8 +25,9 @@
   (displayln "  --sequential      Run tests sequentially (jobs=1)")
   (displayln "  --timeout SECS    Per-file timeout in seconds")
   (displayln "  --mode <name>     Execution mode: auto (default), subprocess, in-process, grouped")
-  (displayln
-   "  --suite <name>    Run test suite: all/broad (default all), fast, unit-fast, slow, tui, smoke, release-smoke, security, arch, runtime, extensions, workflows")
+  (displayln "  --suite <name>    Run test suite: all/broad (default all), fast,")
+  (displayln "                    unit-fast, slow, tui, smoke, release-smoke,")
+  (displayln "                    security, arch, runtime, extensions, workflows")
   (displayln "  --strict          Enable strict zero-test detection (default: on)")
   (displayln "  --repeat N        Run suite N times (exit 1 if any run fails)")
   (displayln "  --record-gate-evidence  Write .gate-evidence/<suite>.passed on success")
