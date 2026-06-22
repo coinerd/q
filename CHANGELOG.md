@@ -1,3 +1,80 @@
+## 0.99.42
+
+Released: 2026-06-25
+
+### Overview
+Racket Abstraction Manual Roadmap V — abstraction governance and
+high-leverage boundary hardening. This milestone applied the Racket
+Abstraction Manual (§7–§55) to harden release/CI boundary code
+without destabilizing the green release/CI pipeline. Delivered
+scanner v5 with 3 new signals, verdict predicate abstraction, 4
+structured result types, pure/effect separation for manifest
+construction, explicit lifecycle state machine, cwd-independent
+project root detection, common-case API ergonomics, and design-fact
+comments at critical invariants.
+
+### Abstraction Boundary Hardening
+
+- **W0: Baseline.** Revalidated all local gates and created the
+  abstraction fitness baseline and coverage matrix. 701 modules,
+  ~111K lines scanned.
+
+- **W1: Scanner v5.** Added 3 high-signal checks to
+  `scripts/abstraction-audit.rkt`: stringly verdict detection,
+  effectful classifier detection, optional/mandatory wording detection.
+  Scanner now has 11 signals total.
+
+- **W2: Verdict predicates.** Introduced predicate functions
+  (`release-verdict-success?`, `ci-verdict-blocking?`, etc.) and
+  status constants to replace bare string comparisons in
+  `milestone-gate.rkt` and `actions-red-run-classifier.rkt`.
+
+- **W3: Result boundary.** Introduced `dry-run-result` struct
+  replacing ad-hoc `(cons 'pass/'fail)` pairs in
+  `release-dry-run.rkt`. Follows the `status-result.rkt` pattern.
+
+- **W4: Manifest domain model.** Introduced `manifest`,
+  `manifest-asset`, and `manifest-trace` structs with pure
+  `validate-manifest` function in `gen-release-manifest.rkt`.
+  JSON parse safety with `with-handlers` wrapper.
+
+- **W5: Pure-core/effect-shell.** Separated manifest construction
+  into pure `build-manifest` and effectful `collect-release-inputs`.
+  Added `release-inputs` struct and `commits-match?` predicate.
+
+- **W6: Lifecycle state machine.** Made milestone lifecycle
+  transitions explicit with 6-state model
+  (`planned → in_progress → release_ready → release_published →
+  ci_green → closed`). Added `can-close-milestone?` guard requiring
+  release + CI success.
+
+- **W7: Path/env boundary.** Added cwd-independent
+  `find-project-root` and `project-root-or-cwd` using sentinel file.
+  Audited 26 cwd-dependent script sites (Medium risk, deferred
+  migration).
+
+- **W8: Common-case API.** Introduced `read-canonical-version!`
+  in `version-surface.rkt` replacing 6-line version-parsing
+  boilerplate repeated across 6+ scripts. Migrated 3 scripts.
+
+- **W9: Design-fact comments.** Added DESIGN FACT comments at 4
+  high-risk invariants: cancelled_superseded exclusion, validation
+  tolerance, pure/effect boundary, lifecycle linearity.
+
+- **W10: Scorecards and governance.** Created public scorecard and
+  governance report. Synced metrics.
+
+### Stats
+
+```text
+Source modules: 701 (unchanged)
+Source lines: ~112,375 (+575)
+Test assertions: ~28,152 (+270)
+Scanner signals: 11 (v5, +3)
+Structured result types: 4 (+3)
+DESIGN FACT comments: 10 (+4)
+```
+
 ## 0.99.41
 
 Released: 2026-06-24
