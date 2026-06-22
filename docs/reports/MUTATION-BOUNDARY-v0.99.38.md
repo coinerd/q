@@ -1,4 +1,4 @@
-# Mutation Boundary Report — v0.99.38 W5
+# Mutation Boundary Report — v0.99.40 W5
 
 **Date:** 2026-06-23
 **Issue:** #8479

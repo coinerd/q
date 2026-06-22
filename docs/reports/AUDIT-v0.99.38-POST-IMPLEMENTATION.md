@@ -1,14 +1,14 @@
-# AUDIT v0.99.38 — Post-Implementation
+# AUDIT v0.99.40 — Post-Implementation
 
 **Date:** 2026-06-23
-**Version:** 0.99.38
+**Version:** 0.99.40
 **Milestone:** #824
 **Parent Issue:** #8468
 **Base commit:** `42e0402b` → W11 commit
 
 ## Summary
 
-v0.99.38 — Racket Abstraction Manual Roadmap IV: Change Locality.
+v0.99.40 — Racket Abstraction Manual Roadmap IV: Change Locality.
 12 waves (W0–W11) completed. All changes backward-compatible.
 
 ## Wave Summary
@@ -65,7 +65,7 @@ racket scripts/run-tests.rkt --suite fast --profile local \
 
 ### Broad Gate
 
-The original W11 report incorrectly cited v0.99.37 broad evidence. Remediation #8498 reran the current v0.99.38 broad gate with the ledger after fixing `scripts/check-deps.rkt` relative internal require classification:
+The original W11 report incorrectly cited v0.99.37 broad evidence. Remediation #8498 reran the current v0.99.40 broad gate with the ledger after fixing `scripts/check-deps.rkt` relative internal require classification:
 
 ```
 timeout 7200 racket scripts/run-tests.rkt --suite broad --profile local \
@@ -81,7 +81,7 @@ Release-blocking known failures: 0
 
 This broad evidence supersedes the stale v0.99.37 baseline citation.
 
-## Files Changed in v0.99.38
+## Files Changed in v0.99.40
 
 ### New Modules
 
@@ -110,8 +110,8 @@ Modified test files:
 
 ### Modified Source Files
 
-- `util/version.rkt` — Version bump to 0.99.38
-- `info.rkt` — Version bump to 0.99.38
+- `util/version.rkt` — Version bump to 0.99.40
+- `info.rkt` — Version bump to 0.99.40
 - `runtime/provider/provider-factory.rkt` — `global-config-dir` consolidation (W6)
 - `scripts/run-tests/parse.rkt` — DESIGN FACT comment (W9)
 - `util/config-paths.rkt` — DESIGN FACT comment (W9)
@@ -122,17 +122,17 @@ Modified test files:
 
 ### Reports Added (11)
 
-1. `ABSTRACTION-BASELINE-v0.99.38.md`
-2. `COMMON-CASE-API-SCORECARD-v0.99.38.md`
-3. `PATH-MODULE-LOADING-AUDIT-v0.99.38.md`
-4. `PARSER-HOTSPOT-SCORECARD-v0.99.38.md`
-5. `STATE-TRANSITION-BOUNDARIES-v0.99.38.md`
-6. `MUTATION-BOUNDARY-v0.99.38.md`
-7. `ADAPTER-LAYER-CONTRACTS-v0.99.38.md`
-8. `RED-MODULE-FIRST-SLICE-v0.99.38.md`
-9. `SCANNER-V4-CHANGE-LOCALITY-v0.99.38.md`
-10. `DESIGN-FACTS-CLEANUP-v0.99.38.md`
-11. `RELEASE-TRUTH-HARDENING-v0.99.38.md`
+1. `ABSTRACTION-BASELINE-v0.99.40.md`
+2. `COMMON-CASE-API-SCORECARD-v0.99.40.md`
+3. `PATH-MODULE-LOADING-AUDIT-v0.99.40.md`
+4. `PARSER-HOTSPOT-SCORECARD-v0.99.40.md`
+5. `STATE-TRANSITION-BOUNDARIES-v0.99.40.md`
+6. `MUTATION-BOUNDARY-v0.99.40.md`
+7. `ADAPTER-LAYER-CONTRACTS-v0.99.40.md`
+8. `RED-MODULE-FIRST-SLICE-v0.99.40.md`
+9. `SCANNER-V4-CHANGE-LOCALITY-v0.99.40.md`
+10. `DESIGN-FACTS-CLEANUP-v0.99.40.md`
+11. `RELEASE-TRUTH-HARDENING-v0.99.40.md`
 
 ## Known Issues Carried Forward
 
@@ -160,7 +160,7 @@ Modified test files:
 - [x] Fast gate PASS after remediation #8498 (975/975 files, 13619/13619 tests)
 - [x] Broad gate PASS after remediation #8498 (1067/1067 files, 14555/14555 tests; Known=0, New=0, Unclassified=0, Release-blocking=0)
 - [x] README metrics synced
-- [x] CHANGELOG top entry correct (v0.99.38)
+- [x] CHANGELOG top entry correct (v0.99.40)
 - [x] Final reports committed
-- [x] Version bumped to 0.99.38 in util/version.rkt + info.rkt
-- [x] All .md version references updated to 0.99.38
+- [x] Version bumped to 0.99.40 in util/version.rkt + info.rkt
+- [x] All .md version references updated to 0.99.40

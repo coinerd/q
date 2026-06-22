@@ -11,7 +11,7 @@ missing releases.
 ## Historical Gap
 
 - **Last successful release**: v0.32.9
-- **Affected tags**: All tags after v0.32.9 through v0.99.38
+- **Affected tags**: All tags after v0.32.9 through v0.99.40
 - **Root cause**: `raco pkg install` during setup-racket compiled
   package-visible modules with errors not caught by `raco make main.rkt`
 - **Remediation**: v0.99.39 (#826) fixed the F1–F4 compile errors and

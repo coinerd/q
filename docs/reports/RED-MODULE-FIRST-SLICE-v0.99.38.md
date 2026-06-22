@@ -1,4 +1,4 @@
-# RED-Module First-Slice Characterization — v0.99.38 W7
+# RED-Module First-Slice Characterization — v0.99.40 W7
 
 **Date:** 2026-06-23
 **Issue:** #8481

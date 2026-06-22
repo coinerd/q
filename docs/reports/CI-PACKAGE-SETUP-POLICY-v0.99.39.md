@@ -11,7 +11,7 @@ The `raco pkg install` / `raco pkg update` step in CI (via the
 This is a broader compile boundary than `raco make main.rkt` or the test
 suite, which only compile modules in their respective dependency graphs.
 
-In v0.99.38, four scripts/CLI modules had compile errors that were
+In v0.99.40, four scripts/CLI modules had compile errors that were
 invisible to local development gates but broke every CI run:
 
 | ID | Module | Root Cause |
@@ -135,7 +135,7 @@ When adding a new `.rkt` file under a package-visible directory:
 
 ## 6. Historical Context
 
-- **v0.99.38**: CI broke on main due to 4 package-visible compile errors
+- **v0.99.40**: CI broke on main due to 4 package-visible compile errors
   invisible to local gates. All CI runs failed at the `setup-racket`
   step, skipping all downstream jobs (lint, test, security, etc.).
 - **v0.99.39 W0** (#8503): Baseline documentation of the failure pattern.

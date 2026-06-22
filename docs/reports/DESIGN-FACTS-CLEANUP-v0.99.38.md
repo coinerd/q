@@ -1,4 +1,4 @@
-# Design-Facts Cleanup — v0.99.38 W9
+# Design-Facts Cleanup — v0.99.40 W9
 
 **Date:** 2026-06-23
 **Issue:** #8483
@@ -6,7 +6,7 @@
 
 ## Purpose
 
-Add design-fact comments to source files where v0.99.38 W0–W8 audits found
+Add design-fact comments to source files where v0.99.40 W0–W8 audits found
 hidden assumptions, known bugs, or non-obvious invariant provenance. Each
 comment ties to a concrete audit finding — no cosmetic churn.
 

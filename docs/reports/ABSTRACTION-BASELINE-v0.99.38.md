@@ -1,4 +1,4 @@
-# Abstraction Baseline — v0.99.38
+# Abstraction Baseline — v0.99.40
 
 **Date:** 2026-06-23
 **Head:** `main@ce34c68f`
