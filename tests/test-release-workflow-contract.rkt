@@ -172,3 +172,67 @@
   (for ([line (in-list lines)]
         [i (in-naturals 1)])
     (check-false (string-contains? line "\t") (format "tab found at line ~a" i))))
+
+;; ============================================================
+;; W2: Mandatory manifest verification contract tests
+;; ============================================================
+
+(test-case "release.yml smoke job verifies manifest as mandatory"
+  (define content (read-release-yml))
+  (check-true (string-contains? content "Verify manifest (mandatory)")
+              "smoke job must have 'Verify manifest (mandatory)' step"))
+
+(test-case "release.yml does not contain optional manifest wording"
+  (define content (read-release-yml))
+  (check-false (string-contains? content "No release-manifest.json found (optional)")
+               "smoke job must NOT treat manifest as optional"))
+
+(test-case "release.yml smoke manifest verification has failing path for missing manifest"
+  (define content (read-release-yml))
+  ;; Must have explicit error + exit 1 for missing manifest
+  (check-true (string-contains? content "ERROR: release-manifest.json")
+              "must have ERROR message for missing manifest")
+  ;; Must have exit 1 for manifest failure
+  (check-true (string-contains? content "exit 1") "must have exit 1 for manifest failures"))
+
+(test-case "release.yml smoke manifest verifies version field"
+  (define content (read-release-yml))
+  (check-true (string-contains? content "manifest version mismatch")
+              "must verify manifest version field"))
+
+(test-case "release.yml smoke manifest verifies tag field"
+  (define content (read-release-yml))
+  (check-true (string-contains? content "manifest tag mismatch") "must verify manifest tag field"))
+
+(test-case "release.yml smoke manifest verifies tarball asset name"
+  (define content (read-release-yml))
+  (check-true (string-contains? content "manifest tarball name mismatch")
+              "must verify manifest tarball asset name"))
+
+(test-case "release.yml smoke manifest verifies sha256 when available"
+  (define content (read-release-yml))
+  (check-true (string-contains? content "sha256 mismatch")
+              "must verify manifest sha256 when tarball is available"))
+
+(test-case "release.yml smoke manifest uses asset API not direct download URL"
+  (define content (read-release-yml))
+  ;; Must look up release by tag to find asset URL
+  (check-true (string-contains? content "releases/tags/${TAG}")
+              "must look up release by tag for manifest asset URL")
+  ;; Must find manifest via asset filter, not direct download URL
+  (check-false (string-contains? content "releases/download/${TAG}/release-manifest.json")
+               "must NOT use unreliable direct download URL for manifest"))
+
+(test-case "release.yml smoke manifest has no '|| true' fallback"
+  (define content (read-release-yml))
+  ;; The old code had '|| true' on the manifest curl — now it's gone.
+  ;; Extract manifest step section using regexp-match-positions
+  (define start-pos (regexp-match-positions #rx"Verify manifest .mandatory" content))
+  (define end-pos (regexp-match-positions #rx"Run test suite" content))
+  (when (and start-pos end-pos)
+    (define start-idx (caar start-pos))
+    (define end-idx (caar end-pos))
+    (when (< start-idx end-idx)
+      (define manifest-section (substring content start-idx end-idx))
+      (check-false (string-contains? manifest-section "|| true")
+                   "manifest download must NOT have '|| true' masking failures"))))
