@@ -300,3 +300,121 @@
   (define jobs (dynamic-script 'ci-required-jobs))
   (check-not-false (member "test" jobs))
   (check-not-false (member "security" jobs)))
+
+;; ============================================================
+;; W6 (#8568): Lifecycle transition model tests
+;; ============================================================
+
+(require (only-in "../scripts/milestone-gate.rkt"
+                  milestone-lifecycle-transition-result
+                  milestone-lifecycle-transition-result?
+                  milestone-lifecycle-transition-result-from
+                  milestone-lifecycle-transition-result-to
+                  milestone-lifecycle-transition-result-ok?
+                  milestone-lifecycle-transition-result-reason))
+
+;; --- milestone-lifecycle-states ---
+
+(test-case "lifecycle-states: has 6 states in order"
+  (define states (dynamic-script 'milestone-lifecycle-states))
+  (check-equal? states '(planned in_progress release_ready release_published ci_green closed)))
+
+(test-case "lifecycle-states: length is 6"
+  (check-equal? (length (dynamic-script 'milestone-lifecycle-states)) 6))
+
+;; --- milestone-lifecycle-next ---
+
+(test-case "lifecycle-next: planned → in_progress"
+  (check-equal? ((dynamic-script 'milestone-lifecycle-next) 'planned) 'in_progress))
+
+(test-case "lifecycle-next: in_progress → release_ready"
+  (check-equal? ((dynamic-script 'milestone-lifecycle-next) 'in_progress) 'release_ready))
+
+(test-case "lifecycle-next: release_ready → release_published"
+  (check-equal? ((dynamic-script 'milestone-lifecycle-next) 'release_ready) 'release_published))
+
+(test-case "lifecycle-next: release_published → ci_green"
+  (check-equal? ((dynamic-script 'milestone-lifecycle-next) 'release_published) 'ci_green))
+
+(test-case "lifecycle-next: ci_green → closed"
+  (check-equal? ((dynamic-script 'milestone-lifecycle-next) 'ci_green) 'closed))
+
+(test-case "lifecycle-next: closed → #f (no next state)"
+  (check-false ((dynamic-script 'milestone-lifecycle-next) 'closed)))
+
+(test-case "lifecycle-next: invalid state returns #f"
+  (check-false ((dynamic-script 'milestone-lifecycle-next) 'nonexistent)))
+
+;; --- milestone-valid-transition? ---
+
+(test-case "valid-transition?: planned → in_progress is valid"
+  (check-true ((dynamic-script 'milestone-valid-transition?) 'planned 'in_progress)))
+
+(test-case "valid-transition?: in_progress → release_ready is valid"
+  (check-true ((dynamic-script 'milestone-valid-transition?) 'in_progress 'release_ready)))
+
+(test-case "valid-transition?: ci_green → closed is valid"
+  (check-true ((dynamic-script 'milestone-valid-transition?) 'ci_green 'closed)))
+
+(test-case "valid-transition?: planned → closed is invalid (skipping steps)"
+  (check-false ((dynamic-script 'milestone-valid-transition?) 'planned 'closed)))
+
+(test-case "valid-transition?: in_progress → ci_green is invalid (skipping steps)"
+  (check-false ((dynamic-script 'milestone-valid-transition?) 'in_progress 'ci_green)))
+
+(test-case "valid-transition?: release_published → release_ready is invalid (backwards)"
+  (check-false ((dynamic-script 'milestone-valid-transition?) 'release_published 'release_ready)))
+
+(test-case "valid-transition?: closed → planned is invalid (backwards from terminal)"
+  (check-false ((dynamic-script 'milestone-valid-transition?) 'closed 'planned)))
+
+;; --- can-close-milestone? (guard function) ---
+
+(test-case "can-close: success+success → allowed"
+  (define r ((dynamic-script 'can-close-milestone?) 'workflow_success 'ci_success))
+  (check-true (milestone-lifecycle-transition-result-ok? r))
+  (check-equal? (milestone-lifecycle-transition-result-from r) 'ci_green)
+  (check-equal? (milestone-lifecycle-transition-result-to r) 'closed))
+
+(test-case "can-close: release blocking → blocked"
+  (define r ((dynamic-script 'can-close-milestone?) 'no_release_run 'ci_success))
+  (check-false (milestone-lifecycle-transition-result-ok? r))
+  (check-true (string-contains? (milestone-lifecycle-transition-result-reason r) "release")))
+
+(test-case "can-close: release_failed → blocked"
+  (define r ((dynamic-script 'can-close-milestone?) 'release_failed 'ci_success))
+  (check-false (milestone-lifecycle-transition-result-ok? r)))
+
+(test-case "can-close: CI blocking → blocked"
+  (define r ((dynamic-script 'can-close-milestone?) 'workflow_success 'ci_in_progress))
+  (check-false (milestone-lifecycle-transition-result-ok? r))
+  (check-true (string-contains? (milestone-lifecycle-transition-result-reason r) "CI")))
+
+(test-case "can-close: ci_failure → blocked"
+  (define r ((dynamic-script 'can-close-milestone?) 'workflow_success 'ci_failure))
+  (check-false (milestone-lifecycle-transition-result-ok? r)))
+
+(test-case "can-close: ci_cancelled → blocked"
+  (define r ((dynamic-script 'can-close-milestone?) 'workflow_success 'ci_cancelled))
+  (check-false (milestone-lifecycle-transition-result-ok? r)))
+
+(test-case "can-close: stale_run → blocked (release not confirmed)"
+  (define r ((dynamic-script 'can-close-milestone?) 'stale_run 'ci_success))
+  (check-false (milestone-lifecycle-transition-result-ok? r)))
+
+(test-case "can-close: unknown release verdict → blocked"
+  (define r ((dynamic-script 'can-close-milestone?) 'unknown 'ci_success))
+  (check-false (milestone-lifecycle-transition-result-ok? r)))
+
+(test-case "can-close: ci_required_job_unexpectedly_skipped → blocked"
+  (define r
+    ((dynamic-script 'can-close-milestone?) 'workflow_success 'ci_required_job_unexpectedly_skipped))
+  (check-false (milestone-lifecycle-transition-result-ok? r)))
+
+(test-case "can-close: success+success reason is 'all gates passed'"
+  (define r ((dynamic-script 'can-close-milestone?) 'workflow_success 'ci_success))
+  (check-equal? (milestone-lifecycle-transition-result-reason r) "all gates passed"))
+
+(test-case "can-close: result is milestone-lifecycle-transition-result?"
+  (define r ((dynamic-script 'can-close-milestone?) 'workflow_success 'ci_success))
+  (check-pred milestone-lifecycle-transition-result? r))
