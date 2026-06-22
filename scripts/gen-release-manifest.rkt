@@ -49,6 +49,20 @@
 ;; JSON output (manual — no dependency on json library)
 ;; ---------------------------------------------------------------------------
 
+(define (git-tag-sha tag)
+  "Get the SHA that the tag points to (short)."
+  (define out
+    (with-output-to-string (lambda () (system (format "git rev-list -n 1 ~a 2>/dev/null" tag)))))
+  (define trimmed (string-trim out))
+  (if (string=? trimmed "") "unknown" trimmed))
+
+(define (git-tag-object-sha tag)
+  "Get the annotated tag object SHA if the tag is annotated, #f if lightweight."
+  (define out
+    (with-output-to-string (lambda () (system (format "git rev-parse ~a 2>/dev/null" tag)))))
+  (define trimmed (string-trim out))
+  (if (or (string=? trimmed "") (regexp-match? #rx"unknown revision" trimmed)) #f trimmed))
+
 (define (emit-manifest version commit date tarball-path)
   (define size
     (if tarball-path
@@ -62,11 +76,32 @@
     (if tarball-path
         (path->string (file-name-from-path tarball-path))
         (format "q-~a.tar.gz" version)))
+  ;; Traceability: tag SHA and tag object SHA
+  (define tag-name (format "v~a" version))
+  (define tag-commit-sha (git-tag-sha tag-name))
+  (define tag-obj-sha (git-tag-object-sha tag-name))
   (displayln "{")
   (printf "  \"version\": \"~a\",~n" version)
   (printf "  \"tag\": \"v~a\",~n" version)
   (printf "  \"commit\": \"~a\",~n" (or commit "unknown"))
   (printf "  \"date\": \"~a\",~n" date)
+  ;; W6: Traceability fields
+  (printf "  \"traceability\": {~n")
+  (printf "    \"tag_name\": \"~a\",~n" tag-name)
+  (printf "    \"tag_commit_sha\": \"~a\",~n" tag-commit-sha)
+  (when tag-obj-sha
+    (printf "    \"tag_object_sha\": \"~a\",~n" tag-obj-sha))
+  (printf "    \"manifest_commit_sha\": \"~a\",~n" (or commit "unknown"))
+  (printf "    \"commit_matches_tag\": ~a~n"
+          (if (and commit
+                   (not (equal? commit "unknown"))
+                   (not (equal? tag-commit-sha "unknown"))
+                   (or (string=? commit tag-commit-sha)
+                       (string-prefix? tag-commit-sha commit)
+                       (string-prefix? commit tag-commit-sha)))
+              "true"
+              "false"))
+  (printf "  },~n")
   (printf "  \"assets\": [~n")
   (printf "    {~n")
   (printf "      \"name\": \"~a\",~n" tarball-name)
