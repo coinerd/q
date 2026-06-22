@@ -238,3 +238,65 @@
                                                     #f))
   (check-equal? (hash-ref (hash-ref result 'workflow) 'run_number) 581)
   (check-equal? (hash-ref result 'verdict) 'publication_succeeded_smoke_failed))
+
+;; ============================================================
+;; W5: classify-ci-verdict tests
+;; ============================================================
+
+(test-case "classify-ci-verdict: ci_success"
+  (define result
+    ((dynamic-script 'classify-ci-verdict)
+     (hasheq 'status "completed" 'conclusion "success" 'run_number 600)
+     (make-hash '(("lint" . "success") ("test" . "success")))
+     '("lint" "test")))
+  (check-equal? result 'ci_success))
+
+(test-case "classify-ci-verdict: ci_in_progress"
+  (define result
+    ((dynamic-script 'classify-ci-verdict)
+     (hasheq 'status "in_progress" 'conclusion #f 'run_number 601)
+     (hash)
+     '("lint" "test")))
+  (check-equal? result 'ci_in_progress))
+
+(test-case "classify-ci-verdict: ci_failure"
+  (define result
+    ((dynamic-script 'classify-ci-verdict)
+     (hasheq 'status "completed" 'conclusion "failure" 'run_number 602)
+     (hash)
+     '("lint" "test")))
+  (check-equal? result 'ci_failure))
+
+(test-case "classify-ci-verdict: ci_cancelled"
+  (define result
+    ((dynamic-script 'classify-ci-verdict)
+     (hasheq 'status "completed" 'conclusion "cancelled" 'run_number 603)
+     (hash)
+     '("lint" "test")))
+  (check-equal? result 'ci_cancelled))
+
+(test-case "classify-ci-verdict: ci_no_runs"
+  (define result ((dynamic-script 'classify-ci-verdict) #f (hash) '("lint" "test")))
+  (check-equal? result 'ci_no_runs))
+
+(test-case "classify-ci-verdict: ci_required_job_unexpectedly_skipped"
+  (define result
+    ((dynamic-script 'classify-ci-verdict)
+     (hasheq 'status "completed" 'conclusion "success" 'run_number 604)
+     (make-hash '(("lint" . "success") ("test" . "skipped")))
+     '("lint" "test")))
+  (check-equal? result 'ci_required_job_unexpectedly_skipped))
+
+(test-case "classify-ci-verdict: allowed job skipped → ci_success"
+  ;; release-readiness not in required list → skip is OK
+  (define result
+    ((dynamic-script 'classify-ci-verdict)
+     (hasheq 'status "completed" 'conclusion "success" 'run_number 605)
+     (make-hash '(("lint" . "success") ("test" . "success") ("release-readiness" . "skipped")))
+     '("lint" "test")))
+  (check-equal? result 'ci_success))
+
+(test-case "classify-ci-verdict: all required jobs in ci-required-jobs default"
+  (define jobs (dynamic-script 'ci-required-jobs))
+  (check-not-false (member "test" jobs))
+  (check-not-false (member "security" jobs)))
