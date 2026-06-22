@@ -16,7 +16,7 @@
          racket/path
          json)
 
-;; Provide W4 parse/validate/render boundary
+;; Provide W4 parse/validate/render boundary + W5 pure-core/effect-shell
 (provide (struct-out manifest)
          (struct-out manifest-asset)
          (struct-out manifest-trace)
@@ -28,7 +28,12 @@
          jsexpr->manifest
          validate-manifest
          parse-manifest-json
-         manifest->json-string)
+         manifest->json-string
+         ;; W5 (#8567): pure-core/effect-shell I/O boundary
+         (struct-out release-inputs)
+         build-manifest
+         commits-match?
+         parse-q-version)
 
 ;; ---------------------------------------------------------------------------
 ;; W4 (#8566): Manifest domain model — parse/validate/render boundary
@@ -212,7 +217,50 @@
   (manifest-validation (null? errors) (reverse errors)))
 
 ;; ---------------------------------------------------------------------------
-;; Version parsing
+;; W5 (#8567): Pure-core / effect-shell I/O boundary
+;; ---------------------------------------------------------------------------
+;; Separates manifest construction (pure) from data collection (effects).
+;; The pure core takes a release-inputs struct and produces a manifest.
+;; The effect shell collects raw data from files, git, and the environment.
+
+;; Raw inputs gathered from the environment (no processing, just collection).
+(struct release-inputs
+        (version commit date tarball-name tarball-size tarball-sha256 tag-commit-sha tag-object-sha)
+  #:transparent)
+
+;; Pure: determine if two commit SHAs match (exact, prefix, or both unknown).
+(define (commits-match? commit tag-commit-sha)
+  (and commit
+       tag-commit-sha
+       (not (equal? commit "unknown"))
+       (not (equal? tag-commit-sha "unknown"))
+       (or (string=? commit tag-commit-sha)
+           (string-prefix? tag-commit-sha commit)
+           (string-prefix? commit tag-commit-sha))))
+
+;; Pure: build a manifest from raw release inputs.
+;; No I/O — takes a release-inputs struct, produces a manifest struct.
+(define (build-manifest ri)
+  (define version (release-inputs-version ri))
+  (define commit (release-inputs-commit ri))
+  (define tag-name (format "v~a" version))
+  (define tag-commit-sha (release-inputs-tag-commit-sha ri))
+  (define commit* (or commit "unknown"))
+  (define commit-matches? (commits-match? commit* tag-commit-sha))
+  (make-manifest #:version version
+                 #:commit commit*
+                 #:date (release-inputs-date ri)
+                 #:assets (list (manifest-asset (release-inputs-tarball-name ri)
+                                                (release-inputs-tarball-size ri)
+                                                (release-inputs-tarball-sha256 ri)))
+                 #:traceability (manifest-trace tag-name
+                                                tag-commit-sha
+                                                (release-inputs-tag-object-sha ri)
+                                                commit*
+                                                commit-matches?)))
+
+;; ---------------------------------------------------------------------------
+;; Version parsing (pure — takes file content string)
 ;; ---------------------------------------------------------------------------
 
 (define (parse-q-version content)
@@ -260,6 +308,18 @@
   (if (or (string=? trimmed "") (regexp-match? #rx"unknown revision" trimmed)) #f trimmed))
 
 (define (emit-manifest version commit date tarball-path)
+  ;; Effect shell: collect raw inputs from filesystem and git
+  (define ri (collect-release-inputs version commit date tarball-path))
+  ;; Pure core: build manifest from inputs
+  (define m (build-manifest ri))
+  ;; Render: serialize and print
+  (displayln (manifest->json-string m)))
+
+;; ---------------------------------------------------------------------------
+;; Effect shell: collect raw inputs from the environment
+;; ---------------------------------------------------------------------------
+
+(define (collect-release-inputs version commit date tarball-path)
   (define size
     (if tarball-path
         (file-size-bytes tarball-path)
@@ -272,28 +332,10 @@
     (if tarball-path
         (path->string (file-name-from-path tarball-path))
         (format "q-~a.tar.gz" version)))
-  ;; Traceability: tag SHA and tag object SHA
   (define tag-name (format "v~a" version))
   (define tag-commit-sha (git-tag-sha tag-name))
   (define tag-obj-sha (git-tag-object-sha tag-name))
-  (define commit* (or commit "unknown"))
-  (define commit-matches?
-    (and commit
-         (not (equal? commit "unknown"))
-         (not (equal? tag-commit-sha "unknown"))
-         (or (string=? commit tag-commit-sha)
-             (string-prefix? tag-commit-sha commit)
-             (string-prefix? commit tag-commit-sha))))
-  ;; Build manifest struct (W4: parse/validate/render boundary)
-  (define m
-    (make-manifest #:version version
-                   #:commit commit*
-                   #:date date
-                   #:assets (list (manifest-asset tarball-name size sha))
-                   #:traceability
-                   (manifest-trace tag-name tag-commit-sha tag-obj-sha commit* commit-matches?)))
-  ;; Serialize to JSON
-  (displayln (manifest->json-string m)))
+  (release-inputs version commit date tarball-name size sha tag-commit-sha tag-obj-sha))
 
 ;; ---------------------------------------------------------------------------
 ;; Main
