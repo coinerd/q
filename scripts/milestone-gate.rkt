@@ -20,7 +20,9 @@
 (provide extract-version-from-milestone-title
          validate-release-data
          release-has-asset?
-         make-release-check-result)
+         make-release-check-result
+         classify-release-verdict
+         make-workflow-verdict-result)
 
 (require racket/file
          racket/list
@@ -34,6 +36,79 @@
 ;; ---------------------------------------------------------------------------
 ;; Pure logic (testable without network)
 ;; ---------------------------------------------------------------------------
+
+;; Build a workflow verdict result hash for JSON output.
+(define (make-workflow-verdict-result run-id run-number conclusion jobs-hash assets-hash verdict pass)
+  (hasheq 'workflow
+          (hasheq 'run_id
+                  (or run-id 0)
+                  'run_number
+                  (or run-number 0)
+                  'conclusion
+                  (or conclusion "unknown")
+                  'pass
+                  pass)
+          'jobs
+          (or jobs-hash (hasheq))
+          'release_assets
+          (or assets-hash (hasheq 'release_exists #f 'tarball #f 'manifest #f))
+          'verdict
+          (or verdict "unknown")))
+
+;; Classify a release workflow run into a verdict.
+;; Pure function — takes structured data, returns a verdict string.
+;;
+;; Inputs:
+;;   workflow-data: hash or #f
+;;     'conclusion → "success" | "failure" | #f (if no run)
+;;     'run_number → integer
+;;     'head_branch → string (the tag it ran on)
+;;   jobs: hash of job-name → conclusion string (e.g. 'test → "success")
+;;   assets: hash of 'release_exists 'tarball 'manifest → boolean
+;;   expected-tag: string like "v0.99.41"
+;;
+;; Returns one of:
+;;   no_release_run
+;;   test_failed_release_skipped
+;;   release_failed
+;;   publication_succeeded_smoke_failed
+;;   workflow_success
+;;   stale_run
+;;   unknown
+(define (classify-release-verdict workflow-data jobs assets expected-tag)
+  (cond
+    ;; No workflow run at all
+    [(not workflow-data) 'no_release_run]
+    ;; Stale run — for a different tag
+    [(let ([branch (hash-ref workflow-data 'head_branch #f)])
+       (and branch expected-tag (not (equal? branch expected-tag))))
+     'stale_run]
+    [else
+     (define wf-conclusion (hash-ref workflow-data 'conclusion #f))
+     (define test-status (hash-ref jobs 'test #f))
+     (define release-status (hash-ref jobs 'release #f))
+     (define smoke-status (hash-ref jobs 'smoke #f))
+     (define release-exists (hash-ref assets 'release_exists #f))
+     (cond
+       ;; All jobs succeeded → workflow success
+       [(and (equal? wf-conclusion "success"))
+        (if (and (equal? test-status "success")
+                 (equal? release-status "success")
+                 (or (not smoke-status) (equal? smoke-status "success")))
+            'workflow_success
+            'unknown)]
+       ;; Test failed, release never ran
+       [(and (not (equal? test-status "success")) (not release-status)) 'test_failed_release_skipped]
+       ;; Release job itself failed
+       [(and release-status (not (equal? release-status "success"))) 'release_failed]
+       ;; Release succeeded but smoke failed, and assets published
+       [(and (equal? test-status "success")
+             (equal? release-status "success")
+             smoke-status
+             (not (equal? smoke-status "success"))
+             release-exists)
+        'publication_succeeded_smoke_failed]
+       [else 'unknown])]))
 
 ;; Extract version (X.Y.Z) from milestone title like "v0.99.40 ..." or "0.99.40 ..."
 ;; Returns string or #f.
@@ -122,6 +197,7 @@
 
 (define args (vector->list (current-command-line-arguments)))
 (define json-output? (member "--json" args))
+(define allow-workflow-failure? (member "--allow-workflow-failure" args))
 
 (define milestone-number
   (for/first ([a (in-list args)]
@@ -216,11 +292,92 @@
       (list #t "Metrics synced")
       (list #f "Metrics out of sync")))
 
+(define (check-release-workflow)
+  ;; Query the Release workflow run for this tag and classify verdict.
+  ;; Fails if the Release workflow conclusion is not 'success',
+  ;; unless --allow-workflow-failure override is passed.
+  (define ms-data (gh-api-json (format "milestones/~a" milestone-number)))
+  (cond
+    [(not ms-data) (list #f "Could not query milestone" #f)]
+    [else
+     (define title (hash-ref ms-data 'title ""))
+     (define version (extract-version-from-milestone-title title))
+     (cond
+       [(not version) (list #f "Cannot extract version" #f)]
+       [else
+        (define tag (format "v~a" version))
+        ;; Query release workflow runs for this tag
+        (define wf-data
+          (gh-api-json (format "actions/workflows/release.yml/runs?branch=~a&per_page=1" tag)))
+        (cond
+          [(not wf-data) (list #f "Could not query release workflow" #f)]
+          [else
+           (define runs (hash-ref wf-data 'workflow_runs '()))
+           (cond
+             [(null? runs)
+              ;; No release workflow run found
+              (if allow-workflow-failure?
+                  (list #t (format "No release workflow run for ~a (override)" tag) #f)
+                  (list #f (format "No release workflow run for ~a" tag) #f))]
+             [else
+              (define run (car runs))
+              (define conclusion (hash-ref run 'conclusion #f))
+              (define run-number (hash-ref run 'run_number 0))
+              (define run-id (hash-ref run 'id 0))
+              ;; Query jobs for this run
+              (define jobs-data (gh-api-json (format "actions/runs/~a/jobs" run-id)))
+              (define jobs-hash
+                (if (and jobs-data (hash? jobs-data))
+                    (for/hasheq ([job (in-list (hash-ref jobs-data 'jobs '()))])
+                      (values (string->symbol (hash-ref job 'name ""))
+                              (hash-ref job 'conclusion "skipped")))
+                    (hasheq)))
+              ;; Get release assets info
+              (define rel-data (gh-api-json (format "releases/tags/~a" tag)))
+              (define assets-hash
+                (hasheq 'release_exists
+                        (and rel-data #t)
+                        'tarball
+                        (release-has-asset? rel-data (format "q-~a.tar.gz" version))
+                        'manifest
+                        (release-has-asset? rel-data "release-manifest.json")))
+              ;; Classify verdict
+              (define verdict
+                (classify-release-verdict (hasheq 'conclusion
+                                                  conclusion
+                                                  'head_branch
+                                                  (hash-ref run 'head_branch #f)
+                                                  'run_number
+                                                  run-number)
+                                          jobs-hash
+                                          assets-hash
+                                          tag))
+              (define verdict-result
+                (make-workflow-verdict-result run-id
+                                              run-number
+                                              conclusion
+                                              jobs-hash
+                                              assets-hash
+                                              verdict
+                                              (equal? conclusion "success")))
+              (cond
+                [(equal? verdict 'workflow_success)
+                 (list #t (format "Release workflow ~a: workflow_success" run-number) verdict-result)]
+                [allow-workflow-failure?
+                 (list #t
+                       (format "Release workflow ~a: ~a (override)" run-number verdict)
+                       verdict-result)]
+                [else
+                 (list #f
+                       (format "Release workflow ~a: ~a" run-number verdict)
+                       verdict-result)])])])])]))
+
 ;; --- Main ---
 
 (define (main)
   (unless milestone-number
-    (printf "Usage: racket scripts/milestone-gate.rkt <milestone-number> [--json]~n")
+    (printf
+     "Usage: racket scripts/milestone-gate.rkt <milestone-number> [--json] [--allow-workflow-failure]~n")
     (exit 0))
   (unless (file-exists? "main.rkt")
     (printf "ERROR: Run from the q/ directory~n")
@@ -230,6 +387,7 @@
     (list (list "CI green" check-ci-green)
           (list "Issues closed" check-milestone-issues-closed)
           (list "Release published" check-release-published)
+          (list "Release workflow" check-release-workflow)
           (list "CHANGELOG entry" check-changelog-entry)
           (list "Metrics synced" check-metrics-synced)))
 
@@ -247,10 +405,20 @@
 
   (cond
     [json-output?
-     ;; Build structured JSON with release fields
+     ;; Build structured JSON with release and workflow fields
      (define release-info
        (for/first ([r (in-list results)]
-                   #:when (and (>= (length r) 4) (hash? (list-ref r 3))))
+                   #:when (and (string? (car r))
+                               (equal? (car r) "Release published")
+                               (>= (length r) 4)
+                               (hash? (list-ref r 3))))
+         (list-ref r 3)))
+     (define workflow-info
+       (for/first ([r (in-list results)]
+                   #:when (and (string? (car r))
+                               (equal? (car r) "Release workflow")
+                               (>= (length r) 4)
+                               (hash? (list-ref r 3))))
          (list-ref r 3)))
      (printf "~a~n"
              (jsexpr->string (hasheq 'milestone
@@ -259,7 +427,10 @@
                                      (for/list ([r (in-list results)])
                                        (hasheq 'name (car r) 'pass (cadr r) 'detail (caddr r)))
                                      'release_info
-                                     (or release-info (hasheq 'release (hasheq 'exists #f))))))]
+                                     (or release-info (hasheq 'release (hasheq 'exists #f)))
+                                     'workflow_info
+                                     (or workflow-info
+                                         (hasheq 'workflow (hasheq 'verdict 'no_release_run))))))]
     [else
      (printf "=== Milestone #~a Gate Check ===~n~n" milestone-number)
      (for ([r (in-list results)])
