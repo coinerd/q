@@ -570,7 +570,96 @@ EOF
                    v3-signal-tests
                    pure-audit-content-tests
                    v4-change-locality-signal-tests
-                   v4-audit-content-integration-tests)
+                   v4-audit-content-integration-tests
+                   v5-manual-red-flag-signal-tests
+                   v5-audit-content-integration-tests)
+
+;; ============================================================
+;; v0.99.42 W1: Manual red-flag signal tests
+;; ============================================================
+
+(define-test-suite
+ v5-manual-red-flag-signal-tests
+ (test-case "count-stringly-verdicts detects status string constants"
+   (define text "\"success\" \"failure\" \"pending\" \"cancelled\"")
+   (check-equal? ((audit-ref 'count-stringly-verdicts) text) 4 "counts 4 verdict strings"))
+ (test-case "count-stringly-verdicts detects publication_succeeded_smoke_failed"
+   (define text "\"publication_succeeded_smoke_failed\"")
+   (check-equal? ((audit-ref 'count-stringly-verdicts) text) 1 "detects compound verdict string"))
+ (test-case "count-stringly-verdicts detects current_blocking_red variant"
+   (define text "\"current_blocking_red_release_run\"")
+   (check-equal? ((audit-ref 'count-stringly-verdicts) text) 1 "detects blocking verdict string"))
+ (test-case "count-stringly-verdicts returns 0 for clean text"
+   (define text "(define (f x) x)")
+   (check-equal? ((audit-ref 'count-stringly-verdicts) text) 0 "clean text returns 0"))
+ (test-case "count-effectful-classifiers detects classify function"
+   (define text "(define (classify-run data) ...)")
+   (check-pred positive? ((audit-ref 'count-effectful-classifiers) text) "detects classify function"))
+ (test-case "count-effectful-classifiers detects check-* function"
+   (define text "(define (check-release-status release) ...)")
+   (check-pred positive? ((audit-ref 'count-effectful-classifiers) text) "detects check function"))
+ (test-case "count-effectful-classifiers detects verify function"
+   (define text "(define (verify-manifest data) ...)")
+   (check-pred positive? ((audit-ref 'count-effectful-classifiers) text) "detects verify function"))
+ (test-case "count-effectful-classifiers detects gate function"
+   (define text "(define (gate-release info) ...)")
+   (check-pred positive? ((audit-ref 'count-effectful-classifiers) text) "detects gate function"))
+ (test-case "count-effectful-classifiers detects make-*-verdict function"
+   (define text "(define (make-ci-verdict data) ...)")
+   (check-pred positive?
+               ((audit-ref 'count-effectful-classifiers) text)
+               "detects make-verdict function"))
+ (test-case "count-effectful-classifiers returns 0 for non-classifier"
+   (define text "(define (process-data x) x)")
+   (check-equal? ((audit-ref 'count-effectful-classifiers) text) 0 "non-classifier returns 0"))
+ (test-case "count-optional-mandatory-wording detects optional manifest"
+   (define text "The manifest is optional and may be missing")
+   (check-pred positive?
+               ((audit-ref 'count-optional-mandatory-wording) text)
+               "detects optional manifest"))
+ (test-case "count-optional-mandatory-wording detects may be absent asset"
+   (define text "If the asset may be absent, skip validation")
+   (check-pred positive?
+               ((audit-ref 'count-optional-mandatory-wording) text)
+               "detects may be absent asset"))
+ (test-case "count-optional-mandatory-wording returns 0 for mandatory wording"
+   (define text "The manifest is required")
+   (check-equal? ((audit-ref 'count-optional-mandatory-wording) text)
+                 0
+                 "mandatory wording returns 0"))
+ (test-case "count-optional-mandatory-wording returns 0 for unrelated optional"
+   (define text "The flag is optional for backwards compatibility")
+   (check-equal? ((audit-ref 'count-optional-mandatory-wording) text)
+                 0
+                 "unrelated optional returns 0")))
+
+(define-test-suite
+ v5-audit-content-integration-tests
+ (test-case "audit-content includes 3 new v0.99.42 signal keys"
+   (define text "#lang racket/base\n(define (f x) x)")
+   (define finding ((audit-ref 'audit-content) "test.rkt" text))
+   (check-true (hash-has-key? finding 'stringly-verdict-count) "has stringly-verdict-count")
+   (check-true (hash-has-key? finding 'effectful-classifier-count) "has effectful-classifier-count")
+   (check-true (hash-has-key? finding 'optional-mandatory-count) "has optional-mandatory-count"))
+ (test-case "audit-content detects stringly verdict in fixture"
+   (define text "#lang racket/base\n(define (get-status)\n  \"success\")")
+   (define finding ((audit-ref 'audit-content) "verdict.rkt" text))
+   (check-pred positive? (hash-ref finding 'stringly-verdict-count) "stringly-verdict > 0"))
+ (test-case "audit-content detects effectful classifier in fixture"
+   (define text
+     "#lang racket/base\n(define (classify-run run-data)\n  (if (hash-ref run-data 'status)\n      \"success\"\n      \"failure\"))")
+   (define finding ((audit-ref 'audit-content) "classify.rkt" text))
+   (check-pred positive? (hash-ref finding 'effectful-classifier-count) "effectful-classifier > 0"))
+ (test-case "audit-content detects optional-mandatory wording in fixture"
+   (define text "#lang racket/base\n;; The release manifest is optional in this workflow.")
+   (define finding ((audit-ref 'audit-content) "optional.rkt" text))
+   (check-pred positive? (hash-ref finding 'optional-mandatory-count) "optional-mandatory > 0"))
+ (test-case "audit-content on clean text has all 0 v5 signals"
+   (define text "#lang racket/base\n(define (f x) x)")
+   (define finding ((audit-ref 'audit-content) "clean.rkt" text))
+   (check-equal? (hash-ref finding 'stringly-verdict-count) 0 "clean: 0 stringly-verdicts")
+   (check-equal? (hash-ref finding 'effectful-classifier-count) 0 "clean: 0 effectful-classifiers")
+   (check-equal? (hash-ref finding 'optional-mandatory-count) 0 "clean: 0 optional-mandatory")))
 
 (module+ test
   (run-tests all-abstraction-audit-tests))
