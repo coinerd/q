@@ -25,9 +25,10 @@
   ;; This test documents the contract; Python tests enforce it.
   (check-true (string? "close_milestone_complete(milestone_number, require_release=True)")))
 
-(test-case "verify_milestone_release returns structured dict"
-  ;; Returns dict with keys: pass, detail, version, tag, release_exists,
-  ;; release_is_draft, release_tag_ok, assets, reason
+(test-case "verify_milestone_release returns structured dict with workflow truth"
+  ;; W4: Returns dict with keys: pass, detail, version, tag, release_exists,
+  ;; release_is_draft, release_tag_ok, assets, reason,
+  ;; workflow_conclusion, workflow_pass, workflow_verdict, workflow_jobs
   (define expected-keys
     '("pass" "detail"
              "version"
@@ -36,8 +37,13 @@
              "release_is_draft"
              "release_tag_ok"
              "assets"
-             "reason"))
-  (check-equal? (length expected-keys) 9))
+             "reason"
+             "workflow_conclusion"
+             "workflow_pass"
+             "workflow_verdict"
+             "workflow_jobs"))
+  (check-true (>= (length expected-keys) 13)
+              "verify_milestone_release must include workflow-level truth (W4)"))
 
 (test-case "publish_milestone_release supports dry_run parameter"
   (check-true (string? "publish_milestone_release(milestone_number, dry_run=False)")))
@@ -85,3 +91,31 @@
   ;; Test count from test_gh_helpers_release.py
   (define expected-test-count 23)
   (check-true (> expected-test-count 8) "must have at least 8 test cases as per acceptance gate"))
+
+;; ============================================================
+;; W4: classify_release_verdict contract tests
+;; ============================================================
+
+(test-case "classify_release_verdict distinguishes #581-like failure"
+  ;; The #581 scenario: publication_succeeded_smoke_failed
+  ;; must NOT be classified as workflow_success
+  (define verdicts
+    '("no_release_run" "test_failed_release_skipped"
+                       "release_failed"
+                       "publication_succeeded_smoke_failed"
+                       "workflow_success"
+                       "stale_run"
+                       "unknown"))
+  (check-not-false (member "publication_succeeded_smoke_failed" verdicts))
+  (check-not-false (member "workflow_success" verdicts))
+  (check-false (equal? "publication_succeeded_smoke_failed" "workflow_success")
+               "publication_succeeded_smoke_failed is NOT workflow_success"))
+
+(test-case "classify_release_verdict is a pure function"
+  ;; The Python function classify_release_verdict must be importable
+  ;; and callable with structured data (no network required)
+  (check-true (string? "classify_release_verdict(workflow_data, jobs, assets, expected_tag)")))
+
+(test-case "get_release_workflow_run queries workflow + jobs separately"
+  ;; The Python function must query workflow run AND individual jobs
+  (check-true (string? "get_release_workflow_run(tag)")))

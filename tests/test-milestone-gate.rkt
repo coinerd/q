@@ -199,3 +199,42 @@
 (test-case "milestone-gate.rkt exists and compiles"
   (check-true (file-exists? "../scripts/milestone-gate.rkt"))
   (check-not-exn (lambda () (dynamic-require "../scripts/milestone-gate.rkt" #f))))
+
+;; ============================================================
+;; W4: classify-release-verdict tests (in milestone-gate.rkt)
+;; ============================================================
+
+(test-case "classify-release-verdict: workflow_success"
+  (define result
+    ((dynamic-script 'classify-release-verdict)
+     (hasheq 'conclusion "success" 'head_branch "v0.99.41" 'run_number 600)
+     (hasheq 'test "success" 'release "success" 'smoke "success")
+     (hasheq 'release_exists #t 'tarball #t 'manifest #t)
+     "v0.99.41"))
+  (check-equal? result 'workflow_success))
+
+(test-case "classify-release-verdict: publication_succeeded_smoke_failed"
+  (define result
+    ((dynamic-script 'classify-release-verdict)
+     (hasheq 'conclusion "failure" 'head_branch "v0.99.40" 'run_number 581)
+     (hasheq 'test "success" 'release "success" 'smoke "failure")
+     (hasheq 'release_exists #t 'tarball #t 'manifest #t)
+     "v0.99.40"))
+  (check-equal? result 'publication_succeeded_smoke_failed))
+
+(test-case "classify-release-verdict: no_release_run"
+  (define result
+    ((dynamic-script 'classify-release-verdict) #f (hasheq) (hasheq 'release_exists #f) "v0.99.41"))
+  (check-equal? result 'no_release_run))
+
+(test-case "classify-release-verdict: make-workflow-verdict-result structure"
+  (define result
+    ((dynamic-script 'make-workflow-verdict-result) 12345
+                                                    581
+                                                    "failure"
+                                                    (hasheq 'test "success")
+                                                    (hasheq 'release_exists #t)
+                                                    'publication_succeeded_smoke_failed
+                                                    #f))
+  (check-equal? (hash-ref (hash-ref result 'workflow) 'run_number) 581)
+  (check-equal? (hash-ref result 'verdict) 'publication_succeeded_smoke_failed))
