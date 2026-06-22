@@ -96,7 +96,20 @@
                      (check-exn exn:fail:contract? (λ () (parse 42))))
                    (test-case "contract: version->string rejects non-list"
                      (define v->s (vs-ref 'version->string))
-                     (check-exn exn:fail:contract? (λ () (v->s "not-a-list")))))
+                     (check-exn exn:fail:contract? (λ () (v->s "not-a-list"))))
+                   ;; ---------------------------------------------------------------------------
+                   ;; W8 (#8570): read-canonical-version! tests
+                   ;; ---------------------------------------------------------------------------
+                   (test-case "read-canonical-version!: reads actual version from project"
+                     (define rcv! (vs-ref 'read-canonical-version!))
+                     (define v (rcv! (path->string q-root)))
+                     (check-true (and (regexp-match? #rx"[0-9]+\\.[0-9]+\\.[0-9]+" v) #t)))
+                   (test-case "read-canonical-version!: returns same value as /strict"
+                     (define rcv! (vs-ref 'read-canonical-version!))
+                     (define strict-v ((vs-ref 'read-canonical-version/strict) (path->string q-root)))
+                     (check-equal? (rcv! (path->string q-root))
+                                   strict-v
+                                   "read-canonical-version! and /strict should return same value")))
 
 (module+ test
   (run-tests version-surface-tests))

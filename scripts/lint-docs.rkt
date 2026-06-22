@@ -16,15 +16,15 @@
          racket/list
          racket/path
          racket/string
-         racket/match)
+         racket/match
+         (only-in "version-surface.rkt" read-canonical-version!))
 
 ;; ---------------------------------------------------------------------------
 ;; Version helpers
 ;; ---------------------------------------------------------------------------
 
-(define (parse-q-version content)
-  (define m (regexp-match #rx"\\(define q-version \"([0-9]+\\.[0-9]+\\.[0-9]+)\"" content))
-  (and m (cadr m)))
+;; W8 (#8570): parse-q-version removed; canonical version now read via
+;; read-canonical-version! from version-surface.rkt.
 
 (define VERSION-PAT #rx"[0-9]+\\.[0-9]+\\.[0-9]+")
 
@@ -125,14 +125,7 @@
 ;; ---------------------------------------------------------------------------
 
 (define (main)
-  (define util-path (build-path (current-directory) "util" "version.rkt"))
-  (unless (file-exists? util-path)
-    (displayln "ERROR: util/version.rkt not found")
-    (exit 1))
-  (define canonical (parse-q-version (file->string util-path)))
-  (unless canonical
-    (displayln "ERROR: could not parse version")
-    (exit 1))
+  (define canonical (read-canonical-version!))
 
   (printf "Docs lint — canonical version: ~a~n~n" canonical)
 

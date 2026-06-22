@@ -11,11 +11,11 @@
 
 (require racket/file
          racket/string
-         racket/port)
+         racket/port
+         (only-in "version-surface.rkt" read-canonical-version!))
 
-(define (parse-q-version content)
-  (define m (regexp-match #rx"\\(define q-version \"([0-9]+\\.[0-9]+\\.[0-9]+)\"" content))
-  (and m (cadr m)))
+;; W8 (#8570): parse-q-version removed; canonical version now read via
+;; read-canonical-version! from version-surface.rkt.
 
 (define (version-header? line version)
   ;; Match lines like:
@@ -54,16 +54,7 @@
   (define version
     (cond
       [(pair? args) (car args)]
-      [else
-       (define util-path (build-path (current-directory) "util" "version.rkt"))
-       (unless (file-exists? util-path)
-         (displayln "ERROR: util/version.rkt not found")
-         (exit 1))
-       (define v (parse-q-version (file->string util-path)))
-       (unless v
-         (displayln "ERROR: could not parse version")
-         (exit 1))
-       v]))
+      [else (read-canonical-version!)]))
 
   (printf "Generating release notes for v~a~n" version)
 

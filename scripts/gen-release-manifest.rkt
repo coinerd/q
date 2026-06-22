@@ -14,7 +14,8 @@
          racket/string
          racket/system
          racket/path
-         json)
+         json
+         (only-in "version-surface.rkt" read-canonical-version!))
 
 ;; Provide W4 parse/validate/render boundary + W5 pure-core/effect-shell
 (provide (struct-out manifest)
@@ -344,15 +345,8 @@
 (define (main)
   (define args (vector->list (current-command-line-arguments)))
 
-  ;; Read version
-  (define util-path (build-path (current-directory) "util" "version.rkt"))
-  (unless (file-exists? util-path)
-    (displayln "ERROR: util/version.rkt not found")
-    (exit 1))
-  (define version (parse-q-version (file->string util-path)))
-  (unless version
-    (displayln "ERROR: could not parse version from util/version.rkt")
-    (exit 1))
+  ;; Read version (W8: migrated to read-canonical-version!)
+  (define version (read-canonical-version!))
 
   ;; Get git commit
   (define commit
