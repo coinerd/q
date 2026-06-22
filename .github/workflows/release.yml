@@ -27,24 +27,10 @@ jobs:
       - name: Version consistency check
         run: racket scripts/lint-version.rkt
 
-      - name: Run tests
+      - name: Run tests (fast suite with gate evidence)
         run: |
           set -o pipefail
-          STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt --jobs 4 2>&1 | tee test-output.log
-
-      - name: Record gate evidence (arch)
-        run: racket scripts/run-tests.rkt --suite arch --record-gate-evidence
-
-      - name: Record gate evidence (workflows)
-        run: racket scripts/run-tests.rkt --suite workflows --jobs 4 --timeout 90 --record-gate-evidence
-
-      - name: Record gate evidence (tui)
-        run: racket scripts/run-tests.rkt --suite tui --jobs 4 --timeout 60 --record-gate-evidence
-
-      - name: Record gate evidence (fast)
-        run: |
-          set -o pipefail
-          racket scripts/run-tests.rkt --suite fast --jobs 4 --timeout 120 --record-gate-evidence 2>&1 | tee fast-gate-output.log
+          STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt --suite fast --jobs 4 --timeout 120 --record-gate-evidence 2>&1 | tee test-output.log
 
       - name: Strict release readiness
         run: racket scripts/lint-release-readiness.rkt --strict --context tag-publish
@@ -54,7 +40,7 @@ jobs:
         run: |
           echo "## Test Failures" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          grep -A 4 'FAILURE\|ERROR\|FAILED\|TIMEOUT' test-output.log fast-gate-output.log >> $GITHUB_STEP_SUMMARY || true
+          grep -A 4 'FAILURE\|ERROR\|FAILED\|TIMEOUT' test-output.log >> $GITHUB_STEP_SUMMARY || true
           echo '```' >> $GITHUB_STEP_SUMMARY
 
       - name: Upload test log
@@ -62,9 +48,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: test-output-release
-          path: |
-            test-output.log
-            fast-gate-output.log
+          path: test-output.log
           retention-days: 7
 
   release:

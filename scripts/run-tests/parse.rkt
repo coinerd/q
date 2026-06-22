@@ -164,7 +164,8 @@
 (define FAILURE-START #rx"^-+ FAILURE -+$")
 ;; FIXED (v0.99.39): Changed from #rx to #px mode. The {20,} quantifier
 ;; is literal in #rx mode but a valid repetition in #px (PCRE) mode.
-;; W3 F1 bug — this regex never matched "----..." separator lines before.
+;; DESIGN FACT (W3 F1): {20,} quantifier is literal in #rx but valid repetition in #px (PCRE).
+;; This regex never matched "----..." separator lines before the fix.
 (define FAILURE-END #px"^-{20,}$")
 
 (define (extract-failure-lines stdout-bytes)
