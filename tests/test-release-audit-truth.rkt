@@ -294,3 +294,193 @@
 
 (test-case "milestone-gate.rkt exports make-ci-check-result"
   (check-not-exn (lambda () (dynamic-require script-path 'make-ci-check-result))))
+
+;; ============================================================
+;; W2 (#8564): Verdict predicate layer tests
+;; ============================================================
+
+;; --- Release verdict predicates ---
+
+(test-case "release-verdict-success?: workflow_success is success"
+  (check-true ((dynamic-script 'release-verdict-success?) 'workflow_success)))
+
+(test-case "release-verdict-success?: publication_succeeded_smoke_failed is NOT success"
+  (check-false ((dynamic-script 'release-verdict-success?) 'publication_succeeded_smoke_failed)))
+
+(test-case "release-verdict-success?: no_release_run is NOT success"
+  (check-false ((dynamic-script 'release-verdict-success?) 'no_release_run)))
+
+(test-case "release-verdict-success?: #f is NOT success"
+  (check-false ((dynamic-script 'release-verdict-success?) #f)))
+
+(test-case "release-verdict-blocking?: publication_succeeded_smoke_failed blocks"
+  (check-true ((dynamic-script 'release-verdict-blocking?) 'publication_succeeded_smoke_failed)))
+
+(test-case "release-verdict-blocking?: release_failed blocks"
+  (check-true ((dynamic-script 'release-verdict-blocking?) 'release_failed)))
+
+(test-case "release-verdict-blocking?: test_failed_release_skipped blocks"
+  (check-true ((dynamic-script 'release-verdict-blocking?) 'test_failed_release_skipped)))
+
+(test-case "release-verdict-blocking?: no_release_run blocks"
+  (check-true ((dynamic-script 'release-verdict-blocking?) 'no_release_run)))
+
+(test-case "release-verdict-blocking?: unknown blocks"
+  (check-true ((dynamic-script 'release-verdict-blocking?) 'unknown)))
+
+(test-case "release-verdict-blocking?: workflow_success does NOT block"
+  (check-false ((dynamic-script 'release-verdict-blocking?) 'workflow_success)))
+
+(test-case "release-verdict-blocking?: stale_run does NOT block"
+  (check-false ((dynamic-script 'release-verdict-blocking?) 'stale_run)))
+
+(test-case "release-verdict-blocking?: #f does NOT block"
+  (check-false ((dynamic-script 'release-verdict-blocking?) #f)))
+
+(test-case "release-verdict-superseded?: stale_run is superseded"
+  (check-true ((dynamic-script 'release-verdict-superseded?) 'stale_run)))
+
+(test-case "release-verdict-superseded?: workflow_success is NOT superseded"
+  (check-false ((dynamic-script 'release-verdict-superseded?) 'workflow_success)))
+
+(test-case "release-verdict->approval-state: workflow_success → approved"
+  (check-equal? ((dynamic-script 'release-verdict->approval-state) 'workflow_success) 'approved))
+
+(test-case "release-verdict->approval-state: stale_run → superseded"
+  (check-equal? ((dynamic-script 'release-verdict->approval-state) 'stale_run) 'superseded))
+
+(test-case "release-verdict->approval-state: publication_succeeded_smoke_failed → blocked"
+  (check-equal?
+   ((dynamic-script 'release-verdict->approval-state) 'publication_succeeded_smoke_failed)
+   'blocked))
+
+(test-case "release-verdict->approval-state: release_failed → blocked"
+  (check-equal? ((dynamic-script 'release-verdict->approval-state) 'release_failed) 'blocked))
+
+;; --- CI verdict predicates ---
+
+(test-case "ci-verdict-success?: ci_success is success"
+  (check-true ((dynamic-script 'ci-verdict-success?) 'ci_success)))
+
+(test-case "ci-verdict-success?: ci_failure is NOT success"
+  (check-false ((dynamic-script 'ci-verdict-success?) 'ci_failure)))
+
+(test-case "ci-verdict-blocking?: ci_failure blocks"
+  (check-true ((dynamic-script 'ci-verdict-blocking?) 'ci_failure)))
+
+(test-case "ci-verdict-blocking?: ci_in_progress blocks"
+  (check-true ((dynamic-script 'ci-verdict-blocking?) 'ci_in_progress)))
+
+(test-case "ci-verdict-blocking?: ci_cancelled blocks"
+  (check-true ((dynamic-script 'ci-verdict-blocking?) 'ci_cancelled)))
+
+(test-case "ci-verdict-blocking?: ci_no_runs blocks"
+  (check-true ((dynamic-script 'ci-verdict-blocking?) 'ci_no_runs)))
+
+(test-case "ci-verdict-blocking?: ci_success does NOT block"
+  (check-false ((dynamic-script 'ci-verdict-blocking?) 'ci_success)))
+
+(test-case "ci-verdict-blocking?: #f does NOT block"
+  (check-false ((dynamic-script 'ci-verdict-blocking?) #f)))
+
+(test-case "ci-verdict->approval-state: ci_success → approved"
+  (check-equal? ((dynamic-script 'ci-verdict->approval-state) 'ci_success) 'approved))
+
+(test-case "ci-verdict->approval-state: ci_failure → blocked"
+  (check-equal? ((dynamic-script 'ci-verdict->approval-state) 'ci_failure) 'blocked))
+
+;; --- GitHub status constant tests ---
+
+(test-case "GITHUB-SUCCESS constant equals \"success\""
+  (check-equal? (dynamic-script 'GITHUB-SUCCESS) "success"))
+
+(test-case "GITHUB-FAILURE constant equals \"failure\""
+  (check-equal? (dynamic-script 'GITHUB-FAILURE) "failure"))
+
+(test-case "GITHUB-CANCELLED constant equals \"cancelled\""
+  (check-equal? (dynamic-script 'GITHUB-CANCELLED) "cancelled"))
+
+(test-case "GITHUB-SKIPPED constant equals \"skipped\""
+  (check-equal? (dynamic-script 'GITHUB-SKIPPED) "skipped"))
+
+(test-case "GITHUB-COMPLETED constant equals \"completed\""
+  (check-equal? (dynamic-script 'GITHUB-COMPLETED) "completed"))
+
+;; ============================================================
+;; W2 (#8564): #581 vs #582 compatibility fixtures through predicates
+;; ============================================================
+
+(test-case "#581 compatibility: verdict classified as blocking via predicate"
+  (define verdict
+    ((dynamic-script 'classify-release-verdict) (make-581-workflow-data)
+                                                (make-581-jobs)
+                                                (make-581-assets)
+                                                "v0.99.40"))
+  (check-true ((dynamic-script 'release-verdict-blocking?) verdict)
+              "#581 must be blocking via predicate"))
+
+(test-case "#581 compatibility: verdict NOT classified as success via predicate"
+  (define verdict
+    ((dynamic-script 'classify-release-verdict) (make-581-workflow-data)
+                                                (make-581-jobs)
+                                                (make-581-assets)
+                                                "v0.99.40"))
+  (check-false ((dynamic-script 'release-verdict-success?) verdict)
+               "#581 must NOT be success via predicate"))
+
+(test-case "#581 compatibility: approval-state is blocked"
+  (define verdict
+    ((dynamic-script 'classify-release-verdict) (make-581-workflow-data)
+                                                (make-581-jobs)
+                                                (make-581-assets)
+                                                "v0.99.40"))
+  (check-equal? ((dynamic-script 'release-verdict->approval-state) verdict) 'blocked))
+
+(test-case "#582 compatibility: verdict classified as success via predicate"
+  (define verdict
+    ((dynamic-script 'classify-release-verdict) (make-success-workflow-data)
+                                                (make-success-jobs)
+                                                (make-581-assets)
+                                                "v0.99.41"))
+  (check-true ((dynamic-script 'release-verdict-success?) verdict)
+              "#582 must be success via predicate"))
+
+(test-case "#582 compatibility: verdict NOT classified as blocking via predicate"
+  (define verdict
+    ((dynamic-script 'classify-release-verdict) (make-success-workflow-data)
+                                                (make-success-jobs)
+                                                (make-581-assets)
+                                                "v0.99.41"))
+  (check-false ((dynamic-script 'release-verdict-blocking?) verdict)
+               "#582 must NOT be blocking via predicate"))
+
+(test-case "#582 compatibility: approval-state is approved"
+  (define verdict
+    ((dynamic-script 'classify-release-verdict) (make-success-workflow-data)
+                                                (make-success-jobs)
+                                                (make-581-assets)
+                                                "v0.99.41"))
+  (check-equal? ((dynamic-script 'release-verdict->approval-state) verdict) 'approved))
+
+;; --- Predicate export tests ---
+
+(test-case "milestone-gate.rkt exports release-verdict-success?"
+  (check-not-exn (lambda () (dynamic-require script-path 'release-verdict-success?))))
+
+(test-case "milestone-gate.rkt exports release-verdict-blocking?"
+  (check-not-exn (lambda () (dynamic-require script-path 'release-verdict-blocking?))))
+
+(test-case "milestone-gate.rkt exports release-verdict-superseded?"
+  (check-not-exn (lambda () (dynamic-require script-path 'release-verdict-superseded?))))
+
+(test-case "milestone-gate.rkt exports release-verdict->approval-state"
+  (check-not-exn (lambda () (dynamic-require script-path 'release-verdict->approval-state))))
+
+(test-case "milestone-gate.rkt exports ci-verdict-success?"
+  (check-not-exn (lambda () (dynamic-require script-path 'ci-verdict-success?))))
+
+(test-case "milestone-gate.rkt exports ci-verdict-blocking?"
+  (check-not-exn (lambda () (dynamic-require script-path 'ci-verdict-blocking?))))
+
+(test-case "milestone-gate.rkt exports ci-verdict->approval-state"
+  (check-not-exn (lambda () (dynamic-require script-path 'ci-verdict->approval-state))))
