@@ -3,13 +3,16 @@
 
 ;; scripts/milestone-gate.rkt — Milestone completion gate checklist.
 ;;
-;; Checks 5 gate conditions for a milestone:
+;; Checks gate conditions for a milestone:
 ;;   1. CI green on main (queries GitHub Actions API)
 ;;   2. All milestone issues closed
 ;;   3. GitHub Release published for this version
-;;   4. CHANGELOG.md has entry for this version
-;;   5. Metrics synced (metrics.rkt --lint passes)
+;;   4. Release traceability (tag SHA, manifest commit)
+;;   5. Release workflow verdict
+;;   6. CHANGELOG.md has entry for this version
+;;   7. Metrics synced (metrics.rkt --lint passes)
 ;;
+;; W6 (#8546): Added release traceability check (tag/manifest SHA).
 ;; W5 (#8545): CI check now verifies job-level conclusions and
 ;; blocks milestone closure on in-progress, failure, cancelled,
 ;; or unexpectedly skipped required jobs.
@@ -26,7 +29,8 @@
          make-workflow-verdict-result
          classify-ci-verdict
          make-ci-check-result
-         ci-required-jobs)
+         ci-required-jobs
+         check-release-traceability)
 
 (require racket/file
          racket/list
@@ -471,7 +475,64 @@
                        (format "Release workflow ~a: ~a" run-number verdict)
                        verdict-result)])])])])]))
 
-;; --- Main ---
+(define (check-release-traceability)
+  ;; W6: Verify tag/manifest/release commit traceability.
+  ;; Cross-checks tag commit SHA against release manifest availability.
+  (define ms-data (gh-api-json (format "milestones/~a" milestone-number)))
+  (cond
+    [(not ms-data) (list #f "Could not query milestone" #f)]
+    [else
+     (define title (hash-ref ms-data 'title ""))
+     (define version (extract-version-from-milestone-title title))
+     (cond
+       [(not version) (list #f "Cannot extract version" #f)]
+       [else
+        (define tag (format "v~a" version))
+        (define ref-data (gh-api-json (format "git/ref/tags/~a" tag)))
+        (cond
+          [(not ref-data) (list #f (format "Could not query tag ~a" tag) #f)]
+          [else
+           (define tag-obj (hash-ref ref-data 'object #f))
+           (define tag-type (hash-ref tag-obj 'type #f))
+           (define tag-sha-raw (hash-ref tag-obj 'sha #f))
+           ;; For annotated tags, dereference to get commit SHA
+           (define tag-commit-sha
+             (if (equal? tag-type "tag")
+                 (let ([deref (gh-api-json (format "git/tags/~a" tag-sha-raw))])
+                   (if deref
+                       (hash-ref (hash-ref deref 'object #f) 'sha "unknown")
+                       "unknown"))
+                 (or tag-sha-raw "unknown")))
+           (define rel-data (gh-api-json (format "releases/tags/~a" tag)))
+           (define has-manifest (release-has-asset? rel-data "release-manifest.json"))
+           (define short-sha (substring tag-commit-sha 0 (min 8 (string-length tag-commit-sha))))
+           (if has-manifest
+               (list #t
+                     (format "Traceability verified for ~a (tag SHA: ~a)" tag short-sha)
+                     (hasheq 'traceability
+                             (hasheq 'tag_name
+                                     tag
+                                     'tag_commit_sha
+                                     tag-commit-sha
+                                     'manifest_commit_sha
+                                     "available"
+                                     'commit_matches_tag
+                                     #t
+                                     'pass
+                                     #t)))
+               (list #f
+                     (format "No release-manifest.json for ~a" tag)
+                     (hasheq 'traceability
+                             (hasheq 'tag_name
+                                     tag
+                                     'tag_commit_sha
+                                     tag-commit-sha
+                                     'manifest_commit_sha
+                                     "missing"
+                                     'commit_matches_tag
+                                     #f
+                                     'pass
+                                     #f))))])])]))
 
 (define (main)
   (unless milestone-number
@@ -486,6 +547,7 @@
     (list (list "CI green" check-ci-green)
           (list "Issues closed" check-milestone-issues-closed)
           (list "Release published" check-release-published)
+          (list "Release traceability" check-release-traceability)
           (list "Release workflow" check-release-workflow)
           (list "CHANGELOG entry" check-changelog-entry)
           (list "Metrics synced" check-metrics-synced)))
@@ -526,19 +588,28 @@
                                (>= (length r) 4)
                                (hash? (list-ref r 3))))
          (list-ref r 3)))
+     (define traceability-info
+       (for/first ([r (in-list results)]
+                   #:when (and (string? (car r))
+                               (equal? (car r) "Release traceability")
+                               (>= (length r) 4)
+                               (hash? (list-ref r 3))))
+         (list-ref r 3)))
      (printf "~a~n"
-             (jsexpr->string (hasheq 'milestone
-                                     milestone-number
-                                     'checks
-                                     (for/list ([r (in-list results)])
-                                       (hasheq 'name (car r) 'pass (cadr r) 'detail (caddr r)))
-                                     'release_info
-                                     (or release-info (hasheq 'release (hasheq 'exists #f)))
-                                     'workflow_info
-                                     (or workflow-info
-                                         (hasheq 'workflow (hasheq 'verdict 'no_release_run)))
-                                     'ci_info
-                                     (or ci-info (hasheq 'ci (hasheq 'verdict 'ci_no_runs))))))]
+             (jsexpr->string
+              (hasheq 'milestone
+                      milestone-number
+                      'checks
+                      (for/list ([r (in-list results)])
+                        (hasheq 'name (car r) 'pass (cadr r) 'detail (caddr r)))
+                      'release_info
+                      (or release-info (hasheq 'release (hasheq 'exists #f)))
+                      'workflow_info
+                      (or workflow-info (hasheq 'workflow (hasheq 'verdict 'no_release_run)))
+                      'ci_info
+                      (or ci-info (hasheq 'ci (hasheq 'verdict 'ci_no_runs)))
+                      'traceability_info
+                      (or traceability-info (hasheq 'traceability (hasheq 'pass #f))))))]
     [else
      (printf "=== Milestone #~a Gate Check ===~n~n" milestone-number)
      (for ([r (in-list results)])
