@@ -234,7 +234,10 @@
 ;;   effectful-classifier-rx <- classify functions mixing I/O with classification
 ;;   optional-mandatory-rx <- #581: optional wording for mandatory assets
 (define stringly-verdict-rx
-  #px"\"(?:success|failure|failed?|pending|cancelled?|skipped?|in_progress|completed?|blocked?|red|green|pass|fail|unknown|error|warning|timeout|neutral|action_required|publication_succeeded_smoke_failed|current_blocking_red_[a-zA-Z_0-9]+)\"")
+  (pregexp (string-append "\"(?:success|failure|failed?|pending|cancelled?|skipped?|in_progress|"
+                          "completed?|blocked?|red|green|pass|fail|unknown|error|warning|"
+                          "timeout|neutral|action_required|publication_succeeded_smoke_failed|"
+                          "current_blocking_red_[a-zA-Z_0-9]+)\"")))
 (define effectful-classifier-rx
   #px"\\(define\\s+\\((?:classify|check|verify|gate|make-[a-zA-Z_0-9]*-verdict|make-[a-zA-Z_0-9]*-result)[-_a-zA-Z]*\\s")
 (define optional-before-asset-rx
