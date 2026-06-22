@@ -31,7 +31,14 @@
          extract-changelog-version
          parse-dry-run-args
          dry-run-checks
-         tag-format-rx)
+         tag-format-rx
+         ;; W3 (#8565): Explicit result-type boundary
+         (struct-out dry-run-result)
+         dry-run-result-pass?
+         dry-run-result-fail?
+         dry-run-results-all-pass?
+         dry-run-results-failures
+         dry-run-result-exit-code)
 
 (require racket/string
          racket/port
@@ -39,6 +46,32 @@
          racket/list
          racket/match
          racket/system)
+
+;; ---------------------------------------------------------------------------
+;; W3 (#8565): Explicit result-type boundary for dry-run checks
+;; ---------------------------------------------------------------------------
+;; Replaces ad-hoc (cons 'pass/'fail message) pairs with a structured
+;; result type. Callers dispatch on dry-run-result-pass? instead of
+;; inspecting (car pair) for a symbol.
+(struct dry-run-result (name ok? message) #:transparent)
+
+(define (dry-run-result-pass? r)
+  (and (dry-run-result? r) (dry-run-result-ok? r)))
+
+(define (dry-run-result-fail? r)
+  (and (dry-run-result? r) (not (dry-run-result-ok? r))))
+
+;; Batch predicate: all results in a list passed?
+(define (dry-run-results-all-pass? results)
+  (andmap dry-run-result-pass? results))
+
+;; Batch filter: extract only failures from a list.
+(define (dry-run-results-failures results)
+  (filter dry-run-result-fail? results))
+
+;; Exit code: 0 if all pass, 1 otherwise.
+(define (dry-run-result-exit-code results)
+  (if (null? (dry-run-results-failures results)) 0 1))
 
 ;; ---------------------------------------------------------------------------
 ;; Pure logic (no I/O)
@@ -97,50 +130,54 @@
   (values version context))
 
 ;; Build the list of check descriptors (name, thunk) for dry-run.
-;; Each thunk returns (cons 'pass/'fail message).
+;; Each thunk returns a dry-run-result struct.
 (define (dry-run-checks version context file-exists? file->string run-subprocess)
   ;; Check 1: Version match
-  (list (cons "version-match"
-              (lambda ()
-                (define util-content (file->string "util/version.rkt"))
-                (define canonical (extract-canonical-version util-content))
-                (define result (validate-version-match (or version canonical) canonical))
-                (match result
-                  [(list 'match c _) (cons 'pass (format "version ~a matches canonical" c))]
-                  [(list 'mismatch c r) (cons 'fail (format "requested ~a ≠ canonical ~a" r c))]
-                  [(list 'error msg) (cons 'fail msg)])))
-        ;; Check 2: Tag format
-        (cons "tag-format"
-              (lambda ()
-                (define v (or version (extract-canonical-version (file->string "util/version.rkt"))))
-                (define tag (format "v~a" v))
-                (define result (validate-tag-format tag))
-                (match result
-                  [(list 'ok t) (cons 'pass (format "tag ~a is valid semver" t))]
-                  [(list 'invalid t) (cons 'fail (format "tag ~a is not valid semver" t))])))
-        ;; Check 3: CHANGELOG entry
-        (cons "changelog-entry"
-              (lambda ()
-                (define v (or version (extract-canonical-version (file->string "util/version.rkt"))))
-                (define cl-content (file->string "CHANGELOG.md"))
-                (if (extract-changelog-version cl-content v)
-                    (cons 'pass (format "CHANGELOG has entry for v~a" v))
-                    (cons 'fail (format "CHANGELOG missing entry for v~a" v)))))
-        ;; Check 4: Release notes generation
-        (cons "release-notes"
-              (lambda ()
-                (define v (or version (extract-canonical-version (file->string "util/version.rkt"))))
-                (define exit-code (run-subprocess "racket" (list "scripts/gen-release-notes.rkt" v)))
-                (if (zero? exit-code)
-                    (cons 'pass "release notes generation succeeded")
-                    (cons 'fail "release notes generation failed"))))
-        ;; Check 5: Manifest generation
-        (cons "manifest"
-              (lambda ()
-                (define exit-code (run-subprocess "racket" (list "scripts/gen-release-manifest.rkt")))
-                (if (zero? exit-code)
-                    (cons 'pass "manifest generation succeeded")
-                    (cons 'fail "manifest generation failed"))))))
+  (list
+   (cons "version-match"
+         (lambda ()
+           (define util-content (file->string "util/version.rkt"))
+           (define canonical (extract-canonical-version util-content))
+           (define result (validate-version-match (or version canonical) canonical))
+           (match result
+             [(list 'match c _)
+              (dry-run-result "version-match" #t (format "version ~a matches canonical" c))]
+             [(list 'mismatch c r)
+              (dry-run-result "version-match" #f (format "requested ~a ≠ canonical ~a" r c))]
+             [(list 'error msg) (dry-run-result "version-match" #f msg)])))
+   ;; Check 2: Tag format
+   (cons "tag-format"
+         (lambda ()
+           (define v (or version (extract-canonical-version (file->string "util/version.rkt"))))
+           (define tag (format "v~a" v))
+           (define result (validate-tag-format tag))
+           (match result
+             [(list 'ok t) (dry-run-result "tag-format" #t (format "tag ~a is valid semver" t))]
+             [(list 'invalid t)
+              (dry-run-result "tag-format" #f (format "tag ~a is not valid semver" t))])))
+   ;; Check 3: CHANGELOG entry
+   (cons "changelog-entry"
+         (lambda ()
+           (define v (or version (extract-canonical-version (file->string "util/version.rkt"))))
+           (define cl-content (file->string "CHANGELOG.md"))
+           (if (extract-changelog-version cl-content v)
+               (dry-run-result "changelog-entry" #t (format "CHANGELOG has entry for v~a" v))
+               (dry-run-result "changelog-entry" #f (format "CHANGELOG missing entry for v~a" v)))))
+   ;; Check 4: Release notes generation
+   (cons "release-notes"
+         (lambda ()
+           (define v (or version (extract-canonical-version (file->string "util/version.rkt"))))
+           (define exit-code (run-subprocess "racket" (list "scripts/gen-release-notes.rkt" v)))
+           (if (zero? exit-code)
+               (dry-run-result "release-notes" #t "release notes generation succeeded")
+               (dry-run-result "release-notes" #f "release notes generation failed"))))
+   ;; Check 5: Manifest generation
+   (cons "manifest"
+         (lambda ()
+           (define exit-code (run-subprocess "racket" (list "scripts/gen-release-manifest.rkt")))
+           (if (zero? exit-code)
+               (dry-run-result "manifest" #t "manifest generation succeeded")
+               (dry-run-result "manifest" #f "manifest generation failed"))))))
 
 ;; ---------------------------------------------------------------------------
 ;; I/O layer
@@ -182,13 +219,14 @@
     (for/list ([c (in-list checks)])
       (define name (car c))
       (define result ((cdr c)))
-      (define status (car result))
-      (define msg (cdr result))
-      (printf "  [~a] ~a: ~a~n" (if (eq? status 'pass) "PASS" "FAIL") name msg)
-      (cons name status)))
+      (printf "  [~a] ~a: ~a~n"
+              (if (dry-run-result-pass? result) "PASS" "FAIL")
+              name
+              (dry-run-result-message result))
+      result))
 
   ;; Summary
-  (define failures (filter (λ (r) (eq? (cdr r) 'fail)) results))
+  (define failures (dry-run-results-failures results))
   (displayln "")
   (displayln "--- Summary ---")
   (printf "Checks: ~a total, ~a passed, ~a failed~n"
@@ -197,7 +235,7 @@
           (length failures))
   (displayln "No tags or releases were created. (Dry-run only)")
 
-  (exit (if (null? failures) 0 1)))
+  (exit (dry-run-result-exit-code results)))
 
 (module+ main
   (main))
