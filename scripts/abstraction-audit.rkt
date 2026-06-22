@@ -60,6 +60,9 @@
          count-mutation-sites
          count-hash-ref-chains
          count-inline-config-paths
+         count-stringly-verdicts
+         count-effectful-classifiers
+         count-optional-mandatory-wording
          audit-content
          current-audit-file->lines)
 
@@ -161,7 +164,13 @@
           'hash-ref-chain-count
           (count-hash-ref-chains text)
           'inline-config-path-count
-          (count-inline-config-paths text))))
+          (count-inline-config-paths text)
+          'stringly-verdict-count
+          (count-stringly-verdicts text)
+          'effectful-classifier-count
+          (count-effectful-classifiers text)
+          'optional-mandatory-count
+          (count-optional-mandatory-wording text))))
 
 ;; Count exported identifiers in (provide ...) forms.
 ;; Handles: provide id, provide (contract-out ...), provide (struct-out ...)
@@ -218,6 +227,32 @@
 
 (define (count-matches text rx)
   (length (regexp-match* rx text)))
+
+;; v0.99.42 W1: Manual red-flag signals
+;; DESIGN FACT: Each signal encodes a concrete v0.99.40/v0.99.41 incident:
+;;   stringly-verdict-rx <- #581: verdict strings scattered across modules
+;;   effectful-classifier-rx <- classify functions mixing I/O with classification
+;;   optional-mandatory-rx <- #581: optional wording for mandatory assets
+(define stringly-verdict-rx
+  #px"\"(?:success|failure|failed?|pending|cancelled?|skipped?|in_progress|completed?|blocked?|red|green|pass|fail|unknown|error|warning|timeout|neutral|action_required|publication_succeeded_smoke_failed|current_blocking_red_[a-zA-Z_0-9]+)\"")
+(define effectful-classifier-rx
+  #px"\\(define\\s+\\((?:classify|check|verify|gate|make-[a-zA-Z_0-9]*-verdict|make-[a-zA-Z_0-9]*-result)[-_a-zA-Z]*\\s")
+(define optional-before-asset-rx
+  #px"(?:optional|may[ ]+(?:be[ ]+)?(?:missing|absent|skipped))[^\n]{0,80}(?:manifest|asset|tarball)")
+(define asset-before-optional-rx
+  #px"(?:manifest|asset|tarball)[^\n]{0,80}(?:optional|may[ ]+(?:be[ ]+)?(?:missing|absent|skipped))")
+
+(define (count-stringly-verdicts text)
+  "Count string literals used as status/verdict values (failure-design smell)."
+  (count-matches text stringly-verdict-rx))
+
+(define (count-effectful-classifiers text)
+  "Count classify/verdict/check/verify function definitions that may mix effects."
+  (count-matches text effectful-classifier-rx))
+
+(define (count-optional-mandatory-wording text)
+  "Count optional language near mandatory release assets (manifest/tarball/asset)."
+  (+ (count-matches text optional-before-asset-rx) (count-matches text asset-before-optional-rx)))
 
 (define (count-struct-outs text)
   "Count the number of struct-out forms in the text."
@@ -377,6 +412,14 @@
   (define all-inline-config-paths
     (filter (lambda (f) (> (hash-ref f 'inline-config-path-count 0) 0)) findings))
 
+  ;; v0.99.42 W1: Manual red-flag signals
+  (define all-stringly-verdicts
+    (filter (lambda (f) (> (hash-ref f 'stringly-verdict-count 0) 0)) findings))
+  (define all-effectful-classifiers
+    (filter (lambda (f) (> (hash-ref f 'effectful-classifier-count 0) 0)) findings))
+  (define all-optional-mandatory
+    (filter (lambda (f) (> (hash-ref f 'optional-mandatory-count 0) 0)) findings))
+
   (hash
    'total-modules
    (length findings)
@@ -434,9 +477,18 @@
    (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'hash-ref-chain-count 0)))
         (sort all-hash-ref-chains > #:key (lambda (f) (hash-ref f 'hash-ref-chain-count 0))))
    'inline-config-path-modules
+   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'inline-config-path-count 0)))
+        (sort all-inline-config-paths > #:key (lambda (f) (hash-ref f 'inline-config-path-count 0))))
+   'stringly-verdict-modules
+   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'stringly-verdict-count 0)))
+        (sort all-stringly-verdicts > #:key (lambda (f) (hash-ref f 'stringly-verdict-count 0))))
+   'effectful-classifier-modules
    (map
-    (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'inline-config-path-count 0)))
-    (sort all-inline-config-paths > #:key (lambda (f) (hash-ref f 'inline-config-path-count 0))))))
+    (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'effectful-classifier-count 0)))
+    (sort all-effectful-classifiers > #:key (lambda (f) (hash-ref f 'effectful-classifier-count 0))))
+   'optional-mandatory-modules
+   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'optional-mandatory-count 0)))
+        (sort all-optional-mandatory > #:key (lambda (f) (hash-ref f 'optional-mandatory-count 0))))))
 
 (define (take-at-most lst n)
   (if (> (length lst) n)
@@ -638,6 +690,40 @@
         (fprintf out "| Count | Path |\n")
         (fprintf out "|-------|------|\n")
         (for ([p icp])
+          (fprintf out "| ~a | ~a |\n" (hash-ref p 'count) (hash-ref p 'path)))
+        (fprintf out "\n")))
+
+  ;; v0.99.42 W1: Manual red-flag signals
+  (fprintf out "## Stringly Verdict Constants (string status/verdict returns)\n\n")
+  (define sv (hash-ref summary 'stringly-verdict-modules '()))
+  (if (null? sv)
+      (fprintf out "None found.\n\n")
+      (begin
+        (fprintf out "| Count | Path |\n")
+        (fprintf out "|-------|------|\n")
+        (for ([p (take-at-most sv 20)])
+          (fprintf out "| ~a | ~a |\n" (hash-ref p 'count) (hash-ref p 'path)))
+        (fprintf out "\n")))
+
+  (fprintf out "## Effectful Classifier Functions (classify/verify/gate with potential I/O)\n\n")
+  (define ec (hash-ref summary 'effectful-classifier-modules '()))
+  (if (null? ec)
+      (fprintf out "None found.\n\n")
+      (begin
+        (fprintf out "| Count | Path |\n")
+        (fprintf out "|-------|------|\n")
+        (for ([p (take-at-most ec 20)])
+          (fprintf out "| ~a | ~a |\n" (hash-ref p 'count) (hash-ref p 'path)))
+        (fprintf out "\n")))
+
+  (fprintf out "## Optional-Mandatory Asset Wording (optional near manifest/asset/tarball)\n\n")
+  (define om (hash-ref summary 'optional-mandatory-modules '()))
+  (if (null? om)
+      (fprintf out "None found.\n\n")
+      (begin
+        (fprintf out "| Count | Path |\n")
+        (fprintf out "|-------|------|\n")
+        (for ([p om])
           (fprintf out "| ~a | ~a |\n" (hash-ref p 'count) (hash-ref p 'path)))
         (fprintf out "\n")))
 
