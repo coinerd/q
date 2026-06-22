@@ -226,25 +226,61 @@ jobs:
           echo "$OUTPUT"
           echo "$OUTPUT" | grep -q "version ${VERSION}"
 
-      - name: Verify manifest
+      - name: Verify manifest (mandatory)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EXPECTED_VERSION: ${{ steps.download.outputs.VERSION }}
         run: |
-          VERSION="${{ steps.download.outputs.VERSION }}"
           TAG="${GITHUB_REF#refs/tags/}"
-          curl -sfL -H "Authorization: token $GH_TOKEN" -H "Accept: application/octet-stream" \
-            -o /tmp/release-manifest.json \
-            "https://api.github.com/repos/${{ github.repository }}/releases/download/${TAG}/release-manifest.json" || true
-          if [ -f /tmp/release-manifest.json ] && [ -s /tmp/release-manifest.json ]; then
-            python3 -c "
-          import json
-          m = json.load(open('/tmp/release-manifest.json'))
-          assert m['version'] == '${VERSION}', f\"manifest version {m['version']} != expected ${VERSION}\"
-          print(f'Manifest OK: version={m[\"version\"]}')
-          "
-          else
-            echo "No release-manifest.json found (optional)"
+          # Look up release by tag to find manifest asset URL
+          RELEASE_DATA=$(curl -sf -H "Authorization: token $GH_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/${TAG}")
+          if [ -z "$RELEASE_DATA" ]; then
+            echo "ERROR: Release for tag ${TAG} not found"
+            exit 1
           fi
+          # Find manifest asset URL via asset API
+          MANIFEST_URL=$(echo "$RELEASE_DATA" | jq -r '.assets[] | select(.name=="release-manifest.json") | .url')
+          if [ -z "$MANIFEST_URL" ] || [ "$MANIFEST_URL" = "null" ]; then
+            echo "ERROR: release-manifest.json asset not found in release ${TAG}"
+            exit 1
+          fi
+          # Download manifest via asset API (binary/octet-stream)
+          curl -sfL -H "Authorization: token $GH_TOKEN" -H "Accept: application/octet-stream" \
+            -o /tmp/release-manifest.json "$MANIFEST_URL"
+          if [ ! -s /tmp/release-manifest.json ]; then
+            echo "ERROR: release-manifest.json is empty or download failed"
+            exit 1
+          fi
+          # Verify manifest fields (version, tag, tarball, sha256)
+          echo "$EXPECTED_VERSION" > /tmp/expected-version.txt
+          python3 << 'PYEOF'
+          import json, hashlib, os
+          ev = open('/tmp/expected-version.txt').read().strip()
+          et = 'q-' + ev + '.tar.gz'
+          m = json.load(open('/tmp/release-manifest.json'))
+          # Version is mandatory
+          assert m['version'] == ev, 'manifest version mismatch: %s != %s' % (m['version'], ev)
+          print('Manifest version OK:', m['version'])
+          # Tag must match
+          etag = 'v' + ev
+          assert m.get('tag') == etag, 'manifest tag mismatch: %s != %s' % (m.get('tag'), etag)
+          print('Manifest tag OK:', m['tag'])
+          # Tarball asset name must match
+          assets = m.get('assets', [])
+          assert len(assets) > 0, 'manifest has no assets'
+          tarball_asset = assets[0]
+          assert tarball_asset['name'] == et, 'manifest tarball name mismatch: %s != %s' % (tarball_asset['name'], et)
+          print('Manifest tarball OK:', tarball_asset['name'])
+          # SHA256 verification if tarball is locally available
+          if 'sha256' in tarball_asset:
+              tarball_path = '/tmp/q-' + ev + '.tar.gz'
+              if os.path.exists(tarball_path):
+                  h = hashlib.sha256(open(tarball_path, 'rb').read()).hexdigest()
+                  assert h == tarball_asset['sha256'], 'sha256 mismatch: %s != %s' % (h, tarball_asset['sha256'])
+                  print('Manifest sha256 OK:', tarball_asset['sha256'])
+          print('All manifest checks passed.')
+          PYEOF
 
       - name: Run test suite
         run: |
