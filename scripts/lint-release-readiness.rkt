@@ -35,7 +35,8 @@
          racket/port
          racket/system
          racket/list
-         racket/path)
+         racket/path
+         json)
 
 ;; ---------------------------------------------------------------------------
 ;; Version extraction
@@ -160,16 +161,31 @@
      (define ver (get-canonical-version))
      (define results
        (for/list ([suite (in-list required-gate-suites)])
-         (define evidence-file (build-path evid-dir (format "~a.passed" suite)))
+         ;; Support both v1 (.passed) and v2 (.json) evidence formats
+         (define json-file (build-path evid-dir (format "~a.json" suite)))
+         (define passed-file (build-path evid-dir (format "~a.passed" suite)))
+         (define evidence-file
+           (cond
+             [(file-exists? json-file) json-file]
+             [(file-exists? passed-file) passed-file]
+             [else #f]))
          (cond
-           [(not (file-exists? evidence-file))
+           [(not evidence-file)
             (printf "  [FAIL] gate evidence missing: ~a~n" suite)
             #f]
            [else
-            (define content (file->string evidence-file))
-            (define parts (string-split content " "))
-            (define ev-version (and (>= (length parts) 1) (car parts)))
-            (define ev-time (and (>= (length parts) 2) (string->number (cadr parts))))
+            ;; Parse evidence — v2 JSON or v1 space-separated
+            (define-values (ev-version ev-time)
+              (if (regexp-match? #rx"\\.json$" (path->string evidence-file))
+                  ;; v2 JSON format
+                  (let* ([content (file->string evidence-file)]
+                         [data (with-input-from-string content read-json)])
+                    (values (hash-ref data 'version #f) (hash-ref data 'timestamp #f)))
+                  ;; v1 space-separated format
+                  (let* ([content (file->string evidence-file)]
+                         [parts (string-split content " ")])
+                    (values (and (>= (length parts) 1) (car parts))
+                            (and (>= (length parts) 2) (string->number (cadr parts)))))))
             (define now (current-seconds))
             (define max-age 7200) ;; 2 hours
             (cond
