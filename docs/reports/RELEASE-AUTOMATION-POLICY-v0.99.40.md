@@ -225,4 +225,4 @@ Every CI run is checked for setup-racket success. The step named
   trigger model, asset verification, milestone completion enforcement,
   and repair/backfill procedure.
 - **v0.99.39**: CI remediation (setup-racket package compile fix).
-- **v0.99.38**: Release truth hardening (milestone-gate asset checks).
+- **v0.99.40**: Release truth hardening (milestone-gate asset checks).

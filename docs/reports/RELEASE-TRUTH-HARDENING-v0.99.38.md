@@ -1,4 +1,4 @@
-# Release Truth Hardening — v0.99.38 W10
+# Release Truth Hardening — v0.99.40 W10
 
 **Date:** 2026-06-23
 **Issue:** #8484

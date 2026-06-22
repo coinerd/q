@@ -1,4 +1,4 @@
-# Abstraction Scanner v4 — Change-Locality Signals — v0.99.38 W8
+# Abstraction Scanner v4 — Change-Locality Signals — v0.99.40 W8
 
 **Date:** 2026-06-23
 **Issue:** #8482

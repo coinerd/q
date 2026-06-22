@@ -1,4 +1,4 @@
-# Parser/String Hotspot Scorecard — v0.99.38 W3
+# Parser/String Hotspot Scorecard — v0.99.40 W3
 
 **Date:** 2026-06-23
 **Issue:** #8472

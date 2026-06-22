@@ -1,4 +1,4 @@
-# Adapter Layer Contracts — v0.99.38 W6
+# Adapter Layer Contracts — v0.99.40 W6
 
 **Date:** 2026-06-23
 **Issue:** #8480

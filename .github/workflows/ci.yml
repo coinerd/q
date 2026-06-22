@@ -117,6 +117,9 @@ jobs:
 
       - name: Compile gate (all test modules)
         run: |
+          # Pre-compile shared dependencies to avoid parallel compilation races
+          raco make main.rkt
+          # Now compile all test modules in parallel (shared deps already cached)
           find tests -name '*.rkt' -not -path '*/compiled/*' -print0 \
             | xargs -0 -n 1 -P 4 raco make
 

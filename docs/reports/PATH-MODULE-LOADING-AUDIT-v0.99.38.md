@@ -1,4 +1,4 @@
-# Source-Relative Path / Module-Loading Audit — v0.99.38 W2
+# Source-Relative Path / Module-Loading Audit — v0.99.40 W2
 
 **Date:** 2026-06-23
 **Issue:** #8471

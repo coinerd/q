@@ -1,4 +1,4 @@
-# Common-Case API and Repeated-Call-Pattern Scorecard — v0.99.38 W1
+# Common-Case API and Repeated-Call-Pattern Scorecard — v0.99.40 W1
 
 **Date:** 2026-06-23
 **Issue:** #8470

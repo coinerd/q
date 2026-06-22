@@ -1,3 +1,74 @@
+## 0.99.40
+
+Released: 2026-06-23
+
+### Overview
+GitHub Release Automation Restoration. This release restores the
+automated GitHub Release publishing pipeline that broke after v0.32.9
+(363+ missing releases). The root causes were CI setup-racket package
+compile failures (fixed in v0.99.39), incorrect release-readiness
+context, unverified milestone close, and missing repair/backfill
+workflow. All changes are backward-compatible.
+
+### Release Automation Hardening
+
+- **W0: Lint-all baseline fixes.** Fixed 108 CHANGELOG headers, 8
+  local with-temp-dir → shared import, IVG stale path, test-fixture
+  false positives. 22/23 lint checks now pass.
+
+- **W1: CI setup-racket verification.** Verified v0.99.39 CI fix is
+  effective — setup-racket passes on all 4 post-remediation CI runs.
+
+- **W2: Tag-publish release readiness context.** release.yml now
+  uses `--strict --context tag-publish` for correct tag-publish
+  release readiness evaluation.
+
+- **W3: Local release dry-run gate.** Created
+  `scripts/release-dry-run.rkt` for local release workflow validation
+  without network publication. 22 tests.
+
+- **W4: Release workflow diagnostics + asset contract.** Added
+  diagnostics and asset verification to release.yml. 22 contract
+  tests.
+
+- **W5: Milestone-gate release truth.** Strengthened
+  `milestone-gate.rkt` with asset verification and structured JSON
+  output. 16 tests.
+
+- **W6: Release-aware milestone close.**
+  `close_milestone_complete` now requires verified release by
+  default. Added `verify_milestone_release`,
+  `publish_milestone_release`,
+  `extract_version_from_milestone_title`,
+  `check_release_assets` to gh_helpers.py. 23 Python tests + 12
+  Racket contract tests.
+
+- **W7: Manual release repair/backfill workflow.** Created
+  `.github/workflows/release-repair.yml` (defaults to dry-run) and
+  `scripts/release-repair.rkt` (pure-logic validation). 25 tests.
+
+- **W8: Release automation policy docs.**
+  `RELEASE-AUTOMATION-POLICY-v0.99.40.md` with 10 required
+  sections documenting the complete release lifecycle.
+
+- **W9: PR CI and release workflow verification.** Verified CI
+  passes on all platforms (ubuntu, macOS). Made release-readiness
+  non-blocking in lint-all. 19 tests.
+
+- **W10: v0.99.40 publication, main CI, final audit.** Version
+  bump, final gates, tag publication, release verification, and
+  milestone close.
+
+## 0.99.39
+
+Released: 2026-06-23
+
+### Overview
+Post-Release Audit Remediation (milestone #825) and CI GitHub
+Actions Permanent Remediation (milestone #826). Fixed CI
+setup-racket package compile failures (4 root-cause fixes) and
+created local CI-equivalent gates.
+
 ## 0.99.38
 
 Released: 2026-06-23
