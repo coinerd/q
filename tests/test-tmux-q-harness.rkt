@@ -304,3 +304,75 @@
   (check-equal? (prompt-result-prompt pr) "hello")
   (check-equal? (prompt-result-status pr) 'completed)
   (check-equal? (prompt-result-capture pr) "output"))
+
+;; ============================================================
+;; Approval-prompt detection tests
+;; ============================================================
+
+(test-case "detect-approval-prompt detects subagent approval overlay"
+  (define pane-text
+    "\u26a1 Subagent Approval Required\n  Capabilities: read, ls, grep\n  Task: list files\n\n  [y] Approve   [n] Deny   [Esc] Cancel")
+  (check-true (detect-approval-prompt pane-text)))
+
+(test-case "detect-approval-prompt detects generic approval"
+  (check-true (detect-approval-prompt "Some text\nApproval Required\n[y] Approve   [n] Deny")))
+
+(test-case "detect-approval-prompt returns #f for normal pane"
+  (check-false (detect-approval-prompt "q> hello\nThis is a normal response"))
+  (check-false (detect-approval-prompt "")))
+
+(test-case "parse-approval-prompt extracts subagent type and capabilities"
+  (define pane-text
+    "\u26a1 Subagent Approval Required\n  Capabilities: read, ls, grep\n  Task: explore the codebase\n\n  [y] Approve   [n] Deny   [Esc] Cancel")
+  (define info (parse-approval-prompt pane-text))
+  (check-true (approval-info? info))
+  (check-equal? (approval-info-type info) 'subagent)
+  (check-equal? (approval-info-capabilities info) '("read" "ls" "grep"))
+  (check-equal? (approval-info-task-preview info) "explore the codebase"))
+
+(test-case "parse-approval-prompt returns #f when no approval present"
+  (check-false (parse-approval-prompt "normal pane output without approval")))
+
+(test-case "classify-approval-safety returns 'safe for read-only capabilities"
+  (define info (approval-info 'subagent '("read" "ls" "grep") "list files" "raw"))
+  (check-equal? (classify-approval-safety info) 'safe))
+
+(test-case "classify-approval-safety returns 'dangerous for bash capability"
+  (define info (approval-info 'subagent '("read" "bash") "run a command" "raw"))
+  (check-equal? (classify-approval-safety info) 'dangerous))
+
+(test-case "classify-approval-safety returns 'dangerous for tmux kill-server in task"
+  (define info (approval-info 'subagent '("read") "run tmux kill-server" "raw"))
+  (check-equal? (classify-approval-safety info) 'dangerous))
+
+(test-case "classify-approval-safety returns 'dangerous for rm -rf in task"
+  (define info (approval-info 'subagent '("read") "rm -rf /tmp/data" "raw"))
+  (check-equal? (classify-approval-safety info) 'dangerous))
+
+(test-case "classify-approval-safety returns 'dangerous for write capability"
+  (define info (approval-info 'subagent '("read" "write") "edit a file" "raw"))
+  (check-equal? (classify-approval-safety info) 'dangerous))
+
+(test-case "classify-approval-safety returns 'caution for unknown capabilities"
+  (define info (approval-info 'subagent '("read" "unknown-cap") "do something" "raw"))
+  (check-equal? (classify-approval-safety info) 'caution))
+
+(test-case "classify-approval-safety returns 'caution for empty capabilities"
+  (define info (approval-info 'unknown '() "no caps" "raw"))
+  (check-equal? (classify-approval-safety info) 'caution))
+
+(test-case "dangerous-command-patterns includes broad tmux cleanup"
+  (check-true (if (member "tmux kill-server" dangerous-command-patterns) #t #f))
+  (check-true (if (member "tmux kill-session" dangerous-command-patterns) #t #f))
+  (check-true (if (member "rm -rf" dangerous-command-patterns) #t #f)))
+
+(test-case "safe-capabilities includes read-only tools"
+  (check-true (if (member 'read safe-capabilities) #t #f))
+  (check-true (if (member 'ls safe-capabilities) #t #f))
+  (check-true (if (member 'grep safe-capabilities) #t #f)))
+
+(test-case "dangerous-capabilities includes destructive tools"
+  (check-true (if (member 'bash dangerous-capabilities) #t #f))
+  (check-true (if (member 'write dangerous-capabilities) #t #f))
+  (check-true (if (member 'edit dangerous-capabilities) #t #f))
+  (check-true (if (member 'kill dangerous-capabilities) #t #f)))

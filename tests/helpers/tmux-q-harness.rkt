@@ -97,6 +97,19 @@
          assert-no-queued-prompts!
          write-exploration-artifacts!
 
+         ;; Approval-prompt-specific automation
+         detect-approval-prompt
+         parse-approval-prompt
+         (struct-out approval-info)
+         classify-approval-safety
+         safe-capabilities
+         dangerous-capabilities
+         dangerous-command-patterns
+         approve-approval!
+         deny-approval!
+         handle-approval-if-present!
+         assert-no-approval-pending!
+
          ;; Pure functions (for unit testing)
          normalize-pane-output
          build-tmux-new-session-command
@@ -570,6 +583,149 @@
                              (fprintf p "Phases: ~a\n" phases))
                            #:exists 'replace))
   art-dir)
+
+;; ============================================================
+;; Approval-prompt-specific automation
+;; ============================================================
+
+;; approval-info struct for parsed approval overlay content.
+;; type: 'subagent or 'unknown
+;; capabilities: (listof string)
+;; task-preview: string
+;; raw-text: string (the matched approval overlay text, redacted later)
+(struct approval-info (type capabilities task-preview raw-text) #:transparent)
+
+;; Safe capabilities that can be auto-approved in test/automation.
+;; These are read-only and cannot cause side effects.
+(define safe-capabilities '(read find ls grep file tree))
+
+;; Dangerous capabilities that must NEVER be auto-approved.
+;; These can cause side effects, data loss, or broad system damage.
+(define dangerous-capabilities '(bash shell exec write edit delete kill))
+
+;; Dangerous command patterns that should trigger rejection even if
+;; the capability itself isn't in dangerous-capabilities.
+;; Checked against task-preview text (case-insensitive substring match).
+(define dangerous-command-patterns
+  '("tmux kill-server" "tmux kill-session"
+                       "kill-server"
+                       "rm -rf"
+                       "rm -r "
+                       "shutdown"
+                       "reboot"
+                       "mkfs"
+                       "dd if="
+                       "chmod 777"
+                       "git push --force"
+                       "git push --tags"))
+
+;; detect-approval-prompt : string? -> boolean?
+;; Pure: checks normalized pane text for approval overlay markers.
+(define (detect-approval-prompt text)
+  (and (string? text)
+       (or (string-contains? text "Approval Required") (string-contains? text "[y] Approve"))
+       #t))
+
+;; parse-approval-prompt : string? -> (or/c approval-info? #f)
+;; Pure: extracts approval type, capabilities, and task preview from pane text.
+;; Returns #f if no approval prompt is detected.
+(define (parse-approval-prompt text)
+  (unless (string? text)
+    (set! text ""))
+  (cond
+    [(not (detect-approval-prompt text)) #f]
+    [else
+     (define type
+       (cond
+         [(string-contains? text "Subagent Approval") 'subagent]
+         [(string-contains? text "Approval Required") 'unknown]
+         [else 'unknown]))
+     ;; Extract capabilities: look for "Capabilities: <comma-separated>"
+     (define caps-str
+       (let ([match (regexp-match #rx"Capabilities: ([^\n]*)" text)])
+         (if match
+             (string-trim (cadr match))
+             "")))
+     ;; Parse capabilities into a list
+     (define capabilities
+       (if (string=? caps-str "")
+           '()
+           (map string-trim (string-split caps-str ","))))
+     ;; Extract task preview: look for "Task: <text>"
+     (define task-preview
+       (let ([match (regexp-match #rx"Task: ([^\n]*)" text)])
+         (if match
+             (string-trim (cadr match))
+             "")))
+     (approval-info type capabilities task-preview text)]))
+
+;; classify-approval-safety : approval-info? -> (or/c 'safe 'dangerous 'caution)
+;; Classifies whether the approval request is safe to auto-approve.
+;; - 'safe: all capabilities are in safe-capabilities and no dangerous patterns
+;; - 'dangerous: contains dangerous capabilities or dangerous command patterns
+;; - 'caution: contains unknown capabilities (not in safe or dangerous sets)
+(define (classify-approval-safety info)
+  (define caps (approval-info-capabilities info))
+  (define task (approval-info-task-preview info))
+  (define task-lower (string-downcase task))
+  (cond
+    ;; Check for dangerous command patterns in task preview
+    [(for/or ([pattern (in-list dangerous-command-patterns)])
+       (string-contains? task-lower pattern))
+     'dangerous]
+    ;; Check for dangerous capabilities
+    [(for/or ([cap (in-list caps)])
+       (define sym (string->symbol (string-downcase cap)))
+       (member sym dangerous-capabilities))
+     'dangerous]
+    ;; All capabilities are safe
+    [(for/and ([cap (in-list caps)])
+       (define sym (string->symbol (string-downcase cap)))
+       (member sym safe-capabilities))
+     (if (null? caps) 'caution 'safe)]
+    ;; Unknown capabilities present
+    [else 'caution]))
+
+;; approve-approval! : tmux-q-session? -> void?
+;; Sends the 'y' key to approve the current approval prompt.
+;; NEVER use blindly — always check classify-approval-safety first.
+(define (approve-approval! sess)
+  (send-key! sess "y"))
+
+;; deny-approval! : tmux-q-session? -> void?
+;; Sends the 'n' key to deny the current approval prompt.
+;; Safe to call for any approval type.
+(define (deny-approval! sess)
+  (send-key! sess "n"))
+
+;; handle-approval-if-present! : tmux-q-session? -> (or/c 'approved 'denied 'dangerous-rejected 'no-approval)
+;; Detects approval prompt, classifies safety, and acts accordingly.
+;; Auto-approves only 'safe approvals; denies 'dangerous ones; denies 'caution.
+;; Returns the action taken.
+(define (handle-approval-if-present! sess)
+  (define pane (capture-normalized sess #:lines 80))
+  (define info (parse-approval-prompt pane))
+  (cond
+    [(not info) 'no-approval]
+    [else
+     (define safety (classify-approval-safety info))
+     (case safety
+       [(safe)
+        (approve-approval! sess)
+        'approved]
+       [(dangerous)
+        (deny-approval! sess)
+        'dangerous-rejected]
+       [(caution)
+        (deny-approval! sess)
+        'denied])]))
+
+;; assert-no-approval-pending! : tmux-q-session? -> void?
+;; Fails if the pane shows an approval prompt that hasn't been handled.
+(define (assert-no-approval-pending! sess)
+  (define pane (capture-normalized sess #:lines 80))
+  (when (detect-approval-prompt pane)
+    (error 'assert-no-approval-pending! "unhandled approval prompt detected in pane")))
 
 ;; ============================================================
 ;; tmux command execution (internal)
