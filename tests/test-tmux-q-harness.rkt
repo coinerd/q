@@ -220,3 +220,87 @@
      (check-equal? (trace-entry-phase (car events)) "turn.completed")
      (check-equal? (trace-entry-turn-id (car events)) "t-2")
      (check-true (turn-completion-trace-entry? (car events))))))
+
+;; ============================================================
+;; Real-provider safe harness helpers
+;; ============================================================
+
+(test-case "real-provider-authorized? returns #f without env gates"
+  (parameterize ([current-environment-variables
+                  (environment-variables-copy (current-environment-variables))])
+    (putenv "Q_TMUX_TUI_TESTS" "0")
+    (putenv "Q_TMUX_TUI_REAL_PROVIDER" "0")
+    (check-false (real-provider-authorized?))
+    (putenv "Q_TMUX_TUI_TESTS" "1")
+    (check-false (real-provider-authorized?))
+    (putenv "Q_TMUX_TUI_REAL_PROVIDER" "1")
+    (check-false (real-provider-authorized?))
+    (putenv "Q_TMUX_TUI_REAL_PROVIDER_CONFIRM" "wrong")
+    (check-false (real-provider-authorized?))
+    (putenv "Q_TMUX_TUI_REAL_PROVIDER_CONFIRM" "I_UNDERSTAND_COSTS")
+    (check-true (real-provider-authorized?))))
+
+(test-case "make-real-provider-tmux-env raises without gates"
+  (parameterize ([current-environment-variables
+                  (environment-variables-copy (current-environment-variables))])
+    (putenv "Q_TMUX_TUI_TESTS" "0")
+    (putenv "Q_TMUX_TUI_REAL_PROVIDER" "0")
+    (check-exn #rx"real-provider mode requires" (lambda () (make-real-provider-tmux-env)))))
+
+(test-case "copy-q-config-to-temp-home! copies config files without printing"
+  (with-temp-dir (lambda (dir)
+                   ;; Create mock source HOME with .q/config.json and credentials.json
+                   (define source-home (build-path dir "source-home"))
+                   (define source-q (build-path source-home ".q"))
+                   (make-directory* source-q)
+                   (call-with-output-file (build-path source-q "config.json")
+                                          (lambda (out) (write-json (hasheq 'model "test-model") out))
+                                          #:exists 'replace)
+                   (call-with-output-file (build-path source-q "credentials.json")
+                                          (lambda (out) (display "{\"key\":\"sk-FAKE123\"}" out))
+                                          #:exists 'replace)
+                   ;; Create env
+                   (define env (make-tmux-test-env #:base-dir dir))
+                   ;; Copy config
+                   (define copied
+                     (copy-q-config-to-temp-home! env #:source-home (path->string source-home)))
+                   (check-equal? (sort copied string<?) '("config.json" "credentials.json"))
+                   ;; Verify files exist in temp HOME
+                   (define dest-q (build-path (tmux-env-home env) ".q"))
+                   (check-true (file-exists? (build-path dest-q "config.json")))
+                   (check-true (file-exists? (build-path dest-q "credentials.json")))
+                   ;; Verify config.rkt was not copied (doesn't exist in source)
+                   (check-false (file-exists? (build-path dest-q "config.rkt"))))))
+
+(test-case "detect-queued-prompts detects queued indicator"
+  (check-true (detect-queued-prompts "some output\n[Queued — will run after current task]\nmore"))
+  (check-false (detect-queued-prompts "normal pane output without queued"))
+  (check-false (detect-queued-prompts "")))
+
+(test-case "redact-sensitive redacts bearer tokens"
+  (define result (redact-sensitive "Authorization: Bearer abc123secret"))
+  (check-false (string-contains? result "abc123secret"))
+  (check-true (string-contains? result "<REDACTED>")))
+
+(test-case "redact-sensitive redacts API key patterns"
+  (define result (redact-sensitive "api_key=sk-proj123abc456"))
+  (check-false (string-contains? result "sk-proj123abc456"))
+  (check-true (string-contains? result "<REDACTED>")))
+
+(test-case "redact-sensitive redacts HOME paths"
+  (define home-path "/tmp/q-tmux-home-1234567890")
+  (define result
+    (redact-sensitive (format "Config file: ~a/.q/config.json\nsome text" home-path)
+                      #:home-path home-path))
+  (check-false (string-contains? result home-path))
+  (check-true (string-contains? result "<HOME>")))
+
+(test-case "redact-sensitive preserves non-sensitive text"
+  (define result (redact-sensitive "just normal text without secrets"))
+  (check-equal? result "just normal text without secrets"))
+
+(test-case "prompt-result struct has expected fields"
+  (define pr (prompt-result "hello" (hasheq 'phase "turn.completed") "output" 'completed))
+  (check-equal? (prompt-result-prompt pr) "hello")
+  (check-equal? (prompt-result-status pr) 'completed)
+  (check-equal? (prompt-result-capture pr) "output"))

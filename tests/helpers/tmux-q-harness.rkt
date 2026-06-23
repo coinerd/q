@@ -86,6 +86,17 @@
          latest-turn-completion-event
          wait-for-turn-completion-event
 
+         ;; Real-provider safe helpers
+         real-provider-authorized?
+         require-real-provider-authorization!
+         make-real-provider-tmux-env
+         copy-q-config-to-temp-home!
+         (struct-out prompt-result)
+         send-prompt-and-wait!
+         detect-queued-prompts
+         assert-no-queued-prompts!
+         write-exploration-artifacts!
+
          ;; Pure functions (for unit testing)
          normalize-pane-output
          build-tmux-new-session-command
@@ -294,9 +305,10 @@
 ;; Pure: Redaction
 ;; ============================================================
 
-(define (redact-sensitive text)
+(define (redact-sensitive text #:home-path [home-path #f])
+  ;; Step 1: line-based KEY=VALUE redaction (existing)
   (define lines (string-split text "\n" #:trim? #f))
-  (define redacted
+  (define step1-lines
     (for/list ([line (in-list lines)])
       (cond
         [(regexp-match? #px"^(HOME|.*(KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL).*)=" line)
@@ -305,7 +317,17 @@
              (format "~a=<REDACTED>" (cadr key-parts))
              line)]
         [else line])))
-  (string-join redacted "\n"))
+  (define step1 (string-join step1-lines "\n"))
+  ;; Step 2: redact bearer tokens
+  (define step2 (regexp-replace* #px"(?i:bearer) +[A-Za-z0-9._-]+" step1 "Bearer <REDACTED>"))
+  ;; Step 3: redact API key patterns (sk-...)
+  (define step3 (regexp-replace* #px"sk-[A-Za-z0-9_-]+" step2 "<REDACTED>"))
+  ;; Step 4: redact HOME path if provided
+  (define step4
+    (if (and home-path (> (string-length home-path) 0))
+        (string-replace step3 home-path "<HOME>")
+        step3))
+  step4)
 
 ;; ============================================================
 ;; Pure: Text matching
@@ -429,6 +451,125 @@
      #:timeout-ms timeout-ms
      #:poll-ms poll-ms))
   (and ok? found))
+
+;; ============================================================
+;; Real-provider safe helpers
+;; ============================================================
+
+(define (real-provider-authorized?)
+  (and (equal? (getenv "Q_TMUX_TUI_TESTS") "1")
+       (equal? (getenv "Q_TMUX_TUI_REAL_PROVIDER") "1")
+       (equal? (getenv "Q_TMUX_TUI_REAL_PROVIDER_CONFIRM") "I_UNDERSTAND_COSTS")))
+
+(define (require-real-provider-authorization!)
+  (unless (real-provider-authorized?)
+    (error 'tmux-q-harness
+           (string-append "real-provider mode requires Q_TMUX_TUI_TESTS=1, "
+                          "Q_TMUX_TUI_REAL_PROVIDER=1, and "
+                          "Q_TMUX_TUI_REAL_PROVIDER_CONFIRM=I_UNDERSTAND_COSTS"))))
+
+;; make-real-provider-tmux-env : [#:base-dir path-string?] -> tmux-env?
+;; Creates an isolated temp environment. Only callable when real-provider
+;; gates are satisfied. Does not copy config/credentials automatically;
+;; use copy-q-config-to-temp-home! for that.
+(define (make-real-provider-tmux-env #:base-dir [base-dir #f])
+  (require-real-provider-authorization!)
+  (make-tmux-test-env #:base-dir base-dir))
+
+;; Q config files to copy for real-provider mode.
+;; Listed by name only — contents are never printed.
+(define q-config-files '("config.json" "credentials.json" "config.rkt"))
+
+;; copy-q-config-to-temp-home! : tmux-env? [#:source-home path-string?] -> (listof string?)
+;; Copies ~/.q/{config.json,credentials.json,config.rkt} into temp HOME .q/.
+;; Returns list of copied file names (not contents). Prints nothing.
+(define (copy-q-config-to-temp-home! env
+                                     #:source-home
+                                     [source-home (path->string (find-system-path 'home-dir))])
+  (define source-q-dir (build-path source-home ".q"))
+  (define dest-q-dir (build-path (tmux-env-home env) ".q"))
+  (make-directory* dest-q-dir)
+  (for/list ([fname (in-list q-config-files)]
+             #:when (file-exists? (build-path source-q-dir fname)))
+    ;; Read bytes and write bytes — never print or log contents
+    (define src-bytes (file->bytes (build-path source-q-dir fname)))
+    (call-with-output-file (build-path dest-q-dir fname)
+                           (lambda (out) (write-bytes src-bytes out))
+                           #:exists 'replace)
+    fname))
+
+;; prompt-result struct for send-prompt-and-wait!
+(struct prompt-result (prompt completion-event capture status) #:transparent)
+
+;; send-prompt-and-wait! : tmux-q-session? string? [#:timeout-ms ...] -> prompt-result?
+;; Sends a prompt and waits for structured turn-completion via trace.jsonl.
+;; Returns a prompt-result with status 'completed, 'timeout, or 'no-trace.
+(define (send-prompt-and-wait! sess prompt #:timeout-ms [timeout-ms 30000] #:poll-ms [poll-ms 250])
+  (send-line! sess prompt)
+  (define completion-event
+    (wait-for-turn-completion-event sess #:timeout-ms timeout-ms #:poll-ms poll-ms))
+  (define capture (capture-normalized sess #:lines 80))
+  (define status
+    (cond
+      [completion-event 'completed]
+      [(string-contains? capture "trace.jsonl") 'no-trace]
+      [else 'timeout]))
+  (prompt-result prompt completion-event capture status))
+
+;; detect-queued-prompts : string? -> boolean?
+;; Pure: checks normalized pane text for queued-prompt indicators.
+(define (detect-queued-prompts text)
+  (and (string? text) (string-contains? text "[Queued") #t))
+
+;; assert-no-queued-prompts! : tmux-q-session? -> void?
+;; Fails if the pane shows a queued prompt indicator.
+(define (assert-no-queued-prompts! sess)
+  (define pane (capture-normalized sess #:lines 80))
+  (when (detect-queued-prompts pane)
+    (error 'assert-no-queued-prompts! "queued prompt detected in pane — automation sent too early")))
+
+;; write-exploration-artifacts! : tmux-q-session? string? [#:status ...] -> path-string?
+;; Writes exploration artifacts (not just failures) including:
+;; - normalized-capture.txt (redacted)
+;; - env-summary.txt (redacted)
+;; - trace-events.jsonl (if trace exists)
+;; Returns the artifact directory path.
+(define (write-exploration-artifacts! sess label #:status [status "exploration"])
+  (define art-dir (tmux-q-session-artifact-dir sess))
+  (define name (tmux-q-session-name sess))
+  ;; Normalized capture (redacted)
+  (define normalized (capture-normalized sess #:lines 100))
+  (call-with-output-file
+   (build-path art-dir (format "~a-normalized.txt" label))
+   (lambda (p) (display (redact-sensitive normalized #:home-path (tmux-q-session-home sess)) p))
+   #:exists 'replace)
+  ;; Env summary (redacted)
+  (define env-summary
+    (format "Label: ~a\nStatus: ~a\nSession: ~a\nCols: ~a\nRows: ~a\nHOME=<HOME>\nProject=~a\n"
+            label
+            status
+            name
+            (tmux-q-session-cols sess)
+            (tmux-q-session-rows sess)
+            (tmux-q-session-cwd sess)))
+  (call-with-output-file (build-path art-dir (format "~a-env-summary.txt" label))
+                         (lambda (p) (display (redact-sensitive env-summary) p))
+                         #:exists 'replace)
+  ;; Trace events summary (if available)
+  (define trace-paths (find-trace-jsonl-paths (tmux-q-session-session-dir sess)))
+  (unless (null? trace-paths)
+    (define all-events (apply append (map read-trace-events trace-paths)))
+    (define phases (map trace-entry-phase all-events))
+    (define completion-count
+      (length (filter (lambda (p) (and p (member p completion-phases))) phases)))
+    (call-with-output-file (build-path art-dir (format "~a-trace-summary.txt" label))
+                           (lambda (p)
+                             (fprintf p "Trace files: ~a\n" (length trace-paths))
+                             (fprintf p "Total events: ~a\n" (length all-events))
+                             (fprintf p "Completion events: ~a\n" completion-count)
+                             (fprintf p "Phases: ~a\n" phases))
+                           #:exists 'replace))
+  art-dir)
 
 ;; ============================================================
 ;; tmux command execution (internal)
