@@ -1,3 +1,60 @@
+## 0.99.43
+
+Released: 2026-06-25
+
+### Overview
+Tmux real-life q functionality and usability testing. Built a
+comprehensive tmux-based TUI test harness with 70 test assertions
+(39 unit + 31 e2e) covering startup, prompt-response, session
+artifacts, slash commands, resize, unicode, context/memory, GSD
+planning, tools/approval, and cleanup. All tests are opt-in via
+`Q_TMUX_TUI_TESTS=1` and skip gracefully when tmux is unavailable.
+
+### tmux TUI Testing Harness
+
+- **W0: Planning.** Runbook, scenario matrix, flake/failure artifact docs.
+- **W1: Harness + unit tests.** `tests/helpers/tmux-q-harness.rkt` with
+  full API: session lifecycle, interaction, capture, waiting, diagnostics.
+  39 pure-function unit tests.
+- **W2: Smoke e2e tests.** 5 tests: T0a prompt, T0b status, T0c mock
+  response, T1a quit, T1b orphan check. Fixed 4 critical harness bugs
+  (session name dots, subprocess apply, module path resolution,
+  split-path).
+- **W3: Prompt-response and artifacts.** 7 tests: input echo, mock
+  response, multi-turn, session.jsonl/trace.jsonl/scrollback.jsonl
+  existence and valid JSON.
+- **W4: Slash commands.** 5 tests: /help, /status, /clear, unknown
+  command recovery, /retry graceful.
+- **W5: Resize, unicode, cleanup.** 4 tests: resize smaller/larger,
+  unicode rendering (CJK, emoji), terminal cleanup.
+- **W6: Context and memory.** 4 tests: default startup, ctx indicator,
+  memory-off (no files), file-jsonl memory configured (no crash).
+- **W7: GSD planning.** 3 tests: planning prompt, temp project
+  isolation, /goal command.
+- **W8: Tools and approval.** 3 tests: --no-tools startup, tool-disabled
+  request, /interrupt.
+- **W9: Diagnostics.** Developer runner (`scripts/tmux-tui-smoke.rkt`)
+  and report generator (`scripts/tmux-tui-report.rkt`) with failure
+  classification and credential redaction checking.
+- **W10: Documentation.** Developer docs, CI policy, metrics.
+
+### Test Files Added
+
+| File | Tests | Description |
+|------|-------|-------------|
+| `tests/helpers/tmux-q-harness.rkt` | — | Harness API |
+| `tests/test-tmux-q-harness.rkt` | 39 | Pure function unit tests |
+| `tests/test-tmux-tui-smoke.rkt` | 5 | Startup/quit/orphan |
+| `tests/test-tmux-tui-session-artifacts.rkt` | 7 | Response/artifacts |
+| `tests/test-tmux-tui-commands.rkt` | 5 | Slash commands |
+| `tests/test-tmux-tui-resize-cleanup.rkt` | 4 | Resize/unicode/cleanup |
+| `tests/test-tmux-tui-context-memory.rkt` | 4 | Context/memory |
+| `tests/test-tmux-tui-gsd.rkt` | 3 | GSD planning |
+| `tests/test-tmux-tui-tools-approval.rkt` | 3 | Tools/approval |
+| `scripts/tmux-tui-smoke.rkt` | — | Developer runner |
+| `scripts/tmux-tui-report.rkt` | — | Diagnostic report |
+| `docs/reports/TMUX-TUI-TESTING-v0.99.43.md` | — | Documentation |
+
 ## 0.99.42
 
 Released: 2026-06-25

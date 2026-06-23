@@ -1,7 +1,7 @@
-# Abstraction Manual Scorecard — v0.99.42
+# Abstraction Manual Scorecard — v0.99.43
 
 **Date:** 2026-06-24
-**Milestone:** v0.99.42 (#829)
+**Milestone:** v0.99.43 (#829)
 **Theme:** Abstraction governance and high-leverage boundary hardening
 
 ## Summary
