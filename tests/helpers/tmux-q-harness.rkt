@@ -110,6 +110,17 @@
          verify-artifact-redacted!
          detect-sensitive-leak
 
+         ;; MAS/subagent lifecycle evidence (W6)
+         mas-lifecycle-phases
+         mas-trace-entry?
+         find-mas-events
+         (struct-out mas-spawn-event)
+         (struct-out mas-lifecycle-info)
+         parse-spawn-approval-event
+         parse-mas-lifecycle
+         verify-subagent-spawn-lifecycle
+         detect-mas-coordination-events
+
          ;; Approval-prompt-specific automation
          detect-approval-prompt
          parse-approval-prompt
@@ -852,6 +863,126 @@
   (define content (file->string path))
   (when (detect-sensitive-leak content)
     (error 'verify-artifact-redacted! "un-redacted sensitive content detected in artifact: ~a" path)))
+
+;; ============================================================
+;; MAS/subagent lifecycle evidence (W6)
+;; ============================================================
+
+;; All known MAS-related event phases that can appear in trace.jsonl.
+(define mas-lifecycle-phases
+  '("mas.spawn-approval-requested" "mas.artifact.produced"
+                                   "mas.test.result"
+                                   "mas.hypothesis.opened"
+                                   "mas.hypothesis.resolved"
+                                   "mas.blackboard.sync"
+                                   "mas.agent.version.pinned"
+                                   "mas.agent.registered"
+                                   "mas.agent.activated"
+                                   "mas.mcp.connected"
+                                   "mas.mcp.tool.called"))
+
+;; mas-spawn-event: parsed spawn-approval-requested trace entry.
+;; capabilities: (listof symbol)
+;; task-preview: string
+;; turn-id: (or/c string #f)
+;; entry: hash? — raw trace entry
+(struct mas-spawn-event (capabilities task-preview turn-id entry) #:transparent)
+
+;; mas-lifecycle-info: structured summary of MAS events in a session.
+;; spawn-approvals: (listof mas-spawn-event?)
+;; artifacts: (listof hash?) — raw artifact-produced entries
+;; coordination-events: (listof hash?) — hypotheses, blackboard, agent events
+;; tool-execution-events: (listof hash?) — tool.execution.* entries for cross-reference
+;; total-mas-events: exact-nonnegative-integer?
+(struct mas-lifecycle-info
+        (spawn-approvals artifacts coordination-events tool-execution-events total-mas-events)
+  #:transparent)
+
+;; mas-trace-entry? : hash? -> boolean?
+;; Pure: checks if a trace entry is a MAS-lifecycle event.
+(define (mas-trace-entry? entry)
+  (define phase (trace-entry-phase entry))
+  (and phase (if (member phase mas-lifecycle-phases) #t #f)))
+
+;; find-mas-events : (or/c path-string? tmux-q-session?) -> (listof hash?)
+;; Finds all MAS-lifecycle events in a session's trace.jsonl files.
+(define (find-mas-events session-dir-or-sess)
+  (define session-dir
+    (if (tmux-q-session? session-dir-or-sess)
+        (tmux-q-session-session-dir session-dir-or-sess)
+        session-dir-or-sess))
+  (for*/list ([trace-path (in-list (find-trace-jsonl-paths session-dir))]
+              [entry (in-list (read-trace-events trace-path))]
+              #:when (mas-trace-entry? entry))
+    entry))
+
+;; parse-spawn-approval-event : hash? -> mas-spawn-event?
+;; Pure: parses a mas.spawn-approval-requested trace entry into structured record.
+(define (parse-spawn-approval-event entry)
+  (define data (trace-entry-data entry))
+  (define caps-raw (and (hash? data) (hash-ref/keys data '(capabilities "capabilities") '())))
+  (define caps
+    (cond
+      [(list? caps-raw)
+       (for/list ([c (in-list caps-raw)])
+         (cond
+           [(symbol? c) c]
+           [(string? c) (string->symbol c)]
+           [else (string->symbol (format "~a" c))]))]
+      [else '()]))
+  (define task-raw (and (hash? data) (hash-ref/keys data '(task-preview "task-preview") "")))
+  (define task-str
+    (if (string? task-raw)
+        task-raw
+        (if task-raw
+            (format "~a" task-raw)
+            "")))
+  (mas-spawn-event caps task-str (trace-entry-turn-id entry) entry))
+
+;; parse-mas-lifecycle : (or/c path-string? tmux-q-session?) -> mas-lifecycle-info?
+;; Parses all MAS events from a session and returns structured lifecycle info.
+(define (parse-mas-lifecycle session-dir-or-sess)
+  (define mas-events (find-mas-events session-dir-or-sess))
+  (define tool-events (find-tool-execution-events session-dir-or-sess))
+  (define spawn-approvals
+    (for/list ([e (in-list mas-events)]
+               #:when (equal? (trace-entry-phase e) "mas.spawn-approval-requested"))
+      (parse-spawn-approval-event e)))
+  (define artifacts
+    (filter (lambda (e) (equal? (trace-entry-phase e) "mas.artifact.produced")) mas-events))
+  (define coordination-phases
+    '("mas.test.result" "mas.hypothesis.opened"
+                        "mas.hypothesis.resolved"
+                        "mas.blackboard.sync"
+                        "mas.agent.version.pinned"
+                        "mas.agent.registered"
+                        "mas.agent.activated"
+                        "mas.mcp.connected"
+                        "mas.mcp.tool.called"))
+  (define coordination-events
+    (filter (lambda (e) (member (trace-entry-phase e) coordination-phases)) mas-events))
+  (mas-lifecycle-info spawn-approvals artifacts coordination-events tool-events (length mas-events)))
+
+;; verify-subagent-spawn-lifecycle : mas-lifecycle-info? -> boolean?
+;; Pure: checks if the lifecycle shows evidence of a complete spawn cycle:
+;; spawn-approval-requested → tool.execution.started → tool.execution.completed
+;; Returns #t if at least one spawn-approval was followed by tool execution.
+(define (verify-subagent-spawn-lifecycle info)
+  (and (> (length (mas-lifecycle-info-spawn-approvals info)) 0)
+       (let ([exec-events (mas-lifecycle-info-tool-execution-events info)])
+         (and (> (length exec-events) 0)
+              ;; Check for at least one started and one completed
+              (for/or ([e (in-list exec-events)])
+                (equal? (trace-entry-phase e) "tool.execution.started"))
+              (for/or ([e (in-list exec-events)])
+                (equal? (trace-entry-phase e) "tool.execution.completed"))))
+       #t))
+
+;; detect-mas-coordination-events : mas-lifecycle-info? -> (listof string?)
+;; Pure: returns the unique list of coordination event phases present.
+(define (detect-mas-coordination-events info)
+  (remove-duplicates (for/list ([e (in-list (mas-lifecycle-info-coordination-events info))])
+                       (or (trace-entry-phase e) ""))))
 
 ;; ============================================================
 ;; tmux command execution (internal)
