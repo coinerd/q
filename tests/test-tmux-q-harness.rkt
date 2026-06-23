@@ -1172,3 +1172,134 @@
   (check-exn #rx"no release-authorization refusal"
              (lambda ()
                (verify-release-authorization-refused! "Everything looks great, let's ship!"))))
+
+;; ============================================================
+;; Flake classification and centralized reporting tests (W9)
+;; ============================================================
+
+(test-case "flake-classifications includes all standard categories"
+  (check-true (if (member 'pass flake-classifications) #t #f))
+  (check-true (if (member 'fail flake-classifications) #t #f))
+  (check-true (if (member 'flake flake-classifications) #t #f))
+  (check-true (if (member 'skip flake-classifications) #t #f))
+  (check-true (if (member 'incomplete flake-classifications) #t #f)))
+
+(test-case "classify-result-status maps correctly"
+  (check-equal? (classify-result-status 'pass-mock-tui) 'pass)
+  (check-equal? (classify-result-status 'pass-mock-tui-with-caveat) 'partial)
+  (check-equal? (classify-result-status 'pass-mock-tui-partial) 'partial)
+  (check-equal? (classify-result-status 'unsupported) 'skip)
+  (check-equal? (classify-result-status 'requires-real-provider-run) 'incomplete)
+  (check-equal? (classify-result-status 'fail) 'fail)
+  (check-equal? (classify-result-status 'unknown-status) 'unknown))
+
+(test-case "detect-flake-indicators finds flake markers"
+  (define indicators (detect-flake-indicators "This test is flaky and occasionally fails"))
+  (check-true (if (member "flaky" indicators) #t #f))
+  (check-true (if (member "occasionally fails" indicators) #t #f)))
+
+(test-case "detect-flake-indicators empty when none present"
+  (check-equal? (detect-flake-indicators "All tests passed consistently") '()))
+
+(test-case "classify-exploration-run produces records"
+  (define results
+    (list (cons 'pass-mock-tui "memory")
+          (cons 'pass-mock-tui-with-caveat "mas")
+          (cons 'requires-real-provider-run "release-audit")))
+  (define records (classify-exploration-run results))
+  (check-equal? (length records) 3)
+  (check-equal? (flake-record-tag (car records)) "memory")
+  (check-equal? (flake-record-classification (car records)) 'pass)
+  (check-equal? (flake-record-classification (cadr records)) 'partial)
+  (check-equal? (flake-record-classification (caddr records)) 'incomplete))
+
+(test-case "classify-exploration-run detects flake from text"
+  (define results (list (cons 'pass-mock-tui "tools")))
+  (define texts (list (cons "tools" "This test is flaky sometimes")))
+  (define records (classify-exploration-run results #:texts texts))
+  (check-equal? (flake-record-classification (car records)) 'flake)
+  (check-true (pair? (flake-record-flake-indicators (car records)))))
+
+(test-case "flaky-run? detects flakes"
+  (define records
+    (list (flake-record "a" 'pass-mock-tui 'pass '() #f)
+          (flake-record "b" 'pass-mock-tui 'flake '("flaky") #f)))
+  (check-true (flaky-run? records)))
+
+(test-case "flaky-run? returns #f when no flakes"
+  (define records
+    (list (flake-record "a" 'pass-mock-tui 'pass '() #f)
+          (flake-record "b" 'pass-mock-tui-with-caveat 'partial '() #f)))
+  (check-false (flaky-run? records)))
+
+(test-case "make-central-log-entry aggregates counts"
+  (define records
+    (list (flake-record "memory" 'pass-mock-tui 'pass '() "m.md")
+          (flake-record "mas" 'pass-mock-tui-with-caveat 'partial '() "mas.md")
+          (flake-record "gsd" 'pass-mock-tui 'pass '() "g.md")))
+  (define entry (make-central-log-entry records "run-001" "mock"))
+  (check-equal? (central-log-entry-total entry) 3)
+  (check-equal? (central-log-entry-pass-count entry) 2)
+  (check-equal? (central-log-entry-partial-count entry) 1)
+  (check-equal? (central-log-entry-fail-count entry) 0)
+  (check-equal? (central-log-entry-flake-count entry) 0))
+
+(test-case "central-log-entry->hash produces JSON-compatible hash"
+  (define records (list (flake-record "x" 'pass-mock-tui 'pass '() #f)))
+  (define entry (make-central-log-entry records "run-002" "mock" "2026-07-02T00:00:00"))
+  (define h (central-log-entry->hash entry))
+  (check-equal? (hash-ref h 'total) 1)
+  (check-equal? (hash-ref h 'pass) 1)
+  (check-equal? (hash-ref h 'run_id) "run-002"))
+
+(test-case "write-central-log-entry! and parse-central-log round-trip"
+  (with-temp-dir
+   (lambda (dir)
+     (define log-path (build-path dir "central.jsonl"))
+     (define records1
+       (list (flake-record "memory" 'pass-mock-tui 'pass '() #f)
+             (flake-record "gsd" 'pass-mock-tui 'pass '() #f)))
+     (define entry1 (make-central-log-entry records1 "run-A" "mock" "2026-07-01T00:00:00"))
+     (write-central-log-entry! (path->string log-path) entry1)
+     (define records2 (list (flake-record "tools" 'pass-mock-tui 'pass '() #f)))
+     (define entry2 (make-central-log-entry records2 "run-B" "real" "2026-07-02T00:00:00"))
+     (write-central-log-entry! (path->string log-path) entry2)
+     (define parsed (parse-central-log (path->string log-path)))
+     (check-equal? (length parsed) 2)
+     (check-equal? (hash-ref (car parsed) 'run_id) "run-A")
+     (check-equal? (hash-ref (cadr parsed) 'run_id) "run-B"))))
+
+(test-case "parse-central-log returns empty for nonexistent file"
+  (check-equal? (parse-central-log "/tmp/nonexistent-central-log.jsonl") '()))
+
+(test-case "make-exploration-bundle computes pass-rate"
+  (define records
+    (list (flake-record "a" 'pass-mock-tui 'pass '() #f)
+          (flake-record "b" 'pass-mock-tui 'pass '() #f)
+          (flake-record "c" 'requires-real-provider-run 'incomplete '() #f)))
+  (define bundle (make-exploration-bundle "tmp-explore" records "run-003" "mock"))
+  (check-equal? (exploration-bundle-root-dir bundle) "tmp-explore")
+  (check-true (> (bundle-pass-rate bundle) 0.0))
+  (check-false (bundle-has-flakes? bundle)))
+
+(test-case "make-exploration-bundle detects flakes"
+  (define records (list (flake-record "a" 'pass-mock-tui 'flake '("flaky") #f)))
+  (define bundle (make-exploration-bundle "tmp-explore2" records "run-004" "real"))
+  (check-true (bundle-has-flakes? bundle)))
+
+(test-case "render-bundle-index-markdown produces table"
+  (define records
+    (list (flake-record "memory" 'pass-mock-tui 'pass '() "m.md")
+          (flake-record "gsd" 'pass-mock-tui 'pass '() "g.md")))
+  (define bundle (make-exploration-bundle "tmp-explore3" records "run-005" "mock"))
+  (define md (render-bundle-index-markdown bundle))
+  (check-true (string-contains? md "Exploration bundle index"))
+  (check-true (string-contains? md "memory"))
+  (check-true (string-contains? md "gsd"))
+  (check-true (string-contains? md "Pass rate")))
+
+(test-case "render-bundle-index-markdown shows flake warning"
+  (define records (list (flake-record "x" 'pass-mock-tui 'flake '("intermittent") #f)))
+  (define bundle (make-exploration-bundle "tmp-explore4" records "run-006" "mock"))
+  (define md (render-bundle-index-markdown bundle))
+  (check-true (string-contains? md "Flaky scenarios detected")))

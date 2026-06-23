@@ -29,8 +29,9 @@
          racket/string
          racket/format
          racket/list
+         racket/date
          racket/system
-         (only-in racket/port port->string))
+         (only-in racket/port port->string with-input-from-string))
 
 ;; Struct
 (provide (struct-out tmux-q-session)
@@ -159,6 +160,25 @@
          find-release-manifest
          verify-release-manifest-present!
          verify-release-authorization-refused!
+
+         ;; Flake classification and centralized reporting (W9)
+         flake-classifications
+         (struct-out flake-record)
+         classify-result-status
+         classify-exploration-run
+         flake-indicator-patterns
+         detect-flake-indicators
+         flaky-run?
+         (struct-out central-log-entry)
+         make-central-log-entry
+         central-log-entry->hash
+         write-central-log-entry!
+         parse-central-log
+         (struct-out exploration-bundle)
+         make-exploration-bundle
+         bundle-pass-rate
+         bundle-has-flakes?
+         render-bundle-index-markdown
 
          ;; Approval-prompt-specific automation
          detect-approval-prompt
@@ -1497,6 +1517,245 @@
   (unless refusal
     (raise-user-error 'verify-release-authorization-refused!
                       "no release-authorization refusal pattern found in captured text")))
+
+;; ============================================================
+;; Flake classification and centralized reporting (W9)
+;; ============================================================
+
+;; Standard classifications for exploration run outcomes.
+(define flake-classifications '(pass partial fail flake skip incomplete timeout unknown))
+
+;; flake-record: per-scenario classification with optional flake evidence.
+;; tag: string?
+;; status: symbol? — the raw scenario status
+;; classification: symbol? — one of flake-classifications
+;; flake-indicators: (listof string?) — patterns found, if any
+;; report-path: (or/c string? #f)
+(struct flake-record (tag status classification flake-indicators report-path) #:transparent)
+
+;; classify-result-status : symbol? -> symbol?
+;; Pure: maps a scenario status symbol to a flake classification.
+(define (classify-result-status status)
+  (case status
+    [(pass-mock-tui) 'pass]
+    [(pass-mock-tui-with-caveat pass-mock-tui-partial) 'partial]
+    [(unsupported unsupported-until-w7) 'skip]
+    [(requires-real-provider-run) 'incomplete]
+    [(fail error) 'fail]
+    [(timeout) 'timeout]
+    [else 'unknown]))
+
+;; flake-indicator-patterns: text patterns that suggest flaky behavior.
+(define flake-indicator-patterns
+  '("intermittent" "flaky"
+                   "retry"
+                   "timed out"
+                   "race condition"
+                   "non-deterministic"
+                   "occasionally fails"
+                   "unstable"))
+
+;; detect-flake-indicators : string? -> (listof string?)
+;; Pure: returns list of matching flake indicator patterns.
+(define (detect-flake-indicators text)
+  (for/list ([pat (in-list flake-indicator-patterns)]
+             #:when (string-contains? text pat))
+    pat))
+
+;; flaky-run? : (listof flake-record?) -> boolean?
+;; Pure: returns #t if any record has classification 'flake.
+(define (flaky-run? records)
+  (for/or ([r (in-list records)])
+    (eq? (flake-record-classification r) 'flake)))
+
+;; classify-exploration-run : (listof (cons symbol? string?)) -> (listof flake-record?)
+;; Each input pair is (status . tag). Optionally accepts #:report-paths alist.
+;; Pure: produces flake-record for each result.
+(define (classify-exploration-run results #:texts [texts '()] #:report-paths [report-paths '()])
+  (for/list ([item (in-list results)])
+    (define status (car item))
+    (define tag (cdr item))
+    (define text (alist-ref-string tag texts))
+    (define indicators
+      (if text
+          (detect-flake-indicators text)
+          '()))
+    (define base-class (classify-result-status status))
+    ;; If we have indicators AND base-class is pass/partial, reclassify as flake
+    (define classification
+      (if (and (pair? indicators) (or (eq? base-class 'pass) (eq? base-class 'partial)))
+          'flake
+          base-class))
+    (define rp (alist-ref-string tag report-paths))
+    (flake-record tag status classification indicators rp)))
+
+;; alist-ref-string : string? (listof (cons string? string?)) -> (or/c string? #f)
+;; Internal helper for case-insensitive alist lookup.
+(define (alist-ref-string key alist)
+  (define found (assoc key alist))
+  (if found
+      (cdr found)
+      #f))
+
+;; central-log-entry: structured entry for centralized protocol log.
+;; timestamp: string?
+;; run-id: string?
+;; total: exact-nonnegative-integer?
+;; pass-count: exact-nonnegative-integer?
+;; partial-count: exact-nonnegative-integer?
+;; fail-count: exact-nonnegative-integer?
+;; flake-count: exact-nonnegative-integer?
+;; skip-count: exact-nonnegative-integer?
+;; incomplete-count: exact-nonnegative-integer?
+;; mode: string?
+;; records: (listof flake-record?)
+(struct central-log-entry
+        (timestamp run-id
+                   total
+                   pass-count
+                   partial-count
+                   fail-count
+                   flake-count
+                   skip-count
+                   incomplete-count
+                   mode
+                   records)
+  #:transparent)
+
+;; make-central-log-entry : (listof flake-record?) string? string? -> central-log-entry?
+;; Pure: aggregates records into a structured log entry.
+(define (make-central-log-entry records run-id mode [ts #f])
+  (define (count-class cls)
+    (for/sum ([r (in-list records)] #:when (eq? (flake-record-classification r) cls)) 1))
+  (central-log-entry (or ts (current-iso-timestamp))
+                     run-id
+                     (length records)
+                     (count-class 'pass)
+                     (count-class 'partial)
+                     (count-class 'fail)
+                     (count-class 'flake)
+                     (count-class 'skip)
+                     (count-class 'incomplete)
+                     mode
+                     records))
+
+;; current-iso-timestamp : -> string?
+(define (current-iso-timestamp)
+  (parameterize ([date-display-format 'iso-8601])
+    (date->string (current-date) #t)))
+
+;; central-log-entry->hash : central-log-entry? -> hash?
+;; Pure: converts to JSON-compatible hash (for write-json).
+(define (central-log-entry->hash entry)
+  (hasheq 'timestamp
+          (central-log-entry-timestamp entry)
+          'run_id
+          (central-log-entry-run-id entry)
+          'total
+          (central-log-entry-total entry)
+          'pass
+          (central-log-entry-pass-count entry)
+          'partial
+          (central-log-entry-partial-count entry)
+          'fail
+          (central-log-entry-fail-count entry)
+          'flake
+          (central-log-entry-flake-count entry)
+          'skip
+          (central-log-entry-skip-count entry)
+          'incomplete
+          (central-log-entry-incomplete-count entry)
+          'mode
+          (central-log-entry-mode entry)))
+
+;; write-central-log-entry! : path-string? central-log-entry? -> void?
+;; Side-effect: appends a structured JSON line to the log file.
+(define (write-central-log-entry! log-path entry)
+  (define parent
+    (let-values ([(base name dir?) (split-path (string->path log-path))])
+      (and (path? base) base)))
+  (when parent
+    (make-directory* parent))
+  (call-with-output-file log-path
+                         (lambda (out)
+                           (write-json (central-log-entry->hash entry) out)
+                           (newline out))
+                         #:exists 'append))
+
+;; parse-central-log : path-string? -> (listof hash?)
+;; Pure: reads JSONL entries from a central log file.
+(define (parse-central-log log-path)
+  (if (not (file-exists? log-path))
+      '()
+      (call-with-input-file log-path
+                            (lambda (inp)
+                              (let loop ([acc '()])
+                                (define line (read-line inp))
+                                (cond
+                                  [(eof-object? line) (reverse acc)]
+                                  [(string-contains? (string-trim line) "{")
+                                   (define parsed
+                                     (with-handlers ([exn:fail? (lambda (_) #f)])
+                                       (with-input-from-string (string-trim line)
+                                                               (lambda () (read-json)))))
+                                   (loop (if parsed
+                                             (cons parsed acc)
+                                             acc))]
+                                  [else (loop acc)]))))))
+
+;; exploration-bundle: aggregated summary of an exploration run.
+;; root-dir: string?
+;; records: (listof flake-record?)
+;; entry: (or/c central-log-entry? #f)
+;; pass-rate: flonum? (0.0–1.0)
+;; has-flakes?: boolean?
+(struct exploration-bundle (root-dir records entry pass-rate has-flakes?) #:transparent)
+
+;; make-exploration-bundle : string? (listof flake-record?) string? string? -> exploration-bundle?
+;; Pure: creates bundle with computed pass-rate and flake flag.
+(define (make-exploration-bundle root-dir records run-id mode)
+  (define entry (make-central-log-entry records run-id mode))
+  (define total (max 1 (central-log-entry-total entry)))
+  (define rate
+    (/ (+ (central-log-entry-pass-count entry) (central-log-entry-partial-count entry)) total))
+  (exploration-bundle root-dir records entry (exact->inexact rate) (flaky-run? records)))
+
+;; bundle-pass-rate : exploration-bundle? -> flonum?
+(define (bundle-pass-rate bundle)
+  (exploration-bundle-pass-rate bundle))
+
+;; bundle-has-flakes? : exploration-bundle? -> boolean?
+(define (bundle-has-flakes? bundle)
+  (exploration-bundle-has-flakes? bundle))
+
+;; render-bundle-index-markdown : exploration-bundle? -> string?
+;; Pure: renders a markdown index summarizing all scenario results.
+(define (render-bundle-index-markdown bundle)
+  (define entry (exploration-bundle-entry bundle))
+  (define records (exploration-bundle-records bundle))
+  (string-append
+   (format "# Exploration bundle index\n\n")
+   (format "**Root:** `~a`\n" (exploration-bundle-root-dir bundle))
+   (format "**Run ID:** `~a`\n" (central-log-entry-run-id entry))
+   (format "**Mode:** `~a`\n" (central-log-entry-mode entry))
+   (format "**Pass rate:** ~a% (~a/~a)\n\n"
+           (real->decimal-string (* 100 (exploration-bundle-pass-rate bundle)) 1)
+           (+ (central-log-entry-pass-count entry) (central-log-entry-partial-count entry))
+           (central-log-entry-total entry))
+   (format "| Tag | Status | Classification | Flake? | Report |\n")
+   (format "|-----|--------|----------------|--------|--------|\n")
+   (apply string-append
+          (for/list ([r (in-list records)])
+            (format "| ~a | ~a | ~a | ~a | ~a |\n"
+                    (flake-record-tag r)
+                    (flake-record-status r)
+                    (flake-record-classification r)
+                    (if (pair? (flake-record-flake-indicators r)) "⚠️" "")
+                    (or (flake-record-report-path r) ""))))
+   (if (exploration-bundle-has-flakes? bundle)
+       (format "\n> ⚠️ **Flaky scenarios detected** — ~a record(s) classified as flake.\n"
+               (central-log-entry-flake-count entry))
+       "")))
 
 ;; ============================================================
 ;; tmux command execution (internal)

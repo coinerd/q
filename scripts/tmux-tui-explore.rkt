@@ -144,7 +144,8 @@
     [(memory)
      '(("completion" . "structured trace completion: stream.turn.completed")
        ("context" . "blue-harbor retained as session context only")
-       ("durability" . "not claimed"))]
+       ("durability" . "not claimed")
+       ("classification" . "W9: classify-result-status maps status to pass/partial/flake/etc."))]
     [(gsd)
      '(("completion" . "mock turn completed")
        ("waves" . "W0/W1 with gates")
@@ -179,7 +180,8 @@
        ("retrieval-trace" . "W7: memory.retrieval.performed phase in trace.jsonl")
        ("restart-trace" . "W7: session.started with reason resume in trace.jsonl")
        ("roundtrip" . "W7: verify-durable-memory-roundtrip checks store+restart+retrieval")
-       ("truth" . "trace evidence required, not prose"))]
+       ("truth" . "trace evidence required, not prose")
+       ("reporting" . "W9: render-bundle-index-markdown generates structured summary table"))]
     [else '(("completion" . "mock turn completed"))]))
 
 (define (scenario-status mode scenario)
