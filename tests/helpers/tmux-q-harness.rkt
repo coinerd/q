@@ -138,6 +138,28 @@
          parse-durable-memory-roundtrip
          verify-durable-memory-roundtrip
 
+         ;; GSD lifecycle evidence (W8)
+         gsd-event-phases
+         gsd-trace-entry?
+         find-gsd-events
+         (struct-out gsd-transition-record)
+         (struct-out gsd-wave-record)
+         (struct-out gsd-plan-record)
+         parse-gsd-transition-event
+         parse-gsd-wave-event
+         parse-gsd-plan-event
+         (struct-out gsd-lifecycle-info)
+         parse-gsd-lifecycle
+         verify-gsd-transition-succeeded
+
+         ;; Release/audit truthfulness (W8)
+         release-refusal-patterns
+         (struct-out release-evidence)
+         detect-release-authorization-refusal
+         find-release-manifest
+         verify-release-manifest-present!
+         verify-release-authorization-refused!
+
          ;; Approval-prompt-specific automation
          detect-approval-prompt
          parse-approval-prompt
@@ -1213,6 +1235,268 @@
 ;; at least one store, one restart (resume), and one retrieval.
 (define (verify-durable-memory-roundtrip info)
   (durable-memory-roundtrip-roundtrip-complete? info))
+
+;; ============================================================
+;; GSD lifecycle evidence (W8)
+;; ============================================================
+
+;; GSD event phases emitted by trace.jsonl.
+(define gsd-event-phases
+  '("gsd.mode.changed" "gsd.transition.attempted"
+                       "gsd.transition.succeeded"
+                       "gsd.transition.failed"
+                       "gsd.wave.started"
+                       "gsd.wave.completed"
+                       "gsd.wave.failed"
+                       "gsd.wave.skipped"
+                       "gsd.plan.parsed"
+                       "gsd.plan.validated"
+                       "gsd.plan.normalized"
+                       "gsd.plan.archived"
+                       "gsd.command.received"
+                       "gsd.command.completed"
+                       "gsd.guard.blocked"
+                       "gsd.guard.allowed"))
+
+;; gsd-transition-record: parsed gsd.transition.* event.
+;; outcome: symbol? — 'attempted, 'succeeded, 'failed
+;; from-state: (or/c string? symbol? #f)
+;; to-state: (or/c string? symbol? #f)
+;; reason: (or/c string? #f) — only for failed transitions
+;; turn-id: (or/c string? #f)
+;; entry: hash?
+(struct gsd-transition-record (outcome from-state to-state reason turn-id entry) #:transparent)
+
+;; gsd-wave-record: parsed gsd.wave.* event.
+;; outcome: symbol? — 'started, 'completed, 'failed, 'skipped
+;; wave: (or/c string? #f)
+;; error: (or/c string? #f) — only for failed waves
+;; reason: (or/c string? #f) — only for skipped waves
+;; turn-id: (or/c string? #f)
+;; entry: hash?
+(struct gsd-wave-record (outcome wave error reason turn-id entry) #:transparent)
+
+;; gsd-plan-record: parsed gsd.plan.* event.
+;; operation: symbol? — 'parsed, 'validated, 'normalized, 'archived
+;; wave-count: exact-nonnegative-integer?
+;; valid?: (or/c boolean? #f) — only for validated
+;; error-count: exact-nonnegative-integer? — only for validated
+;; path: (or/c string? #f) — only for archived
+;; turn-id: (or/c string? #f)
+;; entry: hash?
+(struct gsd-plan-record (operation wave-count valid? error-count path turn-id entry) #:transparent)
+
+;; gsd-lifecycle-info: structured summary of GSD events.
+;; transitions: (listof gsd-transition-record?)
+;; waves: (listof gsd-wave-record?)
+;; plan-ops: (listof gsd-plan-record?)
+;; guard-events: (listof hash?)
+;; command-events: (listof hash?)
+;; total-gsd-events: exact-nonnegative-integer?
+;; has-transition-succeeded?: boolean?
+;; has-wave-completed?: boolean?
+(struct gsd-lifecycle-info
+        (transitions waves
+                     plan-ops
+                     guard-events
+                     command-events
+                     total-gsd-events
+                     has-transition-succeeded?
+                     has-wave-completed?)
+  #:transparent)
+
+;; gsd-trace-entry? : hash? -> boolean?
+;; Pure: checks if a trace entry is a GSD event.
+(define (gsd-trace-entry? entry)
+  (define phase (trace-entry-phase entry))
+  (and phase (if (member phase gsd-event-phases) #t #f)))
+
+;; find-gsd-events : (or/c path-string? tmux-q-session?) -> (listof hash?)
+;; Finds all GSD events in a session's trace.jsonl files.
+(define (find-gsd-events session-dir-or-sess)
+  (define session-dir
+    (if (tmux-q-session? session-dir-or-sess)
+        (tmux-q-session-session-dir session-dir-or-sess)
+        session-dir-or-sess))
+  (for*/list ([trace-path (in-list (find-trace-jsonl-paths session-dir))]
+              [entry (in-list (read-trace-events trace-path))]
+              #:when (gsd-trace-entry? entry))
+    entry))
+
+;; parse-gsd-transition-event : hash? -> gsd-transition-record?
+;; Pure: parses a gsd.transition.* trace entry.
+(define (parse-gsd-transition-event entry)
+  (define phase (or (trace-entry-phase entry) ""))
+  (define outcome
+    (cond
+      [(string-contains? phase "succeeded") 'succeeded]
+      [(string-contains? phase "failed") 'failed]
+      [else 'attempted]))
+  (define data (trace-entry-data entry))
+  (gsd-transition-record outcome
+                         (data-ref data '(from "from" from-state) #f)
+                         (data-ref data '(to "to" to-state) #f)
+                         (data-ref data '(reason "reason") #f)
+                         (trace-entry-turn-id entry)
+                         entry))
+
+;; parse-gsd-wave-event : hash? -> gsd-wave-record?
+;; Pure: parses a gsd.wave.* trace entry.
+(define (parse-gsd-wave-event entry)
+  (define phase (or (trace-entry-phase entry) ""))
+  (define outcome
+    (cond
+      [(string-contains? phase "completed") 'completed]
+      [(string-contains? phase "failed") 'failed]
+      [(string-contains? phase "skipped") 'skipped]
+      [else 'started]))
+  (define data (trace-entry-data entry))
+  (gsd-wave-record outcome
+                   (data-ref data '(wave "wave" wave-id) #f)
+                   (data-ref data '(error "error") #f)
+                   (data-ref data '(reason "reason") #f)
+                   (trace-entry-turn-id entry)
+                   entry))
+
+;; parse-gsd-plan-event : hash? -> gsd-plan-record?
+;; Pure: parses a gsd.plan.* trace entry.
+(define (parse-gsd-plan-event entry)
+  (define phase (or (trace-entry-phase entry) ""))
+  (define operation
+    (cond
+      [(string-contains? phase "parsed") 'parsed]
+      [(string-contains? phase "validated") 'validated]
+      [(string-contains? phase "normalized") 'normalized]
+      [(string-contains? phase "archived") 'archived]
+      [else 'unknown]))
+  (define data (trace-entry-data entry))
+  (gsd-plan-record operation
+                   (data-ref data '(wave-count "wave-count") 0)
+                   (data-ref data '(valid? "valid?") #f)
+                   (data-ref data '(error-count "error-count") 0)
+                   (data-ref data '(path "path") #f)
+                   (trace-entry-turn-id entry)
+                   entry))
+
+;; parse-gsd-lifecycle : (or/c path-string? tmux-q-session?) -> gsd-lifecycle-info?
+;; Parses all GSD events to produce a structured lifecycle summary.
+(define (parse-gsd-lifecycle session-dir-or-sess)
+  (define session-dir
+    (if (tmux-q-session? session-dir-or-sess)
+        (tmux-q-session-session-dir session-dir-or-sess)
+        session-dir-or-sess))
+  (define gsd-events (find-gsd-events session-dir))
+  (define transitions
+    (for/list ([e (in-list gsd-events)]
+               #:when (string-contains? (or (trace-entry-phase e) "") "transition"))
+      (parse-gsd-transition-event e)))
+  (define waves
+    (for/list ([e (in-list gsd-events)]
+               #:when (string-contains? (or (trace-entry-phase e) "") "wave"))
+      (parse-gsd-wave-event e)))
+  (define plan-ops
+    (for/list ([e (in-list gsd-events)]
+               #:when (string-contains? (or (trace-entry-phase e) "") "plan"))
+      (parse-gsd-plan-event e)))
+  (define guard-events
+    (for/list ([e (in-list gsd-events)]
+               #:when (string-contains? (or (trace-entry-phase e) "") "guard"))
+      e))
+  (define command-events
+    (for/list ([e (in-list gsd-events)]
+               #:when (string-contains? (or (trace-entry-phase e) "") "command"))
+      e))
+  (define has-transition-succeeded?
+    (for/or ([t (in-list transitions)])
+      (eq? (gsd-transition-record-outcome t) 'succeeded)))
+  (define has-wave-completed?
+    (for/or ([w (in-list waves)])
+      (eq? (gsd-wave-record-outcome w) 'completed)))
+  (gsd-lifecycle-info transitions
+                      waves
+                      plan-ops
+                      guard-events
+                      command-events
+                      (length gsd-events)
+                      has-transition-succeeded?
+                      has-wave-completed?))
+
+;; verify-gsd-transition-succeeded : gsd-lifecycle-info? (or/c string? symbol?) (or/c string? symbol?) -> boolean?
+;; Pure: verifies that a transition from-state → to-state succeeded.
+(define (verify-gsd-transition-succeeded info from-state to-state)
+  (define from-str
+    (if (symbol? from-state)
+        (symbol->string from-state)
+        from-state))
+  (define to-str
+    (if (symbol? to-state)
+        (symbol->string to-state)
+        to-state))
+  (for/or ([t (in-list (gsd-lifecycle-info-transitions info))])
+    (and (eq? (gsd-transition-record-outcome t) 'succeeded)
+         (equal? (let ([f (gsd-transition-record-from-state t)])
+                   (if (symbol? f)
+                       (symbol->string f)
+                       f))
+                 from-str)
+         (equal? (let ([tt (gsd-transition-record-to-state t)])
+                   (if (symbol? tt)
+                       (symbol->string tt)
+                       tt))
+                 to-str))))
+
+;; ============================================================
+;; Release/audit truthfulness (W8)
+;; ============================================================
+
+;; Patterns indicating release authorization was refused.
+(define release-refusal-patterns
+  '("refused without live CI" "release is not authorized"
+                              "not authorized"
+                              "insufficient evidence"
+                              "release-manifest.json is required"
+                              "CI evidence is required"
+                              "cannot authorize release"))
+
+;; release-evidence: structured release/audit evidence.
+;; has-manifest?: boolean?
+;; manifest-path: (or/c path-string? #f)
+;; authorization-refused?: boolean?
+;; refusal-snippet: (or/c string? #f)
+;; source-text: string?
+(struct release-evidence
+        (has-manifest? manifest-path authorization-refused? refusal-snippet source-text)
+  #:transparent)
+
+;; detect-release-authorization-refusal : string? -> (or/c string? #f)
+;; Pure: returns the first matching refusal pattern, or #f.
+(define (detect-release-authorization-refusal text)
+  (for/or ([pat (in-list release-refusal-patterns)])
+    (and (string-contains? text pat) pat)))
+
+;; find-release-manifest : path-string? -> (or/c path-string? #f)
+;; Pure: checks for release-manifest.json in the given directory.
+(define (find-release-manifest project-dir)
+  (define candidate (build-path project-dir "release-manifest.json"))
+  (if (file-exists? candidate)
+      (path->string candidate)
+      #f))
+
+;; verify-release-manifest-present! : path-string? -> void?
+;; Side-effect: fails if release-manifest.json is not present.
+(define (verify-release-manifest-present! project-dir)
+  (unless (find-release-manifest project-dir)
+    (raise-user-error 'verify-release-manifest-present!
+                      "release-manifest.json not found in ~a"
+                      project-dir)))
+
+;; verify-release-authorization-refused! : string? -> void?
+;; Pure assertion: fails if text does not contain a refusal pattern.
+(define (verify-release-authorization-refused! text)
+  (define refusal (detect-release-authorization-refusal text))
+  (unless refusal
+    (raise-user-error 'verify-release-authorization-refused!
+                      "no release-authorization refusal pattern found in captured text")))
 
 ;; ============================================================
 ;; tmux command execution (internal)
