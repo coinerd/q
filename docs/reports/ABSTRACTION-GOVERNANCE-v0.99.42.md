@@ -1,12 +1,12 @@
-# Abstraction Governance — v0.99.43
+# Abstraction Governance — v0.99.44
 
 **Date:** 2026-06-24
-**Milestone:** v0.99.43 (#829)
+**Milestone:** v0.99.44 (#829)
 **Predecessor:** v0.99.41 (Release Smoke CI Actions Truth Remediation)
 
 ## Executive Summary
 
-v0.99.43 was an abstraction-governance milestone focused on making
+v0.99.44 was an abstraction-governance milestone focused on making
 abstraction quality durable without destabilizing the now-green
 release/CI pipeline. The work targeted high-risk boundary code
 in release tooling, CI classification, and milestone gating.

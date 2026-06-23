@@ -1,13 +1,13 @@
-# AUDIT v0.99.43 IN-DEPTH — Tmux Real-Life q Testing
+# AUDIT v0.99.44 IN-DEPTH — Tmux Real-Life q Testing
 
 **Date:** 2026-06-25
-**Milestone:** #830 (v0.99.43)
+**Milestone:** #830 (v0.99.44)
 **Status:** COMPLETE
-**Version:** 0.99.43
+**Version:** 0.99.44
 
 ## Executive Summary
 
-The v0.99.43 milestone delivered a comprehensive tmux-based real-life testing
+The v0.99.44 milestone delivered a comprehensive tmux-based real-life testing
 harness for q's TUI mode. The harness provides a full API for launching q --tui
 inside tmux sessions, interacting via terminal commands, capturing pane output,
 and verifying session artifacts — all without requiring API keys or network
@@ -129,7 +129,7 @@ tests/helpers/tmux-q-harness.rkt
 
 - Smoke gate: 286/286 tests pass (unchanged from v0.99.42 baseline)
 - No source code changes to q itself — all additions are test/script files
-- Version bumped 0.99.42 → 0.99.43 with all references synced
+- Version bumped 0.99.42 → 0.99.44 with all references synced
 - No RED modules modified
 
 ## Carry-Forward Items
@@ -138,7 +138,7 @@ None. All milestone objectives met.
 
 ## Conclusion
 
-The v0.99.43 milestone successfully delivered a production-grade tmux testing
+The v0.99.44 milestone successfully delivered a production-grade tmux testing
 harness for q's TUI mode. The harness is reusable, well-documented, and provides
 comprehensive coverage of real-life TUI scenarios. The opt-in design ensures it
 never destabilizes CI pipelines.
