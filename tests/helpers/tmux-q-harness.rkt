@@ -71,6 +71,10 @@
          text-found-in?
          make-session-name
 
+         ;; Artifact discovery
+         find-session-subdirs
+         find-first-session-subdir
+
          ;; Pure functions (for unit testing)
          normalize-pane-output
          build-tmux-new-session-command
@@ -309,6 +313,28 @@
 (define (make-session-name)
   ;; tmux session names must not contain '.' or ':' — use exact integer
   (format "q-test-~a" (current-milliseconds)))
+
+;; ============================================================
+;; Artifact discovery
+;; ============================================================
+
+;; find-session-subdirs : path-string? -> (listof string?)
+;; Returns sorted list of subdirectory paths under the given session-dir.
+;; These are the session-id directories q creates (e.g. 01KVSHZK79Y5J42EJHHX38G27D).
+(define (find-session-subdirs session-dir-path)
+  (with-handlers ([exn:fail? (lambda (e) '())])
+    (if (directory-exists? session-dir-path)
+        (sort (for/list ([entry (in-list (directory-list session-dir-path))]
+                         #:when (directory-exists? (build-path session-dir-path entry)))
+                (path->string (build-path session-dir-path entry)))
+              string<?)
+        '())))
+
+;; find-first-session-subdir : path-string? -> (or/c #f string?)
+;; Returns the first session subdirectory path, or #f if none exist.
+(define (find-first-session-subdir session-dir-path)
+  (define subs (find-session-subdirs session-dir-path))
+  (and (pair? subs) (car subs)))
 
 ;; ============================================================
 ;; tmux command execution (internal)
