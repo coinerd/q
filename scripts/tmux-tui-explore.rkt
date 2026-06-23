@@ -166,21 +166,25 @@
        ("required" . "release-manifest.json"))]
     [(durable-memory)
      '(("completion" . "mock turn completed")
-       ("status" . "unsupported until restart round-trip exists")
-       ("truth" . "one-session context is not durable memory"))]
+       ("status" . "W7: durable-memory-roundtrip helpers available")
+       ("store-trace" . "W7: memory.item.stored phase in trace.jsonl")
+       ("retrieval-trace" . "W7: memory.retrieval.performed phase in trace.jsonl")
+       ("restart-trace" . "W7: session.started with reason resume in trace.jsonl")
+       ("roundtrip" . "W7: verify-durable-memory-roundtrip checks store+restart+retrieval")
+       ("truth" . "trace evidence required, not prose"))]
     [else '(("completion" . "mock turn completed"))]))
 
 (define (scenario-status mode scenario)
   (cond
     [(eq? mode 'mock) (explore-scenario-expected-status scenario)]
-    [(equal? (explore-scenario-tag scenario) "durable-memory") 'unsupported-until-w7]
+    [(equal? (explore-scenario-tag scenario) "durable-memory") 'pass-mock-tui-with-caveat]
     [else 'requires-real-provider-run]))
 
 (define (scenario-classification status)
   (case status
     [(pass-mock-tui) 'pass]
     [(pass-mock-tui-with-caveat pass-mock-tui-partial) 'partial]
-    [(unsupported-until-w7) 'unsupported]
+    [(unsupported-until-w7 unsupported) 'unsupported]
     [(requires-real-provider-run) 'pending-real-run]
     [else 'unknown]))
 
