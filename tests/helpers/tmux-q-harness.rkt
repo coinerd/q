@@ -53,6 +53,7 @@
          ;; Interaction
          send-line!
          send-key!
+         resize-session!
 
          ;; Capture
          capture-pane
@@ -438,6 +439,14 @@
   (define-values (status _) (run-tmux-command cmd))
   (unless (eq? status 0)
     (error 'send-key! "tmux send-keys failed with status ~a" status)))
+
+;; resize-session! : tmux-q-session? exact-nonnegative-integer? exact-nonnegative-integer? -> void?
+;; Resize the tmux window to the given cols x rows.
+(define (resize-session! sess cols rows)
+  (define cmd (build-tmux-resize-command (tmux-q-session-name sess) cols rows))
+  (define-values (status _) (run-tmux-command cmd))
+  (unless (eq? status 0)
+    (error 'resize-session! "tmux resize-window failed with status ~a" status)))
 
 ;; ============================================================
 ;; Capture
