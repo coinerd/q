@@ -376,3 +376,146 @@
   (check-true (if (member 'write dangerous-capabilities) #t #f))
   (check-true (if (member 'edit dangerous-capabilities) #t #f))
   (check-true (if (member 'kill dangerous-capabilities) #t #f)))
+
+;; ============================================================
+;; Tool-execution trace verification tests (W5)
+;; ============================================================
+
+(test-case "tool-execution-phases includes key lifecycle events"
+  (check-true (if (member "tool.call.started" tool-execution-phases) #t #f))
+  (check-true (if (member "tool.execution.started" tool-execution-phases) #t #f))
+  (check-true (if (member "tool.execution.completed" tool-execution-phases) #t #f)))
+
+(test-case "trace-entry-data extracts data payload"
+  (define entry (hasheq 'phase "tool.execution.started" 'data (hasheq 'toolName "read")))
+  (define data (trace-entry-data entry))
+  (check-true (hash? data))
+  (check-equal? (hash-ref data 'toolName) "read"))
+
+(test-case "trace-entry-data returns #f for entries without data"
+  (define entry (hasheq 'phase "turn.completed"))
+  (check-false (trace-entry-data entry)))
+
+(test-case "trace-entry-tool-name extracts toolName from data"
+  (define entry (hasheq 'phase "tool.execution.started" 'data (hasheq 'toolName "read")))
+  (check-equal? (trace-entry-tool-name entry) "read"))
+
+(test-case "trace-entry-tool-name handles kebab-case key"
+  (define entry (hasheq 'phase "tool.execution.started" 'data (hasheq 'tool-name "bash")))
+  (check-equal? (trace-entry-tool-name entry) "bash"))
+
+(test-case "trace-entry-tool-name handles 'name key from stream events"
+  (define entry (hasheq 'phase "tool.call.started" 'data (hasheq 'name "grep")))
+  (check-equal? (trace-entry-tool-name entry) "grep"))
+
+(test-case "trace-entry-tool-name returns #f when no data"
+  (define entry (hasheq 'phase "turn.completed"))
+  (check-false (trace-entry-tool-name entry)))
+
+(test-case "tool-execution-trace-entry? recognizes tool events"
+  (define entry (hasheq 'phase "tool.execution.started" 'data (hasheq 'toolName "read")))
+  (check-true (tool-execution-trace-entry? entry)))
+
+(test-case "tool-execution-trace-entry? rejects non-tool events"
+  (define entry (hasheq 'phase "turn.completed"))
+  (check-false (tool-execution-trace-entry? entry)))
+
+(test-case "tool-execution-trace-entry? filters by tool-name"
+  (define entry (hasheq 'phase "tool.execution.started" 'data (hasheq 'toolName "read")))
+  (check-true (tool-execution-trace-entry? entry #:tool-name "read"))
+  (check-false (tool-execution-trace-entry? entry #:tool-name "bash")))
+
+(test-case "parse-tool-events converts trace entries to tool-info"
+  ;; Create a temp dir with a fake trace.jsonl
+  (with-temp-dir
+   (lambda (dir)
+     (define session-sub (build-path dir "session-123"))
+     (make-directory* session-sub)
+     (call-with-output-file
+      (build-path session-sub "trace.jsonl")
+      (lambda (out)
+        (write-json
+         (hasheq 'phase "tool.execution.started" 'turnId "t1" 'data (hasheq 'toolName "read"))
+         out)
+        (newline out)
+        (write-json (hasheq 'phase
+                            "tool.execution.completed"
+                            'turnId
+                            "t1"
+                            'data
+                            (hasheq 'toolName "read" 'duration-ms 100))
+                    out)
+        (newline out)
+        (write-json (hasheq 'phase "turn.completed" 'turnId "t1") out)
+        (newline out))
+      #:exists 'replace)
+     (define events (parse-tool-events (path->string dir)))
+     (check-equal? (length events) 2)
+     (check-equal? (tool-info-phase (car events)) "tool.execution.started")
+     (check-equal? (tool-info-tool-name (car events)) "read")
+     (check-equal? (tool-info-phase (cadr events)) "tool.execution.completed"))))
+
+(test-case "compute-file-fingerprint is stable for unchanged files"
+  (with-temp-dir
+   (lambda (dir)
+     (define f (build-path dir "test.txt"))
+     (call-with-output-file f (lambda (out) (display "hello world" out)) #:exists 'replace)
+     (define fp1 (compute-file-fingerprint f))
+     (define fp2 (compute-file-fingerprint f))
+     (check-equal? fp1 fp2))))
+
+(test-case "compute-file-fingerprint changes when file is modified"
+  (with-temp-dir
+   (lambda (dir)
+     (define f (build-path dir "test.txt"))
+     (call-with-output-file f (lambda (out) (display "hello world" out)) #:exists 'replace)
+     (define fp1 (compute-file-fingerprint f))
+     (call-with-output-file f (lambda (out) (display "MODIFIED CONTENT" out)) #:exists 'replace)
+     (define fp2 (compute-file-fingerprint f))
+     (check-false (equal? fp1 fp2)))))
+
+(test-case "verify-file-unchanged! passes for identical file"
+  (with-temp-dir (lambda (dir)
+                   (define f (build-path dir "test.txt"))
+                   (call-with-output-file f (lambda (out) (display "content" out)) #:exists 'replace)
+                   (define fp (compute-file-fingerprint f))
+                   (verify-file-unchanged! f fp))))
+
+(test-case "verify-file-unchanged! fails for modified file"
+  (with-temp-dir (lambda (dir)
+                   (define f (build-path dir "test.txt"))
+                   (call-with-output-file f (lambda (out) (display "original" out)) #:exists 'replace)
+                   (define fp (compute-file-fingerprint f))
+                   (call-with-output-file f (lambda (out) (display "changed" out)) #:exists 'replace)
+                   (check-exn #rx"file was modified" (lambda () (verify-file-unchanged! f fp))))))
+
+(test-case "detect-sensitive-leak detects bearer tokens"
+  (check-true (detect-sensitive-leak "Authorization: Bearer abc123secretkey")))
+
+(test-case "detect-sensitive-leak detects API keys"
+  (check-true (detect-sensitive-leak "key=sk-proj123abc456def789")))
+
+(test-case "detect-sensitive-leak ignores already-redacted content"
+  (check-false (detect-sensitive-leak "Authorization: Bearer <REDACTED>")))
+
+(test-case "detect-sensitive-leak returns #f for clean text"
+  (check-false (detect-sensitive-leak "just normal text without secrets")))
+
+(test-case "detect-sensitive-leak returns #f for empty string"
+  (check-false (detect-sensitive-leak "")))
+
+(test-case "verify-artifact-redacted! passes for clean artifact"
+  (with-temp-dir
+   (lambda (dir)
+     (define f (build-path dir "artifact.txt"))
+     (call-with-output-file f (lambda (out) (display "clean content" out)) #:exists 'replace)
+     (verify-artifact-redacted! f))))
+
+(test-case "verify-artifact-redacted! fails for leaked bearer token"
+  (with-temp-dir
+   (lambda (dir)
+     (define f (build-path dir "artifact.txt"))
+     (call-with-output-file f
+                            (lambda (out) (display "Authorization: Bearer secretkey123" out))
+                            #:exists 'replace)
+     (check-exn #rx"un-redacted sensitive content" (lambda () (verify-artifact-redacted! f))))))
