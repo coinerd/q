@@ -68,6 +68,7 @@
                    (define md (file->string (explore-result-report-path result)))
                    (check-true (string-contains? md "README_FIXTURE_ALPHA"))
                    (check-true (string-contains? md "credential-like values are redacted"))
+                   (check-true (string-contains? md "trace.jsonl turn.completed"))
                    (define rows (call-with-input-file (build-path dir "summary.json") read-json))
                    (check-equal? (length rows) 1)
                    (check-equal? (hash-ref (car rows) 'tag) "tools"))))

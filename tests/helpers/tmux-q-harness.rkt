@@ -24,7 +24,8 @@
 ;;   - Cleanup in dynamic-wind
 ;;   - No real credentials, no network
 
-(require racket/file
+(require json
+         racket/file
          racket/string
          racket/format
          racket/list
@@ -75,6 +76,15 @@
          ;; Artifact discovery
          find-session-subdirs
          find-first-session-subdir
+
+         ;; Structured trace/event completion
+         find-trace-jsonl-paths
+         read-trace-events
+         trace-entry-phase
+         trace-entry-turn-id
+         turn-completion-trace-entry?
+         latest-turn-completion-event
+         wait-for-turn-completion-event
 
          ;; Pure functions (for unit testing)
          normalize-pane-output
@@ -336,6 +346,89 @@
 (define (find-first-session-subdir session-dir-path)
   (define subs (find-session-subdirs session-dir-path))
   (and (pair? subs) (car subs)))
+
+;; ============================================================
+;; Structured trace/event completion
+;; ============================================================
+
+(define completion-phases
+  '("turn.completed" "stream.turn.completed" "turn.cancelled" "stream.turn.cancelled"))
+
+(define (->phase-string v)
+  (cond
+    [(symbol? v) (symbol->string v)]
+    [(string? v) v]
+    [else #f]))
+
+(define (hash-ref/keys h keys [default #f])
+  (let loop ([keys keys])
+    (cond
+      [(null? keys) default]
+      [(hash-has-key? h (car keys)) (hash-ref h (car keys))]
+      [else (loop (cdr keys))])))
+
+(define (find-trace-jsonl-paths session-dir-path)
+  (with-handlers ([exn:fail? (lambda (_e) '())])
+    (sort (for/list ([subdir (in-list (find-session-subdirs session-dir-path))]
+                     #:do [(define trace-path (build-path subdir "trace.jsonl"))]
+                     #:when (file-exists? trace-path))
+            (path->string trace-path))
+          string<?)))
+
+(define (read-trace-events trace-path)
+  (with-handlers ([exn:fail? (lambda (_e) '())])
+    (if (file-exists? trace-path)
+        (call-with-input-file trace-path
+                              (lambda (in)
+                                (let loop ([acc '()])
+                                  (define line (read-line in 'any))
+                                  (cond
+                                    [(eof-object? line) (reverse acc)]
+                                    [(string=? (string-trim line) "") (loop acc)]
+                                    [else
+                                     (define parsed
+                                       (with-handlers ([exn:fail? (lambda (_e) #f)])
+                                         (string->jsexpr line)))
+                                     (loop (if (hash? parsed)
+                                               (cons parsed acc)
+                                               acc))]))))
+        '())))
+
+(define (trace-entry-phase entry)
+  (and (hash? entry) (->phase-string (hash-ref/keys entry '(phase "phase") #f))))
+
+(define (trace-entry-turn-id entry)
+  (and (hash? entry) (hash-ref/keys entry '(turnId "turnId" turn-id "turn-id") #f)))
+
+(define (turn-completion-trace-entry? entry #:turn-id [turn-id #f])
+  (define phase (trace-entry-phase entry))
+  (define entry-turn-id (trace-entry-turn-id entry))
+  (and phase
+       (if (member phase completion-phases) #t #f)
+       (or (not turn-id) (equal? entry-turn-id turn-id))))
+
+(define (latest-turn-completion-event session-dir-path #:turn-id [turn-id #f])
+  (define matches
+    (for*/list ([trace-path (in-list (find-trace-jsonl-paths session-dir-path))]
+                [entry (in-list (read-trace-events trace-path))]
+                #:when (turn-completion-trace-entry? entry #:turn-id turn-id))
+      entry))
+  (and (pair? matches) (last matches)))
+
+(define (wait-for-turn-completion-event sess
+                                        #:turn-id [turn-id #f]
+                                        #:timeout-ms [timeout-ms 30000]
+                                        #:poll-ms [poll-ms 250])
+  (define found #f)
+  (define ok?
+    (wait-for-predicate
+     sess
+     (lambda ()
+       (set! found (latest-turn-completion-event (tmux-q-session-session-dir sess) #:turn-id turn-id))
+       found)
+     #:timeout-ms timeout-ms
+     #:poll-ms poll-ms))
+  (and ok? found))
 
 ;; ============================================================
 ;; tmux command execution (internal)

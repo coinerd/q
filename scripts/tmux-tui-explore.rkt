@@ -142,7 +142,7 @@
 (define (scenario->mock-evidence scenario)
   (case (string->symbol (explore-scenario-tag scenario))
     [(memory)
-     '(("completion" . "mock turn completed")
+     '(("completion" . "structured trace completion: stream.turn.completed")
        ("context" . "blue-harbor retained as session context only")
        ("durability" . "not claimed"))]
     [(gsd)
@@ -203,6 +203,7 @@
    "real-provider mode is explicit opt-in only\n"
    "temp HOME/project isolation required for real mode\n"
    "credential-like values are redacted before report writing\n"
+   "automation should wait for trace.jsonl turn.completed or stream.turn.completed, not visible q>\n"
    "```\n"))
 
 (define (safe-file-tag tag)
