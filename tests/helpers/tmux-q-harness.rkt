@@ -121,6 +121,23 @@
          verify-subagent-spawn-lifecycle
          detect-mas-coordination-events
 
+         ;; Durable memory restart round-trip (W7)
+         memory-event-phases
+         session-lifecycle-phases
+         memory-trace-entry?
+         session-lifecycle-trace-entry?
+         find-memory-events
+         find-session-lifecycle-events
+         (struct-out memory-store-record)
+         (struct-out memory-retrieval-record)
+         (struct-out session-lifecycle-record)
+         parse-memory-store-event
+         parse-memory-retrieval-event
+         parse-session-start-event
+         (struct-out durable-memory-roundtrip)
+         parse-durable-memory-roundtrip
+         verify-durable-memory-roundtrip
+
          ;; Approval-prompt-specific automation
          detect-approval-prompt
          parse-approval-prompt
@@ -983,6 +1000,219 @@
 (define (detect-mas-coordination-events info)
   (remove-duplicates (for/list ([e (in-list (mas-lifecycle-info-coordination-events info))])
                        (or (trace-entry-phase e) ""))))
+
+;; ============================================================
+;; Durable memory restart round-trip (W7)
+;; ============================================================
+
+;; Memory event phases that appear in trace.jsonl.
+(define memory-event-phases
+  '("memory.item.store.requested" "memory.item.stored"
+                                  "memory.item.deleted"
+                                  "memory.item.updated"
+                                  "memory.retrieval.performed"
+                                  "memory.policy.blocked"
+                                  "memory.backend.unavailable"))
+
+;; Session lifecycle phases relevant to durable memory round-trip.
+(define session-lifecycle-phases
+  '("session.started" "session.shutdown"
+                      "session.closed"
+                      "session.fork.completed"
+                      "session.fork.failed"
+                      "session.compact.completed"
+                      "session.compact.failed"))
+
+;; memory-store-record: parsed memory.item.stored event.
+;; memory-id: string?
+;; mem-type: string?
+;; scope: string?
+;; source: (or/c string? symbol?)
+;; redacted-snippet: string?
+;; turn-id: (or/c string? #f)
+;; entry: hash?
+(struct memory-store-record (memory-id mem-type scope source redacted-snippet turn-id entry)
+  #:transparent)
+
+;; memory-retrieval-record: parsed memory.retrieval.performed event.
+;; query-snippet: string?
+;; result-count: exact-nonnegative-integer?
+;; query-limit: exact-nonnegative-integer?
+;; scope: (or/c string? #f)
+;; latency-ms: exact-nonnegative-integer?
+;; turn-id: (or/c string? #f)
+;; entry: hash?
+(struct memory-retrieval-record
+        (query-snippet result-count query-limit scope latency-ms turn-id entry)
+  #:transparent)
+
+;; session-lifecycle-record: parsed session.started/shutdown event.
+;; phase: string?
+;; reason: (or/c symbol? string? #f) — new/resume/fork/shutdown
+;; previous-session-id: (or/c string? #f)
+;; session-dir: (or/c string? #f)
+;; turn-id: (or/c string? #f)
+;; entry: hash?
+(struct session-lifecycle-record (phase reason previous-session-id session-dir turn-id entry)
+  #:transparent)
+
+;; durable-memory-roundtrip: structured summary of a memory round-trip.
+;; store-events: (listof memory-store-record?)
+;; retrieval-events: (listof memory-retrieval-record?)
+;; session-events: (listof session-lifecycle-record?)
+;; has-store?: boolean? — at least one memory.item.stored
+;; has-retrieval?: boolean? — at least one memory.retrieval.performed
+;; has-restart?: boolean? — session.started with reason 'resume
+;; roundtrip-complete?: boolean? — store → restart → retrieval cycle present
+(struct durable-memory-roundtrip
+        (store-events retrieval-events
+                      session-events
+                      has-store?
+                      has-retrieval?
+                      has-restart?
+                      roundtrip-complete?)
+  #:transparent)
+
+;; memory-trace-entry? : hash? -> boolean?
+;; Pure: checks if a trace entry is a memory event.
+(define (memory-trace-entry? entry)
+  (define phase (trace-entry-phase entry))
+  (and phase (if (member phase memory-event-phases) #t #f)))
+
+;; session-lifecycle-trace-entry? : hash? -> boolean?
+;; Pure: checks if a trace entry is a session lifecycle event.
+(define (session-lifecycle-trace-entry? entry)
+  (define phase (trace-entry-phase entry))
+  (and phase (if (member phase session-lifecycle-phases) #t #f)))
+
+;; find-memory-events : (or/c path-string? tmux-q-session?) -> (listof hash?)
+;; Finds all memory events in a session's trace.jsonl files.
+(define (find-memory-events session-dir-or-sess)
+  (define session-dir
+    (if (tmux-q-session? session-dir-or-sess)
+        (tmux-q-session-session-dir session-dir-or-sess)
+        session-dir-or-sess))
+  (for*/list ([trace-path (in-list (find-trace-jsonl-paths session-dir))]
+              [entry (in-list (read-trace-events trace-path))]
+              #:when (memory-trace-entry? entry))
+    entry))
+
+;; find-session-lifecycle-events : (or/c path-string? tmux-q-session?) -> (listof hash?)
+;; Finds all session lifecycle events in a session's trace.jsonl files.
+(define (find-session-lifecycle-events session-dir-or-sess)
+  (define session-dir
+    (if (tmux-q-session? session-dir-or-sess)
+        (tmux-q-session-session-dir session-dir-or-sess)
+        session-dir-or-sess))
+  (for*/list ([trace-path (in-list (find-trace-jsonl-paths session-dir))]
+              [entry (in-list (read-trace-events trace-path))]
+              #:when (session-lifecycle-trace-entry? entry))
+    entry))
+
+;; Helper: extract a field from data hash with symbol/string fallback and default.
+(define (data-ref data keys default)
+  (if (hash? data)
+      (hash-ref/keys data keys default)
+      default))
+
+;; parse-memory-store-event : hash? -> memory-store-record?
+;; Pure: parses a memory.item.stored trace entry.
+(define (parse-memory-store-event entry)
+  (define data (trace-entry-data entry))
+  (memory-store-record (data-ref data '(memory-id "memory-id") "")
+                       (data-ref data '(mem-type "mem-type") "")
+                       (data-ref data '(scope "scope") "")
+                       (data-ref data '(source "source") 'tool)
+                       (data-ref data '(redacted-snippet "redacted-snippet") "")
+                       (trace-entry-turn-id entry)
+                       entry))
+
+;; parse-memory-retrieval-event : hash? -> memory-retrieval-record?
+;; Pure: parses a memory.retrieval.performed trace entry.
+(define (parse-memory-retrieval-event entry)
+  (define data (trace-entry-data entry))
+  (memory-retrieval-record (data-ref data '(query-snippet "query-snippet") "")
+                           (data-ref data '(result-count "result-count") 0)
+                           (data-ref data '(query-limit "query-limit") 5)
+                           (data-ref data '(scope "scope") #f)
+                           (data-ref data '(latency-ms "latency-ms") 0)
+                           (trace-entry-turn-id entry)
+                           entry))
+
+;; parse-session-start-event : hash? -> session-lifecycle-record?
+;; Pure: parses a session.started trace entry, extracting reason.
+(define (parse-session-start-event entry)
+  (define data (trace-entry-data entry))
+  ;; The session.started event embeds reason in data payload:
+  ;; For session-switch, data is a hasheq with 'reason key.
+  ;; For simple session-start, data may be the model string.
+  (define reason-raw
+    (cond
+      [(hash? data) (hash-ref/keys data '(reason "reason") #f)]
+      [else #f]))
+  ;; Normalize: JSON strings become symbols for consistency.
+  (define reason
+    (cond
+      [(not reason-raw) #f]
+      [(symbol? reason-raw) reason-raw]
+      [(string? reason-raw) (string->symbol reason-raw)]
+      [else #f]))
+  (define prev-id
+    (if (hash? data)
+        (hash-ref/keys data '(previous-session-id "previous-session-id") #f)
+        #f))
+  (define session-dir
+    (if (hash? data)
+        (hash-ref/keys data '(session-dir "session-dir") #f)
+        #f))
+  (session-lifecycle-record (or (trace-entry-phase entry) "session.started")
+                            reason
+                            prev-id
+                            session-dir
+                            (trace-entry-turn-id entry)
+                            entry))
+
+;; parse-durable-memory-roundtrip : (or/c path-string? tmux-q-session?) -> durable-memory-roundtrip?
+;; Parses all memory and session events to determine if a durable memory
+;; round-trip (store → restart → retrieval) is present.
+(define (parse-durable-memory-roundtrip session-dir-or-sess)
+  (define session-dir
+    (if (tmux-q-session? session-dir-or-sess)
+        (tmux-q-session-session-dir session-dir-or-sess)
+        session-dir-or-sess))
+  (define mem-events (find-memory-events session-dir))
+  (define sess-events (find-session-lifecycle-events session-dir))
+  (define store-events
+    (for/list ([e (in-list mem-events)]
+               #:when (equal? (trace-entry-phase e) "memory.item.stored"))
+      (parse-memory-store-event e)))
+  (define retrieval-events
+    (for/list ([e (in-list mem-events)]
+               #:when (equal? (trace-entry-phase e) "memory.retrieval.performed"))
+      (parse-memory-retrieval-event e)))
+  (define session-records
+    (for/list ([e (in-list sess-events)]
+               #:when (equal? (trace-entry-phase e) "session.started"))
+      (parse-session-start-event e)))
+  (define has-store? (> (length store-events) 0))
+  (define has-retrieval? (> (length retrieval-events) 0))
+  (define has-restart?
+    (for/or ([r (in-list session-records)])
+      (equal? (session-lifecycle-record-reason r) 'resume)))
+  (define roundtrip-complete? (and has-store? has-restart? has-retrieval? #t))
+  (durable-memory-roundtrip store-events
+                            retrieval-events
+                            session-records
+                            has-store?
+                            has-retrieval?
+                            has-restart?
+                            roundtrip-complete?))
+
+;; verify-durable-memory-roundtrip : durable-memory-roundtrip? -> boolean?
+;; Pure: verifies that a complete durable memory round-trip is present:
+;; at least one store, one restart (resume), and one retrieval.
+(define (verify-durable-memory-roundtrip info)
+  (durable-memory-roundtrip-roundtrip-complete? info))
 
 ;; ============================================================
 ;; tmux command execution (internal)

@@ -717,3 +717,273 @@
                    (check-equal? (length phases) 2)
                    (check-true (if (member "mas.hypothesis.opened" phases) #t #f))
                    (check-true (if (member "mas.hypothesis.resolved" phases) #t #f)))))
+
+;; ============================================================
+
+;; ============================================================
+;; Durable memory restart round-trip tests (W7)
+;; ============================================================
+
+(test-case "memory-event-phases includes store and retrieval"
+  (check-true (if (member "memory.item.stored" memory-event-phases) #t #f))
+  (check-true (if (member "memory.retrieval.performed" memory-event-phases) #t #f))
+  (check-true (if (member "memory.item.updated" memory-event-phases) #t #f)))
+
+(test-case "session-lifecycle-phases includes started and shutdown"
+  (check-true (if (member "session.started" session-lifecycle-phases) #t #f))
+  (check-true (if (member "session.shutdown" session-lifecycle-phases) #t #f)))
+
+(test-case "memory-trace-entry? recognizes memory events"
+  (check-true (memory-trace-entry? (hasheq 'phase "memory.item.stored")))
+  (check-true (memory-trace-entry? (hasheq 'phase "memory.retrieval.performed")))
+  (check-false (memory-trace-entry? (hasheq 'phase "turn.completed"))))
+
+(test-case "session-lifecycle-trace-entry? recognizes session events"
+  (check-true (session-lifecycle-trace-entry? (hasheq 'phase "session.started")))
+  (check-true (session-lifecycle-trace-entry? (hasheq 'phase "session.shutdown")))
+  (check-false (session-lifecycle-trace-entry? (hasheq 'phase "memory.item.stored"))))
+
+(test-case "parse-memory-store-event extracts fields"
+  (define entry
+    (hasheq 'phase
+            "memory.item.stored"
+            'turnId
+            "t1"
+            'data
+            (hasheq 'memory-id
+                    "mem-001"
+                    'mem-type
+                    "preference"
+                    'scope
+                    "user"
+                    'source
+                    "tool"
+                    'redacted-snippet
+                    "prefers dark mode")))
+  (define rec (parse-memory-store-event entry))
+  (check-equal? (memory-store-record-memory-id rec) "mem-001")
+  (check-equal? (memory-store-record-mem-type rec) "preference")
+  (check-equal? (memory-store-record-scope rec) "user")
+  (check-equal? (memory-store-record-redacted-snippet rec) "prefers dark mode")
+  (check-equal? (memory-store-record-turn-id rec) "t1"))
+
+(test-case "parse-memory-store-event handles missing data"
+  (define entry (hasheq 'phase "memory.item.stored"))
+  (define rec (parse-memory-store-event entry))
+  (check-equal? (memory-store-record-memory-id rec) "")
+  (check-equal? (memory-store-record-source rec) 'tool))
+
+(test-case "parse-memory-retrieval-event extracts fields"
+  (define entry
+    (hasheq
+     'phase
+     "memory.retrieval.performed"
+     'turnId
+     "t2"
+     'data
+     (hasheq 'query-snippet "dark mode" 'result-count 3 'query-limit 5 'scope "user" 'latency-ms 42)))
+  (define rec (parse-memory-retrieval-event entry))
+  (check-equal? (memory-retrieval-record-query-snippet rec) "dark mode")
+  (check-equal? (memory-retrieval-record-result-count rec) 3)
+  (check-equal? (memory-retrieval-record-latency-ms rec) 42))
+
+(test-case "parse-session-start-event extracts resume reason"
+  (define entry
+    (hasheq 'phase
+            "session.started"
+            'turnId
+            #f
+            'data
+            (hasheq 'reason 'resume 'previous-session-id "sess-001" 'session-dir "/tmp/sess")))
+  (define rec (parse-session-start-event entry))
+  (check-equal? (session-lifecycle-record-reason rec) 'resume)
+  (check-equal? (session-lifecycle-record-previous-session-id rec) "sess-001"))
+
+(test-case "parse-session-start-event normalizes string reason to symbol"
+  (define entry (hasheq 'phase "session.started" 'data (hasheq 'reason "resume")))
+  (define rec (parse-session-start-event entry))
+  (check-equal? (session-lifecycle-record-reason rec) 'resume))
+
+(test-case "parse-session-start-event handles non-hash data"
+  (define entry (hasheq 'phase "session.started" 'data "model-name"))
+  (define rec (parse-session-start-event entry))
+  (check-false (session-lifecycle-record-reason rec)))
+
+(test-case "find-memory-events finds memory events in trace"
+  (with-temp-dir (lambda (dir)
+                   (define session-sub (build-path dir "session-dm"))
+                   (make-directory* session-sub)
+                   (call-with-output-file (build-path session-sub "trace.jsonl")
+                                          (lambda (out)
+                                            (write-json (hasheq 'phase
+                                                                "memory.item.stored"
+                                                                'turnId
+                                                                "t1"
+                                                                'data
+                                                                (hasheq 'memory-id
+                                                                        "mem-001"
+                                                                        'mem-type
+                                                                        "preference"
+                                                                        'scope
+                                                                        "user"
+                                                                        'source
+                                                                        "tool"
+                                                                        'redacted-snippet
+                                                                        "dark mode"))
+                                                        out)
+                                            (newline out)
+                                            (write-json (hasheq 'phase "turn.completed" 'turnId "t1")
+                                                        out)
+                                            (newline out))
+                                          #:exists 'replace)
+                   (define events (find-memory-events (path->string dir)))
+                   (check-equal? (length events) 1)
+                   (check-equal? (trace-entry-phase (car events)) "memory.item.stored"))))
+
+(test-case "parse-durable-memory-roundtrip finds complete round-trip"
+  (with-temp-dir
+   (lambda (dir)
+     (define session-sub (build-path dir "session-rt"))
+     (make-directory* session-sub)
+     (call-with-output-file
+      (build-path session-sub "trace.jsonl")
+      (lambda (out)
+        (write-json (hasheq 'phase "session.started" 'data (hasheq 'reason "new" 'session-id "s1"))
+                    out)
+        (newline out)
+        (write-json (hasheq 'phase
+                            "memory.item.stored"
+                            'turnId
+                            "t1"
+                            'data
+                            (hasheq 'memory-id
+                                    "mem-001"
+                                    'mem-type
+                                    "preference"
+                                    'scope
+                                    "user"
+                                    'source
+                                    "tool"
+                                    'redacted-snippet
+                                    "dark mode"))
+                    out)
+        (newline out)
+        (write-json (hasheq 'phase "session.shutdown" 'data (hasheq 'reason "explicit")) out)
+        (newline out)
+        (write-json (hasheq 'phase
+                            "session.started"
+                            'data
+                            (hasheq 'reason "resume" 'session-id "s2" 'previous-session-id "s1"))
+                    out)
+        (newline out)
+        (write-json (hasheq 'phase
+                            "memory.retrieval.performed"
+                            'turnId
+                            "t2"
+                            'data
+                            (hasheq 'query-snippet "dark" 'result-count 1 'latency-ms 10))
+                    out)
+        (newline out))
+      #:exists 'replace)
+     (define rt (parse-durable-memory-roundtrip (path->string dir)))
+     (check-true (durable-memory-roundtrip-has-store? rt))
+     (check-true (durable-memory-roundtrip-has-retrieval? rt))
+     (check-true (durable-memory-roundtrip-has-restart? rt))
+     (check-true (durable-memory-roundtrip-roundtrip-complete? rt)))))
+
+(test-case "parse-durable-memory-roundtrip incomplete without retrieval"
+  (with-temp-dir (lambda (dir)
+                   (define session-sub (build-path dir "session-no-ret"))
+                   (make-directory* session-sub)
+                   (call-with-output-file
+                    (build-path session-sub "trace.jsonl")
+                    (lambda (out)
+                      (write-json (hasheq 'phase "session.started" 'data (hasheq 'reason "new")) out)
+                      (newline out)
+                      (write-json (hasheq 'phase
+                                          "memory.item.stored"
+                                          'turnId
+                                          "t1"
+                                          'data
+                                          (hasheq 'memory-id "mem-001" 'mem-type "p" 'scope "u"))
+                                  out)
+                      (newline out)
+                      (write-json (hasheq 'phase "session.started" 'data (hasheq 'reason "resume"))
+                                  out)
+                      (newline out))
+                    #:exists 'replace)
+                   (define rt (parse-durable-memory-roundtrip (path->string dir)))
+                   (check-true (durable-memory-roundtrip-has-store? rt))
+                   (check-false (durable-memory-roundtrip-has-retrieval? rt))
+                   (check-true (durable-memory-roundtrip-has-restart? rt))
+                   (check-false (durable-memory-roundtrip-roundtrip-complete? rt)))))
+
+(test-case "parse-durable-memory-roundtrip incomplete without restart"
+  (with-temp-dir
+   (lambda (dir)
+     (define session-sub (build-path dir "session-no-restart"))
+     (make-directory* session-sub)
+     (call-with-output-file
+      (build-path session-sub "trace.jsonl")
+      (lambda (out)
+        (write-json (hasheq 'phase
+                            "memory.item.stored"
+                            'turnId
+                            "t1"
+                            'data
+                            (hasheq 'memory-id "mem-001" 'mem-type "p" 'scope "u"))
+                    out)
+        (newline out)
+        (write-json
+         (hasheq 'phase "memory.retrieval.performed" 'turnId "t2" 'data (hasheq 'result-count 1))
+         out)
+        (newline out))
+      #:exists 'replace)
+     (define rt (parse-durable-memory-roundtrip (path->string dir)))
+     (check-true (durable-memory-roundtrip-has-store? rt))
+     (check-true (durable-memory-roundtrip-has-retrieval? rt))
+     (check-false (durable-memory-roundtrip-has-restart? rt))
+     (check-false (durable-memory-roundtrip-roundtrip-complete? rt)))))
+
+(test-case "verify-durable-memory-roundtrip delegates to roundtrip-complete?"
+  (with-temp-dir
+   (lambda (dir)
+     (define session-sub (build-path dir "session-vrf"))
+     (make-directory* session-sub)
+     (call-with-output-file
+      (build-path session-sub "trace.jsonl")
+      (lambda (out)
+        (write-json (hasheq 'phase "session.started" 'data (hasheq 'reason "new")) out)
+        (newline out)
+        (write-json (hasheq 'phase
+                            "memory.item.stored"
+                            'turnId
+                            "t1"
+                            'data
+                            (hasheq 'memory-id "mem-001" 'mem-type "p" 'scope "u"))
+                    out)
+        (newline out)
+        (write-json (hasheq 'phase "session.started" 'data (hasheq 'reason "resume")) out)
+        (newline out)
+        (write-json
+         (hasheq 'phase "memory.retrieval.performed" 'turnId "t2" 'data (hasheq 'result-count 1))
+         out)
+        (newline out))
+      #:exists 'replace)
+     (define rt (parse-durable-memory-roundtrip (path->string dir)))
+     (check-true (verify-durable-memory-roundtrip rt)))))
+
+(test-case "parse-durable-memory-roundtrip empty trace produces no store/retrieval"
+  (with-temp-dir (lambda (dir)
+                   (define session-sub (build-path dir "session-empty"))
+                   (make-directory* session-sub)
+                   (call-with-output-file (build-path session-sub "trace.jsonl")
+                                          (lambda (out)
+                                            (write-json (hasheq 'phase "turn.completed") out)
+                                            (newline out))
+                                          #:exists 'replace)
+                   (define rt (parse-durable-memory-roundtrip (path->string dir)))
+                   (check-false (durable-memory-roundtrip-has-store? rt))
+                   (check-false (durable-memory-roundtrip-has-retrieval? rt))
+                   (check-false (durable-memory-roundtrip-has-restart? rt))
+                   (check-false (durable-memory-roundtrip-roundtrip-complete? rt)))))
