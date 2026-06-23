@@ -84,6 +84,11 @@ When a test fails, the harness saves diagnostic artifacts:
   temp-tree.txt          # Directory listing of temp dirs
 ```
 
+Successful runs may retain isolated `q-tmux-art-*`, `q-tmux-home-*`, and
+`q-tmux-proj-*` directories for local debugging. Empty retained success dirs are
+not failure bundles; the report classifies them as `retained-success-dir` and
+therefore does not mark missing capture files as failures.
+
 To generate a report from artifacts:
 
 ```bash
@@ -96,6 +101,7 @@ racket scripts/tmux-tui-report.rkt --dir /path/to/artifacts
 | Category | Description |
 |----------|-------------|
 | deterministic-pass | Passes consistently |
+| retained-success-dir | Isolated temp/artifact dir from a successful run; failure artifacts not expected |
 | environmental-skip | Skipped (missing tmux/env) |
 | timeout | Scenario exceeded timeout |
 | content-mismatch | Output didn't match expected |
