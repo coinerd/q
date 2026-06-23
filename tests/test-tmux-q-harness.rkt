@@ -519,3 +519,201 @@
                             (lambda (out) (display "Authorization: Bearer secretkey123" out))
                             #:exists 'replace)
      (check-exn #rx"un-redacted sensitive content" (lambda () (verify-artifact-redacted! f))))))
+
+;; ============================================================
+;; MAS/subagent lifecycle evidence tests (W6)
+;; ============================================================
+
+(test-case "mas-lifecycle-phases includes spawn-approval and coordination events"
+  (check-true (if (member "mas.spawn-approval-requested" mas-lifecycle-phases) #t #f))
+  (check-true (if (member "mas.artifact.produced" mas-lifecycle-phases) #t #f))
+  (check-true (if (member "mas.blackboard.sync" mas-lifecycle-phases) #t #f))
+  (check-true (if (member "mas.agent.activated" mas-lifecycle-phases) #t #f)))
+
+(test-case "mas-trace-entry? recognizes MAS events"
+  (define entry (hasheq 'phase "mas.spawn-approval-requested" 'data (hasheq)))
+  (check-true (mas-trace-entry? entry)))
+
+(test-case "mas-trace-entry? rejects non-MAS events"
+  (define entry (hasheq 'phase "turn.completed"))
+  (check-false (mas-trace-entry? entry)))
+
+(test-case "parse-spawn-approval-event extracts capabilities and task"
+  (define entry
+    (hasheq 'phase
+            "mas.spawn-approval-requested"
+            'turnId
+            "t1"
+            'data
+            (hasheq 'capabilities '(read ls grep) 'task-preview "Review the code")))
+  (define parsed (parse-spawn-approval-event entry))
+  (check-equal? (mas-spawn-event-capabilities parsed) '(read ls grep))
+  (check-equal? (mas-spawn-event-task-preview parsed) "Review the code")
+  (check-equal? (mas-spawn-event-turn-id parsed) "t1"))
+
+(test-case "parse-spawn-approval-event handles string capabilities"
+  (define entry
+    (hasheq 'phase
+            "mas.spawn-approval-requested"
+            'data
+            (hasheq 'capabilities '("read" "write") 'task-preview "Test")))
+  (define parsed (parse-spawn-approval-event entry))
+  (check-equal? (mas-spawn-event-capabilities parsed) '(read write)))
+
+(test-case "parse-spawn-approval-event handles missing data"
+  (define entry (hasheq 'phase "mas.spawn-approval-requested"))
+  (define parsed (parse-spawn-approval-event entry))
+  (check-equal? (mas-spawn-event-capabilities parsed) '())
+  (check-equal? (mas-spawn-event-task-preview parsed) ""))
+
+(test-case "find-mas-events finds MAS events in session trace"
+  (with-temp-dir (lambda (dir)
+                   (define session-sub (build-path dir "session-abc"))
+                   (make-directory* session-sub)
+                   (call-with-output-file
+                    (build-path session-sub "trace.jsonl")
+                    (lambda (out)
+                      (write-json (hasheq 'phase
+                                          "mas.spawn-approval-requested"
+                                          'turnId
+                                          "t1"
+                                          'data
+                                          (hasheq 'capabilities '("read") 'task-preview "Do thing"))
+                                  out)
+                      (newline out)
+                      (write-json (hasheq 'phase "turn.completed" 'turnId "t1") out)
+                      (newline out)
+                      (write-json (hasheq 'phase
+                                          "mas.artifact.produced"
+                                          'data
+                                          (hasheq 'name "result.md" 'path "/tmp/result.md"))
+                                  out)
+                      (newline out))
+                    #:exists 'replace)
+                   (define events (find-mas-events (path->string dir)))
+                   (check-equal? (length events) 2)
+                   (check-equal? (trace-entry-phase (car events)) "mas.spawn-approval-requested")
+                   (check-equal? (trace-entry-phase (cadr events)) "mas.artifact.produced"))))
+
+(test-case "parse-mas-lifecycle extracts full lifecycle from trace"
+  (with-temp-dir
+   (lambda (dir)
+     (define session-sub (build-path dir "session-xyz"))
+     (make-directory* session-sub)
+     (call-with-output-file
+      (build-path session-sub "trace.jsonl")
+      (lambda (out)
+        (write-json (hasheq 'phase
+                            "mas.spawn-approval-requested"
+                            'turnId
+                            "t1"
+                            'data
+                            (hasheq 'capabilities '("read" "ls") 'task-preview "Review code"))
+                    out)
+        (newline out)
+        (write-json (hasheq 'phase "tool.execution.started" 'data (hasheq 'toolName "read")) out)
+        (newline out)
+        (write-json
+         (hasheq 'phase "tool.execution.completed" 'data (hasheq 'toolName "read" 'duration-ms 50))
+         out)
+        (newline out)
+        (write-json (hasheq 'phase
+                            "mas.artifact.produced"
+                            'data
+                            (hasheq 'name "report.md" 'path "/tmp/report.md"))
+                    out)
+        (newline out)
+        (write-json
+         (hasheq 'phase "mas.hypothesis.opened" 'data (hasheq 'id "h1" 'question "Is it correct?"))
+         out)
+        (newline out))
+      #:exists 'replace)
+     (define info (parse-mas-lifecycle (path->string dir)))
+     (check-equal? (length (mas-lifecycle-info-spawn-approvals info)) 1)
+     (check-equal? (length (mas-lifecycle-info-artifacts info)) 1)
+     (check-equal? (length (mas-lifecycle-info-coordination-events info)) 1)
+     (check-true (>= (mas-lifecycle-info-total-mas-events info) 3)))))
+
+(test-case "verify-subagent-spawn-lifecycle passes for complete cycle"
+  (with-temp-dir
+   (lambda (dir)
+     (define session-sub (build-path dir "session-lc"))
+     (make-directory* session-sub)
+     (call-with-output-file
+      (build-path session-sub "trace.jsonl")
+      (lambda (out)
+        (write-json (hasheq 'phase
+                            "mas.spawn-approval-requested"
+                            'turnId
+                            "t1"
+                            'data
+                            (hasheq 'capabilities '("read") 'task-preview "Task"))
+                    out)
+        (newline out)
+        (write-json (hasheq 'phase "tool.execution.started" 'data (hasheq 'toolName "spawn-subagent"))
+                    out)
+        (newline out)
+        (write-json (hasheq 'phase
+                            "tool.execution.completed"
+                            'data
+                            (hasheq 'toolName "spawn-subagent" 'duration-ms 100))
+                    out)
+        (newline out))
+      #:exists 'replace)
+     (define info (parse-mas-lifecycle (path->string dir)))
+     (check-true (verify-subagent-spawn-lifecycle info)))))
+
+(test-case "verify-subagent-spawn-lifecycle fails without tool execution"
+  (with-temp-dir (lambda (dir)
+                   (define session-sub (build-path dir "session-noexec"))
+                   (make-directory* session-sub)
+                   (call-with-output-file
+                    (build-path session-sub "trace.jsonl")
+                    (lambda (out)
+                      (write-json (hasheq 'phase
+                                          "mas.spawn-approval-requested"
+                                          'turnId
+                                          "t1"
+                                          'data
+                                          (hasheq 'capabilities '("read") 'task-preview "Task"))
+                                  out)
+                      (newline out)
+                      (write-json (hasheq 'phase "turn.completed" 'turnId "t1") out)
+                      (newline out))
+                    #:exists 'replace)
+                   (define info (parse-mas-lifecycle (path->string dir)))
+                   (check-false (verify-subagent-spawn-lifecycle info)))))
+
+(test-case "verify-subagent-spawn-lifecycle fails without spawn-approval"
+  (with-temp-dir
+   (lambda (dir)
+     (define session-sub (build-path dir "session-nospawn"))
+     (make-directory* session-sub)
+     (call-with-output-file
+      (build-path session-sub "trace.jsonl")
+      (lambda (out)
+        (write-json (hasheq 'phase "tool.execution.started" 'data (hasheq 'toolName "read")) out)
+        (newline out))
+      #:exists 'replace)
+     (define info (parse-mas-lifecycle (path->string dir)))
+     (check-false (verify-subagent-spawn-lifecycle info)))))
+
+(test-case "detect-mas-coordination-events returns unique phases"
+  (with-temp-dir (lambda (dir)
+                   (define session-sub (build-path dir "session-coord"))
+                   (make-directory* session-sub)
+                   (call-with-output-file
+                    (build-path session-sub "trace.jsonl")
+                    (lambda (out)
+                      (write-json (hasheq 'phase "mas.hypothesis.opened" 'data (hasheq)) out)
+                      (newline out)
+                      (write-json (hasheq 'phase "mas.hypothesis.resolved" 'data (hasheq)) out)
+                      (newline out)
+                      (write-json (hasheq 'phase "mas.hypothesis.opened" 'data (hasheq)) out)
+                      (newline out))
+                    #:exists 'replace)
+                   (define info (parse-mas-lifecycle (path->string dir)))
+                   (define phases (detect-mas-coordination-events info))
+                   (check-equal? (length phases) 2)
+                   (check-true (if (member "mas.hypothesis.opened" phases) #t #f))
+                   (check-true (if (member "mas.hypothesis.resolved" phases) #t #f)))))

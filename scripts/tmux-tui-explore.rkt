@@ -149,8 +149,11 @@
      '(("completion" . "mock turn completed") ("waves" . "W0/W1 with gates")
                                               ("truth" . "no executed PASS claimed"))]
     [(mas)
-     '(("completion" . "mock turn completed") ("caveat" . "lifecycle events deferred to W6")
-                                              ("truth" . "prose-only evidence is not final PASS"))]
+     '(("completion" . "mock turn completed")
+       ("caveat" . "lifecycle events deferred to W6")
+       ("truth" . "prose-only evidence is not final PASS")
+       ("spawn-trace" . "W6: mas.spawn-approval-requested phase in trace.jsonl")
+       ("lifecycle" . "W6: verify-subagent-spawn-lifecycle cross-references spawn+tool-exec"))]
     [(tools)
      '(("completion" . "mock turn completed")
        ("fixture" . "README_FIXTURE_ALPHA")
