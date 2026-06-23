@@ -126,7 +126,7 @@
 ;; Redaction tests
 ;; ============================================================
 
-(check-equal? (redact-sensitive "HOME=/home/user") "HOME=<REDACTED>" "HOME path redacted")
+(check-equal? (redact-sensitive "HOME=/tmp/q-home") "HOME=<REDACTED>" "HOME path redacted")
 
 (check-equal? (redact-sensitive "API_KEY=secret123") "API_KEY=<REDACTED>" "API_KEY redacted")
 
