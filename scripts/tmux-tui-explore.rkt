@@ -146,8 +146,13 @@
        ("context" . "blue-harbor retained as session context only")
        ("durability" . "not claimed"))]
     [(gsd)
-     '(("completion" . "mock turn completed") ("waves" . "W0/W1 with gates")
-                                              ("truth" . "no executed PASS claimed"))]
+     '(("completion" . "mock turn completed")
+       ("waves" . "W0/W1 with gates")
+       ("truth" . "no executed PASS claimed")
+       ("transition-trace" . "W8: gsd.transition.attempted/succeeded phases in trace.jsonl")
+       ("wave-trace" . "W8: gsd.wave.started/completed phases in trace.jsonl")
+       ("plan-trace" . "W8: gsd.plan.parsed/validated phases in trace.jsonl")
+       ("lifecycle" . "W8: parse-gsd-lifecycle + verify-gsd-transition-succeeded"))]
     [(mas)
      '(("completion" . "mock turn completed")
        ("caveat" . "lifecycle events deferred to W6")
@@ -163,7 +168,10 @@
     [(release-audit)
      '(("completion" . "mock turn completed")
        ("authorization" . "refused without live CI/release evidence")
-       ("required" . "release-manifest.json"))]
+       ("required" . "release-manifest.json")
+       ("refusal-detection" . "W8: detect-release-authorization-refusal scans for refusal patterns")
+       ("manifest-verify" . "W8: verify-release-manifest-present! checks file exists")
+       ("truth" . "W8: verify-release-authorization-refused! asserts refusal in captured text"))]
     [(durable-memory)
      '(("completion" . "mock turn completed")
        ("status" . "W7: durable-memory-roundtrip helpers available")

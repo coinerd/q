@@ -987,3 +987,188 @@
                    (check-false (durable-memory-roundtrip-has-retrieval? rt))
                    (check-false (durable-memory-roundtrip-has-restart? rt))
                    (check-false (durable-memory-roundtrip-roundtrip-complete? rt)))))
+
+;; ============================================================
+;; GSD lifecycle evidence tests (W8)
+;; ============================================================
+
+(test-case "gsd-event-phases includes transition and wave phases"
+  (check-true (if (member "gsd.transition.attempted" gsd-event-phases) #t #f))
+  (check-true (if (member "gsd.transition.succeeded" gsd-event-phases) #t #f))
+  (check-true (if (member "gsd.wave.started" gsd-event-phases) #t #f))
+  (check-true (if (member "gsd.wave.completed" gsd-event-phases) #t #f))
+  (check-true (if (member "gsd.plan.parsed" gsd-event-phases) #t #f)))
+
+(test-case "gsd-trace-entry? recognizes GSD events"
+  (check-true (gsd-trace-entry? (hasheq 'phase "gsd.transition.succeeded")))
+  (check-true (gsd-trace-entry? (hasheq 'phase "gsd.wave.completed")))
+  (check-false (gsd-trace-entry? (hasheq 'phase "memory.item.stored"))))
+
+(test-case "parse-gsd-transition-event extracts fields"
+  (define entry
+    (hasheq 'phase
+            "gsd.transition.succeeded"
+            'turnId
+            "t1"
+            'data
+            (hasheq 'from "planning" 'to "implementing")))
+  (define rec (parse-gsd-transition-event entry))
+  (check-equal? (gsd-transition-record-outcome rec) 'succeeded)
+  (check-equal? (gsd-transition-record-from-state rec) "planning")
+  (check-equal? (gsd-transition-record-to-state rec) "implementing"))
+
+(test-case "parse-gsd-transition-event handles failed"
+  (define entry
+    (hasheq 'phase
+            "gsd.transition.failed"
+            'turnId
+            "t2"
+            'data
+            (hasheq 'from "implementing" 'to "review" 'reason "tests failed")))
+  (define rec (parse-gsd-transition-event entry))
+  (check-equal? (gsd-transition-record-outcome rec) 'failed)
+  (check-equal? (gsd-transition-record-reason rec) "tests failed"))
+
+(test-case "parse-gsd-wave-event extracts fields"
+  (define entry (hasheq 'phase "gsd.wave.completed" 'turnId "t3" 'data (hasheq 'wave "W0")))
+  (define rec (parse-gsd-wave-event entry))
+  (check-equal? (gsd-wave-record-outcome rec) 'completed)
+  (check-equal? (gsd-wave-record-wave rec) "W0"))
+
+(test-case "parse-gsd-plan-event extracts fields"
+  (define entry
+    (hasheq 'phase
+            "gsd.plan.validated"
+            'turnId
+            "t4"
+            'data
+            (hasheq 'wave-count 5 'valid? #t 'error-count 0)))
+  (define rec (parse-gsd-plan-event entry))
+  (check-equal? (gsd-plan-record-operation rec) 'validated)
+  (check-equal? (gsd-plan-record-wave-count rec) 5)
+  (check-true (gsd-plan-record-valid? rec)))
+
+(test-case "parse-gsd-lifecycle finds complete lifecycle"
+  (with-temp-dir
+   (lambda (dir)
+     (define session-sub (build-path dir "session-gsd"))
+     (make-directory* session-sub)
+     (call-with-output-file
+      (build-path session-sub "trace.jsonl")
+      (lambda (out)
+        (write-json
+         (hasheq 'phase "gsd.transition.attempted" 'data (hasheq 'from "planning" 'to "implementing"))
+         out)
+        (newline out)
+        (write-json (hasheq 'phase
+                            "gsd.transition.succeeded"
+                            'turnId
+                            "t1"
+                            'data
+                            (hasheq 'from "planning" 'to "implementing"))
+                    out)
+        (newline out)
+        (write-json (hasheq 'phase "gsd.wave.started" 'data (hasheq 'wave "W0")) out)
+        (newline out)
+        (write-json (hasheq 'phase "gsd.wave.completed" 'turnId "t2" 'data (hasheq 'wave "W0")) out)
+        (newline out)
+        (write-json (hasheq 'phase "gsd.plan.parsed" 'data (hasheq 'wave-count 5)) out)
+        (newline out)
+        (write-json (hasheq 'phase "turn.completed") out)
+        (newline out))
+      #:exists 'replace)
+     (define info (parse-gsd-lifecycle (path->string dir)))
+     (check-equal? (length (gsd-lifecycle-info-transitions info)) 2)
+     (check-equal? (length (gsd-lifecycle-info-waves info)) 2)
+     (check-equal? (length (gsd-lifecycle-info-plan-ops info)) 1)
+     (check-true (gsd-lifecycle-info-has-transition-succeeded? info))
+     (check-true (gsd-lifecycle-info-has-wave-completed? info))
+     (check-equal? (gsd-lifecycle-info-total-gsd-events info) 5))))
+
+(test-case "verify-gsd-transition-succeeded finds transition"
+  (with-temp-dir
+   (lambda (dir)
+     (define session-sub (build-path dir "session-vgsd"))
+     (make-directory* session-sub)
+     (call-with-output-file (build-path session-sub "trace.jsonl")
+                            (lambda (out)
+                              (write-json (hasheq 'phase
+                                                  "gsd.transition.succeeded"
+                                                  'turnId
+                                                  "t1"
+                                                  'data
+                                                  (hasheq 'from "planning" 'to "implementing"))
+                                          out)
+                              (newline out))
+                            #:exists 'replace)
+     (define info (parse-gsd-lifecycle (path->string dir)))
+     (check-true (verify-gsd-transition-succeeded info "planning" "implementing"))
+     (check-false (verify-gsd-transition-succeeded info "planning" "review")))))
+
+(test-case "verify-gsd-transition-succeeded normalizes symbols"
+  (with-temp-dir
+   (lambda (dir)
+     (define session-sub (build-path dir "session-vgsd2"))
+     (make-directory* session-sub)
+     (call-with-output-file (build-path session-sub "trace.jsonl")
+                            (lambda (out)
+                              (write-json (hasheq 'phase
+                                                  "gsd.transition.succeeded"
+                                                  'turnId
+                                                  "t1"
+                                                  'data
+                                                  (hasheq 'from "planning" 'to "implementing"))
+                                          out)
+                              (newline out))
+                            #:exists 'replace)
+     (define info (parse-gsd-lifecycle (path->string dir)))
+     (check-true (verify-gsd-transition-succeeded info 'planning 'implementing)))))
+
+;; ============================================================
+;; Release/audit truthfulness tests (W8)
+;; ============================================================
+
+(test-case "release-refusal-patterns includes key phrases"
+  (check-true (if (member "release is not authorized" release-refusal-patterns) #t #f))
+  (check-true (if (member "release-manifest.json is required" release-refusal-patterns) #t #f)))
+
+(test-case "detect-release-authorization-refusal finds refusal"
+  (check-true
+   (if (detect-release-authorization-refusal "Release is not authorized due to missing CI evidence")
+       #t
+       #f))
+  (check-true (if (detect-release-authorization-refusal "refused without live CI evidence") #t #f))
+  (check-false (detect-release-authorization-refusal "Release is authorized, all checks passed")))
+
+(test-case "detect-release-authorization-refusal empty text"
+  (check-false (detect-release-authorization-refusal "")))
+
+(test-case "find-release-manifest finds existing manifest"
+  (with-temp-dir (lambda (dir)
+                   (call-with-output-file (build-path dir "release-manifest.json")
+                                          (lambda (out) (write-json (hasheq 'version "0.99.44") out))
+                                          #:exists 'replace)
+                   (check-true (if (find-release-manifest (path->string dir)) #t #f)))))
+
+(test-case "find-release-manifest returns #f when missing"
+  (with-temp-dir (lambda (dir) (check-false (find-release-manifest (path->string dir))))))
+
+(test-case "verify-release-manifest-present! passes when present"
+  (with-temp-dir (lambda (dir)
+                   (call-with-output-file (build-path dir "release-manifest.json")
+                                          (lambda (out) (write-json (hasheq 'version "0.99.44") out))
+                                          #:exists 'replace)
+                   (verify-release-manifest-present! (path->string dir)))))
+
+(test-case "verify-release-manifest-present! fails when missing"
+  (with-temp-dir (lambda (dir)
+                   (check-exn #rx"release-manifest.json not found"
+                              (lambda () (verify-release-manifest-present! (path->string dir)))))))
+
+(test-case "verify-release-authorization-refused! passes with refusal text"
+  (verify-release-authorization-refused! "Release is not authorized without live CI evidence"))
+
+(test-case "verify-release-authorization-refused! fails without refusal text"
+  (check-exn #rx"no release-authorization refusal"
+             (lambda ()
+               (verify-release-authorization-refused! "Everything looks great, let's ship!"))))
