@@ -1,4 +1,4 @@
-# TMUX TUI Testing — v0.99.43
+# TMUX TUI Testing — v0.99.44
 
 **Date:** 2026-06-25
 

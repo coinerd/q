@@ -1,3 +1,80 @@
+## 0.99.44
+
+Released: 2026-07-04
+
+### Overview
+Real-LLM tmux TUI exploration hardening. Converted ad-hoc real-provider
+exploration into official product testing infrastructure with structured
+evidence collection, safety runbook, centralized reporting, and
+comprehensive documentation.
+
+### tmux TUI Exploration Infrastructure
+
+- **W0: Baseline.** Verified fast suite (994/994 files), baseline
+  exploratory fixtures stabilized.
+
+- **W1: Official Explorer.** Added `scripts/tmux-tui-explore.rkt` with
+  6 scenarios (memory, gsd, mas, tools, release-audit, durable-memory),
+  mock/real-provider gates, per-scenario reports, and safety text.
+
+- **W2: Structured Turn Completion.** Added trace.jsonl-based completion
+  detection: `find-trace-jsonl-paths`, `read-trace-events`,
+  `wait-for-turn-completion-event`. Eliminates reliance on visible `q>`
+  prompt as completion signal.
+
+- **W3: Real-Provider Safe Harness.** Added isolated temp HOME creation,
+  credential redaction (bearer tokens, API keys, HOME path),
+  three-env-var opt-in gate, and exploration artifact writers.
+
+- **W4: Approval-Prompt Automation.** Added approval type detection,
+  capability classification (safe/dangerous/caution),
+  `handle-approval-if-present!` auto-approves read-only, auto-denies
+  destructive.
+
+- **W5: Tool-Execution Trace Verification.** Added tool event scanning,
+  file fingerprinting (`compute-file-fingerprint`),
+  `verify-file-unchanged!` for artifact truth, and
+  `detect-sensitive-leak` for credential leak detection.
+
+- **W6: MAS/Subagent Lifecycle Evidence.** Added MAS event scanning,
+  spawn-approval parsing, `verify-subagent-spawn-lifecycle` checking
+  the spawn→tool→complete chain.
+
+- **W7: Durable Memory Restart Round-Trip.** Added memory event scanning,
+  session-lifecycle parsing, `parse-durable-memory-roundtrip` verifying
+  store→restart(resume)→retrieve.
+
+- **W8: GSD Lifecycle and Release/Audit Truthfulness.** Added GSD
+  transition/wave/plan parsing, `verify-gsd-transition-succeeded`,
+  release refusal detection patterns, and manifest verification.
+
+- **W9: Flake Classification and Centralized Reporting.** Added
+  `flake-classifications`, `classify-result-status`, flake text pattern
+  detection, `central-log-entry` with JSONL write/parse,
+  `exploration-bundle` with pass-rate computation, and
+  `render-bundle-index-markdown` summary.
+
+- **W10: Documentation.** Added comprehensive safety runbook
+  (`TMUX-TUI-EXPLORATION-SAFETY-RUNBOOK-v0.99.44.md`) covering
+  isolation policies, credential redaction, suite classification,
+  harness API surface, known limitations, and CI recommendations.
+
+### Test Counts
+
+- Harness unit tests: 149 (up from 39 in v0.99.43)
+- Explorer tests: 7
+- Fast suite: 994/994 files PASS
+- All tmux tests remain opt-in (`Q_TMUX_TUI_TESTS=1`)
+
+### Files Changed
+
+- `scripts/tmux-tui-explore.rkt` — Official exploratory runner
+- `tests/helpers/tmux-q-harness.rkt` — Extended with W2–W9 helpers
+- `tests/test-tmux-q-harness.rkt` — 149 unit tests
+- `tests/test-tmux-tui-explore.rkt` — 7 explorer tests
+- `docs/reports/TMUX-TUI-EXPLORATION-SAFETY-RUNBOOK-v0.99.44.md` — Runbook
+- `docs/reports/TMUX-TUI-TESTING-v0.99.43.md` — Updated cross-ref
+
 ## 0.99.43
 
 Released: 2026-06-25
