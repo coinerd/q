@@ -155,3 +155,8 @@
             "session name is non-empty string")
 
 (check-true (string-prefix? (make-session-name) "q-test-") "session name has q-test- prefix")
+
+(check-false (string-contains? (make-session-name) ".") "session name has no dot (tmux restriction)")
+
+(check-false (string-contains? (make-session-name) ":")
+             "session name has no colon (tmux restriction)")
