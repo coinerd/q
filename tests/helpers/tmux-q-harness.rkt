@@ -107,7 +107,7 @@
 
 (define (tmux-available?)
   (with-handlers ([exn:fail? (lambda (e) #f)])
-    (define-values (proc out-in err) (subprocess #f #f #f (find-executable-path "tmux") "-V"))
+    (define-values (proc out-in _stdin err) (subprocess #f #f #f (find-executable-path "tmux") "-V"))
     (subprocess-wait proc)
     (define ok? (eq? (subprocess-status proc) 0))
     (close-input-port out-in)
@@ -307,7 +307,8 @@
 ;; ============================================================
 
 (define (make-session-name)
-  (format "q-test-~a" (current-inexact-milliseconds)))
+  ;; tmux session names must not contain '.' or ':' — use exact integer
+  (format "q-test-~a" (current-milliseconds)))
 
 ;; ============================================================
 ;; tmux command execution (internal)
@@ -318,7 +319,7 @@
   (cond
     [(not tmux-path) (error 'run-tmux-command "tmux not found")]
     [capture?
-     (define-values (proc out-port err-port) (subprocess #f #f #f tmux-path (cdr args)))
+     (define-values (proc out-port _stdin err-port) (apply subprocess #f #f #f tmux-path (cdr args)))
      (subprocess-wait proc)
      (define status (subprocess-status proc))
      (define output (port->string out-port))
@@ -326,17 +327,26 @@
      (close-input-port err-port)
      (values status output)]
     [else
-     (define-values (proc out-port err-port) (subprocess #f #f #f tmux-path (cdr args)))
+     (define-values (proc out-port _stdin err-port) (apply subprocess #f #f #f tmux-path (cdr args)))
      (subprocess-wait proc)
      (define status (subprocess-status proc))
      (close-input-port out-port)
      (close-input-port err-port)
      (values status "")]))
 
+;; Compute the q source root from this module's location.
+;; The harness is at tests/helpers/tmux-q-harness.rkt, so the q root is ../..
+(define q-source-root
+  (let* ([this-file (resolved-module-path-name (variable-reference->resolved-module-path
+                                                (#%variable-reference)))]
+         [this-dir (let-values ([(base _name _dir?) (split-path this-file)])
+                     base)])
+    (path->string (simplify-path (build-path this-dir ".." "..")))))
+
 ;; Build the full shell command for q --tui
 (define (build-q-tui-command home-dir project-dir args)
   (define racket-path (find-executable-path "racket"))
-  (define main-path (path->string (build-path (current-directory) "main.rkt")))
+  (define main-path (path->string (build-path q-source-root "main.rkt")))
   (format "HOME=~a TERM=xterm-256color ~a ~a ~a"
           home-dir
           (path->string racket-path)
