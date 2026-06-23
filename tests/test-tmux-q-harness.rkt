@@ -10,7 +10,10 @@
 ;; Tests pure functions (normalization, command construction, env var
 ;; handling) without requiring tmux to be available.
 
-(require rackunit
+(require json
+         rackunit
+         racket/file
+         racket/list
          racket/string
          "helpers/tmux-q-harness.rkt")
 
@@ -160,3 +163,60 @@
 
 (check-false (string-contains? (make-session-name) ":")
              "session name has no colon (tmux restriction)")
+
+;; ============================================================
+;; Structured trace/event completion helpers
+;; ============================================================
+
+(define (with-temp-dir proc)
+  (define dir (make-temporary-file "q-tmux-harness-test-~a" 'directory))
+  (dynamic-wind void
+                (lambda () (proc dir))
+                (lambda ()
+                  (with-handlers ([exn:fail? (lambda (_e) (void))])
+                    (delete-directory/files dir)))))
+
+(test-case "trace completion helper finds stream.turn.completed in session trace"
+  (with-temp-dir (lambda (dir)
+                   (define sid-dir (build-path dir "01TESTSESSION"))
+                   (make-directory* sid-dir)
+                   (define trace-path (build-path sid-dir "trace.jsonl"))
+                   (call-with-output-file
+                    trace-path
+                    (lambda (out)
+                      (write-json (hasheq 'phase "turn.started" 'turnId "t-1" 'seq 1) out)
+                      (newline out)
+                      (write-json (hasheq 'phase "model.stream.delta" 'turnId "t-1" 'seq 2) out)
+                      (newline out)
+                      (write-json (hasheq 'phase "stream.turn.completed" 'turnId "t-1" 'seq 3) out)
+                      (newline out))
+                    #:exists 'replace)
+                   (check-equal? (find-trace-jsonl-paths (path->string dir))
+                                 (list (path->string trace-path)))
+                   (define events (read-trace-events (path->string trace-path)))
+                   (check-equal? (length events) 3)
+                   (check-equal? (trace-entry-phase (last events)) "stream.turn.completed")
+                   (check-true (turn-completion-trace-entry? (last events) #:turn-id "t-1"))
+                   (check-false (turn-completion-trace-entry? (last events) #:turn-id "other"))
+                   (define latest (latest-turn-completion-event (path->string dir) #:turn-id "t-1"))
+                   (check-equal? (trace-entry-phase latest) "stream.turn.completed")
+                   (check-equal? (trace-entry-turn-id latest) "t-1"))))
+
+(test-case "trace completion helper ignores malformed JSONL and accepts canonical turn.completed"
+  (with-temp-dir
+   (lambda (dir)
+     (define sid-dir (build-path dir "01TESTSESSION"))
+     (make-directory* sid-dir)
+     (define trace-path (build-path sid-dir "trace.jsonl"))
+     (call-with-output-file trace-path
+                            (lambda (out)
+                              (display "not-json" out)
+                              (newline out)
+                              (write-json (hasheq 'phase "turn.completed" 'turnId "t-2" 'seq 4) out)
+                              (newline out))
+                            #:exists 'replace)
+     (define events (read-trace-events (path->string trace-path)))
+     (check-equal? (length events) 1)
+     (check-equal? (trace-entry-phase (car events)) "turn.completed")
+     (check-equal? (trace-entry-turn-id (car events)) "t-2")
+     (check-true (turn-completion-trace-entry? (car events))))))
