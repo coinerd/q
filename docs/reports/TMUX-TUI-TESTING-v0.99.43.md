@@ -61,7 +61,7 @@ files. They are opt-in only.
 
 | File | Tag | Tests | Description |
 |------|-----|-------|-------------|
-| `tests/test-tmux-q-harness.rkt` | unit | 39 | Pure function unit tests (no tmux needed) |
+| `tests/test-tmux-q-harness.rkt` | unit | 149 | Pure function unit tests (no tmux needed; W2–W9 helpers) |
 | `tests/test-tmux-tui-smoke.rkt` | smoke | 5 | T0/T1: Startup, prompt, quit, orphan check |
 | `tests/test-tmux-tui-session-artifacts.rkt` | artifacts | 7 | T2/T3: Prompt-response, session artifacts |
 | `tests/test-tmux-tui-commands.rkt` | commands | 5 | C0-C4: Slash commands (/help, /status, /clear, etc.) |
@@ -70,7 +70,7 @@ files. They are opt-in only.
 | `tests/test-tmux-tui-gsd.rkt` | gsd | 3 | G0-G2: GSD planning scenarios |
 | `tests/test-tmux-tui-tools-approval.rkt` | tools | 3 | A0-A3: Tools, approval, no-tools guardrails |
 
-**Total: 70 test assertions** (39 unit + 31 e2e)
+**Total: 180 test assertions** (149 unit + 31 e2e)
 
 ## Artifact Locations
 
@@ -124,3 +124,30 @@ The harness (`tests/helpers/tmux-q-harness.rkt`) provides:
 - **Lifecycle**: `make-tmux-test-env` creates temp HOME/project/session dirs; `stop-session!` kills tmux session
 - **Retry/wait**: `wait-for-text` polls pane with configurable timeout
 - **Cleanup**: `with-tmux-q-session` macro ensures cleanup in dynamic-wind
+
+---
+
+## v0.99.44 Update
+
+The v0.99.44 milestone significantly extended this infrastructure with:
+
+- **Structured turn-completion events** (W2) — wait for `trace.jsonl` events
+  instead of visible `q>` prompt
+- **Real-provider safe helpers** (W3) — isolated temp HOME, credential
+  redaction, explicit opt-in gates
+- **Approval-prompt automation** (W4) — classify and auto-handle safe vs.
+  dangerous tool approvals
+- **Tool-execution trace verification** (W5) — artifact fingerprints, leak
+  detection
+- **MAS/subagent lifecycle evidence** (W6) — spawn-approval → tool →
+  complete chain verification
+- **Durable memory restart round-trip** (W7) — store → restart → retrieve
+  verification
+- **GSD lifecycle and release/audit truthfulness** (W8) — transition/wave/plan
+  parsing, release refusal detection
+- **Flake classification and centralized reporting** (W9) — structured log
+  protocol, exploration bundle, pass-rate computation
+
+The harness now contains 149 unit tests. See
+[`TMUX-TUI-EXPLORATION-SAFETY-RUNBOOK-v0.99.44.md`](./TMUX-TUI-EXPLORATION-SAFETY-RUNBOOK-v0.99.44.md)
+for the comprehensive safety runbook and suite policy.
