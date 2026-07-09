@@ -7,9 +7,11 @@
 
 ## Executive Summary
 
-A comprehensive real-world subsystem audit of the Pi-Q agent was conducted across 11 waves (W0–W11), covering all major subsystems. **782 tests** were written across **11 test files**, with **0 failures** on the smoke gate (19/19 files, 286/286 tests).
+A comprehensive real-world subsystem audit of the Pi-Q agent was conducted across 11 waves (W0–W10), covering all major subsystems. The corrected audit inventory is **663 tests** across **11 test files**, containing **1,626 check assertions**. The smoke gate was green (19/19 files, 286/286 tests), but it did **not** include the v0.99.45 audit tests; the audit tests are part of the fast/default suite and require fast-suite verification.
 
-The audit found **1 medium-severity issue**, **5 low-severity issues**, and **45+ informational findings** (overwhelmingly positive). No critical or high-severity issues were discovered. The codebase demonstrates strong architectural patterns, comprehensive input validation, thread-safe design, and defense-in-depth security.
+The audit found **1 medium-severity issue**, **6 low-severity issues**, and **40+ informational findings** (overwhelmingly positive). No critical or high-severity issues were discovered. The codebase demonstrates strong architectural patterns, comprehensive input validation, thread-safe design, and defense-in-depth security.
+
+**Release status:** v0.99.45 was audit-only. There was no v0.99.45 tag or GitHub Release. Remediation issues were filed in the follow-up v0.99.46 milestone as #8666–#8671.
 
 ## Wave Summary
 
@@ -26,7 +28,7 @@ The audit found **1 medium-severity issue**, **5 low-severity issues**, and **45
 | W8 | TUI | #8647 | 101 | #8659 | 1 low, 7 info |
 | W9 | Extension | #8648 | 72 | #8663 | 8 info |
 | W10 | Integration | #8649 | 74 | #8664 | 7 info |
-| **Total** | | | **782** | **11 PRs** | **1 med, 5 low, 40+ info** |
+| **Total** | | | **663** | **11 PRs** | **1 med, 6 low, 40+ info** |
 
 ## All Findings Summary
 
@@ -36,7 +38,7 @@ The audit found **1 medium-severity issue**, **5 low-severity issues**, and **45
 |----|------|-----------|-------------|
 | W5-FINDING-001 | W5 | Tools | `risk-severity?`, `token-type?`, `risk-type?` predicates use `member` which returns a list (truthy), not a boolean. Contract is `(-> any/c boolean?)` but returns list. Calling these predicates from outside the module raises a contract violation. |
 
-### Low Severity (5)
+### Low Severity (6)
 
 | ID | Wave | Subsystem | Description |
 |----|------|-----------|-------------|
@@ -91,11 +93,25 @@ The audit found **1 medium-severity issue**, **5 low-severity issues**, and **45
 
 ## Test Infrastructure
 
-- **Smoke gate**: 19 files, 286 tests, ~1 min — used as acceptance gate
-- **Broad gate**: 1048+ files, ~1.5-2 hours — available but not required for audit
+- **Smoke gate**: 19 files, 286 tests, ~1 min — green during v0.99.45, but did not include the v0.99.45 audit tests.
+- **Audit tests**: 11 v0.99.45 audit test files, 663 test cases, and 1,626 check assertions. These are fast/default suite tests and must be verified with the project test runner rather than inferred from the smoke gate.
+- **Fast/default suite**: authoritative gate for v0.99.45 audit test inclusion.
+- **Broad gate**: available but not the evidence used for the v0.99.45 audit acceptance claim.
 - **Mock provider**: Used for all audit tests (no real API keys on VPS)
 - **Test pattern**: Each wave produces test file + audit report, committed to repo
 
+## Remediation Status
+
+v0.99.45 documented findings but did not file remediation during the v0.99.45 milestone. Follow-up remediation was filed in v0.99.46 as #8666–#8671.
+
+| Finding | v0.99.46 remediation |
+|---------|----------------------|
+| W5-FINDING-001 | #8666 — fixed in W1; member-based predicates now return exact booleans. |
+| W8-FINDING-001 | #8667 — fixed in W2; `tokenize` now has a stable two-value contract. |
+| W7-FINDING-001 | #8668 — fixed in W2; OAuth config validation rejects empty authorize/token URLs. |
+| W3-FINDING-001 | #8669 — clarified in W2; same-state transition path is explicit zero-hop `()`, distinct from `#f` no-path. |
+| CI/doc/report drift | #8670/#8671 — fixed in W0/W1; README metrics and report/test truth restored. |
+
 ## Conclusion
 
-The Pi-Q agent v0.99.45 codebase is production-ready based on this audit. The 1 medium-severity finding (contract bugs in tool risk predicates) and 5 low-severity findings are all documented and represent minor issues that don't affect core functionality. The overwhelming majority of findings are positive architectural observations confirming strong design patterns throughout the codebase.
+The Pi-Q agent v0.99.45 audit found no critical or high-severity issues and documented strong architectural patterns throughout the codebase. However, v0.99.45 was audit-only, not a released version, and the final report must not use the smoke gate as proof that the audit tests ran. The corrected evidence is 663 test cases and 1,626 check assertions in the v0.99.45 audit tests, with follow-up remediation tracked and completed through the v0.99.46 remediation milestone.
