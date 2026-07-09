@@ -163,8 +163,11 @@
 ;;   version        — version string like "0.99.47"
 ;; Returns a gate-result.
 (define (check-changelog-gate changelog-text version)
-  (define version-pattern (format "## v~a" version))
-  (if (string-contains? changelog-text version-pattern)
+  ;; CHANGELOG entries use "## 0.99.XX" (without 'v' prefix).
+  ;; Also accept "## v0.99.XX" for robustness.
+  (define pattern-bare (format "## ~a" version))
+  (define pattern-v (format "## v~a" version))
+  (if (or (string-contains? changelog-text pattern-bare) (string-contains? changelog-text pattern-v))
       (gate-result 'changelog #t (format "CHANGELOG entry for v~a found" version))
       (gate-result 'changelog #f (format "No CHANGELOG entry for v~a" version))))
 
