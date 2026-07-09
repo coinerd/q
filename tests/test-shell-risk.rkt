@@ -64,6 +64,16 @@
                      (and (eq? (shell-token-type t) 'unknown)
                           (member (shell-token-value t) '("(" ")"))))))
 
+;; ── Predicate contract tests ──────────────────────────────────────
+
+(test-case "predicates return exact booleans across contract boundary"
+  (for ([pred (in-list (list risk-severity? token-type? risk-type?))]
+        [valid (in-list '(critical word destructive))]
+        [invalid (in-list '(not-a-severity not-a-token not-a-risk))])
+    (check-true (boolean? (pred valid)))
+    (check-true (pred valid))
+    (check-false (pred invalid))))
+
 ;; ── Risk classifier tests ─────────────────────────────────────────
 
 (test-case "classify: rm -rf"

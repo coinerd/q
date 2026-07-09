@@ -276,21 +276,14 @@
   (check-equal? (hash-ref summary 'max-severity) 'critical))
 
 (test-case "audit-sr-predicates"
-  ;; FINDING-001: risk-severity?, token-type?, risk-type? use member which returns
-  ;; a list (truthy), not #t. The contract-out promises boolean?, causing
-  ;; a contract violation. This is a LOW severity bug.
-  ;; Verify: valid symbols trigger contract violation (bug), invalid ones return #f safely.
-  (check-exn exn:fail?
-             (lambda () (risk-severity? 'critical))
-             "risk-severity? 'critical violates boolean? contract (bug)")
-  (check-exn exn:fail?
-             (lambda () (risk-severity? 'low))
-             "risk-severity? 'low violates boolean? contract (bug)")
-  ;; For symbols NOT in the member list, member returns #f which IS boolean
-  (check-false (risk-severity? 'bogus) "Non-member returns #f (boolean? OK)")
-  (check-exn exn:fail? (lambda () (token-type? 'word)) "token-type? also has same bug")
+  ;; FINDING-001 remediation: exported predicates must return exact booleans
+  ;; across the contract boundary, not member's truthy tail list.
+  (check-true (risk-severity? 'critical))
+  (check-true (risk-severity? 'low))
+  (check-false (risk-severity? 'bogus))
+  (check-true (token-type? 'word))
   (check-false (token-type? 'bogus))
-  (check-exn exn:fail? (lambda () (risk-type? 'destructive)) "risk-type? also has same bug")
+  (check-true (risk-type? 'destructive))
   (check-false (risk-type? 'bogus)))
 
 ;; ---------------------------------------------------------------------------
