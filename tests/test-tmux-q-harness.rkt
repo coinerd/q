@@ -1303,3 +1303,83 @@
   (define bundle (make-exploration-bundle "tmp-explore4" records "run-006" "mock"))
   (define md (render-bundle-index-markdown bundle))
   (check-true (string-contains? md "Flaky scenarios detected")))
+
+;; ============================================================
+;; cleanup-tmux-env! tests (GAP-6, W3 #8685)
+;; ============================================================
+
+(test-case "cleanup-tmux-env! deletes empty dirs on success (keep-artifacts? #t)"
+  (define stamp (number->string (current-inexact-milliseconds)))
+  (define base (find-system-path 'temp-dir))
+  (define home (build-path base (format "q-test-cleanup-home-~a" stamp)))
+  (define proj (build-path base (format "q-test-cleanup-proj-~a" stamp)))
+  (define sess (build-path home ".q" "sessions"))
+  (define art (build-path base (format "q-test-cleanup-art-~a" stamp)))
+  (make-directory* home)
+  (make-directory* proj)
+  (make-directory* sess)
+  (make-directory* art)
+  ;; artifact-dir is empty → success
+  (define env
+    (tmux-env (path->string home) (path->string proj) (path->string sess) (path->string art)))
+  (define results (cleanup-tmux-env! env))
+  (check-true (andmap cdr results) "all dirs should be deleted")
+  (check-false (directory-exists? home))
+  (check-false (directory-exists? proj))
+  (check-false (directory-exists? art)))
+
+(test-case "cleanup-tmux-env! preserves dirs with artifacts (keep-artifacts? #t)"
+  (define stamp (number->string (current-inexact-milliseconds)))
+  (define base (find-system-path 'temp-dir))
+  (define home (build-path base (format "q-test-cleanup-home-~a" stamp)))
+  (define proj (build-path base (format "q-test-cleanup-proj-~a" stamp)))
+  (define sess (build-path home ".q" "sessions"))
+  (define art (build-path base (format "q-test-cleanup-art-~a" stamp)))
+  (make-directory* home)
+  (make-directory* proj)
+  (make-directory* sess)
+  (make-directory* art)
+  ;; Write a failure artifact file
+  (call-with-output-file (build-path art "raw-capture.txt") (lambda (p) (display "fail" p)))
+  (define env
+    (tmux-env (path->string home) (path->string proj) (path->string sess) (path->string art)))
+  (define results (cleanup-tmux-env! env))
+  (check-false (andmap cdr results) "dirs should NOT be deleted (artifacts present)")
+  (check-true (directory-exists? home) "home preserved")
+  (check-true (directory-exists? art) "artifact-dir preserved")
+  ;; cleanup test artifacts
+  (delete-directory/files home)
+  (delete-directory/files proj))
+
+(test-case "cleanup-tmux-env! deletes all dirs with keep-artifacts? #f"
+  (define stamp (number->string (current-inexact-milliseconds)))
+  (define base (find-system-path 'temp-dir))
+  (define home (build-path base (format "q-test-cleanup-home-~a" stamp)))
+  (define proj (build-path base (format "q-test-cleanup-proj-~a" stamp)))
+  (define sess (build-path home ".q" "sessions"))
+  (define art (build-path base (format "q-test-cleanup-art-~a" stamp)))
+  (make-directory* home)
+  (make-directory* proj)
+  (make-directory* sess)
+  (make-directory* art)
+  ;; Write a failure artifact file
+  (call-with-output-file (build-path art "raw-capture.txt") (lambda (p) (display "fail" p)))
+  (define env
+    (tmux-env (path->string home) (path->string proj) (path->string sess) (path->string art)))
+  (define results (cleanup-tmux-env! env #:keep-artifacts? #f))
+  (check-true (andmap cdr results) "all dirs should be deleted unconditionally")
+  (check-false (directory-exists? home))
+  (check-false (directory-exists? proj))
+  (check-false (directory-exists? art)))
+
+(test-case "cleanup-tmux-env! does not throw on non-existent dirs"
+  (define env
+    (tmux-env "/nonexistent/q-tmux-test-999999"
+              "/nonexistent/q-tmux-test-999999"
+              "/nonexistent/q-tmux-test-999999"
+              "/nonexistent/q-tmux-test-999999"))
+  (define results (cleanup-tmux-env! env))
+  (check-pred list? results)
+  ;; Non-existent dirs report deleted? = #f (or #t if should-delete? is true but dir doesn't exist)
+  ;; The key invariant: no exception thrown
+  (check-true (andmap pair? results)))
