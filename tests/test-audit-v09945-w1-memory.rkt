@@ -37,7 +37,7 @@
                    #:type [type 'semantic]
                    #:scope [scope 'project]
                    #:content [content "The project uses 2-space indentation"]
-                   #:project [project "/home/user/myapp"]
+                   #:project [project "project/myapp"]
                    #:session [session "sess-001"]
                    #:tags [tags '("convention" "style")]
                    #:sensitivity [sensitivity 'public]
@@ -179,12 +179,12 @@
                      (make-item #:id "proj-shared"
                                 #:scope 'project
                                 #:content "Shared project convention: use tabs not spaces"
-                                #:project "/proj/main"))
+                                #:project "proj/main"))
   ;; Query with session-B should only see project-scoped items
   (define r-sess-B
     (gen:retrieve-memory
      b
-     (make-query #:text "" #:scope 'session #:session "sess-B" #:project "/proj/main")))
+     (make-query #:text "" #:scope 'session #:session "sess-B" #:project "proj/main")))
   (check-true (memory-result-ok? r-sess-B))
   (define sess-B-items (memory-result-value r-sess-B))
   (for ([item (in-list sess-B-items)])
