@@ -33,21 +33,22 @@
 (struct shell-risk-finding (type severity message position) #:transparent)
 
 (define (risk-severity? v)
-  (member v '(info low medium high critical)))
+  (and (member v '(info low medium high critical)) #t))
 
 (define (token-type? v)
-  (member v '(word separator redirect substitution quote whitespace unknown)))
+  (and (member v '(word separator redirect substitution quote whitespace unknown)) #t))
 
 (define (risk-type? v)
-  (member v
-          '(destructive high-risk
-                        network-pipe
-                        substitution
-                        redirect-sensitive
-                        command-substitution
-                        eval
-                        exec
-                        windows-destructive)))
+  (and (member v
+               '(destructive high-risk
+                             network-pipe
+                             substitution
+                             redirect-sensitive
+                             command-substitution
+                             eval
+                             exec
+                             windows-destructive))
+       #t))
 
 ;; ── Tokenizer helpers ─────────────────────────────────────────────
 
