@@ -32,7 +32,7 @@ jobs:
       result: ${{ steps.result.outputs.RESULT }}
     steps:
       - name: Checkout exact tag
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event.inputs.tag }}
 
