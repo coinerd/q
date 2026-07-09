@@ -552,11 +552,12 @@
                   8089))
   (check-true (valid-oauth-config? cfg)))
 
-(test-case "audit-oauth-config-empty-url-still-valid"
-  ;; FINDING: valid-oauth-config? only checks client-id non-empty and port positive
-  ;; It does NOT validate that authorize-url or token-url are non-empty strings
-  (define cfg (oauth-config "" "https://token.example.com" "client" "secret" '() 8089))
-  (check-true (valid-oauth-config? cfg)))
+(test-case "audit-oauth-config-empty-url-rejected"
+  ;; FINDING remediation: valid-oauth-config? rejects empty authorize/token URLs.
+  (define missing-authorize (oauth-config "" "https://token.example.com" "client" "secret" '() 8089))
+  (define missing-token (oauth-config "https://auth.example.com" "" "client" "secret" '() 8089))
+  (check-false (valid-oauth-config? missing-authorize))
+  (check-false (valid-oauth-config? missing-token)))
 
 (test-case "audit-oauth-invalid-config-bad-port"
   (define cfg

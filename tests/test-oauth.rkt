@@ -48,6 +48,14 @@
                   8089))
   (check-false (valid-oauth-config? cfg)))
 
+(test-case "valid-oauth-config? rejects empty authorize/token URLs"
+  (define missing-authorize
+    (oauth-config "" "https://example.com/token" "client-123" "secret" '("scope1") 8089))
+  (define missing-token
+    (oauth-config "https://example.com/auth" "" "client-123" "secret" '("scope1") 8089))
+  (check-false (valid-oauth-config? missing-authorize))
+  (check-false (valid-oauth-config? missing-token)))
+
 (test-case "valid-oauth-config? rejects non-config"
   (check-false (valid-oauth-config? "not-a-config"))
   (check-false (valid-oauth-config? 42)))

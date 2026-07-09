@@ -103,12 +103,14 @@
   (> (current-seconds) (- (oauth-token-expires-at tok) margin-seconds)))
 
 ;; Validate oauth-config fields.
+(define (non-empty-string? v)
+  (and (string? v) (> (string-length v) 0)))
+
 (define (valid-oauth-config? cfg)
   (and (oauth-config? cfg)
-       (string? (oauth-config-authorize-url cfg))
-       (string? (oauth-config-token-url cfg))
-       (string? (oauth-config-client-id cfg))
-       (> (string-length (oauth-config-client-id cfg)) 0)
+       (non-empty-string? (oauth-config-authorize-url cfg))
+       (non-empty-string? (oauth-config-token-url cfg))
+       (non-empty-string? (oauth-config-client-id cfg))
        (exact-positive-integer? (oauth-config-redirect-port cfg))))
 
 ;; ═══════════════════════════════════════════════════════════════════
