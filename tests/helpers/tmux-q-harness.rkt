@@ -46,6 +46,7 @@
 
          ;; Environment
          make-tmux-test-env
+         cleanup-tmux-env!
 
          ;; Session lifecycle
          start-q-tui-session!
@@ -285,6 +286,39 @@
             (path->string project-dir)
             (path->string session-dir)
             (path->string artifact-dir)))
+
+;; ============================================================
+;; Temp directory cleanup (GAP-6, W3 #8685)
+;; ============================================================
+
+;; Clean up temp directories created by make-tmux-test-env.
+;; Called after test completion to avoid accumulating /var/tmp dirs.
+;;
+;; If keep-artifacts? is #t (default), only removes dirs when the
+;; artifact-dir is empty (meaning no failure artifacts were written).
+;; If keep-artifacts? is #f, removes all dirs unconditionally.
+;;
+;; Returns a list of (cons dir-path-string deleted?) pairs.
+;; Never throws — wraps all operations in with-handlers so callers
+;; can use it in dynamic-wind cleanup without risk.
+(define (cleanup-tmux-env! env #:keep-artifacts? [keep-artifacts? #t])
+  (define (dir-has-files? dir)
+    (and (directory-exists? dir) (not (null? (directory-list dir)))))
+  (define (safe-delete-dir dir)
+    (with-handlers ([exn:fail? (lambda (_) #f)])
+      (when (directory-exists? dir)
+        (delete-directory/files dir))
+      #t))
+  ;; home, project-dir, and artifact-dir are independent temp dirs.
+  ;; session-dir is inside home, so deleting home covers it.
+  (define dirs (list (tmux-env-home env) (tmux-env-project-dir env) (tmux-env-artifact-dir env)))
+  (define should-delete?
+    (if keep-artifacts?
+        ;; Only delete if artifact-dir is empty (no failure artifacts)
+        (not (dir-has-files? (tmux-env-artifact-dir env)))
+        #t))
+  (for/list ([d (in-list dirs)])
+    (cons d (and should-delete? (safe-delete-dir d)))))
 
 ;; ============================================================
 ;; Pure: ANSI/VT normalization

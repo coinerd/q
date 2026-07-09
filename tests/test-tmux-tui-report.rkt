@@ -17,13 +17,14 @@
                   (with-handlers ([exn:fail? (lambda (e) (void))])
                     (delete-directory/files dir)))))
 
-(test-case "classify retained success dir without expecting failure bundle"
+(test-case "classify success dir without artifacts (GAP-6 improved classification)"
   (with-temp-dir (lambda (dir)
                    (define success-dir (build-path dir "q-tmux-art-success"))
                    (make-directory* success-dir)
-                   (check-equal? (classify-failure #f success-dir) 'retained-success-dir)
+                   ;; No reason file, no artifacts → success-no-artifacts
+                   (check-equal? (classify-failure #f success-dir) 'success-no-artifacts)
                    (define rendered (with-output-to-string (lambda () (render-report dir))))
-                   (check-true (string-contains? rendered "Category: retained-success-dir"))
+                   (check-true (string-contains? rendered "Category: success-no-artifacts"))
                    (check-true (string-contains? rendered "Artifacts: not expected"))
                    (check-false (string-contains? rendered "❌ MISSING")))))
 

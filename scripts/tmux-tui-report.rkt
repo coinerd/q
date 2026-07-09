@@ -41,10 +41,12 @@
 (define expected-artifact-files '("raw-capture.txt" "normalized-capture.txt" "env-summary.txt"))
 
 ;; Classify a failure based on reason text and artifacts. Directories without a
-;; reason file are retained success/temp dirs, not incomplete failure bundles.
+;; reason file and no artifacts are success dirs (candidate for cleanup).
+;; Directories with a reason but incomplete artifacts are incomplete failures.
 (define (classify-failure reason artifact-dir)
   (cond
-    [(not reason) 'retained-success-dir]
+    [(not reason)
+     (if (complete-artifact-bundle? artifact-dir) 'failure-artifacts 'success-no-artifacts)]
     [(string-contains? (string-downcase reason) "timeout") 'timeout]
     [(string-contains? (string-downcase reason) "crash") 'crash]
     [(string-contains? (string-downcase reason) "orphan") 'orphan-cleanup]
@@ -52,7 +54,7 @@
     [(string-contains? (string-downcase reason) "content") 'content-mismatch]
     [(string-contains? reason "Expected") 'content-mismatch]
     [(complete-artifact-bundle? artifact-dir) 'failure-artifacts]
-    [else 'unknown]))
+    [else 'incomplete-failure]))
 
 ;; Check if artifact directory contains expected files.
 (define (check-artifacts dir)
@@ -130,8 +132,12 @@
           (when reason
             (fprintf out "  Reason: ~a~n" (string-trim reason)))
           (cond
-            [(eq? category 'retained-success-dir)
-             (fprintf out "  Artifacts: not expected (retained success/temp directory)~n")]
+            [(or (eq? category 'success-no-artifacts) (eq? category 'retained-success-dir))
+             (fprintf out "  Artifacts: not expected (success dir, no failure artifacts)~n")]
+            [(eq? category 'incomplete-failure)
+             (fprintf out "  Artifacts: INCOMPLETE (missing expected files)~n")
+             (for ([a (in-list artifacts)])
+               (fprintf out "    ~a: ~a~n" (car a) (if (cdr a) "✅" "❌ MISSING")))]
             [else
              (fprintf out "  Artifacts:~n")
              (for ([a (in-list artifacts)])
