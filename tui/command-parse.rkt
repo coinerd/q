@@ -20,7 +20,7 @@
           [parsed-command-args (-> parsed-command? list?)]
           [parsed-command-arg-kind (-> parsed-command? symbol?)]
           ;; Pipeline stage extraction for testability
-          [tokenize (-> string? any/c)]
+          [tokenize (-> string? (values (or/c string? #f) (listof string?)))]
           [lookup-command-entry
            (-> string? (hash/c string? (cons/c symbol? symbol?)) (or/c #f (cons/c symbol? symbol?)))]
           [validate-args (-> (cons/c symbol? symbol?) (listof string?) parsed-command?)]))
@@ -115,12 +115,14 @@
 ;; R-17: Returns parsed-command or #f for non-commands.
 ;; For backward compat, also returns 'unknown for unrecognized slash commands.
 ;; F13: Pipeline stage extraction for testability.
-;; tokenize: string -> (values cmd-string (listof string)) or #f
+;; tokenize: string -> (values (or/c cmd-string #f) (listof string))
+;; Non-command inputs use #f plus an empty arg list so callers and contracts
+;; always observe the same result arity.
 (define (tokenize text)
   (define trimmed (string-trim text))
   (cond
-    [(string=? trimmed "") #f]
-    [(not (char=? (string-ref trimmed 0) #\/)) #f]
+    [(string=? trimmed "") (values #f '())]
+    [(not (char=? (string-ref trimmed 0) #\/)) (values #f '())]
     [else
      (define parts (string-split trimmed))
      (values (car parts) (cdr parts))]))
@@ -146,20 +148,16 @@
     [else (parsed-command (car entry) '() 'none)]))
 
 (define (parse-command-name text)
-  ;; v0.47.0 (D-5): Cleaner handling of tokenize multi-value or #f return.
-  ;; tokenize returns (values cmd-string args-list) or a single #f.
-  (define result (call-with-values (λ () (tokenize text)) list))
+  ;; tokenize always returns two values: command string or #f, plus args.
+  (define-values (cmd args) (tokenize text))
   (cond
-    [(null? result) #f]
-    [(= (length result) 2)
-     (define cmd (car result))
-     (define args (cadr result))
+    [(not cmd) #f]
+    [else
      (define table (make-command-table))
      (define entry (lookup-command-entry cmd table))
      (cond
        [(not entry) 'unknown]
-       [else (validate-args entry args)])]
-    [else #f]))
+       [else (validate-args entry args)])]))
 
 ;; Resolve a command name (with alias) to canonical symbol.
 ;; Returns: symbol or #f

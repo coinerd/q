@@ -578,16 +578,18 @@
 ;; 8. Command Parsing
 ;; ---------------------------------------------------------------------------
 
-(test-case "audit-cmd-parse-tokenize-contract-bug"
-  ;; FINDING: tokenize has a contract bug. It returns (values cmd args) or #f,
-  ;; but its contract is (-> string? any/c) which promises exactly 1 value.
-  ;; When called from outside the module, the contract raises an error.
-  ;; The function works correctly when called internally (parse-command-name
-  ;; uses call-with-values to capture both return values).
-  ;; We test tokenize indirectly through parse-command-name instead.
-  (check-false (tokenize ""))
-  (check-false (tokenize "hello"))
-  ;; tokenize "/help" returns 2 values but contract breaks — test via parse-command-name
+(test-case "audit-cmd-parse-tokenize-contract-remediated"
+  ;; FINDING remediation: tokenize has a precise two-value contract.
+  ;; Commands return (values cmd args); non-commands return (values #f '()).
+  (define-values (empty-cmd empty-args) (tokenize ""))
+  (check-false empty-cmd)
+  (check-equal? empty-args '())
+  (define-values (text-cmd text-args) (tokenize "hello"))
+  (check-false text-cmd)
+  (check-equal? text-args '())
+  (define-values (help-cmd help-args) (tokenize "/help"))
+  (check-equal? help-cmd "/help")
+  (check-equal? help-args '())
   (define result (parse-command-name "/help"))
   (check-true (parsed-command? result))
   (check-equal? (parsed-command-canonical-name result) 'help))

@@ -132,6 +132,8 @@
 
 ;; BFS path finder for multi-step transitions.
 ;; Returns list of states to visit (excluding 'from, including 'to) or #f.
+;; Same-state requests are successful zero-hop paths and return '(), which is
+;; intentionally distinguishable from #f (no path exists).
 (define (find-transition-path from to)
   (define visited (make-hash))
   (define q (list (cons from '())))

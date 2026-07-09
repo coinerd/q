@@ -135,11 +135,11 @@
                      ;; plan-written → idle → exploring
                      (define path (find-transition-path 'plan-written 'exploring))
                      (check-true (and path (member 'exploring path) #t)))
-                   (test-case "path to self returns empty"
-                     ;; idle → idle is handled by valid-transition? self-loop
-                     ;; find-transition-path returns #f when from == to initially but BFS finds it
+                   (test-case "path to self returns explicit empty path"
+                     ;; Same-state path is a successful zero-hop path and must remain
+                     ;; distinguishable from #f, which means no path exists.
                      (define path (find-transition-path 'verifying 'verifying))
-                     (check-true (or (null? path) (not path)))))
+                     (check-equal? path '())))
 
 ;; ============================================================
 ;; compute-next-gsm-state tests
