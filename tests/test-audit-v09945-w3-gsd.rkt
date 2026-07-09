@@ -283,9 +283,9 @@
     (gsd-decide-action (hasheq 'mode
                                'executing
                                'target-path
-                               "/project/.planning/PLAN.md"
+                               "project/.planning/PLAN.md"
                                'pinned-dir
-                               "/project/.planning")
+                               "project/.planning")
                        'write-file))
   (check-true (policy-blocked? d) "Write to .planning during execution should be blocked"))
 
@@ -293,7 +293,7 @@
   ;; Writes to source files during execution are allowed
   (define d
     (gsd-decide-action
-     (hasheq 'mode 'executing 'target-path "/project/src/main.rkt" 'pinned-dir "/project/.planning")
+     (hasheq 'mode 'executing 'target-path "project/src/main.rkt" 'pinned-dir "project/.planning")
      'write-file))
   (check-true (policy-allowed? d) "Write to source files during execution should be allowed"))
 
