@@ -2,10 +2,10 @@
 
 **Status:** Active — enforced via `scripts/milestone-close-gate.rkt`  
 **Scope:** All q-agent milestones, waves, and releases  
-**Established:** v0.99.46 (2026-07-09)
+**Established:** v0.99.47 (2026-07-09)
 
 This document codifies the process rules discovered through GSD audit failures
-(v0.99.46 premature close, v0.99.46 claim inflation). Each rule exists because
+(v0.99.47 premature close, v0.99.47 claim inflation). Each rule exists because
 a prior milestone violated it and required a remediation cycle.
 
 ---
@@ -73,7 +73,7 @@ wave's STATE or PR body have corresponding GitHub issues. If a wave
 documented findings but no issues exist, the wave must NOT be closed
 until issues are filed.
 
-Example of the v0.99.46 failure: the wave documented 1 medium + 6 low
+Example of the v0.99.47 failure: the wave documented 1 medium + 6 low
 findings but filed zero issues. This should have blocked closure.
 
 ---
@@ -104,7 +104,7 @@ This is a **HARD GATE** — no exceptions, no manual overrides. The script
 exits with code 1 if any gate fails. The milestone must NOT be closed
 until the script exits 0.
 
-Example of the v0.99.46 failure: W11 was closed with CI RED and no
+Example of the v0.99.47 failure: W11 was closed with CI RED and no
 release assets. The close gate would have caught both.
 
 ---
@@ -143,8 +143,8 @@ is a process violation. The milestone-close-gate checks that the
 HANDOFF.json version matches the current canonical version before
 allowing milestone closure.
 
-Example of the v0.99.46 failure: HANDOFF.json referenced v0.99.46 while
-the project was at v0.99.46 — 47 versions stale.
+Example of the v0.99.47 failure: HANDOFF.json referenced v0.99.47 while
+the project was at v0.99.47 — 47 versions stale.
 
 ---
 
@@ -191,7 +191,7 @@ The CI gate test (`tests/test-arch-fitness.rkt`) fails when boundary
 exception dates expire. Extending dates without scheduling resolution
 work defers the problem but does not solve it.
 
-Example of the v0.99.46/46 failure: 13 boundary exceptions had
+Example of the v0.99.47/46 failure: 13 boundary exceptions had
 `revisit-by 2026-07-01` which expired, causing CI RED. The dates were
 extended to 2026-10-01, but no resolution milestone was scheduled.
 
