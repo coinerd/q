@@ -1,8 +1,5 @@
+<!-- verified-against: 0.99.46 -->
 # Architecture Overview
-
-## Version
-
-v0.99.44
 
 ## Native TUI Stack
 

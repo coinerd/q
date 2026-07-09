@@ -1,3 +1,39 @@
+## 0.99.46
+
+Released: 2026-07-09
+
+### Overview
+Audit remediation and release. v0.99.46 closes the follow-up work from the
+v0.99.45 real-world subsystem audit, restores report/test truth, repairs
+contract and validation defects found by the audit, and publishes the next
+release after v0.99.44. v0.99.45 was audit-only and had no tag or GitHub
+Release.
+
+### Audit Remediation
+
+- **W0: CI and report-test hygiene.** Extended expired architecture-boundary
+  exception dates to 2026-10-01, removed absolute-path assumptions from
+  v0.99.45 audit tests, and restored README metrics sync.
+- **W1: Shell-risk predicate contracts.** Fixed `risk-severity?`,
+  `token-type?`, and `risk-type?` so member-based predicates return exact
+  booleans under `(-> symbol? boolean?)` contracts.
+- **W2: Contract and validation clarity.** Fixed TUI command tokenization to
+  return a stable two-value result, rejected empty OAuth authorize/token URLs,
+  and documented/tested same-state GSD transition paths as zero-hop `()`.
+- **W3: Final audit-report truth.** Corrected the v0.99.45 final report to
+  state 663 audit test cases, 1,626 check assertions, 6 low-severity findings,
+  no v0.99.45 tag/release, and v0.99.46 remediation tracking via #8666–#8671.
+- **W4: Release.** Bumped source/package/README version surfaces to 0.99.46
+  and verified release gates before publishing v0.99.46.
+
+### Verification
+
+- Focused remediation tests for shell-risk contracts, command parsing, OAuth
+  validation, GSD transition semantics, and final report truth.
+- Fast suite before release: 1008/1008 files, 14959/14959 tests passed during
+  W3; W4 release gates rerun after version bump.
+- Release artifacts required: `q-0.99.46.tar.gz` and `release-manifest.json`.
+
 ## 0.99.44
 
 Released: 2026-07-04

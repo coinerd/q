@@ -222,7 +222,7 @@ Session-to-project memory reflection via `runtime/memory/reflection.rkt`:
 - Each reflection supersedes its source items (automatic superseded removal on retrieval)
 - No-op when fewer than `min-group-size` items or no groupable items found
 
-### v0.99.44 Quality Remediation
+### Quality Remediation
 
 Key behavioral improvements:
 
@@ -241,7 +241,7 @@ Key behavioral improvements:
 - [Architecture Overview](architecture/overview.md)
 - [Tool System](tooling.md)
 
-### v0.99.44 Memory Injection Hotfix
+### Memory Injection Hotfix
 
 **HF1**: Memory injection was silently skipped in production because `assemble-context/pure` in `turn-orchestrator.rkt` did not thread `#:session-config` to `build-tiered-context/state-aware`. The parameter was accepted but never populated. Fixed by adding the wire.
 
@@ -251,7 +251,7 @@ Key behavioral improvements:
 
 **LF2**: `decode-mem0-items` in the Mem0 adapter was called with hardcoded `"session"` and `"."` instead of actual query values. Now threaded from the retrieve payload.
 
-### v0.99.44 Memory Lifecycle Completion
+### Memory Lifecycle Completion
 
 **G1 — Background Reflection Trigger**: Session-scoped memories are now automatically promoted to project scope via deterministic reflection. When `memory.auto-reflection.enabled` is `true`, `maybe-reflect-session-memories!` fires after each turn's auto-extraction. The non-fatal wrapper catches all exceptions and logs warnings, never disrupting the agent loop. Controlled by two config keys:
 
