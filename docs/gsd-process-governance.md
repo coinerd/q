@@ -179,16 +179,17 @@ scheduled before their `revisit-by` date expires.
 
 ### Protocol
 
-- Each boundary exception has a `revisit-by` date.
-- A dedicated milestone must exist to resolve the violations before
+- Each boundary exception has exactly one lifecycle: a `revisit-by` date or an
+  explicit `permanent-waiver` with a non-empty `waiver-justification`.
+- A dedicated milestone must exist to resolve dated violations before
   the earliest `revisit-by` date.
-- If violations are not resolved, they must either be fixed or given
-  a permanent waiver (no expiry date) with justification.
+- Permanent waivers are reserved for intentional composition boundaries; they
+  remain subject to exception-count and boundary-drift gates.
 
 ### Enforcement
 
-The CI gate test (`tests/test-arch-fitness.rkt`) fails when boundary
-exception dates expire. Extending dates without scheduling resolution
+The CI gate test (`tests/test-arch-boundaries.rkt`) validates lifecycle
+metadata for every exception layer and fails when dated exceptions expire. Extending dates without scheduling resolution
 work defers the problem but does not solve it.
 
 Example of the v0.99.47/46 failure: 13 boundary exceptions had
