@@ -34,16 +34,22 @@
    (rationale
     . "Browser subsystem peer of tools — imports only agent/event and util. Never runtime/tui.")))
  ;; Known boundary exceptions (files that violate layer rules for documented reasons)
- ;; Format: ((filename (rationale . "...") (owner . "...") (revisit-by . "YYYY-MM-DD")) ...)
- ;; Owner: responsible module/component. Revisit-by: date to reassess necessity.
- ;; Gate test: undocumented exceptions (missing owner/revisit-by) will FAIL.
+ ;; Dated format: ((filename (rationale . "...") (owner . "...")
+ ;;                           (revisit-by . "YYYY-MM-DD")) ...)
+ ;; Permanent format: ((filename (rationale . "...") (owner . "...")
+ ;;                               (permanent-waiver . #t)
+ ;;                               (waiver-justification . "...")) ...)
+ ;; Owner and rationale are always required. Exactly one lifecycle form is required.
+ ;; Permanent waivers remain tracked by exception-count and boundary-drift gates.
  (known-exceptions
   (runtime
    .
    ((layer-adapters.rkt
      (rationale . "explicit adapter facade routing tool/extension deps behind contained boundary")
      (owner . "runtime")
-     (revisit-by . "2026-10-01"))
+     (permanent-waiver . #t)
+     (waiver-justification
+      . "The adapter is the intentional composition boundary that contains all runtime-to-tool and runtime-to-extension wiring; removing it would spread forbidden imports across runtime consumers."))
     (agent-session.rkt (rationale . "list-extensions via adapter (re-exports extension listing)")
                        (owner . "runtime")
                        (revisit-by . "2026-10-01"))

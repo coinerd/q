@@ -36,6 +36,40 @@
 ;; Boundary tests
 ;; ============================================================
 
+(define (exception-metadata-error layer entry)
+  (define name (car entry))
+  (define fields (cdr entry))
+  (define (field key)
+    (and (pair? fields) (assoc key fields)))
+  (define (value key)
+    (define found (field key))
+    (and found (cdr found)))
+  (define revisit-field (field 'revisit-by))
+  (define permanent-field (field 'permanent-waiver))
+  (define justification-field (field 'waiver-justification))
+  (cond
+    [(not (and (string? (value 'owner)) (non-empty-string? (value 'owner))))
+     (format "~a/~a: missing owner" layer name)]
+    [(not (and (string? (value 'rationale)) (non-empty-string? (value 'rationale))))
+     (format "~a/~a: missing rationale" layer name)]
+    [(and revisit-field permanent-field) (format "~a/~a: has both lifecycle fields" layer name)]
+    [revisit-field
+     (cond
+       [justification-field (format "~a/~a: dated exception has waiver justification" layer name)]
+       [(not (and (string? (cdr revisit-field))
+                  (regexp-match? #px"^[0-9]{4}-[0-9]{2}-[0-9]{2}$" (cdr revisit-field))))
+        (format "~a/~a: malformed revisit-by" layer name)]
+       [else #f])]
+    [permanent-field
+     (cond
+       [(not (eq? (cdr permanent-field) #t)) (format "~a/~a: permanent-waiver must be #t" layer name)]
+       [(not (and justification-field
+                  (string? (cdr justification-field))
+                  (non-empty-string? (cdr justification-field))))
+        (format "~a/~a: permanent waiver lacks justification" layer name)]
+       [else #f])]
+    [else (format "~a/~a: missing lifecycle metadata" layer name)]))
+
 (define boundary-tests
   (test-suite "architecture-boundaries"
 
@@ -43,24 +77,17 @@
       ;; Use recursive scan to include subdirectory modules (runtime/iteration/*, etc.)
       (define runtime-files (rkt-files-in-recursive "runtime"))
       (define runtime-exc (policy-ref 'known-exceptions 'runtime))
-      ;; Build set of known exception RELATIVE paths (e.g. "runtime/iteration/loop-config.rkt")
-      ;; Each entry is either (filename . "rationale") or (filename (rationale . "...") ...)
+      ;; Policy names are canonical paths relative to runtime/. A top-level name
+      ;; therefore cannot accidentally waive a nested module with the same basename.
       (define known-exceptions
-        (for/fold ([acc (set)]) ([entry (in-list runtime-exc)])
-          (define name
-            (if (symbol? (car entry))
-                (symbol->string (car entry))
-                (car entry)))
-          ;; Accept both bare filename and runtime/ prefixed path
-          (set-add (set-add acc name) (string-append "runtime/" name))))
-      ;; Also match filenames for backward compat
+        (for/set ([entry (in-list runtime-exc)])
+          (define name (car entry))
+          (if (symbol? name)
+              (symbol->string name)
+              name)))
       (define (known-exception? f)
         (define rel (path->string (find-relative-path (build-path q-dir "runtime") f)))
-        (define bare (path->string (file-name-from-path f)))
-        (or (set-member? known-exceptions rel)
-            (set-member? known-exceptions bare)
-            (set-member? known-exceptions (string-append "runtime/" rel))
-            (set-member? known-exceptions (string-append "runtime/" bare))))
+        (set-member? known-exceptions rel))
       (define violations
         (for/list ([f (in-list runtime-files)]
                    #:when (not (known-exception? f)))
@@ -86,30 +113,49 @@
                     '()
                     (format "TUI modules importing from forbidden layers: ~a" actual-violations)))
 
-    (test-case "All boundary exceptions have required metadata (owner, revisit-by)"
-      ;; W25 blocking gate: every known exception must have owner and revisit-by fields.
-      ;; Undocumented exceptions (missing metadata) cause test failure.
-      (define layers-with-exceptions '(runtime extensions))
-      (define missing-metadata
+    (test-case "All boundary exceptions have valid lifecycle metadata"
+      (define layers-with-exceptions (map car (policy-ref 'known-exceptions)))
+      (define metadata-errors
         (for*/list ([layer (in-list layers-with-exceptions)]
                     [entry (in-list (policy-ref 'known-exceptions layer))])
-          (define name (car entry))
-          (define fields (cdr entry))
-          (define (has-field? f)
-            (and (pair? fields) (assoc f fields)))
-          (cond
-            [(not (has-field? 'owner)) (format "~a/~a: missing owner" layer name)]
-            [(not (has-field? 'revisit-by)) (format "~a/~a: missing revisit-by" layer name)]
-            [else #f])))
-      (define actual-missing (filter identity missing-metadata))
-      (check-equal? actual-missing
+          (exception-metadata-error layer entry)))
+      (check-equal? (filter identity metadata-errors)
                     '()
-                    (format "Boundary exceptions missing metadata: ~a" actual-missing)))
+                    (format "Invalid boundary exception metadata: ~a"
+                            (filter identity metadata-errors)))
+      (define valid-base '((rationale . "reason") (owner . "owner")))
+      (define fixtures
+        (list (cons (append valid-base '((revisit-by . "2027-01-01"))) #f)
+              (cons (append valid-base
+                            '((permanent-waiver . #t) (waiver-justification . "intentional")))
+                    #f)
+              (cons valid-base #t)
+              (cons (append valid-base
+                            '((revisit-by . "2027-01-01") (permanent-waiver . #t)
+                                                          (waiver-justification . "ambiguous")))
+                    #t)
+              (cons (append valid-base '((permanent-waiver . #f))) #t)
+              (cons (append valid-base
+                            '((permanent-waiver . permanent) (waiver-justification . "wrong type")))
+                    #t)
+              (cons (append valid-base '((permanent-waiver . #t) (waiver-justification . ""))) #t)
+              (cons (append valid-base '((revisit-by . "January 1"))) #t)
+              (cons (append valid-base '((revisit-by . 20270101))) #t)
+              (cons (append valid-base
+                            '((revisit-by . "2027-01-01") (waiver-justification . "not a waiver")))
+                    #t)))
+      (for ([fixture (in-list fixtures)])
+        (define error (exception-metadata-error 'fixture (cons 'sample.rkt (car fixture))))
+        (check-equal? (and error #t) (cdr fixture)))
+      (define layer-adapter-fields
+        (cdr (assoc 'layer-adapters.rkt (policy-ref 'known-exceptions 'runtime))))
+      (check-equal? (cdr (assoc 'permanent-waiver layer-adapter-fields)) #t)
+      (check-false (assoc 'revisit-by layer-adapter-fields)))
 
     (test-case "No boundary exception has expired revisit-by date"
       ;; W25 blocking gate: expired revisit-by dates must be addressed.
       ;; Uses simple YYYY-MM-DD string comparison (ISO format sorts lexicographically).
-      (define layers-with-exceptions '(runtime extensions))
+      (define layers-with-exceptions (map car (policy-ref 'known-exceptions)))
       (define today-str
         (parameterize ([date-display-format 'iso-8601])
           (date->string (seconds->date (current-seconds)))))
