@@ -12,7 +12,7 @@
          racket/list
          "goal-state.rkt"
          "../../sandbox/subprocess.rkt"
-         "../../tools/shell-risk.rkt"
+         "../../util/shell-risk.rkt"
          (only-in "../../util/time.rkt" now-epoch-ms))
 
 ;; ============================================================
