@@ -12,9 +12,9 @@
 ((layers
   (runtime
    (max-exceptions . 12)
-   (forbidden-from . (llm tools extensions))
+   (forbidden-from . (tools extensions))
    (rationale
-    . "Runtime should not import upward into tools/extensions except via documented exceptions (includes iteration/ submodules and layer-adapters)"))
+    . "Runtime may depend downward on LLM provider contracts, but must not import upward into tools/extensions except via documented exceptions (including layer-adapters)."))
   (agent (max-exceptions . 2)
          (forbidden-from . (llm))
          (rationale . "Agent layer types; minimal cross-boundary imports"))
@@ -50,29 +50,6 @@
      (permanent-waiver . #t)
      (waiver-justification
       . "The adapter is the intentional composition boundary that contains all runtime-to-tool and runtime-to-extension wiring; removing it would spread forbidden imports across runtime consumers."))
-    (agent-session.rkt (rationale . "list-extensions via adapter (re-exports extension listing)")
-                       (owner . "runtime")
-                       (revisit-by . "2026-10-01"))
-    (session/session-lifecycle.rkt
-     (rationale . "injection-event-topic import (extracted from agent-session/iteration)")
-     (owner . "runtime")
-     (revisit-by . "2026-10-01"))
-    (session/session-lifecycle-transitions.rkt
-     (rationale . "pure FSM transitions extracted from session-lifecycle")
-     (owner . "runtime")
-     (revisit-by . "2026-09-01"))
-    (runtime-helpers.rkt (rationale . "hook dispatch for session events (via adapter)")
-                         (owner . "runtime")
-                         (revisit-by . "2026-10-01"))
-    (tool-coordinator.rkt (rationale . "tool execution orchestration (all imports via adapter)")
-                          (owner . "tools")
-                          (revisit-by . "2026-10-01"))
-    (turn-orchestrator.rkt (rationale . "context assembly + provider turn (imports via adapter)")
-                           (owner . "runtime")
-                           (revisit-by . "2026-10-01"))
-    (session/session-config.rkt (rationale . "central typed config (imports via adapter)")
-                                (owner . "runtime")
-                                (revisit-by . "2026-10-01"))
     (package.rkt (rationale . "package audit reads extension manifests")
                  (owner . "extensions")
                  (revisit-by . "2026-08-01"))
@@ -86,10 +63,7 @@
     (goal/goal-checks.rkt (rationale . "imports shell-risk from tools/ for command safety validation")
                           (owner . "runtime")
                           (revisit-by . "2026-08-01"))))
-  (agent . ((iteration/loop-state.rkt
-             (rationale . "typed require from extensions/api.rkt for opaque ExtRegistry")
-             (owner . "agent")
-             (revisit-by . "2026-08-01"))))
+  (agent . ())
   (extensions
    .
    ((dialog-api.rkt (rationale . "TUI dialog interface") (owner . "tui") (revisit-by . "2026-10-01"))
