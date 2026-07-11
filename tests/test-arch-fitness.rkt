@@ -112,11 +112,11 @@
         "Runtime boundary exceptions (~a) exceed policy maximum (~a). Update dependency-policy.rktd or refactor."
         (length runtime-exceptions)
         max-runtime-exc))
-      ;; At least 3 of the known exceptions should still be importing
-      (check-true
-       (>= (length still-importing) 3)
-       (format "Too few known exceptions still importing from tools/extensions: ~a (expected >= 3)"
-               still-importing))
+      ;; Only the intentional adapter facade may retain static upward imports.
+      ;; Other exceptions (for example, lazy dynamic loading) must not expand this list.
+      (check-equal? still-importing
+                    '("layer-adapters.rkt")
+                    (format "Unexpected runtime static upward imports: ~a" still-importing))
       (check-true (<= (length still-importing) max-runtime-exc)
                   (format "More than ~a runtime files importing from tools/extensions: ~a"
                           max-runtime-exc

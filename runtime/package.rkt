@@ -14,7 +14,7 @@
          racket/port
          racket/string
          racket/path
-         "../extensions/manifest.rkt")
+         "layer-adapters.rkt")
 (require (only-in "../util/error/error-helpers.rkt" with-safe-fallback))
 (require "../util/config-paths.rkt")
 
