@@ -21,6 +21,8 @@
 ;; Re-exported from extensions/:
 ;;   - dispatch-hooks (context assembly hook dispatch)
 ;;   - make-extension-ctx (extension context factory)
+;;   - manifest operations (package management adapter)
+;;   - catalog metadata operations (extension discovery adapter)
 
 (require racket/contract
          (only-in "../tools/tool.rkt"
@@ -34,7 +36,19 @@
          (only-in "../tools/scheduler.rkt" run-tool-batch scheduler-result scheduler-result-results)
          (only-in "../extensions/hooks.rkt" dispatch-hooks)
          (only-in "../extensions/context.rkt" make-extension-ctx)
-         (only-in "../extensions/api.rkt" extension-registry? list-extensions)
+         (only-in "../extensions/api.rkt"
+                  extension-registry?
+                  list-extensions
+                  extension-name
+                  extension-version)
+         (only-in "../extensions/loader.rkt" get-extension-name-from-path)
+         (only-in "../extensions/manifest.rkt"
+                  read-qpm-manifest
+                  validate-manifest
+                  compute-manifest-checksum
+                  qpm-manifest-name
+                  qpm-manifest-checksum
+                  qpm-manifest-files)
          (only-in "../extensions/gsd/session-state.rkt" current-gsd-ctx gsd-session-ctx?))
 
 ;; Tool schema assembly
@@ -62,4 +76,13 @@
          make-default-permission-config
          ;; GSD session context
          current-gsd-ctx
-         gsd-session-ctx?)
+         gsd-session-ctx?
+         extension-name
+         extension-version
+         get-extension-name-from-path
+         read-qpm-manifest
+         validate-manifest
+         compute-manifest-checksum
+         qpm-manifest-name
+         qpm-manifest-checksum
+         qpm-manifest-files)

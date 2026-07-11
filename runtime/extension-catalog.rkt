@@ -17,8 +17,7 @@
          racket/file
          racket/path
          json
-         "../extensions/api.rkt"
-         (only-in "../extensions/loader.rkt" get-extension-name-from-path))
+         "layer-adapters.rkt")
 (require (only-in "../util/error/error-helpers.rkt" with-safe-fallback))
 (require "../util/config-paths.rkt")
 
