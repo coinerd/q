@@ -77,6 +77,9 @@
       ;; Use recursive scan to include subdirectory modules (runtime/iteration/*, etc.)
       (define runtime-files (rkt-files-in-recursive "runtime"))
       (define runtime-exc (policy-ref 'known-exceptions 'runtime))
+      ;; Runtime legitimately consumes lower-level LLM provider contracts. Its
+      ;; upward boundaries are tools and extensions, matching this gate.
+      (check-equal? (policy-ref 'layers 'runtime 'forbidden-from) '(tools extensions))
       ;; Policy names are canonical paths relative to runtime/. A top-level name
       ;; therefore cannot accidentally waive a nested module with the same basename.
       (define known-exceptions
@@ -112,6 +115,27 @@
       (check-equal? actual-violations
                     '()
                     (format "TUI modules importing from forbidden layers: ~a" actual-violations)))
+
+    (test-case "Retired stale exceptions have clean direct dependencies"
+      (define retired
+        '((runtime "agent-session.rkt" ("../tools/" "../extensions/"))
+          (runtime "session/session-lifecycle.rkt" ("../../tools/" "../../extensions/"))
+          (runtime "session/session-lifecycle-transitions.rkt" ("../../tools/" "../../extensions/"))
+          (runtime "runtime-helpers.rkt" ("../tools/" "../extensions/"))
+          (runtime "tool-coordinator.rkt" ("../tools/" "../extensions/"))
+          (runtime "turn-orchestrator.rkt" ("../tools/" "../extensions/"))
+          (runtime "session/session-config.rkt" ("../../tools/" "../../extensions/"))
+          (agent "iteration/loop-state.rkt" ("../../llm/"))))
+      (for ([item (in-list retired)])
+        (define layer (car item))
+        (define rel (cadr item))
+        (define forbidden (caddr item))
+        (define exception-names (map car (policy-ref 'known-exceptions layer)))
+        (check-false (member (string->symbol rel) exception-names)
+                     (format "~a/~a remains in known-exceptions" layer rel))
+        (define module-path (build-path q-dir (symbol->string layer) rel))
+        (check-false (imports-from? (extract-requires module-path) forbidden)
+                     (format "~a/~a still imports a forbidden layer" layer rel))))
 
     (test-case "All boundary exceptions have valid lifecycle metadata"
       (define layers-with-exceptions (map car (policy-ref 'known-exceptions)))
