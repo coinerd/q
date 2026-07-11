@@ -125,6 +125,7 @@
           (runtime "tool-coordinator.rkt" ("../tools/" "../extensions/"))
           (runtime "turn-orchestrator.rkt" ("../tools/" "../extensions/"))
           (runtime "session/session-config.rkt" ("../../tools/" "../../extensions/"))
+          (runtime "goal/goal-checks.rkt" ("../../tools/" "../../extensions/"))
           (agent "iteration/loop-state.rkt" ("../../llm/"))))
       (for ([item (in-list retired)])
         (define layer (car item))

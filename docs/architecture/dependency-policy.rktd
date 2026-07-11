@@ -60,9 +60,7 @@
      (rationale . "dynamic-require to extensions for lazy loading (avoids circular dependency)")
      (owner . "runtime")
      (revisit-by . "2026-10-01"))
-    (goal/goal-checks.rkt (rationale . "imports shell-risk from tools/ for command safety validation")
-                          (owner . "runtime")
-                          (revisit-by . "2026-08-01"))))
+))
   (agent . ())
   (extensions
    .
