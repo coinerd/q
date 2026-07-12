@@ -50,10 +50,6 @@
      (permanent-waiver . #t)
      (waiver-justification
       . "The adapter is the intentional composition boundary that contains all runtime-to-tool and runtime-to-extension wiring; removing it would spread forbidden imports across runtime consumers."))
-    (session/session-switch.rkt
-     (rationale . "dynamic-require to extensions for lazy loading (avoids circular dependency)")
-     (owner . "runtime")
-     (revisit-by . "2026-10-01"))
 ))
   (agent . ())
   (extensions
