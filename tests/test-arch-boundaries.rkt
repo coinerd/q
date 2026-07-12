@@ -116,7 +116,7 @@
                     '()
                     (format "TUI modules importing from forbidden layers: ~a" actual-violations)))
 
-    (test-case "Retired stale exceptions have clean direct dependencies"
+    (test-case "Retired stale exceptions have clean direct or dynamic dependencies"
       (define retired
         '((runtime "agent-session.rkt" ("../tools/" "../extensions/"))
           (runtime "session/session-lifecycle.rkt" ("../../tools/" "../../extensions/"))
@@ -128,6 +128,7 @@
           (runtime "goal/goal-checks.rkt" ("../../tools/" "../../extensions/"))
           (runtime "package.rkt" ("../tools/" "../extensions/"))
           (runtime "extension-catalog.rkt" ("../tools/" "../extensions/"))
+          (runtime "session/session-switch.rkt" ("../../tools/" "../../extensions/"))
           (agent "iteration/loop-state.rkt" ("../../llm/"))))
       (for ([item (in-list retired)])
         (define layer (car item))
@@ -138,7 +139,14 @@
                      (format "~a/~a remains in known-exceptions" layer rel))
         (define module-path (build-path q-dir (symbol->string layer) rel))
         (check-false (imports-from? (extract-requires module-path) forbidden)
-                     (format "~a/~a still imports a forbidden layer" layer rel))))
+                     (format "~a/~a still imports a forbidden layer" layer rel)))
+      ;; session-switch previously hid its extension dependency behind
+      ;; dynamic-require. Keep the retired exception honest beyond static
+      ;; require extraction so lazy loading cannot silently restore it.
+      (define session-switch-source
+        (file->string (build-path q-dir "runtime" "session" "session-switch.rkt")))
+      (check-false (regexp-match? #px"\\b(?:dynamic-require|lazy-require)\\b" session-switch-source)
+                   "runtime/session/session-switch.rkt must use adapter-provided defaults"))
 
     (test-case "All boundary exceptions have valid lifecycle metadata"
       (define layers-with-exceptions (map car (policy-ref 'known-exceptions)))

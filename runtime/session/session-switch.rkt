@@ -10,17 +10,16 @@
 ;;
 ;; Lifecycle: before-switch → teardown old → create new → rebind → emit start
 ;;
-;; v0.14.1: DI for extension hooks/context to avoid runtime→extensions import.
-;; Callers pass #:dispatch-hooks and #:make-ctx functions (defaults provided
-;; for backward compatibility via lazy require).
+;; Extension defaults enter through runtime/layer-adapters.rkt, the intentional
+;; composition boundary. Callers may still override #:dispatch-hooks and
+;; #:make-ctx for dependency injection.
 
 (require racket/contract
          racket/match
-         racket/runtime-path
          "../../util/event/event-bus.rkt"
          "../../agent/event-emitter.rkt"
          "../../agent/event-structs/session-events.rkt"
-         (only-in "../../util/error/errors.rkt" raise-extension-error))
+         (only-in "../layer-adapters.rkt" dispatch-hooks make-extension-ctx))
 
 ;; #704: Teardown
 (provide teardown-session-extensions!
@@ -43,47 +42,11 @@
          (contract-out [switch-session! any/c]))
 
 ;; ============================================================
-;; Lazy extension imports (DI defaults)
+;; Adapter-provided DI defaults
 ;; ============================================================
 
-;; Capture absolute paths at module-load time so dynamic-require works
-;; regardless of (current-directory) at call time.
-(define-runtime-path hooks-rkt-path "../../extensions/hooks.rkt")
-(define-runtime-path context-rkt-path "../../extensions/context.rkt")
-
-;; Default dispatch-hooks: lazy-load from extensions/hooks.rkt
-(define (default-dispatch-hooks hook-point payload registry)
-  (define dispatch-fn
-    (with-handlers ([exn:fail:filesystem? (lambda (e)
-                                            (raise-extension-error
-                                             (format "Cannot load extensions/hooks.rkt: ~a"
-                                                     (exn-message e))
-                                             "hooks"
-                                             'dispatch-hooks))])
-      (dynamic-require hooks-rkt-path 'dispatch-hooks)))
-  (dispatch-fn hook-point payload registry))
-
-;; Default make-extension-ctx: lazy-load from extensions/context.rkt
-(define (default-make-extension-ctx #:session-id sid
-                                    #:session-dir sdir
-                                    #:event-bus bus
-                                    #:extension-registry ereg
-                                    #:model-name [model-name #f]
-                                    #:working-directory [working-directory #f])
-  (define make-ctx-fn
-    (with-handlers ([exn:fail:filesystem? (lambda (e)
-                                            (raise-extension-error
-                                             (format "Cannot load extensions/context.rkt: ~a"
-                                                     (exn-message e))
-                                             "context"
-                                             'make-extension-ctx))])
-      (dynamic-require context-rkt-path 'make-extension-ctx)))
-  (make-ctx-fn #:session-id sid
-               #:session-dir sdir
-               #:event-bus bus
-               #:extension-registry ereg
-               #:model-name model-name
-               #:working-directory working-directory))
+(define default-dispatch-hooks dispatch-hooks)
+(define default-make-extension-ctx make-extension-ctx)
 
 ;; ============================================================
 ;; Structs
