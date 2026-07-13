@@ -28,4 +28,10 @@
       (regexp-match? #px"(?i:introduced|added|since|deprecated|removed) v[0-9]+\\.[0-9]+\\.[0-9]+"
                      line)
       ;; Pattern 7: Section headers with version — "## Title (vX.Y.Z)"
-      (regexp-match? #rx"^#+ .*\\(v[0-9]+\\.[0-9]+\\.[0-9]+\\)" trimmed)))
+      (regexp-match? #rx"^#+ .*\\(v[0-9]+\\.[0-9]+\\.[0-9]+\\)" trimmed)
+      ;; Pattern 8: Document provenance — "**Established:** vX.Y.Z"
+      (regexp-match? #rx"^\\*\\*Established:\\*\\* v[0-9]+\\.[0-9]+\\.[0-9]+" trimmed)
+      ;; Pattern 9: Explicit historical examples — "Example of the vX.Y.Z failure"
+      (regexp-match? #rx"^Example of the v[0-9]+\\.[0-9]+\\.[0-9]+" trimmed)
+      ;; Pattern 10: Parenthesized audit-failure provenance.
+      (regexp-match? #px"^\\(v[0-9]+\\.[0-9]+\\.[0-9]+ .*(?:failure|close|claim)" trimmed)))

@@ -1,3 +1,50 @@
+## 0.99.49
+
+Released: 2026-07-13
+
+### Overview
+
+Architecture boundary resolution. v0.99.49 retires all dated runtime and agent
+layer exceptions tracked by milestone #835 while retaining one explicit,
+permanent composition-boundary waiver for `runtime/layer-adapters.rkt`.
+
+### User-Visible Changes
+
+- Added strict lifecycle metadata for dated and permanent architecture waivers,
+  including canonical runtime-relative exception matching.
+- Removed stale exceptions for runtime session lifecycle, orchestration, helper,
+  configuration, and agent loop-state modules.
+- Moved pure shell-risk classification into `util/`, retaining the tools module
+  as a compatibility facade.
+- Routed package-manifest and extension-catalog operations through the intentional
+  layer-adapter composition boundary.
+- Replaced session-switch dynamic extension loading with adapter-provided defaults
+  while preserving `#:dispatch-hooks` and `#:make-ctx` dependency injection.
+- Added regression gates preventing retired static, dynamic, and lazy dependencies
+  from returning.
+
+### Breaking / Behavior Changes
+
+- No public API break is intended. Runtime session switching now resolves its
+  default extension hooks eagerly through the composition adapter rather than
+  loading extension modules dynamically at first use.
+
+### Migration Notes
+
+- No migration is required. Existing callers that inject `#:dispatch-hooks` or
+  `#:make-ctx` continue to work unchanged.
+
+### Testing
+
+- Fast suite: 1010/1010 files and 15013/15013 tests passed before the release bump.
+- Focused version and release-contract verification passed after the bump.
+
+### Operational / Release
+
+- Release artifacts required: `q-0.99.49.tar.gz` and `release-manifest.json`.
+- GitHub milestone #835 completed with 14/14 architecture issues closed before
+  release issue #8712 was added.
+
 ## 0.99.46
 
 Released: 2026-07-09

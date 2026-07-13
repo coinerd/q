@@ -143,8 +143,7 @@ is a process violation. The milestone-close-gate checks that the
 HANDOFF.json version matches the current canonical version before
 allowing milestone closure.
 
-Example of the v0.99.47 failure: HANDOFF.json referenced v0.99.47 while
-the project was at v0.99.47 — 47 versions stale.
+Example of the v0.99.47 failure: HANDOFF.json referenced a release 47 versions older than the project version.
 
 ---
 

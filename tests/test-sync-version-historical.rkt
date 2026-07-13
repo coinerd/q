@@ -9,6 +9,7 @@
 ;;
 ;; W1 sub-issue #3325: 7 positive patterns + 2 negative cases
 ;; W2 sub-issue #3357: Now requires from shared version-guard.rkt
+;; v0.99.49: Protect governance provenance and historical failure examples.
 
 (require rackunit
          racket/file
@@ -49,6 +50,16 @@
 (test-case "P7: Section headers with version protected"
   (check-true (historical-line? "## Migration Guide (v0.28.22)"))
   (check-true (historical-line? "# Exn:fail Migration Analysis (v0.28.22 W1)")))
+
+(test-case "P8: governance establishment provenance protected"
+  (check-true (historical-line? "**Established:** v0.99.47 (2026-07-09)")))
+
+(test-case "P9: explicit historical failure examples protected"
+  (check-true (historical-line? "Example of the v0.99.47 failure: CI was red"))
+  (check-true (historical-line? "Example of the v0.99.47/46 failure: dates expired")))
+
+(test-case "P10: parenthesized audit-failure provenance protected"
+  (check-true (historical-line? "(v0.99.47 premature close, v0.99.47 claim inflation).")))
 
 ;; ---------------------------------------------------------------------------
 ;; 2 negative cases — these SHOULD be updated by sync-version
