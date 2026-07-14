@@ -280,21 +280,38 @@
                                                          (scheduler-result-results sched-result))
                                   'count
                                   (length tool-calls-to-run))))
-  ;; G13: Emit typed tool-execution-end events
+  ;; G13: Emit typed tool-execution-end events.
+  ;; v0.99.50 W3: Also emit a correlated protocol record because the v1 typed
+  ;; end-event schema predates tool-call identity and cannot be changed without
+  ;; breaking its public/red-module contract.
   (for ([tc (in-list tool-calls-to-run)]
         [tr (in-list (scheduler-result-results sched-result))])
+    (define duration-ms
+      (inexact->exact (floor (- (current-inexact-milliseconds)
+                                (hash-ref per-tool-start-ms (tool-call-id tc) batch-start-ms)))))
+    (define result-summary (if (tool-result-is-error? tr) 'error 'completed))
     (emit-typed-event! bus
                        (make-tool-execution-end-event
                         #:session-id session-id
                         #:turn-id #f
                         #:timestamp (current-inexact-milliseconds)
                         #:tool-name (tool-call-name tc)
-                        #:duration-ms (inexact->exact (floor (- (current-inexact-milliseconds)
-                                                                (hash-ref per-tool-start-ms
-                                                                          (tool-call-id tc)
-                                                                          batch-start-ms))))
-                        #:result-summary (if (tool-result-is-error? tr) 'error 'completed)
-                        #:result-error (and (tool-result-is-error? tr) (tool-result-error-text tr)))))
+                        #:duration-ms duration-ms
+                        #:result-summary result-summary
+                        #:result-error (and (tool-result-is-error? tr) (tool-result-error-text tr))))
+    (emit-session-event! bus
+                         session-id
+                         "tool.execution.correlated-completed"
+                         (hasheq 'tool-name
+                                 (tool-call-name tc)
+                                 'tool-call-id
+                                 (tool-call-id tc)
+                                 'duration-ms
+                                 duration-ms
+                                 'result-present?
+                                 #t
+                                 'result-summary
+                                 result-summary)))
   sched-result)
 
 ;; Helper: extract error text from tool-result content for event propagation.

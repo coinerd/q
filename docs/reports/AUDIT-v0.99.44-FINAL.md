@@ -5,6 +5,20 @@
 **Parent Issue:** #8613
 **Status:** ✅ COMPLETE
 
+> ## v0.99.50 Erratum (2026-07-13)
+>
+> The completion status above is a historical v0.99.44 milestone statement,
+> not current proof that real-provider exploration executed. The v0.99.44
+> explorer's `--mode real` path produced gated but synthetic/pending evidence;
+> it did not launch tmux, q, or a provider. The executable authorization
+> contract is `Q_TMUX_TUI_TESTS=1`, `Q_TMUX_TUI_REAL_PROVIDER=1`, and
+> `Q_TMUX_TUI_REAL_PROVIDER_CONFIRM=I_UNDERSTAND_COSTS`, plus an explicit
+> `Q_TMUX_TUI_REAL_PROVIDER_HOME` for the v0.99.50 executor. Historical claims
+> about universally redacted raw captures and selectable `tui-tmux` suites were
+> also inaccurate. See the corrected safety runbook and v0.99.50 semantic
+> executor/verifier tests. This erratum preserves rather than silently rewrites
+> the original audit evidence.
+
 ---
 
 ## 1. Executive Summary

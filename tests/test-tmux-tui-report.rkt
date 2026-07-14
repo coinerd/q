@@ -51,8 +51,21 @@
   (with-temp-dir (lambda (dir)
                    (define art-dir (build-path dir "q-tmux-art-leak"))
                    (make-directory* art-dir)
-                   (call-with-output-file (build-path art-dir "env-summary.txt")
-                                          (lambda (p) (display "Authorization: Bearer secret" p)))
+                   (call-with-output-file
+                    (build-path art-dir "env-summary.txt")
+                    (lambda (p)
+                      (display "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.real-token"
+                               p)))
                    (check-not-equal? (check-redaction art-dir) '())
                    (define rendered (with-output-to-string (lambda () (render-report dir))))
                    (check-true (string-contains? rendered "Redaction: ❌ FAIL")))))
+
+(test-case "redaction report ignores benign sk substrings and Bearer prose"
+  (with-temp-dir (lambda (dir)
+                   (define art-dir (build-path dir "q-tmux-art-clean"))
+                   (make-directory* art-dir)
+                   (call-with-output-file
+                    (build-path art-dir "normalized-capture.txt")
+                    (lambda (p)
+                      (display "set-task-state risk-score Bearer authentication token=<REDACTED>" p)))
+                   (check-equal? (check-redaction art-dir) '()))))

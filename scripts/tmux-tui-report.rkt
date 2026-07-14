@@ -17,7 +17,8 @@
          racket/string
          racket/date
          racket/format
-         racket/file)
+         racket/file
+         "../util/credential-redaction.rkt")
 
 (provide path-basename
          classify-failure
@@ -67,23 +68,14 @@
 ;; Check for credential leakage in artifact files. Redacted key names such as
 ;; API_KEY=<REDACTED> are allowed; raw bearer/API key values are not.
 (define (check-redaction dir)
-  (define leak-patterns '("sk-ant-" "Bearer "))
-  (define assignment-patterns
-    '(#rx"(?i:api[_-]?key)=([^<\\s][^\\s]*)" #rx"(?i:token)=([^<\\s][^\\s]*)"
-                                             #rx"(?i:secret)=([^<\\s][^\\s]*)"
-                                             #rx"(?i:password)=([^<\\s][^\\s]*)"))
-  (define leaked '())
-  (for ([f (in-list expected-artifact-files)])
-    (define path (build-path dir f))
-    (when (file-exists? path)
-      (define content (file->string path))
-      (for ([pat (in-list leak-patterns)])
-        (when (string-contains? content pat)
-          (set! leaked (cons (format "~a in ~a" pat f) leaked))))
-      (for ([pat (in-list assignment-patterns)])
-        (when (regexp-match? pat content)
-          (set! leaked (cons (format "secret assignment in ~a" f) leaked))))))
-  leaked)
+  ;; v0.99.50 W3 (TMUX-07): Use the same precision-tuned policy as the
+  ;; explorer and harness, avoiding benign Bearer/sk- false positives.
+  (for*/fold ([leaked '()])
+             ([f (in-list expected-artifact-files)]
+              [path (in-value (build-path dir f))]
+              #:when (file-exists? path)
+              [leak (in-list (find-secret-leaks (file->string path)))])
+    (cons (format "~a in ~a" leak f) leaked)))
 
 ;; Scan directory for artifact subdirs.
 (define (scan-artifact-dir base-dir)
