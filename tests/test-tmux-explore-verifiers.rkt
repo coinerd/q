@@ -76,9 +76,25 @@
          (evt "session.resumed" #:data (hash 'session-id session 'previous-session-id "session-0"))
          completion)
    "compact"
-   (list (evt "session.compact.completed"
-              #:data (hash 'session-id session 'before-count 42 'after-count 12 'persisted? #t))
-         completion)))
+   (list (evt "session.compact.started"
+              #:turn #f
+              #:data (hash 'session-id session 'request-id "compact-1" 'persisted? #f))
+         (evt "session.compact.completed"
+              #:turn #f
+              #:data (hash 'session-id
+                           session
+                           'request-id
+                           "compact-1"
+                           'before-count
+                           42
+                           'after-count
+                           13
+                           'removed-count
+                           30
+                           'kept-count
+                           12
+                           'persisted?
+                           #t)))))
 
 (define negative-fixtures
   (hash
@@ -137,6 +153,7 @@
                      #:capture [capture "plausible assistant prose says everything passed"]
                      #:status [status 'completed]
                      #:mock? [mock? #f]
+                     #:control? [control? #t]
                      #:timed-out? [timed-out? #f]
                      #:crashed? [crashed? #f])
   (hash 'status
@@ -147,6 +164,8 @@
         capture
         'provider-confirmed?
         (not mock?)
+        'control-command-confirmed?
+        control?
         'mock-provider?
         mock?
         'timed-out?
@@ -178,6 +197,30 @@
                                 (observation valid-tools #:crashed? #t)
                                 (observation valid-tools #:status 'failed)))])
         (check-false (verification-result-passed? (verify-scenario-evidence "tools" obs)))))
+
+    (test-case "compact lifecycle requires one matching request ID"
+      (define events
+        (list (evt "session.compact.started"
+                   #:turn #f
+                   #:data (hash 'session-id session 'request-id "request-a"))
+              (evt "session.compact.completed"
+                   #:turn #f
+                   #:data (hash 'session-id
+                                session
+                                'request-id
+                                "request-b"
+                                'before-count
+                                10
+                                'after-count
+                                4
+                                'removed-count
+                                7
+                                'kept-count
+                                3
+                                'persisted?
+                                #t))))
+      (check-false (verification-result-passed? (verify-scenario-evidence "compact"
+                                                                          (observation events)))))
 
     (test-case "unknown scenario tag fails closed"
       (define result (verify-scenario-evidence "not-registered" (observation (list completion))))

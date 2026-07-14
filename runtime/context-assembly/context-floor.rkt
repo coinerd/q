@@ -104,45 +104,56 @@
     (trace-cb 'start (hasheq 'total (length messages))))
   (define-values (compaction-summaries regular-msgs)
     (partition (lambda (m) (eq? (message-kind m) 'compaction-summary)) messages))
-  (define-values (gsd-pinned regular) (partition gsd-progress-message? regular-msgs))
-  (define-values (sys-protected unpinned-raw)
-    (partition (lambda (m) (eq? (message-kind m) 'system-instruction)) regular))
-  ;; UNIVERSAL PINNING: Pin ALL user messages to Tier A, not just the first.
-  (define-values (pinned-user unpinned)
-    (partition (lambda (m) (eq? (message-role m) 'user)) unpinned-raw))
-  (define total (length unpinned))
-  (define effective-tier-b (or tier-b-count (compute-dynamic-tier-b-count total)))
-  (define effective-tier-c
-    (if (= tier-c-count DEFAULT-TIER-C-COUNT)
-        (compute-tier-c-count total)
-        tier-c-count))
-  (define tier-c-size (min effective-tier-c total))
-  (define tier-c
-    (if (> tier-c-size 0)
-        (take-right unpinned tier-c-size)
-        '()))
-  (define remaining-after-c
-    (if (> tier-c-size 0)
-        (drop-right unpinned tier-c-size)
-        unpinned))
-  (define remaining-count (length remaining-after-c))
-  (define tier-b-size (min effective-tier-b remaining-count))
-  (define tier-b
-    (if (> tier-b-size 0)
-        (take-right remaining-after-c tier-b-size)
-        '()))
-  (define tier-a (append sys-protected pinned-user gsd-pinned compaction-summaries ws-messages))
-  (when trace-cb
-    (trace-cb 'partition
-              (hasheq 'tier-a
-                      (length tier-a)
-                      'tier-b
-                      (length tier-b)
-                      'tier-c
-                      (length tier-c)
-                      'gsd-pinned
-                      (length gsd-pinned))))
-  (tiered-context tier-a tier-b tier-c))
+  (cond
+    [(pair? compaction-summaries)
+     ;; Compaction already bounded this context. Preserve its protocol order
+     ;; exactly: summary, verbatim kept window, then the new user prompt.
+     (define ordered (append messages ws-messages))
+     (when trace-cb
+       (trace-cb
+        'partition
+        (hasheq 'tier-a (length ordered) 'tier-b 0 'tier-c 0 'gsd-pinned 0 'compaction-ordered? #t)))
+     (tiered-context ordered '() '())]
+    [else
+     (define-values (gsd-pinned regular) (partition gsd-progress-message? regular-msgs))
+     (define-values (sys-protected unpinned-raw)
+       (partition (lambda (m) (eq? (message-kind m) 'system-instruction)) regular))
+     ;; UNIVERSAL PINNING: Pin ALL user messages to Tier A, not just the first.
+     (define-values (pinned-user unpinned)
+       (partition (lambda (m) (eq? (message-role m) 'user)) unpinned-raw))
+     (define total (length unpinned))
+     (define effective-tier-b (or tier-b-count (compute-dynamic-tier-b-count total)))
+     (define effective-tier-c
+       (if (= tier-c-count DEFAULT-TIER-C-COUNT)
+           (compute-tier-c-count total)
+           tier-c-count))
+     (define tier-c-size (min effective-tier-c total))
+     (define tier-c
+       (if (> tier-c-size 0)
+           (take-right unpinned tier-c-size)
+           '()))
+     (define remaining-after-c
+       (if (> tier-c-size 0)
+           (drop-right unpinned tier-c-size)
+           unpinned))
+     (define remaining-count (length remaining-after-c))
+     (define tier-b-size (min effective-tier-b remaining-count))
+     (define tier-b
+       (if (> tier-b-size 0)
+           (take-right remaining-after-c tier-b-size)
+           '()))
+     (define tier-a (append sys-protected pinned-user gsd-pinned ws-messages))
+     (when trace-cb
+       (trace-cb 'partition
+                 (hasheq 'tier-a
+                         (length tier-a)
+                         'tier-b
+                         (length tier-b)
+                         'tier-c
+                         (length tier-c)
+                         'gsd-pinned
+                         (length gsd-pinned))))
+     (tiered-context tier-a tier-b tier-c)]))
 
 ;; build-tiered-context-with-hooks : variant with hook dispatch
 (define (build-tiered-context-with-hooks messages

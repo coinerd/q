@@ -15,10 +15,15 @@
          racket/runtime-path
          racket/string
          racket/system
-         "../../util/credential-redaction.rkt")
+         "../../util/credential-redaction.rkt"
+         (only-in "../../runtime/session/session-store.rkt" append-entry! load-session-log)
+         (only-in "../../util/message/message.rkt" make-message message-id)
+         (only-in "../../util/content/content-parts.rkt" make-text-part))
 
 (provide call-with-executor-cleanup
-         run-real-scenario)
+         run-real-scenario
+         scenario-terminal-event?
+         seed-compact-history!)
 
 (define-runtime-path q-root "../..")
 
@@ -186,7 +191,41 @@
   (string-downcase (format "~a" raw)))
 
 (define (completion-event? event)
-  (member (event-phase event) completion-phases))
+  (and (member (event-phase event) completion-phases) #t))
+
+(define compact-terminal-phases
+  '("session.compact.completed" "session.compact.nothing-to-compact"
+                                "session.compact.already-running"
+                                "session.compact.failed"))
+
+(define (scenario-terminal-event? tag event)
+  (if (string=? tag "compact")
+      (and (member (event-phase event) compact-terminal-phases) #t)
+      (completion-event? event)))
+
+(define (find-session-log-path sessions-root)
+  (and (directory-exists? sessions-root)
+       (findf (lambda (path) (equal? (path->string (file-name-from-path path)) "session.jsonl"))
+              (find-files file-exists? sessions-root))))
+
+(define (seed-compact-history! session-log-path [count 240])
+  (define existing (load-session-log session-log-path))
+  (define initial-parent (and (pair? existing) (message-id (last existing))))
+  (for ([i (in-range count)])
+    (define id (format "explorer-compact-seed-~a" i))
+    (define parent-id
+      (if (zero? i)
+          initial-parent
+          (format "explorer-compact-seed-~a" (sub1 i))))
+    (append-entry! session-log-path
+                   (make-message id
+                                 parent-id
+                                 (if (even? i) 'user 'assistant)
+                                 'message
+                                 (list (make-text-part (make-string 2000 #\x)))
+                                 (+ (current-inexact-milliseconds) i)
+                                 (hasheq 'fixture "tmux-compact"))))
+  session-log-path)
 
 (define (trace-text events)
   (with-output-to-string (lambda ()
@@ -293,6 +332,19 @@
                      30000))
        (unless ready?
          (error 'tmux-tui-explore "q TUI did not become ready in the named tmux session"))
+       ;; /compact is a control command, not a provider turn. Seed only its
+       ;; isolated durable log so real verification can exercise positive
+       ;; compaction without paying for artificial model traffic.
+       (when (string=? tag "compact")
+         (define compact-log (box #f))
+         (unless (wait-until (lambda ()
+                               (define found (find-session-log-path sessions-root))
+                               (when found
+                                 (set-box! compact-log found))
+                               found)
+                             10000)
+           (error 'tmux-tui-explore "compact scenario session log was not created"))
+         (seed-compact-history! (unbox compact-log)))
        ;; Read-only tools are auto-approved. Remove every copied config or
        ;; credential file before a tool-capable prompt. If provider setup was
        ;; lazy and this makes the turn fail, the result truthfully remains FAIL.
@@ -305,7 +357,8 @@
          (wait-until (lambda ()
                        (define all-events (read-trace-events sessions-root))
                        (and (> (length all-events) baseline-count)
-                            (findf completion-event? (drop all-events baseline-count))))
+                            (findf (lambda (event) (scenario-terminal-event? tag event))
+                                   (drop all-events baseline-count))))
                      timeout-ms))
        (define all-events (read-trace-events sessions-root))
        (define events
@@ -329,7 +382,9 @@
              'capture
              capture
              'provider-confirmed?
-             (and completed? (not mock?))
+             (and completed? (not (string=? tag "compact")) (not mock?))
+             'control-command-confirmed?
+             (and completed? (string=? tag "compact"))
              'mock-provider?
              mock?
              'timed-out?

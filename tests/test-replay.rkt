@@ -748,9 +748,13 @@
    ;; Build tree after
    (define tree-after (build-visible-tree (load-session-log path)))
 
-   ;; Original relationships should still exist
+   ;; Original relationships remain unchanged. The append-only compaction
+   ;; checkpoint may additionally be a child of the last kept original.
+   (define original-ids (map message-id messages))
    (for ([(id children) (in-hash tree-before)])
-     (check-equal? (hash-ref tree-after id '()) children))
+     (define original-children-after
+       (filter (lambda (child-id) (member child-id original-ids)) (hash-ref tree-after id '())))
+     (check-equal? original-children-after children))
    (delete-directory/files dir #:must-exist? #f))
  (test-case "PROPERTY: replay after compaction includes all original entries"
    (define rng (make-seeded-rng SEED-1))

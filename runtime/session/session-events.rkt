@@ -14,7 +14,7 @@
          "../session-index/mutations.rkt"
          "../session-index/query.rkt"
          (only-in "../../util/event/event.rkt" event-ev)
-         (only-in "../../util/message/message.rkt" message-id)
+         (only-in "../../util/message/message.rkt" message-id message-kind)
          (only-in "../../util/event/event.rkt" event-payload)
          (only-in "../runtime-helpers.rkt" emit-session-event!)
          "session-types.rkt"
@@ -23,7 +23,10 @@
                   current-conclusion-to-memory-bridge-enabled
                   persist-high-value-conclusions!)
          (only-in "../memory/service.rkt" current-memory-backend)
-         racket/set)
+         racket/set
+         (only-in "../../util/ids.rkt" generate-id)
+         (only-in "../context-assembly/session-walk.rkt" build-session-context)
+         (only-in "../trace-logger.rkt" make-trace-logger start-trace-logger! stop-trace-logger!))
 (require "session-mutation.rkt")
 (require (only-in "../context-assembly/state-inference.rkt"
                   infer-task-state-from-tools
@@ -34,7 +37,12 @@
 ;; context.ws-evolve-requested event for turn-orchestrator to handle.
 ;; (require (only-in "../context-assembly/ws-evolution.rkt" evolve-working-set-for-state))
 
-(provide (contract-out [wire-session-event-handlers! (-> agent-session? procedure? void?)])
+(provide (contract-out
+          [wire-session-event-handlers! (-> agent-session? procedure? void?)]
+          [compact-session-durably!
+           (->* (agent-session?)
+                (#:request-id string? #:load-history procedure? #:compact-and-persist procedure?)
+                symbol?)])
          current-mid-session-bridge-enabled
          current-mid-session-persisted-ids
          major-forward-transition?
@@ -82,6 +90,140 @@
                                                        ([c (in-list new-conclusions)])
                                                (set-add s (task-conclusion-id c)))))))))
 
+;; Durable manual compaction lifecycle. Shared claim/release primitives prevent
+;; manual and automatic compaction from owning the session guard concurrently.
+(define (emit-compact-lifecycle! sess phase payload)
+  (emit-session-event! (agent-session-event-bus sess) (agent-session-session-id sess) phase payload))
+
+(define (effective-compaction-history sess durable-history)
+  (if (and (agent-session-index sess)
+           (for/or ([message (in-list durable-history)])
+             (eq? (message-kind message) 'compaction-summary)))
+      (build-session-context (agent-session-index sess))
+      durable-history))
+
+(define (stop-compact-tracer! tracer)
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-warning "compaction trace cleanup failed: ~a" (exn-message e)))])
+    (stop-trace-logger! tracer)))
+
+(define (compact-session-durably! sess
+                                  #:request-id [request-id (generate-id)]
+                                  #:load-history [load-history load-session-log]
+                                  #:compact-and-persist [compact-proc compact-and-persist!])
+  (define claimed? (try-claim-compaction! sess))
+  (cond
+    [(not claimed?)
+     (define active-owner (if (agent-session-prompt-running? sess) 'prompt 'compaction))
+     (emit-compact-lifecycle! sess
+                              "session.compact.already-running"
+                              (hasheq 'request-id
+                                      request-id
+                                      'persisted?
+                                      #f
+                                      'outcome
+                                      'already-running
+                                      'active-owner
+                                      active-owner))
+     'already-running]
+    [else
+     (define persisted? (box #f))
+     (define tracer
+       (make-trace-logger (agent-session-event-bus sess)
+                          (agent-session-session-dir sess)
+                          #:enabled? #t))
+     (with-handlers ([exn:fail? (lambda (e)
+                                  (emit-compact-lifecycle! sess
+                                                           "session.compact.failed"
+                                                           (hasheq 'request-id
+                                                                   request-id
+                                                                   'persisted?
+                                                                   (unbox persisted?)
+                                                                   'outcome
+                                                                   'failed
+                                                                   'error
+                                                                   (exn-message e)))
+                                  (release-compaction! sess)
+                                  (stop-compact-tracer! tracer)
+                                  'failed)])
+       (start-trace-logger! tracer)
+       (emit-compact-lifecycle! sess
+                                "session.compact.started"
+                                (hasheq 'request-id request-id 'persisted? #f 'outcome 'started))
+       (define outcome
+         (dynamic-wind void
+                       (lambda ()
+                         (define log-path (session-log-path-for sess))
+                         (define durable-history (load-history log-path))
+                         (define history (effective-compaction-history sess durable-history))
+                         (cond
+                           [(null? history)
+                            (emit-compact-lifecycle! sess
+                                                     "session.compact.nothing-to-compact"
+                                                     (hasheq 'request-id
+                                                             request-id
+                                                             'persisted?
+                                                             #f
+                                                             'outcome
+                                                             'nothing-to-compact
+                                                             'before-count
+                                                             0
+                                                             'after-count
+                                                             0))
+                            'nothing-to-compact]
+                           [else
+                            (define compact-result (compact-proc history log-path))
+                            (define removed (compaction-result-removed-count compact-result))
+                            (define kept (length (compaction-result-kept-messages compact-result)))
+                            (cond
+                              [(zero? removed)
+                               (emit-compact-lifecycle! sess
+                                                        "session.compact.nothing-to-compact"
+                                                        (hasheq 'request-id
+                                                                request-id
+                                                                'persisted?
+                                                                #f
+                                                                'outcome
+                                                                'nothing-to-compact
+                                                                'before-count
+                                                                (length history)
+                                                                'after-count
+                                                                (length history)
+                                                                'removed-count
+                                                                0
+                                                                'kept-count
+                                                                kept))
+                               'nothing-to-compact]
+                              [else
+                               (set-box! persisted? #t)
+                               (define rebuilt-index
+                                 (build-index! log-path
+                                               (session-index-path (agent-session-session-dir sess))))
+                               (define summary (compaction-result-summary-message compact-result))
+                               (when summary
+                                 (mark-active-leaf! rebuilt-index (message-id summary)))
+                               (guarded-set-index! sess rebuilt-index)
+                               (emit-compact-lifecycle! sess
+                                                        "session.compact.completed"
+                                                        (hasheq 'request-id
+                                                                request-id
+                                                                'persisted?
+                                                                #t
+                                                                'outcome
+                                                                'completed
+                                                                'before-count
+                                                                (length history)
+                                                                'after-count
+                                                                (add1 kept)
+                                                                'removed-count
+                                                                removed
+                                                                'kept-count
+                                                                kept))
+                               'completed])]))
+                       (lambda () (release-compaction! sess))))
+       (stop-compact-tracer! tracer)
+       outcome)]))
+
 ;; Wire event-bus subscribers for fork.requested, compact.requested,
 ;; tool execution, conclusions, and state transitions.
 
@@ -112,31 +254,21 @@
                                                  (or entry-id "latest")))))
                 #:filter (lambda (evt) (equal? (event-ev evt) "fork.requested")))
 
-    ;; Subscribe to compact.requested — compact the session context
+    ;; Run durable I/O off the synchronous event-bus/render path;
+    ;; compact-session-durably! owns all correlated terminal events.
     (subscribe! bus
                 (lambda (evt)
-                  (with-handlers ([exn:fail? (lambda (e)
-                                               (emit-session-event! bus
-                                                                    (agent-session-session-id sess)
-                                                                    "session.compact.failed"
-                                                                    (hasheq 'error
-                                                                            (exn-message e))))])
-                    (define log-path (session-log-path-for sess))
-                    (when (file-exists? log-path)
-                      (define history (load-session-log log-path))
-                      (when (and (not (null? history)) (not (agent-session-compacting? sess)))
-                        (guarded-set-compacting! sess #t)
-                        (define compact-result (compact-history history))
-                        (guarded-set-compacting! sess #f)
-                        (emit-session-event! bus
-                                             (agent-session-session-id sess)
-                                             "session.compact.completed"
-                                             (hasheq 'removedCount
-                                                     (compaction-result-removed-count compact-result)
-                                                     'keptCount
-                                                     (length (compaction-result-kept-messages
-                                                              compact-result))))))))
-                #:filter (lambda (evt) (equal? (event-ev evt) "compact.requested")))
+                  (define payload (event-payload evt))
+                  (define request-id
+                    (if (hash? payload)
+                        (hash-ref payload 'request-id (generate-id))
+                        (generate-id)))
+                  (thread (lambda ()
+                            (parameterize ([current-prompt-operation-session #f])
+                              (compact-session-durably! sess #:request-id request-id)))))
+                #:filter (lambda (evt)
+                           (member (event-ev evt)
+                                   '("session.compact.requested" "compact.requested"))))
     ;; Subscribe to tool.execution.completed — infer task state
     (subscribe! bus
                 (lambda (evt)

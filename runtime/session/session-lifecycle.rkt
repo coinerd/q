@@ -373,16 +373,17 @@
   (unless (agent-session-active? sess)
     (raise-session-error (format "run-prompt!: session ~a is closed" (agent-session-session-id sess))
                          (agent-session-session-id sess)))
-  ;; Guard against concurrent prompt execution
-  (when (agent-session-prompt-running? sess)
+  ;; Atomically exclude both another prompt and manual/automatic compaction.
+  (unless (try-claim-prompt! sess)
+    (define reason
+      (if (agent-session-compacting? sess)
+          "Session compaction is active — retry the prompt after it completes"
+          "Prompt already running — ignoring concurrent submission"))
     (emit-session-event! (agent-session-event-bus sess)
                          (agent-session-session-id sess)
                          "runtime.error"
-                         (hasheq 'error "Prompt already running — ignoring concurrent submission"))
-    (raise-session-error (format "run-prompt!: session ~a already has a prompt running"
-                                 (agent-session-session-id sess))
-                         (agent-session-session-id sess)))
-  (guarded-set-prompt-running! sess #t)
+                         (hasheq 'error reason))
+    (raise-session-error (format "run-prompt!: ~a" reason) (agent-session-session-id sess)))
   (define bus (agent-session-event-bus sess))
   (define sid (agent-session-session-id sess))
   ;; F2: Emit turn.started immediately so TUI shows activity
@@ -424,19 +425,20 @@
           (if (and input-hook-res (eq? (hook-result-action input-hook-res) 'amend))
               (hash-ref (hook-result-payload input-hook-res) 'message user-message)
               user-message))
-        (begin0 (run-prompt-internal sess
-                                     effective-input
-                                     max-iterations
-                                     token-budget-threshold
-                                     ep!
-                                     ba!)
-          (set-box! emit-cleanup-turn-completed? #f))]))
+        (parameterize ([current-prompt-operation-session sess])
+          (begin0 (run-prompt-internal sess
+                                       effective-input
+                                       max-iterations
+                                       token-budget-threshold
+                                       ep!
+                                       ba!)
+            (set-box! emit-cleanup-turn-completed? #f)))]))
    ;; Cleanup: always reset prompt-running? even on error
    ;; v0.45.14: Safety-net turn.completed ensures TUI busy? is always cleared,
    ;; even if a regression prevents normal event flow.
    ;; B3-A: Emergency persist — defense-in-depth if session not yet persisted
    (lambda ()
-     (guarded-set-prompt-running! sess #f)
+     (release-prompt! sess)
      ;; v0.45.14 W0a: Safety-net turn.completed for TUI busy-state recovery
      ;; only on abnormal/early-exit paths.
      (when (unbox emit-cleanup-turn-completed?)

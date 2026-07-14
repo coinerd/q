@@ -337,9 +337,10 @@
           (if (pair? adjusted-recent)
               (message-id (car adjusted-recent))
               #f))
+        (define summary-parent-id (and (pair? adjusted-recent) (message-id (last adjusted-recent))))
         (define summary-msg
           (make-message (format "compaction-~a" (now-fn))
-                        #f ; no parent — compaction summaries are root-level context
+                        summary-parent-id ; append-only checkpoint after the kept window
                         'system
                         'compaction-summary
                         (list (make-text-part summary-text))

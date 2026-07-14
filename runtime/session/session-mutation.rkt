@@ -21,6 +21,47 @@
 
 (define-logger q-session-mutation)
 
+;; One atomic ownership boundary shared by prompts plus manual/automatic compaction.
+(define session-operation-lock (make-semaphore 1))
+(define current-prompt-operation-session (make-parameter #f))
+
+(define (try-claim-compaction! sess [prompt-owned? #f])
+  (call-with-semaphore session-operation-lock
+                       (lambda ()
+                         (cond
+                           [(agent-session-compacting? sess) #f]
+                           [(and (agent-session-prompt-running? sess)
+                                 (not (and prompt-owned?
+                                           (eq? (current-prompt-operation-session) sess))))
+                            #f]
+                           [else
+                            ;; Only the automatic path may request a prompt-owned nested claim,
+                            ;; and the dynamic owner must be this exact session.
+                            (set-agent-session-compacting?! sess #t)
+                            #t]))))
+
+(define (release-compaction! sess)
+  (call-with-semaphore session-operation-lock
+                       (lambda ()
+                         (when (agent-session-compacting? sess)
+                           (set-agent-session-compacting?! sess #f)))))
+
+(define (try-claim-prompt! sess)
+  (call-with-semaphore
+   session-operation-lock
+   (lambda ()
+     (cond
+       [(or (agent-session-prompt-running? sess) (agent-session-compacting? sess)) #f]
+       [else
+        (set-agent-session-prompt-running?! sess #t)
+        #t]))))
+
+(define (release-prompt! sess)
+  (call-with-semaphore session-operation-lock
+                       (lambda ()
+                         (when (agent-session-prompt-running? sess)
+                           (set-agent-session-prompt-running?! sess #f)))))
+
 ;; v0.79.2 GAP-4: Injectable callback for persisting archived WS entries.
 ;; Signature: (-> ws-entry? void?). Runtime wires real implementation.
 (define current-archive-entry-fn (make-parameter #f))
@@ -44,7 +85,12 @@
                        [guarded-set-working-set-evolved! (-> agent-session? evolution-result? void?)]
                        [valid-session-phase? (-> symbol? boolean?)]
                        [session-phase (-> agent-session? symbol?)])
-         current-archive-entry-fn)
+         current-archive-entry-fn
+         try-claim-compaction!
+         release-compaction!
+         try-claim-prompt!
+         release-prompt!
+         current-prompt-operation-session)
 
 ;; Valid session phases derived from boolean flags
 (define (valid-session-phase? phase)
