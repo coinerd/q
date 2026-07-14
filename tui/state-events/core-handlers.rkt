@@ -8,7 +8,14 @@
 (require racket/string
          racket/match
          racket/list
-         (only-in "../../util/event/event.rkt" event event-ev event-payload event-time event?)
+         (only-in "../../util/event/event.rkt"
+                  event
+                  event-ev
+                  event-payload
+                  event-time
+                  event-session-id
+                  event-turn-id
+                  event?)
          (only-in "../../util/message/message.rkt" message)
          "../../util/cost-tracker.rkt"
          "../../util/content/content-helpers.rkt"
@@ -177,6 +184,20 @@
 ;; Session / turn handlers
 ;; ============================================================
 
+(define (event-for-current-session? state evt)
+  (define state-session (ui-state-session-id state))
+  (define event-session (event-session-id evt))
+  (or (not state-session) (not event-session) (equal? state-session event-session)))
+
+(define (event-for-active-turn? state evt)
+  (define event-turn (event-turn-id evt))
+  (define prompt-turn (ui-state-active-turn-id state))
+  (define model-turn (ui-state-active-model-turn-id state))
+  (or (not event-turn)
+      (and (not prompt-turn) (not model-turn))
+      (equal? event-turn prompt-turn)
+      (equal? event-turn model-turn)))
+
 (define (handle-session-started state evt)
   (define payload (event-payload evt))
   (define sid (hash-ref payload 'sessionId ""))
@@ -190,60 +211,137 @@
   (append-entry s1 (make-entry 'system (format "Session resumed: ~a" sid) (event-time evt) (hash))))
 
 (define (handle-turn-started state evt)
-  (set-status-message
-   (clear-streaming (set-pending-tool-name (set-streaming-phase (set-busy-since (set-busy state #t)
-                                                                                (event-time evt))
-                                                                'thinking)
-                                           #f))
-   #f))
+  (define payload (event-payload evt))
+  (define prompt-scope?
+    (and (hash? payload) (equal? (hash-ref payload 'scope #f) "prompt") (event-turn-id evt)))
+  (cond
+    [(not (event-for-current-session? state evt)) state]
+    ;; Inner iteration starts must not erase pending feedback or partial output.
+    [(and (ui-state-interrupt-request-id state) (not prompt-scope?)) state]
+    [else
+     (define started
+       (set-status-message (clear-streaming (set-pending-tool-name
+                                             (set-streaming-phase (set-busy-since (set-busy state #t)
+                                                                                  (event-time evt))
+                                                                  'thinking)
+                                             #f))
+                           #f))
+     (cond
+       [prompt-scope?
+        (set-active-model-turn-id (set-active-turn-id (set-interrupt-request-id started #f)
+                                                      (event-turn-id evt))
+                                  #f)]
+       [(event-turn-id evt) (set-active-model-turn-id started (event-turn-id evt))]
+       [else started])]))
 
 (define (handle-turn-completed state evt)
-  (set-streaming-phase (clear-streaming (set-pending-tool-name (set-busy-since (set-busy state #f) #f)
+  (if (or (not (event-for-current-session? state evt))
+          (not (event-for-active-turn? state evt))
+          (ui-state-interrupt-request-id state))
+      state
+      (set-streaming-phase
+       (clear-streaming (set-pending-tool-name (set-busy-since (set-busy state #f) #f) #f))
+       'idle)))
+
+(define (clear-after-turn-terminal state)
+  (set-active-model-turn-id
+   (set-active-turn-id (set-interrupt-request-id
+                        (set-status-message (set-streaming-phase
+                                             (clear-streaming (set-pending-tool-name
+                                                               (set-busy-since (set-busy state #f) #f)
                                                                #f))
-                       'idle))
+                                             'idle)
+                                            #f)
+                        #f)
+                       #f)
+   #f))
 
 (define (handle-turn-cancelled state evt)
-  (set-streaming-phase (clear-streaming (set-pending-tool-name (set-busy-since (set-busy state #f) #f)
-                                                               #f))
-                       'idle))
+  (define pending-request-id (ui-state-interrupt-request-id state))
+  (define payload (event-payload evt))
+  (define acknowledged-request-id (and (hash? payload) (hash-ref payload 'request-id #f)))
+  (define correlated?
+    (and pending-request-id
+         (equal? pending-request-id acknowledged-request-id)
+         (equal? (ui-state-session-id state) (event-session-id evt))
+         (equal? (ui-state-active-turn-id state) (event-turn-id evt))))
+  (cond
+    [correlated?
+     (append-entry
+      (clear-after-turn-terminal state)
+      (make-entry 'system "[interrupt completed: turn cancelled]" (event-time evt) (hash)))]
+    ;; While a user interrupt is pending, unrelated/inner cancellation events
+    ;; must not clear the visible turn before its correlated acknowledgement.
+    [pending-request-id state]
+    [(and (event-for-current-session? state evt) (event-for-active-turn? state evt))
+     (clear-after-turn-terminal state)]
+    [else state]))
+
+(define (handle-interrupt-terminal state evt)
+  (define payload (event-payload evt))
+  (define request-id (and (hash? payload) (hash-ref payload 'request-id #f)))
+  (if (and request-id
+           (equal? request-id (ui-state-interrupt-request-id state))
+           (equal? (ui-state-session-id state) (event-session-id evt))
+           (equal? (ui-state-active-turn-id state) (event-turn-id evt)))
+      (append-entry (clear-after-turn-terminal state)
+                    (make-entry 'system
+                                (if (string=? (event-ev evt) "interrupt.failed")
+                                    "[interrupt failed: turn did not cancel]"
+                                    "[interrupt: no matching active turn]")
+                                (event-time evt)
+                                (hash)))
+      state))
 
 (define (handle-stream-turn-completed state evt)
-  (define cleared
-    (set-streaming-phase
-     (clear-streaming (set-pending-tool-name (set-busy-since (set-busy state #f) #f) #f))
-     'idle))
-  (define goal (ui-state-active-goal cleared))
-  (if (and goal (eq? (goal-display-info-status goal) 'active))
-      (set-busy (set-status-message cleared
-                                    (format "Goal turn ~a/~a: evaluating..."
-                                            (goal-display-info-turns-used goal)
-                                            (goal-display-info-max-turns goal)))
-                #t)
-      cleared))
+  (cond
+    [(or (not (event-for-current-session? state evt))
+         (not (event-for-active-turn? state evt))
+         (ui-state-interrupt-request-id state))
+     state]
+    [else
+     (define cleared
+       (set-streaming-phase
+        (clear-streaming (set-pending-tool-name (set-busy-since (set-busy state #f) #f) #f))
+        'idle))
+     (define goal (ui-state-active-goal cleared))
+     (if (and goal (eq? (goal-display-info-status goal) 'active))
+         (set-busy (set-status-message cleared
+                                       (format "Goal turn ~a/~a: evaluating..."
+                                               (goal-display-info-turns-used goal)
+                                               (goal-display-info-max-turns goal)))
+                   #t)
+         cleared)]))
 
 ;; ============================================================
 ;; Error / compaction / retry handlers
 ;; ============================================================
 
 (define (handle-runtime-error state evt)
-  (define payload (event-payload evt))
-  (define err (hash-ref payload 'error "unknown error"))
-  (define ts (event-time evt))
-  (define error-type (classify-error-type err payload))
-  (define retries-attempted (hash-ref payload 'retries-attempted #f))
-  (define error-history (hash-ref payload 'errorHistory '()))
-  (define history-types (remove-duplicates error-history))
-  (define hint (format-error-hint error-type retries-attempted history-types))
-  (define streamed (ui-state-streaming-text state))
-  (define s0
-    (if (and streamed (> (string-length (string-trim streamed)) 0))
-        (append-entry state (make-entry 'assistant streamed ts (hasheq 'partial #t)))
-        state))
-  (define s1
-    (set-status-message (clear-streaming (set-pending-tool-name (set-busy s0 #f) #f))
-                        (truncate-status-msg err)))
-  (define s2 (append-entry s1 (make-entry 'error (format "Error: ~a" err) ts (hash))))
-  (append-entry s2 (make-entry 'system hint ts (hash))))
+  (cond
+    [(or (not (event-for-current-session? state evt))
+         (not (event-for-active-turn? state evt))
+         (ui-state-interrupt-request-id state))
+     state]
+    [else
+     (define payload (event-payload evt))
+     (define err (hash-ref payload 'error "unknown error"))
+     (define ts (event-time evt))
+     (define error-type (classify-error-type err payload))
+     (define retries-attempted (hash-ref payload 'retries-attempted #f))
+     (define error-history (hash-ref payload 'errorHistory '()))
+     (define history-types (remove-duplicates error-history))
+     (define hint (format-error-hint error-type retries-attempted history-types))
+     (define streamed (ui-state-streaming-text state))
+     (define s0
+       (if (and streamed (> (string-length (string-trim streamed)) 0))
+           (append-entry state (make-entry 'assistant streamed ts (hasheq 'partial #t)))
+           state))
+     (define s1
+       (set-status-message (clear-streaming (set-pending-tool-name (set-busy s0 #f) #f))
+                           (truncate-status-msg err)))
+     (define s2 (append-entry s1 (make-entry 'error (format "Error: ~a" err) ts (hash))))
+     (append-entry s2 (make-entry 'system hint ts (hash)))]))
 
 (define (handle-compaction-warning state evt)
   (define payload (event-payload evt))
@@ -508,6 +606,8 @@
 (register-event-reducer! "turn.started" handle-turn-started)
 (register-event-reducer! "turn.completed" handle-turn-completed)
 (register-event-reducer! "turn.cancelled" handle-turn-cancelled)
+(register-event-reducer! "interrupt.no-active" handle-interrupt-terminal)
+(register-event-reducer! "interrupt.failed" handle-interrupt-terminal)
 (register-event-reducer! "compaction.warning" handle-compaction-warning)
 (register-event-reducer! "session.forked" handle-session-forked)
 (register-event-reducer! "compaction" handle-compaction)

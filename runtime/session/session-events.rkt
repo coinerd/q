@@ -26,7 +26,9 @@
          racket/set
          (only-in "../../util/ids.rkt" generate-id)
          (only-in "../context-assembly/session-walk.rkt" build-session-context)
-         (only-in "../trace-logger.rkt" make-trace-logger start-trace-logger! stop-trace-logger!))
+         (only-in "../trace-logger.rkt" make-trace-logger start-trace-logger! stop-trace-logger!)
+         "session-interruption.rkt"
+         (only-in "../../util/event/event.rkt" make-event event-session-id event-turn-id))
 (require "session-mutation.rkt")
 (require (only-in "../context-assembly/state-inference.rkt"
                   infer-task-state-from-tools
@@ -253,6 +255,48 @@
                                                  'forkPoint
                                                  (or entry-id "latest")))))
                 #:filter (lambda (evt) (equal? (event-ev evt) "fork.requested")))
+
+    ;; Bind interruption to this session's exact active prompt turn. Unrelated
+    ;; session requests are ignored so a shared bus cannot cross-cancel.
+    (subscribe!
+     bus
+     (lambda (evt)
+       ;; Defer handling until the original request reaches every observer so
+       ;; structured traces preserve request-before-accepted ordering.
+       (thread (lambda ()
+                 (define payload (event-payload evt))
+                 (define request-id (and (hash? payload) (hash-ref payload 'request-id #f)))
+                 (define target-session-id
+                   (and (hash? payload) (hash-ref payload 'target-session-id (event-session-id evt))))
+                 (define target-turn-id
+                   (and (hash? payload) (hash-ref payload 'target-turn-id (event-turn-id evt))))
+                 (when (and (string? request-id) (string? target-session-id) (string? target-turn-id))
+                   (define status
+                     (request-session-interrupt! sess target-session-id target-turn-id request-id))
+                   (unless (eq? status 'unrelated)
+                     (define response-event
+                       (make-event (case status
+                                     [(accepted) "interrupt.accepted"]
+                                     [(already-requested) "interrupt.already-requested"]
+                                     [else "interrupt.no-active"])
+                                   (current-inexact-milliseconds)
+                                   target-session-id
+                                   target-turn-id
+                                   (hasheq 'request-id
+                                           request-id
+                                           'target-session-id
+                                           target-session-id
+                                           'target-turn-id
+                                           target-turn-id
+                                           'status
+                                           (symbol->string status))))
+                     (publish! bus response-event)
+                     (when (eq? status 'accepted)
+                       (with-handlers ([exn:fail? (lambda (error)
+                                                    (log-warning "interrupt callback failed: ~a"
+                                                                 (exn-message error)))])
+                         (signal-session-interrupt! sess request-id))))))))
+     #:filter (lambda (evt) (equal? (event-ev evt) "interrupt.requested")))
 
     ;; Run durable I/O off the synchronous event-bus/render path;
     ;; compact-session-durably! owns all correlated terminal events.

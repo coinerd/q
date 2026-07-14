@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @isolation process
 
 (require json
          rackunit
@@ -11,24 +12,18 @@
          racket/runtime-path
          racket/string
          racket/system
-         "../scripts/tmux-tui-explore.rkt")
+         "../scripts/tmux-tui-explore.rkt"
+         (only-in "helpers/fixtures.rkt" with-temp-dir))
 
 (define-runtime-path explorer-script "../scripts/tmux-tui-explore.rkt")
-
-(define (with-temp-dir proc)
-  (define dir (make-temporary-file "q-tmux-explore-test-~a" 'directory))
-  (dynamic-wind void
-                (lambda () (proc dir))
-                (lambda ()
-                  (with-handlers ([exn:fail? (lambda (_e) (void))])
-                    (delete-directory/files dir)))))
 
 (define (scenario-tags)
   (map explore-scenario-tag scenario-registry))
 
 (test-case "scenario registry contains exact v0.99.50 semantic scenarios"
-  (check-equal? (scenario-tags)
-                '("memory" "gsd" "mas" "tools" "release-audit" "durable-memory" "resume" "compact"))
+  (check-equal?
+   (scenario-tags)
+   '("memory" "gsd" "mas" "tools" "release-audit" "durable-memory" "resume" "compact" "interrupt"))
   (check-equal? (length (find-scenarios #:filter "memory")) 1)
   (check-equal? (find-scenarios #:filter "missing") '()))
 
@@ -213,7 +208,8 @@
                      (putenv "Q_TMUX_TUI_TESTS" "1")
                      (putenv "Q_TMUX_TUI_REAL_PROVIDER" "1")
                      (putenv "Q_TMUX_TUI_REAL_PROVIDER_CONFIRM" "I_UNDERSTAND_COSTS")
-                     (putenv "Q_TMUX_TUI_REAL_PROVIDER_HOME" "/definitely/missing/q-home")
+                     (putenv "Q_TMUX_TUI_REAL_PROVIDER_HOME"
+                             (path->string (build-path dir "missing-q-home")))
                      (define racket-bin (find-executable-path "racket"))
                      (define fail-dir (build-path dir "gating"))
                      (define nongating-dir (build-path dir "non-gating"))

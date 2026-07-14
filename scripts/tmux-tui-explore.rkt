@@ -92,6 +92,12 @@
                      "Run compaction and require a terminal persisted lifecycle event."
                      "/compact"
                      'pass-mock-tui-with-caveat
+                     #f)
+   (explore-scenario "interrupt"
+                     "Functional interruption"
+                     "Cancel one active turn, observe correlated acknowledgement, then recover."
+                     "Produce a detailed multi-section explanation of cooperative cancellation."
+                     'pass-mock-tui-with-caveat
                      #f)))
 
 (define (valid-mode? mode)

@@ -152,6 +152,10 @@
   (unless (command-success? tmux "-L" server-name "send-keys" "-t" session-name "Enter")
     (error 'tmux-tui-explore "failed to submit scenario prompt")))
 
+(define (send-interrupt! tmux server-name session-name)
+  (unless (command-success? tmux "-L" server-name "send-keys" "-t" session-name "C-c")
+    (error 'tmux-tui-explore "failed to send interrupt key")))
+
 (define (wait-until predicate timeout-ms [poll-ms 250])
   (define deadline (+ (current-inexact-milliseconds) timeout-ms))
   (let loop ()
@@ -189,6 +193,21 @@
         (hash-ref event 'event #f)
         (hash-ref event "event" "")))
   (string-downcase (format "~a" raw)))
+
+(define (trace-event-field event top-key data-key [default #f])
+  (define top-value (hash-ref event top-key default))
+  (if (equal? top-value default)
+      (let ([data (or (hash-ref event 'data #f) (hash-ref event "data" #f))])
+        (if (hash? data)
+            (or (hash-ref data data-key #f) (hash-ref data (symbol->string data-key) default))
+            default))
+      top-value))
+
+(define (trace-event-matches? event phase session-id turn-id request-id)
+  (and (string=? (event-phase event) phase)
+       (equal? (trace-event-field event 'sessionId 'session-id) session-id)
+       (equal? (trace-event-field event 'turnId 'turn-id) turn-id)
+       (equal? (trace-event-field event 'request-id 'request-id) request-id)))
 
 (define (completion-event? event)
   (and (member (event-phase event) completion-phases) #t))
@@ -350,20 +369,66 @@
        ;; lazy and this makes the turn fail, the result truthfully remains FAIL.
        (when tools?
          (delete-copied-config! destination-home copied))
-       (define baseline-count (length (read-trace-events sessions-root)))
-       (send-line! tmux server-name session-name prompt)
+       (define scenario-baseline-count (length (read-trace-events sessions-root)))
+       (define completion-baseline-count scenario-baseline-count)
        (define timeout-ms (environment-timeout-ms))
+       (send-line! tmux server-name session-name prompt)
+       ;; The interrupt scenario is two-phase: wait until the real provider
+       ;; turn is observably active, send Ctrl-C, require its correlated
+       ;; cancellation terminal, then prove recovery with a fresh prompt.
+       (when (string=? tag "interrupt")
+         (unless (wait-until (lambda ()
+                               (findf (lambda (event) (string=? (event-phase event) "turn.started"))
+                                      (drop (read-trace-events sessions-root)
+                                            scenario-baseline-count)))
+                             timeout-ms
+                             20)
+           (error 'tmux-tui-explore "interrupt scenario never reached an active turn"))
+         (send-interrupt! tmux server-name session-name)
+         (define request-event (box #f))
+         (unless (wait-until
+                  (lambda ()
+                    (define found
+                      (findf (lambda (event) (string=? (event-phase event) "interrupt.requested"))
+                             (drop (read-trace-events sessions-root) scenario-baseline-count)))
+                    (when found
+                      (set-box! request-event found))
+                    found)
+                  timeout-ms
+                  20)
+           (error 'tmux-tui-explore "interrupt scenario lacked a structured request"))
+         (define request-id (trace-event-field (unbox request-event) 'request-id 'request-id))
+         (define target-session-id
+           (trace-event-field (unbox request-event) 'sessionId 'target-session-id))
+         (define target-turn-id (trace-event-field (unbox request-event) 'turnId 'target-turn-id))
+         (unless (and request-id target-session-id target-turn-id)
+           (error 'tmux-tui-explore "interrupt request lacked correlation IDs"))
+         (for ([required-phase (in-list '("interrupt.accepted" "turn.cancelled"))])
+           (unless (wait-until (lambda ()
+                                 (findf (lambda (event)
+                                          (trace-event-matches? event
+                                                                required-phase
+                                                                target-session-id
+                                                                target-turn-id
+                                                                request-id))
+                                        (drop (read-trace-events sessions-root)
+                                              scenario-baseline-count)))
+                               timeout-ms
+                               20)
+             (error 'tmux-tui-explore "interrupt scenario lacked correlated ~a" required-phase)))
+         (set! completion-baseline-count (length (read-trace-events sessions-root)))
+         (send-line! tmux server-name session-name "Reply exactly INTERRUPT_RECOVERY_OK."))
        (define completed?
          (wait-until (lambda ()
                        (define all-events (read-trace-events sessions-root))
-                       (and (> (length all-events) baseline-count)
+                       (and (> (length all-events) completion-baseline-count)
                             (findf (lambda (event) (scenario-terminal-event? tag event))
-                                   (drop all-events baseline-count))))
+                                   (drop all-events completion-baseline-count))))
                      timeout-ms))
        (define all-events (read-trace-events sessions-root))
        (define events
-         (if (>= (length all-events) baseline-count)
-             (drop all-events baseline-count)
+         (if (>= (length all-events) scenario-baseline-count)
+             (drop all-events scenario-baseline-count)
              '()))
        (define alive? (tmux-session-alive? tmux server-name session-name))
        (define capture (capture-pane tmux server-name session-name))

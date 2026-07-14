@@ -15,6 +15,7 @@
                   ui-state-streaming-text
                   ui-state-streaming-thinking
                   ui-state-last-delta-ms
+                  ui-state-interrupt-request-id
                   set-busy
                   set-busy-since
                   set-status-message
@@ -37,6 +38,8 @@
 
 (define (check-busy-watchdog state now-ms watchdog-ms)
   (cond
+    ;; Runtime owns terminal truth while a correlated interrupt is pending.
+    [(ui-state-interrupt-request-id state) #f]
     ;; Case 1: Non-streaming busy timeout (busy, no text or thinking stream)
     ;; HF1 (v0.99.5): Also check streaming-thinking — thinking-only streams
     ;; used to trigger false busy timeouts.

@@ -344,17 +344,16 @@
     (check-equal? result 'continue "compact with bus returns 'continue")
     (check-true (event? received) "compact publishes event")))
 
-(test-case "process-slash-command: /interrupt publishes interrupt.requested event"
+(test-case "process-slash-command: idle /interrupt is truthful and publishes nothing"
   (let ([bus (make-event-bus)]
         [received #f])
     (subscribe! bus (lambda (evt) (set! received evt)))
     (define ctx (make-tui-ctx #:event-bus bus))
     (define result (process-slash-command ctx 'interrupt))
     (check-equal? result 'continue "interrupt returns 'continue")
-    (check-true (event? received) "interrupt publishes event")
-    (check-equal? (event-ev received)
-                  "interrupt.requested"
-                  "interrupt publishes correct event type")))
+    (check-false received "idle interrupt publishes no event")
+    (check-true (for/or ([entry (in-list (ui-state-transcript (unbox (tui-ctx-ui-state-box ctx))))])
+                  (string-contains? (transcript-entry-text entry) "no active turn")))))
 
 (test-case "process-slash-command: /interrupt without bus returns 'continue"
   (let ([ctx (make-tui-ctx)])

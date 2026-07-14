@@ -14,7 +14,7 @@
          verify-scenario-evidence)
 
 (define required-scenario-tags
-  '("memory" "gsd" "mas" "tools" "release-audit" "durable-memory" "resume" "compact"))
+  '("memory" "gsd" "mas" "tools" "release-audit" "durable-memory" "resume" "compact" "interrupt"))
 
 (struct verification-result (passed? status reasons evidence) #:transparent)
 
@@ -223,6 +223,30 @@
          (truthy? (event-field completed '(persisted? durable?) #f))
          (ordered? events started completed))))
 
+(define (verify-interrupt events recovery-completion)
+  (for*/or ([request (in-list (events-with-phase events "interrupt.requested"))]
+            [accepted (in-list (events-with-phase events "interrupt.accepted"))]
+            [cancelled (in-list (events-with-phase events "turn.cancelled"))]
+            [recovery-start (in-list (events-with-phase events "turn.started"))])
+    (define request-id (event-field request '(request-id requestId)))
+    (define target-session (event-field request '(target-session-id targetSessionId)))
+    (define target-turn (event-field request '(target-turn-id targetTurnId)))
+    (and request-id
+         (same-value? request-id (event-field accepted '(request-id requestId)))
+         (same-value? request-id (event-field cancelled '(request-id requestId)))
+         (same-value? target-session (event-session request))
+         (same-value? target-session (event-session accepted))
+         (same-value? target-session (event-session cancelled))
+         (same-value? target-turn (event-turn request))
+         (same-value? target-turn (event-turn accepted))
+         (same-value? target-turn (event-turn cancelled))
+         (same-value? target-session (event-session recovery-start))
+         (same-value? target-session (event-session recovery-completion))
+         (same-value? (event-session recovery-start) (event-session recovery-completion))
+         (same-value? (event-turn recovery-start) (event-turn recovery-completion))
+         (not (same-value? target-turn (event-turn recovery-completion)))
+         (ordered? events request accepted cancelled recovery-start recovery-completion))))
+
 (define (scenario-semantic-pass? tag events completion)
   (case (string->symbol tag)
     [(memory) (verify-memory events completion)]
@@ -233,6 +257,7 @@
     [(durable-memory) (verify-durable-memory events completion)]
     [(resume) (verify-resume events completion)]
     [(compact) (verify-compact events completion)]
+    [(interrupt) (verify-interrupt events completion)]
     [else #f]))
 
 (define (verify-scenario-evidence tag observation)

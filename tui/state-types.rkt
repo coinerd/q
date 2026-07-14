@@ -144,9 +144,15 @@
           [ui-state-streaming-phase (-> ui-state? symbol?)]
           [ui-state-busy-since (-> ui-state? (or/c real? #f))]
           [ui-state-last-delta-ms (-> ui-state? (or/c real? #f))]
+          [ui-state-active-turn-id (-> ui-state? (or/c string? #f))]
+          [ui-state-active-model-turn-id (-> ui-state? (or/c string? #f))]
+          [ui-state-interrupt-request-id (-> ui-state? (or/c string? #f))]
           ;; Streaming update helpers
           [update-streaming (-> ui-state? (-> streaming-state? streaming-state?) ui-state?)]
           [set-busy (-> ui-state? boolean? ui-state?)]
+          [set-active-turn-id (-> ui-state? (or/c string? #f) ui-state?)]
+          [set-active-model-turn-id (-> ui-state? (or/c string? #f) ui-state?)]
+          [set-interrupt-request-id (-> ui-state? (or/c string? #f) ui-state?)]
           [set-status-message (-> ui-state? (or/c string? #f) ui-state?)]
           [set-pending-tool-name (-> ui-state? (or/c string? #f) ui-state?)]
           [set-streaming-text (-> ui-state? (or/c string? #f) ui-state?)]
@@ -206,7 +212,10 @@
          streaming-thinking ; string or #f — accumulated thinking text
          busy-since ; any/c — timestamp when busy started
          streaming-phase ; symbol: idle | thinking | streaming | tool-pending (T2-8)
-         last-delta-ms) ; (or/c real? #f) — BF1b: timestamp of last stream delta (v0.99.4)
+         last-delta-ms
+         active-turn-id
+         interrupt-request-id
+         active-model-turn-id) ; (or/c real? #f) — BF1b: timestamp of last stream delta (v0.99.4)
   #:transparent)
 
 ;; The complete UI state (21 fields, grouped by domain)
@@ -388,7 +397,7 @@
             session-id
             model-name
             mode
-            (streaming-state #f #f #f #f #f #f 'idle #f) ; streaming
+            (streaming-state #f #f #f #f #f #f 'idle #f #f #f #f) ; streaming
             #f ; current-branch
             '() ; visible-branches
             (selection-state #f #f)
@@ -436,6 +445,15 @@
 (define (ui-state-last-delta-ms state)
   (streaming-state-last-delta-ms (ui-state-streaming state)))
 
+(define (ui-state-active-turn-id state)
+  (streaming-state-active-turn-id (ui-state-streaming state)))
+
+(define (ui-state-active-model-turn-id state)
+  (streaming-state-active-model-turn-id (ui-state-streaming state)))
+
+(define (ui-state-interrupt-request-id state)
+  (streaming-state-interrupt-request-id (ui-state-streaming state)))
+
 ;; ============================================================
 ;; Streaming update helpers
 ;; ============================================================
@@ -472,6 +490,17 @@
                    (if busy?
                        (streaming-state-last-delta-ms s)
                        #f)]))))
+
+(define (set-active-turn-id state turn-id)
+  (update-streaming state (lambda (s) (struct-copy streaming-state s [active-turn-id turn-id]))))
+
+(define (set-active-model-turn-id state turn-id)
+  (update-streaming state
+                    (lambda (s) (struct-copy streaming-state s [active-model-turn-id turn-id]))))
+
+(define (set-interrupt-request-id state request-id)
+  (update-streaming state
+                    (lambda (s) (struct-copy streaming-state s [interrupt-request-id request-id]))))
 
 (define (set-status-message state msg)
   (update-streaming state (lambda (s) (struct-copy streaming-state s [status-message msg]))))

@@ -62,7 +62,11 @@
                   in-memory-fork!)
          (only-in "../util/loop-result.rkt" loop-result?)
          "../util/cancellation.rkt"
-         (only-in "../util/time.rkt" now-epoch-secs))
+         (only-in "../util/time.rkt" now-epoch-secs)
+         racket/dict
+         (only-in "../runtime/session/session-interruption.rkt" active-session-turn-id)
+         (only-in "../runtime/session/session-types.rkt" agent-session-config)
+         (only-in "../util/ids.rkt" generate-id))
 
 ;; C1 v0.97.13: Explicit provides instead of struct-out for stable SDK ABI.
 ;; runtime-config: predicate + constructor + all accessors
@@ -282,7 +286,9 @@
     [else
      (define-values (updated-sess result)
        (session:run-prompt! sess prompt #:max-iterations (runtime-config-max-iterations (rt-cfg rt))))
-     (values (make-runtime-internal (rt-cfg rt) updated-sess (rt-token rt)) result)]))
+     (define current-token
+       (dict-ref (agent-session-config updated-sess) 'cancellation-token (rt-token rt)))
+     (values (make-runtime-internal (rt-cfg rt) updated-sess current-token) result)]))
 
 ;; ============================================================
 ;; subscribe-events!
@@ -301,14 +307,18 @@
 (define (interrupt! rt)
   (define sess (rt-sess rt))
   (define bus (runtime-config-event-bus (rt-cfg rt)))
-  (cancel-token! (rt-token rt))
-  (when sess
-    (publish! bus
-              (make-event "interrupt.requested"
-                          (now-epoch-secs)
-                          (session:session-id sess)
-                          #f
-                          (hasheq 'sessionId (session:session-id sess)))))
+  (define turn-id (and sess (active-session-turn-id sess)))
+  (when turn-id
+    (define session-id (session:session-id sess))
+    (define request-id (generate-id))
+    (publish!
+     bus
+     (make-event
+      "interrupt.requested"
+      (now-epoch-secs)
+      session-id
+      turn-id
+      (hasheq 'request-id request-id 'target-session-id session-id 'target-turn-id turn-id))))
   rt)
 
 ;; ============================================================

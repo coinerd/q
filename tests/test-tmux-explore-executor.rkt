@@ -105,6 +105,10 @@
       (check-true (scenario-terminal-event? "memory" (hash 'phase "turn.completed")))
       (check-false (scenario-terminal-event? "memory" (hash 'phase "session.compact.completed"))))
 
+    (test-case "interrupt cancellation is intermediate and recovery completion is terminal"
+      (check-false (scenario-terminal-event? "interrupt" (hash 'phase "turn.cancelled")))
+      (check-true (scenario-terminal-event? "interrupt" (hash 'phase "turn.completed"))))
+
     (test-case "no session name means no tmux cleanup call"
       (define dir (make-workspace))
       (define stopped '())

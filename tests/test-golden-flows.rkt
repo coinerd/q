@@ -29,7 +29,12 @@
                   stream-chunk-usage
                   stream-chunk-done?
                   make-stream-chunk)
-         (only-in "../util/event/event-bus.rkt" make-event-bus event-bus? subscribe! unsubscribe! publish!)
+         (only-in "../util/event/event-bus.rkt"
+                  make-event-bus
+                  event-bus?
+                  subscribe!
+                  unsubscribe!
+                  publish!)
          (only-in "../util/message/protocol-types.rkt"
                   make-event
                   event-event
@@ -491,7 +496,8 @@
                      "model.stream.delta should be emitted during mock response")
     (check-not-false (member "model.stream.completed" evts)
                      "model.stream.completed should be emitted")
-    (check-not-false (or (member "turn.completed" evts) (member "stream.turn.completed" evts)) "turn.completed should be emitted")
+    (check-not-false (or (member "turn.completed" evts) (member "stream.turn.completed" evts))
+                     "turn.completed should be emitted")
     (check-not-false (member "session.updated" evts) "session.updated should be emitted after turn")
     (cleanup-dir dir)))
 
@@ -512,7 +518,8 @@
     ;; session.started should come before turn.started
     (define session-start-idx (index-of evts "session.started"))
     (define turn-start-idx (index-of evts "turn.started"))
-    (define turn-end-idx (or (index-of evts "turn.completed") (index-of evts "stream.turn.completed")))
+    (define turn-end-idx
+      (or (index-of evts "turn.completed") (index-of evts "stream.turn.completed")))
     (check-true (< session-start-idx turn-start-idx)
                 "session.started should come before turn.started")
     (check-true (< turn-start-idx turn-end-idx) "turn.started should come before turn.completed")
@@ -532,14 +539,17 @@
                 (lambda (evt)
                   (set-box! filtered-events
                             (append (unbox filtered-events) (list (event-event evt)))))
-                #:filter (lambda (evt) (or (string-prefix? (event-event evt) "turn.") (string-prefix? (event-event evt) "stream.turn."))))
+                #:filter (lambda (evt)
+                           (or (string-prefix? (event-event evt) "turn.")
+                               (string-prefix? (event-event evt) "stream.turn."))))
     (define rt (make-golden-runtime prov #:session-dir dir #:event-bus bus #:tool-registry reg))
     (define rt2 (sdk:open-session rt))
     (sdk:run-prompt! rt2 "filter test")
     (define evts (unbox filtered-events))
     ;; All received events should start with "turn."
     (for ([e (in-list evts)])
-      (check-true (or (string-prefix? e "turn.") (string-prefix? e "stream.turn.")) (format "Expected turn.* event, got: ~a" e)))
+      (check-true (or (string-prefix? e "turn.") (string-prefix? e "stream.turn."))
+                  (format "Expected turn.* event, got: ~a" e)))
     ;; But should have at least turn.started and turn.completed
     (check-not-false (member "turn.started" evts))
     (check-not-false (or (member "turn.completed" evts) (member "stream.turn.completed" evts)))
@@ -830,7 +840,7 @@
                      "cancelled prompt should emit turn.cancelled")
     (cleanup-dir dir)))
 
-(test-case "golden-cancel: interrupt! cancels runtime token"
+(test-case "golden-cancel: idle interrupt! does not poison the runtime token"
   (define dir (make-temp-dir))
   (with-handlers ([exn:fail? (lambda (e)
                                (cleanup-dir dir)
@@ -840,9 +850,8 @@
     (define rt2 (sdk:open-session rt))
     (check-false (cancellation-token-cancelled? (sdk:runtime-rt-cancellation-token rt2)))
     (sdk:interrupt! rt2)
-    (check-pred cancellation-token-cancelled?
-                (sdk:runtime-rt-cancellation-token rt2)
-                "interrupt! should cancel the token")
+    ;; Idle interrupt is a no-op: no active turn, so no token poisoning.
+    (check-false (cancellation-token-cancelled? (sdk:runtime-rt-cancellation-token rt2)))
     (cleanup-dir dir)))
 
 (test-case "golden-cancel: uncancelled token → normal completion"

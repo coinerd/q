@@ -91,7 +91,9 @@
                   make-cancellation-token
                   cancellation-token?
                   cancellation-token-cancelled?
-                  cancel-token!))
+                  cancel-token!)
+         racket/dict
+         (only-in "../runtime/session/session-types.rkt" agent-session-config))
 
 ;; ============================================================
 ;; Helpers
@@ -152,6 +154,14 @@
    (define hist (session-history s))
    (check-equal? (length hist) 1 "only user message in history")
    (check-equal? (message-role (first hist)) 'user)
+   ;; Cancellation tokens are one-way: rotate after a cancelled turn so the
+   ;; next prompt on this same session can complete.
+   (define fresh-token (dict-ref (agent-session-config s) 'cancellation-token #f))
+   (check-true (cancellation-token? fresh-token))
+   (check-false (eq? fresh-token tok))
+   (check-false (cancellation-token-cancelled? fresh-token))
+   (define-values (_s2 next-result) (run-prompt! s "next prompt"))
+   (check-equal? (loop-result-termination-reason next-result) 'completed)
    (delete-directory/files dir #:must-exist? #f))
  (test-case "run-prompt! with pre-cancelled token emits turn.cancelled event"
    (define dir (make-temp-dir))
