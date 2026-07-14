@@ -197,22 +197,27 @@
       (define ctx (make-tui-ctx #:event-bus bus))
       ;; Set state to busy with no selection
       (define busy-state
-        (set-pending-tool-name (set-streaming-text (set-busy (initial-ui-state) #t) "partial...")
-                               "bash"))
+        (set-active-turn-id
+         (set-pending-tool-name
+          (set-streaming-text (set-busy (initial-ui-state #:session-id "session-a") #t) "partial...")
+          "bash")
+         "turn-a"))
       (set-box! (tui-ctx-ui-state-box ctx) busy-state)
       ;; Send ctrl-c
       (define result (handle-key ctx 'ctrl-c))
       (check-equal? result 'continue)
-      ;; Verify state is no longer busy
+      ;; Requesting alone must not fake terminal cancellation.
       (define new-state (unbox (tui-ctx-ui-state-box ctx)))
-      (check-false (ui-state-busy? new-state) "ctrl-c clears busy state")
-      (check-false (ui-state-streaming-text new-state) "ctrl-c clears streaming text")
-      (check-false (ui-state-pending-tool-name new-state) "ctrl-c clears pending tool")
-      ;; Verify interrupt event was published
+      (check-true (ui-state-busy? new-state) "ctrl-c waits for cancellation acknowledgement")
+      (check-equal? (ui-state-streaming-text new-state) "partial...")
+      (check-equal? (ui-state-pending-tool-name new-state) "bash")
+      (check-pred string? (ui-state-interrupt-request-id new-state))
+      ;; Verify exactly one targeted interrupt event was published.
       (check-equal? (length published-events) 1 "one event published")
-      (check-equal? (event-ev (car published-events))
-                    "interrupt.requested"
-                    "published interrupt.requested event"))
+      (define requested (car published-events))
+      (check-equal? (event-ev requested) "interrupt.requested")
+      (check-equal? (event-session-id requested) "session-a")
+      (check-equal? (event-turn-id requested) "turn-a"))
 
     (test-case "handle-key 'ctrl-c with selection copies instead of interrupting"
       (define bus (make-event-bus))

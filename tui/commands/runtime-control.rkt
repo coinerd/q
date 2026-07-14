@@ -50,17 +50,39 @@
                               (hasheq 'request-id (generate-id) 'persist? #t)))
         'continue])]))
 
-;; Handle /interrupt — interrupt current operation
+;; Shared slash/Ctrl-C path. Requesting does not clear active state; only the
+;; correlated runtime acknowledgement may do that.
+(define (request-active-turn-interrupt! bus state)
+  (define session-id (ui-state-session-id state))
+  (define turn-id (ui-state-active-turn-id state))
+  (cond
+    [(or (not (ui-state-busy? state)) (not session-id) (not turn-id))
+     (values (add-transcript-entry state (make-system-entry "[interrupt: no active turn]")) #f)]
+    [(ui-state-interrupt-request-id state)
+     (values (add-transcript-entry state (make-system-entry "[interrupt: already requested]")) #f)]
+    [(not bus)
+     (values
+      (add-transcript-entry state
+                            (make-error-entry "[interrupt failed: runtime event bus unavailable]"))
+      #f)]
+    [else
+     (define request-id (generate-id))
+     (publish!
+      bus
+      (make-event
+       "interrupt.requested"
+       (inexact->exact (truncate (/ (current-inexact-milliseconds) 1000)))
+       session-id
+       turn-id
+       (hasheq 'request-id request-id 'target-session-id session-id 'target-turn-id turn-id)))
+     (values (set-status-message (set-interrupt-request-id state request-id) "Interrupting...") #t)]))
+
+;; Handle /interrupt — interrupt the active correlated turn.
 (define (handle-interrupt-command cctx state)
-  (when (cmd-ctx-event-bus cctx)
-    (publish! (cmd-ctx-event-bus cctx)
-              (make-event "interrupt.requested"
-                          (inexact->exact (truncate (/ (current-inexact-milliseconds) 1000)))
-                          (or (ui-state-session-id state) "")
-                          #f
-                          (hash))))
-  (define entry (make-system-entry "[interrupt requested]"))
-  (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+  (define-values (new-state _published?)
+    (request-active-turn-interrupt! (cmd-ctx-event-bus cctx) state))
+  (set-box! (cmd-ctx-state-box cctx) new-state)
+  (set-box! (cmd-ctx-needs-redraw-box cctx) #t)
   'continue)
 
 ;; Handle /retry — resubmit last prompt
@@ -292,4 +314,5 @@
          get-oauth-config
          current-browser-launcher
          launch-browser
-         browser-command+args)
+         browser-command+args
+         request-active-turn-interrupt!)

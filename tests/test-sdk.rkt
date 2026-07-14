@@ -29,14 +29,17 @@
                   hook-result-action
                   hook-result-payload)
          (only-in "../util/hook-types.rkt" hook-amend)
-         (only-in "../runtime/compaction/compactor.rkt" compaction-result-removed-count compact-and-persist!)
+         (only-in "../runtime/compaction/compactor.rkt"
+                  compaction-result-removed-count
+                  compact-and-persist!)
          (only-in "../runtime/compaction/token-compaction.rkt" token-compaction-config)
          "helpers/compaction-helpers.rkt"
          (only-in "../runtime/agent-session.rkt" agent-session-system-instructions session-history)
          (only-in "../runtime/settings.rkt" default-session-dir)
          (only-in "../util/json/jsonl.rkt" jsonl-read-all-valid)
          (only-in "../runtime/session-index.rkt" navigate-result?)
-         "../interfaces/sdk.rkt")
+         "../interfaces/sdk.rkt"
+         racket/async-channel)
 
 ;; ============================================================
 ;; Helpers
@@ -252,7 +255,7 @@
 ;; Test suite: interrupt!
 ;; ============================================================
 
-(test-case "interrupt!: emit interrupt event and return runtime"
+(test-case "interrupt!: idle session emits no interrupt event and returns runtime"
   (define tmp (make-temp-session-dir))
   (with-handlers ([exn:fail? (λ (e)
                                (cleanup-dir tmp)
@@ -264,11 +267,49 @@
     (define rt2 (open-session rt))
     (define rt3 (interrupt! rt2))
     (check-pred runtime? rt3)
-    ;; Should have emitted an interrupt event
+    ;; Idle interruption is truthful and publishes no cancellation request.
     (define event-names (map (λ (e) (event-event e)) (unbox received-events)))
-    (check-not-false (member "interrupt.requested" event-names)
-                     (format "Expected interrupt.requested in ~a" event-names))
+    (check-false (member "interrupt.requested" event-names))
     (cleanup-dir tmp)))
+
+(test-case "interrupt!: two active SDK turns cancel across token rotation"
+  (define tmp (make-temp-session-dir))
+  (dynamic-wind void
+                (lambda ()
+                  (define entered (make-semaphore 0))
+                  (define current-token (box #f))
+                  (define prov
+                    (make-provider (lambda () "sdk-interrupt")
+                                   (lambda () (hash 'streaming #t 'token-counting #t))
+                                   (lambda (_request) (make-model-response '() (hash) "mock" 'stop))
+                                   (lambda (_request)
+                                     (semaphore-post entered)
+                                     (let wait ()
+                                       (unless (cancellation-token-cancelled? (unbox current-token))
+                                         (sleep 0.01)
+                                         (wait)))
+                                     (list (make-stream-chunk #f #f (hasheq) #t)))))
+                  (define rt0 (make-runtime #:provider prov #:session-dir tmp))
+                  (define rt1 (open-session rt0))
+                  (define (run-and-interrupt rt prompt)
+                    (set-box! current-token (runtime-rt-cancellation-token rt))
+                    (define result-ch (make-async-channel))
+                    (thread (lambda ()
+                              (define-values (next-rt result) (run-prompt! rt prompt))
+                              (async-channel-put result-ch (cons next-rt result))))
+                    (check-not-false (sync/timeout 5 entered))
+                    (interrupt! rt)
+                    (define pair (sync/timeout 5 result-ch))
+                    (check-not-false pair)
+                    (check-equal? (loop-result-termination-reason (cdr pair)) 'cancelled)
+                    (car pair))
+                  (define rt2 (run-and-interrupt rt1 "first"))
+                  (check-false (eq? (runtime-rt-cancellation-token rt1)
+                                    (runtime-rt-cancellation-token rt2)))
+                  (check-false (cancellation-token-cancelled? (runtime-rt-cancellation-token rt2)))
+                  (define rt3 (run-and-interrupt rt2 "second"))
+                  (check-false (cancellation-token-cancelled? (runtime-rt-cancellation-token rt3))))
+                (lambda () (cleanup-dir tmp))))
 
 ;; ============================================================
 ;; Test suite: fork-session!
@@ -634,7 +675,7 @@
     (check-equal? (runtime-config-token-budget-threshold (runtime-rt-config rt)) 100000)
     (cleanup-dir tmp)))
 
-(test-case "interrupt! cancels the runtime token"
+(test-case "idle interrupt! does not poison the runtime token"
   (define tmp (make-temp-session-dir))
   (with-handlers ([exn:fail? (λ (e)
                                (cleanup-dir tmp)
@@ -643,7 +684,7 @@
     (define rt (make-runtime #:provider prov #:session-dir tmp))
     (define rt2 (open-session rt))
     (interrupt! rt2)
-    (check-true (cancellation-token-cancelled? (runtime-rt-cancellation-token rt2)))
+    (check-false (cancellation-token-cancelled? (runtime-rt-cancellation-token rt2)))
     (cleanup-dir tmp)))
 
 (test-case "session-info: includes max-iterations and token-budget-threshold"
@@ -663,7 +704,7 @@
     (check-equal? (hash-ref info 'token-budget-threshold) 75000)
     (cleanup-dir tmp)))
 
-(test-case "immutability: interrupt! returns same runtime (token is mutated in place)"
+(test-case "immutability: idle interrupt! returns same runtime without token mutation"
   (define tmp (make-temp-session-dir))
   (with-handlers ([exn:fail? (λ (e)
                                (cleanup-dir tmp)
@@ -672,9 +713,9 @@
     (define rt (make-runtime #:provider prov #:session-dir tmp))
     (define rt2 (open-session rt))
     (define rt3 (interrupt! rt2))
-    ;; The runtime struct is returned as-is; token inside is same object
+    ;; The runtime struct is returned as-is and its idle token remains usable.
     (check-eq? (runtime-rt-cancellation-token rt2) (runtime-rt-cancellation-token rt3))
-    (check-true (cancellation-token-cancelled? (runtime-rt-cancellation-token rt3)))
+    (check-false (cancellation-token-cancelled? (runtime-rt-cancellation-token rt3)))
     (cleanup-dir tmp)))
 
 (test-case "open-session: passes token-budget-threshold to agent-session"
@@ -772,7 +813,7 @@
                 1
                 "callback fires only once — cancel-token! is now idempotent (W10.4)"))
 
-(test-case "interrupt! on runtime with no active session cancels token, no crash"
+(test-case "interrupt! on runtime with no active session is a no-op"
   (define tmp (make-temp-session-dir))
   (with-handlers ([exn:fail? (lambda (e)
                                (cleanup-dir tmp)
@@ -783,8 +824,8 @@
     (define tok (runtime-rt-cancellation-token rt))
     (check-false (cancellation-token-cancelled? tok))
     (define rt2 (interrupt! rt))
-    ;; Token should be cancelled
-    (check-true (cancellation-token-cancelled? (runtime-rt-cancellation-token rt2)))
+    ;; No active turn means no cancellation request and no poisoned token.
+    (check-false (cancellation-token-cancelled? (runtime-rt-cancellation-token rt2)))
     ;; Should not crash
     (check-pred runtime? rt2)
     (cleanup-dir tmp)))

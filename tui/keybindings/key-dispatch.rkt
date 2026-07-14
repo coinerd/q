@@ -16,15 +16,14 @@
          "../command-parse.rkt"
          "binding-resolver.rkt"
          "../selection.rkt"
-         "../../util/event/event-bus.rkt"
-         "../../util/event/event.rkt"
          "../keymap.rkt"
          (only-in "../component.rkt"
                   component-handle-input
                   q-component-handle-input-fn
                   input-consumed?
                   cycle-focus
-                  focusable-components))
+                  focusable-components)
+         (only-in "../commands/runtime-control.rkt" request-active-turn-interrupt!))
 
 ;; Dispatch a keymap action to the appropriate handler.
 ;; Returns 'handled if handled (maps to 'continue in handle-key),
@@ -199,17 +198,9 @@
             (let ([text (selection-text ctx state)])
               (when (and text (not (string=? text "")))
                 (copy-text! text)))
-            (begin
-              (when (tui-ctx-event-bus ctx)
-                (publish! (tui-ctx-event-bus ctx)
-                          (make-event "interrupt.requested"
-                                      (inexact->exact (truncate (/ (current-inexact-milliseconds)
-                                                                   1000)))
-                                      (or (ui-state-session-id state) "")
-                                      #f
-                                      (hash))))
-              (set-box! (tui-ctx-ui-state-box ctx)
-                        (clear-streaming (set-pending-tool-name (set-busy state #f) #f)))))
+            (let-values ([(new-state _published?)
+                          (request-active-turn-interrupt! (tui-ctx-event-bus ctx) state)])
+              (set-box! (tui-ctx-ui-state-box ctx) new-state)))
         'continue]
        [(alt-tab)
         ;; Cycle focus forward through focusable components

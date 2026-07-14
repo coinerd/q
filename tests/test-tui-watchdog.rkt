@@ -182,7 +182,7 @@
   ;; Even with busy-since very recent (< 500ms), handle-turn-completed must clear busy?
   (define now (current-inexact-milliseconds))
   (define st
-    (set-busy (set-busy-since (initial-ui-state #:session-id "test" #:model-name "m") now) #t))
+    (set-busy (set-busy-since (initial-ui-state #:session-id "test-session" #:model-name "m") now) #t))
   ;; Create a turn.completed event
   (define evt (make-test-event "turn.completed" (hasheq) #:time (+ now 100)))
   (define result (apply-event-to-state st evt))
@@ -193,7 +193,7 @@
 
 (test-case "v0.45.14: rapid iteration pattern does not stick busy"
   ;; Simulate 10 rapid turn.started/turn.completed pairs with short elapsed times
-  (define base (initial-ui-state #:session-id "test" #:model-name "m"))
+  (define base (initial-ui-state #:session-id "test-session" #:model-name "m"))
   (define (turn-pair st idx)
     (define start-time (+ (* idx 200) 1000000))
     (define end-time (+ start-time 150)) ;; 150ms — well under old 500ms threshold
@@ -226,7 +226,7 @@
 (test-case "v0.45.14: turn-cancelled clears busy-since"
   (define now (current-inexact-milliseconds))
   (define st
-    (set-busy (set-busy-since (initial-ui-state #:session-id "test" #:model-name "m") now) #t))
+    (set-busy (set-busy-since (initial-ui-state #:session-id "test-session" #:model-name "m") now) #t))
   (define evt (make-test-event "turn.cancelled" (hasheq) #:time (+ now 100)))
   (define result (apply-event-to-state st evt))
   (check-false (ui-state-busy? result))

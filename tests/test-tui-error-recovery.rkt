@@ -29,13 +29,13 @@
 (define-test-suite
  test-tui-error-recovery
  (test-case "error recovery: runtime.error clears busy?"
-   (define s0 (set-busy (initial-ui-state #:session-id "s1") #t))
+   (define s0 (set-busy (initial-ui-state #:session-id "test-session") #t))
    (define evt
      (make-test-event "runtime.error" (hasheq 'error "test error" 'errorType 'internal-error)))
    (define s1 (apply-event-to-state s0 evt))
    (check-false (ui-state-busy? s1) "busy? cleared after runtime.error"))
  (test-case "error recovery: error message shown in transcript"
-   (define s0 (set-busy (initial-ui-state #:session-id "s1") #t))
+   (define s0 (set-busy (initial-ui-state #:session-id "test-session") #t))
    (define evt
      (make-test-event "runtime.error"
                       (hasheq 'error "something went wrong" 'errorType 'internal-error)))
@@ -45,7 +45,7 @@
    (define entry (last entries))
    (check-equal? (transcript-entry-kind entry) 'error))
  (test-case "error recovery: turn.completed after error is idempotent"
-   (define s0 (set-busy (initial-ui-state #:session-id "s1") #t))
+   (define s0 (set-busy (initial-ui-state #:session-id "test-session") #t))
    (define err-evt
      (make-test-event "runtime.error" (hasheq 'error "test error" 'errorType 'internal-error)))
    (define s1 (apply-event-to-state s0 err-evt))
@@ -55,7 +55,7 @@
    (define s2 (apply-event-to-state s1 done-evt))
    (check-false (ui-state-busy? s2) "busy? still false after turn.completed"))
  (test-case "error recovery: subsequent prompt works after error"
-   (define s0 (set-busy (initial-ui-state #:session-id "s1") #t))
+   (define s0 (set-busy (initial-ui-state #:session-id "test-session") #t))
    (define err-evt
      (make-test-event "runtime.error" (hasheq 'error "test error" 'errorType 'internal-error)))
    (define s1 (apply-event-to-state s0 err-evt))
@@ -64,7 +64,7 @@
    (define s2 (apply-event-to-state s1 start-evt))
    (check-true (ui-state-busy? s2) "new turn sets busy?=#t after error recovery"))
  (test-case "error recovery: internal-error hint shown"
-   (define s0 (set-busy (initial-ui-state #:session-id "s1") #t))
+   (define s0 (set-busy (initial-ui-state #:session-id "test-session") #t))
    (define evt
      (make-test-event "runtime.error" (hasheq 'error "internal failure" 'errorType 'internal-error)))
    (define s1 (apply-event-to-state s0 evt))
@@ -76,7 +76,7 @@
                (format "hint mentions internal: ~a" hint-text)))
  (test-case "error recovery: streaming state cleared on error"
    (define s0
-     (set-streaming-thinking (set-streaming-text (set-busy (initial-ui-state #:session-id "s1") #t)
+     (set-streaming-thinking (set-streaming-text (set-busy (initial-ui-state #:session-id "test-session") #t)
                                                  "partial code...")
                              "thinking..."))
    (define evt (make-test-event "runtime.error" (hasheq 'error "timeout" 'errorType 'timeout)))
@@ -85,7 +85,7 @@
    (check-false (ui-state-streaming-thinking s1) "streaming-thinking cleared"))
  ;; v0.45.15 W1: Error text visibility — verify error message text is shown in transcript
  (test-case "v0.45.15: runtime.error shows visible error text in transcript"
-   (define s0 (initial-ui-state #:session-id "s1"))
+   (define s0 (initial-ui-state #:session-id "test-session"))
    (define evt
      (make-test-event "runtime.error"
                       (hasheq 'error "Connection refused by provider" 'errorType 'network)))
@@ -100,7 +100,7 @@
    (check-not-false (regexp-match #rx"Connection refused" (transcript-entry-text error-entry))
                     "error text is visible in transcript"))
  (test-case "v0.45.15: runtime.error with status-message shows error"
-   (define s0 (initial-ui-state #:session-id "s1"))
+   (define s0 (initial-ui-state #:session-id "test-session"))
    (define evt
      (make-test-event "runtime.error"
                       (hasheq 'error "API rate limit exceeded" 'errorType 'rate-limit)))

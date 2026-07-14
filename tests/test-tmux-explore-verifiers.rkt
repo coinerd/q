@@ -94,7 +94,23 @@
                            'kept-count
                            12
                            'persisted?
-                           #t)))))
+                           #t)))
+   "interrupt"
+   (list
+    (evt "interrupt.requested"
+         #:turn "prompt-turn-a"
+         #:data
+         (hash 'request-id "interrupt-1" 'target-session-id session 'target-turn-id "prompt-turn-a"))
+    (evt "interrupt.accepted"
+         #:turn "prompt-turn-a"
+         #:data
+         (hash 'request-id "interrupt-1" 'target-session-id session 'target-turn-id "prompt-turn-a"))
+    (evt "turn.cancelled"
+         #:turn "prompt-turn-a"
+         #:data
+         (hash 'request-id "interrupt-1" 'target-session-id session 'target-turn-id "prompt-turn-a"))
+    (evt "turn.started" #:turn "recovery-turn")
+    (evt "turn.completed" #:turn "recovery-turn"))))
 
 (define negative-fixtures
   (hash
@@ -147,7 +163,18 @@
    (list (evt "session.started" #:turn #f #:data (hash 'reason "new" 'session-id session)) completion)
    ;; Accepted/prose without terminal compact completion is not PASS.
    "compact"
-   (list (evt "session.compact.requested" #:data (hash 'session-id session)) completion)))
+   (list (evt "session.compact.requested" #:data (hash 'session-id session)) completion)
+   ;; Cancellation acknowledgement belongs to another request.
+   "interrupt"
+   (list
+    (evt "interrupt.requested"
+         #:turn "prompt-turn-a"
+         #:data
+         (hash 'request-id "interrupt-1" 'target-session-id session 'target-turn-id "prompt-turn-a"))
+    (evt "interrupt.accepted" #:turn "prompt-turn-a" #:data (hash 'request-id "interrupt-1"))
+    (evt "turn.cancelled" #:turn "prompt-turn-a" #:data (hash 'request-id "other-request"))
+    (evt "turn.started" #:turn "recovery-turn")
+    (evt "turn.completed" #:turn "recovery-turn"))))
 
 (define (observation events
                      #:capture [capture "plausible assistant prose says everything passed"]
@@ -175,6 +202,9 @@
 
 (define suite
   (test-suite "tmux explorer semantic verifiers"
+
+    (test-case "interrupt is a required semantic scenario"
+      (check-not-false (member "interrupt" required-scenario-tags)))
 
     (test-case "all exact registered tags accept correlated positive fixtures"
       (for ([tag (in-list required-scenario-tags)])
@@ -220,6 +250,15 @@
                                 'persisted?
                                 #t))))
       (check-false (verification-result-passed? (verify-scenario-evidence "compact"
+                                                                          (observation events)))))
+
+    (test-case "interrupt recovery must remain in the interrupted session"
+      (define events
+        (for/list ([event (in-list (hash-ref positive-fixtures "interrupt"))])
+          (if (member (hash-ref event 'turn-id #f) '("recovery-turn"))
+              (hash-set event 'session-id "foreign-session")
+              event)))
+      (check-false (verification-result-passed? (verify-scenario-evidence "interrupt"
                                                                           (observation events)))))
 
     (test-case "unknown scenario tag fails closed"
