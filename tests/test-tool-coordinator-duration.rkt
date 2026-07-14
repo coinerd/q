@@ -96,3 +96,30 @@
   (define dur (car durations))
   (check-true (>= dur 40))
   (check-true (<= dur 300)))
+
+(test-case "correlated completion carries stable call identity and result presence"
+  (define bus (make-event-bus))
+  (define reg (make-tool-registry))
+  (register-tool! reg (make-sleep-tool 1))
+  (define records (box '()))
+  (subscribe! bus
+              (lambda (evt)
+                (when (equal? (event-event evt) "tool.execution.correlated-completed")
+                  (set-box! records (cons (event-payload evt) (unbox records))))))
+  (define message (make-assistant-msg-with-sleep 1))
+  (handle-tool-calls-pending (list message)
+                             '()
+                             #f
+                             reg
+                             bus
+                             "test-session"
+                             (format "/tmp/test-~a-correlated.log" (random 1000000))
+                             #f
+                             (hash->session-config (hash)))
+  (check-equal? (length (unbox records)) 1)
+  (define payload (car (unbox records)))
+  (check-true (string? (hash-ref payload 'tool-call-id #f)))
+  (check-not-equal? (hash-ref payload 'tool-call-id) "")
+  (check-equal? (hash-ref payload 'tool-name) "sleep")
+  (check-true (hash-ref payload 'result-present? #f))
+  (check-equal? (hash-ref payload 'result-summary) 'completed))

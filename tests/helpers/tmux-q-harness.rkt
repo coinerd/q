@@ -31,7 +31,8 @@
          racket/list
          racket/date
          racket/system
-         (only-in racket/port port->string with-input-from-string))
+         (only-in racket/port port->string with-input-from-string)
+         "../../util/credential-redaction.rkt")
 
 ;; Struct
 (provide (struct-out tmux-q-session)
@@ -448,11 +449,9 @@
              line)]
         [else line])))
   (define step1 (string-join step1-lines "\n"))
-  ;; Step 2: redact bearer tokens
-  (define step2 (regexp-replace* #px"(?i:bearer) +[A-Za-z0-9._-]+" step1 "Bearer <REDACTED>"))
-  ;; Step 3: redact API key patterns (sk-...)
-  (define step3 (regexp-replace* #px"sk-[A-Za-z0-9_-]+" step2 "<REDACTED>"))
-  ;; Step 4: redact HOME path if provided
+  ;; Step 2: apply the centralized credential policy (TMUX-07).
+  (define step3 (redact-secrets step1))
+  ;; Step 3: redact HOME path if provided
   (define step4
     (if (and home-path (> (string-length home-path) 0))
         (string-replace step3 home-path "<HOME>")
@@ -941,14 +940,8 @@
 ;; Pure: checks if text contains un-redacted sensitive patterns.
 ;; Returns #t if a sensitive pattern is found that is NOT already redacted.
 (define (detect-sensitive-leak text)
-  (and (string? text)
-       (let* ([has-bearer (regexp-match? #px"[Bb]earer +[A-Za-z0-9._-]{8,}" text)]
-              [has-api-key (regexp-match? #px"sk-[A-Za-z0-9]{10,}" text)]
-              [has-redacted (string-contains? text "<REDACTED>")])
-         (and (or has-bearer has-api-key)
-              ;; If the only match IS <REDACTED>, it's fine
-              (not (and has-redacted (not has-bearer) (not has-api-key)))))
-       #t))
+  ;; v0.99.50 W3 (TMUX-07): One policy across explorer, harness, and report.
+  (contains-secret-leak? text))
 
 ;; verify-artifact-redacted! : path-string? -> void?
 ;; Reads an artifact file and fails if un-redacted sensitive content is found.

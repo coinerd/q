@@ -278,9 +278,14 @@
   (check-false (detect-queued-prompts "")))
 
 (test-case "redact-sensitive redacts bearer tokens"
-  (define result (redact-sensitive "Authorization: Bearer abc123secret"))
-  (check-false (string-contains? result "abc123secret"))
+  (define token "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.real-token")
+  (define result (redact-sensitive (string-append "Authorization: Bearer " token)))
+  (check-false (string-contains? result token))
   (check-true (string-contains? result "<REDACTED>")))
+
+(test-case "redact-sensitive preserves benign credential lookalikes"
+  (define benign "set-task-state risk-score Bearer authentication token=<REDACTED>")
+  (check-equal? (redact-sensitive benign) benign))
 
 (test-case "redact-sensitive redacts API key patterns"
   (define result (redact-sensitive "api_key=sk-proj123abc456"))
@@ -490,10 +495,15 @@
                    (check-exn #rx"file was modified" (lambda () (verify-file-unchanged! f fp))))))
 
 (test-case "detect-sensitive-leak detects bearer tokens"
-  (check-true (detect-sensitive-leak "Authorization: Bearer abc123secretkey")))
+  (check-true (detect-sensitive-leak
+               "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.real-token")))
 
 (test-case "detect-sensitive-leak detects API keys"
-  (check-true (detect-sensitive-leak "key=sk-proj123abc456def789")))
+  (check-true (detect-sensitive-leak "key=sk-proj-abcdefghijklmnopqrstuvwxyz1234567890")))
+
+(test-case "detect-sensitive-leak ignores benign credential lookalikes"
+  (check-false (detect-sensitive-leak
+                "set-task-state risk-score Bearer authentication token=<REDACTED>")))
 
 (test-case "detect-sensitive-leak ignores already-redacted content"
   (check-false (detect-sensitive-leak "Authorization: Bearer <REDACTED>")))
@@ -515,9 +525,11 @@
   (with-temp-dir
    (lambda (dir)
      (define f (build-path dir "artifact.txt"))
-     (call-with-output-file f
-                            (lambda (out) (display "Authorization: Bearer secretkey123" out))
-                            #:exists 'replace)
+     (call-with-output-file
+      f
+      (lambda (out)
+        (display "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.real-token" out))
+      #:exists 'replace)
      (check-exn #rx"un-redacted sensitive content" (lambda () (verify-artifact-redacted! f))))))
 
 ;; ============================================================

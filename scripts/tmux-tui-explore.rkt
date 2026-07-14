@@ -15,7 +15,10 @@
          racket/list
          racket/match
          racket/path
-         racket/string)
+         racket/string
+         "../util/credential-redaction.rkt"
+         "tmux-explore/executor.rkt"
+         "tmux-explore/verifiers.rkt")
 
 (provide (struct-out explore-scenario)
          (struct-out explore-result)
@@ -30,6 +33,8 @@
          write-explore-report!
          write-summary-files!
          run-exploration
+         real-results-gating-pass?
+         exploration-exit-code
          print-scenario-list)
 
 (struct explore-scenario (tag title description prompt expected-status real-tools?) #:transparent)
@@ -72,10 +77,22 @@
    (explore-scenario
     "durable-memory"
     "Durable memory restart"
-    "Restart/round-trip memory scenario; W7 upgrades this from unsupported to evidence-backed."
-    "Persist a durable fact, restart, and recall it without restating it."
-    'unsupported-until-w7
-    #f)))
+    "Store, resume, and retrieve one correlated durable-memory item."
+    "Persist the codename amber-quay, restart the session, and retrieve it without restating it."
+    'pass-mock-tui-with-caveat
+    #f)
+   (explore-scenario "resume"
+                     "Session resume"
+                     "Resume the exact persisted session with structured continuity evidence."
+                     "Resume this session and report the prior session identifier."
+                     'pass-mock-tui-with-caveat
+                     #f)
+   (explore-scenario "compact"
+                     "Durable compaction"
+                     "Run compaction and require a terminal persisted lifecycle event."
+                     "/compact"
+                     'pass-mock-tui-with-caveat
+                     #f)))
 
 (define (valid-mode? mode)
   (member mode '(mock real)))
@@ -109,27 +126,7 @@
                           "Q_TMUX_TUI_REAL_PROVIDER=1, and "
                           "Q_TMUX_TUI_REAL_PROVIDER_CONFIRM=I_UNDERSTAND_COSTS"))))
 
-(define secret-regexps
-  (list #px"sk-[A-Za-z0-9_-]+"
-        #px"(?i:bearer) +[A-Za-z0-9._-]+"
-        #px"(?i:(api[_-]?key|token|secret|password))=([^ \t\n\r]+)"
-        #px"(?i:(api[_-]?key|token|secret|password))\":\"([^\"]+)"))
-
-(define (redact-explore-text text)
-  (define redacted
-    (for/fold ([acc text]) ([rx (in-list secret-regexps)])
-      (regexp-replace*
-       rx
-       acc
-       (lambda matches
-         (define matched (car matches))
-         (cond
-           [(regexp-match? #px"=" matched) (regexp-replace #px"=.*$" matched "=<REDACTED>")]
-           [(regexp-match? #px"\":\"" matched)
-            (regexp-replace #px"\":\".*$" matched "\":\"<REDACTED>")]
-           [(regexp-match? #px"(?i:bearer)" matched) "Bearer <REDACTED>"]
-           [else "<REDACTED>"])))))
-  redacted)
+(define redact-explore-text redact-secrets)
 
 (define (make-explore-root [base-dir (find-system-path 'temp-dir)])
   (define root (make-temporary-file "q-tmux-explore-~a" 'directory base-dir))
@@ -299,27 +296,79 @@
                                       (or (explore-result-report-path r) ""))))
                          #:exists 'append))
 
-(define (run-one-scenario scenario mode root)
+(define (default-real-executor scenario root)
+  (run-real-scenario (explore-scenario-tag scenario)
+                     (explore-scenario-prompt scenario)
+                     root
+                     #:tools? (explore-scenario-real-tools? scenario)))
+
+(define (failed-executor-observation error)
+  (hash 'status
+        'failed
+        'trace-events
+        '()
+        'capture
+        ""
+        'mock-provider?
+        #f
+        'timed-out?
+        #f
+        'crashed?
+        #t
+        'error
+        (exn-message error)))
+
+(define (real-result-evidence observation verification)
+  (list (cons "evidence-source" "observed isolated tmux/q execution")
+        (cons "execution-status" (hash-ref observation 'status 'failed))
+        (cons "trace-event-count" (length (hash-ref observation 'trace-events '())))
+        (cons "verifier"
+              (if (verification-result-passed? verification)
+                  "correlated semantic lifecycle evidence matched"
+                  (string-join (verification-result-reasons verification) "; ")))
+        (cons "artifact" (hash-ref observation 'artifact-path "no retained artifact"))))
+
+(define (run-one-scenario scenario mode root executor)
   (define started (timestamp))
-  ;; W1 intentionally establishes the official runner/report contract. Later
-  ;; waves replace pane/sentinel mock evidence with structured TUI event waits.
-  (define status (scenario-status mode scenario))
   (define result
-    (explore-result (explore-scenario-tag scenario)
-                    (explore-scenario-title scenario)
-                    mode
-                    status
-                    (scenario-classification status)
-                    #f
-                    (scenario->mock-evidence scenario)
-                    started
-                    (timestamp)))
+    (cond
+      [(eq? mode 'mock)
+       (define status (scenario-status mode scenario))
+       (explore-result (explore-scenario-tag scenario)
+                       (explore-scenario-title scenario)
+                       mode
+                       status
+                       (scenario-classification status)
+                       #f
+                       (cons '("evidence-source" . "deterministic mock; never valid for real PASS")
+                             (scenario->mock-evidence scenario))
+                       started
+                       (timestamp))]
+      [else
+       (define observation
+         (with-handlers ([exn:fail? failed-executor-observation])
+           (executor scenario root)))
+       (define verification (verify-scenario-evidence (explore-scenario-tag scenario) observation))
+       (define passed? (verification-result-passed? verification))
+       (define execution-status (hash-ref observation 'status 'failed))
+       (explore-result (explore-scenario-tag scenario)
+                       (explore-scenario-title scenario)
+                       mode
+                       (if passed?
+                           'pass
+                           (if (eq? execution-status 'completed) 'failed-verifier execution-status))
+                       (if passed? 'pass 'fail)
+                       #f
+                       (real-result-evidence observation verification)
+                       started
+                       (timestamp))]))
   (write-explore-report! root result))
 
 (define (run-exploration #:mode [mode 'mock]
                          #:filter [filter-tag #f]
                          #:out [out-dir #f]
-                         #:append-log [append-log #f])
+                         #:append-log [append-log #f]
+                         #:executor [executor default-real-executor])
   (unless (valid-mode? mode)
     (error 'tmux-tui-explore "invalid mode: ~a" mode))
   (when (eq? mode 'real)
@@ -330,12 +379,27 @@
   (define root (or out-dir (make-explore-root)))
   (make-directory* root)
   (define results
-    (for/list ([s (in-list scenarios)])
-      (run-one-scenario s mode root)))
+    (for/list ([scenario (in-list scenarios)])
+      (run-one-scenario scenario mode root executor)))
   (define-values (_tsv _json) (write-summary-files! root results))
   (when append-log
     (append-central-log! append-log results))
   results)
+
+(define (real-results-gating-pass? results)
+  (and (pair? results)
+       (andmap (lambda (result)
+                 (and (eq? (explore-result-mode result) 'real)
+                      (eq? (explore-result-status result) 'pass)
+                      (eq? (explore-result-classification result) 'pass)))
+               results)))
+
+(define (exploration-exit-code mode results non-gating?)
+  (cond
+    [(not (eq? mode 'real)) 0]
+    [non-gating? 0]
+    [(real-results-gating-pass? results) 0]
+    [else 1]))
 
 (define (print-scenario-list [out (current-output-port)])
   (fprintf out "Available tmux TUI exploration scenarios:~n")
@@ -363,6 +427,7 @@
   (define filter-tag #f)
   (define out-dir #f)
   (define append-log #f)
+  (define non-gating? #f)
   (command-line
    #:program "tmux-tui-explore"
    #:once-each [("-l" "--list") "List scenarios without running" (set! list-only? #t)]
@@ -370,6 +435,7 @@
    [("-f" "--filter") tag "Run only one scenario tag" (set! filter-tag tag)]
    [("-o" "--out") dir "Output directory for reports" (set! out-dir dir)]
    [("--append-log") path "Append compact ledger entry to a markdown log" (set! append-log path)]
+   [("--non-gating") "Report real non-PASS outcomes without a nonzero exit" (set! non-gating? #t)]
    #:args ()
    (void))
   (cond
@@ -382,4 +448,8 @@
        (define root (or out-dir (make-explore-root)))
        (define results
          (run-exploration #:mode mode #:filter filter-tag #:out root #:append-log append-log))
-       (print-summary results root))]))
+       (print-summary results root)
+       (define code (exploration-exit-code mode results non-gating?))
+       (unless (zero? code)
+         (eprintf "tmux-tui-explore: one or more real scenarios did not PASS~n")
+         (exit code)))]))
