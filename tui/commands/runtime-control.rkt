@@ -14,14 +14,14 @@
          "../../runtime/auth/oauth.rkt"
          "../../runtime/auth/oauth-callback.rkt"
          "../../runtime/auth/auth-store.rkt"
-         "context.rkt")
+         "context.rkt"
+         (only-in "../../util/ids.rkt" generate-id))
 
-;; Handle /compact — request compaction with optional --dry-run
+;; Handle /compact — request durable compaction with optional --dry-run.
 (define (handle-compact-command cctx state [args '()])
-  ;; Block during active tool loop
   (cond
     [(ui-state-busy? state)
-     (define entry (make-error-entry "Cannot compact while a tool is running. Wait for completion."))
+     (define entry (make-error-entry "Cannot compact while an active turn is running."))
      (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
      (set-box! (cmd-ctx-needs-redraw-box cctx) #t)
      'continue]
@@ -29,22 +29,25 @@
      (define dry-run? (member "--dry-run" args))
      (cond
        [dry-run?
-        (define transcript (ui-state-transcript state))
-        (define entry-count (length transcript))
-        (define msg
-          (format "[compact dry-run: ~a transcript entries would be compacted]" entry-count))
-        (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state (make-system-entry msg)))
+        (define msg "[compact dry-run unavailable: /compact always persists]")
+        (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state (make-error-entry msg)))
+        'continue]
+       [(not (cmd-ctx-event-bus cctx))
+        (set-box! (cmd-ctx-state-box cctx)
+                  (add-transcript-entry
+                   state
+                   (make-error-entry "[compact failed: runtime event bus unavailable]")))
+        (set-box! (cmd-ctx-needs-redraw-box cctx) #t)
         'continue]
        [else
-        (define entry (make-system-entry "[compact requested]"))
-        (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
-        (when (cmd-ctx-event-bus cctx)
-          (publish! (cmd-ctx-event-bus cctx)
-                    (make-event "compact.requested"
-                                (inexact->exact (truncate (/ (current-inexact-milliseconds) 1000)))
-                                (or (ui-state-session-id state) "")
-                                #f
-                                (hash))))
+        (set-box! (cmd-ctx-state-box cctx) (set-status-message state "Compacting..."))
+        (set-box! (cmd-ctx-needs-redraw-box cctx) #t)
+        (publish! (cmd-ctx-event-bus cctx)
+                  (make-event "session.compact.requested"
+                              (inexact->exact (truncate (/ (current-inexact-milliseconds) 1000)))
+                              (or (ui-state-session-id state) "")
+                              #f
+                              (hasheq 'request-id (generate-id) 'persist? #t)))
         'continue])]))
 
 ;; Handle /interrupt — interrupt current operation

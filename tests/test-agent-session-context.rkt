@@ -166,22 +166,12 @@
    ;; Now build tiered context
    (define tiered (build-tiered-context compacted-context #:tier-b-count 2 #:tier-c-count 1))
 
-   ;; Tier A should have the summary message + all pinned user messages.
-   (check-equal? (length (tiered-context-tier-a tiered))
-                 3
-                 "Tier A should have 1 summary + all user messages")
-   ;; The compaction-summary should be present in Tier A
-   (define tier-a-kinds (map message-kind (tiered-context-tier-a tiered)))
-   (check-not-false (member 'compaction-summary tier-a-kinds)
-                    "Tier A should contain a compaction-summary message")
-
-   ;; No non-user regular messages remain after compaction + all-user pinning.
-   (check-equal? (length (tiered-context-tier-b tiered)) 0 "Tier B should have no unpinned messages")
-
-   ;; Tier C keeps the remaining unpinned assistant message.
-   (check-equal? (length (tiered-context-tier-c tiered))
-                 1
-                 "Tier C should keep the unpinned assistant message"))
+   ;; A compaction result is already bounded. Tiering must preserve its exact
+   ;; protocol order instead of pinning/reordering user and assistant messages.
+   (check-equal? (map message-id (tiered-context-tier-a tiered)) (map message-id compacted-context))
+   (check-equal? (length (tiered-context-tier-b tiered)) 0)
+   (check-equal? (length (tiered-context-tier-c tiered)) 0)
+   (check-eq? (message-kind (first (tiered-context-tier-a tiered))) 'compaction-summary))
  (test-case "build-tiered-context with no compaction returns empty Tier A"
    (define msgs
      (list (make-message "id-1" #f 'user 'message (list (make-text-part "User 1")) 1000 (hasheq))
@@ -336,23 +326,32 @@
         (run-prompt! sess (format "message ~a" i)))
       ;; Collect events from compact
       (define compact-events (box '()))
+      (define terminal-names
+        '("session.compact.completed" "session.compact.nothing-to-compact"
+                                      "session.compact.already-running"
+                                      "session.compact.failed"))
       (subscribe! bus
                   (lambda (evt) (set-box! compact-events (cons evt (unbox compact-events))))
-                  #:filter (lambda (e)
-                             (member (event-ev e)
-                                     '("session.compact.completed" "session.compact.failed"))))
+                  #:filter (lambda (e) (member (event-ev e) terminal-names)))
       ;; Publish compact.requested
-      (publish! bus (make-event "compact.requested" 1001 (session-id sess) #f (hasheq)))
-      ;; Allow thread to process (publish! is synchronous but yield for safety)
-      (sync/timeout 0.5 never-evt)
-      ;; Verify compact completed event was emitted
-      (check-not-equal? (length (unbox compact-events))
-                        0
-                        "compact.requested should trigger session.compact.completed")
-      (define completed-evt (car (unbox compact-events)))
-      (define payload (event-payload completed-evt))
-      (check-true (hash-has-key? payload 'removedCount) "completed event should have removedCount")
-      (check-true (hash-has-key? payload 'keptCount) "completed event should have keptCount")
+      (publish! bus
+                (make-event "session.compact.requested"
+                            1001
+                            (session-id sess)
+                            #f
+                            (hasheq 'request-id "compact-request-test")))
+      ;; Durable compaction runs off the synchronous event-bus/render path.
+      (let wait ([remaining 50])
+        (when (and (null? (unbox compact-events)) (positive? remaining))
+          (sleep 0.01)
+          (wait (sub1 remaining))))
+      ;; Every accepted request emits exactly one truthful terminal outcome.
+      (check-equal? (length (unbox compact-events)) 1)
+      (define terminal-evt (car (unbox compact-events)))
+      (check-not-false (member (event-ev terminal-evt) terminal-names))
+      (define payload (event-payload terminal-evt))
+      (check-equal? (hash-ref payload 'request-id #f) "compact-request-test")
+      (check-true (hash-has-key? payload 'persisted?))
       (close-session! sess)
       (delete-directory/files tmpdir))))
 

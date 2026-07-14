@@ -54,7 +54,19 @@
 
 (define (assemble-context path)
   (define-values (pre post) (split-at-compaction path))
-  (define relevant (if post post path))
+  (define relevant
+    (cond
+      [(not post) path]
+      [else
+       (define summary (car post))
+       (define first-kept-id (hash-ref (message-meta summary) 'firstKeptEntryId #f))
+       (define kept
+         (if first-kept-id
+             (dropf pre (lambda (entry) (not (equal? (message-id entry) first-kept-id))))
+             '()))
+       ;; Durable logs are append-only, so kept entries precede the summary on
+       ;; disk. Provider context is summary, then kept entries, then new turns.
+       (append (list summary) kept (cdr post))]))
   (filter-map entry->context-message relevant))
 
 (define (split-at-compaction path)

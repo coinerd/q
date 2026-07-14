@@ -199,21 +199,29 @@
                       (event-field resumed '(previous-session-id previousSessionId)))
          (ordered? events started resumed completion))))
 
-(define (verify-compact events completion)
-  (for/or ([event (in-list (events-with-phase events "session.compact.completed"))])
-    (define removed (event-field event '(removed-count removedCount) #f))
-    (define kept (event-field event '(kept-count keptCount) #f))
+(define (verify-compact events terminal)
+  (for*/or ([started (in-list (events-with-phase events "session.compact.started"))]
+            [completed (in-list (events-with-phase events "session.compact.completed"))])
+    (define removed (event-field completed '(removed-count removedCount) #f))
+    (define kept (event-field completed '(kept-count keptCount) #f))
     (define before
       (or
-       (event-field event '(before-count beforeCount original-count) #f)
+       (event-field completed '(before-count beforeCount original-count) #f)
        (and (exact-nonnegative-integer? removed) (exact-nonnegative-integer? kept) (+ removed kept))))
-    (define after (or (event-field event '(after-count afterCount compacted-count) #f) kept))
-    (and (correlated-to-completion? event completion)
+    (define after (or (event-field completed '(after-count afterCount compacted-count) #f) kept))
+    (and (eq? completed terminal)
+         (same-value? (event-session started) (event-session completed))
+         (same-value? (event-field started '(request-id requestId))
+                      (event-field completed '(request-id requestId)))
+         (exact-nonnegative-integer? removed)
+         (positive? removed)
+         (exact-nonnegative-integer? kept)
          (exact-nonnegative-integer? before)
          (exact-nonnegative-integer? after)
+         (= after (add1 kept))
          (<= after before)
-         (truthy? (event-field event '(persisted? durable?) #f))
-         (ordered? events event completion))))
+         (truthy? (event-field completed '(persisted? durable?) #f))
+         (ordered? events started completed))))
 
 (define (scenario-semantic-pass? tag events completion)
   (case (string->symbol tag)
@@ -236,6 +244,7 @@
     [else
      (define status (hash-ref-any observation '(status) 'failed))
      (define events (hash-ref-any observation '(trace-events traceEvents) '()))
+     (define compact? (string=? tag "compact"))
      (define blockers
        (filter values
                (list (and (not (eq? status 'completed)) (format "terminal status is ~a" status))
@@ -243,17 +252,26 @@
                      (and (truthy? (hash-ref-any observation '(crashed?) #f)) "session crashed")
                      (and (truthy? (hash-ref-any observation '(mock-provider?) #f))
                           "mock-provider fallback observed")
-                     (and (not (truthy? (hash-ref-any observation '(provider-confirmed?) #f)))
+                     (and (not compact?)
+                          (not (truthy? (hash-ref-any observation '(provider-confirmed?) #f)))
                           "non-mock provider execution is not positively confirmed")
+                     (and compact?
+                          (not (truthy? (hash-ref-any observation '(control-command-confirmed?) #f)))
+                          "real control-command execution is not positively confirmed")
                      (and (not (and (list? events) (pair? events))) "structured trace is missing"))))
-     (define completion (and (list? events) (findf completion-event? (reverse events))))
+     (define completion
+       (and (list? events)
+            (findf (if compact?
+                       (lambda (event) (phase=? event "session.compact.completed"))
+                       completion-event?)
+                   (reverse events))))
      (define turn-id (and completion (event-turn completion)))
      (define reasons
        (append blockers
                (if completion
                    '()
                    (list "terminal completion event is missing"))
-               (if (and completion turn-id)
+               (if (or compact? (and completion turn-id))
                    '()
                    (list "completion turn ID is missing"))
                (if (and completion (event-session completion))

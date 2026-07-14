@@ -56,9 +56,8 @@
      (cond
        [(and last-compact (< (- now-ms last-compact) 2000))
         context-with-system] ; too soon after last compaction
-       [(agent-session-compacting? sess) context-with-system] ; recursive compaction guard
+       [(not (try-claim-compaction! sess #t)) context-with-system] ; explicit prompt-owned claim
        [else
-        (guarded-set-compacting! sess #t)
         (emit-typed-event! bus
                            (make-compaction-event #:session-id sid
                                                   #:turn-id #f
@@ -75,7 +74,7 @@
                                                         bus
                                                         sid))
                       (lambda ()
-                        (guarded-set-compacting! sess #f)
+                        (release-compaction! sess)
                         (guarded-set-last-compaction-time! sess (now-epoch-ms))
                         (emit-typed-event! bus
                                            (make-compaction-event #:session-id sid

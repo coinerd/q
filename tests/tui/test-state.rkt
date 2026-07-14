@@ -183,11 +183,44 @@
              [s2 (apply-event-to-state s evt)])
         (check-equal? (ui-state-status-message s2) "Compacting...")))
 
-    (test-case "apply-event: compaction.completed"
+    (test-case "apply-event: session compaction completed is visible with counts"
       (let* ([s (set-status-message (initial-ui-state) "Compacting...")]
-             [evt (make-test-event "compaction.completed" (hash))]
+             [evt (make-test-event "session.compact.completed"
+                                   (hash 'removed-count 8 'kept-count 3 'persisted? #t))]
              [s2 (apply-event-to-state s evt)])
-        (check-false (ui-state-status-message s2))))
+        (check-false (ui-state-status-message s2))
+        (check-equal? (transcript-entry-text (last (ui-state-transcript s2)))
+                      "[compact completed: removed 8, kept 3]")))
+
+    (test-case "apply-event: session compaction no-op and failure are terminal and visible"
+      (define terminal-cases
+        (list (cons (make-test-event "session.compact.nothing-to-compact" (hash))
+                    "[compact: nothing to compact]")
+              (cons (make-test-event "session.compact.failed" (hash 'error "disk full"))
+                    "[compact failed: disk full]")))
+      (for ([case (in-list terminal-cases)])
+        (define s2
+          (apply-event-to-state (set-status-message (initial-ui-state) "Compacting...") (car case)))
+        (check-false (ui-state-status-message s2))
+        (check-equal? (length (ui-state-transcript s2)) 1)
+        (check-equal? (transcript-entry-text (car (ui-state-transcript s2))) (cdr case))))
+
+    (test-case "apply-event: already-running does not clear the active owner's status"
+      (define s2
+        (apply-event-to-state (set-status-message (initial-ui-state) "Compacting...")
+                              (make-test-event "session.compact.already-running" (hash))))
+      (check-equal? (ui-state-status-message s2) "Compacting...")
+      (check-equal? (transcript-entry-text (car (ui-state-transcript s2)))
+                    "[compact: already running]"))
+
+    (test-case "apply-event: prompt-owned guard terminates the compact request status"
+      (define s2
+        (apply-event-to-state (set-status-message (initial-ui-state) "Compacting...")
+                              (make-test-event "session.compact.already-running"
+                                               (hash 'active-owner 'prompt))))
+      (check-false (ui-state-status-message s2))
+      (check-equal? (transcript-entry-text (car (ui-state-transcript s2)))
+                    "[compact: active prompt is blocking compaction]"))
 
     (test-case "apply-event: unknown event returns unchanged state"
       (let* ([s (initial-ui-state)]

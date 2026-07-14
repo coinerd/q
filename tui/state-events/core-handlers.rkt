@@ -390,8 +390,29 @@
 
 (define (handle-compaction-lifecycle state evt)
   (define ev (event-ev evt))
+  (define payload (event-payload evt))
+  (define ts (event-time evt))
+  (define (terminal message)
+    (append-entry (set-status-message state #f) (make-entry 'system message ts (hash))))
   (match ev
-    [(or "compaction.started" "compaction.start") (set-status-message state "Compacting...")]
+    [(or "session.compact.started" "compaction.started" "compaction.start")
+     (set-status-message state "Compacting...")]
+    ["session.compact.completed"
+     (define removed (hash-ref-multi payload 'removed-count 'removedCount "?"))
+     (define kept (hash-ref-multi payload 'kept-count 'keptCount "?"))
+     (terminal (format "[compact completed: removed ~a, kept ~a]" removed kept))]
+    ["session.compact.nothing-to-compact" (terminal "[compact: nothing to compact]")]
+    ["session.compact.already-running"
+     (if (eq? (hash-ref payload 'active-owner 'compaction) 'prompt)
+         (terminal "[compact: active prompt is blocking compaction]")
+         ;; Another compaction still owns the guard; retain its active status.
+         (append-entry state (make-entry 'system "[compact: already running]" ts (hash))))]
+    ["session.compact.failed"
+     (define prefix
+       (if (hash-ref payload 'persisted? #f)
+           "compact failed after summary persistence"
+           "compact failed"))
+     (terminal (format "[~a: ~a]" prefix (hash-ref payload 'error "unknown error")))]
     [(or "compaction.completed" "compaction.end") (set-status-message state #f)]
     [_ state]))
 
@@ -500,6 +521,12 @@
 (register-event-reducer! "exploration.progress" handle-exploration-progress)
 (register-event-reducer! "gsd.plan.archived" handle-gsd-plan-archived)
 (register-event-reducer! "context.mid-turn-over-budget" handle-context-mid-turn-over-budget)
+(register-event-reducer! "session.compact.started" handle-compaction-lifecycle)
+(register-event-reducer! "session.compact.completed" handle-compaction-lifecycle)
+(register-event-reducer! "session.compact.nothing-to-compact" handle-compaction-lifecycle)
+(register-event-reducer! "session.compact.already-running" handle-compaction-lifecycle)
+(register-event-reducer! "session.compact.failed" handle-compaction-lifecycle)
+;; Legacy SDK/automatic-compaction names remain read-compatible at the UI boundary.
 (register-event-reducer! "compaction.started" handle-compaction-lifecycle)
 (register-event-reducer! "compaction.start" handle-compaction-lifecycle)
 (register-event-reducer! "compaction.completed" handle-compaction-lifecycle)
