@@ -124,9 +124,14 @@
 
 (define (create-tui-session rt-config cli-cfg)
   ;; Create agent session and TUI context from runtime config.
+  ;; If rt-config has a 'session-id, resume that session instead of creating new.
   ;; Returns (values ctx sess scrollback-path)
   (define bus (dict-ref rt-config 'event-bus #f))
-  (define sess (make-agent-session rt-config))
+  (define maybe-sid (dict-ref rt-config 'session-id #f))
+  (define sess
+    (if maybe-sid
+        (resume-agent-session maybe-sid rt-config)
+        (make-agent-session rt-config)))
 
   ;; Wire custom keybindings path if specified
   (define kb-path (and (cli-config? cli-cfg) (cli-config-keybindings-path cli-cfg)))

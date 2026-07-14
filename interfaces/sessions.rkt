@@ -73,7 +73,7 @@
                         (->* (path-string? string?)
                              (#:confirm? boolean? #:in input-port? #:out output-port?)
                              (or/c 'ok 'not-found 'cancelled))]
-                       [run-sessions-command (-> hash? void?)]
+                       [run-sessions-command (-> cli-config? void?)]
                        [scan-session-dirs (-> path-string? (listof list?))]
                        [read-session-metadata (-> string? (or/c path-string? #f) (or/c hash? #f))]
                        [read-trace-entries (-> path-string? (listof any/c))]
