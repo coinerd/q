@@ -225,26 +225,36 @@
   (cond
     ;; Not our overlay type — pass through
     [(not (and ov (eq? (overlay-state-type ov) 'approval-prompt))) 'pass]
-    ;; Approve: y or Y
-    [(or (eq? keycode #\y) (eq? keycode #\Y) (eq? keycode 'y))
-     (approval-put! #t)
-     (set-box! (tui-ctx-ui-state-box ctx) (dismiss-overlay state))
-     (mark-dirty! ctx)
-     'handled]
-    ;; Deny: n or N
-    [(or (eq? keycode #\n) (eq? keycode #\N) (eq? keycode 'n))
-     (approval-put! #f)
-     (set-box! (tui-ctx-ui-state-box ctx) (dismiss-overlay state))
-     (mark-dirty! ctx)
-     'handled]
-    ;; Cancel (deny): Escape
-    [(eq? keycode 'escape)
-     (approval-put! #f)
-     (set-box! (tui-ctx-ui-state-box ctx) (dismiss-overlay state))
-     (mark-dirty! ctx)
-     'handled]
-    ;; Unrecognized key — pass through
-    [else 'pass]))
+    ;; v0.99.50 W2 (TMUX-04): Correlated exactly-once delivery.
+    ;; Extract request-id from overlay extra, use approval-put-for-id!
+    ;; so stale/duplicate responses are ignored.
+    [else
+     (define extra (and ov (overlay-state-extra ov)))
+     (define req-id (and (hash? extra) (hash-ref extra 'request-id #f)))
+     (define approved?
+       (cond
+         [(or (eq? keycode #\y) (eq? keycode #\Y) (eq? keycode 'y)) #t]
+         [(or (eq? keycode #\n) (eq? keycode #\N) (eq? keycode 'n)) #f]
+         [(eq? keycode 'escape) #f]
+         [else #f]))
+     (define recognized?
+       (or (eq? keycode #\y)
+           (eq? keycode #\Y)
+           (eq? keycode 'y)
+           (eq? keycode #\n)
+           (eq? keycode #\N)
+           (eq? keycode 'n)
+           (eq? keycode 'escape)))
+     (cond
+       [(not recognized?) 'pass]
+       [else
+        ;; Deliver correlated response (exactly-once via registry)
+        (if req-id
+            (approval-put-for-id! req-id approved?)
+            (approval-put! approved?)) ; backward compat for legacy events
+        (set-box! (tui-ctx-ui-state-box ctx) (dismiss-overlay state))
+        (mark-dirty! ctx)
+        'handled])]))
 
 (provide selection-text
          handle-mouse

@@ -33,7 +33,13 @@
                        [current-approval-channel (-> (or/c approval-channel? #f))]
                        [approval-await-result (->* () () boolean?)])
          approval-put!
-         DEFAULT-APPROVAL-TIMEOUT-MS)
+         DEFAULT-APPROVAL-TIMEOUT-MS
+         ;; v0.99.50 W2 (TMUX-04): Correlated exactly-once approval delivery
+         register-approval-request!
+         approval-await-for-id
+         approval-put-for-id!
+         clear-pending-approvals!
+         pending-approval-count)
 
 ;; ============================================================
 ;; Approval channel struct
@@ -66,8 +72,10 @@
   (void))
 
 ;; Clear the shared approval channel (called on TUI teardown).
+;; v0.99.50 W2: Also clears the pending-approvals registry.
 (define (clear-approval-channel!)
   (set-box! current-approval-channel-box #f)
+  (clear-pending-approvals!)
   (void))
 
 ;; Read the current shared approval channel.
@@ -100,3 +108,83 @@
   (when ch
     (async-channel-put (approval-channel-ch ch) result))
   (void))
+
+;; ============================================================
+;; v0.99.50 W2 (TMUX-04): Correlated exactly-once approval delivery
+;; ============================================================
+
+;; A pending approval request with a dedicated response channel.
+;; Each request gets its own async-channel, so responses can't cross.
+(struct pending-approval (id ch created-at) #:transparent)
+
+;; Registry: hash from request-id (symbol) → pending-approval
+(define pending-approvals-box (box (hash)))
+
+;; Semaphore for thread-safe registry access
+(define registry-sem (make-semaphore 1))
+
+;; Register a new approval request.
+;; Returns a unique request-id (symbol) that must be included in the
+;; response to correlate it back to this request.
+;; Each request gets its own dedicated async-channel.
+(define (register-approval-request!)
+  (define req-id (gensym 'approval))
+  (define pa (pending-approval req-id (make-async-channel) (current-inexact-milliseconds)))
+  (call-with-semaphore
+   registry-sem
+   (lambda () (set-box! pending-approvals-box (hash-set (unbox pending-approvals-box) req-id pa))))
+  req-id)
+
+;; Await an approval result for a specific request-id.
+;; Blocks until the response arrives or timeout.
+;; Returns (values approved? delivered?) where delivered? is #f on timeout
+;; or if the request was not found / already consumed.
+;; Removes the request from the registry on completion or timeout.
+(define (approval-await-for-id req-id [timeout-ms #f])
+  (define pa
+    (call-with-semaphore registry-sem (lambda () (hash-ref (unbox pending-approvals-box) req-id #f))))
+  (cond
+    [(not pa) (values #f #f)]
+    [else
+     (define ach (pending-approval-ch pa))
+     (define effective-timeout
+       (or timeout-ms
+           (let ([ch (current-approval-channel)])
+             (if ch
+                 (approval-channel-timeout-ms ch)
+                 DEFAULT-APPROVAL-TIMEOUT-MS))))
+     (define result (sync/timeout (/ effective-timeout 1000.0) ach))
+     (call-with-semaphore
+      registry-sem
+      (lambda () (set-box! pending-approvals-box (hash-remove (unbox pending-approvals-box) req-id))))
+     (if result
+         (values (car result) #t)
+         (values #f #f))]))
+
+;; Put an approval result for a specific request-id (exactly-once).
+;; Atomically removes the request from the registry before delivering,
+;; so a second put for the same ID is a no-op (returns #f).
+;; Returns #t if delivered, #f if the request-id was not found
+;; (already answered, timed out, or never registered).
+(define (approval-put-for-id! req-id approved?)
+  (define pa
+    (call-with-semaphore registry-sem
+                         (lambda ()
+                           (define h (unbox pending-approvals-box))
+                           (define found (hash-ref h req-id #f))
+                           (when found
+                             (set-box! pending-approvals-box (hash-remove h req-id)))
+                           found)))
+  (cond
+    [(not pa) #f]
+    [else
+     (async-channel-put (pending-approval-ch pa) (list approved?))
+     #t]))
+
+;; Clear all pending approval requests (called on TUI teardown).
+(define (clear-pending-approvals!)
+  (call-with-semaphore registry-sem (lambda () (set-box! pending-approvals-box (hash)))))
+
+;; Count of pending approval requests (for testing/introspection).
+(define (pending-approval-count)
+  (call-with-semaphore registry-sem (lambda () (hash-count (unbox pending-approvals-box)))))

@@ -426,10 +426,13 @@
 ;; Handle spawn approval request from MAS spawn.
 ;; Sets active-overlay to 'approval-prompt so the TUI can collect
 ;; user input (y/n/Esc) and respond via approval-put!.
+;; v0.99.50 W2 (TMUX-04): Stores request-id in overlay extra for
+;; correlated exactly-once delivery.
 (define (handle-spawn-approval-requested state evt)
   (define payload (event-payload evt))
   (define capabilities (hash-ref payload 'capabilities '()))
   (define task-preview (hash-ref payload 'task-preview ""))
+  (define request-id (hash-ref payload 'request-id #f))
   (define caps-str
     (string-join (map (lambda (c)
                         (if (symbol? c)
@@ -449,18 +452,20 @@
           (plain-line (format "  Task: ~a" preview-str))
           (plain-line "")
           (plain-line "  [y] Approve   [n] Deny   [Esc] Cancel")))
-  ;; Store capabilities and task-preview in extra for key handler access.
-  (struct-copy ui-state
-               state
-               [active-overlay
-                (overlay-state 'approval-prompt
-                               content
-                               ""
-                               'top-left
-                               #f
-                               #f
-                               0
-                               (hasheq 'capabilities capabilities 'task-preview preview-str))]))
+  ;; Store capabilities, task-preview, and request-id in extra for key handler.
+  (struct-copy
+   ui-state
+   state
+   [active-overlay
+    (overlay-state
+     'approval-prompt
+     content
+     ""
+     'top-left
+     #f
+     #f
+     0
+     (hasheq 'capabilities capabilities 'task-preview preview-str 'request-id request-id))]))
 
 ;; ============================================================
 ;; Register all core handlers at module load time

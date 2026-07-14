@@ -16,7 +16,11 @@
          "../../tools/tool.rkt"
          (only-in "../../util/capability.rkt" valid-capability?)
          (only-in "../../runtime/runtime-helpers.rkt" emit-session-event! make-event-bus)
-         (only-in "../../tui/approval-channel.rkt" current-approval-channel approval-await-result)
+         (only-in "../../tui/approval-channel.rkt"
+                  current-approval-channel
+                  approval-await-result
+                  register-approval-request!
+                  approval-await-for-id)
          (only-in "../../runtime/settings.rkt" q-settings? setting-ref)
          (only-in "../../runtime/auto-retry.rkt" with-auto-retry)
          "../model-bridge.rkt"
@@ -139,26 +143,39 @@
 ;; Returns #t when approved, #f when denied.
 ;; When no approval channel is available (non-interactive mode), returns #t
 ;; (permissive — the approval gate only blocks in interactive/TUI mode).
+;; v0.99.50 W2 (TMUX-04): Uses correlated request IDs for exactly-once delivery.
+;; Each request registers a unique ID in the pending registry and emits it
+;; in the event payload so the TUI can correlate the response.
 (define (request-spawn-approval capabilities task-desc exec-ctx)
   (define publisher (and exec-ctx (exec-context-event-publisher exec-ctx)))
-  ;; Emit the approval-request event for TUI display (when available)
-  (when publisher
-    (publisher "mas.spawn-approval-requested"
-               (hasheq 'capabilities
-                       capabilities
-                       'task-preview
-                       (if (and (string? task-desc) (> (string-length task-desc) 200))
-                           (substring task-desc 0 200)
-                           (or task-desc "")))))
-  ;; v0.99.25 §5.3: Check for approval channel (TUI interactive mode).
-  ;; When a channel is set, block until user responds (with timeout).
-  ;; When no channel (non-interactive mode), use the permissive parameter.
   (define ch (current-approval-channel))
-  (if ch
-      ;; Interactive: block until user responds or timeout
-      (approval-await-result)
-      ;; Non-interactive: use permissive parameter (default #t)
-      (current-spawn-approval-result)))
+  (cond
+    [ch
+     ;; Interactive mode: correlated exactly-once approval delivery.
+     (define req-id (register-approval-request!))
+     (when publisher
+       (publisher "mas.spawn-approval-requested"
+                  (hasheq 'capabilities
+                          capabilities
+                          'task-preview
+                          (if (and (string? task-desc) (> (string-length task-desc) 200))
+                              (substring task-desc 0 200)
+                              (or task-desc ""))
+                          'request-id
+                          req-id)))
+     (define-values (approved? delivered?) (approval-await-for-id req-id))
+     approved?]
+    [else
+     ;; Non-interactive: emit event for logging, use permissive parameter.
+     (when publisher
+       (publisher "mas.spawn-approval-requested"
+                  (hasheq 'capabilities
+                          capabilities
+                          'task-preview
+                          (if (and (string? task-desc) (> (string-length task-desc) 200))
+                              (substring task-desc 0 200)
+                              (or task-desc "")))))
+     (current-spawn-approval-result)]))
 
 ;; Default role prompt when no role is specified
 (define default-role-prompt
