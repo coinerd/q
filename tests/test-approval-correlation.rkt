@@ -1,0 +1,280 @@
+#lang racket/base
+
+;; @speed fast
+;; @suite default
+
+;; tests/test-approval-correlation.rkt
+;; v0.99.50 W2 (TMUX-04): Correlated exactly-once HITL approval delivery.
+;;
+;; Verifies:
+;; 1. register → await → put-for-id delivers correct result
+;; 2. duplicate put-for-id is exactly-once (second returns #f)
+;; 3. mismatched IDs don't deliver to wrong request
+;; 4. timeout cleans up registry (no leak)
+;; 5. clear-pending-approvals cleans up all pending
+;; 6. concurrent requests get unique IDs and channels
+;; 7. request-spawn-approval emits request-id in event payload
+
+(require rackunit
+         rackunit/text-ui
+         racket/list
+         "../tui/approval-channel.rkt"
+         "../tui/state-types.rkt"
+         (only-in "../tui/tui-keybindings.rkt"
+                  make-tui-ctx
+                  tui-ctx-ui-state-box
+                  handle-approval-overlay-key)
+         "../tools/builtins/spawn-subagent.rkt"
+         "../tools/tool.rkt")
+
+(define suite
+  (test-suite "Correlated Exactly-Once Approval Delivery (v0.99.50 W2)"
+
+    ;; ── Setup: ensure clean state ──
+    (test-case "starts with empty registry"
+      (clear-pending-approvals!)
+      (check-equal? (pending-approval-count) 0))
+
+    ;; ── 1. Basic register → await → put-for-id ──
+
+    (test-case "register then put-for-id delivers result"
+      (clear-pending-approvals!)
+      (define req-id (register-approval-request!))
+      (check-equal? (pending-approval-count) 1)
+      (define result-box (box #f))
+      (define t
+        (thread (lambda ()
+                  (define-values (approved? delivered?) (approval-await-for-id req-id))
+                  (set-box! result-box (list approved? delivered?)))))
+      (sleep 0.05)
+      (check-true (approval-put-for-id! req-id #t))
+      (thread-wait t)
+      (check-equal? (unbox result-box) (list #t #t))
+      (check-equal? (pending-approval-count) 0))
+
+    (test-case "register then put-for-id delivers denial"
+      (clear-pending-approvals!)
+      (define req-id (register-approval-request!))
+      (define result-box (box #f))
+      (define t
+        (thread (lambda ()
+                  (define-values (approved? delivered?) (approval-await-for-id req-id))
+                  (set-box! result-box (list approved? delivered?)))))
+      (sleep 0.05)
+      (check-true (approval-put-for-id! req-id #f))
+      (thread-wait t)
+      (check-equal? (unbox result-box) (list #f #t)))
+
+    ;; ── 2. Exactly-once: duplicate put returns #f ──
+
+    (test-case "duplicate put-for-id is exactly-once"
+      (clear-pending-approvals!)
+      (define req-id (register-approval-request!))
+      ;; First put delivers and atomically removes from registry
+      (check-true (approval-put-for-id! req-id #t))
+      ;; Second put finds nothing — exactly-once enforcement
+      (check-false (approval-put-for-id! req-id #t))
+      (check-false (approval-put-for-id! req-id #f)))
+
+    ;; ── 3. Mismatched IDs don't cross ──
+
+    (test-case "mismatched ID does not deliver to wrong request"
+      (clear-pending-approvals!)
+      (define req-a (register-approval-request!))
+      (define req-b (register-approval-request!))
+      (check-not-equal? req-a req-b)
+      (check-equal? (pending-approval-count) 2)
+      ;; Put for B should not deliver to A
+      (check-true (approval-put-for-id! req-b #t))
+      ;; A is still pending
+      (check-equal? (pending-approval-count) 1)
+      ;; Now put for A
+      (check-true (approval-put-for-id! req-a #f))
+      (check-equal? (pending-approval-count) 0))
+
+    ;; ── 4. Timeout cleans up registry ──
+
+    (test-case "timeout removes request from registry"
+      (clear-pending-approvals!)
+      (define req-id (register-approval-request!))
+      (check-equal? (pending-approval-count) 1)
+      (define-values (approved? delivered?) (approval-await-for-id req-id 50))
+      (check-false approved?)
+      (check-false delivered?)
+      (check-equal? (pending-approval-count) 0))
+
+    ;; ── 5. clear-pending-approvals cleans up ──
+
+    (test-case "clear-pending-approvals removes all pending"
+      (clear-pending-approvals!)
+      (register-approval-request!)
+      (register-approval-request!)
+      (register-approval-request!)
+      (check-equal? (pending-approval-count) 3)
+      (clear-pending-approvals!)
+      (check-equal? (pending-approval-count) 0))
+
+    ;; ── 6. Unique IDs for concurrent requests ──
+
+    (test-case "concurrent requests get unique IDs"
+      (clear-pending-approvals!)
+      (define ids
+        (for/list ([_ (in-range 10)])
+          (register-approval-request!)))
+      (check-equal? (length ids) 10)
+      (check-equal? (length (remove-duplicates ids)) 10)
+      (check-equal? (pending-approval-count) 10)
+      (clear-pending-approvals!))
+
+    ;; ── 7. await for unknown ID returns #f #f ──
+
+    (test-case "await for unknown ID returns not-delivered"
+      (clear-pending-approvals!)
+      (define-values (approved? delivered?) (approval-await-for-id 'nonexistent-id 10))
+      (check-false approved?)
+      (check-false delivered?))
+
+    ;; ── 8. clear-approval-channel! also clears pending ──
+
+    (test-case "clear-approval-channel! also clears pending approvals"
+      (clear-pending-approvals!)
+      (register-approval-request!)
+      (register-approval-request!)
+      (check-equal? (pending-approval-count) 2)
+      (clear-approval-channel!)
+      (check-equal? (pending-approval-count) 0))
+
+    ;; ── 9. Cross-thread: full correlated lifecycle ──
+
+    (test-case "full correlated lifecycle across threads"
+      (clear-pending-approvals!)
+      (define req-id (register-approval-request!))
+      (define result-box (box #f))
+      ;; Session thread blocks on correlated await
+      (define t
+        (thread (lambda ()
+                  (define-values (approved? delivered?) (approval-await-for-id req-id))
+                  (set-box! result-box approved?))))
+      ;; Simulate TUI key handler delivering correlated response
+      (sleep 0.05)
+      (check-true (approval-put-for-id! req-id #t))
+      (thread-wait t)
+      (check-equal? (unbox result-box) #t)
+      ;; Registry is now empty
+      (check-equal? (pending-approval-count) 0))
+
+    ;; ── 10. request-spawn-approval emits request-id in event ──
+
+    (test-case "request-spawn-approval emits request-id when channel is set"
+      (clear-pending-approvals!)
+      (set-approval-channel! (make-approval-channel #:timeout-ms 100))
+      (define events-received '())
+      (define mock-publisher
+        (lambda (event-type payload)
+          (set! events-received (cons (cons event-type payload) events-received))))
+      (define mock-ctx (make-exec-context #:event-publisher mock-publisher))
+      ;; Spawn a thread to deliver the approval (will timeout otherwise)
+      (thread (lambda ()
+                (sleep 0.05)
+                ;; Find the request-id from the event and deliver
+                (when (pair? events-received)
+                  (define payload (cdar events-received))
+                  (define req-id (hash-ref payload 'request-id #f))
+                  (when req-id
+                    (approval-put-for-id! req-id #t)))))
+      (define approved (request-spawn-approval '(shell-exec) "dangerous task" mock-ctx))
+      (check-true approved "should be approved via correlated delivery")
+      (check-true (pair? events-received) "should have emitted an event")
+      (define payload (cdar events-received))
+      (check-true (hash-has-key? payload 'request-id) "event must contain request-id")
+      (clear-approval-channel!))
+
+    ;; ── 11. Stale approval cannot auto-approve new request ──
+
+    (test-case "stale approval does not leak to new request"
+      (clear-pending-approvals!)
+      (set-approval-channel! (make-approval-channel #:timeout-ms 100))
+      ;; First request registers and times out
+      (define req-1 (register-approval-request!))
+      (define-values (a1 d1) (approval-await-for-id req-1 50))
+      (check-false d1 "first request timed out")
+      (check-equal? (pending-approval-count) 0)
+      ;; Stale approval for req-1 arrives (late response)
+      (check-false (approval-put-for-id! req-1 #t) "stale approval must be rejected")
+      ;; New request gets a fresh ID
+      (define req-2 (register-approval-request!))
+      (check-not-equal? req-1 req-2)
+      ;; The stale #t is NOT sitting on req-2's channel
+      (define-values (a2 d2) (approval-await-for-id req-2 50))
+      (check-false d2 "new request must not receive stale approval")
+      (clear-approval-channel!))
+
+    ;; ── 12. Key handler delivers correlated response ──
+
+    (test-case "key handler delivers via approval-put-for-id! when request-id present"
+      (clear-pending-approvals!)
+      (set-approval-channel! (make-approval-channel #:timeout-ms 5000))
+      (define req-id (register-approval-request!))
+      ;; Build a tui-ctx with an approval overlay that has request-id in extra
+      (define ctx (make-tui-ctx #:session-runner void #:event-bus #f #:session-queue #f))
+      (set-box!
+       (tui-ctx-ui-state-box ctx)
+       (struct-copy
+        ui-state
+        (initial-ui-state)
+        [active-overlay
+         (overlay-state
+          'approval-prompt
+          '()
+          ""
+          'top-left
+          #f
+          #f
+          0
+          (hasheq 'capabilities '(shell-exec) 'task-preview "correlated test" 'request-id req-id))]))
+      ;; Session thread blocks on correlated await
+      (define result-box (box #f))
+      (define t
+        (thread (lambda ()
+                  (define-values (approved? delivered?) (approval-await-for-id req-id))
+                  (set-box! result-box approved?))))
+      (sleep 0.05)
+      ;; User presses 'y' — key handler uses correlated delivery
+      (define handler-result (handle-approval-overlay-key ctx #\y))
+      (check-equal? handler-result 'handled)
+      (thread-wait t)
+      (check-equal? (unbox result-box) #t)
+      (check-equal? (pending-approval-count) 0)
+      (clear-approval-channel!))
+
+    ;; ── 13. Key handler falls back to legacy when no request-id ──
+
+    (test-case "key handler uses legacy approval-put! when no request-id"
+      (clear-pending-approvals!)
+      (set-approval-channel! (make-approval-channel #:timeout-ms 5000))
+      ;; Build a tui-ctx with an approval overlay WITHOUT request-id in extra
+      (define ctx (make-tui-ctx #:session-runner void #:event-bus #f #:session-queue #f))
+      (set-box! (tui-ctx-ui-state-box ctx)
+                (struct-copy ui-state
+                             (initial-ui-state)
+                             [active-overlay
+                              (overlay-state
+                               'approval-prompt
+                               '()
+                               ""
+                               'top-left
+                               #f
+                               #f
+                               0
+                               (hasheq 'capabilities '(shell-exec) 'task-preview "legacy test"))]))
+      ;; Press 'n' — should go through legacy approval-put! (bare boolean)
+      (define handler-result (handle-approval-overlay-key ctx #\n))
+      (check-equal? handler-result 'handled)
+      ;; Legacy channel should have the result
+      (define ch (current-approval-channel))
+      (check-not-false ch "channel should be set")
+      (define result (sync/timeout 0.1 (approval-channel-ch ch)))
+      (check-equal? result #f "legacy denial should be on shared channel")
+      (clear-approval-channel!))))
+
+(run-tests suite)
