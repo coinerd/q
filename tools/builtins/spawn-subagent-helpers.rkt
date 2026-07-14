@@ -15,6 +15,7 @@
 
 (require racket/string
          racket/list
+         (only-in file/sha1 sha1)
          (only-in "../../util/capability.rkt" valid-capability?)
          (only-in "../../util/message/message.rkt" make-message message-role message-content)
          (only-in "../../util/content/content-parts.rkt"
@@ -27,7 +28,10 @@
          requires-hitl-approval?
          extract-assistant-text
          extract-text-summary
-         SUBAGENT-SUMMARY-MAX-CHARS)
+         SUBAGENT-SUMMARY-MAX-CHARS
+         classify-terminal-status
+         make-safe-result-metadata
+         result-has-content?)
 
 ;; ============================================================
 ;; Capability normalization
@@ -137,3 +141,61 @@
   (if (> (string-length full-text) max-chars)
       (string-append (substring full-text 0 (- max-chars 3)) "...")
       full-text))
+
+;; ============================================================
+;; Typed terminal outcomes (v0.99.50 W1 — TMUX-04)
+;; ============================================================
+
+;; Classify a raw loop final-status into a canonical typed terminal outcome.
+;;
+;; Raw statuses from run-subagent-loop:
+;;   'complete             → subagent finished normally
+;;   'max-turns-reached    → ran out of turns
+;;   'cancelled            → HITL-denied (transport-ineligible, W2)
+;;   (other symbols)       → unexpected loop exit
+;;
+;; Returns one of these canonical typed symbols:
+;;   'completed            — finished with non-empty result text
+;;   'approved-empty       — finished but produced empty result
+;;   'timed-out            — hit max turns without completing
+;;   'failed               — unexpected loop exit
+;;   'cancelled            — HITL-denied
+;;
+;; This function is pure — it takes the raw status symbol and a
+;; result-has-content? boolean, returning the canonical typed outcome.
+(define (classify-terminal-status raw-status has-content?)
+  (cond
+    [(eq? raw-status 'complete) (if has-content? 'completed 'approved-empty)]
+    [(eq? raw-status 'max-turns-reached) 'timed-out]
+    [(eq? raw-status 'cancelled) 'cancelled]
+    [else 'failed]))
+
+;; Check whether result text is non-empty (after trimming).
+(define (result-has-content? text)
+  (and (string? text) (> (string-length (string-trim text)) 0)))
+
+;; Build safe trace metadata for a subagent result.
+;; Logs presence, size, SHA-1 digest, IDs, and status WITHOUT logging
+;; unrestricted child content.
+;;
+;; All inputs are plain data; output is a plain hash suitable for JSON.
+;; v0.99.50 W1 (TMUX-04): Adds typed 'terminal-status while keeping
+;; legacy 'status (raw loop status) for backward compatibility.
+(define (make-safe-result-metadata result-text session-id terminal-status [raw-status #f])
+  (define trimmed (or (and (string? result-text) result-text) ""))
+  (define size (string-length trimmed))
+  (define digest (sha1 (open-input-string trimmed)))
+  (define base
+    (hasheq 'result-present?
+            (result-has-content? trimmed)
+            'content-size
+            size
+            'content-digest
+            digest
+            'session-id
+            (or session-id "")
+            'terminal-status
+            (symbol->string terminal-status)))
+  (if raw-status
+      (hash-set base 'status (symbol->string raw-status))
+      base))

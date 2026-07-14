@@ -97,7 +97,11 @@
          ;; W2 v0.99.35: Re-export pure helpers for backward compat
          normalize-capabilities
          extract-assistant-text
-         extract-text-summary)
+         extract-text-summary
+         ;; v0.99.50 W1 (TMUX-04): Typed terminal outcomes and safe metadata
+         classify-terminal-status
+         make-safe-result-metadata
+         result-has-content?)
 
 ;; Subagent configuration struct — replaces ad-hoc hash extraction
 ;; v0.99.21 §4.2: Added capabilities field (6th, default #f for backward compat)
@@ -443,71 +447,23 @@
 
     ;; W2 v0.99.35: Extract assistant text via pure helper.
     ;; Previously inline — logic now in spawn-subagent-helpers.rkt.
+    ;; v0.99.50 W1 (TMUX-04): Use typed terminal outcomes and safe metadata.
     (define result-text (extract-assistant-text result-messages))
-    (make-success-result
-     (list (hasheq 'type "text" 'text result-text))
-     (hasheq 'turns-used max-turns 'status (symbol->string final-status) 'session-id session-id))))
+    (define has-content? (result-has-content? result-text))
+    (define terminal-status (classify-terminal-status final-status has-content?))
+    (define base-meta (make-safe-result-metadata result-text session-id terminal-status final-status))
+    (make-success-result (list (hasheq 'type "text" 'text result-text))
+                         (hash-set base-meta 'turns-used max-turns))))
 
 ;; ============================================================
 ;; Message-to-provider conversion
 ;; ============================================================
 
-;; Convert internal message struct to a provider-facing JSON hash.
-;; Providers expect simple {role, content} hashes, not q internal structs.
-;; Handles both string content (initial messages) and content-part lists
-;; (assistant messages with tool calls, tool-result messages).
-(define (message->provider-hash msg)
-  (define role-sym (message-role msg))
-  (define role-str
-    (if (symbol? role-sym)
-        (symbol->string role-sym)
-        (format "~a" role-sym)))
-  (define content (message-content msg))
-  (define content-val
-    (cond
-      [(string? content) content]
-      [(null? content) ""]
-      [(and (list? content) (andmap string? content)) (string-join content "\n")]
-      [(and (list? content) (andmap content-part? content))
-       (for/list ([cp (in-list content)])
-         (content-part->provider-hash cp))]
-      [(list? content)
-       (for/list ([c (in-list content)])
-         (cond
-           [(string? c) c]
-           [(content-part? c) (content-part->provider-hash c)]
-           [(hash? c) c]
-           [else (format "~a" c)]))]
-      [else (format "~a" content)]))
-  (hasheq 'role role-str 'content content-val))
-
-;; Convert content-part to provider-facing hash for JSON serialization.
-(define (content-part->provider-hash cp)
-  (cond
-    [(text-part? cp) (hasheq 'type "text" 'text (text-part-text cp))]
-    [(tool-call-part? cp)
-     (hasheq 'type
-             "tool_call"
-             'id
-             (or (tool-call-part-id cp) "")
-             'name
-             (or (tool-call-part-name cp) "")
-             'arguments
-             (tool-call-part-arguments cp))]
-    [(tool-result-part? cp)
-     (hasheq 'type
-             "tool_result"
-             'tool_call_id
-             (or (tool-result-part-tool-call-id cp) "")
-             'content
-             (tool-result-part-content cp)
-             'is_error
-             (tool-result-part-is-error? cp))]
-    [else (hasheq 'type "text" 'text (format "~a" cp))]))
-
-;; Convert a list of message structs to provider-facing JSON hashes.
-(define (messages->provider-hashes msgs)
-  (map message->provider-hash msgs))
+;; v0.99.50 W1 (TMUX-04): Duplicate provider conversion removed.
+;; All three functions (message->provider-hash, content-part->provider-hash,
+;; messages->provider-hashes) are imported from provider-hash-bridge.rkt.
+;; Keeping one canonical wire representation prevents divergence between
+;; the inline and extracted versions.
 
 ;; Run a simple agent loop for the subagent
 ;; v0.19.4 GAP-1 fix: actually dispatch tool_calls instead of returning 'stopped
@@ -532,16 +488,21 @@
                           #:per-type-budgets (hash 'timeout 2 'rate-limit 4 'provider-error 2)))
        (define content (model-response-content resp))
        ;; Build assistant message from response content parts
+       ;; v0.99.50 W1 (TMUX-04): Unknown content types (thinking, image, etc.)
+       ;; no longer become raw hash garbage via (format "~a" c). Instead they
+       ;; produce a clean [unsupported:type] label or extract any 'text field.
        (define content-parts
          (for/list ([c (in-list content)])
            (match (hash-ref c 'type #f)
-             ["text" (hash-ref c 'text (format "~a" c))]
+             ["text" (hash-ref c 'text "")]
              ["tool_call"
               (make-tool-call-part (hash-ref c 'id (generate-id))
                                    (hash-ref c 'name "")
                                    (ensure-hash-args (hash-ref c 'arguments "{}")))]
-             [#f (hash-ref c 'text (format "~a" c))]
-             [_ (format "~a" c)])))
+             [#f (hash-ref c 'text "")]
+             ;; Unknown but typed content: extract text if present, else clean label.
+             ;; This prevents #hasheq garbage from leaking into result text.
+             [type-str (hash-ref c 'text (format "[unsupported:~a]" type-str))])))
        (define assistant-msg
          (make-message (generate-id) #f 'assistant 'message content-parts (current-seconds) (hasheq)))
        (define new-all (append all-results (list assistant-msg)))
