@@ -1,7 +1,7 @@
 #lang racket/base
 
 ;; @speed fast
-;; @suite default
+;; @suite security
 
 ;; tests/test-spawn-approval.rkt
 ;; v0.99.23 §5.3: Tests for HITL approval of dangerous subagent spawns.
@@ -14,6 +14,7 @@
 (require rackunit
          rackunit/text-ui
          racket/string
+         racket/list
          "../tools/builtins/spawn-subagent.rkt"
          "../tools/tool.rkt")
 
@@ -96,6 +97,33 @@
         (define result (run-subagent-with-config cfg #f))
         (check-true (tool-result? result) "should return a tool-result")
         (check-true (tool-result-is-error? result) "should be an error result")))
+
+    (test-case "denied work does not consume spawn rate budget"
+      (define timestamps (box '()))
+      (parameterize ([current-spawn-approval-result #f]
+                     [current-spawn-timestamps timestamps])
+        (define result
+          (run-subagent-with-config (make-cfg #:task "denied" #:capabilities '(shell-exec)) #f))
+        (check-true (tool-result-is-error? result))
+        (check-equal? (unbox timestamps) '())))
+
+    (test-case "rate limiter counts recent timestamps and prunes expired timestamps"
+      (define now (current-inexact-milliseconds))
+      (define recent (box (make-list 30 now)))
+      (define events '())
+      (define ctx
+        (make-exec-context #:event-publisher (lambda (type payload)
+                                               (set! events (cons (cons type payload) events)))))
+      (parameterize ([current-spawn-timestamps recent])
+        (define blocked
+          (run-subagent-with-config (make-cfg #:task "dangerous" #:capabilities '(shell-exec)) ctx))
+        (check-true (tool-result-is-error? blocked))
+        (check-equal? events '()))
+      (define expired (box (make-list 30 (- now 61000))))
+      (parameterize ([current-spawn-timestamps expired])
+        (define allowed
+          (run-subagent-with-config (make-cfg #:task "safe" #:capabilities '(read-only)) #f))
+        (check-false (tool-result-is-error? allowed))))
 
     (test-case "non-dangerous spawn not blocked even with denial parameter"
       (parameterize ([current-spawn-approval-result #f])

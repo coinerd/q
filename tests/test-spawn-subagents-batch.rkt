@@ -76,11 +76,10 @@
   (define result (tool-spawn-subagents (hasheq 'jobs (list (hasheq 'task "test")) 'maxParallel 0)))
   (check-true (tool-result-is-error? result)))
 
-(test-case "spawn-subagents clamps maxParallel > 3"
-  ;; v0.83.10: maxParallel > 3 is clamped, not rejected.
-  ;; With 1 job and maxParallel=5, effective-parallel=min(5,1,3)=1 → call succeeds.
+(test-case "spawn-subagents rejects maxParallel > 3"
   (define result (tool-spawn-subagents (hasheq 'jobs (list (hasheq 'task "test")) 'maxParallel 5)))
-  (check-false (tool-result-is-error? result)))
+  (check-true (tool-result-is-error? result))
+  (check-true (string-contains? (result-text result) "at most 3")))
 
 ;; ============================================================
 ;; Single job execution
@@ -157,18 +156,15 @@
   (check-false (string-contains? text "---")))
 
 ;; ============================================================
-;; Partial failure
+;; Fail-closed whole-batch preflight
 ;; ============================================================
 
-(test-case "spawn-subagents handles job missing task"
+(test-case "spawn-subagents rejects every job when one task is missing"
   (define prov (make-stub-provider "ok"))
   (define ctx (make-test-exec-ctx prov))
-  (define jobs (list (hasheq 'task "valid task" 'jobId "good") (hasheq 'jobId "bad"))) ;; no task
+  (define jobs (list (hasheq 'task "valid task" 'jobId "good") (hasheq 'jobId "bad")))
   (define result (tool-spawn-subagents (hasheq 'jobs jobs) ctx))
-  (check-false (tool-result-is-error? result))
-  (define details (tool-result-details result))
-  (check-equal? (hash-ref details 'succeeded #f) 1)
-  (check-equal? (hash-ref details 'failed #f) 1))
+  (check-true (tool-result-is-error? result)))
 
 ;; ============================================================
 ;; Backward compat

@@ -105,6 +105,7 @@
                   approval-channel-timeout-ms
                   set-approval-channel!
                   clear-approval-channel!
+                  set-headless-approval-mode!
                   current-approval-channel
                   approval-await-result
                   approval-put!
@@ -845,10 +846,12 @@
   (define ch (make-approval-channel #:timeout-ms 5000))
   (check-equal? (approval-channel-timeout-ms ch) 5000))
 
-(test-case "audit-approval-default-permissive"
-  ;; When no channel is set, approval is permissive (returns #t)
+(test-case "audit-approval-explicit-headless-policy"
+  (set-headless-approval-mode!)
+  (check-true (approval-await-result))
+  (set-approval-channel! (make-approval-channel))
   (clear-approval-channel!)
-  (check-equal? (approval-await-result) #t))
+  (check-false (approval-await-result)))
 
 (test-case "audit-approval-set-and-clear"
   (clear-approval-channel!)

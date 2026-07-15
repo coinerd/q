@@ -18,7 +18,13 @@
 
 (require (only-in "../tools/builtins/spawn-subagent-helpers.rkt"
                   normalize-capabilities
+                  normalize-capabilities/strict
+                  canonical-datum-string
+                  immutable-canonical-copy
+                  sha256-digest
                   requires-hitl-approval?
+                  bounded-delegated-capabilities
+                  valid-plan-id?
                   extract-assistant-text
                   extract-text-summary
                   SUBAGENT-SUMMARY-MAX-CHARS))
@@ -46,7 +52,44 @@
  (test-case "normalize-capabilities: all-invalid → #f"
    (check-false (normalize-capabilities '("bogus" "also-bogus"))))
  (test-case "normalize-capabilities: mixed strings and symbols"
-   (check-equal? (normalize-capabilities '("read-only" shell-exec)) '(read-only shell-exec))))
+   (check-equal? (normalize-capabilities '("read-only" shell-exec)) '(read-only shell-exec)))
+ (test-case "strict normalization rejects any explicitly invalid capability"
+   (check-exn exn:fail:contract? (lambda () (normalize-capabilities/strict '("read-only" "bogus")))))
+ (test-case "strict normalization accepts explicit valid values and removes duplicates"
+   (check-equal? (normalize-capabilities/strict '("shell-exec" shell-exec read-only))
+                 '(shell-exec read-only)))
+ (test-case "strict normalization preserves explicit empty authority"
+   (check-equal? (normalize-capabilities/strict '()) '())
+   (check-equal? (normalize-capabilities/strict #f) '()))
+ (test-case "strict delegated capabilities reject unrestricted any wildcard"
+   (check-exn exn:fail:contract? (lambda () (normalize-capabilities/strict '(any))))
+   (check-exn exn:fail:contract? (lambda () (normalize-capabilities/strict "any"))))
+ (test-case "delegated capabilities are bounded by parent authority"
+   (check-equal? (bounded-delegated-capabilities #f '(read-only)) '(read-only))
+   (check-equal? (bounded-delegated-capabilities '(file-write) '(any)) '(file-write))
+   (check-exn exn:fail?
+              (lambda () (bounded-delegated-capabilities '(read-only shell-exec) '(read-only)))))
+ (test-case "planned IDs are bounded and terminal-safe"
+   (check-true (valid-plan-id? "batch:job-1.ok"))
+   (check-false (valid-plan-id? ""))
+   (check-false (valid-plan-id? "bad\nidentifier"))
+   (check-false (valid-plan-id? (make-string 129 #\a)))))
+
+(define-test-suite
+ immutable-snapshot-tests
+ (test-case "canonical form is independent of hash insertion order"
+   (define left (hash 'task "abc" 'capabilities '(shell-exec read-only)))
+   (define right (hash 'capabilities '(shell-exec read-only) 'task "abc"))
+   (check-equal? (canonical-datum-string left) (canonical-datum-string right))
+   (check-equal? (sha256-digest left) (sha256-digest right)))
+ (test-case "canonical copy does not track later mutable request changes"
+   (define raw (make-hasheq (list (cons 'task "before"))))
+   (define snapshot (immutable-canonical-copy raw))
+   (hash-set! raw 'task "after")
+   (check-equal? (hash-ref snapshot 'task) "before"))
+ (test-case "SHA-256 digest is exact"
+   (check-equal? (sha256-digest "abc")
+                 "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")))
 
 (define-test-suite requires-hitl-approval-tests
                    (test-case "#t for shell-exec"
@@ -110,6 +153,7 @@
 
 (define-test-suite all-spawn-subagent-helpers-tests
                    normalize-capabilities-tests
+                   immutable-snapshot-tests
                    requires-hitl-approval-tests
                    extract-assistant-text-tests
                    extract-text-summary-tests)

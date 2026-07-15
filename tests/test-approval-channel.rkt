@@ -1,7 +1,7 @@
 #lang racket/base
 
 ;; @speed fast
-;; @suite default
+;; @suite security
 
 ;; tests/test-approval-channel.rkt
 ;; v0.99.25 W0 §5.3: Tests for the HITL approval channel infrastructure.
@@ -53,8 +53,8 @@
 
     ;; ── approval-await-result ──
 
-    (test-case "approval-await-result returns #t with no channel (non-interactive)"
-      (clear-approval-channel!)
+    (test-case "approval-await-result permits explicit headless mode"
+      (set-headless-approval-mode!)
       (check-true (approval-await-result)))
 
     (test-case "approval-await-result returns #f on timeout (no channel-put)"

@@ -21,7 +21,9 @@
                   list-active-tools
                   list-active-tools-jsexpr
                   with-registry-snapshot)
-         (only-in "../tools/tool.rkt" make-tool))
+         (only-in "../tools/tool.rkt" make-tool)
+         (only-in "../tools/registry-table/skill-tools.rkt" skill-tool-specs)
+         (only-in "../tools/registry-table/spec.rkt" tool-spec-name tool-spec-schema))
 
 ;; Helper: create a real tool for registry tests
 (define (make-test-tool name)
@@ -123,6 +125,25 @@
       (register-tool! reg (make-test-tool "b"))
       (set-active-tools! reg '("a"))
       (check-equal? (length (list-active-tools reg)) 1))
+
+    (test-case "spawn-subagents schema matches bounded immutable batch contract"
+      (define spec
+        (findf (lambda (candidate) (string=? (tool-spec-name candidate) "spawn-subagents"))
+               skill-tool-specs))
+      (define schema (tool-spec-schema spec))
+      (define properties (hash-ref schema 'properties))
+      (define jobs-schema (hash-ref properties 'jobs))
+      (define item-schema (hash-ref jobs-schema 'items))
+      (define item-properties (hash-ref item-schema 'properties))
+      (check-equal? (hash-ref jobs-schema 'minItems) 1)
+      (check-equal? (hash-ref jobs-schema 'maxItems) 12)
+      (check-equal? (hash-ref item-schema 'required) '("task"))
+      (for ([name (in-list '(task role model max-turns jobId capabilities))])
+        (check-true (hash-has-key? item-properties name)))
+      (check-false
+       (member "any" (hash-ref (hash-ref (hash-ref item-properties 'capabilities) 'items) 'enum)))
+      (check-equal? (hash-ref (hash-ref properties 'maxParallel) 'minimum) 1)
+      (check-equal? (hash-ref (hash-ref properties 'maxParallel) 'maximum) 3))
 
     (test-case "tool->jsexpr requires tool? struct"
       (check-exn exn:fail? (lambda () (tool->jsexpr "not-a-tool"))))))

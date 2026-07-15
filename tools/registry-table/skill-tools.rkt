@@ -136,8 +136,7 @@
                              "network"
                              "memory-write"
                              "browser"
-                             "subagent"
-                             "any"))
+                             "subagent"))
        'description
        "Capability filter: child only gets tools matching these capabilities. Default: all child-safe tools.")))
     tool-spawn-subagent
@@ -154,35 +153,76 @@
      '("jobs")
      'properties
      (hasheq
+      'batchId
+      (hasheq 'type
+              "string"
+              'minLength
+              1
+              'maxLength
+              128
+              'pattern
+              "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
       'jobs
       (hasheq
        'type
        "array"
+       'minItems
+       1
+       'maxItems
+       12
        'description
-       "Array of job objects, each with task (required), role, model, max-turns, jobId, capabilities"
+       "Array of bounded job objects; task is required and delegated capabilities are concrete."
        'items
        (hasheq
         'type
         "object"
+        'required
+        '("task")
         'properties
         (hasheq
          'task
-         (hasheq 'type "string")
+         (hasheq 'type "string" 'minLength 1 'maxLength 100000)
          'role
-         (hasheq 'type "string")
+         (hasheq 'type "string" 'maxLength 10000)
+         'model
+         (hasheq 'type "string" 'maxLength 200)
+         'max-turns
+         (hasheq 'type "integer" 'minimum 1)
+         'jobId
+         (hasheq 'type
+                 "string"
+                 'minLength
+                 1
+                 'maxLength
+                 128
+                 'pattern
+                 "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
          'capabilities
-         (hasheq
-          'type
-          "array"
-          'items
-          (hasheq 'type
-                  "string"
-                  'enum
-                  '("read-only" "file-write" "shell-exec" "git-write" "network" "browser" "any"))
-          'description
-          "Capability filter for this job's child agent"))))
+         (hasheq 'type
+                 "array"
+                 'items
+                 (hasheq 'type
+                         "string"
+                         'enum
+                         '("read-only" "file-write"
+                                       "shell-exec"
+                                       "plan-write"
+                                       "git-write"
+                                       "network"
+                                       "memory-write"
+                                       "browser"
+                                       "subagent"))
+                 'description
+                 "Concrete delegated capabilities; an explicit empty array grants no child tools."))))
       'maxParallel
-      (hasheq 'type "integer" 'description "Max concurrent subagents (1-3, default 3)")
+      (hasheq 'type
+              "integer"
+              'minimum
+              1
+              'maximum
+              3
+              'description
+              "Max concurrent subagents (1-3, default 3)")
       'aggregate
       (hasheq 'type "boolean" 'description "Include aggregated summary in response (default true)")))
     tool-spawn-subagents

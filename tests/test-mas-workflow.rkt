@@ -163,11 +163,15 @@
     (test-case "parse-capabilities #f returns #f"
       (check-false (parse-capabilities #f)))
 
-    (test-case "parse-capabilities empty list returns #f"
-      (check-false (parse-capabilities '())))
+    (test-case "parse-capabilities preserves explicit empty authority"
+      (check-equal? (parse-capabilities '()) '()))
 
-    (test-case "parse-capabilities filters non-strings"
-      (check-equal? (parse-capabilities '("read-only" 42 #f "file-write")) '(read-only file-write)))
+    (test-case "parse-capabilities rejects malformed or unknown explicit authority"
+      (check-exn exn:fail:contract?
+                 (lambda () (parse-capabilities '("read-only" 42 #f "file-write"))))
+      (check-exn exn:fail:contract?
+                 (lambda () (parse-capabilities '("read-only" "unknown-capability"))))
+      (check-exn exn:fail:contract? (lambda () (parse-capabilities '("any")))))
 
     ;; ── workflow-has-result-chaining? ──
 

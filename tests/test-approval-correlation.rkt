@@ -1,7 +1,7 @@
 #lang racket/base
 
 ;; @speed fast
-;; @suite default
+;; @suite security
 
 ;; tests/test-approval-correlation.rkt
 ;; v0.99.50 W2 (TMUX-04): Correlated exactly-once HITL approval delivery.
@@ -17,6 +17,7 @@
 
 (require rackunit
          rackunit/text-ui
+         json
          racket/list
          "../tui/approval-channel.rkt"
          "../tui/state-types.rkt"
@@ -37,6 +38,19 @@
 
     ;; ── 1. Basic register → await → put-for-id ──
 
+    (test-case "request IDs survive JSON round trip and still correlate"
+      (clear-pending-approvals!)
+      (define req-id (register-approval-request!))
+      (check-true (string? req-id))
+      (define wire (jsexpr->string (hasheq 'request-id req-id)))
+      (define recovered-id (hash-ref (string->jsexpr wire) 'request-id))
+      (check-equal? recovered-id req-id)
+      (check-true (approval-put-for-id! recovered-id #t))
+      (define-values (approved? delivered?) (approval-await-for-id req-id 10))
+      (check-true approved?)
+      (check-true delivered?)
+      (check-equal? (pending-approval-count) 0))
+
     (test-case "register then put-for-id delivers result"
       (clear-pending-approvals!)
       (define req-id (register-approval-request!))
@@ -51,6 +65,21 @@
       (thread-wait t)
       (check-equal? (unbox result-box) (list #t #t))
       (check-equal? (pending-approval-count) 0))
+
+    (test-case "delivered-before-await remains counted until exactly-once claim"
+      (clear-pending-approvals!)
+      (define req-id (register-approval-request!))
+      (check-true (approval-request-pending? req-id))
+      (check-true (approval-put-for-id! req-id #t))
+      (check-false (approval-request-pending? req-id))
+      (check-equal? (pending-approval-count) 1 "retained terminal result must be visible")
+      (define-values (approved? delivered?) (approval-await-for-id req-id 10))
+      (check-true approved?)
+      (check-true delivered?)
+      (check-equal? (pending-approval-count) 0)
+      (define-values (again-approved? again-delivered?) (approval-await-for-id req-id 10))
+      (check-false again-approved?)
+      (check-false again-delivered?))
 
     (test-case "register then put-for-id delivers denial"
       (clear-pending-approvals!)
@@ -70,11 +99,13 @@
     (test-case "duplicate put-for-id is exactly-once"
       (clear-pending-approvals!)
       (define req-id (register-approval-request!))
-      ;; First put delivers and atomically removes from registry
+      ;; First put transitions the retained record to delivered.
       (check-true (approval-put-for-id! req-id #t))
-      ;; Second put finds nothing — exactly-once enforcement
+      ;; Second put sees a terminal record — exactly-once enforcement
       (check-false (approval-put-for-id! req-id #t))
-      (check-false (approval-put-for-id! req-id #f)))
+      (check-false (approval-put-for-id! req-id #f))
+      (check-equal? (pending-approval-count) 1)
+      (check-true (cancel-approval-request! req-id)))
 
     ;; ── 3. Mismatched IDs don't cross ──
 
@@ -84,12 +115,18 @@
       (define req-b (register-approval-request!))
       (check-not-equal? req-a req-b)
       (check-equal? (pending-approval-count) 2)
-      ;; Put for B should not deliver to A
+      ;; Put for B should not deliver to A. B remains retained for its owner.
       (check-true (approval-put-for-id! req-b #t))
-      ;; A is still pending
-      (check-equal? (pending-approval-count) 1)
-      ;; Now put for A
+      (check-true (approval-request-pending? req-a))
+      (check-false (approval-request-pending? req-b))
+      (check-equal? (pending-approval-count) 2)
+      ;; Now put for A; both terminal records remain visible until claimed.
       (check-true (approval-put-for-id! req-a #f))
+      (check-equal? (pending-approval-count) 2)
+      (define-values (_a a-delivered?) (approval-await-for-id req-a 10))
+      (define-values (_b b-delivered?) (approval-await-for-id req-b 10))
+      (check-true a-delivered?)
+      (check-true b-delivered?)
       (check-equal? (pending-approval-count) 0))
 
     ;; ── 4. Timeout cleans up registry ──
@@ -118,9 +155,14 @@
 
     (test-case "concurrent requests get unique IDs"
       (clear-pending-approvals!)
+      (define output (make-channel))
+      (define workers
+        (for/list ([_ (in-range 10)])
+          (thread (lambda () (channel-put output (register-approval-request!))))))
       (define ids
         (for/list ([_ (in-range 10)])
-          (register-approval-request!)))
+          (channel-get output)))
+      (for-each thread-wait workers)
       (check-equal? (length ids) 10)
       (check-equal? (length (remove-duplicates ids)) 10)
       (check-equal? (pending-approval-count) 10)
@@ -130,9 +172,63 @@
 
     (test-case "await for unknown ID returns not-delivered"
       (clear-pending-approvals!)
-      (define-values (approved? delivered?) (approval-await-for-id 'nonexistent-id 10))
+      (define-values (approved? delivered?) (approval-await-for-id "nonexistent-id" 10))
       (check-false approved?)
       (check-false delivered?))
+
+    (test-case "correlated API rejects malformed IDs and non-boolean decisions"
+      (clear-pending-approvals!)
+      (define req-id (register-approval-request!))
+      (check-false (approval-put-for-id! (string->symbol req-id) #t))
+      (check-false (approval-put-for-id! req-id 'yes))
+      (check-equal? (pending-approval-count) 1)
+      (define-values (approved? delivered?) (approval-await-for-id 42 10))
+      (check-false approved?)
+      (check-false delivered?)
+      (check-true (approval-put-for-id! req-id #f))
+      (check-equal? (pending-approval-count) 1)
+      (check-true (cancel-approval-request! req-id))
+      (check-false (cancel-approval-request! req-id))
+      (check-equal? (pending-approval-count) 0))
+
+    (test-case "explicit cancellation is exactly once and invalidates the request"
+      (clear-pending-approvals!)
+      (define req-id (register-approval-request!))
+      (check-true (approval-request-pending? req-id))
+      (check-true (cancel-approval-request! req-id))
+      (check-false (cancel-approval-request! req-id))
+      (check-false (approval-request-pending? req-id))
+      (check-false (approval-put-for-id! req-id #t))
+      (check-equal? (pending-approval-count) 0))
+
+    (test-case "barrier-synchronized timeout and response have one terminal winner"
+      (clear-pending-approvals!)
+      (for ([_ (in-range 80)])
+        (define req-id (register-approval-request!))
+        (define gate (make-semaphore 0))
+        (define ready (make-channel))
+        (define waiter-result (box 'waiting))
+        (define put-result (box 'waiting))
+        (define waiter
+          (thread (lambda ()
+                    (channel-put ready 'waiter)
+                    (sync (semaphore-peek-evt gate))
+                    (define-values (approved? delivered?) (approval-await-for-id req-id 1))
+                    (set-box! waiter-result (list approved? delivered?)))))
+        (define responder
+          (thread (lambda ()
+                    (channel-put ready 'responder)
+                    (sync (semaphore-peek-evt gate))
+                    (set-box! put-result (approval-put-for-id! req-id #t)))))
+        (channel-get ready)
+        (channel-get ready)
+        (semaphore-post gate)
+        (thread-wait waiter)
+        (thread-wait responder)
+        (if (unbox put-result)
+            (check-equal? (unbox waiter-result) '(#t #t))
+            (check-equal? (unbox waiter-result) '(#f #f)))
+        (check-equal? (pending-approval-count) 0)))
 
     ;; ── 8. clear-approval-channel! also clears pending ──
 
@@ -209,6 +305,17 @@
       (check-false d2 "new request must not receive stale approval")
       (clear-approval-channel!))
 
+    (test-case "publisher failure cancels the registered approval request"
+      (clear-pending-approvals!)
+      (set-approval-channel! (make-approval-channel #:timeout-ms 5000))
+      (define ctx
+        (make-exec-context #:event-publisher (lambda (_type _payload)
+                                               (error 'publisher "simulated failure"))))
+      (check-exn #rx"simulated failure"
+                 (lambda () (request-spawn-approval '(shell-exec) "blocked" ctx)))
+      (check-equal? (pending-approval-count) 0)
+      (clear-approval-channel!))
+
     ;; ── 12. Key handler delivers correlated response ──
 
     (test-case "key handler delivers via approval-put-for-id! when request-id present"
@@ -247,9 +354,9 @@
       (check-equal? (pending-approval-count) 0)
       (clear-approval-channel!))
 
-    ;; ── 13. Key handler falls back to legacy when no request-id ──
+    ;; ── 13. Missing correlation fails closed ──
 
-    (test-case "key handler uses legacy approval-put! when no request-id"
+    (test-case "key handler never uses legacy channel when request-id is missing"
       (clear-pending-approvals!)
       (set-approval-channel! (make-approval-channel #:timeout-ms 5000))
       ;; Build a tui-ctx with an approval overlay WITHOUT request-id in extra
@@ -267,14 +374,14 @@
                                #f
                                0
                                (hasheq 'capabilities '(shell-exec) 'task-preview "legacy test"))]))
-      ;; Press 'n' — should go through legacy approval-put! (bare boolean)
-      (define handler-result (handle-approval-overlay-key ctx #\n))
+      ;; A positive decision would be unambiguously observable if legacy
+      ;; fallback remained.  It must instead be consumed with no delivery.
+      (define handler-result (handle-approval-overlay-key ctx #\y))
       (check-equal? handler-result 'handled)
-      ;; Legacy channel should have the result
+      (check-not-false (ui-state-active-overlay (unbox (tui-ctx-ui-state-box ctx))))
       (define ch (current-approval-channel))
       (check-not-false ch "channel should be set")
-      (define result (sync/timeout 0.1 (approval-channel-ch ch)))
-      (check-equal? result #f "legacy denial should be on shared channel")
+      (check-false (sync/timeout 0.1 (approval-channel-ch ch)))
       (clear-approval-channel!))))
 
 (run-tests suite)
