@@ -80,7 +80,7 @@
 
 ;; Returns #t iff every gate in results passed.
 (define (all-gates-passed? results)
-  (andmap gate-result-passed? results))
+  (and (pair? results) (andmap gate-result-passed? results)))
 
 ;; Count passed and total gates.
 ;; Returns (values passed-count total-count).
@@ -113,19 +113,22 @@
 ;; Returns a gate-result.
 (define (check-claims-gate verified-claims)
   (define mismatches (filter (λ (c) (not (claim-result-matched? c))) verified-claims))
-  (if (null? mismatches)
-      (gate-result 'claims #t (format "~a claim(s) verified, all matched" (length verified-claims)))
-      (gate-result 'claims
-                   #f
-                   (format "~a/~a claim(s) mismatched: ~a"
-                           (length mismatches)
-                           (length verified-claims)
-                           (string-join (for/list ([m (in-list mismatches)])
-                                          (format "~a (claimed ~a, actual ~a)"
-                                                  (claim-result-pattern m)
-                                                  (claim-result-claimed m)
-                                                  (claim-result-actual m)))
-                                        "; ")))))
+  (cond
+    [(null? verified-claims) (gate-result 'claims #f "No claims were available to verify")]
+    [(null? mismatches)
+     (gate-result 'claims #t (format "~a claim(s) verified, all matched" (length verified-claims)))]
+    [else
+     (gate-result 'claims
+                  #f
+                  (format "~a/~a claim(s) mismatched: ~a"
+                          (length mismatches)
+                          (length verified-claims)
+                          (string-join (for/list ([m (in-list mismatches)])
+                                         (format "~a (claimed ~a, actual ~a)"
+                                                 (claim-result-pattern m)
+                                                 (claim-result-claimed m)
+                                                 (claim-result-actual m)))
+                                       "; ")))]))
 
 ;; Release gate: verify a GitHub release exists with required assets.
 ;;   release-data — jsexpr from GitHub API or #f
@@ -148,15 +151,25 @@
 ;;   issues — list of issue hashes with 'state key ("open" or "closed")
 ;; Returns a gate-result.
 (define (check-issues-gate issues)
-  (define open-issues (filter (λ (i) (equal? (hash-ref i 'state #f) "open")) issues))
-  (if (null? open-issues)
-      (gate-result 'issues #t (format "~a issue(s) all closed" (length issues)))
-      (gate-result
-       'issues
-       #f
-       (format "~a open issue(s): ~a"
-               (length open-issues)
-               (string-join (map (λ (i) (format "#~a" (hash-ref i 'number #f))) open-issues) ", ")))))
+  (define malformed
+    (filter (λ (i)
+              (or (not (hash? i))
+                  (not (exact-positive-integer? (hash-ref i 'number #f)))
+                  (not (member (hash-ref i 'state #f) '("open" "closed")))))
+            issues))
+  (define open-issues (filter (λ (i) (and (hash? i) (equal? (hash-ref i 'state #f) "open"))) issues))
+  (cond
+    [(null? issues) (gate-result 'issues #f "No issue evidence was returned")]
+    [(pair? malformed)
+     (gate-result 'issues #f (format "~a malformed issue record(s)" (length malformed)))]
+    [(null? open-issues) (gate-result 'issues #t (format "~a issue(s) all closed" (length issues)))]
+    [else
+     (gate-result
+      'issues
+      #f
+      (format "~a open issue(s): ~a"
+              (length open-issues)
+              (string-join (map (λ (i) (format "#~a" (hash-ref i 'number #f))) open-issues) ", ")))]))
 
 ;; Changelog gate: verify CHANGELOG has an entry for the version.
 ;;   changelog-text — string contents of CHANGELOG.md

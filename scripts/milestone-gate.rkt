@@ -118,12 +118,19 @@
   '(ci_no_runs ci_in_progress
                ci_failure
                ci_cancelled
+               ci_required_job_missing
                ci_required_job_unexpectedly_skipped
+               ci_required_job_non_success
                ci_success))
 
 ;; CI verdicts that block milestone closure
 (define ci-blocking-verdicts
-  '(ci_no_runs ci_in_progress ci_failure ci_cancelled ci_required_job_unexpectedly_skipped))
+  '(ci_no_runs ci_in_progress
+               ci_failure
+               ci_cancelled
+               ci_required_job_missing
+               ci_required_job_unexpectedly_skipped
+               ci_required_job_non_success))
 
 (define (ci-verdict-success? v)
   (equal? v 'ci_success))
@@ -268,10 +275,20 @@
         'publication_succeeded_smoke_failed]
        [else 'unknown])]))
 
-;; Default required CI jobs for milestone closure.
-;; release-dry-run and release-readiness may be skipped on main.
+;; Default required CI jobs for milestone closure. These names match the
+;; complete current non-tag CI job/matrix contexts exactly. release-readiness
+;; remains tag-only and is therefore not a main/PR required check.
 (define ci-required-jobs
-  '("lint" "lint-alignment" "test" "security" "smoke" "inter-wave-gate" "workflows"))
+  '("lint" "lint-alignment"
+           "security"
+           "release-dry-run"
+           "inter-wave-gate"
+           "workflows"
+           "smoke (ubuntu-latest)"
+           "smoke (macos-latest)"
+           "test (ubuntu-latest, 8.10)"
+           "test (ubuntu-latest, 8.11)"
+           "test (macos-latest, 8.10)"))
 
 ;; Build a CI check result hash for JSON output.
 (define (make-ci-check-result run-id run-number status conclusion verdict pass detail)
@@ -317,12 +334,25 @@
     [(equal? (hash-ref ci-run-data 'conclusion #f) GITHUB-CANCELLED) 'ci_cancelled]
     [(not (equal? (hash-ref ci-run-data 'conclusion #f) GITHUB-SUCCESS)) 'ci_failure]
     [else
-     ;; Workflow succeeded — check required jobs for unexpected skips
+     ;; Workflow-level success is insufficient: every required current context
+     ;; must be present and individually successful.
+     (define missing-required
+       (filter (λ (job-name) (not (hash-has-key? jobs job-name))) required-jobs))
      (define skipped-required
        (for/list ([job-name (in-list required-jobs)]
                   #:when (equal? (hash-ref jobs job-name #f) GITHUB-SKIPPED))
          job-name))
-     (if (pair? skipped-required) 'ci_required_job_unexpectedly_skipped 'ci_success)]))
+     (define non-success-required
+       (for/list ([job-name (in-list required-jobs)]
+                  #:when (and (hash-has-key? jobs job-name)
+                              (not (equal? (hash-ref jobs job-name #f) GITHUB-SUCCESS))
+                              (not (equal? (hash-ref jobs job-name #f) GITHUB-SKIPPED))))
+         job-name))
+     (cond
+       [(pair? missing-required) 'ci_required_job_missing]
+       [(pair? skipped-required) 'ci_required_job_unexpectedly_skipped]
+       [(pair? non-success-required) 'ci_required_job_non_success]
+       [else 'ci_success])]))
 
 ;; Extract version (X.Y.Z) from milestone title like "v0.99.40 ..." or "0.99.40 ..."
 ;; Returns string or #f.
@@ -446,9 +476,9 @@
      (define runs (hash-ref data 'workflow_runs '()))
      (cond
        [(null? runs)
-        (list #t
-              "No CI runs found (pass)"
-              (make-ci-check-result #f #f "none" "none" 'ci_no_runs #t "No CI runs"))]
+        (list #f
+              "No CI runs found — blocks closure"
+              (make-ci-check-result #f #f "none" "none" 'ci_no_runs #f "No CI runs"))]
        [else
         (define run (car runs))
         (define status (hash-ref run 'status ""))
@@ -478,6 +508,10 @@
             [(ci_failure)
              (format "CI run ~a failed (conclusion: ~a) — blocks closure" run-number conclusion)]
             [(ci_cancelled) (format "CI run ~a cancelled — blocks closure" run-number)]
+            [(ci_required_job_missing)
+             (define missing
+               (filter (λ (job-name) (not (hash-has-key? jobs-hash job-name))) ci-required-jobs))
+             (format "CI run ~a is missing required jobs: ~a" run-number (string-join missing ", "))]
             [(ci_required_job_unexpectedly_skipped)
              (define skipped
                (for/list ([job-name (in-list ci-required-jobs)]
@@ -486,6 +520,15 @@
              (format "CI run ~a has unexpectedly skipped required jobs: ~a"
                      run-number
                      (string-join skipped ", "))]
+            [(ci_required_job_non_success)
+             (define incomplete
+               (for/list ([job-name (in-list ci-required-jobs)]
+                          #:when (and (hash-has-key? jobs-hash job-name)
+                                      (not (equal? (hash-ref jobs-hash job-name #f) "success"))))
+                 job-name))
+             (format "CI run ~a has non-success required jobs: ~a"
+                     run-number
+                     (string-join incomplete ", "))]
             [else (format "CI run ~a: ~a" run-number verdict)]))
         (list pass?
               detail
