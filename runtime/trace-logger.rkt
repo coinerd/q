@@ -180,6 +180,8 @@
     [(jsexpr? v) v]
     [(event? v)
      (hasheq 'phase (event-ev v) 'seq "nested-event" 'data (sanitize-for-json (event-payload v)))]
+    [(symbol? v) (symbol->string v)]
+    [(keyword? v) (keyword->string v)]
     [(struct? v) (format "<~a>" (object-name v))]
     [(procedure? v) "<procedure>"]
     [(hash? v)

@@ -15,6 +15,7 @@
          racket/string
          json
          "../util/event/event-bus.rkt"
+         "../util/event/event.rkt"
          "../runtime/trace-logger.rkt"
          "../util/message/protocol-types.rkt")
 
@@ -244,4 +245,38 @@
   (check-equal? (length entries) 10)
   (define seqs (map (lambda (e) (hash-ref e 'seq #f)) entries))
   (check-equal? seqs '(1 2 3 4 5 6 7 8 9 10))
+  (delete-directory/files dir))
+
+;; ============================================================
+;; v0.99.50 W6: Symbol serialization in trace JSON
+;; ============================================================
+
+(test-case "symbol payload values serialize as strings"
+  (define dir (make-temp-dir))
+  (define bus (make-event-bus))
+  (define logger (make-trace-logger bus dir #:enabled? #t))
+  (start-trace-logger! logger)
+  (publish! bus
+            (make-event "test.symbol-event" 1000 "s1" #f (hasheq 'status 'completed 'kind 'error)))
+  (flush-trace-logger! logger)
+  (stop-trace-logger! logger)
+  (define entries (read-trace-jsonl dir))
+  (check-equal? (length entries) 1)
+  (define data (hash-ref (car entries) 'data))
+  (check-equal? (hash-ref data 'status) "completed" "symbol 'completed must serialize as string")
+  (check-equal? (hash-ref data 'kind) "error" "symbol 'error must serialize as string")
+  (delete-directory/files dir))
+
+(test-case "nested symbol values in hash serialize as strings"
+  (define dir (make-temp-dir))
+  (define bus (make-event-bus))
+  (define logger (make-trace-logger bus dir #:enabled? #t))
+  (start-trace-logger! logger)
+  (publish! bus
+            (make-event "test.nested-symbol" 1000 "s1" #f (hasheq 'outer (hasheq 'inner 'approved))))
+  (flush-trace-logger! logger)
+  (stop-trace-logger! logger)
+  (define entries (read-trace-jsonl dir))
+  (define outer (hash-ref (hash-ref (car entries) 'data) 'outer))
+  (check-equal? (hash-ref outer 'inner) "approved" "nested symbol must serialize as string")
   (delete-directory/files dir))

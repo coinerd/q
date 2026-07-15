@@ -1,3 +1,84 @@
+## 0.99.50
+
+Released: 2026-07-13
+
+### Overview
+
+tmux coding-agent reliability and test truth. v0.99.50 remediates every finding
+from the v0.99.49 tmux TUI reliability audit (milestone #836), closing ten
+identified defects (V9949-TMUX-01 through V9949-TMUX-10) across six waves.
+The release adds black-box semantic evidence that distinguishes real lifecycle
+behavior from generated prose, hardens cooperative interruption and durable
+compaction, restores truthful subagent result transport and correlated HITL
+approvals, and ships a traceable release with independently verified assets.
+
+### User-Visible Changes
+
+- `--session <id>` now resumes the exact persisted session and restores its model
+  context; `q sessions list/info/delete` accept stable session identifiers
+  (V9949-TMUX-01, V9949-TMUX-02; W0, PR #8722).
+- `/history` exposes row, timestamp, message ID, role/tool, and excerpt for each
+  entry (V9949-TMUX-05; W0, PR #8722).
+- Subagent results flow through the canonical provider bridge with typed terminal
+  outcomes (`completed`, `approved-empty`, `failed`, `timed-out`, `cancelled`);
+  safe metadata carries digests rather than raw content (V9949-TMUX-04; W1,
+  PR #8723).
+- HITL approvals are correlated exactly-once: every approval receives a unique
+  request ID and dedicated channel; duplicate or replayed approvals are rejected
+  atomically (V9949-TMUX-04; W2, PR #8724).
+- The tmux TUI explorer dispatches an authorized real executor using a private
+  `tmux -L` server, isolated filesystem/environment, and fail-closed semantic
+  verification; synthetic, mock, stale, or crashed runs no longer pass
+  (V9949-TMUX-03, V9949-TMUX-07, V9949-TMUX-08; W3, PR #8725).
+- Centralized credential redaction policy (`util/credential-redaction.rkt`)
+  avoids false positives such as `risk-score` or `Bearer authentication` while
+  catching realistic credentials (V9949-TMUX-07; W3, PR #8725).
+- `/compact` uses one canonical compact-and-persist path with correlated request
+  IDs and exactly one terminal outcome (`completed`, `nothing-to-compact`,
+  `already-running`, or `failed`); internal summaries do not leak into the next
+  assistant answer (V9949-TMUX-06; W4, PR #8726).
+- Manual and automatic compaction share an atomic session-operation boundary so
+  manual compaction cannot overlap a prompt and automatic compaction nests only
+  with explicit ownership (V9949-TMUX-06; W4, PR #8726).
+- `/interrupt` and Ctrl-C share one correlated cooperative-cancellation path;
+  idle invocation truthfully reports "no active turn" and busy invocation
+  targets the exact active session and turn with a terminal acknowledgement
+  (V9949-TMUX-10; W5, PR #8727).
+- Pending interrupt state survives runtime errors and watchdog checks; only a
+  correlated `turn.cancelled` acknowledgement clears TUI streaming/busy/tool
+  state (V9949-TMUX-09, V9949-TMUX-10; W5, PR #8727).
+- Trace logger now serializes Racket symbols and keywords as JSON strings,
+  preventing `<unsupported:...>` artifacts in tool execution evidence
+  (V9949-TMUX-09; W6).
+
+### Breaking / Behavior Changes
+
+- No public API break is intended. The following behavioral corrections are
+  intentional remediations:
+  - `/interrupt` while idle no longer emits a cancellation request; it reports
+    that no turn is active.
+  - `q sessions` subcommands now require a stable session ID argument where
+    previously they accepted loose hash keys.
+  - Duplicate HITL approval events with the same request ID are now rejected
+    instead of silently re-delivered.
+  - Compaction summary messages are no longer eligible to become the next
+    assistant answer.
+
+### Findings Closed
+
+| ID | Severity | Wave | PR |
+|----|----------|------|----|
+| V9949-TMUX-01 | Critical | W0 | #8722 |
+| V9949-TMUX-02 | High | W0 | #8722 |
+| V9949-TMUX-03 | Critical | W3 | #8725 |
+| V9949-TMUX-04 | High | W1–W2 | #8723, #8724 |
+| V9949-TMUX-05 | Medium | W0 | #8722 |
+| V9949-TMUX-06 | Medium | W4 | #8726 |
+| V9949-TMUX-07 | Medium | W3 | #8725 |
+| V9949-TMUX-08 | Medium | W3 | #8725 |
+| V9949-TMUX-09 | Medium | W0–W6 | #8722–#8727 |
+| V9949-TMUX-10 | Low | W5 | #8727 |
+
 ## 0.99.49
 
 Released: 2026-07-13
