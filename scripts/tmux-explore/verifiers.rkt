@@ -88,10 +88,13 @@
            (member (string-downcase (format "~a" value)) '("true" "yes" "present" "approved")))
        #t))
 
+(define (no-turn-id? v)
+  (or (not v) (null? v) (eq? v 'null)))
+
 (define (correlated-to-completion? event completion)
   (define event-turn-id (event-turn event))
   (and (same-value? (event-session event) (event-session completion))
-       (or (not event-turn-id) (same-value? event-turn-id (event-turn completion)))))
+       (or (no-turn-id? event-turn-id) (same-value? event-turn-id (event-turn completion)))))
 
 (define (index-of-event events target)
   (for/first ([event (in-list events)]
@@ -144,7 +147,11 @@
          (truthy? (event-field completed '(result-present? result-present has-result?) #f))
          (string=? (string-downcase (format "~a" (event-field completed '(result-summary status))))
                    "completed")
-         (ordered? events started completed completion))))
+         ;; v0.99.50 W6: The model turn that generates a tool call completes
+         ;; (stream.turn.completed) BEFORE the agent loop executes the tool.
+         ;; Require temporal ordering only for the tool pair, not for the
+         ;; completion event, which belongs to the generating turn.
+         (ordered? events started completed))))
 
 (define (verify-mas events completion-event)
   (for*/or ([request (in-list (events-with-phase events "mas.spawn-approval-requested"))]

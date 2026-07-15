@@ -166,6 +166,39 @@
        (sleep (/ poll-ms 1000.0))
        (loop)])))
 
+;; v0.99.50 W6: Stale-completion detector for tool-capable scenarios.
+;; stream.turn.completed fires when the model finishes its response, which may
+;; include a tool call. The agent loop then executes the tool and starts a new
+;; model turn. Without this detector, the executor accepts the first
+;; stream.turn.completed (before tool execution) and misses the real evidence.
+;; After finding a terminal event, we wait a short settle period. If new trace
+;; events arrive during the settle, the session is still active and we wait for
+;; another terminal event.
+(define settle-ms 3000)
+
+(define (wait-for-stale-completion sessions-root baseline-count tag timeout-ms)
+  (define deadline (+ (current-inexact-milliseconds) timeout-ms))
+  (let loop ()
+    (define remaining (max 0 (- deadline (current-inexact-milliseconds))))
+    (define found
+      (wait-until (lambda ()
+                    (define all-events (read-trace-events sessions-root))
+                    (and (> (length all-events) baseline-count)
+                         (findf (lambda (event) (scenario-terminal-event? tag event))
+                                (drop all-events baseline-count))))
+                  remaining
+                  250))
+    (cond
+      [(not found) #f]
+      [(<= (- deadline (current-inexact-milliseconds)) settle-ms) #t]
+      [else
+       (define count-at-terminal (length (read-trace-events sessions-root)))
+       (sleep (/ settle-ms 1000.0))
+       (define count-after-settle (length (read-trace-events sessions-root)))
+       (if (> count-after-settle count-at-terminal)
+           (loop)
+           #t)])))
+
 (define (trace-paths sessions-root)
   (if (directory-exists? sessions-root)
       (for/list ([path (in-directory sessions-root)]
@@ -419,12 +452,7 @@
          (set! completion-baseline-count (length (read-trace-events sessions-root)))
          (send-line! tmux server-name session-name "Reply exactly INTERRUPT_RECOVERY_OK."))
        (define completed?
-         (wait-until (lambda ()
-                       (define all-events (read-trace-events sessions-root))
-                       (and (> (length all-events) completion-baseline-count)
-                            (findf (lambda (event) (scenario-terminal-event? tag event))
-                                   (drop all-events completion-baseline-count))))
-                     timeout-ms))
+         (wait-for-stale-completion sessions-root completion-baseline-count tag timeout-ms))
        (define all-events (read-trace-events sessions-root))
        (define events
          (if (>= (length all-events) scenario-baseline-count)
