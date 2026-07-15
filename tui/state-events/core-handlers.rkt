@@ -22,6 +22,7 @@
          "../state-types.rkt"
          (only-in "../../runtime/gsd-query.rkt" current-gsd-mode-query)
          (only-in "../render/message-layout.rkt" plain-line)
+         (only-in "../approval-channel.rkt" approval-request-pending?)
          ;; W7 v0.99.35: Pure helpers extracted from this module
          "handler-helpers.rkt"
          "helpers.rkt"
@@ -542,49 +543,152 @@
 ;; HITL Approval handler (v0.99.25 §5.3)
 ;; ============================================================
 
-;; Handle spawn approval request from MAS spawn.
-;; Sets active-overlay to 'approval-prompt so the TUI can collect
-;; user input (y/n/Esc) and respond via approval-put!.
-;; v0.99.50 W2 (TMUX-04): Stores request-id in overlay extra for
-;; correlated exactly-once delivery.
-(define (handle-spawn-approval-requested state evt)
-  (define payload (event-payload evt))
-  (define capabilities (hash-ref payload 'capabilities '()))
-  (define task-preview (hash-ref payload 'task-preview ""))
-  (define request-id (hash-ref payload 'request-id #f))
+;; Approval requests stay in the overlay's extra field to preserve the ui-state
+;; and overlay-state ABIs.  The active request keeps the historical extra keys;
+;; queued requests are normalized hashes under 'approval-queue.
+(define (approval-request-from-payload payload)
+  (and
+   (hash? payload)
+   (let ([request-id (hash-ref payload 'request-id #f)])
+     ;; Correlation is mandatory at this security boundary.  An
+     ;; uncorrelated prompt could only be answered through the permissive
+     ;; legacy channel and must therefore not become visible.
+     (and (string? request-id)
+          (approval-request-pending? request-id)
+          (let* ([raw-capabilities (hash-ref payload 'capabilities '())]
+                 [capabilities (if (list? raw-capabilities)
+                                   raw-capabilities
+                                   '())]
+                 [raw-preview (hash-ref payload 'task-preview "")]
+                 [task-preview (if (string? raw-preview)
+                                   raw-preview
+                                   (format "~a" raw-preview))])
+            (hasheq 'request-id request-id 'capabilities capabilities 'task-preview task-preview))))))
+
+(define (approval-request-id request)
+  (and (hash? request) (hash-ref request 'request-id #f)))
+
+(define (approval-overlay-queue ov)
+  (define extra (overlay-state-extra ov))
+  (define queue (and (hash? extra) (hash-ref extra 'approval-queue '())))
+  (if (list? queue)
+      queue
+      '()))
+
+(define (approval-overlay-seen-ids ov)
+  (define extra (overlay-state-extra ov))
+  (define stored (and (hash? extra) (hash-ref extra 'approval-seen-request-ids #f)))
+  (if (list? stored)
+      stored
+      (filter string?
+              (cons (and (hash? extra) (hash-ref extra 'request-id #f))
+                    (map approval-request-id (approval-overlay-queue ov))))))
+
+(define (approval-request-overlay request queue seen-ids)
+  (define capabilities (hash-ref request 'capabilities '()))
+  (define task-preview (hash-ref request 'task-preview ""))
   (define caps-str
-    (string-join (map (lambda (c)
-                        (if (symbol? c)
-                            (symbol->string c)
-                            (format "~a" c)))
-                      (if (list? capabilities)
-                          capabilities
-                          '()))
+    (string-join (map (lambda (capability)
+                        (if (symbol? capability)
+                            (symbol->string capability)
+                            (format "~a" capability)))
+                      capabilities)
                  ", "))
-  (define preview-str
-    (if (string? task-preview)
-        task-preview
-        (format "~a" task-preview)))
+  (define preview-lines
+    (let ([lines (string-split task-preview "\n" #:trim? #f)])
+      (if (null? lines)
+          (list "")
+          lines)))
   (define content
-    (list (plain-line "\u26a1 Subagent Approval Required")
-          (plain-line (format "  Capabilities: ~a" caps-str))
-          (plain-line (format "  Task: ~a" preview-str))
-          (plain-line "")
-          (plain-line "  [y] Approve   [n] Deny   [Esc] Cancel")))
-  ;; Store capabilities, task-preview, and request-id in extra for key handler.
-  (struct-copy
-   ui-state
-   state
-   [active-overlay
-    (overlay-state
-     'approval-prompt
-     content
-     ""
-     'top-left
-     #f
-     #f
-     0
-     (hasheq 'capabilities capabilities 'task-preview preview-str 'request-id request-id))]))
+    (append (list (plain-line "\u26a1 Subagent Approval Required")
+                  (plain-line (format "  Capabilities: ~a" caps-str)))
+            (for/list ([line (in-list preview-lines)]
+                       [index (in-naturals)])
+              (plain-line (format "  ~a: ~a" (if (zero? index) "Task" "    ") line)))
+            (list (plain-line "") (plain-line "  [y] Approve   [n] Deny   [Esc] Cancel"))))
+  (overlay-state 'approval-prompt
+                 content
+                 ""
+                 'top-left
+                 #f
+                 #f
+                 0
+                 (hasheq 'capabilities
+                         capabilities
+                         'task-preview
+                         task-preview
+                         'request-id
+                         (hash-ref request 'request-id)
+                         'approval-queue
+                         queue
+                         'approval-seen-request-ids
+                         seen-ids)))
+
+;; Remove exactly one correlated request.  If it is active, promote the next
+;; queued request in FIFO order; if it is queued, leave the active request in
+;; place.  This helper is shared with the key handler so a failed/stale channel
+;; delivery can never dismiss a newer prompt.
+(define (approval-overlay-remove-request state request-id)
+  (define ov (ui-state-active-overlay state))
+  (cond
+    [(not (and (string? request-id) ov (eq? (overlay-state-type ov) 'approval-prompt))) state]
+    [else
+     (define extra (overlay-state-extra ov))
+     (define active-id (and (hash? extra) (hash-ref extra 'request-id #f)))
+     (define queue (approval-overlay-queue ov))
+     (define seen-ids (approval-overlay-seen-ids ov))
+     (cond
+       [(equal? request-id active-id)
+        (if (null? queue)
+            (struct-copy ui-state state [active-overlay #f])
+            (struct-copy ui-state
+                         state
+                         [active-overlay
+                          (approval-request-overlay (car queue) (cdr queue) seen-ids)]))]
+       [(ormap (lambda (request) (equal? request-id (approval-request-id request))) queue)
+        (define remaining
+          (filter (lambda (request) (not (equal? request-id (approval-request-id request)))) queue))
+        (define new-extra (hash-set extra 'approval-queue remaining))
+        (struct-copy ui-state
+                     state
+                     [active-overlay (struct-copy overlay-state ov [extra new-extra])])]
+       [else state])]))
+
+;; Handle a correlated spawn approval request.  Existing approval prompts are
+;; never replaced: new requests queue FIFO and duplicate deliveries are ignored.
+(define (handle-spawn-approval-requested state evt)
+  (define request (approval-request-from-payload (event-payload evt)))
+  (cond
+    [(not request) state]
+    [else
+     (define request-id (approval-request-id request))
+     (define ov (ui-state-active-overlay state))
+     (cond
+       [(and ov (eq? (overlay-state-type ov) 'approval-prompt))
+        (define seen-ids (approval-overlay-seen-ids ov))
+        (if (member request-id seen-ids)
+            state
+            (let* ([queue (approval-overlay-queue ov)]
+                   [old-extra (overlay-state-extra ov)]
+                   [base-extra (if (hash? old-extra)
+                                   old-extra
+                                   (hasheq))]
+                   [new-extra
+                    (hash-set (hash-set base-extra 'approval-queue (append queue (list request)))
+                              'approval-seen-request-ids
+                              (append seen-ids (list request-id)))])
+              (struct-copy ui-state
+                           state
+                           [active-overlay (struct-copy overlay-state ov [extra new-extra])])))]
+       [else
+        (struct-copy ui-state
+                     state
+                     [active-overlay (approval-request-overlay request '() (list request-id))])])]))
+
+(define (handle-spawn-approval-terminal state evt)
+  (define payload (event-payload evt))
+  (define request-id (and (hash? payload) (hash-ref payload 'request-id #f)))
+  (approval-overlay-remove-request state request-id))
 
 ;; ============================================================
 ;; Register all core handlers at module load time
@@ -592,7 +696,9 @@
 
 ;; M2 fix (v0.99.6): Exported for testing.
 (provide verification-payload-ref
-         handle-spawn-approval-requested)
+         handle-spawn-approval-requested
+         handle-spawn-approval-terminal
+         approval-overlay-remove-request)
 
 (register-event-reducer! "assistant.message.completed" handle-assistant-message-completed)
 (register-event-reducer! "tool.call.started" handle-tool-call-started)
@@ -641,3 +747,4 @@
 (register-event-reducer! "gsd.verification.completed" handle-verification-completed)
 (register-event-reducer! "gsd.verification.escalated" handle-verification-escalated)
 (register-event-reducer! "mas.spawn-approval-requested" handle-spawn-approval-requested)
+(register-event-reducer! "mas.spawn-approval-terminal" handle-spawn-approval-terminal)

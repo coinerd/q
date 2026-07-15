@@ -13,6 +13,12 @@
          "../skills/workflow-executor.rkt"
          "../skills/mas-workflow.rkt"
          (only-in "../tools/builtins/spawn-subagent.rkt" current-spawn-approval-result)
+         (only-in "../tui/approval-channel.rkt"
+                  make-approval-channel
+                  set-approval-channel!
+                  clear-approval-channel!
+                  set-headless-approval-mode!
+                  approval-put-for-id!)
          "../tools/tool.rkt"
          "../llm/provider.rkt"
          "../llm/model.rkt")
@@ -51,8 +57,11 @@
          (error 'hybrid-provider "failure after ~a successes" n)))
    (lambda (req) (error 'hybrid-provider "streaming failed"))))
 
-(define (make-test-exec-ctx provider)
+(define (make-test-exec-ctx provider #:publisher [publisher #f])
+  (unless publisher
+    (set-headless-approval-mode!))
   (make-exec-context #:working-directory (current-directory)
+                     #:event-publisher publisher
                      #:runtime-settings (hasheq 'provider provider 'model "mock-model")))
 
 ;; ── Test helpers ──
@@ -218,6 +227,34 @@
                       '()))
       (define result (execute-workflow wf (hasheq) exec-ctx))
       (check-false (tool-result-is-error? result) "default permissive mode should allow parallel"))
+
+    (test-case "spawn APIs own exactly one interactive approval per workflow group"
+      (for ([parallel? (in-list '(#f #t))])
+        (dynamic-wind
+         (lambda () (set-approval-channel! (make-approval-channel #:timeout-ms 1000)))
+         (lambda ()
+           (define requests 0)
+           (define terminals 0)
+           (define publisher
+             (lambda (type payload)
+               (cond
+                 [(string=? type "mas.spawn-approval-requested")
+                  (set! requests (add1 requests))
+                  (check-true (approval-put-for-id! (hash-ref payload 'request-id) #t))]
+                 [(string=? type "mas.spawn-approval-terminal") (set! terminals (add1 terminals))])))
+           (define provider (make-static-text-provider "Done"))
+           (define exec-ctx (make-test-exec-ctx provider #:publisher publisher))
+           (define steps
+             (if parallel?
+                 (list (workflow-step "a" "Run A" '(shell-exec) #t)
+                       (workflow-step "b" "Run B" '(read-only) #t))
+                 (list (workflow-step "a" "Run A" '(shell-exec) #f))))
+           (define result
+             (execute-workflow (mas-workflow "owned" "desc" steps '()) (hasheq) exec-ctx))
+           (check-false (tool-result-is-error? result))
+           (check-equal? requests 1)
+           (check-equal? terminals 1))
+         clear-approval-channel!)))
 
     (test-case "role used in workflow steps"
       (define provider (make-static-text-provider "Role check"))

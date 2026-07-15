@@ -10,12 +10,38 @@
 
 (require "tui-keybindings.rkt"
          "submit-handler.rkt"
-         "input.rkt")
+         "input.rkt"
+         (only-in "state-types.rkt"
+                  ui-state-active-overlay
+                  overlay-state?
+                  overlay-state-type
+                  overlay-state-extra)
+         (only-in "state-events/core-handlers.rkt" approval-overlay-remove-request)
+         (only-in "approval-channel.rkt" approval-request-pending?))
+
+;; A killed/interrupted approval owner cannot publish its terminal event.  The
+;; channel registry is still authoritative, so every event-loop message prunes
+;; terminal active requests and promotes queued live requests before dispatch.
+(define (prune-stale-approval-overlays! ctx)
+  (define state-box (tui-ctx-ui-state-box ctx))
+  (let loop ()
+    (define state (unbox state-box))
+    (define overlay (ui-state-active-overlay state))
+    (when (and (overlay-state? overlay) (eq? (overlay-state-type overlay) 'approval-prompt))
+      (define extra (overlay-state-extra overlay))
+      (define request-id (and (hash? extra) (hash-ref extra 'request-id #f)))
+      (when (and (string? request-id) (not (approval-request-pending? request-id)))
+        (define pruned (approval-overlay-remove-request state request-id))
+        (unless (eq? pruned state)
+          (set-box! state-box pruned)
+          (mark-dirty! ctx)
+          (loop))))))
 
 ;; Process a single TUI message (from next-message adapter).
 ;; Returns 'quit if quit requested, 'resize if resize needed, or void.
 ;; The caller handles 'resize by calling tui-ctx-resize-ubuf! etc.
 (define (process-tui-message! ctx msg)
+  (prune-stale-approval-overlays! ctx)
   (case (car msg)
     ;; Key press: dispatch to handler
     [(key)
@@ -54,14 +80,18 @@
     [(resize) 'resize]
     ;; Redraw command: mark dirty
     [(redraw) (mark-dirty! ctx)]
-    ;; Paste event: insert as single undo entry
+    ;; Paste and mouse are also blocked while approval is modal.  Probing with
+    ;; a non-decision key has no state effect and keeps modality ownership in
+    ;; the approval handler rather than duplicating overlay inspection here.
     [(paste)
-     (define text (cadr msg))
-     (define inp (unbox (tui-ctx-input-state-box ctx)))
-     (set-box! (tui-ctx-input-state-box ctx) (input-insert-string inp text))
-     (mark-dirty! ctx)]
-    ;; Mouse event: dispatch to handler
-    [(mouse) (handle-mouse ctx (cdr msg))]
+     (unless (eq? (handle-approval-overlay-key ctx 'modal-probe) 'handled)
+       (define text (cadr msg))
+       (define inp (unbox (tui-ctx-input-state-box ctx)))
+       (set-box! (tui-ctx-input-state-box ctx) (input-insert-string inp text))
+       (mark-dirty! ctx))]
+    [(mouse)
+     (unless (eq? (handle-approval-overlay-key ctx 'modal-probe) 'handled)
+       (handle-mouse ctx (cdr msg)))]
     ;; Unknown message type - ignore
     [else (void)]))
 

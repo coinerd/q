@@ -17,10 +17,8 @@
       (define filtered (child-safe-tools-filtered #f))
       (check-equal? (length filtered) (length all)))
 
-    (test-case "child-safe-tools-filtered returns all tools when empty list"
-      (define all (child-safe-tools))
-      (define filtered (child-safe-tools-filtered '()))
-      (check-equal? (length filtered) (length all)))
+    (test-case "child-safe-tools-filtered gives explicit empty authority no tools"
+      (check-equal? (child-safe-tools-filtered '()) '()))
 
     (test-case "read-only filter returns only read-only tools"
       (define filtered (child-safe-tools-filtered '(read-only)))
@@ -70,16 +68,37 @@
         (parse-subagent-config (hasheq 'task "test" 'capabilities '("read-only" "file-write"))))
       (check-equal? (subagent-config-capabilities cfg) '(read-only file-write)))
 
-    (test-case "parse-subagent-config filters invalid capabilities"
-      (define cfg
-        (parse-subagent-config (hasheq 'task "test" 'capabilities '("read-only" "bogus-cap"))))
-      ;; Only valid capability is kept
-      (check-equal? (subagent-config-capabilities cfg) '(read-only)))
+    (test-case "parse-subagent-config rejects any explicit invalid capability"
+      (check-exn exn:fail:contract?
+                 (lambda ()
+                   (parse-subagent-config
+                    (hasheq 'task "test" 'capabilities '("read-only" "bogus-cap"))))))
 
-    (test-case "parse-subagent-config handles empty capabilities list"
+    (test-case "parse-subagent-config validates every effectful field before execution"
+      (for ([bad-args (in-list (list (hasheq 'task "ok" 'role 42)
+                                     (hasheq 'task "ok" 'model 42)
+                                     (hasheq 'task "ok" 'tools '("read" 42))
+                                     (hasheq 'task "ok" 'tools '("not-a-child-tool"))
+                                     (hasheq 'task "ok" 'max-turns 0)
+                                     (hasheq 'task "")))])
+        (check-exn exn:fail:contract? (lambda () (parse-subagent-config bad-args)))))
+
+    (test-case "invalid single spawn fails before approval and rate effects"
+      (define events '())
+      (define timestamps (box '()))
+      (define ctx
+        (make-exec-context #:event-publisher (lambda (type payload)
+                                               (set! events (cons (cons type payload) events)))))
+      (parameterize ([current-spawn-timestamps timestamps])
+        (define result
+          (tool-spawn-subagent (hasheq 'task "valid" 'role 42 'capabilities '(shell-exec)) ctx))
+        (check-true (tool-result-is-error? result))
+        (check-equal? events '())
+        (check-equal? (unbox timestamps) '())))
+
+    (test-case "parse-subagent-config preserves explicit empty authority"
       (define cfg (parse-subagent-config (hasheq 'task "test" 'capabilities '())))
-      ;; Empty list after filtering becomes #f (treat as "all tools")
-      (check-false (subagent-config-capabilities cfg)))
+      (check-equal? (subagent-config-capabilities cfg) '()))
 
     ;; v0.99.22 A-2: Batch capabilities support
     (test-case "parse-job-capabilities returns #f when no capabilities key"
@@ -91,16 +110,14 @@
         (parse-job-capabilities (hasheq 'task "hello" 'capabilities '("read-only" "file-write"))))
       (check-equal? caps '(read-only file-write)))
 
-    (test-case "parse-job-capabilities filters invalid and returns #f for empty"
-      ;; Mix of valid and invalid
-      (define caps1
-        (parse-job-capabilities (hasheq 'task "hello" 'capabilities '("read-only" "bogus"))))
-      (check-equal? caps1 '(read-only))
-      ;; All invalid → #f
-      (define caps2 (parse-job-capabilities (hasheq 'task "hello" 'capabilities '("bogus"))))
-      (check-false caps2)
-      ;; Empty list → #f
+    (test-case "parse-job-capabilities rejects invalid and preserves explicit empty"
+      (check-exn exn:fail:contract?
+                 (lambda ()
+                   (parse-job-capabilities
+                    (hasheq 'task "hello" 'capabilities '("read-only" "bogus")))))
+      (check-exn exn:fail:contract?
+                 (lambda () (parse-job-capabilities (hasheq 'task "hello" 'capabilities '("any")))))
       (define caps3 (parse-job-capabilities (hasheq 'task "hello" 'capabilities '())))
-      (check-false caps3))))
+      (check-equal? caps3 '()))))
 
 (run-tests suite)

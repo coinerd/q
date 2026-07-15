@@ -1,6 +1,6 @@
 #lang racket
 
-;; @speed fast  ;; @suite tui
+;; @speed fast  ;; @suite security
 
 ;; tests/test-hitl-approval-integration.rkt
 ;; v0.99.25 W3 §5.3: Integration tests for the complete HITL approval flow.
@@ -14,8 +14,8 @@
 ;; 2. Full approval flow: set channel → thread blocks → put #t → result #t
 ;; 3. Full denial flow: set channel → thread blocks → put #f → result #f
 ;; 4. Timeout flow: set channel with short timeout → no put → returns #f
-;; 5. Non-interactive: no channel → permissive (#t)
-;; 6. Channel cleared after teardown → subsequent approval is permissive
+;; 5. Explicit non-interactive mode is permissive
+;; 6. Interactive teardown remains fail closed
 ;; 7. Cross-thread: approval-put! from one thread, await from another
 
 (require rackunit
@@ -28,6 +28,7 @@
                   approval-channel-timeout-ms
                   set-approval-channel!
                   clear-approval-channel!
+                  set-headless-approval-mode!
                   current-approval-channel
                   approval-await-result
                   approval-put!))
@@ -104,21 +105,20 @@
 
     ;; ── Non-Interactive (No Channel) ──
 
-    (test-case "non-interactive: permissive when no channel"
-      (clear-approval-channel!)
+    (test-case "explicit non-interactive mode is permissive when no channel"
+      (set-headless-approval-mode!)
       (check-false (current-approval-channel))
-      (define result (approval-await-result))
-      (check-equal? result #t) ; No channel → permissive
-      (check-false (current-approval-channel))) ; Still no channel
+      (check-true (approval-await-result))
+      (check-false (current-approval-channel)))
 
-    ;; ── Teardown → Permissive ──
+    ;; ── Teardown → fail closed ──
 
-    (test-case "after teardown, approval is permissive"
+    (test-case "after teardown approval remains closed"
       (set-approval-channel! (make-approval-channel))
       (check-not-false (current-approval-channel))
-      (clear-approval-channel!) ; TUI teardown
+      (clear-approval-channel!)
       (check-false (current-approval-channel))
-      (check-equal? (approval-await-result) #t))
+      (check-false (approval-await-result)))
 
     ;; ── Cross-thread Simulation (Full TUI Lifecycle) ──
 
@@ -141,8 +141,8 @@
       ;; 4. TUI teardown
       (clear-approval-channel!)
       (check-false (current-approval-channel))
-      ;; 5. Subsequent approval requests are permissive
-      (check-equal? (approval-await-result) #t))
+      ;; 5. Surviving work cannot become permissive after teardown.
+      (check-false (approval-await-result)))
 
     (test-case "full TUI lifecycle: init → spawn → deny → teardown"
       (clear-approval-channel!)

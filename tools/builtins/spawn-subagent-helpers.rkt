@@ -16,6 +16,7 @@
 (require racket/string
          racket/list
          (only-in file/sha1 sha1)
+         (only-in "../../util/json/checksum.rkt" sha256-string)
          (only-in "../../util/capability.rkt" valid-capability?)
          (only-in "../../util/message/message.rkt" make-message message-role message-content)
          (only-in "../../util/content/content-parts.rkt"
@@ -25,7 +26,13 @@
                   tool-call-part-name))
 
 (provide normalize-capabilities
+         normalize-capabilities/strict
+         immutable-canonical-copy
+         canonical-datum-string
+         sha256-digest
          requires-hitl-approval?
+         bounded-delegated-capabilities
+         valid-plan-id?
          extract-assistant-text
          extract-text-summary
          SUBAGENT-SUMMARY-MAX-CHARS
@@ -49,8 +56,11 @@
   (cond
     [(not caps-raw) #f]
     [(null? caps-raw) #f]
-    [(string? caps-raw)
-     (define sym (string->symbol caps-raw))
+    [(or (string? caps-raw) (symbol? caps-raw))
+     (define sym
+       (if (string? caps-raw)
+           (string->symbol caps-raw)
+           caps-raw))
      (if (valid-capability? sym)
          (list sym)
          #f)]
@@ -64,6 +74,121 @@
                     caps-raw)))
      (if (null? filtered) #f filtered)]
     [else #f]))
+
+;; Strict variant for an explicitly supplied batch capability declaration.
+;; Unlike the legacy normalizer, it rejects the complete value when even one
+;; member is malformed or unknown.  Omitted declarations never call this
+;; function, preserving the legacy #f/unrestricted behavior.
+(define (normalize-capabilities/strict caps-raw)
+  (define raw-list
+    (cond
+      [(not caps-raw) '()]
+      [(or (string? caps-raw) (symbol? caps-raw)) (list caps-raw)]
+      [(list? caps-raw) caps-raw]
+      [else
+       (raise-argument-error 'normalize-capabilities/strict
+                             "a capability string, symbol, list, or #f"
+                             caps-raw)]))
+  (define normalized
+    (for/list ([cap (in-list raw-list)])
+      (define sym
+        (cond
+          [(string? cap) (string->symbol cap)]
+          [(symbol? cap) cap]
+          [else
+           (raise-argument-error 'normalize-capabilities/strict
+                                 "a list containing only capability strings or symbols"
+                                 caps-raw)]))
+      (unless (and (valid-capability? sym) (not (eq? sym 'any)))
+        (raise-argument-error 'normalize-capabilities/strict
+                              "a list containing only concrete delegated capabilities"
+                              caps-raw))
+      sym))
+  ;; Preserve explicit empty authority as '().  Omission is represented by #f
+  ;; by the caller, so an empty declaration can never become unrestricted.
+  (remove-duplicates normalized eq?))
+
+(define DEFAULT-DELEGATED-CAPABILITIES '(read-only file-write shell-exec))
+
+(define (bounded-delegated-capabilities declared-caps parent-capabilities)
+  (define parent-unrestricted? (and (list? parent-capabilities) (memq 'any parent-capabilities)))
+  (define requested (if (eq? declared-caps #f) DEFAULT-DELEGATED-CAPABILITIES declared-caps))
+  (cond
+    [(or parent-unrestricted? (not (list? parent-capabilities))) requested]
+    [(eq? declared-caps #f)
+     (filter (lambda (capability) (memq capability parent-capabilities)) requested)]
+    [else
+     (define excess
+       (filter (lambda (capability) (not (memq capability parent-capabilities))) requested))
+     (unless (null? excess)
+       (error 'spawn-subagent "delegated capabilities exceed parent session authority: ~a" excess))
+     requested]))
+
+(define (valid-plan-id? value)
+  (and (string? value) (regexp-match? #px"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" value)))
+
+;; ============================================================
+;; Immutable canonical request snapshots
+;; ============================================================
+
+;; Deep-copy request data into immutable containers.  Strings and bytes are
+;; copied as immutable values so later mutation of the original request cannot
+;; alter an approval snapshot.
+(define (immutable-canonical-copy value)
+  (cond
+    [(hash? value)
+     (for/hash ([(key item) (in-hash value)])
+       (values (immutable-canonical-copy key) (immutable-canonical-copy item)))]
+    [(list? value) (map immutable-canonical-copy value)]
+    [(pair? value)
+     (cons (immutable-canonical-copy (car value)) (immutable-canonical-copy (cdr value)))]
+    [(vector? value)
+     (vector->immutable-vector (for/vector ([item (in-vector value)])
+                                 (immutable-canonical-copy item)))]
+    [(string? value) (string->immutable-string (string-copy value))]
+    [(bytes? value) (bytes->immutable-bytes (bytes-copy value))]
+    [(box? value) (box-immutable (immutable-canonical-copy (unbox value)))]
+    [else value]))
+
+;; Deterministic, type-tagged encoding used only for identity digests.  Hash
+;; entries are sorted by their encoded key; list order remains significant.
+(define (canonical-datum-string value)
+  (define (encode item)
+    (cond
+      [(hash? item)
+       (define entries
+         (sort (for/list ([(key val) (in-hash item)])
+                 (cons (encode key) (encode val)))
+               string<?
+               #:key car))
+       (string-append "h{"
+                      (apply string-append
+                             (for/list ([entry (in-list entries)])
+                               (format "~a=~a;" (car entry) (cdr entry))))
+                      "}")]
+      [(list? item) (string-append "l[" (apply string-append (map encode item)) "]")]
+      [(pair? item) (format "p(~a.~a)" (encode (car item)) (encode (cdr item)))]
+      [(vector? item)
+       (string-append "v["
+                      (apply string-append
+                             (for/list ([part (in-vector item)])
+                               (encode part)))
+                      "]")]
+      [(string? item) (format "s~s" item)]
+      [(symbol? item) (format "y~s" item)]
+      [(bytes? item) (format "b~s" item)]
+      [(boolean? item) (if item "t" "f")]
+      [(number? item) (format "n~s" item)]
+      [(void? item) "zvoid"]
+      [else (format "o~s" item)]))
+  (encode value))
+
+;; SHA-256 for exact task strings and deterministic canonical SHA-256 for
+;; structured snapshots/raw requests.
+(define (sha256-digest value)
+  (string->immutable-string (sha256-string (if (string? value)
+                                               value
+                                               (canonical-datum-string value)))))
 
 ;; ============================================================
 ;; HITL approval check

@@ -24,7 +24,8 @@
 ;; skills/workflow-executor.rkt (W3).
 
 (require racket/string
-         racket/list)
+         racket/list
+         (only-in "../util/capability.rkt" valid-capability?))
 
 ;; ============================================================
 ;; Structs
@@ -109,9 +110,20 @@
   (cond
     [(not caps-raw) #f]
     [(list? caps-raw)
-     (define parsed (filter-map (lambda (c) (and (string? c) (string->symbol c))) caps-raw))
-     (if (null? parsed) #f parsed)]
-    [else #f]))
+     (define parsed
+       (for/list ([capability (in-list caps-raw)])
+         (unless (string? capability)
+           (raise-argument-error 'parse-capabilities
+                                 "a list containing only capability strings"
+                                 caps-raw))
+         (define symbol (string->symbol capability))
+         (unless (and (valid-capability? symbol) (not (eq? symbol 'any)))
+           (raise-argument-error 'parse-capabilities
+                                 "a list containing only concrete delegated capabilities"
+                                 caps-raw))
+         symbol))
+     (remove-duplicates parsed eq?)]
+    [else (raise-argument-error 'parse-capabilities "a capability list or #f" caps-raw)]))
 
 ;; ============================================================
 ;; Utility predicates

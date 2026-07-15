@@ -18,6 +18,7 @@
          "terminal.rkt"
          "tree-view.rkt"
          "approval-channel.rkt"
+         (only-in "state-events/core-handlers.rkt" approval-overlay-remove-request)
          "../util/event/event-bus.rkt")
 
 ;; ============================================================
@@ -212,49 +213,37 @@
 ;; Approval overlay key handling (v0.99.25 §5.3)
 ;; ============================================================
 
-;; Handle key events when approval-prompt overlay is active.
-;; Returns 'handled (consumed), 'pass (not ours / unrecognized key).
-;;
-;; Keys:
-;;   y/Y — approve subagent spawn
-;;   n/N — deny subagent spawn
-;;   Esc — cancel (deny)
+;; Handle key events when approval-prompt overlay is active.  Approval prompts
+;; are strictly modal: every key is consumed, but only y/n/Escape attempts a
+;; decision.  A prompt advances only after correlated exactly-once delivery
+;; succeeds; malformed or stale IDs never fall back to the legacy channel.
 (define (handle-approval-overlay-key ctx keycode)
   (define state (unbox (tui-ctx-ui-state-box ctx)))
   (define ov (ui-state-active-overlay state))
   (cond
-    ;; Not our overlay type — pass through
     [(not (and ov (eq? (overlay-state-type ov) 'approval-prompt))) 'pass]
-    ;; v0.99.50 W2 (TMUX-04): Correlated exactly-once delivery.
-    ;; Extract request-id from overlay extra, use approval-put-for-id!
-    ;; so stale/duplicate responses are ignored.
     [else
-     (define extra (and ov (overlay-state-extra ov)))
-     (define req-id (and (hash? extra) (hash-ref extra 'request-id #f)))
-     (define approved?
+     (define extra (overlay-state-extra ov))
+     (define request-id (and (hash? extra) (hash-ref extra 'request-id #f)))
+     (define decision
        (cond
          [(or (eq? keycode #\y) (eq? keycode #\Y) (eq? keycode 'y)) #t]
-         [(or (eq? keycode #\n) (eq? keycode #\N) (eq? keycode 'n)) #f]
-         [(eq? keycode 'escape) #f]
-         [else #f]))
-     (define recognized?
-       (or (eq? keycode #\y)
-           (eq? keycode #\Y)
-           (eq? keycode 'y)
-           (eq? keycode #\n)
-           (eq? keycode #\N)
-           (eq? keycode 'n)
-           (eq? keycode 'escape)))
-     (cond
-       [(not recognized?) 'pass]
-       [else
-        ;; Deliver correlated response (exactly-once via registry)
-        (if req-id
-            (approval-put-for-id! req-id approved?)
-            (approval-put! approved?)) ; backward compat for legacy events
-        (set-box! (tui-ctx-ui-state-box ctx) (dismiss-overlay state))
-        (mark-dirty! ctx)
-        'handled])]))
+         [(or (eq? keycode #\n) (eq? keycode #\N) (eq? keycode 'n) (eq? keycode 'escape)) #f]
+         [else 'no-decision]))
+     (define stale? (and (string? request-id) (not (approval-request-pending? request-id))))
+     (when (or
+            stale?
+            (and (boolean? decision) (string? request-id) (approval-put-for-id! request-id decision)))
+       ;; Re-read after delivery so a concurrently processed terminal event or
+       ;; promotion cannot be overwritten with the stale state captured above.
+       ;; A request already terminal in the registry is also safe to remove;
+       ;; otherwise an undeliverable modal could capture the TUI forever.
+       (define latest-state (unbox (tui-ctx-ui-state-box ctx)))
+       (define updated-state (approval-overlay-remove-request latest-state request-id))
+       (unless (eq? updated-state latest-state)
+         (set-box! (tui-ctx-ui-state-box ctx) updated-state)
+         (mark-dirty! ctx)))
+     'handled]))
 
 (provide selection-text
          handle-mouse
