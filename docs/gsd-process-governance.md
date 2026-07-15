@@ -50,20 +50,23 @@ protection requires the complete non-tag CI workflow, including the
 malformed required checks block merge.
 
 Each wave PR adds exactly one record under
-`docs/reports/gsd-wave-evidence/*.rktd`. The record must contain:
+`docs/reports/gsd-wave-evidence/*.rktd`, plus retained review and validation
+snapshots under the adjacent `gsd-wave-reviews/` and `gsd-wave-validation/`
+directories. The evidence record contains:
 
 - milestone, wave, and issue identity;
-- `ready-for-merge` status and implementation SHA;
-- exact red-first command and observed failure;
-- current external VALIDATION path/status;
-- retained independent reviewer identity, `APPROVED` verdict, artifact path,
-  and reviewed implementation SHA;
-- the required-check inventory.
+- `ready-for-merge` status and reviewed implementation SHA;
+- SHA-256 of the PR content diff excluding the three attestation directories;
+- paths to the retained review and validation snapshots;
+- the exact required-check inventory from `scripts/required-pr-checks.policy`.
 
-`racket scripts/gsd-wave-gate.rkt <record.rktd>` validates the record. The
-external merge helper additionally binds review, validation, and required
-checks to the exact current PR head SHA and verifies GitHub's merge result
-before closing issues or setting board state to Done.
+CI computes the actual changed-content digest from the PR base/head or the main
+push before/head pair. `gsd-wave-gate.rkt` verifies that digest, reads both
+retained artifacts, requires `APPROVED`, cross-checks implementation SHA and
+content digest, and validates required red-first/test/lint/fast/planning fields.
+A fabricated path or stale record therefore fails. The external merge helper
+binds required checks to the exact current PR head SHA and verifies GitHub's
+merge result before explicitly closing issues or setting board state to Done.
 
 Because GitHub does not permit a sole maintainer to approve their own PR, the
 independent review is a retained external reviewer artifact rather than a
@@ -232,10 +235,11 @@ extended to 2026-10-01, but no resolution milestone was scheduled.
 
 | Gap | Rule | Enforcement tool |
 |-----|------|------------------|
-| GAP-1 | Claims must match reality | `claim-verifier.rkt` |
-| GAP-2 | Titles must match scope | `claim-verifier.rkt` (naming check) |
-| GAP-3 | Findings must have issues | Wave closure checklist |
+| GAP-1 | Claims must match reality; empty evidence fails | `claim-verifier.rkt`, `milestone-close-gate.rkt` |
+| GAP-2 | Titles must match scope | Planning + independent review (no automated semantic checker yet) |
+| GAP-3 | Findings must have issues | Wave closure checklist + GitHub sub-issues |
+| F-10/F-13 | Current checks and review/validation evidence before merge | branch protection, `gsd-wave-gate.rkt`, external merge helper |
 | GAP-4 | Release truth before close | `milestone-close-gate.rkt` |
-| GAP-5 | HANDOFF.json must be current | `milestone-close-gate.rkt` |
+| GAP-5 | HANDOFF.json must be current | Per-wave review/evidence (external planning is not parsed by close gate) |
 | GAP-6 | Temp dirs cleaned on success | `cleanup-tmux-env!` |
 | GAP-7 | Boundary debt must be tracked | Dedicated resolution milestone |

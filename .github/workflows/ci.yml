@@ -339,23 +339,32 @@ jobs:
           evidence_dir="docs/reports/gsd-wave-evidence"
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             git fetch origin "${{ github.base_ref }}"
-            mapfile -t evidence_files < <(
-              git diff --name-only "origin/${{ github.base_ref }}...HEAD" -- "$evidence_dir/*.rktd"
-            )
-            if [[ ${#evidence_files[@]} -ne 1 ]]; then
-              echo "Expected exactly one changed wave evidence record; found ${#evidence_files[@]}"
-              printf '  %s\n' "${evidence_files[@]:-<none>}"
-              exit 1
-            fi
-            evidence="${evidence_files[0]}"
+            base_sha="origin/${{ github.base_ref }}"
+            head_sha="${{ github.event.pull_request.head.sha }}"
           else
-            evidence=$(find "$evidence_dir" -maxdepth 1 -type f -name '*.rktd' | sort | tail -1)
-            if [[ -z "$evidence" ]]; then
-              echo "No retained wave evidence record found"
-              exit 1
-            fi
+            base_sha="${{ github.event.before }}"
+            head_sha="${{ github.sha }}"
           fi
-          racket scripts/gsd-wave-gate.rkt "$evidence"
+          mapfile -t evidence_files < <(
+            git diff --name-only "$base_sha...$head_sha" -- "$evidence_dir/*.rktd"
+          )
+          if [[ ${#evidence_files[@]} -ne 1 ]]; then
+            echo "Expected exactly one changed wave evidence record; found ${#evidence_files[@]}"
+            printf '  %s\n' "${evidence_files[@]:-<none>}"
+            exit 1
+          fi
+          evidence="${evidence_files[0]}"
+          content_digest=$(
+            git diff --binary "$base_sha...$head_sha" -- . \
+              ':(exclude)docs/reports/gsd-wave-evidence/**' \
+              ':(exclude)docs/reports/gsd-wave-reviews/**' \
+              ':(exclude)docs/reports/gsd-wave-validation/**' \
+              | sha256sum | awk '{print $1}'
+          )
+          racket scripts/gsd-wave-gate.rkt "$evidence" \
+            --content-digest "$content_digest" \
+            --root . \
+            --policy scripts/required-pr-checks.policy
 
   # ────────────────────────────────────────────────────────────
   # Gate 6: Release-readiness check (v0.56.1)
