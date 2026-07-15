@@ -44,8 +44,8 @@
           (gate-result 'release #t "Release exists")))
   (check-false (all-gates-passed? results)))
 
-(test-case "all-gates-passed? returns #t for empty list"
-  (check-true (all-gates-passed? '())))
+(test-case "all-gates-passed? fails closed for empty list"
+  (check-false (all-gates-passed? '())))
 
 (test-case "all-gates-passed? returns #f when all gates fail"
   (define results (list (gate-result 'claims #f "Claims mismatch") (gate-result 'ci #f "CI failed")))
@@ -90,9 +90,10 @@
   (check-false (gate-result-passed? g))
   (check-equal? (gate-result-name g) 'claims))
 
-(test-case "check-claims-gate passes for empty claim list"
+(test-case "check-claims-gate fails closed for empty claim list"
   (define g (check-claims-gate '()))
-  (check-true (gate-result-passed? g)))
+  (check-false (gate-result-passed? g))
+  (check-true (string-contains? (gate-result-details g) "No claims")))
 
 ;; ---------------------------------------------------------------------------
 ;; check-release-gate
@@ -140,9 +141,15 @@
   (define g (check-issues-gate issues))
   (check-false (gate-result-passed? g)))
 
-(test-case "check-issues-gate passes for empty issue list"
+(test-case "check-issues-gate fails closed for empty issue list"
   (define g (check-issues-gate '()))
-  (check-true (gate-result-passed? g)))
+  (check-false (gate-result-passed? g))
+  (check-true (string-contains? (gate-result-details g) "No issue")))
+
+(test-case "check-issues-gate fails closed for malformed issue data"
+  (define g (check-issues-gate (list (hasheq 'number 100))))
+  (check-false (gate-result-passed? g))
+  (check-true (string-contains? (gate-result-details g) "malformed")))
 
 ;; ---------------------------------------------------------------------------
 ;; check-changelog-gate

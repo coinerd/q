@@ -283,11 +283,14 @@
   (check-equal? (hash-ref ci-hash 'verdict) 'ci_success)
   (check-true (hash-ref ci-hash 'pass)))
 
-(test-case "ci-required-jobs default list exported"
+(test-case "ci-required-jobs exports complete current matrix contexts"
   (define jobs (dynamic-script 'ci-required-jobs))
-  (check-not-false (member "test" jobs))
+  (check-not-false (member "test (ubuntu-latest, 8.10)" jobs))
+  (check-not-false (member "test (ubuntu-latest, 8.11)" jobs))
+  (check-not-false (member "test (macos-latest, 8.10)" jobs))
   (check-not-false (member "security" jobs))
-  (check-not-false (member "smoke" jobs)))
+  (check-not-false (member "smoke (ubuntu-latest)" jobs))
+  (check-not-false (member "smoke (macos-latest)" jobs)))
 
 (test-case "milestone-gate.rkt exports classify-ci-verdict"
   (check-not-exn (lambda () (dynamic-require script-path 'classify-ci-verdict))))

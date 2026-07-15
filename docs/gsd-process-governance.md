@@ -34,14 +34,47 @@ Milestone titles MUST accurately describe the actual scope of work delivered.
 
 ### Enforcement
 
-The claim-verifier (`scripts/claim-verifier.rkt`) and milestone-close-gate
-(`scripts/milestone-close-gate.rkt`) check for naming/scope mismatches by
-comparing milestone titles against test evidence. A milestone titled
-"Real-World" with zero real-provider test references will fail the gate.
+Milestone naming remains a required human planning/review check. The current
+`claim-verifier.rkt` verifies quantitative claims, while
+`milestone-close-gate.rkt` fails closed on missing claims and release evidence;
+neither script infers semantic scope from a milestone title. A future naming
+checker must not be claimed until executable fixtures prove it.
 
 ---
 
-## 2. Per-Wave Issue Filing Requirement (GAP-3)
+## 2. Required PR Checks and Wave Evidence
+
+Every wave is implemented in one feature branch and one PR. `main` branch
+protection requires the complete non-tag CI workflow, including the
+`gsd-governance` check. Missing, pending, skipped, cancelled, failed, stale, or
+malformed required checks block merge.
+
+Each wave PR adds exactly one record under
+`docs/reports/gsd-wave-evidence/*.rktd`, plus retained review and validation
+snapshots under the adjacent `gsd-wave-reviews/` and `gsd-wave-validation/`
+directories. The evidence record contains:
+
+- milestone, wave, and issue identity;
+- `ready-for-merge` status and reviewed implementation SHA;
+- SHA-256 of the PR content diff excluding the three attestation directories;
+- paths to the retained review and validation snapshots;
+- the exact required-check inventory from `scripts/required-pr-checks.policy`.
+
+CI computes the actual changed-content digest from the PR base/head or the main
+push before/head pair. `gsd-wave-gate.rkt` verifies that digest, reads both
+retained artifacts, requires `APPROVED`, cross-checks implementation SHA and
+content digest, and validates required red-first/test/lint/fast/planning fields.
+A fabricated path or stale record therefore fails. The external merge helper
+binds required checks to the exact current PR head SHA and verifies GitHub's
+merge result before explicitly closing issues or setting board state to Done.
+
+Because GitHub does not permit a sole maintainer to approve their own PR, the
+independent review is a retained external reviewer artifact rather than a
+self-review. This is explicit evidence, not a silent waiver.
+
+---
+
+## 3. Per-Wave Issue Filing Requirement (GAP-3)
 
 Every wave that discovers findings (bugs, gaps, design issues, tech debt)
 MUST file a GitHub issue for each finding BEFORE the wave's issue is closed.
@@ -78,7 +111,7 @@ findings but filed zero issues. This should have blocked closure.
 
 ---
 
-## 3. Pre-Closure Release-Truth Gate (GAP-4)
+## 4. Pre-Closure Release-Truth Gate (GAP-4)
 
 Before closing a milestone, run the pre-closure gate:
 
@@ -109,7 +142,7 @@ release assets. The close gate would have caught both.
 
 ---
 
-## 4. HANDOFF.json Maintenance Protocol (GAP-5)
+## 5. HANDOFF.json Maintenance Protocol (GAP-5)
 
 `HANDOFF.json` MUST be kept current. It is the machine-readable handoff
 state for context recovery and machine switches.
@@ -138,16 +171,17 @@ state for context recovery and machine switches.
 
 ### Enforcement
 
-A stale HANDOFF.json (version field more than 1 release behind current)
-is a process violation. The milestone-close-gate checks that the
-HANDOFF.json version matches the current canonical version before
-allowing milestone closure.
+A stale HANDOFF.json (version field more than 1 release behind current) is a
+process violation. HANDOFF freshness is currently enforced by per-wave review
+and the machine-checkable wave evidence record; `milestone-close-gate.rkt` does
+not yet parse external `.planning/HANDOFF.json`, so this document does not claim
+that it does.
 
 Example of the v0.99.47 failure: HANDOFF.json referenced a release 47 versions older than the project version.
 
 ---
 
-## 5. Temp Directory Cleanup (GAP-6)
+## 6. Temp Directory Cleanup (GAP-6)
 
 tmux test runs create temp directories under `/var/tmp/q-tmux-*`. These
 MUST be cleaned up after successful runs.
@@ -170,7 +204,7 @@ for failed tests. Successful test directories should be cleaned up.
 
 ---
 
-## 6. Architecture Boundary Debt Tracking (GAP-7)
+## 7. Architecture Boundary Debt Tracking (GAP-7)
 
 Architecture boundary violations documented in
 `docs/architecture/dependency-policy.rktd` MUST have a resolution milestone
@@ -201,10 +235,11 @@ extended to 2026-10-01, but no resolution milestone was scheduled.
 
 | Gap | Rule | Enforcement tool |
 |-----|------|------------------|
-| GAP-1 | Claims must match reality | `claim-verifier.rkt` |
-| GAP-2 | Titles must match scope | `claim-verifier.rkt` (naming check) |
-| GAP-3 | Findings must have issues | Wave closure checklist |
+| GAP-1 | Claims must match reality; empty evidence fails | `claim-verifier.rkt`, `milestone-close-gate.rkt` |
+| GAP-2 | Titles must match scope | Planning + independent review (no automated semantic checker yet) |
+| GAP-3 | Findings must have issues | Wave closure checklist + GitHub sub-issues |
+| F-10/F-13 | Current checks and review/validation evidence before merge | branch protection, `gsd-wave-gate.rkt`, external merge helper |
 | GAP-4 | Release truth before close | `milestone-close-gate.rkt` |
-| GAP-5 | HANDOFF.json must be current | `milestone-close-gate.rkt` |
+| GAP-5 | HANDOFF.json must be current | Per-wave review/evidence (external planning is not parsed by close gate) |
 | GAP-6 | Temp dirs cleaned on success | `cleanup-tmux-env!` |
 | GAP-7 | Boundary debt must be tracked | Dedicated resolution milestone |

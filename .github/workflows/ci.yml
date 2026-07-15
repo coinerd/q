@@ -317,6 +317,56 @@ jobs:
           retention-days: 7
 
   # ────────────────────────────────────────────────────────────
+  # Gate 5c: GSD wave evidence (v0.99.51 W0)
+  # Every PR must add exactly one machine-checkable wave record. Pushes to
+  # main revalidate the latest retained record.
+  # ────────────────────────────────────────────────────────────
+  gsd-governance:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-racket
+        with:
+          racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
+
+      - name: Validate machine-checkable wave evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence_dir="docs/reports/gsd-wave-evidence"
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            git fetch origin "${{ github.base_ref }}"
+            base_sha="origin/${{ github.base_ref }}"
+            head_sha="${{ github.event.pull_request.head.sha }}"
+          else
+            base_sha="${{ github.event.before }}"
+            head_sha="${{ github.sha }}"
+          fi
+          mapfile -t evidence_files < <(
+            git diff --name-only "$base_sha...$head_sha" -- "$evidence_dir/*.rktd"
+          )
+          if [[ ${#evidence_files[@]} -ne 1 ]]; then
+            echo "Expected exactly one changed wave evidence record; found ${#evidence_files[@]}"
+            printf '  %s\n' "${evidence_files[@]:-<none>}"
+            exit 1
+          fi
+          evidence="${evidence_files[0]}"
+          content_digest=$(
+            git diff --binary "$base_sha...$head_sha" -- . \
+              ':(exclude)docs/reports/gsd-wave-evidence/**' \
+              ':(exclude)docs/reports/gsd-wave-reviews/**' \
+              ':(exclude)docs/reports/gsd-wave-validation/**' \
+              | sha256sum | awk '{print $1}'
+          )
+          racket scripts/gsd-wave-gate.rkt "$evidence" \
+            --content-digest "$content_digest" \
+            --root . \
+            --policy scripts/required-pr-checks.policy
+
+  # ────────────────────────────────────────────────────────────
   # Gate 6: Release-readiness check (v0.56.1)
   # ────────────────────────────────────────────────────────────
   release-readiness:

@@ -287,18 +287,44 @@
      '("lint" "test")))
   (check-equal? result 'ci_required_job_unexpectedly_skipped))
 
+(test-case "classify-ci-verdict: missing required job fails closed"
+  (define result
+    ((dynamic-script 'classify-ci-verdict)
+     (hasheq 'status "completed" 'conclusion "success" 'run_number 605)
+     (make-hash '(("lint" . "success")))
+     '("lint" "test")))
+  (check-equal? result 'ci_required_job_missing))
+
+(test-case "classify-ci-verdict: pending required job fails closed"
+  (define result
+    ((dynamic-script 'classify-ci-verdict)
+     (hasheq 'status "completed" 'conclusion "success" 'run_number 606)
+     (make-hash '(("lint" . "success") ("test" . #f)))
+     '("lint" "test")))
+  (check-equal? result 'ci_required_job_non_success))
+
+(test-case "classify-ci-verdict: failed required job fails closed even if workflow says success"
+  (define result
+    ((dynamic-script 'classify-ci-verdict)
+     (hasheq 'status "completed" 'conclusion "success" 'run_number 607)
+     (make-hash '(("lint" . "success") ("test" . "failure")))
+     '("lint" "test")))
+  (check-equal? result 'ci_required_job_non_success))
+
 (test-case "classify-ci-verdict: allowed job skipped → ci_success"
   ;; release-readiness not in required list → skip is OK
   (define result
     ((dynamic-script 'classify-ci-verdict)
-     (hasheq 'status "completed" 'conclusion "success" 'run_number 605)
+     (hasheq 'status "completed" 'conclusion "success" 'run_number 608)
      (make-hash '(("lint" . "success") ("test" . "success") ("release-readiness" . "skipped")))
      '("lint" "test")))
   (check-equal? result 'ci_success))
 
-(test-case "classify-ci-verdict: all required jobs in ci-required-jobs default"
+(test-case "classify-ci-verdict: all required matrix jobs in ci-required-jobs default"
   (define jobs (dynamic-script 'ci-required-jobs))
-  (check-not-false (member "test" jobs))
+  (check-not-false (member "test (ubuntu-latest, 8.10)" jobs))
+  (check-not-false (member "test (macos-latest, 8.10)" jobs))
+  (check-not-false (member "smoke (ubuntu-latest)" jobs))
   (check-not-false (member "security" jobs)))
 
 ;; ============================================================

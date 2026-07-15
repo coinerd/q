@@ -67,7 +67,8 @@
          count-test-cases-in-file
          scan-report-file
          parse-claim-verifier-args
-         main)
+         main
+         claim-results-valid?)
 
 ;; Count (test-case forms in text. Only matches the open paren form, not
 ;; the word "test-case" appearing inside a string. The literal open paren
@@ -130,6 +131,11 @@
         [else 0]))
     (claim-result key claimed actual-n (= claimed actual-n))))
 
+;; A claim set is acceptable only when it contains evidence and every claim
+;; matches. Empty evidence must fail closed rather than vacuously passing.
+(define (claim-results-valid? results)
+  (and (pair? results) (andmap claim-result-matched? results)))
+
 ;; ---------------------------------------------------------------------------
 ;; File I/O layer
 ;; ---------------------------------------------------------------------------
@@ -176,7 +182,9 @@
     (exit 1))
   (define claims (scan-report-file file))
   (if (null? claims)
-      (printf "~a: no claims found~n" file)
+      (begin
+        (printf "ERROR: ~a: no claims found~n" file)
+        (exit 1))
       (begin
         (printf "~a:~n" file)
         (for ([c (in-list claims)])

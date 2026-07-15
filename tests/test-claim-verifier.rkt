@@ -141,6 +141,15 @@
   (check-equal? (length results) 3)
   (check-true (andmap claim-result-matched? results)))
 
+(test-case "claim-results-valid? requires at least one verified claim"
+  (check-false (claim-results-valid? '())))
+
+(test-case "claim-results-valid? rejects any mismatched claim"
+  (check-false (claim-results-valid? (list (claim-result 'tests 2 1 #f)))))
+
+(test-case "claim-results-valid? accepts a non-empty fully matched set"
+  (check-true (claim-results-valid? (list (claim-result 'tests 2 2 #t)))))
+
 ;; ---------------------------------------------------------------------------
 ;; claim-result struct
 ;; ---------------------------------------------------------------------------
