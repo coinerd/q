@@ -66,7 +66,9 @@
          racket/dict
          (only-in "../runtime/session/session-interruption.rkt" active-session-turn-id)
          (only-in "../runtime/session/session-types.rkt" agent-session-config)
-         (only-in "../util/ids.rkt" generate-id))
+         (only-in "../util/ids.rkt" generate-id)
+         "../runtime/session/session-path.rkt"
+         racket/path)
 
 ;; C1 v0.97.13: Explicit provides instead of struct-out for stable SDK ABI.
 ;; runtime-config: predicate + constructor + all accessors
@@ -351,10 +353,10 @@
                            #f
                            (hasheq 'sessionId sid 'persist? persist?)))
      (define history (session:session-history sess))
-     (define log-path
-       (build-path (runtime-config-session-dir (rt-cfg rt))
-                   (session:session-id sess)
-                   "session.jsonl"))
+     ;; The live session already owns a contained directory; still revalidate
+     ;; the artifact immediately before persistent compaction.
+     (define session-dir (session:agent-session-session-dir sess))
+     (define log-path (resolve-session-path (path-only session-dir) sid "session.jsonl"))
      (define compaction-res
        (if persist?
            (compact-and-persist! history log-path)

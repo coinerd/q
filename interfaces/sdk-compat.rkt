@@ -31,7 +31,8 @@
          (prefix-in store: "../runtime/session/session-store.rkt")
          "../util/event/event-bus.rkt"
          ;; Core SDK types
-         "sdk-core.rkt")
+         "sdk-core.rkt"
+         "../runtime/session/session-path.rkt")
 
 ;; Re-export core types for convenience
 ;; C1 v0.97.13: Explicit re-exports instead of struct-out (matches sdk-core.rkt).
@@ -139,6 +140,11 @@
 (define q:session-compact compact-session!)
 (define q:session-info session-info)
 
+(define (runtime-session-log-path rt sess)
+  (resolve-session-path (runtime-config-session-dir (runtime-rt-config rt))
+                        (session:session-id sess)
+                        "session.jsonl"))
+
 ;; ============================================================
 ;; Tree API (#1319)
 ;; ============================================================
@@ -148,7 +154,7 @@
   (cond
     [(not sess) 'no-active-session]
     [else
-     (define log-path (build-path (session:agent-session-session-dir sess) "session.jsonl"))
+     (define log-path (runtime-session-log-path rt sess))
      (define history (session:session-history sess))
      (define target-id
        (or entry-id (and (pair? history) (message-id (last history))) (session:session-id sess)))
@@ -162,7 +168,7 @@
   (cond
     [(not sess) 'no-active-session]
     [else
-     (define log-path (build-path (session:agent-session-session-dir sess) "session.jsonl"))
+     (define log-path (runtime-session-log-path rt sess))
      (define history (session:session-history sess))
      (define from-id
        (if (pair? history)
@@ -185,7 +191,7 @@
   (cond
     [(not sess) 'no-active-session]
     [else
-     (define log-path (build-path (session:agent-session-session-dir sess) "session.jsonl"))
+     (define log-path (runtime-session-log-path rt sess))
      (cond
        [(not (file-exists? log-path))
         (hasheq 'total-entries 0 'branch-count 0 'navigation-count 0 'summary-count 0 'leaf-ids '())]

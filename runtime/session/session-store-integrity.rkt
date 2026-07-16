@@ -46,8 +46,17 @@
         session-log-path))
   (string->path (string-append base ".pending")))
 
-(define (write-pending-marker! session-log-path entry-count)
+(define (require-safe-pending-marker who session-log-path)
   (define marker-path (pending-marker-path session-log-path))
+  (when (link-exists? marker-path)
+    (raise-arguments-error who
+                           "pending marker must not be a symbolic link"
+                           "marker-path"
+                           marker-path))
+  marker-path)
+
+(define (write-pending-marker! session-log-path entry-count)
+  (define marker-path (require-safe-pending-marker 'write-pending-marker! session-log-path))
   (ensure-parent-dirs! marker-path)
   (call-with-output-file marker-path
                          (lambda (out) (write entry-count out))
@@ -55,7 +64,7 @@
                          #:exists 'truncate))
 
 (define (remove-pending-marker! session-log-path)
-  (define marker-path (pending-marker-path session-log-path))
+  (define marker-path (require-safe-pending-marker 'remove-pending-marker! session-log-path))
   (when (file-exists? marker-path)
     (delete-file marker-path)))
 

@@ -17,7 +17,8 @@
          racket/match
          racket/contract
          (only-in "../../llm/provider-errors.rkt" raise-provider-error)
-         "../../util/hash-helpers.rkt")
+         "../../util/hash-helpers.rkt"
+         "../../util/credential-redaction.rkt")
 
 ;; ── URL Validation ──────────────────────────────────────────
 
@@ -70,21 +71,27 @@
 ;; ============================================================
 
 ;; A model entry — describes an available model
-(struct model-entry
-        (name ; string — model name (e.g. "gpt-4o")
-         provider-name ; string — provider name (e.g. "openai")
-         provider-config ; hash — full provider config section
-         )
-  #:transparent)
+(struct model-entry (name provider-name provider-config)
+  #:transparent
+  #:property prop:custom-write
+  (lambda (entry out _mode)
+    (fprintf out
+             "#<model-entry name=~s provider=~s provider-config=~s>"
+             (model-entry-name entry)
+             (model-entry-provider-name entry)
+             (redact-credential-data (model-entry-provider-config entry)))))
 
 ;; A resolution result — everything needed to create a provider instance
-(struct model-resolution
-        (model-name ; string — the resolved model name
-         provider-name ; string — the provider to use
-         base-url ; string — API base URL
-         provider-config ; hash — full provider config (for auth-store etc.)
-         )
-  #:transparent)
+(struct model-resolution (model-name provider-name base-url provider-config)
+  #:transparent
+  #:property prop:custom-write
+  (lambda (resolution out _mode)
+    (fprintf out
+             "#<model-resolution model=~s provider=~s base-url=~s provider-config=~s>"
+             (model-resolution-model-name resolution)
+             (model-resolution-provider-name resolution)
+             (model-resolution-base-url resolution)
+             (redact-credential-data (model-resolution-provider-config resolution)))))
 
 ;; Internal registry struct (not exported)
 (struct model-registry

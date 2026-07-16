@@ -18,7 +18,8 @@
          racket/path
          "session-store.rkt"
          (only-in "../../util/message/message.rkt" message?)
-         (only-in "../../util/error/errors.rkt" raise-session-error))
+         (only-in "../../util/error/errors.rkt" raise-session-error)
+         "session-path.rkt")
 
 (provide (contract-out [session-manager? (-> any/c boolean?)]
                        [persistent-session-manager? (-> any/c boolean?)]
@@ -51,21 +52,34 @@
 
 (define (session-manager? x)
   (or (persistent-session-manager? x) (in-memory-session-manager? x)))
+(define (validate-manager-session-id! who session-id)
+  (unless (valid-session-id? session-id)
+    (raise-arguments-error who
+                           "expected a nonempty one-component session identifier"
+                           "session-id"
+                           session-id)))
 
 (define (sm-append! mgr session-id msg)
+  (validate-manager-session-id! 'sm-append! session-id)
   (cond
     [(persistent-session-manager? mgr)
-     (define dir (build-path (persistent-session-manager-base-dir mgr) session-id))
+     (define base (persistent-session-manager-base-dir mgr))
+     (define dir (resolve-session-path base session-id))
+     (define log-path (resolve-session-path base session-id "session.jsonl"))
+     ;; append-entry! uses this write-ahead sidecar internally; validate it at
+     ;; the same containment boundary before any directory or file effect.
+     (resolve-session-path base session-id "session.jsonl.pending")
      (make-directory* dir)
-     (append-entry! (build-path dir "session.jsonl") msg)]
+     (append-entry! log-path msg)]
     [(in-memory-session-manager? mgr) (in-memory-append! mgr session-id msg)]
     [else (raise-session-error (format "not a session manager: ~a" mgr) #f)]))
 
 (define (sm-load mgr session-id)
+  (validate-manager-session-id! 'sm-load session-id)
   (cond
     [(persistent-session-manager? mgr)
      (define log-path
-       (build-path (persistent-session-manager-base-dir mgr) session-id "session.jsonl"))
+       (resolve-session-path (persistent-session-manager-base-dir mgr) session-id "session.jsonl"))
      (if (file-exists? log-path)
          (load-session-log log-path)
          '())]
@@ -78,20 +92,24 @@
      (define base (persistent-session-manager-base-dir mgr))
      (if (directory-exists? base)
          (for/list ([d (in-list (directory-list base))]
-                    #:when (directory-exists? (build-path base d)))
-           (path->string d))
+                    #:do [(define sid (path->string d))]
+                    #:when (and (valid-session-id? sid)
+                                (with-handlers ([exn:fail? (lambda (_) #f)])
+                                  (directory-exists? (resolve-session-path base sid)))))
+           sid)
          '())]
     [(in-memory-session-manager? mgr) (in-memory-list-sessions mgr)]
     [else (raise-session-error (format "not a session manager: ~a" mgr) #f)]))
 
 (define (sm-fork! mgr src-id dest-id [entry-id #f])
+  (validate-manager-session-id! 'sm-fork! src-id)
+  (validate-manager-session-id! 'sm-fork! dest-id)
   (cond
     [(persistent-session-manager? mgr)
      (define base (persistent-session-manager-base-dir mgr))
-     (define src-path (build-path base src-id "session.jsonl"))
-     (define dest-dir (build-path base dest-id))
-     (make-directory* dest-dir)
-     (define dest-path (build-path dest-dir "session.jsonl"))
+     (define src-path (resolve-session-path base src-id "session.jsonl"))
+     (define dest-path (resolve-session-path base dest-id "session.jsonl"))
+     ;; fork-session! loads and validates the source before creating the destination.
      (fork-session! src-path entry-id dest-path)]
     [(in-memory-session-manager? mgr) (in-memory-fork! mgr src-id dest-id entry-id)]
     [else (raise-session-error (format "not a session manager: ~a" mgr) #f)]))

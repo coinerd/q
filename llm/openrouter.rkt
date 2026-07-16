@@ -59,13 +59,17 @@
                 'capabilities
                 (hasheq 'chat #t 'streaming #t 'tools #t))))
 
-(struct openrouter-config
-        (api-key ; string
-         base-url ; string
-         model ; string
-         max-tokens ; (or/c exact-positive-integer? #f)
-         temperature) ; (or/c real? #f)
-  #:transparent)
+(struct openrouter-config (api-key base-url model max-tokens temperature)
+  #:transparent
+  #:property prop:custom-write
+  (lambda (cfg out _mode)
+    (fprintf
+     out
+     "#<openrouter-config api-key=<REDACTED> base-url=~s model=~s max-tokens=~s temperature=~s>"
+     (openrouter-config-base-url cfg)
+     (openrouter-config-model cfg)
+     (openrouter-config-max-tokens cfg)
+     (openrouter-config-temperature cfg))))
 
 (define (hash->openrouter-config h)
   (openrouter-config (hash-ref h 'api-key "")

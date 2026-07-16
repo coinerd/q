@@ -220,7 +220,9 @@
    "## Evidence\n\n"
    (apply string-append
           (for/list ([item (in-list evidence)])
-            (format "- **~a:** ~a~n" (car item) (redact-explore-text (format "~a" (cdr item))))))
+            (format "- **~a:** ~a~n"
+                    (car item)
+                    (redact-explore-text (format "~a" (redact-credential-data (cdr item)))))))
    "\n## Safety\n\n"
    "```text\n"
    "real-provider mode is explicit opt-in only\n"
@@ -245,23 +247,26 @@
                          #:exists 'replace)
   (struct-copy explore-result result [report-path (path->string report-path)]))
 
+(define (safe-output-field value)
+  (redact-explore-text (format "~a" value)))
+
 (define (result->hash result)
-  (hasheq 'tag
-          (explore-result-tag result)
-          'title
-          (explore-result-title result)
-          'mode
-          (mode->string (explore-result-mode result))
-          'status
-          (format "~a" (explore-result-status result))
-          'classification
-          (format "~a" (explore-result-classification result))
-          'report_path
-          (or (explore-result-report-path result) "")
-          'started_at
-          (explore-result-started-at result)
-          'completed_at
-          (explore-result-completed-at result)))
+  (redact-credential-data (hasheq 'tag
+                                  (explore-result-tag result)
+                                  'title
+                                  (explore-result-title result)
+                                  'mode
+                                  (mode->string (explore-result-mode result))
+                                  'status
+                                  (format "~a" (explore-result-status result))
+                                  'classification
+                                  (format "~a" (explore-result-classification result))
+                                  'report_path
+                                  (or (explore-result-report-path result) "")
+                                  'started_at
+                                  (explore-result-started-at result)
+                                  'completed_at
+                                  (explore-result-completed-at result))))
 
 (define (write-summary-files! root results)
   (make-directory* root)
@@ -273,12 +278,12 @@
                            (for ([r (in-list results)])
                              (fprintf out
                                       "~a\t~a\t~a\t~a\t~a\t~a~n"
-                                      (explore-result-tag r)
-                                      (explore-result-title r)
-                                      (mode->string (explore-result-mode r))
-                                      (explore-result-status r)
-                                      (explore-result-classification r)
-                                      (or (explore-result-report-path r) ""))))
+                                      (safe-output-field (explore-result-tag r))
+                                      (safe-output-field (explore-result-title r))
+                                      (safe-output-field (mode->string (explore-result-mode r)))
+                                      (safe-output-field (explore-result-status r))
+                                      (safe-output-field (explore-result-classification r))
+                                      (safe-output-field (or (explore-result-report-path r) "")))))
                          #:exists 'replace)
   (call-with-output-file json-path
                          (lambda (out) (write-json (map result->hash results) out))
@@ -295,11 +300,11 @@
                            (for ([r (in-list results)])
                              (fprintf out
                                       "- `~a` mode=`~a` status=`~a` classification=`~a` report=`~a`~n"
-                                      (explore-result-tag r)
-                                      (mode->string (explore-result-mode r))
-                                      (explore-result-status r)
-                                      (explore-result-classification r)
-                                      (or (explore-result-report-path r) ""))))
+                                      (safe-output-field (explore-result-tag r))
+                                      (safe-output-field (mode->string (explore-result-mode r)))
+                                      (safe-output-field (explore-result-status r))
+                                      (safe-output-field (explore-result-classification r))
+                                      (safe-output-field (or (explore-result-report-path r) "")))))
                          #:exists 'append))
 
 (define (default-real-executor scenario root)

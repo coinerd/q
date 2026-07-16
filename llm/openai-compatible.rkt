@@ -35,13 +35,16 @@
 ;; OpenAI Config struct (T2-4)
 ;; ============================================================
 
-(struct openai-config
-        (api-key ; string — API key
-         base-url ; string — API base URL
-         model ; string — default model name
-         max-tokens ; (or/c exact-positive-integer? #f) — max tokens
-         temperature) ; (or/c (between/c 0 2) #f) — temperature
-  #:transparent)
+(struct openai-config (api-key base-url model max-tokens temperature)
+  #:transparent
+  #:property prop:custom-write
+  (lambda (cfg out _mode)
+    (fprintf out
+             "#<openai-config api-key=<REDACTED> base-url=~s model=~s max-tokens=~s temperature=~s>"
+             (openai-config-base-url cfg)
+             (openai-config-model cfg)
+             (openai-config-max-tokens cfg)
+             (openai-config-temperature cfg))))
 
 (define (hash->openai-config h)
   (openai-config (hash-ref h 'api-key "")
