@@ -24,7 +24,8 @@
                   set-lifecycle-state-prompt-running?!
                   set-lifecycle-state-task-fsm-state!
                   set-lifecycle-state-task-conclusions!
-                  set-lifecycle-state-recent-tool-calls!))
+                  set-lifecycle-state-recent-tool-calls!)
+         racket/file)
 ;; STABILITY: internal
 ;;
 ;; Extracted from agent-session.rkt (ARCH-05).
@@ -177,11 +178,28 @@
 ;; Shared helper: session log path
 ;; ============================================================
 
+(define (safe-session-artifact-path dir artifact)
+  (when (link-exists? dir)
+    (raise-arguments-error 'safe-session-artifact-path
+                           "session directory must not be a symbolic link"
+                           "session-dir"
+                           dir))
+  (define path (build-path dir artifact))
+  (when (link-exists? path)
+    (raise-arguments-error 'safe-session-artifact-path
+                           "session artifact must not be a symbolic link"
+                           "artifact-path"
+                           path))
+  path)
+
 (define (session-log-path dir)
-  (build-path dir "session.jsonl"))
+  (define log-path (safe-session-artifact-path dir "session.jsonl"))
+  ;; The append protocol derives this write-ahead sidecar from log-path.
+  (safe-session-artifact-path dir "session.jsonl.pending")
+  log-path)
 
 (define (session-index-path dir)
-  (build-path dir "session.index"))
+  (safe-session-artifact-path dir "session.index"))
 
 ;; session-log-path-for : agent-session? -> path?
 ;; Convenience: returns session.jsonl path for a session struct.

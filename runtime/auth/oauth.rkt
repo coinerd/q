@@ -69,22 +69,30 @@
 ;; ═══════════════════════════════════════════════════════════════════
 
 ;; OAuth configuration for a provider
-(struct oauth-config
-        (authorize-url ; string — e.g. "https://accounts.google.com/o/oauth2/v2/auth"
-         token-url ; string — e.g. "https://oauth2.googleapis.com/token"
-         client-id ; string
-         client-secret ; string
-         scopes ; (listof string) — e.g. '("openid" "email")
-         redirect-port) ; exact-positive-integer? — localhost callback port, e.g. 8089
-  #:transparent)
+(struct oauth-config (authorize-url token-url client-id client-secret scopes redirect-port)
+  #:transparent
+  #:property prop:custom-write
+  (lambda (cfg out _mode)
+    (fprintf
+     out
+     "#<oauth-config authorize-url=~s token-url=~s client-id=~s client-secret=<REDACTED> scopes=~s redirect-port=~a>"
+     (oauth-config-authorize-url cfg)
+     (oauth-config-token-url cfg)
+     (oauth-config-client-id cfg)
+     (oauth-config-scopes cfg)
+     (oauth-config-redirect-port cfg))))
 
 ;; Stored OAuth token
-(struct oauth-token
-        (access-token refresh-token
-                      expires-at ; epoch seconds
-                      token-type ; usually "Bearer"
-                      scope)
-  #:transparent)
+(struct oauth-token (access-token refresh-token expires-at token-type scope)
+  #:transparent
+  #:property prop:custom-write
+  (lambda (tok out _mode)
+    (fprintf
+     out
+     "#<oauth-token access-token=<REDACTED> refresh-token=<REDACTED> expires-at=~a token-type=~s scope=~s>"
+     (oauth-token-expires-at tok)
+     (oauth-token-token-type tok)
+     (oauth-token-scope tok))))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Feature availability

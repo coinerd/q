@@ -16,7 +16,8 @@
          racket/string
          racket/runtime-path
          "../../llm/provider.rkt"
-         "../../llm/model.rkt")
+         "../../llm/model.rkt"
+         "../../util/credential-redaction.rkt")
 
 ;; Registry
 (provide (contract-out
@@ -60,24 +61,30 @@
 ;; ============================================================
 
 ;; Info about a registered provider
-(struct provider-info
-        (name ; string
-         provider ; provider? instance
-         config ; hash — merged config
-         registered-at ; exact-positive-integer — timestamp
-         )
-  #:transparent)
+(struct provider-info (name provider config registered-at)
+  #:transparent
+  #:property prop:custom-write
+  (lambda (info out _mode)
+    (fprintf out
+             "#<provider-info name=~s config=~s registered-at=~a>"
+             (provider-info-name info)
+             (redact-credential-data (provider-info-config info))
+             (provider-info-registered-at info))))
 
 ;; A dynamically registered model
-(struct registered-model
-        (id ; string — unique model id (e.g. "gpt-4o")
-         name ; string — display name
-         provider-name ; string — which provider owns this model
-         context-window ; positive-integer or #f
-         max-tokens ; positive-integer or #f
-         capabilities ; hash — model capabilities
-         )
-  #:transparent)
+(struct registered-model (id name provider-name context-window max-tokens capabilities)
+  #:transparent
+  #:property prop:custom-write
+  (lambda (model out _mode)
+    (fprintf
+     out
+     "#<registered-model id=~s name=~s provider=~s context-window=~s max-tokens=~s capabilities=~s>"
+     (registered-model-id model)
+     (registered-model-name model)
+     (registered-model-provider-name model)
+     (registered-model-context-window model)
+     (registered-model-max-tokens model)
+     (redact-credential-data (registered-model-capabilities model)))))
 
 ;; Internal registry struct
 (struct provider-registry
@@ -243,7 +250,7 @@
   (hasheq 'name
           (provider-info-name pinfo)
           'config
-          (provider-info-config pinfo)
+          (redact-credential-data (provider-info-config pinfo))
           'registered-at
           (provider-info-registered-at pinfo)
           'provider-valid?
@@ -267,7 +274,7 @@
                         'max-tokens
                         (registered-model-max-tokens m)
                         'capabilities
-                        (registered-model-capabilities m))))
+                        (redact-credential-data (registered-model-capabilities m)))))
       #f))
 
 ;; ============================================================

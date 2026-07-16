@@ -13,7 +13,8 @@
          "../tree-view.rkt"
          (only-in "../../util/message/message.rkt" message-id message-parent-id message-role)
          "../../runtime/session-index.rkt"
-         "context.rkt")
+         "context.rkt"
+         "../../runtime/session/session-path.rkt")
 
 (provide handle-branches-command
          handle-leaves-command
@@ -56,7 +57,7 @@
         (define state (unbox (cmd-ctx-state-box cctx)))
         (define sid (ui-state-session-id state))
         (if sid
-            (let ([index-path (build-path dir sid "session.index")]) (load-index index-path))
+            (load-index (resolve-session-path dir sid "session.index"))
             #f))
       #f))
 

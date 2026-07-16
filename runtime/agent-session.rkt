@@ -102,7 +102,8 @@
          ;; v0.99.18 W4 (F-HS-07): Clear hot-swap state on session teardown
          (only-in "../agent/registry.rkt" set-session-active! set-hot-swap-enabled!)
          ;; v0.99.20 W3 (§3.4): Stop watcher on session teardown
-         (only-in "../agent/registry-watcher.rkt" stop-registry-watcher!))
+         (only-in "../agent/registry-watcher.rkt" stop-registry-watcher!)
+         "session/session-path.rkt")
 (require "session/session-mutation.rkt")
 
 (provide agent-session?
@@ -238,6 +239,14 @@
       (and (> rate 0.0)
            (< (modulo (equal-hash-code sid) 100) (inexact->exact (round (* rate 100)))))))
 
+(define (resolve-agent-session-path who base-dir session-id [artifact #f])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (raise-session-error
+                                (format "~a: unsafe session identifier: ~a" who (exn-message e))
+                                session-id
+                                (hasheq 'session-root base-dir)))])
+    (resolve-session-path base-dir session-id artifact)))
+
 ;; ============================================================
 ;; make-agent-session
 ;; ============================================================
@@ -250,7 +259,7 @@
         (hash->session-config config)))
   (define sid (generate-id))
   (define base-dir (config-session-dir cfg))
-  (define dir (build-path base-dir sid))
+  (define dir (resolve-agent-session-path 'make-agent-session base-dir sid))
 
   ;; M4 W0: Rollout gate — deterministically assign task-state-aware? based on session-id hash
   (define task-state-aware? (session-rollout-enabled? sid))
@@ -321,16 +330,21 @@
         config
         (hash->session-config config)))
   (define base-dir (config-session-dir cfg))
-  (define dir (build-path base-dir session-id))
+  ;; Resolve the complete session and artifact paths before any existence probe,
+  ;; version-header rewrite, index write, hook, or event.
+  (define dir (resolve-agent-session-path 'resume-agent-session base-dir session-id))
+  (define log-path
+    (resolve-agent-session-path 'resume-agent-session base-dir session-id "session.jsonl"))
+  (define idx-path
+    (resolve-agent-session-path 'resume-agent-session base-dir session-id "session.index"))
 
   (unless (directory-exists? dir)
-    (raise-session-error 'resume-agent-session "session directory not found" session-id dir))
+    (raise-session-error (format "resume-agent-session: session directory not found: ~a" dir)
+                         session-id
+                         (hasheq 'path dir)))
 
-  (define log-path (session-log-path dir))
   (when (file-exists? log-path)
     (ensure-session-version-header! log-path))
-
-  (define idx-path (session-index-path dir))
 
   (define idx
     (if (file-exists? log-path)
@@ -403,21 +417,21 @@
 (define (fork-session-internal sess parent-entry-id)
   (define new-id (generate-id))
   (define base-dir (path-only (simple-form-path (agent-session-session-dir sess))))
-  (define new-dir (build-path base-dir new-id))
-  (make-directory* new-dir)
+  (define current-id (agent-session-session-id sess))
+  (define log-path (resolve-agent-session-path 'fork-session base-dir current-id "session.jsonl"))
+  (define new-dir (resolve-agent-session-path 'fork-session base-dir new-id))
+  (define new-log-path (resolve-agent-session-path 'fork-session base-dir new-id "session.jsonl"))
+  (define new-idx-path (resolve-agent-session-path 'fork-session base-dir new-id "session.index"))
 
-  (define log-path (session-log-path-for sess))
+  ;; Load and slice the complete source before creating any destination artifact.
   (define entries
     (if (file-exists? log-path)
         (load-session-log log-path)
         '()))
-
   (define entries-to-copy (slice-entries-up-to entries parent-entry-id))
 
-  (define new-log-path (session-log-path new-dir))
+  (make-directory* new-dir)
   (append-entries! new-log-path entries-to-copy)
-
-  (define new-idx-path (session-index-path new-dir))
   (define new-idx
     (if (null? entries-to-copy)
         #f
@@ -438,21 +452,16 @@
                          #:thinking-level (agent-session-thinking-level sess)
                          #:lifecycle (lifecycle-state #f #f #t #f #f #f #f '() '())))
 
-  (emit-session-event! (agent-session-event-bus sess)
-                       (agent-session-session-id sess)
-                       "session.forked"
-                       (hasheq 'newSessionId
-                               new-id
-                               'parentSessionId
-                               (agent-session-session-id sess)
-                               'forkPoint
-                               (or parent-entry-id "latest")))
+  (emit-session-event!
+   (agent-session-event-bus sess)
+   current-id
+   "session.forked"
+   (hasheq 'newSessionId new-id 'parentSessionId current-id 'forkPoint (or parent-entry-id "latest")))
 
   (when (agent-session-extension-registry sess)
-    (maybe-dispatch-hooks
-     (agent-session-extension-registry sess)
-     'session-start
-     (hasheq 'session-id new-id 'reason 'fork 'parent-session-id (agent-session-session-id sess))))
+    (maybe-dispatch-hooks (agent-session-extension-registry sess)
+                          'session-start
+                          (hasheq 'session-id new-id 'reason 'fork 'parent-session-id current-id)))
 
   new-sess)
 

@@ -7,7 +7,8 @@
          json
          racket/port
          (only-in "../util/event/event.rkt" event->jsexpr event-ev)
-         "../util/event/event-bus.rkt")
+         "../util/event/event-bus.rkt"
+         "../util/credential-redaction.rkt")
 (require (only-in "../util/error/error-helpers.rkt" with-safe-fallback))
 
 (define-logger rpc-mode)
@@ -166,26 +167,28 @@
 ;; ============================================================
 
 (define (rpc-response->json resp)
-  (let ([h (hasheq 'id
-                   (rpc-response-id resp)
-                   'result
-                   (rpc-response-result resp)
-                   'error
-                   (rpc-response-error resp))])
-    (with-output-to-string (λ () (write-json h)))))
+  (define response-data
+    (hasheq 'id
+            (rpc-response-id resp)
+            'result
+            (rpc-response-result resp)
+            'error
+            (rpc-response-error resp)))
+  (with-output-to-string (lambda () (write-json (redact-credential-jsexpr response-data)))))
 
 ;; ============================================================
 ;; rpc-notification->json : rpc-notification? -> string?
 ;; ============================================================
 
 (define (rpc-notification->json notif)
-  (let ([h (hasheq 'jsonrpc
-                   "2.0"
-                   'method
-                   (symbol->string (rpc-notification-method notif))
-                   'params
-                   (rpc-notification-params notif))])
-    (with-output-to-string (λ () (write-json h)))))
+  (define notification-data
+    (hasheq 'jsonrpc
+            "2.0"
+            'method
+            (symbol->string (rpc-notification-method notif))
+            'params
+            (rpc-notification-params notif)))
+  (with-output-to-string (lambda () (write-json (redact-credential-jsexpr notification-data)))))
 
 ;; ============================================================
 ;; Rate Limiter — SEC-08: Token-bucket per-method rate limiting

@@ -25,7 +25,8 @@
                        [json-file-trace-sink% trace-sink-class/c]
                        [port-trace-sink% trace-sink-class/c]
                        [null-trace-sink% trace-sink-class/c]
-                       [async-trace-sink% trace-sink-class/c]))
+                       [async-trace-sink% trace-sink-class/c])
+         json-port-trace-sink%)
 
 ;; Interface: trace-sink<%>
 (define trace-sink<%>
@@ -90,6 +91,21 @@
 
     (define/public (trace-write! entry)
       (write entry port)
+      (newline port))
+
+    (define/public (trace-flush!) (flush-output port))
+
+    (define/public (trace-close!) (void))))
+
+;; JSON sink over an already-open, validated descriptor. Ownership stays with
+;; the trace logger, preventing an async worker from reopening a replaced path.
+(define json-port-trace-sink%
+  (class* object% (trace-sink<%>)
+    (init-field port)
+    (super-new)
+
+    (define/public (trace-write! entry)
+      (write-json entry port)
       (newline port))
 
     (define/public (trace-flush!) (flush-output port))

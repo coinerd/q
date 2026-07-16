@@ -6,7 +6,8 @@
 ;;   - run-json: JSON mode (stdin/stdout intents)
 ;;   - run-rpc: RPC mode (structured request/response over stdio)
 
-(require racket/dict)
+(require racket/dict
+         "../runtime/session/session-path.rkt")
 
 (require json
          racket/hash
@@ -142,9 +143,12 @@
                              (define session-dir (dict-ref rt-config 'session-dir))
                              (define session-ids
                                (if (directory-exists? session-dir)
-                                   (for/list ([e (in-list (directory-list session-dir))]
-                                              #:when (directory-exists? (build-path session-dir e)))
-                                     (path->string e))
+                                   (for/list ([entry (in-list (directory-list session-dir))]
+                                              #:do [(define sid (path->string entry))]
+                                              #:when (with-handlers ([exn:fail? (lambda (_) #f)])
+                                                       (directory-exists?
+                                                        (resolve-session-path session-dir sid))))
+                                     sid)
                                    '()))
                              (hasheq 'sessions session-ids)))
                      (cons 'session.resume

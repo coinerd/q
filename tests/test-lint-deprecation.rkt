@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @isolation process
 
 ;; BOUNDARY: integration
 
@@ -12,28 +13,24 @@
          racket/string
          racket/file
          racket/path
-         racket/port)
+         racket/port
+         racket/runtime-path)
 
-;; Resolve q-dir
-(define q-dir
-  (let* ([test-dir (current-directory)]
-         [parent (simplify-path (build-path test-dir ".."))])
-    (if (directory-exists? (build-path parent "runtime"))
-        parent
-        (simplify-path (build-path parent "q")))))
-
-(define lint-script (build-path q-dir "scripts" "lint-deprecation-deadlines.rkt"))
+;; Resolve paths relative to this test module, never the invoking process cwd.
+(define-runtime-path lint-script "../scripts/lint-deprecation-deadlines.rkt")
+(define q-dir (simplify-path (build-path (path-only lint-script) 'up)))
 
 (define (run-lint . args)
   (define-values (sp out in err)
     (parameterize ([current-directory q-dir])
       (apply subprocess #f #f #f (find-executable-path "racket") (path->string lint-script) args)))
   (define output (port->string out))
+  (define error-output (port->string err))
   (close-input-port out)
   (close-input-port err)
   (close-output-port in)
   (subprocess-wait sp)
-  (values output (subprocess-status sp)))
+  (values (string-append output error-output) (subprocess-status sp)))
 
 (define deprecation-tests
   (test-suite "Deprecation Linter Tests"
@@ -44,7 +41,8 @@
     (test-case "lint script runs without error"
       (define-values (output exit-code) (run-lint))
       ;; Should either find expired TODOs or print "No expired"
-      (check-true (or (string-contains? output "expired") (string-contains? output "No expired"))))
+      (check-true (or (string-contains? output "expired") (string-contains? output "No expired"))
+                  (format "unexpected linter output: ~s (exit ~a)" output exit-code)))
 
     (test-case "lint --ci exits 0 when no expired TODOs"
       (define-values (output exit-code) (run-lint "--ci"))

@@ -9,7 +9,9 @@
 ;; where session-dir defaults to ~/.q/sessions/.
 
 (require racket/contract
-         "../util/error/error-helpers.rkt")
+         "../util/error/error-helpers.rkt"
+         "../runtime/session/session-path.rkt"
+         "../util/credential-redaction.rkt")
 (require racket/match
          racket/string
          racket/format
@@ -59,6 +61,10 @@
 (define (fs-build-path . args)
   (apply (fs-op 'build-path) args))
 
+(define (safe-session-artifact session-dir session-id artifact)
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (resolve-session-path session-dir session-id artifact)))
+
 ;; Listing
 (provide current-sessions-fs-ops
          default-sessions-fs-ops
@@ -88,15 +94,22 @@
 (define (scan-session-dirs session-dir)
   (if (not (directory-exists? session-dir))
       '()
-      (let* ([entries (fs-directory-list session-dir #:build? #t)]
-             [session-paths (filter (lambda (p)
-                                      (and (directory-exists? p)
-                                           (fs-file-exists? (fs-build-path p "session.jsonl"))))
-                                    entries)])
-        ;; Sort by modification time of session.jsonl, newest first
+      (let ([session-paths (filter-map (lambda (entry)
+                                         (define sid (path->string (file-name-from-path entry)))
+                                         (with-handlers ([exn:fail? (lambda (_) #f)])
+                                           (define resolved (resolve-session-path session-dir sid))
+                                           (define log-path
+                                             (resolve-session-path session-dir sid "session.jsonl"))
+                                           (and (directory-exists? resolved)
+                                                (fs-file-exists? log-path)
+                                                (list sid resolved log-path))))
+                                       (fs-directory-list session-dir #:build? #t))])
+        ;; Sort by modification time of session.jsonl, newest first.
         (define with-time
-          (for/list ([p (in-list session-paths)])
-            (define jsonl (fs-build-path p "session.jsonl"))
+          (for/list ([entry (in-list session-paths)])
+            (define sid (car entry))
+            (define session-path (cadr entry))
+            (define jsonl (caddr entry))
             (define mtime
               (with-handlers ([exn:fail? (lambda (e)
                                            (log-warning "sessions: failed to get mtime for ~a: ~a"
@@ -104,8 +117,8 @@
                                                         (exn-message e))
                                            0)])
                 (file-or-directory-modify-seconds jsonl)))
-            (list (path->string (file-name-from-path p)) p mtime)))
-        (map (lambda (t) (list (car t) (cadr t))) (sort with-time > #:key caddr)))))
+            (list sid session-path mtime)))
+        (map (lambda (entry) (list (car entry) (cadr entry))) (sort with-time > #:key caddr)))))
 
 ;; Read metadata from a session.jsonl file.
 ;; Returns a hash with keys:
@@ -220,39 +233,36 @@
 ;; Get detailed info for a specific session.
 ;; Returns a hash with session metadata, or #f if not found.
 (define (sessions-info session-dir session-id)
-  (define session-path (fs-build-path session-dir session-id))
-  (cond
-    [(not (directory-exists? session-path)) #f]
-    [else
-     (define meta (read-session-metadata session-id session-path))
-     ;; Count tool calls from messages
-     (define jsonl-path (fs-build-path session-path "session.jsonl"))
-     (define entries
-       (with-handlers ([exn:fail?
-                        (lambda (e)
-                          (log-warning "sessions: failed to read ~a: ~a" jsonl-path (exn-message e))
-                          '())])
-         (jsonl-read-all-valid jsonl-path)))
-     (define tool-call-count
-       (for/sum ([e (in-list entries)])
-                (define content (hash-ref e 'content '()))
-                (if (list? content)
-                    (for/sum ([part (in-list content)] #:when (equal? (hash-ref part 'type #f)
-                                                                      "tool-call"))
-                             1)
-                    0)))
-     ;; Check for branch info
-     (define branch-count
-       (for/sum ([e (in-list entries)])
-                (define parent-id (hash-ref e 'parentId #f))
-                (if parent-id 1 0)))
-     (hash-set* meta
-                'tool-call-count
-                tool-call-count
-                'branch-count
-                branch-count
-                'path
-                session-path)]))
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (define session-path (resolve-session-path session-dir session-id))
+    (define jsonl-path (resolve-session-path session-dir session-id "session.jsonl"))
+    (cond
+      [(not (directory-exists? session-path)) #f]
+      [else
+       (define meta (read-session-metadata session-id session-path))
+       ;; Count tool calls from messages.
+       (define entries
+         (with-handlers ([exn:fail?
+                          (lambda (e)
+                            (log-warning "sessions: failed to read ~a: ~a" jsonl-path (exn-message e))
+                            '())])
+           (jsonl-read-all-valid jsonl-path)))
+       (define tool-call-count
+         (for/sum ([e (in-list entries)])
+                  (define content (hash-ref e 'content '()))
+                  (if (list? content)
+                      (for/sum ([part (in-list content)] #:when (equal? (hash-ref part 'type #f)
+                                                                        "tool-call"))
+                               1)
+                      0)))
+       (define branch-count (for/sum ([e (in-list entries)]) (if (hash-ref e 'parentId #f) 1 0)))
+       (hash-set* meta
+                  'tool-call-count
+                  tool-call-count
+                  'branch-count
+                  branch-count
+                  'path
+                  session-path)])))
 
 ;; Format session info to a string.
 (define (sessions-info->string info)
@@ -297,21 +307,29 @@
                          #:confirm? [confirm? #f]
                          #:in [in (current-input-port)]
                          #:out [out (current-output-port)])
-  (define session-path (fs-build-path session-dir session-id))
-  (cond
-    [(not (directory-exists? session-path)) 'not-found]
-    [confirm?
-     (display (format "Delete session ~a? [y/N] " session-id) out)
-     (flush-output out)
-     (define answer (string-trim (or (read-line in) "")))
-     (if (or (string=? answer "y") (string=? answer "Y"))
-         (begin
-           (fs-delete-directory/files session-path)
-           'ok)
-         'cancelled)]
-    [else
-     (fs-delete-directory/files session-path)
-     'ok]))
+  (with-handlers ([exn:fail? (lambda (_) 'not-found)])
+    (define session-path (resolve-session-path session-dir session-id))
+    (cond
+      [(not (directory-exists? session-path)) 'not-found]
+      [confirm?
+       (display (format "Delete session ~a? [y/N] " session-id) out)
+       (flush-output out)
+       (define answer (string-trim (or (read-line in) "")))
+       (if (or (string=? answer "y") (string=? answer "Y"))
+           (let ([revalidated (resolve-session-path session-dir session-id)])
+             (if (and (equal? revalidated session-path) (directory-exists? revalidated))
+                 (begin
+                   (fs-delete-directory/files revalidated)
+                   'ok)
+                 'not-found))
+           'cancelled)]
+      [else
+       (define revalidated (resolve-session-path session-dir session-id))
+       (if (and (equal? revalidated session-path) (directory-exists? revalidated))
+           (begin
+             (fs-delete-directory/files revalidated)
+             'ok)
+           'not-found)])))
 
 ;; ============================================================
 ;; Formatting helpers
@@ -345,7 +363,7 @@
 (define (read-trace-entries path)
   (filter-map (lambda (line)
                 (if (and (string? line) (> (string-length line) 0))
-                    (with-safe-fallback #f (string->jsexpr line))
+                    (with-safe-fallback #f (redact-credential-data (string->jsexpr line)))
                     #f))
               (file->lines path)))
 
@@ -475,12 +493,12 @@
      (define json? (member "--json" args))
      (define summary? (member "--summary" args))
      (if sid
-         (let ([trace-path (fs-build-path session-dir sid "trace.jsonl")])
+         (let ([trace-path (safe-session-artifact session-dir sid "trace.jsonl")])
            (cond
-             [(not (fs-file-exists? trace-path))
+             [(or (not trace-path) (not (fs-file-exists? trace-path)))
               (displayln (format "No trace file for session: ~a" sid))]
              [summary? (display-trace-summary trace-path)]
-             [json? (displayln (fs-file->string trace-path))]
+             [json? (displayln (redact-secrets (fs-file->string trace-path)))]
              [else (display-trace-formatted trace-path)]))
          (displayln "Usage: q sessions trace <session-id> [--json] [--summary]"))]
     [else (displayln "Usage: q sessions <list|info|delete|verify|trace> [args]")]))

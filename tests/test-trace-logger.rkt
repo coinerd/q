@@ -280,3 +280,28 @@
   (define outer (hash-ref (hash-ref (car entries) 'data) 'outer))
   (check-equal? (hash-ref outer 'inner) "approved" "nested symbol must serialize as string")
   (delete-directory/files dir))
+
+(test-case "trace payload recursively redacts OAuth and provider credential fields"
+  (define dir (make-temp-dir))
+  (define bus (make-event-bus))
+  (define logger (make-trace-logger bus dir #:enabled? #t))
+  (start-trace-logger! logger)
+  (publish! bus
+            (make-event "test.credentials"
+                        1000
+                        "s1"
+                        #f
+                        (hash 'nested
+                              (list (hash "access_token" "trace-access-raw")
+                                    (hash 'refresh-token "trace-refresh-raw")
+                                    (hash 'clientSecret "trace-client-raw"))
+                              'safe
+                              "kept")))
+  (flush-trace-logger! logger)
+  (stop-trace-logger! logger)
+  (define output (file->string (build-path dir "trace.jsonl")))
+  (for ([raw (in-list '("trace-access-raw" "trace-refresh-raw" "trace-client-raw"))])
+    (check-false (string-contains? output raw)))
+  (check-true (string-contains? output "<REDACTED>"))
+  (check-true (string-contains? output "kept"))
+  (delete-directory/files dir))

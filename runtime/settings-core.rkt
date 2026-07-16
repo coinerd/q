@@ -15,7 +15,8 @@
 ;;   - Query: setting-ref (flat), setting-ref* (nested path)
 ;;   - Provider access: convenience functions for providers section
 
-(require "../util/json/json-helpers.rkt")
+(require "../util/json/json-helpers.rkt"
+         "../util/credential-redaction.rkt")
 (require racket/contract
          racket/match
          racket/file
@@ -60,7 +61,14 @@
          project ; #:INTERNAL — hash from .q/config.json; use `merged' for access
          merged ; PUBLIC — deep-merged settings (project overrides global)
          )
-  #:transparent)
+  #:transparent
+  #:property prop:custom-write
+  (lambda (settings out _mode)
+    (fprintf out
+             "#<q-settings global=~s project=~s merged=~s>"
+             (redact-credential-data (q-settings-global settings))
+             (redact-credential-data (q-settings-project settings))
+             (redact-credential-data (q-settings-merged settings)))))
 
 ;; ============================================================
 ;; Internal helpers

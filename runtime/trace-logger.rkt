@@ -20,7 +20,8 @@
                   event-time
                   event-turn-id
                   event?)
-         "trace-sink.rkt")
+         "trace-sink.rkt"
+         "../util/credential-redaction.rkt")
 
 (provide (contract-out
           [make-trace-logger
@@ -57,6 +58,20 @@
                            #:async? [async? #f])
   (trace-logger bus session-dir enabled? 0 #f #f sink async?))
 
+(define (safe-trace-path session-dir)
+  (when (link-exists? session-dir)
+    (raise-arguments-error 'start-trace-logger!
+                           "session directory must not be a symbolic link"
+                           "session-dir"
+                           session-dir))
+  (define trace-path (build-path session-dir "trace.jsonl"))
+  (when (link-exists? trace-path)
+    (raise-arguments-error 'start-trace-logger!
+                           "trace artifact must not be a symbolic link"
+                           "trace-path"
+                           trace-path))
+  trace-path)
+
 ;; ============================================================
 ;; Start / Stop
 ;; ============================================================
@@ -72,20 +87,17 @@
       (set-trace-logger-out-port! logger #f))
     (define out
       (or out-port
-          (let ([trace-path (build-path session-dir "trace.jsonl")])
+          (let ([trace-path (safe-trace-path session-dir)])
             ;; Ensure parent dir exists
             (make-directory* session-dir)
             ;; Open output port in append mode
             (open-output-file trace-path #:exists 'append))))
     (set-trace-logger-out-port! logger out)
-    ;; v0.70.4: wrap sink in async-trace-sink% when async? is enabled
+    ;; Async publication retains the already-open validated descriptor. The
+    ;; worker must never reopen a pathname that could have been replaced.
     (when (and (trace-logger-async? logger) (not (trace-logger-sink logger)))
-      ;; Close the port we just opened — async sink manages its own file handle
-      (close-output-port out)
-      (set-trace-logger-out-port! logger #f)
-      (define trace-path (build-path (trace-logger-session-dir logger) "trace.jsonl"))
-      (define file-sink (new json-file-trace-sink% [path trace-path]))
-      (set-trace-logger-sink! logger (new async-trace-sink% [inner-sink file-sink])))
+      (define port-sink (new json-port-trace-sink% [port out]))
+      (set-trace-logger-sink! logger (new async-trace-sink% [inner-sink port-sink])))
     ;; Subscribe to all events
     (define sub-id (subscribe! bus (lambda (evt) (handle-event! logger evt))))
     (set-trace-logger-sub-id! logger sub-id)))
@@ -96,6 +108,10 @@
     (when sub-id
       (unsubscribe! (trace-logger-bus logger) sub-id)
       (set-trace-logger-sub-id! logger #f))
+    (define sink (trace-logger-sink logger))
+    (when (and sink (object? sink))
+      (send sink trace-close!)
+      (set-trace-logger-sink! logger #f))
     (define out (trace-logger-out-port logger))
     (when out
       (close-output-port out)
@@ -133,7 +149,7 @@
               'turnId
               (or (event-turn-id evt) 'null)
               'data
-              (sanitize-for-json (event-payload evt))))
+              (redact-credential-data (sanitize-for-json (event-payload evt)))))
     ;; v0.15.1: Wrap write-json in error handler to prevent
     ;; partial writes from corrupting the JSONL file.
     (cond
@@ -177,16 +193,27 @@
 ;; to prevent write-json partial writes that corrupt the JSONL file.
 (define (sanitize-for-json v)
   (cond
-    [(jsexpr? v) v]
     [(event? v)
      (hasheq 'phase (event-ev v) 'seq "nested-event" 'data (sanitize-for-json (event-payload v)))]
+    [(hash? v)
+     (for/hasheq ([(key child) (in-hash v)])
+       ;; write-json requires symbol object keys. Use uninterned symbols for
+       ;; attacker-controlled string/keyword keys rather than growing the
+       ;; process-wide symbol table.
+       (define json-key
+         (cond
+           [(symbol? key) key]
+           [(string? key) (string->uninterned-symbol key)]
+           [(keyword? key) (string->uninterned-symbol (keyword->string key))]
+           [else (string->uninterned-symbol (format "~a" key))]))
+       (values json-key (sanitize-for-json child)))]
+    [(vector? v) (map sanitize-for-json (vector->list v))]
+    [(list? v) (map sanitize-for-json v)]
+    [(pair? v) (list (sanitize-for-json (car v)) (sanitize-for-json (cdr v)))]
+    [(eq? v 'null) 'null]
     [(symbol? v) (symbol->string v)]
     [(keyword? v) (keyword->string v)]
+    [(or (string? v) (number? v) (boolean? v)) v]
     [(struct? v) (format "<~a>" (object-name v))]
     [(procedure? v) "<procedure>"]
-    [(hash? v)
-     (for/hasheq ([(k val) (in-hash v)])
-       (values k (sanitize-for-json val)))]
-    [(list? v) (map sanitize-for-json v)]
-    [(pair? v) (cons (sanitize-for-json (car v)) (sanitize-for-json (cdr v)))]
     [else (format "<unsupported:~a>" v)]))

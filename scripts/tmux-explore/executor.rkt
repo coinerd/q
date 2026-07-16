@@ -282,7 +282,7 @@
 (define (trace-text events)
   (with-output-to-string (lambda ()
                            (for ([event (in-list events)])
-                             (write-json event)
+                             (write-json (redact-credential-data event))
                              (newline)))))
 
 (define (mock-provider-observed? capture events)
