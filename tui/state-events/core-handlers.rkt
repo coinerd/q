@@ -491,11 +491,25 @@
   (define ev (event-ev evt))
   (define payload (event-payload evt))
   (define ts (event-time evt))
+  (define evt-request-id (and (hash? payload) (hash-ref payload 'request-id #f)))
+  (define pending-compact (ui-state-compact-request-id state))
+  ;; F-06: A lifecycle event is correlated if its request-id matches the
+  ;; pending compact request, or if no pending request exists (legacy /
+  ;; automatic compaction paths that predate correlation).  Foreign or
+  ;; stale terminals must not clear the status or report completion.
+  (define correlated?
+    (or (not pending-compact) (and evt-request-id (equal? evt-request-id pending-compact))))
+  (define (clear-compact-pending! s)
+    (set-compact-request-id (set-status-message s #f) #f))
   (define (terminal message)
-    (append-entry (set-status-message state #f) (make-entry 'system message ts (hash))))
+    (if correlated?
+        (append-entry (clear-compact-pending! state) (make-entry 'system message ts (hash)))
+        state))
   (match ev
     [(or "session.compact.started" "compaction.started" "compaction.start")
-     (set-status-message state "Compacting...")]
+     (if correlated?
+         (set-status-message state "Compacting...")
+         state)]
     ["session.compact.completed"
      (define removed (hash-ref-multi payload 'removed-count 'removedCount "?"))
      (define kept (hash-ref-multi payload 'kept-count 'keptCount "?"))
@@ -505,14 +519,20 @@
      (if (eq? (hash-ref payload 'active-owner 'compaction) 'prompt)
          (terminal "[compact: active prompt is blocking compaction]")
          ;; Another compaction still owns the guard; retain its active status.
-         (append-entry state (make-entry 'system "[compact: already running]" ts (hash))))]
+         (if correlated?
+             (append-entry state (make-entry 'system "[compact: already running]" ts (hash)))
+             state))]
     ["session.compact.failed"
      (define prefix
        (if (hash-ref payload 'persisted? #f)
            "compact failed after summary persistence"
            "compact failed"))
      (terminal (format "[~a: ~a]" prefix (hash-ref payload 'error "unknown error")))]
-    [(or "compaction.completed" "compaction.end") (set-status-message state #f)]
+    [(or "compaction.completed" "compaction.end")
+     ;; Legacy automatic-compaction names — clear status only when correlated.
+     (if correlated?
+         (clear-compact-pending! state)
+         state)]
     [_ state]))
 
 (define (handle-auto-retry-lifecycle state evt)

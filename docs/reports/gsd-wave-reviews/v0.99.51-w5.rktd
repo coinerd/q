@@ -1,0 +1,7 @@
+#hash((reviewer . "glm-5.2-independent-reviewer")
+      (verdict . "APPROVED")
+      (reviewed-sha . "9134f0ebe46aa0bd8d8bbe67f0518067d5cfd522")
+      (content-digest . "c07e32d23c84cc207f17802ebd91ab675004611da5aa3a18b09292767df23468")
+      (timestamp . "2026-07-18T00:00:00Z")
+      (scope . "v0.99.51 W5 #8735; F-06 #8744; compact correlation and multi-session isolation")
+      (report . "APPROVED. Independent review verified all seven changed files. (1) session-events.rkt subscriber filters by exact target-session-id with event-session-id fallback; foreign requests are ignored, matching requests proceed. (2) runtime-control.rkt stores pending request-id and includes target-session-id. (3) state-types.rkt adds compact-request-id field with correct accessor/setter/provides. (4) core-handlers.rkt correlates terminal events by request-id; foreign/stale terminals cannot clear status; legacy events work when no pending exists. (5) verifiers.rkt requires full requested->started->completed chain with matching session/request-id. (6) New test file covers foreign-session isolation, matching-session processing, request-id propagation, and single-terminal guarantee. (7) Positive fixture updated with requested event. No issues found."))

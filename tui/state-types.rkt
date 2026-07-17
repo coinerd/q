@@ -172,7 +172,9 @@
          goal-display-info-goal-text
          goal-display-info-turns-used
          goal-display-info-max-turns
-         goal-display-info-status)
+         goal-display-info-status
+         ui-state-compact-request-id
+         set-compact-request-id)
 
 ;; Forward declarations for types referenced in contracts but defined elsewhere
 ;; (These are provided by other modules and re-exported through state.rkt)
@@ -215,7 +217,8 @@
          last-delta-ms
          active-turn-id
          interrupt-request-id
-         active-model-turn-id) ; (or/c real? #f) — BF1b: timestamp of last stream delta (v0.99.4)
+         active-model-turn-id
+         compact-request-id) ; (or/c string? #f) — F-06: pending compact request ID
   #:transparent)
 
 ;; The complete UI state (21 fields, grouped by domain)
@@ -397,7 +400,7 @@
             session-id
             model-name
             mode
-            (streaming-state #f #f #f #f #f #f 'idle #f #f #f #f) ; streaming
+            (streaming-state #f #f #f #f #f #f 'idle #f #f #f #f #f) ; streaming
             #f ; current-branch
             '() ; visible-branches
             (selection-state #f #f)
@@ -454,6 +457,9 @@
 (define (ui-state-interrupt-request-id state)
   (streaming-state-interrupt-request-id (ui-state-streaming state)))
 
+(define (ui-state-compact-request-id state)
+  (streaming-state-compact-request-id (ui-state-streaming state)))
+
 ;; ============================================================
 ;; Streaming update helpers
 ;; ============================================================
@@ -501,6 +507,10 @@
 (define (set-interrupt-request-id state request-id)
   (update-streaming state
                     (lambda (s) (struct-copy streaming-state s [interrupt-request-id request-id]))))
+
+(define (set-compact-request-id state request-id)
+  (update-streaming state
+                    (lambda (s) (struct-copy streaming-state s [compact-request-id request-id]))))
 
 (define (set-status-message state msg)
   (update-streaming state (lambda (s) (struct-copy streaming-state s [status-message msg]))))

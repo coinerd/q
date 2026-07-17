@@ -76,7 +76,10 @@
          (evt "session.resumed" #:data (hash 'session-id session 'previous-session-id "session-0"))
          completion)
    "compact"
-   (list (evt "session.compact.started"
+   (list (evt "session.compact.requested"
+              #:turn #f
+              #:data (hash 'session-id session 'request-id "compact-1" 'target-session-id session))
+         (evt "session.compact.started"
               #:turn #f
               #:data (hash 'session-id session 'request-id "compact-1" 'persisted? #f))
          (evt "session.compact.completed"

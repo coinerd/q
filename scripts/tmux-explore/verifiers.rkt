@@ -207,7 +207,8 @@
          (ordered? events started resumed completion))))
 
 (define (verify-compact events terminal)
-  (for*/or ([started (in-list (events-with-phase events "session.compact.started"))]
+  (for*/or ([requested (in-list (events-with-phase events "session.compact.requested"))]
+            [started (in-list (events-with-phase events "session.compact.started"))]
             [completed (in-list (events-with-phase events "session.compact.completed"))])
     (define removed (event-field completed '(removed-count removedCount) #f))
     (define kept (event-field completed '(kept-count keptCount) #f))
@@ -217,7 +218,12 @@
        (and (exact-nonnegative-integer? removed) (exact-nonnegative-integer? kept) (+ removed kept))))
     (define after (or (event-field completed '(after-count afterCount compacted-count) #f) kept))
     (and (eq? completed terminal)
+         ;; F-06: full requested→started→completed chain with matching
+         ;; session and request-id correlation.
+         (same-value? (event-session requested) (event-session started))
          (same-value? (event-session started) (event-session completed))
+         (same-value? (event-field requested '(request-id requestId))
+                      (event-field started '(request-id requestId)))
          (same-value? (event-field started '(request-id requestId))
                       (event-field completed '(request-id requestId)))
          (exact-nonnegative-integer? removed)
@@ -228,7 +234,7 @@
          (= after (add1 kept))
          (<= after before)
          (truthy? (event-field completed '(persisted? durable?) #f))
-         (ordered? events started completed))))
+         (ordered? events requested started completed))))
 
 (define (verify-interrupt events recovery-completion)
   (for*/or ([request (in-list (events-with-phase events "interrupt.requested"))]

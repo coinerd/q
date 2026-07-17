@@ -300,19 +300,28 @@
 
     ;; Run durable I/O off the synchronous event-bus/render path;
     ;; compact-session-durably! owns all correlated terminal events.
-    (subscribe! bus
-                (lambda (evt)
-                  (define payload (event-payload evt))
-                  (define request-id
-                    (if (hash? payload)
-                        (hash-ref payload 'request-id (generate-id))
-                        (generate-id)))
-                  (thread (lambda ()
-                            (parameterize ([current-prompt-operation-session #f])
-                              (compact-session-durably! sess #:request-id request-id)))))
-                #:filter (lambda (evt)
-                           (member (event-ev evt)
-                                   '("session.compact.requested" "compact.requested"))))
+    ;; F-06: Filter by exact target session so a shared bus cannot fan
+    ;; one session's /compact into unrelated sessions.  The payload
+    ;; target-session-id is authoritative; the event session-id is the
+    ;; fallback for legacy publishers that omit the payload field.
+    (subscribe!
+     bus
+     (lambda (evt)
+       (define payload (event-payload evt))
+       (define request-id
+         (if (hash? payload)
+             (hash-ref payload 'request-id (generate-id))
+             (generate-id)))
+       (define target-session-id
+         (if (hash? payload)
+             (hash-ref payload 'target-session-id (event-session-id evt))
+             (event-session-id evt)))
+       (when (and target-session-id (equal? target-session-id (agent-session-session-id sess)))
+         (thread (lambda ()
+                   (parameterize ([current-prompt-operation-session #f])
+                     (compact-session-durably! sess #:request-id request-id))))))
+     #:filter (lambda (evt)
+                (member (event-ev evt) '("session.compact.requested" "compact.requested"))))
     ;; Subscribe to tool.execution.completed — infer task state
     (subscribe! bus
                 (lambda (evt)
