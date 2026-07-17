@@ -22,7 +22,9 @@
          "../llm/provider.rkt"
          "../llm/model.rkt"
          "../llm/openai-compatible.rkt"
-         "../runtime/settings.rkt")
+         "../runtime/settings.rkt"
+         "../util/cancellation.rkt"
+         (only-in "../agent/blackboard.rkt" current-blackboard))
 
 ;; ============================================================
 ;; Request-capturing provider
@@ -64,7 +66,7 @@
         (make-request-capturing-provider
          (list (make-model-response (list (hasheq 'type "text" 'text "Let me check.")
                                           (hasheq 'type
-                                                  "tool_call"
+                                                  "tool-call"
                                                   'id
                                                   "call_xyz789"
                                                   'name
@@ -73,7 +75,7 @@
                                                   (hasheq 'command "echo CHILD_SENTINEL_42")))
                                     (hasheq 'prompt-tokens 10 'completion-tokens 10 'total-tokens 20)
                                     "test-model"
-                                    'tool_calls)
+                                    'tool-calls)
                (make-model-response
                 (list (hasheq 'type "text" 'text "Task done. CHILD_SENTINEL_42 found."))
                 (hasheq 'prompt-tokens 10 'completion-tokens 10 'total-tokens 20)
@@ -89,23 +91,16 @@
       (define req-two (cadr reqs))
       (define messages (model-request-messages req-two))
 
-      ;; Find tool_result in request two's messages
-      (define all-content
-        (apply append
-               (for/list ([m messages])
-                 (define c (hash-ref m 'content #f))
-                 (if (list? c)
-                     c
-                     '()))))
-      (define tool-results
-        (filter (lambda (c) (and (hash? c) (equal? (hash-ref c 'type #f) "tool_result")))
-                all-content))
-      (check-true (pair? tool-results) "request two must contain at least one tool_result")
-      (when (pair? tool-results)
-        (define tr (car tool-results))
-        (check-equal? (hash-ref tr 'tool_call_id #f)
-                      "call_xyz789"
-                      "tool_result must have matching tool_call_id")))
+      (define assistant
+        (findf (lambda (message) (pair? (hash-ref message 'tool_calls '()))) messages))
+      (define tool-message
+        (findf (lambda (message) (equal? (hash-ref message 'role #f) "tool")) messages))
+      (check-not-false assistant "request two must preserve the assistant tool call")
+      (check-not-false tool-message "request two must contain a canonical tool message")
+      (check-equal? (hash-ref (car (hash-ref assistant 'tool_calls)) 'id) "call_xyz789")
+      (check-equal? (hash-ref tool-message 'tool_call_id #f)
+                    "call_xyz789"
+                    "tool result must have matching message-level tool_call_id"))
 
     ;; ---------------------------------------------------------
     ;; 2. Unique child sentinel reaches spawn result
@@ -189,8 +184,239 @@
                        (> (string-length (hash-ref details 'content-digest "")) 0))
                   "content-digest must be non-empty string"))
 
+    (test-case "completed result reports actual provider turns"
+      (define-values (provider _captured)
+        (make-request-capturing-provider
+         (list (make-model-response (list (hasheq 'type "text" 'text "done"))
+                                    (hasheq)
+                                    "test-model"
+                                    'stop))))
+      (define ctx
+        (make-exec-context #:runtime-settings (q-settings (hash) (hash) (hasheq 'provider provider))))
+      (define result (tool-spawn-subagent (hasheq 'task "finish" 'max-turns 5) ctx))
+      (check-false (tool-result-is-error? result))
+      (check-equal? (hash-ref (tool-result-details result) 'turns-used #f) 1))
+
+    (test-case "max-turn exhaustion is a typed timed-out error"
+      (define looping
+        (make-model-response (list (hasheq 'type
+                                           "tool-call"
+                                           'id
+                                           "loop-call"
+                                           'name
+                                           "read"
+                                           'arguments
+                                           (hasheq 'path "README.md")))
+                             (hasheq)
+                             "test-model"
+                             'tool-calls))
+      (define-values (provider _captured) (make-request-capturing-provider (list looping)))
+      (define ctx
+        (make-exec-context #:runtime-settings (q-settings (hash) (hash) (hasheq 'provider provider))))
+      (define result (tool-spawn-subagent (hasheq 'task "loop" 'max-turns 1) ctx))
+      (check-true (tool-result-is-error? result))
+      (check-equal? (hash-ref (tool-result-details result) 'terminal-status #f) "timed-out")
+      (check-equal? (hash-ref (tool-result-details result) 'turns-used #f) 1))
+
+    (test-case "tool-calls stop without an executable call fails closed"
+      (define malformed
+        (make-model-response (list (hasheq 'type "text" 'text "not a call"))
+                             (hasheq)
+                             "test-model"
+                             'tool-calls))
+      (define-values (provider _captured) (make-request-capturing-provider (list malformed)))
+      (define ctx
+        (make-exec-context #:runtime-settings (q-settings (hash) (hash) (hasheq 'provider provider))))
+      (define result (tool-spawn-subagent (hasheq 'task "malformed") ctx))
+      (check-true (tool-result-is-error? result))
+      (check-equal? (hash-ref (tool-result-details result) 'terminal-status #f) "failed"))
+
+    (test-case "pre-cancelled child performs zero provider sends"
+      (define sends (box 0))
+      (define provider
+        (make-provider (lambda () "cancel-provider")
+                       (lambda () (hasheq))
+                       (lambda (_request)
+                         (set-box! sends (add1 (unbox sends)))
+                         (make-model-response '() (hasheq) "test" 'stop))
+                       (lambda (_request) '())))
+      (define token (make-cancellation-token))
+      (cancel-token! token)
+      (define ctx
+        (make-exec-context #:cancellation-token token
+                           #:runtime-settings (q-settings (hash) (hash) (hasheq 'provider provider))))
+      (define result (tool-spawn-subagent (hasheq 'task "cancel") ctx))
+      (check-true (tool-result-is-error? result))
+      (check-equal? (hash-ref (tool-result-details result) 'terminal-status #f) "cancelled")
+      (check-equal? (unbox sends) 0))
+
+    (test-case "ordinary provider exception is one safe failed terminal outcome"
+      (define events (box '()))
+      (define provider
+        (make-provider (lambda () "failing")
+                       (lambda () (hasheq))
+                       (lambda (_request) (error 'provider "api_key=PROVIDER-SECRET-SENTINEL"))
+                       (lambda (_request) '())))
+      (define ctx
+        (make-exec-context #:event-publisher
+                           (lambda (event-type payload)
+                             (set-box! events (cons (cons event-type payload) (unbox events))))
+                           #:runtime-settings (q-settings (hash) (hash) (hasheq 'provider provider))))
+      (define result (tool-spawn-subagent (hasheq 'task "fail") ctx))
+      (check-true (tool-result-is-error? result))
+      (check-equal? (hash-ref (tool-result-details result) 'terminal-status #f) "failed")
+      (check-equal? (hash-ref (tool-result-details result) 'turns-used #f) 1)
+      (check-false (string-contains? (format "~s" result) "PROVIDER-SECRET-SENTINEL"))
+      (define terminal-events
+        (filter (lambda (event) (equal? (car event) "subagent.terminal")) (unbox events)))
+      (check-equal? (length terminal-events) 1)
+      (check-equal? (hash-ref (cdar terminal-events) 'terminal-status #f) "failed"))
+
+    (test-case "provider cancellation during retryable failure stops retries and stays cancelled"
+      (define sends (box 0))
+      (define token (make-cancellation-token))
+      (define provider
+        (make-provider (lambda () "cancel-retry")
+                       (lambda () (hasheq))
+                       (lambda (_request)
+                         (set-box! sends (add1 (unbox sends)))
+                         (cancel-token! token)
+                         (error 'cancel-retry "timeout after cancellation"))
+                       (lambda (_request) '())))
+      (define events (box '()))
+      (define ctx
+        (make-exec-context #:cancellation-token token
+                           #:event-publisher
+                           (lambda (event-type payload)
+                             (set-box! events (cons (cons event-type payload) (unbox events))))
+                           #:runtime-settings (q-settings (hash) (hash) (hasheq 'provider provider))))
+      (define result (tool-spawn-subagent (hasheq 'task "cancel retry") ctx))
+      (check-true (tool-result-is-error? result))
+      (check-equal? (hash-ref (tool-result-details result) 'terminal-status #f) "cancelled")
+      (check-equal? (unbox sends) 1)
+      (check-equal? (length (filter (lambda (event) (equal? (car event) "subagent.terminal"))
+                                    (unbox events)))
+                    1))
+
+    (test-case "cancellation after provider response prevents tool and next turn"
+      (define sends (box 0))
+      (define token (make-cancellation-token))
+      (define provider
+        (make-provider (lambda () "mid-cancel")
+                       (lambda () (hasheq))
+                       (lambda (_request)
+                         (set-box! sends (add1 (unbox sends)))
+                         (cancel-token! token)
+                         (make-model-response (list (hasheq 'type
+                                                            "tool-call"
+                                                            'id
+                                                            "cancel-call"
+                                                            'name
+                                                            "read"
+                                                            'arguments
+                                                            (hasheq 'path "README.md")))
+                                              (hasheq)
+                                              "test"
+                                              'tool-calls))
+                       (lambda (_request) '())))
+      (define ctx
+        (make-exec-context #:cancellation-token token
+                           #:runtime-settings (q-settings (hash) (hash) (hasheq 'provider provider))))
+      (define result (tool-spawn-subagent (hasheq 'task "cancel after response") ctx))
+      (check-true (tool-result-is-error? result))
+      (check-equal? (hash-ref (tool-result-details result) 'terminal-status #f) "cancelled")
+      (check-equal? (unbox sends) 1))
+
+    (test-case "post-creation setup exception emits exactly one failed terminal event"
+      (define-values (provider _captured)
+        (make-request-capturing-provider
+         (list
+          (make-model-response (list (hasheq 'type "text" 'text "unused")) (hasheq) "test" 'stop))))
+      (define events (box '()))
+      (define ctx
+        (make-exec-context #:event-publisher
+                           (lambda (event-type payload)
+                             (set-box! events (cons (cons event-type payload) (unbox events))))
+                           #:runtime-settings (q-settings (hash) (hash) (hasheq 'provider provider))))
+      (define result
+        (parameterize ([current-blackboard 'malformed-blackboard])
+          (tool-spawn-subagent (hasheq 'task "setup failure") ctx)))
+      (check-true (tool-result-is-error? result))
+      (define terminal-events
+        (filter (lambda (event) (equal? (car event) "subagent.terminal")) (unbox events)))
+      (check-equal? (length terminal-events) 1)
+      (check-equal? (hash-ref (cdar terminal-events) 'terminal-status #f) "failed"))
+
+    (test-case "created child emits exactly one safe terminal event"
+      (define-values (provider _captured)
+        (make-request-capturing-provider
+         (list (make-model-response (list (hasheq 'type "text" 'text "SECRET_RESULT_SENTINEL"))
+                                    (hasheq)
+                                    "test-model"
+                                    'stop))))
+      (define events (box '()))
+      (define ctx
+        (make-exec-context #:event-publisher
+                           (lambda (event-type payload)
+                             (set-box! events (cons (cons event-type payload) (unbox events))))
+                           #:runtime-settings (q-settings (hash) (hash) (hasheq 'provider provider))))
+      (define result (tool-spawn-subagent (hasheq 'task "emit") ctx))
+      (check-false (tool-result-is-error? result))
+      (define terminal-events
+        (filter (lambda (event) (equal? (car event) "subagent.terminal")) (unbox events)))
+      (check-equal? (length terminal-events) 1)
+      (define payload (cdar terminal-events))
+      (check-equal? (hash-ref payload 'terminal-status #f) "completed")
+      (check-true (positive? (hash-ref payload 'content-size 0)))
+      (check-true (non-empty-string? (hash-ref payload 'content-digest "")))
+      (check-false (string-contains? (format "~v" payload) "SECRET_RESULT_SENTINEL")))
+
+    (test-case "every created unsuccessful or empty outcome emits one matching terminal event"
+      (define fixtures
+        (list
+         (list "approved-empty"
+               (make-model-response (list (hasheq 'type "text" 'text "")) (hasheq) "test" 'stop)
+               #f)
+         (list
+          "timed-out"
+          (make-model-response
+           (list
+            (hasheq 'type "tool-call" 'id "loop" 'name "read" 'arguments (hasheq 'path "README.md")))
+           (hasheq)
+           "test"
+           'tool-calls)
+          #f)
+         (list "failed"
+               (make-model-response (list (hasheq 'type "text" 'text "malformed"))
+                                    (hasheq)
+                                    "test"
+                                    'tool-calls)
+               #f)
+         (list "cancelled"
+               (make-model-response (list (hasheq 'type "text" 'text "unused")) (hasheq) "test" 'stop)
+               #t)))
+      (for ([fixture (in-list fixtures)])
+        (define expected-status (car fixture))
+        (define-values (provider _captured) (make-request-capturing-provider (list (cadr fixture))))
+        (define token (make-cancellation-token))
+        (when (caddr fixture)
+          (cancel-token! token))
+        (define events (box '()))
+        (define ctx
+          (make-exec-context
+           #:cancellation-token token
+           #:event-publisher (lambda (event-type payload)
+                               (set-box! events (cons (cons event-type payload) (unbox events))))
+           #:runtime-settings (q-settings (hash) (hash) (hasheq 'provider provider))))
+        (define result
+          (tool-spawn-subagent (hasheq 'task "terminal" 'max-turns 1 'tools '("read")) ctx))
+        (define terminal-events
+          (filter (lambda (event) (equal? (car event) "subagent.terminal")) (unbox events)))
+        (check-equal? (length terminal-events) 1 expected-status)
+        (check-equal? (hash-ref (cdar terminal-events) 'terminal-status #f) expected-status)))
+
     ;; ---------------------------------------------------------
-    ;; 6. Unknown content type produces clean label, not hash garbage
+    ;; Unknown content type never exposes private reasoning
     ;; ---------------------------------------------------------
     (test-case "unknown content type with 'text extracts text, not #hasheq"
       (define-values (provider _c)
@@ -208,8 +434,8 @@
       (check-false (string-contains? result-text "#hasheq")
                    (format "must not contain #hasheq, got: ~a"
                            (substring result-text 0 (min 200 (string-length result-text)))))
-      (check-true (string-contains? result-text "internal reasoning")
-                  "thinking content with 'text field should extract text"))))
+      (check-false (string-contains? result-text "internal reasoning")
+                   "private thinking content must not reach the child result"))))
 
 (module+ test
   (run-tests terminal-tests))

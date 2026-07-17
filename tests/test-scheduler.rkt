@@ -46,7 +46,8 @@
                   tool-call-id
                   tool-call-name
                   tool-call-arguments
-                  make-tool-call))
+                  make-tool-call)
+         "../util/cancellation.rkt")
 
 ;; ============================================================
 ;; Helper: build a simple registry with fake tools
@@ -563,3 +564,31 @@
   (check-equal? (scheduler-batch-stats-executed s) 8)
   (check-equal? (scheduler-batch-stats-blocked s) 1)
   (check-equal? (scheduler-batch-stats-errors s) 1))
+
+(test-case "serial scheduler checks cancellation before every tool execution"
+  (define registry (make-tool-registry))
+  (define token (make-cancellation-token))
+  (define second-runs (box 0))
+  (register-tool! registry
+                  (make-tool "cancel-first"
+                             "cancel"
+                             (hasheq)
+                             (lambda (_args _ctx)
+                               (cancel-token! token)
+                               (make-success-result (list (hasheq 'type "text" 'text "cancelled"))))))
+  (register-tool! registry
+                  (make-tool "must-not-run"
+                             "blocked after cancellation"
+                             (hasheq)
+                             (lambda (_args _ctx)
+                               (set-box! second-runs (add1 (unbox second-runs)))
+                               (make-success-result (list (hasheq 'type "text" 'text "unsafe"))))))
+  (define result
+    (run-tool-batch (list (make-tool-call "first" "cancel-first" (hasheq))
+                          (make-tool-call "second" "must-not-run" (hasheq)))
+                    registry
+                    #:exec-context (make-exec-context #:cancellation-token token)))
+  (check-equal? (unbox second-runs) 0)
+  (check-false (tool-result-is-error? (car (scheduler-result-results result))))
+  (check-true (tool-result-is-error? (cadr (scheduler-result-results result))))
+  (check-true (string-contains? (result-text (cadr (scheduler-result-results result))) "cancelled")))

@@ -14,12 +14,10 @@
          (only-in "../../runtime/settings.rkt" q-settings? setting-ref)
          (only-in "../../runtime/auto-retry.rkt" with-auto-retry)
          "../model-bridge.rkt"
-         (only-in "provider-hash-bridge.rkt"
-                  message->provider-hash
-                  content-part->provider-hash
-                  messages->provider-hashes)
+         (only-in "provider-hash-bridge.rkt" messages->provider-hashes)
          "../../util/ids.rkt"
          (only-in "../../util/content/content-parts.rkt"
+                  make-text-part
                   tool-call-part?
                   tool-call-part-id
                   tool-call-part-name
@@ -55,11 +53,15 @@
          ;; v0.99.21 §4.3: Blackboard context injection for subagents
          (only-in "../../runtime/context-assembly/blackboard-context.rkt"
                   build-blackboard-context-snippet)
-         (only-in "../../agent/blackboard.rkt" current-blackboard)
          ;; W2 v0.99.35: Pure helpers extracted for testability
          "spawn-subagent-helpers.rkt"
          (prefix-in approval: "spawn-approval.rkt")
-         (prefix-in rate: "spawn-rate-limit.rkt"))
+         (prefix-in rate: "spawn-rate-limit.rkt")
+         (only-in "../../util/cancellation.rkt" cancellation-token-cancelled?)
+         (only-in "../../util/message/provider-transport.rkt"
+                  provider-tool-call-type?
+                  provider-tool-stop-reason?
+                  provider-completion-stop-reason?))
 
 (provide (contract-out [resolve-role-prompt (-> (or/c string? #f) string?)]
                        [parse-subagent-config (-> any/c subagent-config?)])
@@ -122,6 +124,11 @@
 ;; Focused approval transport owns correlation, preview safety, and headless policy.
 (define request-spawn-approval approval:request-spawn-approval)
 (define request-batch-spawn-approval approval:request-batch-spawn-approval)
+
+(define (make-denied-spawn-result message)
+  (make-tool-result (list (hasheq 'type "text" 'text message))
+                    (hasheq 'terminal-status "denied" 'child-created? #f)
+                    #t))
 
 ;; Default role prompt when no role is specified
 (define default-role-prompt
@@ -220,7 +227,7 @@
     (cond
       [(not (spawn-rate-capacity? 1)) (make-error-result "spawn rate limit exceeded (30/min)")]
       [(and (requires-hitl-approval? caps) (not (request-spawn-approval caps task exec-ctx)))
-       (make-error-result "subagent spawn blocked — HITL approval denied")]
+       (make-denied-spawn-result "subagent spawn blocked — HITL approval denied")]
       [(not (reserve-spawn-rate! 1)) (make-error-result "spawn rate limit exceeded (30/min)")]
       [else
        ;; Role/skill resolution is deliberately after approval; it may load
@@ -420,9 +427,14 @@
 ;; Internal: run the subagent
 (define (run-subagent args role-prompt max-turns allowed-tools exec-ctx)
   (define task (hash-ref args 'task))
-  (with-handlers ([exn:fail? (lambda (e)
-                               (make-error-result (sanitize-error-message
-                                                   (format "subagent failed: ~a" (exn-message e)))))])
+  (define failure-terminalizer (box #f))
+  (with-handlers ([exn:fail? (lambda (error-value)
+                               (define terminalize-failure (unbox failure-terminalizer))
+                               (if terminalize-failure
+                                   (terminalize-failure error-value)
+                                   (make-error-result (sanitize-error-message
+                                                       (format "subagent failed: ~a"
+                                                               (exn-message error-value))))))])
     ;; #1204: Resolve real provider from parent's runtime-settings
     (define provider (resolve-provider exec-ctx))
     (define model-name (resolve-model-name exec-ctx args))
@@ -449,21 +461,55 @@
     (define session-id (hash-ref args 'planned-session-id generate-id))
     (define child-id (hash-ref args 'planned-child-id generate-id))
     (define tool-call-id (hash-ref args 'planned-tool-call-id generate-id))
+    (define terminal-emitted? (box #f))
+    (define child-parent-publisher (and exec-ctx (exec-context-event-publisher exec-ctx)))
+    (define (terminalize! terminal-status raw-status result-text turns-used)
+      (define base-meta (make-safe-result-metadata result-text session-id terminal-status raw-status))
+      (define terminal-meta
+        (hash-set* base-meta
+                   'turns-used
+                   turns-used
+                   'child-id
+                   child-id
+                   'tool-call-id
+                   tool-call-id
+                   'parent-call-id
+                   (if exec-ctx
+                       (exec-context-call-id exec-ctx)
+                       "")))
+      (unless (unbox terminal-emitted?)
+        (set-box! terminal-emitted? #t)
+        (when child-parent-publisher
+          (with-handlers ([exn:fail? void])
+            (child-parent-publisher "subagent.terminal" terminal-meta))))
+      terminal-meta)
+    (set-box! failure-terminalizer
+              (lambda (error-value)
+                (define terminal-meta (terminalize! 'failed 'failed "" 0))
+                (make-tool-result
+                 (list (hasheq 'type
+                               "text"
+                               'text
+                               (sanitize-error-message (format "subagent failed: ~a"
+                                                               (exn-message error-value)))))
+                 terminal-meta
+                 #t)))
     (define bus (make-event-bus))
     (define settings (hasheq 'model model-name))
 
     ;; Create execution context for child
     (define child-ctx
-      (make-exec-context #:working-directory (if exec-ctx
-                                                 (exec-context-working-directory exec-ctx)
-                                                 (current-directory))
-                         #:permission-config (and exec-ctx (exec-context-permission-config exec-ctx))
-                         #:event-publisher (lambda (event-type payload)
-                                             (emit-session-event! bus session-id event-type payload))
-                         #:runtime-settings settings
-                         #:call-id tool-call-id
-                         #:session-metadata
-                         (hasheq 'session-id session-id 'child-id child-id 'role "subagent")))
+      (make-exec-context
+       #:working-directory (if exec-ctx
+                               (exec-context-working-directory exec-ctx)
+                               (current-directory))
+       #:cancellation-token (and exec-ctx (exec-context-cancellation-token exec-ctx))
+       #:permission-config (and exec-ctx (exec-context-permission-config exec-ctx))
+       #:event-publisher (lambda (event-type payload)
+                           (emit-session-event! bus session-id event-type payload))
+       #:runtime-settings settings
+       #:call-id tool-call-id
+       #:session-metadata (hasheq 'session-id session-id 'child-id child-id 'role "subagent")))
 
     ;; v0.99.21 §4.3: Inject parent blackboard context into subagent system prompt
     (define bb-context (build-subagent-blackboard-context))
@@ -478,110 +524,138 @@
                     #f
                     'system
                     'message
-                    (list effective-role-prompt)
+                    (list (make-text-part effective-role-prompt))
                     (current-seconds)
                     (hasheq)))
     (define user-msg
-      (make-message (generate-id) #f 'user 'message (list task) (current-seconds) (hasheq)))
+      (make-message (generate-id)
+                    #f
+                    'user
+                    'message
+                    (list (make-text-part task))
+                    (current-seconds)
+                    (hasheq)))
 
-    ;; Run the child agent loop
-    (define-values (result-messages final-status)
+    ;; Run the child loop and preserve its exact terminal status and actual
+    ;; provider-turn count through the tool boundary.
+    (define-values (result-messages final-status turns-used)
       (run-subagent-loop provider registry (list system-msg user-msg) child-ctx max-turns))
-
-    ;; W2 v0.99.35: Extract assistant text via pure helper.
-    ;; Previously inline — logic now in spawn-subagent-helpers.rkt.
-    ;; v0.99.50 W1 (TMUX-04): Use typed terminal outcomes and safe metadata.
     (define result-text (extract-assistant-text result-messages))
     (define has-content? (result-has-content? result-text))
     (define terminal-status (classify-terminal-status final-status has-content?))
-    (define base-meta (make-safe-result-metadata result-text session-id terminal-status final-status))
-    (make-success-result (list (hasheq 'type "text" 'text result-text))
-                         (hash-set base-meta 'turns-used max-turns))))
+    (define terminal-meta (terminalize! terminal-status final-status result-text turns-used))
+    (if (terminal-status-success? terminal-status)
+        (make-success-result (list (hasheq 'type "text" 'text result-text)) terminal-meta)
+        (make-tool-result (list (hasheq 'type
+                                        "text"
+                                        'text
+                                        (case terminal-status
+                                          [(timed-out) "subagent timed out."]
+                                          [(cancelled) "subagent cancelled."]
+                                          [else "subagent failed."])))
+                          terminal-meta
+                          #t))))
 
 ;; ============================================================
 ;; Message-to-provider conversion
 ;; ============================================================
 
 ;; v0.99.50 W1 (TMUX-04): Duplicate provider conversion removed.
-;; All three functions (message->provider-hash, content-part->provider-hash,
-;; messages->provider-hashes) are imported from provider-hash-bridge.rkt.
-;; Keeping one canonical wire representation prevents divergence between
-;; the inline and extracted versions.
+;; Child message conversion delegates through provider-hash-bridge.rkt to the
+;; neutral provider-transport owner. Keeping one canonical wire representation
+;; prevents parent/child and adapter request shapes from diverging.
 
 ;; Run a simple agent loop for the subagent
 ;; v0.19.4 GAP-1 fix: actually dispatch tool_calls instead of returning 'stopped
 (define (run-subagent-loop provider registry messages ctx max-turns)
+  (define token (exec-context-cancellation-token ctx))
+  (define (cancelled?)
+    (and token (cancellation-token-cancelled? token)))
   (let loop ([msgs messages]
              [turns-remaining max-turns]
-             [all-results '()])
+             [all-results '()]
+             [turns-used 0])
     (cond
-      [(<= turns-remaining 0) (values all-results 'max-turns-reached)]
+      [(cancelled?) (values all-results 'cancelled turns-used)]
+      [(<= turns-remaining 0) (values all-results 'max-turns-reached turns-used)]
       [else
-       ;; #SERIALIZE-FIX: Convert internal message structs to provider-facing
-       ;; JSON hashes before building the model request. Real providers call
-       ;; jsexpr->bytes on the request body, which rejects Racket structs.
-       (define provider-msgs (messages->provider-hashes msgs))
-       (define req (make-model-request provider-msgs (list-active-tools-jsexpr registry) (hasheq)))
-       ;; F-1a (v0.99.26): Wrap provider-send in auto-retry so subagents
-       ;; survive rate-limiting and transient timeouts. Without this,
-       ;; a single 429 kills the subagent immediately while the parent
-       ;; agent retries silently.
-       (define resp
-         (with-auto-retry (lambda () (provider-send provider req))
-                          #:per-type-budgets (hash 'timeout 2 'rate-limit 4 'provider-error 2)))
-       (define content (model-response-content resp))
-       ;; Build assistant message from response content parts
-       ;; v0.99.50 W1 (TMUX-04): Unknown content types (thinking, image, etc.)
-       ;; no longer become raw hash garbage via (format "~a" c). Instead they
-       ;; produce a clean [unsupported:type] label or extract any 'text field.
-       (define content-parts
-         (for/list ([c (in-list content)])
-           (match (hash-ref c 'type #f)
-             ["text" (hash-ref c 'text "")]
-             ["tool_call"
-              (make-tool-call-part (hash-ref c 'id (generate-id))
-                                   (hash-ref c 'name "")
-                                   (ensure-hash-args (hash-ref c 'arguments "{}")))]
-             [#f (hash-ref c 'text "")]
-             ;; Unknown but typed content: extract text if present, else clean label.
-             ;; This prevents #hasheq garbage from leaking into result text.
-             [type-str (hash-ref c 'text (format "[unsupported:~a]" type-str))])))
-       (define assistant-msg
-         (make-message (generate-id) #f 'assistant 'message content-parts (current-seconds) (hasheq)))
-       (define new-all (append all-results (list assistant-msg)))
-       (cond
-         ;; Dispatch tool calls and continue the loop
-         [(eq? (model-response-stop-reason resp) 'tool_calls)
-          (define tool-calls
-            (for/list ([part (in-list content-parts)]
-                       #:when (tool-call-part? part))
-              (make-tool-call (tool-call-part-id part)
-                              (tool-call-part-name part)
-                              (tool-call-part-arguments part))))
-          (if (null? tool-calls)
-              (values new-all 'complete)
-              (let ()
-                ;; Run tool batch
-                (define sched-result (run-tool-batch tool-calls registry #:exec-context ctx))
-                (define results (scheduler-result-results sched-result))
-                ;; Build tool-result messages
-                (define tool-result-msgs
-                  (for/list ([tc (in-list tool-calls)]
-                             [tr (in-list results)])
-                    (make-message
-                     (generate-id)
-                     (message-id assistant-msg)
-                     'tool
-                     'tool-result
-                     (list (make-tool-result-part (tool-call-id tc)
-                                                  (tool-result-content tr)
-                                                  (tool-result-is-error? tr)))
-                     (current-seconds)
-                     (hasheq 'toolCallId (tool-call-id tc) 'isError (tool-result-is-error? tr)))))
-                (loop (append msgs (list assistant-msg) tool-result-msgs)
-                      (sub1 turns-remaining)
-                      (append new-all tool-result-msgs))))]
-         [else (values new-all 'complete)])])))
+       (define current-turn (add1 turns-used))
+       (with-handlers ([exn:fail?
+                        (lambda (_)
+                          (values all-results (if (cancelled?) 'cancelled 'failed) current-turn))])
+         (define provider-msgs (messages->provider-hashes msgs))
+         (define req (make-model-request provider-msgs (list-active-tools-jsexpr registry) (hasheq)))
+         (define resp
+           (with-auto-retry (lambda ()
+                              (when (cancelled?)
+                                (error 'subagent-cancelled "child cancellation requested"))
+                              (provider-send provider req))
+                            #:on-retry (lambda (_attempt _maximum _delay _message _category)
+                                         (when (cancelled?)
+                                           (error 'subagent-cancelled
+                                                  "child cancellation requested")))
+                            #:per-type-budgets (hash 'timeout 2 'rate-limit 4 'provider-error 2)))
+         (if (cancelled?)
+             (values all-results 'cancelled current-turn)
+             (let* ([content (model-response-content resp)]
+                    [content-parts
+                     (filter-map
+                      (lambda (item)
+                        (match (hash-ref item 'type #f)
+                          ["text" (make-text-part (hash-ref item 'text ""))]
+                          [(? provider-tool-call-type?)
+                           (make-tool-call-part (hash-ref item 'id (generate-id))
+                                                (hash-ref item 'name "")
+                                                (ensure-hash-args (hash-ref item 'arguments "{}")))]
+                          [_ #f]))
+                      content)]
+                    [assistant-msg (make-message (generate-id)
+                                                 #f
+                                                 'assistant
+                                                 'message
+                                                 content-parts
+                                                 (current-seconds)
+                                                 (hasheq))]
+                    [new-all (append all-results (list assistant-msg))]
+                    [stop-reason (model-response-stop-reason resp)])
+               (cond
+                 [(provider-tool-stop-reason? stop-reason)
+                  (define tool-calls
+                    (for/list ([part (in-list content-parts)]
+                               #:when (tool-call-part? part))
+                      (make-tool-call (tool-call-part-id part)
+                                      (tool-call-part-name part)
+                                      (tool-call-part-arguments part))))
+                  (cond
+                    [(null? tool-calls) (values new-all 'failed current-turn)]
+                    [(cancelled?) (values new-all 'cancelled current-turn)]
+                    [else
+                     (define sched-result (run-tool-batch tool-calls registry #:exec-context ctx))
+                     (define results (scheduler-result-results sched-result))
+                     (define tool-result-msgs
+                       (for/list ([tc (in-list tool-calls)]
+                                  [tr (in-list results)])
+                         (make-message (generate-id)
+                                       (message-id assistant-msg)
+                                       'tool
+                                       'tool-result
+                                       (list (make-tool-result-part (tool-call-id tc)
+                                                                    (tool-result-content tr)
+                                                                    (tool-result-is-error? tr)))
+                                       (current-seconds)
+                                       (hasheq 'toolCallId
+                                               (tool-call-id tc)
+                                               'isError
+                                               (tool-result-is-error? tr)))))
+                     (if (cancelled?)
+                         (values (append new-all tool-result-msgs) 'cancelled current-turn)
+                         (loop (append msgs (list assistant-msg) tool-result-msgs)
+                               (sub1 turns-remaining)
+                               (append new-all tool-result-msgs)
+                               current-turn))])]
+                 [(provider-completion-stop-reason? stop-reason)
+                  (values new-all 'complete current-turn)]
+                 [else (values new-all 'failed current-turn)]))))])))
 
 ;; ============================================================
 ;; spawn-subagents: Batch parallel execution
@@ -772,7 +846,7 @@
                                                   (batch-execution-plan-snapshot-digest plan)
                                                   (batch-execution-plan-dangerous-jobs plan)
                                                   exec-ctx)))
-          (make-error-result "subagent batch blocked — HITL approval denied")]
+          (make-denied-spawn-result "subagent batch blocked — HITL approval denied")]
          [(not (string=? (batch-execution-plan-raw-digest plan) (sha256-digest args)))
           (make-error-result "subagent batch request changed after approval")]
          [(not (reserve-spawn-rate! spawn-count))
@@ -792,17 +866,24 @@
                        exec-ctx
                        (batch-execution-plan-max-parallel plan)))
   (define job-results
-    (for/list ([r (in-list results)]
+    (for/list ([entry (in-list results)]
                [job (in-list (batch-execution-plan-jobs plan))])
-      (define result (cdr r))
+      (define result (cdr entry))
+      (define metadata (or (tool-result-details result) (hasheq)))
       (hasheq 'jobId
-              (car r)
+              (car entry)
               'success
               (not (tool-result-is-error? result))
-              'content
-              (tool-result-content result)
-              'details
-              (tool-result-details result)
+              'terminalStatus
+              (hash-ref metadata 'terminal-status "failed")
+              'turnsUsed
+              (hash-ref metadata 'turns-used 0)
+              'resultPresent
+              (hash-ref metadata 'result-present? #f)
+              'contentSize
+              (hash-ref metadata 'content-size 0)
+              'contentDigest
+              (hash-ref metadata 'content-digest "")
               'taskDigest
               (hash-ref job 'task-digest)
               'capabilities
@@ -813,6 +894,17 @@
               (hash-ref job 'child-id)
               'sessionId
               (hash-ref job 'session-id))))
+  ;; Raw child output belongs only to the explicit tool-result content channel.
+  ;; Retained details/events stay digest-only and safe for logs/traces.
+  (define visible-job-results
+    (for/list ([job-result (in-list job-results)]
+               [entry (in-list results)])
+      (hasheq 'jobId
+              (hash-ref job-result 'jobId)
+              'success
+              (hash-ref job-result 'success #f)
+              'content
+              (tool-result-content (cdr entry)))))
   (define success-count (count (lambda (result) (hash-ref result 'success #f)) job-results))
   (define fail-count (- (length job-results) success-count))
   (define summary-text
@@ -821,26 +913,27 @@
                 success-count
                 (length job-results)
                 fail-count
-                (string-join (for/list ([job-result (in-list job-results)])
-                               (format "[~a] ~a"
-                                       (hash-ref job-result 'jobId)
-                                       (if (hash-ref job-result 'success #f)
-                                           (extract-text-summary (hash-ref job-result 'content '()))
-                                           "FAILED")))
-                             "\n---\n"))
+                (string-join
+                 (for/list ([job-result (in-list job-results)]
+                            [entry (in-list results)])
+                   (format "[~a] ~a"
+                           (hash-ref job-result 'jobId)
+                           (if (hash-ref job-result 'success #f)
+                               (extract-text-summary (tool-result-content (cdr entry)))
+                               (string-upcase (hash-ref job-result 'terminalStatus "failed")))))
+                 "\n---\n"))
         (format "Batch complete: ~a/~a succeeded, ~a failed."
                 success-count
                 (length job-results)
                 fail-count)))
-  (make-success-result (list (hasheq 'type "text" 'text summary-text))
+  (make-success-result (list (hasheq 'type "text" 'text summary-text)
+                             (hasheq 'type "batch-results" 'jobs visible-job-results))
                        (hasheq 'batch-id
                                (batch-execution-plan-batch-id plan)
                                'batchId
                                (batch-execution-plan-batch-id plan)
                                'snapshot-digest
                                (batch-execution-plan-snapshot-digest plan)
-                               'snapshot
-                               (batch-execution-plan-snapshot plan)
                                'total-jobs
                                (length job-results)
                                'succeeded

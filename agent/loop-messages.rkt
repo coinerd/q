@@ -12,26 +12,11 @@
          racket/list
          racket/set
          racket/match
-         (only-in "../util/content/content-parts.rkt"
-                  text-part
-                  text-part-text
-                  image-part?
-                  image-part-mime-type
-                  image-part-data
-                  image-part-detail
-                  text-part?
-                  tool-call-part
-                  tool-call-part-arguments
-                  tool-call-part-id
-                  tool-call-part-name
-                  tool-call-part?
-                  tool-result-part
-                  tool-result-part-content
-                  tool-result-part-tool-call-id
-                  tool-result-part?)
-         (only-in "../util/message/message.rkt" message message-content message-role message?)
-         (only-in "../util/content/content-helpers.rkt" result-content->string)
-         (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload))
+         (only-in "../util/content/content-parts.rkt" text-part-text text-part?)
+         (only-in "../util/message/message.rkt" message?)
+         (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload)
+         (only-in "../util/message/provider-transport.rkt"
+                  [messages->provider-hashes serialize-provider-messages]))
 
 (provide (contract-out [usage-empty? (-> (or/c hash? #f) boolean?)]
                        [parts->text-string (-> (or/c string? list? any/c) string?)]
@@ -132,9 +117,12 @@
      (cond
        [(null? acc) (list msg)]
        [(equal? (hash-ref msg 'role #f) (hash-ref (car acc) 'role #f))
-        ;; Same role: merge content
-        ;; BUT: never merge tool messages — each has its own tool_call_id
-        (if (equal? (hash-ref msg 'role #f) "tool")
+        ;; Never merge tool messages (each has its own correlation ID), or
+        ;; assistant tool-call turns (merging only content would drop calls).
+        (if (or (equal? (hash-ref msg 'role #f) "tool")
+                (and (equal? (hash-ref msg 'role #f) "assistant")
+                     (or (pair? (hash-ref msg 'tool_calls '()))
+                         (pair? (hash-ref (car acc) 'tool_calls '())))))
             (cons msg acc) ; keep separate
             (let ()
               ;; M6: handle both string content and list content (image blocks)
@@ -182,79 +170,7 @@
 ;; PURE function — converts a list of message? structs into raw OpenAI-format
 ;; hash messages. No side effects, no bus/state needed.
 (define (build-raw-messages context)
-  (define raw-msgs
-    (append*
-     (for/list ([msg (in-list context)])
-       (define role (message-role msg))
-       (define parts (message-content msg))
-       (cond
-         ;; user -> text message, possibly with image parts (v0.98.1 vision)
-         [(eq? role 'user)
-          (define img-parts (filter image-part? parts))
-          (if (null? img-parts)
-              ;; text-only user message
-              (list (hasheq 'role "user" 'content (parts->text-string parts)))
-              ;; mixed text+image: produce OpenAI content array
-              (let* ([text-str (parts->text-string parts)]
-                     [text-block (hasheq 'type "text" 'text text-str)]
-                     [image-blocks (for/list ([ip (in-list img-parts)])
-                                     (hasheq 'type
-                                             "image_url"
-                                             'image_url
-                                             (hasheq 'url
-                                                     (format "data:~a;base64,~a"
-                                                             (image-part-mime-type ip)
-                                                             (image-part-data ip))
-                                                     'detail
-                                                     (or (image-part-detail ip) "auto"))))])
-                (list (hasheq 'role "user" 'content (cons text-block image-blocks)))))]
-
-         ;; assistant -> text + optional tool_calls
-         [(eq? role 'assistant)
-          (define text-parts (filter text-part? parts))
-          (define tc-parts (filter tool-call-part? parts))
-          (define text-content (parts->text-string text-parts))
-          (if (null? tc-parts)
-              ;; text-only assistant message
-              (list (hasheq 'role "assistant" 'content text-content))
-              ;; assistant with tool calls -- OpenAI format
-              ;; Note: GLM rejects 'null for content, so we omit the field when empty
-              (let* ([tool-calls-list (for/list ([tc (in-list tc-parts)])
-                                        (hasheq 'id
-                                                (tool-call-part-id tc)
-                                                'type
-                                                "function"
-                                                'function
-                                                (hasheq 'name
-                                                        (tool-call-part-name tc)
-                                                        'arguments
-                                                        (tool-call-part-arguments tc))))]
-                     [assistant-msg (if (string=? text-content "")
-                                        ;; No text content: omit content field (GLM compatible)
-                                        (hasheq 'role "assistant" 'tool_calls tool-calls-list)
-                                        ;; Has text content: include content field
-                                        (hasheq 'role
-                                                "assistant"
-                                                'content
-                                                text-content
-                                                'tool_calls
-                                                tool-calls-list))])
-                (list assistant-msg)))]
-
-         ;; tool -> one OpenAI message per tool-result-part
-         [(eq? role 'tool)
-          (for/list ([p (in-list parts)]
-                     #:when (tool-result-part? p))
-            (hasheq 'role
-                    "tool"
-                    'tool_call_id
-                    (tool-result-part-tool-call-id p)
-                    'content
-                    (result-content->string (tool-result-part-content p) #:handle-hash? #t)))]
-
-         ;; fallback -- unknown role
-         [else
-          (list (hasheq 'role (message-role->api-role role) 'content (parts->text-string parts)))]))))
+  (define raw-msgs (serialize-provider-messages context))
   ;; Safety net: merge consecutive user messages.
   ;; Some providers (GLM) reject consecutive same-role messages.
   (define merged (collect-system-messages-front (merge-consecutive-roles raw-msgs)))

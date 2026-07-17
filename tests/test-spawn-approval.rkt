@@ -96,7 +96,11 @@
         (define cfg (make-cfg #:task "dangerous task" #:capabilities '(shell-exec)))
         (define result (run-subagent-with-config cfg #f))
         (check-true (tool-result? result) "should return a tool-result")
-        (check-true (tool-result-is-error? result) "should be an error result")))
+        (check-true (tool-result-is-error? result) "should be an error result")
+        (define details (tool-result-details result))
+        (check-equal? (hash-ref details 'terminal-status #f) "denied")
+        (check-false (hash-has-key? details 'child-id))
+        (check-false (hash-has-key? details 'session-id))))
 
     (test-case "denied work does not consume spawn rate budget"
       (define timestamps (box '()))

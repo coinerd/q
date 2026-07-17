@@ -68,10 +68,18 @@
   (define model-name (hash-ref settings 'model ANTHROPIC-DEFAULT-MODEL))
   (define max-tokens (hash-ref settings 'max-tokens ANTHROPIC-DEFAULT-MAX-TOKENS))
 
-  ;; Build messages — Anthropic requires content as typed blocks
+  ;; Anthropic requires system instructions at the top level, never as a
+  ;; role inside messages. Canonical transport may carry them as messages.
   (define raw-messages (model-request-messages req))
+  (define system-text
+    (string-join (for/list ([msg (in-list raw-messages)]
+                            #:when (equal? (hash-ref msg 'role #f) "system"))
+                   (format "~a" (hash-ref msg 'content "")))
+                 "\n\n"))
+  (define conversation-messages
+    (filter (lambda (msg) (not (equal? (hash-ref msg 'role #f) "system"))) raw-messages))
   (define messages
-    (for/list ([msg (in-list raw-messages)])
+    (for/list ([msg (in-list conversation-messages)])
       (define role (hash-ref msg 'role "user"))
       (define content (hash-ref msg 'content ""))
       (cond
@@ -236,10 +244,15 @@
         (hash-set base 'temperature (hash-ref settings 'temperature))
         base))
 
-  ;; Add optional system prompt from settings
-  (define with-system
+  ;; Explicit request settings take precedence; otherwise preserve canonical
+  ;; system messages at Anthropic's native top-level boundary.
+  (define effective-system
     (if (hash-has-key? settings 'system)
-        (hash-set with-temp 'system (hash-ref settings 'system))
+        (hash-ref settings 'system)
+        system-text))
+  (define with-system
+    (if (and (string? effective-system) (not (string=? effective-system "")))
+        (hash-set with-temp 'system effective-system)
         with-temp))
 
   ;; Translate tools to Anthropic format if present

@@ -35,6 +35,7 @@
                   make-success-result
                   validate-tool-result
                   exec-context?
+                  exec-context-cancellation-token
                   exec-context-event-publisher
                   exec-context-permission-config
                   tool-call
@@ -70,7 +71,8 @@
                   ipc-response-status
                   ipc-response-content
                   ipc-response-details
-                  ipc-response-error-message))
+                  ipc-response-error-message)
+         (only-in "../util/cancellation.rkt" cancellation-token-cancelled?))
 
 ;; ── Result struct ──
 (provide scheduler-result
@@ -409,6 +411,12 @@
   ;; For 'blocked and 'error entries, produces error results directly.
   ;; For 'ready entries, executes the tool.
 
+  (define cancellation-token (and exec-ctx (exec-context-cancellation-token exec-ctx)))
+  (define (cancelled?)
+    (and cancellation-token (cancellation-token-cancelled? cancellation-token)))
+  (define (cancelled-result)
+    (make-error-result "tool execution cancelled before start"))
+
   ;; Collect indices and ready entries for execution
   (define indexed-ready
     (for/list ([entry (in-list preflight-entries)]
@@ -421,24 +429,27 @@
     (if parallel?
         ;; Parallel execution using threads with bounded pool (F6)
         (let* ([sem (make-semaphore (max-parallel-tools))]
-               [channels (for/list ([ie (in-list indexed-ready)])
-                           (define ch (make-channel))
-                           (define idx (car ie))
-                           (define entry (cdr ie))
-                           (define tc (preflight-entry-tool-call entry))
-                           (define t (preflight-entry-tool entry))
-                           (thread (lambda ()
-                                     (semaphore-wait sem)
-                                     (define result
-                                       (with-handlers ([exn:fail? (lambda (e)
-                                                                    (make-error-result
-                                                                     (format "tool '~a' raised: ~a"
-                                                                             (tool-call-name tc)
-                                                                             (exn-message e))))])
-                                         (execute-single tc t exec-ctx hook-dispatcher)))
-                                     (semaphore-post sem)
-                                     (channel-put ch (cons idx result))))
-                           ch)])
+               [channels
+                (for/list ([ie (in-list indexed-ready)])
+                  (define ch (make-channel))
+                  (define idx (car ie))
+                  (define entry (cdr ie))
+                  (define tc (preflight-entry-tool-call entry))
+                  (define t (preflight-entry-tool entry))
+                  (thread (lambda ()
+                            (semaphore-wait sem)
+                            (define result
+                              (if (cancelled?)
+                                  (cancelled-result)
+                                  (with-handlers ([exn:fail? (lambda (e)
+                                                               (make-error-result
+                                                                (format "tool '~a' raised: ~a"
+                                                                        (tool-call-name tc)
+                                                                        (exn-message e))))])
+                                    (execute-single tc t exec-ctx hook-dispatcher))))
+                            (semaphore-post sem)
+                            (channel-put ch (cons idx result))))
+                  ch)])
           (for/list ([ch (in-list channels)])
             (channel-get ch)))
         ;; Serial execution
@@ -447,7 +458,10 @@
           (define entry (cdr ie))
           (define tc (preflight-entry-tool-call entry))
           (define t (preflight-entry-tool entry))
-          (cons idx (execute-single tc t exec-ctx hook-dispatcher)))))
+          (cons idx
+                (if (cancelled?)
+                    (cancelled-result)
+                    (execute-single tc t exec-ctx hook-dispatcher))))))
 
   ;; Build a map from index → result
   (define results-by-idx

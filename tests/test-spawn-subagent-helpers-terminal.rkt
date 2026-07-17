@@ -30,6 +30,12 @@
   (check-equal? (classify-terminal-status 'something-weird #t) 'failed)
   (check-equal? (classify-terminal-status 'something-weird #f) 'failed))
 
+(test-case "only completed and approved-empty are successful child outcomes"
+  (check-true (terminal-status-success? 'completed))
+  (check-true (terminal-status-success? 'approved-empty))
+  (for ([status (in-list '(failed timed-out cancelled denied))])
+    (check-false (terminal-status-success? status))))
+
 ;; ============================================================
 ;; result-has-content?
 ;; ============================================================

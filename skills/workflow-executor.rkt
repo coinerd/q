@@ -33,7 +33,8 @@
                   tool-result-details
                   make-tool-result
                   make-error-result
-                  make-success-result))
+                  make-success-result)
+         (only-in "../tools/builtins/spawn-subagent-helpers.rkt" sha256-digest))
 
 ;; ============================================================
 ;; Workflow execution result
@@ -74,7 +75,9 @@
          (define group (car remaining-groups))
          (define-values (group-results next-idx group-success? next-prev-result)
            (execute-step-group group idx variables prev-result exec-ctx))
-         (define new-acc (append group-results acc))
+         ;; acc is stored in reverse order; reverse each ordered group before
+         ;; prepending so the final reverse preserves sibling submission order.
+         (define new-acc (append (reverse group-results) acc))
          (cond
            ;; On error, stop pipeline and return partial results
            [(not group-success?) (reverse new-acc)]
@@ -180,6 +183,16 @@
         (define job-result-by-id
           (for/hash ([job-result (in-list job-results)])
             (values (hash-ref job-result 'jobId (format "step-~a" idx)) job-result)))
+        ;; Child output travels only through the explicit tool-result content
+        ;; channel; digest-only job metadata remains safe for traces/logs.
+        (define visible-batch
+          (findf (lambda (part) (and (hash? part) (equal? (hash-ref part 'type #f) "batch-results")))
+                 (tool-result-content batch-result)))
+        (define visible-by-id
+          (for/hash ([job-result (in-list (if visible-batch
+                                              (hash-ref visible-batch 'jobs '())
+                                              '()))])
+            (values (hash-ref job-result 'jobId "") job-result)))
         (define results
           (for/list ([step (in-list group)]
                      [step-idx (in-naturals idx)])
@@ -187,9 +200,10 @@
             (define job-id (format "step-~a" step-idx))
             (define job-result (hash-ref job-result-by-id job-id #f))
             (define success (and job-result (hash-ref job-result 'success #f)))
+            (define visible-result (hash-ref visible-by-id job-id #f))
             (define result-text
-              (if job-result
-                  (extract-text-from-content (hash-ref job-result 'content '()))
+              (if visible-result
+                  (extract-text-from-content (hash-ref visible-result 'content '()))
                   ""))
             (workflow-step-result step-idx
                                   (workflow-step-role step)
@@ -255,8 +269,24 @@
       (workflow-step-result-step failed)
       0))
 
+(define (step-result->safe-metadata result)
+  (define task (workflow-step-result-task result))
+  (define output (workflow-step-result-result result))
+  (hasheq 'step
+          (workflow-step-result-step result)
+          'success
+          (workflow-step-result-success? result)
+          'taskDigest
+          (sha256-digest task)
+          'resultPresent
+          (not (string=? output ""))
+          'resultSize
+          (string-length output)
+          'resultDigest
+          (sha256-digest output)))
+
 ;; make-workflow-error-result : mas-workflow? (listof workflow-step-result?) -> tool-result?
-;; Build an error result that preserves partial step results in details.
+;; Build an error result that preserves safe partial-step metadata in details.
 ;; Content remains human-readable text for backward compatibility.
 ;; Details contain structured information for programmatic callers.
 (define (make-workflow-error-result workflow step-results)
@@ -271,7 +301,7 @@
                             'failed-step
                             failed-idx
                             'steps
-                            (step-results->jsexpr step-results))
+                            (map step-result->safe-metadata step-results))
                     #t))
 
 ;; ============================================================
