@@ -40,14 +40,21 @@
         (set-box! (cmd-ctx-needs-redraw-box cctx) #t)
         'continue]
        [else
-        (set-box! (cmd-ctx-state-box cctx) (set-status-message state "Compacting..."))
+        (define sid (or (ui-state-session-id state) ""))
+        (define req-id (generate-id))
+        ;; F-06: Include target-session-id so the runtime subscriber can
+        ;; filter by exact owning session.  Store the pending request ID
+        ;; so terminal lifecycle events can be correlated before clearing
+        ;; the status message.
+        (set-box! (cmd-ctx-state-box cctx)
+                  (set-compact-request-id (set-status-message state "Compacting...") req-id))
         (set-box! (cmd-ctx-needs-redraw-box cctx) #t)
         (publish! (cmd-ctx-event-bus cctx)
                   (make-event "session.compact.requested"
                               (inexact->exact (truncate (/ (current-inexact-milliseconds) 1000)))
-                              (or (ui-state-session-id state) "")
+                              sid
                               #f
-                              (hasheq 'request-id (generate-id) 'persist? #t)))
+                              (hasheq 'request-id req-id 'persist? #t 'target-session-id sid)))
         'continue])]))
 
 ;; Shared slash/Ctrl-C path. Requesting does not clear active state; only the
