@@ -20,7 +20,8 @@
                   run-prompt!
                   session-id
                   session-history
-                  fork-session)
+                  fork-session
+                  open-or-resume-session)
          "../runtime/settings.rkt"
          "../runtime/provider/model-registry.rkt"
 
@@ -102,7 +103,7 @@
 ;; ============================================================
 
 (define (run-interactive cfg rt-config #:provider-name [prov-name #f])
-  (define sess (make-agent-session rt-config))
+  (define sess (open-or-resume-session rt-config))
   (define bus (dict-ref rt-config 'event-bus))
   (subscribe! bus (make-terminal-subscriber))
   (run-cli-interactive
@@ -143,7 +144,7 @@
    #:provider-name prov-name))
 
 (define (run-single-shot cfg rt-config)
-  (define sess (make-agent-session rt-config))
+  (define sess (open-or-resume-session rt-config))
   (define bus (dict-ref rt-config 'event-bus))
   (subscribe! bus (make-terminal-subscriber))
   (run-cli-single cfg #:session-fn (lambda (prompt) (run-prompt! sess prompt))))
@@ -200,7 +201,7 @@
   (unless prompt
     (displayln "Error: -p/--print requires a prompt argument." (current-error-port))
     (exit 1))
-  (define sess (make-agent-session rt-config))
+  (define sess (open-or-resume-session rt-config))
   ;; Subscribe a collector that accumulates assistant text deltas
   (define accumulated-text (box ""))
   (define (print-subscriber evt)

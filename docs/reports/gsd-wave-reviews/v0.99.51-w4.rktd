@@ -1,0 +1,7 @@
+#hash((reviewer . "github-models/openai-gpt-4.1-independent-two-slice")
+      (verdict . "APPROVED")
+      (reviewed-sha . "e13ba09642048e2f864f5c64269d02d228d025b7")
+      (content-digest . "a29e98fa1339cf4aede51eb4c47594b3f269810d4952a1f706bb49bff8260f81")
+      (timestamp . "2026-07-17T20:30:00Z")
+      (scope . "v0.99.51 W4 #8734; F-11 #8749; F-14 #8752; resume parity and session truth")
+      (report . "APPROVED. Two independent GitHub Models production slices reviewed exact implementation SHA and digest with no remaining blocker. F-11 slice verified open-or-resume-session branches on rt-config session-id across all mode runners (print, single-shot, json, rpc, interactive), resume does not create sibling, missing id fails closed. F-14 slice verified read-session-metadata extracts model from model-change entry meta (not non-existent top-level key), message count excludes internal entries, tool-call-count counts by message kind, SDK session-info includes session-dir and start-time, and docstring is truthful. Aggregate verdict APPROVED with no blockers."))

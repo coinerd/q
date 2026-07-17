@@ -21,7 +21,9 @@
                   session-id
                   session-history
                   fork-session
-                  close-session!)
+                  close-session!
+                  agent-session?
+                  open-or-resume-session)
          "../runtime/settings.rkt"
          "../skills/types.rkt"
          (only-in "../skills/resource-loader.rkt" skills-summary-section)
@@ -137,7 +139,9 @@
          run-rpc
          run-print-mode
          wire-runtime-parameters!
-         make-mcp-governed-execute-fn)
+         make-mcp-governed-execute-fn
+         ;; F-11: Re-export canonical session resolver
+         open-or-resume-session)
 
 ;; ============================================================
 ;; MCP governed tool execution

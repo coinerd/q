@@ -113,6 +113,7 @@
          session-event-bus
          session-extension-registry
          agent-session-session-dir
+         agent-session-start-time
          agent-session-queue
          agent-session-index
          agent-session-extension-registry
@@ -161,7 +162,8 @@
          ;; Graceful shutdown (#1158)
          agent-session-shutdown-requested?
          agent-session-force-shutdown?
-         session-rollout-enabled?)
+         session-rollout-enabled?
+         open-or-resume-session)
 
 ;; ============================================================
 ;; ARCH-05: struct definition moved to session-types.rkt
@@ -395,6 +397,24 @@
     (initialize-memory-backend! cfg))
 
   sess)
+
+;; ============================================================
+;; open-or-resume-session — F-11 canonical resolver
+;; ============================================================
+
+;; open-or-resume-session : (or/c hash? session-config?) -> agent-session?
+;; If config has 'session-id, resume that exact durable session.
+;; Otherwise, create a new session. Ensures --session <id> from
+;; any CLI mode (print, single-shot, json, rpc, interactive, tui)
+;; resumes the durable session instead of creating a silent sibling.
+(define (open-or-resume-session config)
+  (define maybe-sid
+    (if (session-config? config)
+        (dict-ref config 'session-id #f)
+        (hash-ref config 'session-id #f)))
+  (if maybe-sid
+      (resume-agent-session maybe-sid config)
+      (make-agent-session config)))
 
 ;; ============================================================
 ;; fork-session

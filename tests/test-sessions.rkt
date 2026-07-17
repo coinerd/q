@@ -31,13 +31,36 @@
       (jsonl-append! jsonl-path e)))
   jsonl-path)
 
-(define (make-test-entry model [ts 1000000000])
+(define (make-test-entry [model #f] [ts 1000000000])
+  (define base
+    (hasheq 'role
+            "assistant"
+            'kind
+            "message"
+            'content
+            (list (hasheq 'type "text" 'text "hello"))
+            'timestamp
+            ts))
+  (if model
+      (hasheq 'role
+              "system"
+              'kind
+              "model-change"
+              'content
+              '()
+              'meta
+              (hasheq 'model model)
+              'timestamp
+              ts)
+      base))
+
+(define (make-message-entry [ts 1000000000])
   (hasheq 'role
           "assistant"
+          'kind
+          "message"
           'content
           (list (hasheq 'type "text" 'text "hello"))
-          'model
-          model
           'timestamp
           ts))
 
@@ -92,7 +115,7 @@
    (create-session! dir "sess-meta" #:entries (list (make-test-entry "gpt-4")))
    (define meta (read-session-metadata "sess-meta" session-path))
    (check-equal? (hash-ref meta 'id) "sess-meta")
-   (check-equal? (hash-ref meta 'message-count) 1)
+   (check-equal? (hash-ref meta 'message-count) 0) ; model-change is internal, not counted
    (check-equal? (hash-ref meta 'model) "gpt-4")
    (check-true (>= (hash-ref meta 'size-bytes) 1))
    (check-true (>= (hash-ref meta 'mtime) 0))
@@ -101,10 +124,9 @@
    (define dir (make-temp-session-dir))
    (create-session! dir
                     "sess-multi"
-                    #:entries
-                    (list (make-test-entry "m1") (make-test-entry "m2") (make-test-entry "m3")))
+                    #:entries (list (make-test-entry "m1") (make-message-entry) (make-message-entry)))
    (define meta (read-session-metadata "sess-multi" (build-path dir "sess-multi")))
-   (check-equal? (hash-ref meta 'message-count) 3)
+   (check-equal? (hash-ref meta 'message-count) 2) ; 2 messages, 1 model-change excluded
    (check-equal? (hash-ref meta 'model) "m1")
    (delete-directory/files dir))
  (test-case "read-session-metadata returns 'unknown' model when no model field"
@@ -188,11 +210,11 @@
    (delete-directory/files dir))
  (test-case "sessions-info returns metadata for existing session"
    (define dir (make-temp-session-dir))
-   (create-session! dir "sess-info" #:entries (list (make-test-entry "gpt-4")))
+   (create-session! dir "sess-info" #:entries (list (make-test-entry "gpt-4") (make-message-entry)))
    (define info (sessions-info dir "sess-info"))
    (check-not-false info)
    (check-equal? (hash-ref info 'id) "sess-info")
-   (check-equal? (hash-ref info 'message-count) 1)
+   (check-equal? (hash-ref info 'message-count) 1) ; 1 message, model-change excluded
    (check-equal? (hash-ref info 'model) "gpt-4")
    (check-true (path? (hash-ref info 'path)))
    (delete-directory/files dir))
@@ -201,12 +223,9 @@
    (define session-dir (build-path dir "sess-tools"))
    (make-directory* session-dir)
    (define jsonl-path (build-path session-dir "session.jsonl"))
+   ;; F-14: tool calls are messages with kind "tool-call"
    (jsonl-append! jsonl-path
-                  (hasheq 'role
-                          "assistant"
-                          'content
-                          (list (hasheq 'type "tool-call" 'id "tc1" 'name "read")
-                                (hasheq 'type "text" 'text "result"))))
+                  (hasheq 'role "assistant" 'kind "tool-call" 'content '() 'timestamp 1000))
    (define info (sessions-info dir "sess-tools"))
    (check-equal? (hash-ref info 'tool-call-count) 1)
    (delete-directory/files dir))
