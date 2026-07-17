@@ -54,6 +54,12 @@
                  (hash-ref part 'text ""))
                ""))
 
+(define (approval-events events)
+  (filter (lambda (event) (string-prefix? (car event) "mas.spawn-approval")) events))
+
+(define (terminal-events events)
+  (filter (lambda (event) (string=? (car event) "subagent.terminal")) events))
+
 (define (run/capture args decision)
   (set-headless-approval-mode!)
   (define events '())
@@ -87,7 +93,8 @@
   (define-values (result events)
     (run/capture (hasheq 'jobs (list (hasheq 'task "no tools" 'capabilities '()))) #f))
   (check-false (tool-result-is-error? result) (result-text result))
-  (check-equal? events '()))
+  (check-equal? (approval-events events) '())
+  (check-equal? (length (terminal-events events)) 1))
 
 (test-case "delegated any wildcard is rejected before approval"
   (define-values (result events)
@@ -123,7 +130,8 @@
   (define-values (result events)
     (run/capture (hasheq 'jobs (list (hasheq 'task "inspect" 'capabilities '(read-only)))) #f))
   (check-false (tool-result-is-error? result))
-  (check-equal? events '()))
+  (check-equal? (approval-events events) '())
+  (check-equal? (length (terminal-events events)) 1))
 
 (test-case "mixed dangerous batch requests exactly one all-or-nothing approval"
   (define args
@@ -179,7 +187,9 @@
                                                    '(shell-exec))))
                              (make-test-context publisher)))
      (check-false (tool-result-is-error? result))
-     (check-equal? (map car payloads) '("mas.spawn-approval-requested" "mas.spawn-approval-terminal"))
+     (check-equal? (map car payloads)
+                   '("mas.spawn-approval-requested" "mas.spawn-approval-terminal"
+                                                    "subagent.terminal"))
      (for* ([entry (in-list payloads)]
             [secret-fragment (in-list '("super-secret-value-123456" "role-secret-value-123456"
                                                                     "model-secret-value-123456"))])
@@ -316,7 +326,8 @@
                                (hasheq 'jobId "second" 'task "two" 'capabilities '(read-only))))
                  #t))
   (check-false (tool-result-is-error? result) (result-text result))
-  (check-equal? (length events) 1)
+  (check-equal? (length (approval-events events)) 1)
+  (check-equal? (length (terminal-events events)) 2)
   (define jobs (hash-ref (tool-result-details result) 'jobs))
   (check-equal? (map (lambda (job) (hash-ref job 'jobId)) jobs) '("first" "second"))
   (define approved-plan (hash-ref (hash-ref (cdar events) 'snapshot) 'jobs))

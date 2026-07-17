@@ -17,7 +17,8 @@
          "../llm/provider.rkt"
          "../llm/model.rkt"
          "../util/event/event-bus.rkt"
-         "../util/ids.rkt")
+         "../util/ids.rkt"
+         "../util/cancellation.rkt")
 
 ;; ============================================================
 ;; Helpers
@@ -165,6 +166,108 @@
   (define jobs (list (hasheq 'task "valid task" 'jobId "good") (hasheq 'jobId "bad")))
   (define result (tool-spawn-subagents (hasheq 'jobs jobs) ctx))
   (check-true (tool-result-is-error? result)))
+
+;; ============================================================
+;; Truthful unsuccessful child aggregation
+;; ============================================================
+
+(test-case "timed-out child is a batch failure with safe metadata only"
+  (define looping-response
+    (make-model-response
+     (list
+      (hasheq 'type "tool-call" 'id "batch-loop" 'name "read" 'arguments (hasheq 'path "README.md")))
+     (hasheq)
+     "test-provider"
+     'tool-calls))
+  (define provider (make-mock-provider looping-response #:name "looping"))
+  (define ctx (make-test-exec-ctx provider))
+  (define result
+    (tool-spawn-subagents (hasheq 'jobs (list (hasheq 'task "loop" 'jobId "timed" 'max-turns 1)))
+                          ctx))
+  (check-false (tool-result-is-error? result))
+  (define details (tool-result-details result))
+  (check-equal? (hash-ref details 'succeeded #f) 0)
+  (check-equal? (hash-ref details 'failed #f) 1)
+  (check-false (hash-has-key? details 'snapshot))
+  (define job (car (hash-ref details 'jobs)))
+  (check-false (hash-ref job 'success #t))
+  (check-equal? (hash-ref job 'terminalStatus #f) "timed-out")
+  (check-false (hash-has-key? job 'content))
+  (check-false (hash-has-key? job 'details)))
+
+(test-case "batch result content preserves job correlation while metadata stays digest-only"
+  (define first-sentinel "FIRST-CHILD-RAW-SENTINEL")
+  (define second-sentinel "SECOND-CHILD-RAW-SENTINEL")
+  (define provider
+    (make-provider (lambda () "correlated")
+                   (lambda () (hasheq))
+                   (lambda (request)
+                     (define rendered (format "~s" (model-request-messages request)))
+                     (make-model-response (list (hasheq 'type
+                                                        "text"
+                                                        'text
+                                                        (if (string-contains? rendered "first task")
+                                                            first-sentinel
+                                                            second-sentinel)))
+                                          (hasheq)
+                                          "correlated"
+                                          'stop))
+                   (lambda (_request) '())))
+  (define events (box '()))
+  (define ctx
+    (make-exec-context #:event-publisher
+                       (lambda (event-type payload)
+                         (set-box! events (cons (cons event-type payload) (unbox events))))
+                       #:runtime-settings (hasheq 'provider provider 'model "correlated")))
+  (define result
+    (tool-spawn-subagents
+     (hasheq 'jobs
+             (list (hasheq 'jobId "first" 'task "first task" 'capabilities '(read-only))
+                   (hasheq 'jobId "second" 'task "second task" 'capabilities '(read-only)))
+             'maxParallel
+             2)
+     ctx))
+  (define visible
+    (findf (lambda (part) (equal? (hash-ref part 'type #f) "batch-results"))
+           (tool-result-content result)))
+  (define visible-jobs (hash-ref visible 'jobs))
+  (check-equal? (map (lambda (job) (hash-ref job 'jobId)) visible-jobs) '("first" "second"))
+  (check-true (string-contains? (format "~s" (hash-ref (car visible-jobs) 'content)) first-sentinel))
+  (check-true (string-contains? (format "~s" (hash-ref (cadr visible-jobs) 'content))
+                                second-sentinel))
+  (define metadata-rendered (format "~s" (tool-result-details result)))
+  (define events-rendered (format "~s" (unbox events)))
+  (for ([sentinel (in-list (list first-sentinel second-sentinel))])
+    (check-false (string-contains? metadata-rendered sentinel))
+    (check-false (string-contains? events-rendered sentinel))))
+
+(test-case "failed child is a batch failure"
+  (define malformed
+    (make-model-response (list (hasheq 'type "text" 'text "not executable"))
+                         (hasheq)
+                         "test-provider"
+                         'tool-calls))
+  (define result
+    (tool-spawn-subagents (hasheq 'jobs (list (hasheq 'task "fail" 'jobId "failed")))
+                          (make-test-exec-ctx (make-mock-provider malformed))))
+  (define details (tool-result-details result))
+  (check-equal? (hash-ref details 'succeeded) 0)
+  (check-equal? (hash-ref details 'failed) 1)
+  (check-equal? (hash-ref (car (hash-ref details 'jobs)) 'terminalStatus) "failed"))
+
+(test-case "cancelled child is a batch failure"
+  (define token (make-cancellation-token))
+  (cancel-token! token)
+  (define provider (make-stub-provider "must not complete"))
+  (define ctx
+    (make-exec-context #:cancellation-token token
+                       #:runtime-settings (hasheq 'provider provider 'model "test-model")))
+  (define result
+    (tool-spawn-subagents (hasheq 'jobs (list (hasheq 'task "cancel" 'jobId "cancelled"))) ctx))
+  (define details (tool-result-details result))
+  (check-equal? (hash-ref details 'succeeded) 0)
+  (check-equal? (hash-ref details 'failed) 1)
+  (check-equal? (hash-ref (car (hash-ref details 'jobs)) 'terminalStatus) "cancelled"))
 
 ;; ============================================================
 ;; Backward compat

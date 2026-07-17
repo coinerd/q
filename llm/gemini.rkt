@@ -91,22 +91,36 @@
   ;; Build contents — Gemini uses "contents" with "parts" arrays
   ;; Role mapping: "assistant" → "model", "user" → "user"
   (define raw-messages (model-request-messages req))
+  (define system-text
+    (string-join (for/list ([msg (in-list raw-messages)]
+                            #:when (equal? (hash-ref msg 'role #f) "system"))
+                   (format "~a" (hash-ref msg 'content "")))
+                 "\n\n"))
+  (define conversation-messages
+    (filter (lambda (msg) (not (equal? (hash-ref msg 'role #f) "system"))) raw-messages))
 
-  ;; Build call-id → name map from assistant tool-call blocks (Issue #107)
+  ;; Stable normalized IDs are retained internally. Gemini's native protocol
+  ;; correlates functionCall/functionResponse by function name, so keep an
+  ;; ID→name table while translating the canonical top-level tool_calls shape.
   (define call-id->name
-    (for*/fold ([acc (hash)])
-               ([msg (in-list raw-messages)]
-                #:when (equal? (hash-ref msg 'role "") "assistant")
-                [block (in-list (let ([c (hash-ref msg 'content "")])
-                                  (if (list? c)
-                                      c
-                                      '())))])
-      (if (and (hash? block) (equal? (hash-ref block 'type #f) "tool-call"))
-          (hash-set acc (hash-ref block 'id "") (hash-ref block 'name ""))
+    (for/fold ([acc (hash)]) ([msg (in-list conversation-messages)])
+      (if (equal? (hash-ref msg 'role "") "assistant")
+          (let* ([canonical (for/list ([call (in-list (hash-ref msg 'tool_calls '()))])
+                              (define fn (hash-ref call 'function (hasheq)))
+                              (cons (hash-ref call 'id "") (hash-ref fn 'name "")))]
+                 [content (hash-ref msg 'content '())]
+                 [legacy (if (list? content)
+                             (for/list ([block (in-list content)]
+                                        #:when (and (hash? block)
+                                                    (equal? (hash-ref block 'type #f) "tool-call")))
+                               (cons (hash-ref block 'id "") (hash-ref block 'name "")))
+                             '())])
+            (for/fold ([names acc]) ([entry (in-list (append canonical legacy))])
+              (hash-set names (car entry) (cdr entry))))
           acc)))
 
   (define contents
-    (for/list ([msg (in-list raw-messages)])
+    (for/list ([msg (in-list conversation-messages)])
       (define role (hash-ref msg 'role "user"))
       (define content (hash-ref msg 'content ""))
       ;; Map roles
@@ -119,20 +133,46 @@
       ;; Build parts based on content type and role
       (define parts
         (cond
-          ;; Tool role: convert to functionResponse
+          ;; Canonical transport stores correlation at message level. Retain
+          ;; legacy nested fields only as an ingress compatibility path.
           [(equal? role "tool")
            (define tool-call-id
-             (if (hash? content)
-                 (hash-ref content 'toolCallId "")
-                 ""))
+             (hash-ref msg
+                       'tool_call_id
+                       (if (hash? content)
+                           (hash-ref content 'toolCallId "")
+                           "")))
            (define tool-result-content
-             (if (hash? content)
-                 (hash-ref content 'content "")
-                 (if (string? content) content "")))
+             (cond
+               [(string? content) content]
+               [(hash? content) (format "~a" (hash-ref content 'content ""))]
+               [else (format "~a" content)]))
            (define tool-name (hash-ref call-id->name tool-call-id ""))
            (list (hasheq 'functionResponse
-                         (hasheq 'name tool-name 'response (hasheq 'content tool-result-content))))]
+                         (hasheq 'id
+                                 tool-call-id
+                                 'name
+                                 tool-name
+                                 'response
+                                 (hasheq 'content tool-result-content))))]
           ;; User with list content (text + images) (GAP-V1)
+          [(and (equal? role "assistant") (pair? (hash-ref msg 'tool_calls '())))
+           (append (if (and (string? content) (not (string=? content "")))
+                       (list (hasheq 'text content))
+                       '())
+                   (for/list ([call (in-list (hash-ref msg 'tool_calls))])
+                     (define fn (hash-ref call 'function (hasheq)))
+                     (define args (hash-ref fn 'arguments (hasheq)))
+                     (hasheq 'functionCall
+                             (hasheq 'id
+                                     (hash-ref call 'id "")
+                                     'name
+                                     (hash-ref fn 'name "")
+                                     'args
+                                     (if (string? args)
+                                         (with-handlers ([exn:fail? (lambda (_) (hasheq))])
+                                           (string->jsexpr args))
+                                         args)))))]
           [(and (equal? role "user") (list? content))
            (for/list ([block (in-list content)])
              (openai-block->gemini block))]
@@ -143,9 +183,13 @@
              (match btype
                ["text" (hasheq 'text (hash-ref block 'text ""))]
                ["tool-call"
-                (hasheq
-                 'functionCall
-                 (hasheq 'name (hash-ref block 'name "") 'args (hash-ref block 'arguments (hasheq))))]
+                (hasheq 'functionCall
+                        (hasheq 'id
+                                (hash-ref block 'id "")
+                                'name
+                                (hash-ref block 'name "")
+                                'args
+                                (hash-ref block 'arguments (hasheq))))]
                [_ block]))]
           ;; Simple string content: text part
           [(string? content) (list (hasheq 'text content))]
@@ -163,12 +207,15 @@
   ;; Base body
   (define base (hasheq 'contents contents 'generationConfig gen-config))
 
-  ;; Add optional system prompt — goes to systemInstruction, not contents
-  (define with-system
+  ;; Explicit settings take precedence; canonical system messages otherwise
+  ;; become Gemini's native systemInstruction and never synthetic user turns.
+  (define effective-system
     (if (hash-has-key? settings 'system)
-        (hash-set base
-                  'systemInstruction
-                  (hasheq 'parts (list (hasheq 'text (hash-ref settings 'system)))))
+        (hash-ref settings 'system)
+        system-text))
+  (define with-system
+    (if (and (string? effective-system) (not (string=? effective-system "")))
+        (hash-set base 'systemInstruction (hasheq 'parts (list (hasheq 'text effective-system))))
         base))
 
   ;; Translate tools to Gemini format if present
@@ -221,8 +268,13 @@
         (hash-ref candidate 'finishReason "STOP")
         "STOP"))
 
-  ;; Translate stop reason
-  (define stop-reason (translate-stop-reason 'gemini finish-reason))
+  ;; A native functionCall requires another request even when Gemini reports
+  ;; finishReason=STOP. Normalize that mixed native signal to the shared reason.
+  (define stop-reason
+    (if (for/or ([part (in-list parts)])
+          (hash-has-key? part 'functionCall))
+        'tool-calls
+        (translate-stop-reason 'gemini finish-reason)))
 
   ;; Translate usage
   (define prompt-tokens (hash-ref usage-raw 'promptTokenCount 0))
@@ -243,7 +295,10 @@
         [(hash-has-key? part 'text) (hasheq 'type "text" 'text (hash-ref part 'text ""))]
         [(hash-has-key? part 'functionCall)
          (let* ([fc (hash-ref part 'functionCall)]
-                [tool-id (gemini-gen-tool-id)])
+                [native-id (hash-ref fc 'id #f)]
+                [tool-id (if (and (string? native-id) (not (string=? native-id "")))
+                             native-id
+                             (gemini-gen-tool-id))])
            (define tc-hash
              (hasheq 'type
                      "tool-call"
@@ -329,7 +384,10 @@
            (set! results (cons (make-stream-chunk text #f #f #f) results))))]
       [(hash-has-key? part 'functionCall)
        (let* ([fc (hash-ref part 'functionCall)]
-              [tc-id (gemini-gen-tool-id)]
+              [generated-id (gemini-gen-tool-id)]
+              [native-id (hash-ref fc 'id #f)]
+              [tc-id
+               (if (and (string? native-id) (not (string=? native-id ""))) native-id generated-id)]
               [tc-index (sub1 (current-gemini-tool-id-counter))]
               [tc-delta
                (hasheq

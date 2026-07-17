@@ -38,7 +38,8 @@
          SUBAGENT-SUMMARY-MAX-CHARS
          classify-terminal-status
          make-safe-result-metadata
-         result-has-content?)
+         result-has-content?
+         terminal-status-success?)
 
 ;; ============================================================
 ;; Capability normalization
@@ -294,6 +295,9 @@
     [(eq? raw-status 'max-turns-reached) 'timed-out]
     [(eq? raw-status 'cancelled) 'cancelled]
     [else 'failed]))
+
+(define (terminal-status-success? terminal-status)
+  (and (memq terminal-status '(completed approved-empty)) #t))
 
 ;; Check whether result text is non-empty (after trimming).
 (define (result-has-content? text)

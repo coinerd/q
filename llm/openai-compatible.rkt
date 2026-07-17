@@ -66,16 +66,32 @@
 ;; Request body construction
 ;; ============================================================
 
+(define (openai-normalize-message msg)
+  (define calls (hash-ref msg 'tool_calls #f))
+  (if (not (list? calls))
+      msg
+      (hash-set msg
+                'tool_calls
+                (for/list ([call (in-list calls)])
+                  (define fn (hash-ref call 'function (hasheq)))
+                  (define args (hash-ref fn 'arguments "{}"))
+                  (hash-set call
+                            'function
+                            (hash-set fn
+                                      'arguments
+                                      (if (string? args)
+                                          args
+                                          (jsexpr->string args))))))))
+
 (define (openai-build-request-body req #:stream? [stream? #f])
   (define settings (model-request-settings req))
   (define base
     (hasheq 'model
             (hash-ref settings 'model OPENAI-DEFAULT-MODEL)
             'messages
-            (model-request-messages req)
+            (map openai-normalize-message (model-request-messages req))
             'stream
             stream?))
-  ;; Add optional fields
   (define with-temp
     (if (hash-has-key? settings 'temperature)
         (hash-set base 'temperature (hash-ref settings 'temperature))
@@ -84,17 +100,13 @@
     (if (hash-has-key? settings 'max-tokens)
         (hash-set with-temp 'max_tokens (hash-ref settings 'max-tokens))
         with-temp))
-  ;; Add tools if present
   (define with-tools
     (if (model-request-tools req)
         (hash-set with-max-tokens 'tools (model-request-tools req))
         with-max-tokens))
-  ;; v0.83.10: Request usage in streaming chunks so cost tracker updates
-  (define with-stream-opts
-    (if stream?
-        (hash-set with-tools 'stream_options (hasheq 'include_usage #t))
-        with-tools))
-  with-stream-opts)
+  (if stream?
+      (hash-set with-tools 'stream_options (hasheq 'include_usage #t))
+      with-tools))
 
 ;; ============================================================
 ;; Response parsing

@@ -25,7 +25,12 @@
                   make-message)
          (only-in "../../util/entry-predicates.rkt" compaction-summary-entry?)
          (only-in "../../util/content/content-parts.rkt" text-part text-part? text-part-text)
-         (only-in "../../util/content/content-parts.rkt" tool-result-part? tool-result-part-content)
+         (only-in "../../util/content/content-parts.rkt"
+                  make-tool-result-part
+                  tool-result-part?
+                  tool-result-part-tool-call-id
+                  tool-result-part-content
+                  tool-result-part-is-error?)
          (only-in "../../util/content/content-helpers.rkt" result-content->string)
          (only-in "../session-index.rkt" active-leaf get-branch))
 
@@ -133,6 +138,13 @@
                       (result-content->string (tool-result-part-content part) #:handle-hash? #t)]
                      [else ""]))
                  "\n"))
+  (define original-tool-result (findf tool-result-part? content))
+  (define (summarized-content summary-text)
+    (list (if original-tool-result
+              (make-tool-result-part (tool-result-part-tool-call-id original-tool-result)
+                                     summary-text
+                                     (tool-result-part-is-error? original-tool-result))
+              (make-text-part summary-text))))
   (cond
     [(<= (string-length text) MAX-TOOL-RESULT-CHARS) entry]
     [else
@@ -145,14 +157,14 @@
         (define dropped (- (length lines) 20))
         (define summary-text
           (string-join (append head (list (format "... ~a lines truncated ..." dropped)) tail) "\n"))
-        (struct-copy message entry [content (list (make-text-part summary-text))])]
+        (struct-copy message entry [content (summarized-content summary-text)])]
        ;; Single (or few) very long lines: hard truncate at char limit.
        [else
         (define summary-text
           (string-append (substring text 0 MAX-TOOL-RESULT-CHARS)
                          (format "\n... ~a chars truncated ..."
                                  (- (string-length text) MAX-TOOL-RESULT-CHARS))))
-        (struct-copy message entry [content (list (make-text-part summary-text))])])]))
+        (struct-copy message entry [content (summarized-content summary-text)])])]))
 
 ;; ---------------------------------------------------------------------------
 ;; Entry → context message conversion

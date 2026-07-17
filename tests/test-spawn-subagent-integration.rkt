@@ -124,7 +124,8 @@
                    (hash-ref c 'text ""))
                  ""))
   (check-true (string-contains? text "subagent failed")
-              (format "error should mention 'subagent failed', got: ~v" text)))
+              (format "error should mention 'subagent failed', got: ~v" text))
+  (check-equal? (hash-ref (tool-result-details result) 'terminal-status #f) "failed"))
 
 (test-case "#1204: subagent child has independent session ID"
   (define prov (make-stub-provider "session test"))
@@ -190,7 +191,7 @@
   (check-true (> (length content) 0) "content should not be empty")
   (define details (tool-result-details result))
   (check-true (hash? details) "details should be a hash")
-  (check-equal? (hash-ref details 'turns-used #f) 3 "turns-used should match max-turns")
+  (check-equal? (hash-ref details 'turns-used #f) 1 "turns-used should report actual provider turns")
   (check-not-false (hash-ref details 'session-id #f) "should have session-id")
   (check-not-false (hash-ref details 'status #f) "should have status"))
 

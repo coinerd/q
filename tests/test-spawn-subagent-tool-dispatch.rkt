@@ -62,19 +62,12 @@
 (test-case "spawn-subagent dispatches tool_calls instead of returning 'stopped'"
   ;; Provider returns tool_calls first, then stop
   (define tool-call-response
-    (make-model-response (list (hasheq 'id
-                                       "tc-1"
-                                       'type
-                                       "text"
-                                       'text
-                                       ""
-                                       'name
-                                       "read"
-                                       'arguments
-                                       "{\"path\":\"/etc/hostname\"}"))
-                         (hasheq 'prompt-tokens 10 'completion-tokens 20 'total-tokens 30)
-                         "mock-model"
-                         'tool_calls))
+    (make-model-response
+     (list
+      (hasheq 'id "tc-1" 'type "tool-call" 'name "read" 'arguments "{\"path\":\"/etc/hostname\"}"))
+     (hasheq 'prompt-tokens 10 'completion-tokens 20 'total-tokens 30)
+     "mock-model"
+     'tool-calls))
   (define done-response
     (make-model-response (list (hasheq 'type "text" 'text "The hostname file was read successfully."))
                          (hasheq 'prompt-tokens 10 'completion-tokens 20 'total-tokens 30)

@@ -33,6 +33,23 @@
                         'stop)
    #:name "mock"))
 
+(define (make-task-aware-provider)
+  (make-provider (lambda () "task-aware")
+                 (lambda () (hasheq))
+                 (lambda (request)
+                   (define request-text (format "~s" (model-request-messages request)))
+                   (define response-text
+                     (cond
+                       [(string-contains? request-text "Parallel A") "PARALLEL-A-SENTINEL"]
+                       [(string-contains? request-text "Parallel B") "PARALLEL-B-SENTINEL"]
+                       [(string-contains? request-text "Prepare") "PREP-SENTINEL"]
+                       [else "FINAL-SENTINEL"]))
+                   (make-model-response (list (hasheq 'type "text" 'text response-text))
+                                        (hasheq)
+                                        "task-aware"
+                                        'stop))
+                 (lambda (_request) '())))
+
 (define (make-failing-provider)
   (make-provider (lambda () "failing-mock")
                  (lambda () (hasheq 'streaming #t))
@@ -214,7 +231,7 @@
               (hash-ref (car content) 'text "")
               (format "~a" content)))
         (check-true (string-contains? msg "failed") "should mention failure")
-        (check-true (string-contains? msg "step 1") "should indicate failed step")))
+        (check-true (string-contains? msg "step 0") "should indicate first failed step")))
 
     (test-case "dangerous parallel capability approved by default in non-interactive mode"
       (define provider (make-static-text-provider "Done"))
@@ -284,7 +301,7 @@
                   "both parallel steps should succeed"))
 
     (test-case "execute mixed sequential and parallel workflow"
-      (define provider (make-static-text-provider "Done"))
+      (define provider (make-task-aware-provider))
       (define exec-ctx (make-test-exec-ctx provider))
       (define wf
         (make-simple-workflow (list (hasheq 'role "prep" 'task "Prepare")
@@ -296,11 +313,13 @@
       (define content (tool-result-content result))
       (define steps-hash (hash-ref content 'steps))
       (check-equal? (length steps-hash) 4)
+      (check-equal? (map (lambda (step) (hash-ref step 'role)) steps-hash)
+                    '("prep" "a" "b" "finalize"))
       (check-true (andmap (lambda (s) (hash-ref s 'success #f)) steps-hash)
                   "all mixed steps should succeed")
       ;; Finalize step should see the last parallel step's result
       (define finalize-task (hash-ref (cadddr steps-hash) 'task ""))
-      (check-true (string-contains? finalize-task "Done")
+      (check-true (string-contains? finalize-task "PARALLEL-B-SENTINEL")
                   "finalize should be rendered with previous result"))
 
     (test-case "parallel step failure stops pipeline"
@@ -348,6 +367,12 @@
       (check-equal? (length steps) 2 "should have 2 steps (step 0 + step 1), not 3")
       (check-true (hash-ref (car steps) 'success) "step 0 should be successful")
       (check-false (hash-ref (cadr steps) 'success) "step 1 should be failed")
+      (for ([step (in-list steps)])
+        (check-false (hash-has-key? step 'task))
+        (check-false (hash-has-key? step 'result))
+        (check-true (hash-has-key? step 'taskDigest))
+        (check-true (hash-has-key? step 'resultDigest)))
+      (check-false (string-contains? (format "~s" details) "Success 0"))
       ;; Step 2 (index 2) should be absent (skipped)
       (check-false (findf (lambda (s) (= (hash-ref s 'step) 2)) steps)
                    "step 2 should not be present (skipped)"))
@@ -368,8 +393,9 @@
         (define steps (hash-ref details 'steps))
         (check-equal? (length steps) 1 "denied step should be present")
         (check-false (hash-ref (car steps) 'success) "denied step should be marked failed")
-        (check-true (string-contains? (hash-ref (car steps) 'result "") "HITL approval denied")
-                    "should contain denial message")))
+        (check-false (hash-has-key? (car steps) 'task))
+        (check-false (hash-has-key? (car steps) 'result))
+        (check-true (hash-has-key? (car steps) 'resultDigest))))
 
     (test-case "parallel failure preserves all parallel step results in details"
       (define provider (make-failing-provider))
