@@ -245,6 +245,21 @@
 (define (completion-event? event)
   (and (member (event-phase event) completion-phases) #t))
 
+;; F-07: Positive provider/model identity from turn.started trace events.
+;; Returns #t when at least one turn.started event has non-empty provider and
+;; model fields and the provider is not a mock. Replaces negative inference.
+(define (positive-provider-observed? events)
+  (for/or ([event (in-list events)])
+    (and (string=? (event-phase event) "turn.started")
+         (let* ([data (or (hash-ref event 'data #f) (hash-ref event "data" #f) (hash))]
+                [provider (or (hash-ref data 'provider #f) (hash-ref data "provider" #f))]
+                [model (or (hash-ref data 'model #f) (hash-ref data "model" #f))])
+           (and provider
+                model
+                (not (equal? provider ""))
+                (not (equal? model ""))
+                (not (regexp-match? #px"(?i:mock)" (format "~a" provider))))))))
+
 (define compact-terminal-phases
   '("session.compact.completed" "session.compact.nothing-to-compact"
                                 "session.compact.already-running"
@@ -466,6 +481,10 @@
            [alive? 'timed-out]
            [else 'failed]))
        (define mock? (mock-provider-observed? capture events))
+       ;; F-07: positive provider identity from turn.started trace events,
+       ;; not negative inference (absence of mock text).
+       (define provider-positive?
+         (and completed? (not (string=? tag "compact")) (positive-provider-observed? events)))
        (define artifact-path
          (write-redacted-artifacts! output-root tag session-name status capture events))
        (hash 'status
@@ -475,7 +494,7 @@
              'capture
              capture
              'provider-confirmed?
-             (and completed? (not (string=? tag "compact")) (not mock?))
+             provider-positive?
              'control-command-confirmed?
              (and completed? (string=? tag "compact"))
              'mock-provider?

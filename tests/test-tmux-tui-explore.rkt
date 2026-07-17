@@ -120,6 +120,14 @@
    'trace-events
    (list
     (hash 'phase
+          "turn.started"
+          'session-id
+          session
+          'turn-id
+          turn
+          'data
+          (hash 'provider "anthropic" 'model "claude-3-5-sonnet"))
+    (hash 'phase
           "tool.execution.started"
           'session-id
           session
