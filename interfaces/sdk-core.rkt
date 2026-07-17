@@ -388,6 +388,10 @@
              (session:session-id sess)
              'active?
              (session:session-active? sess)
+             'session-dir
+             (session:agent-session-session-dir sess)
+             'start-time
+             (session:agent-session-start-time sess)
              'history-length
              (length (session:session-history sess))
              'model-name

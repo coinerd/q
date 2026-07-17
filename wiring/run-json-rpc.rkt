@@ -21,7 +21,8 @@
                   session-id
                   fork-session
                   close-session!
-                  agent-session-queue)
+                  agent-session-queue
+                  open-or-resume-session)
          "../util/event/event-bus.rkt"
          "../extensions/api.rkt"
          "./rpc-methods.rkt"
@@ -37,7 +38,7 @@
 ;; ============================================================
 
 (define (run-json cfg rt-config)
-  (define sess (make-agent-session rt-config))
+  (define sess (open-or-resume-session rt-config))
   (define bus (dict-ref rt-config 'event-bus))
   (define sid (session-id sess))
   (define sub-id (start-json-mode! bus #:session-id sid))
@@ -85,7 +86,7 @@
   ;; Sessions table: session-id → agent-session
   (define sessions (make-hash))
   ;; Auto-open a default session for backward compatibility
-  (define default-sess (make-agent-session rt-config))
+  (define default-sess (open-or-resume-session rt-config))
   (hash-set! sessions (session-id default-sess) default-sess)
   ;; ---- Build deps for make-core-rpc-handlers ----
   (define core-deps

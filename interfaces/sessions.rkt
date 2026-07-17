@@ -122,7 +122,7 @@
 
 ;; Read metadata from a session.jsonl file.
 ;; Returns a hash with keys:
-;;   'id, 'message-count, 'model, 'provider, 'size-bytes, 'mtime
+;;   'id, 'message-count, 'model, 'size-bytes, 'mtime
 (define (read-session-metadata session-id session-path)
   (define jsonl-path (fs-build-path session-path "session.jsonl"))
   (define size-bytes
@@ -136,24 +136,43 @@
                                               (exn-message e))
                                  0)])
       (file-or-directory-modify-seconds jsonl-path)))
-  ;; Count entries and extract model from first few messages
+  ;; Read entries
   (define entries
     (with-handlers ([exn:fail?
                      (lambda (e)
                        (log-warning "sessions: failed to read ~a: ~a" jsonl-path (exn-message e))
                        '())])
       (jsonl-read-all-valid jsonl-path)))
-  (define message-count (length entries))
-  ;; Try to find model from first assistant message
+  ;; F-14 5-C: Count only conversational messages, excluding internal entries
+  ;; (session-info, model-change, thinking-level-change, version headers)
+  (define internal-kinds '("session-info" "model-change" "thinking-level-change"))
+  (define (internal-entry? e)
+    (define kind (or (hash-ref e "kind" #f) (hash-ref e 'kind #f)))
+    (and kind (member kind internal-kinds)))
+  (define message-count (length (filter (lambda (e) (not (internal-entry? e))) entries)))
+  ;; F-14 5-A: Extract model from model-change entry meta, not non-existent top-level key.
+  ;; JSON entries from read-json have string keys; message->jsexpr uses symbol keys.
+  ;; Handle both for safety.
+  (define (hash-ref* h key [default #f])
+    (or (hash-ref h key #f)
+        (hash-ref h
+                  (string->symbol (if (symbol? key)
+                                      (symbol->string key)
+                                      key))
+                  #f)
+        default))
   (define model
     (let loop ([es entries])
       (cond
         [(null? es) "unknown"]
         [else
          (define e (car es))
-         (define m (hash-ref e 'model #f))
-         (if m
-             m
+         (define kind (hash-ref* e "kind" #f))
+         (if (equal? kind "model-change")
+             (let ([meta (hash-ref* e "meta" #f)])
+               (if (hash? meta)
+                   (let ([m (hash-ref* meta "model" #f)]) (or m "unknown"))
+                   "unknown"))
              (loop (cdr es)))])))
   (hasheq 'id
           session-id
@@ -247,15 +266,23 @@
                             (log-warning "sessions: failed to read ~a: ~a" jsonl-path (exn-message e))
                             '())])
            (jsonl-read-all-valid jsonl-path)))
+       ;; F-14 5-D: Count tool calls by message kind, not content part type.
+       ;; Tool calls are messages with kind "tool-call", not content parts with type "tool-call".
+       (define (hash-ref** h key [default #f])
+         (or (hash-ref h key #f)
+             (hash-ref h
+                       (if (string? key)
+                           (string->symbol key)
+                           key)
+                       #f)
+             default))
        (define tool-call-count
          (for/sum ([e (in-list entries)])
-                  (define content (hash-ref e 'content '()))
-                  (if (list? content)
-                      (for/sum ([part (in-list content)] #:when (equal? (hash-ref part 'type #f)
-                                                                        "tool-call"))
-                               1)
-                      0)))
-       (define branch-count (for/sum ([e (in-list entries)]) (if (hash-ref e 'parentId #f) 1 0)))
+                  (define kind (hash-ref** e "kind" #f))
+                  (if (equal? kind "tool-call") 1 0)))
+       (define branch-count
+         (for/sum ([e (in-list entries)])
+                  (if (or (hash-ref e 'parentId #f) (hash-ref e "parentId" #f)) 1 0)))
        (hash-set* meta
                   'tool-call-count
                   tool-call-count
