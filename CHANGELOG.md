@@ -1,3 +1,124 @@
+## 0.99.51
+
+Released: 2026-07-18
+
+### Overview
+
+Post-release audit remediation. v0.99.51 closes all fifteen findings
+(F-01 through F-15) raised by the v0.99.50 post-release in-depth audit
+(milestone #837). The release hardens security (batch HITL enforcement,
+session-ID containment, OAuth-token redaction), restores truthful terminal
+outcomes (canonical provider transport, positive provider provenance,
+production-aligned verifier evidence), adds correlated compaction and
+functional interrupt, fixes resume/print parity and session-metadata truth,
+and makes release governance fail-closed (gate-evidence strictness, uploaded
+manifest verification, mandatory release-notes lint). Each wave merged behind
+the strict twelve-context branch protection with retained evidence, retained
+independent review, and recorded gate validation.
+
+### User-Visible Changes
+
+- Batch subagent spawns (`spawn_subagents`) can no longer bypass HITL approval;
+  the effective execution snapshot is bound atomically to the approval decision
+  and delegated `any` authority is rejected (F-01; W1, PR #8755).
+- Approval timeout, teardown, and overlay lifecycle are generation-bound: locked
+  transitions and broadcast teardown cover both correlated and legacy waiters
+  (F-12; W1, PR #8755).
+- Exception-safe TUI approval channel cleanup prevents crashes during teardown
+  (F-12; W1, PR #8755).
+- Session ID traversal now reaches only validated session paths and rejects
+  malformed IDs and session/artifact symlinks, including sidecars such as
+  `session.jsonl.pending` (F-02; W2, PR #8756).
+- Centralized credential redaction (`util/credential-redaction.rkt`) redacts
+  nested credential fields, credential-bearing strings, provider config writers,
+  RPC responses, explorer summaries, logs, and trace payloads while keeping raw
+  persistence and HTTP transport lossless; OAuth access/refresh-token fields are
+  now caught (F-09; W2, PR #8756).
+- Subagent tool calls and results now flow through canonical provider transport
+  (`util/message/provider-transport.rkt`) with parent/child loops delegating and
+  adapters translating only at native boundaries; real-provider tool shapes are
+  compatible (F-04; W3, PR #8757).
+- Terminal subagent outcomes are truthful end to end: the canonical provider
+  bridge distinguishes `completed`, `approved-empty`, `failed`, `timed-out`, and
+  `cancelled` (F-05; W3, PR #8757).
+- `--print`/resume now resumes the exact persisted session instead of creating a
+  sibling, restoring resume parity (F-11; W4, PR #8758).
+- Session CLI, history, and metadata contracts are complete: model metadata is
+  read from `model-change` entries, message counts exclude internal entries, and
+  tool-call counts key off the `kind` field (F-14; W4, PR #8758).
+- `/compact` correlates requests and outcomes by `request-id` and isolates
+  multi-session compaction; terminal events only clear status when their
+  `request-id` matches the pending one (F-06; W5, PR #8759).
+- Provider provenance is now positively confirmed from `turn.started` trace
+  events rather than inferred from absence of mock text (F-07; W6, PR #8760).
+- Registered explorer scenarios now produce verifier evidence: `verify-mas`
+  matches the production `mas.spawn-approval-terminal` phase, the release audit
+  detects refusal from capture text, and an evidence manifest records SHA-256
+  artifact digests with repo SHA/version (F-08, F-03; W6, PR #8760).
+- Release gate evidence now fails closed: a pure `validate-gate-evidence-entry`
+  rejects wrong git SHA, non-zero failed, non-zero timed_out, zero test count,
+  stale timestamp, and wrong version (F-15; W7, PR #8761).
+- Uploaded release manifests are verified by a pure `verify-uploaded-manifest`
+  that checks version, tag, and tarball name; release-notes lint is mandatory
+  before tarball build (F-15; W7, PR #8761).
+
+### Breaking / Behavior Changes
+
+- No public API break is intended. The following behavioral corrections are
+  intentional security and truth remediations:
+  - Batch subagent spawns that previously approved via delegated `any` authority
+    are now rejected.
+  - Session CLI subcommands require validated session IDs and reject malformed
+    or symlinked paths.
+  - Credential-bearing strings are redacted at display/write boundaries while
+    raw persistence and HTTP transport remain lossless.
+  - Provider provenance is asserted positively; runs without a real
+    provider/model identity in `turn.started` no longer pass provenance checks.
+  - Release gate evidence with a stale SHA, non-zero failures, or zero tests
+    is now rejected.
+
+### Migration Notes
+
+- No migration is required. Existing session IDs, approval flows, and release
+  workflows continue to work; the only difference is that malformed or
+  non-credentialed evidence is now rejected rather than silently accepted.
+
+### Testing
+
+- Fast suite: 1038/1038 files and 15314/15314 tests passed before the release
+  bump.
+- Smoke suite: 19/19 files and 289/289 tests passed on the local profile.
+- Architecture suite: 14/14 files and 182/182 tests passed.
+- Lint: 22 blocking checks passed with 2 non-blocking warnings.
+
+### Findings Closed
+
+| ID | Severity | Wave | PR |
+|----|----------|------|----|
+| F-01 | Critical | W1 | #8755 |
+| F-02 | High | W2 | #8756 |
+| F-03 | Critical | W6 | #8760 |
+| F-04 | High | W3 | #8757 |
+| F-05 | High | W3 | #8757 |
+| F-06 | High | W5 | #8759 |
+| F-07 | High | W6 | #8760 |
+| F-08 | High | W6 | #8760 |
+| F-09 | High | W2 | #8756 |
+| F-10 | High | W0 | #8754 |
+| F-11 | High | W4 | #8758 |
+| F-12 | Medium | W1 | #8755 |
+| F-13 | Medium | W0 | #8754 |
+| F-14 | Medium | W4 | #8758 |
+| F-15 | Medium | W7 | #8761 |
+
+### Operational / Release
+
+- Release artifacts required: `q-0.99.51.tar.gz` and `release-manifest.json`.
+- GitHub milestone #837 completed with 15/15 findings closed before the release
+  tag was pushed.
+- Retained per-wave evidence, independent review, and gate validation artifacts
+  are published under `docs/reports/gsd-wave-{evidence,reviews,validation}/`.
+
 ## 0.99.50
 
 Released: 2026-07-13
