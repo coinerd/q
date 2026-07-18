@@ -15,8 +15,11 @@
          racket/list
          racket/match
          racket/path
+         racket/port
          racket/string
+         racket/system
          "../util/credential-redaction.rkt"
+         "tmux-explore/evidence.rkt"
          "tmux-explore/executor.rkt"
          "tmux-explore/verifiers.rkt")
 
@@ -393,6 +396,28 @@
     (for/list ([scenario (in-list scenarios)])
       (run-one-scenario scenario mode root executor)))
   (define-values (_tsv _json) (write-summary-files! root results))
+  ;; F-03: Generate evidence manifest with full SHA and artifact digests
+  ;; for real mode runs. This binds results to a specific repo SHA.
+  (when (eq? mode 'real)
+    (define repo-sha
+      (or (getenv "Q_GIT_SHA")
+          (with-handlers ([exn:fail? (lambda (_) #f)])
+            (string-trim (with-output-to-string
+                          (lambda () (system* (find-executable-path "git") "rev-parse" "HEAD")))))))
+    (define version
+      (with-handlers ([exn:fail? (lambda (_) "unknown")])
+        (string-trim (with-output-to-string
+                      (lambda () (system* (find-executable-path "git") "describe" "--tags"))))))
+    (when repo-sha
+      (define manifest
+        (build-evidence-manifest #:tag "all-scenarios"
+                                 #:status (if (real-results-gating-pass? results) 'pass 'fail)
+                                 #:classification (if (real-results-gating-pass? results) 'pass 'fail)
+                                 #:repo-sha repo-sha
+                                 #:version version
+                                 #:output-dir root
+                                 #:scenario-count (length results)))
+      (write-evidence-manifest! manifest (build-path root "evidence-manifest.json"))))
   (when append-log
     (append-central-log! append-log results))
   results)

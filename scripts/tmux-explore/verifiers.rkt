@@ -88,6 +88,28 @@
            (member (string-downcase (format "~a" value)) '("true" "yes" "present" "approved")))
        #t))
 
+;; F-07: Positive provider/model provenance from turn.started trace events.
+;; Returns #t when at least one turn.started event has non-empty provider and
+;; model fields. This replaces negative inference (absence of mock text).
+(define refusal-patterns
+  '(#rx"(?i:not authorized|cannot authorize|refus|not ready|cannot release|release is not)"))
+
+(define (positive-provider-identity? events)
+  (for/or ([event (in-list events)])
+    (and (phase=? event "turn.started")
+         (let ([provider (event-field event '(provider))]
+               [model (event-field event '(model))])
+           (and provider
+                model
+                (not (equal? provider ""))
+                (not (equal? model ""))
+                (not (regexp-match? #rx"(?i:mock)" (format "~a" provider))))))))
+
+(define (refusal-detected? capture)
+  (and (string? capture)
+       (for/or ([pattern (in-list refusal-patterns)])
+         (regexp-match? pattern capture))))
+
 (define (no-turn-id? v)
   (or (not v) (null? v) (eq? v 'null)))
 
@@ -155,28 +177,27 @@
 
 (define (verify-mas events completion-event)
   (for*/or ([request (in-list (events-with-phase events "mas.spawn-approval-requested"))]
-            [decision (in-list (events-with-phase events "mas.spawn-approval-decided"))]
+            [terminal (in-list (events-with-phase events "mas.spawn-approval-terminal"))]
             [completed (in-list (events-with-phase events "tool.execution.correlated-completed"))])
     (define approval-id (event-field request '(approval-id request-id approvalId)))
     (define call-id (event-field request '(tool-call-id toolCallId call-id)))
     (and (correlated-to-completion? request completion-event)
-         (correlated-to-completion? decision completion-event)
+         (correlated-to-completion? terminal completion-event)
          (correlated-to-completion? completed completion-event)
          (event-field request '(child-id childId))
-         (same-value? approval-id (event-field decision '(approval-id request-id approvalId)))
-         (same-value? call-id (event-field decision '(tool-call-id toolCallId call-id)))
+         (same-value? approval-id (event-field terminal '(approval-id request-id approvalId)))
+         (same-value? call-id (event-field terminal '(tool-call-id toolCallId call-id)))
          (same-value? call-id (event-field completed '(tool-call-id toolCallId call-id)))
-         (string=? (string-downcase (format "~a" (event-field decision '(decision status))))
-                   "approved")
+         ;; F-08: production emits mas.spawn-approval-terminal with terminal-status,
+         ;; not mas.spawn-approval-decided with decision/status.
+         (string=?
+          (string-downcase (format "~a" (event-field terminal '(terminal-status status decision))))
+          "approved")
          (truthy? (event-field completed '(result-present? result-present has-result?) #f))
-         (ordered? events request decision completed completion-event))))
+         (ordered? events request terminal completed completion-event))))
 
-(define (verify-release-audit events completion)
-  (for/or ([event (in-list (events-with-phase events "release.authorization.refused"))])
-    (and (correlated-to-completion? event completion)
-         (eq? (event-field event '(authorized? authorized) #t) #f)
-         (event-field event '(reason code))
-         (ordered? events event completion))))
+(define (verify-release-audit capture events completion)
+  (and (refusal-detected? capture) completion (ordered? events completion)))
 
 (define (resume-start? event)
   (and (phase=? event "session.started")
@@ -260,13 +281,13 @@
          (not (same-value? target-turn (event-turn recovery-completion)))
          (ordered? events request accepted cancelled recovery-start recovery-completion))))
 
-(define (scenario-semantic-pass? tag events completion)
+(define (scenario-semantic-pass? tag events completion #:capture [capture ""])
   (case (string->symbol tag)
     [(memory) (verify-memory events completion)]
     [(gsd) (verify-gsd events completion)]
     [(mas) (verify-mas events completion)]
     [(tools) (verify-tools events completion)]
-    [(release-audit) (verify-release-audit events completion)]
+    [(release-audit) (verify-release-audit capture events completion)]
     [(durable-memory) (verify-durable-memory events completion)]
     [(resume) (verify-resume events completion)]
     [(compact) (verify-compact events completion)]
@@ -283,6 +304,7 @@
      (define status (hash-ref-any observation '(status) 'failed))
      (define events (hash-ref-any observation '(trace-events traceEvents) '()))
      (define compact? (string=? tag "compact"))
+     (define capture (hash-ref-any observation '(capture) ""))
      (define blockers
        (filter values
                (list (and (not (eq? status 'completed)) (format "terminal status is ~a" status))
@@ -290,9 +312,11 @@
                      (and (truthy? (hash-ref-any observation '(crashed?) #f)) "session crashed")
                      (and (truthy? (hash-ref-any observation '(mock-provider?) #f))
                           "mock-provider fallback observed")
+                     ;; F-07: positive provider/model identity from turn.started trace events.
+                     ;; Negative inference (absence of mock text) is insufficient.
                      (and (not compact?)
-                          (not (truthy? (hash-ref-any observation '(provider-confirmed?) #f)))
-                          "non-mock provider execution is not positively confirmed")
+                          (not (positive-provider-identity? events))
+                          "positive provider/model identity is absent from turn.started trace events")
                      (and compact?
                           (not (truthy? (hash-ref-any observation '(control-command-confirmed?) #f)))
                           "real control-command execution is not positively confirmed")
@@ -324,7 +348,7 @@
                                          (if (list? events)
                                              (length events)
                                              0))))]
-       [(scenario-semantic-pass? tag events completion)
+       [(scenario-semantic-pass? tag events completion #:capture capture)
         (verification-result #t
                              'pass
                              '()

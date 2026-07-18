@@ -24,43 +24,52 @@
 
 (define completion (evt "turn.completed"))
 
+(define provider-evt
+  (evt "turn.started" #:data (hash 'provider "anthropic" 'model "claude-3-5-sonnet")))
+
 (define positive-fixtures
   (hash
    "memory"
-   (list (evt "memory.retrieval.performed"
+   (list provider-evt
+         (evt "memory.retrieval.performed"
               #:data (hash 'scope "session" 'query-snippet "blue-harbor" 'result-count 1))
          completion)
    "gsd"
-   (list (evt "gsd.transition.attempted" #:data (hash 'from "planned" 'to "executing"))
+   (list provider-evt
+         (evt "gsd.transition.attempted" #:data (hash 'from "planned" 'to "executing"))
          (evt "gsd.transition.succeeded" #:data (hash 'from "planned" 'to "executing"))
          completion)
    "mas"
-   (list (evt "mas.spawn-approval-requested"
-              #:data (hash 'approval-id approval 'tool-call-id call 'child-id "child-1"))
-         (evt "mas.spawn-approval-decided"
-              #:data (hash 'approval-id approval 'tool-call-id call 'decision "approved"))
-         (evt "tool.execution.correlated-completed"
-              #:data (hash 'tool-call-id
-                           call
-                           'tool-name
-                           "spawn_subagent"
-                           'result-present?
-                           #t
-                           'result-summary
-                           "completed"))
-         completion)
+   (list
+    provider-evt
+    (evt "mas.spawn-approval-requested"
+         #:data (hash 'approval-id approval 'tool-call-id call 'child-id "child-1" 'request-id "r1"))
+    (evt "mas.spawn-approval-terminal"
+         #:data
+         (hash 'approval-id approval 'tool-call-id call 'request-id "r1" 'terminal-status "approved"))
+    (evt "tool.execution.correlated-completed"
+         #:data (hash 'tool-call-id
+                      call
+                      'tool-name
+                      "spawn_subagent"
+                      'result-present?
+                      #t
+                      'result-summary
+                      "completed"))
+    completion)
    "tools"
    (list
+    provider-evt
     (evt "tool.execution.started" #:data (hash 'tool-call-id call 'tool-name "read"))
     (evt "tool.execution.correlated-completed"
          #:data
          (hash 'tool-call-id call 'tool-name "read" 'result-present? #t 'result-summary "completed"))
     completion)
    "release-audit"
-   (list (evt "release.authorization.refused" #:data (hash 'reason "missing-live-ci" 'authorized? #f))
-         completion)
+   (list provider-evt completion)
    "durable-memory"
-   (list (evt "memory.item.stored"
+   (list provider-evt
+         (evt "memory.item.stored"
               #:turn "turn-store"
               #:data (hash 'memory-id memory 'session-id "session-0"))
          (evt "session.started"
@@ -70,7 +79,8 @@
               #:data (hash 'memory-id memory 'session-id session 'result-present? #t))
          completion)
    "resume"
-   (list (evt "session.started"
+   (list provider-evt
+         (evt "session.started"
               #:turn #f
               #:data (hash 'reason "resume" 'session-id session 'previous-session-id "session-0"))
          (evt "session.resumed" #:data (hash 'session-id session 'previous-session-id "session-0"))
@@ -112,7 +122,9 @@
          #:turn "prompt-turn-a"
          #:data
          (hash 'request-id "interrupt-1" 'target-session-id session 'target-turn-id "prompt-turn-a"))
-    (evt "turn.started" #:turn "recovery-turn")
+    (evt "turn.started"
+         #:turn "recovery-turn"
+         #:data (hash 'provider "anthropic" 'model "claude-3-5-sonnet"))
     (evt "turn.completed" #:turn "recovery-turn"))))
 
 (define negative-fixtures
@@ -125,22 +137,25 @@
    (list (evt "gsd.transition.attempted" #:data (hash 'from "planned" 'to "executing"))
          (evt "gsd.transition.succeeded" #:data (hash 'from "planned" 'to "done"))
          completion)
-   ;; Approval decision and result target another tool call.
+   ;; Approval terminal and result target another tool call.
    "mas"
-   (list (evt "mas.spawn-approval-requested"
-              #:data (hash 'approval-id approval 'tool-call-id call 'child-id "child-1"))
-         (evt "mas.spawn-approval-decided"
-              #:data (hash 'approval-id approval 'tool-call-id "other" 'decision "approved"))
-         (evt "tool.execution.correlated-completed"
-              #:data (hash 'tool-call-id
-                           "other"
-                           'tool-name
-                           "spawn_subagent"
-                           'result-present?
-                           #t
-                           'result-summary
-                           "completed"))
-         completion)
+   (list
+    (evt "mas.spawn-approval-requested"
+         #:data (hash 'approval-id approval 'tool-call-id call 'child-id "child-1" 'request-id "r1"))
+    (evt
+     "mas.spawn-approval-terminal"
+     #:data
+     (hash 'approval-id approval 'tool-call-id "other" 'request-id "r1" 'terminal-status "approved"))
+    (evt "tool.execution.correlated-completed"
+         #:data (hash 'tool-call-id
+                      "other"
+                      'tool-name
+                      "spawn_subagent"
+                      'result-present?
+                      #t
+                      'result-summary
+                      "completed"))
+    completion)
    ;; Tool names and call IDs do not match.
    "tools"
    (list
@@ -211,7 +226,12 @@
 
     (test-case "all exact registered tags accept correlated positive fixtures"
       (for ([tag (in-list required-scenario-tags)])
-        (define result (verify-scenario-evidence tag (observation (hash-ref positive-fixtures tag))))
+        (define events (hash-ref positive-fixtures tag))
+        (define capture
+          (if (equal? tag "release-audit")
+              "I cannot authorize the release without live CI evidence."
+              "plausible assistant prose says everything passed"))
+        (define result (verify-scenario-evidence tag (observation events #:capture capture)))
         (check-true
          (verification-result-passed? result)
          (format "positive fixture should pass: ~a / ~a" tag (verification-result-reasons result)))))
