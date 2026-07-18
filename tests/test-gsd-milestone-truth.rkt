@@ -16,6 +16,9 @@
          (only-in file/sha1 bytes->hex-string))
 
 (define-runtime-path current-fixture "../docs/reports/gsd-milestones/v0.99.52.json")
+(define-runtime-path current-w0-evidence
+                     "../docs/reports/gsd-milestones/v0.99.52-w0-merge-evidence.json")
+(define current-w0-evidence-digest "3843bcb5520469fb4f3749b714043b78bf1a1d301d95d3adeb41b78d7d414661")
 (define-runtime-path historical-fixture "../docs/reports/gsd-milestones/v0.99.51-historical.json")
 (define historical-fixture-digest "f6e409f9a9757ddc68d442667e86f58673f824d60dbc9be13ca0e86def6a2ba3")
 (define-runtime-path schema-fixture "../docs/reports/gsd-milestones/v0.99.52.schema.json")
@@ -345,12 +348,13 @@
           (hash "id"
                 (format "W~a" i)
                 "status"
-                (if (zero? i) "in-progress" "planned")
+                (if (zero? i) "complete" "planned")
                 "criteria"
-                (list (make-criterion id #f))))
+                (list (if (zero? i)
+                          (hash "id" id "met" #t "evidence-digest" current-w0-evidence-digest)
+                          (make-criterion id #f)))))
         "acceptance-critical-remaining-items"
-        '("Complete W0 milestone-truth remediation and independently validate its evidence"
-          "Execute planned work W1-W10 before acceptance")
+        '("Execute planned work W1-W10 before acceptance")
         "review"
         (hash "status" "pending" "independent" #f "evidence-digest" 'null)
         "validation"
@@ -361,13 +365,14 @@
   ;; never by reading current-fixture (the integration subject).
   (canonical-json-sha256 independently-modeled-current))
 
-(test-case "v0.99.52 is the truthful current in-progress fixture"
+(test-case "v0.99.52 truthfully records completed W0 and planned W1-W10"
   (define document (strict-json-read-file current-fixture))
+  (check-equal? (sha256-file current-w0-evidence) current-w0-evidence-digest)
   (check-equal? document independently-modeled-current)
   (define result (evaluate-milestone-file current-fixture independently-supplied-current-digest))
   (check-equal? (hash-ref document "milestone") "v0.99.52")
   (check-equal? (map (lambda (item) (hash-ref item "status")) (hash-ref document "work-items"))
-                (cons "in-progress" (make-list 10 "planned")))
+                (cons "complete" (make-list 10 "planned")))
   (check-equal? (milestone-truth-derived-release-mechanics result) "planned")
   (check-equal? (milestone-truth-derived-substantive-acceptance result) "in-progress")
   (check-true (milestone-truth-digest-matches? result))

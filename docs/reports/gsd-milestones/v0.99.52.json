@@ -5,7 +5,7 @@
   "release-evidence": [],
   "substantive-acceptance": "in-progress",
   "work-items": [
-    { "id": "W0", "status": "in-progress", "criteria": [{ "id": "W0-milestone-truth-remediation", "met": false, "evidence-digest": null }] },
+    { "id": "W0", "status": "complete", "criteria": [{ "id": "W0-milestone-truth-remediation", "met": true, "evidence-digest": "3843bcb5520469fb4f3749b714043b78bf1a1d301d95d3adeb41b78d7d414661" }] },
     { "id": "W1", "status": "planned", "criteria": [{ "id": "W1-session-cancellation", "met": false, "evidence-digest": null }] },
     { "id": "W2", "status": "planned", "criteria": [{ "id": "W2-credentials", "met": false, "evidence-digest": null }] },
     { "id": "W3", "status": "planned", "criteria": [{ "id": "W3-context", "met": false, "evidence-digest": null }] },
@@ -18,7 +18,6 @@
     { "id": "W10", "status": "planned", "criteria": [{ "id": "W10-post-release-acceptance", "met": false, "evidence-digest": null }] }
   ],
   "acceptance-critical-remaining-items": [
-    "Complete W0 milestone-truth remediation and independently validate its evidence",
     "Execute planned work W1-W10 before acceptance"
   ],
   "review": {
