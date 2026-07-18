@@ -34,7 +34,9 @@
          (struct-out release-inputs)
          build-manifest
          commits-match?
-         parse-q-version)
+         parse-q-version
+         ;; F-15 (#8753): uploaded manifest verification
+         verify-uploaded-manifest)
 
 ;; ---------------------------------------------------------------------------
 ;; W4 (#8566): Manifest domain model — parse/validate/render boundary
@@ -223,7 +225,37 @@
   (manifest-validation (null? errors) (reverse errors)))
 
 ;; ---------------------------------------------------------------------------
-;; W5 (#8567): Pure-core / effect-shell I/O boundary
+;; F-15 (#8753): Uploaded manifest verification
+;; ---------------------------------------------------------------------------
+;; Verifies a downloaded release-manifest.json against expected values.
+;; Pure — takes JSON string and expected fields, returns manifest-validation.
+;; This is used by milestone traceability checks to verify the uploaded
+;; manifest matches the tag/commit/version exactly.
+
+(define (verify-uploaded-manifest json-string expected-version expected-tag expected-tarball-name)
+  (define m (parse-manifest-json json-string))
+  (define errors '())
+  (cond
+    [(not m) (manifest-validation #f (list "manifest is not valid JSON or missing required fields"))]
+    [else
+     (unless (equal? (manifest-version m) expected-version)
+       (set! errors
+             (cons (format "version mismatch: manifest=~a expected=~a"
+                           (manifest-version m)
+                           expected-version)
+                   errors)))
+     (unless (equal? (manifest-tag m) expected-tag)
+       (set! errors
+             (cons (format "tag mismatch: manifest=~a expected=~a" (manifest-tag m) expected-tag)
+                   errors)))
+     (unless (and (pair? (manifest-assets m))
+                  (equal? (manifest-asset-name (car (manifest-assets m))) expected-tarball-name))
+       (set! errors
+             (cons (format "tarball name mismatch: expected ~a" expected-tarball-name) errors)))
+     ;; Also run the standard manifest validation
+     (define std-validation (validate-manifest m))
+     (set! errors (append errors (manifest-validation-errors std-validation)))
+     (manifest-validation (null? errors) (reverse errors))]))
 ;; ---------------------------------------------------------------------------
 ;; DESIGN FACT (W9, v0.99.42 §44): build-manifest is pure — no file reads,
 ;; no git, no network. All side-effecting data collection lives in

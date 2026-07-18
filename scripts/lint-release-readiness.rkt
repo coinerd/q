@@ -27,6 +27,7 @@
          check-git-clean
          check-main-branch
          check-gate-evidence
+         validate-gate-evidence-entry
          required-gate-suites
          parse-argv)
 
@@ -128,6 +129,40 @@
      #f]))
 
 ;; ---------------------------------------------------------------------------
+;; F-15 (#8753): Pure gate evidence validation
+;; ---------------------------------------------------------------------------
+;; Validates a single gate evidence entry against expected values.
+;; Returns (values pass? detail-string).
+;; Pure — no I/O. Takes parsed evidence hash, expected version, expected SHA,
+;; and current time in seconds.
+
+(define (get-current-git-sha)
+  (string-trim (with-output-to-string (lambda () (system "git rev-parse HEAD 2>/dev/null")))))
+
+(define (validate-gate-evidence-entry evidence expected-version expected-sha now-seconds)
+  (define max-age 7200) ;; 2 hours
+  (define ev-version (hash-ref evidence 'version #f))
+  (define ev-sha (hash-ref evidence 'git_sha #f))
+  (define ev-time (hash-ref evidence 'timestamp #f))
+  (define ev-tests (hash-ref evidence 'parsed_test_count 0))
+  (define ev-failed (hash-ref evidence 'failed 0))
+  (define ev-timed-out (hash-ref evidence 'timed_out 0))
+  (cond
+    [(not (equal? ev-version expected-version))
+     (values #f (format "version mismatch: ~a ≠ ~a" ev-version expected-version))]
+    [(and expected-sha (not (equal? ev-sha expected-sha)) (not (equal? ev-sha "unknown")))
+     (values #f (format "sha mismatch: ~a ≠ ~a" ev-sha expected-sha))]
+    [(and ev-time (> (- now-seconds ev-time) max-age))
+     (values #f (format "stale evidence (~a seconds old)" (- now-seconds ev-time)))]
+    [(not (and (integer? ev-tests) (positive? ev-tests)))
+     (values #f (format "zero or missing parsed_test_count: ~a" ev-tests))]
+    [(and (integer? ev-failed) (positive? ev-failed))
+     (values #f (format "~a failed test(s) in evidence" ev-failed))]
+    [(and (integer? ev-timed-out) (positive? ev-timed-out))
+     (values #f (format "~a timed-out test(s) in evidence" ev-timed-out))]
+    [else (values #t "ok")]))
+
+;; ---------------------------------------------------------------------------
 ;; Check 5: On main branch
 ;; ---------------------------------------------------------------------------
 
@@ -178,35 +213,42 @@
             (printf "  [FAIL] gate evidence missing: ~a~n" suite)
             #f]
            [else
-            ;; Parse evidence — v2 JSON or v1 space-separated
-            (define-values (ev-version ev-time)
-              (if (regexp-match? #rx"\\.json$" (path->string evidence-file))
-                  ;; v2 JSON format
+            (define now (current-seconds))
+            (define expected-sha (get-current-git-sha))
+            (define json-path? (regexp-match? #rx"\\.json$" (path->string evidence-file)))
+            (define-values (pass? detail)
+              (if json-path?
+                  ;; v2 JSON format: use full validation
                   (let* ([content (file->string evidence-file)]
                          [data (with-input-from-string content read-json)])
-                    (values (hash-ref data 'version #f) (hash-ref data 'timestamp #f)))
-                  ;; v1 space-separated format
+                    (validate-gate-evidence-entry data ver expected-sha now))
+                  ;; v1 space-separated format: basic validation only
                   (let* ([content (file->string evidence-file)]
-                         [parts (string-split content " ")])
-                    (values (and (>= (length parts) 1) (car parts))
-                            (and (>= (length parts) 2) (string->number (cadr parts)))))))
-            (define now (current-seconds))
-            (define max-age 7200) ;; 2 hours
-            (cond
-              [(not (equal? ev-version ver))
-               (printf "  [FAIL] gate evidence for ~a is stale (version ~a, expected ~a)~n"
-                       suite
-                       ev-version
-                       ver)
-               #f]
-              [(and ev-time (> (- now ev-time) max-age))
-               (printf "  [FAIL] gate evidence for ~a is too old (~a seconds)~n"
-                       suite
-                       (- now ev-time))
-               #f]
-              [else
-               (printf "  [PASS] gate evidence: ~a (v~a)~n" suite ev-version)
-               #t])])))
+                         [parts (string-split content " ")]
+                         [ev-version (and (>= (length parts) 1) (car parts))]
+                         [ev-time (and (>= (length parts) 2) (string->number (cadr parts)))])
+                    (validate-gate-evidence-entry (hasheq 'version
+                                                          ev-version
+                                                          'git_sha
+                                                          "unknown"
+                                                          'timestamp
+                                                          ev-time
+                                                          'parsed_test_count
+                                                          1
+                                                          'failed
+                                                          0
+                                                          'timed_out
+                                                          0)
+                                                  ver
+                                                  expected-sha
+                                                  now))))
+            (if pass?
+                (begin
+                  (printf "  [PASS] gate evidence: ~a~n" suite)
+                  #t)
+                (begin
+                  (printf "  [FAIL] gate evidence ~a: ~a~n" suite detail)
+                  #f))])))
      (andmap values results)]))
 
 ;; ---------------------------------------------------------------------------
