@@ -1,0 +1,128 @@
+START 2026-07-18T17:26:31+02:00
+SHA 7b169a7f354fd8655e2726297c704f36e6b9ddbb
+=== COMPILE ===
+=== LINT ===
+
+── q CI Lint (24 checks) ──
+  [PASS] format
+  [PASS] version-sync
+  [PASS] version-validate
+  [PASS] version-cross
+  [PASS] protocols
+  [PASS] imports
+  [PASS] deps
+  [PASS] metrics-sync
+  [PASS] metrics-lint
+  [PASS] prose
+  [PASS] readme-status
+  [PASS] changelog-dates
+  [PASS] audit
+  [PASS] tests
+  [PASS] deprecation
+  [PASS] ci-readiness
+  [WARN] arch (non-blocking)
+  [PASS] ivg
+  [PASS] release-readiness
+  [PASS] release-notes
+  [PASS] doc-freshness
+  [PASS] widened-ledger
+  [PASS] contract-changes
+  [PASS] hotspot
+
+── Summary: 23 passed, 1 warnings ──
+=== SMOKE ===
+;; run-tests: suite=smoke files=19 jobs=12 sequential=#f repeat=1 mode=subprocess profile=local
+
+...................
+
+═══════════════════════════════════════════════════════════
+                    TEST SUMMARY
+═══════════════════════════════════════════════════════════
+  Files:     19 total, 19 passed, 0 failed, 0 timeouts
+  Tests:     289 total, 289 passed, 0 failed
+  Category:  PASS=19
+  Elapsed:   14.548s
+═══════════════════════════════════════════════════════════
+  VERDICT:   ✅ PASS
+═══════════════════════════════════════════════════════════
+=== ARCH ===
+;; run-tests: suite=arch files=14 jobs=12 sequential=#f repeat=1 mode=subprocess profile=local
+
+..............
+
+═══════════════════════════════════════════════════════════
+                    TEST SUMMARY
+═══════════════════════════════════════════════════════════
+  Files:     14 total, 14 passed, 0 failed, 0 timeouts
+  Tests:     182 total, 182 passed, 0 failed
+  Category:  PASS=14
+  Elapsed:   21.315s
+═══════════════════════════════════════════════════════════
+  VERDICT:   ✅ PASS
+═══════════════════════════════════════════════════════════
+=== WORKFLOWS ===
+;; run-tests: suite=workflows files=28 jobs=12 sequential=#f repeat=1 mode=subprocess profile=local
+
+;; run-tests: serializing 1 mutation-sensitive file before parallel batches
+.
+...........................
+
+═══════════════════════════════════════════════════════════
+                    TEST SUMMARY
+═══════════════════════════════════════════════════════════
+  Files:     28 total, 28 passed, 0 failed, 0 timeouts
+  Tests:     146 total, 146 passed, 0 failed
+  Category:  PASS=28
+  Elapsed:   10.983s
+═══════════════════════════════════════════════════════════
+  VERDICT:   ✅ PASS
+═══════════════════════════════════════════════════════════
+=== TUI ===
+;; run-tests: suite=tui files=83 jobs=12 sequential=#f repeat=1 mode=subprocess profile=local
+
+...................................................................................
+
+═══════════════════════════════════════════════════════════
+                    TEST SUMMARY
+═══════════════════════════════════════════════════════════
+  Files:     83 total, 83 passed, 0 failed, 0 timeouts
+  Tests:     1310 total, 1310 passed, 0 failed
+  Category:  PASS=83
+  Elapsed:   42.035s
+═══════════════════════════════════════════════════════════
+  VERDICT:   ✅ PASS
+═══════════════════════════════════════════════════════════
+=== FOCUSED AUDIT ===
+raco test: "tests/test-spawn-subagents-approval.rkt"
+raco test: "tests/test-session-id-containment.rkt"
+raco test: "tests/test-w2-credential-redaction.rkt"
+raco test: "tests/test-compact-correlation-isolation.rkt"
+4 success(es) 0 failure(s) 0 error(s) 4 test(s) run
+0
+raco test: "tests/test-session-metadata-truth.rkt"
+raco test: "tests/test-tmux-explore-verifiers.rkt"
+7 success(es) 0 failure(s) 0 error(s) 7 test(s) run
+0
+raco test: "tests/test-tmux-explore-production-provenance.rkt"
+raco test: "tests/test-tmux-explore-evidence.rkt"
+raco test: "tests/test-gate-evidence-hardening.rkt"
+raco test: "tests/test-uploaded-manifest-verification.rkt"
+79 tests passed
+=== FAST ===
+;; run-tests: suite=fast files=1038 jobs=12 sequential=#f repeat=1 mode=subprocess profile=local
+
+;; run-tests: serializing 3 mutation-sensitive files before parallel batches
+...
+...........................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................
+
+═══════════════════════════════════════════════════════════
+                    TEST SUMMARY
+═══════════════════════════════════════════════════════════
+  Files:     1038 total, 1038 passed, 0 failed, 0 timeouts
+  Tests:     15317 total, 15317 passed, 0 failed
+  Category:  PASS=1038
+  Elapsed:   6m 25.833s
+═══════════════════════════════════════════════════════════
+  VERDICT:   ✅ PASS
+═══════════════════════════════════════════════════════════
+END 2026-07-18T17:35:38+02:00

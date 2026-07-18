@@ -1,0 +1,13 @@
+START 2026-07-18T17:35:50+02:00
+aa0cca5566c86d3e4ae5011e31b061802fdb5f306226d56818c8d028d8909074  /tmp/q-v09951-release-evidence.FK9PCP/q-0.99.51.tar.gz
+f9d340e03f479afe772061cecf54fe942b50af22cd57ec3d675b7a150a7ad67f  /tmp/q-v09951-release-evidence.FK9PCP/release-manifest.json
+/tmp/q-v09951-release-evidence.FK9PCP/q-0.99.51.tar.gz 3380925
+/tmp/q-v09951-release-evidence.FK9PCP/release-manifest.json 506
+MANIFEST
+{"assets":[{"name":"q-0.99.51.tar.gz","sha256":"aa0cca5566c86d3e4ae5011e31b061802fdb5f306226d56818c8d028d8909074","size":3380925}],"commit":"7b169a7","compatibility":{"min-racket":"8.10"},"date":"2026-07-18","tag":"v0.99.51","traceability":{"commit_matches_tag":true,"manifest_commit_sha":"7b169a7","tag_commit_sha":"7b169a7f354fd8655e2726297c704f36e6b9ddbb","tag_name":"v0.99.51","tag_object_sha":"dcb887e74c3a3b52b8478a760a06002d29855b3c"},"verification":"racket main.rkt --version","version":"0.99.51"}
+GIT_TAG
+7b169a7f354fd8655e2726297c704f36e6b9ddbb
+tag
+dcb887e74c3a3b52b8478a760a06002d29855b3c
+q version 0.99.51
+END 2026-07-18T17:36:23+02:00

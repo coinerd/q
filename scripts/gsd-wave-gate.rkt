@@ -64,6 +64,48 @@
 (define (passed-result-hash? value)
   (and (hash? value) (equal? (hash-ref value 'result #f) "passed")))
 
+(define (normalized-label value)
+  (and (or (symbol? value) (string? value))
+       (string-upcase (if (symbol? value)
+                          (symbol->string value)
+                          value))))
+
+(define (hash-ref/label table label [failure #f])
+  (or (for/first ([(key value) (in-hash table)]
+                  #:when (equal? (normalized-label key) label))
+        value)
+      failure))
+
+(define (normalized-classification value)
+  (and (or (symbol? value) (string? value))
+       (string-downcase (string-trim (if (symbol? value)
+                                         (symbol->string value)
+                                         value)))))
+
+(define (acceptance-critical-item? item)
+  (and (hash? item)
+       (for/or ([label (in-list '("ACCEPTANCE-CRITICAL" "ACCEPTANCE-CRITICAL?"
+                                                        "CLASSIFICATION"
+                                                        "CATEGORY"
+                                                        "CRITICALITY"))])
+         (define value (hash-ref/label item label #f))
+         (or (eq? value #t)
+             (member (normalized-classification value)
+                     '("acceptance-critical" "acceptance_critical"))))))
+
+(define (valid-noncritical-remaining-item? item)
+  (and (hash? item)
+       (not (acceptance-critical-item? item))
+       (member (normalized-classification (hash-ref/label item "CLASSIFICATION" #f))
+               '("noncritical" "deferred-noncritical"))
+       (non-empty-string? (hash-ref/label item "OWNER" #f))
+       (non-empty-string? (hash-ref/label item "RATIONALE" #f))))
+
+(define (known-acceptance-evidence? value)
+  (and (non-empty-string? value)
+       (member (string-downcase (string-trim value))
+               '("verified" "pass" "passed" "present" "confirmed" "complete" "completed" "known"))))
+
 (define (validate-wave-evidence evidence
                                 #:root [root (current-directory)]
                                 #:actual-content-digest [actual-content-digest #f]
@@ -73,6 +115,59 @@
   (define (reject! reason)
     (set! reasons (cons reason reasons)))
   (define root-path (path->complete-path root))
+  ;; The acceptance block is an optional schema-v2 extension so committed
+  ;; pre-extension fixtures remain readable. Its planning digests establish
+  ;; projection consistency only; exact-head authenticity is not inferred
+  ;; from committed evidence (the content boundary is CI-supplied).
+  (define acceptance-reference #f)
+  (define (validate-acceptance! acceptance expected-wave owner)
+    (unless (hash? acceptance)
+      (reject! (format "~a acceptance extension must be a hash" owner)))
+    (when (hash? acceptance)
+      (when (and acceptance-reference (not (equal? acceptance acceptance-reference)))
+        (reject! (format "~a acceptance extension differs from other artifacts" owner)))
+      (unless acceptance-reference
+        (set! acceptance-reference acceptance))
+      (unless (equal? (hash-ref acceptance 'status #f) "accepted")
+        (reject! (format "~a acceptance status must be accepted" owner)))
+      (define acceptance-wave (hash-ref acceptance 'wave #f))
+      (unless (and (non-empty-string? acceptance-wave)
+                   (regexp-match? #px"^W[0-9]+$" acceptance-wave)
+                   (equal? acceptance-wave expected-wave))
+        (reject! (format "~a acceptance wave is missing or differs from evidence" owner)))
+      (unless (non-empty-string? (hash-ref acceptance 'criterion #f))
+        (reject! (format "~a acceptance criterion is missing" owner)))
+      (unless (known-acceptance-evidence? (hash-ref acceptance 'evidence #f))
+        (reject! (format "~a acceptance evidence is missing or unknown" owner)))
+      (define projections (hash-ref acceptance 'projections #f))
+      (unless (hash? projections)
+        (reject! (format "~a acceptance projections must be a hash" owner)))
+      (when (hash? projections)
+        (define expected-projections '("STATE" "VALIDATION" "HANDOFF"))
+        (define actual-labels
+          (for/list ([key (in-hash-keys projections)])
+            (normalized-label key)))
+        (unless (and (= (length actual-labels) (length expected-projections))
+                     (andmap (lambda (label) (member label expected-projections)) actual-labels))
+          (reject!
+           (format "~a acceptance projections must contain only STATE, VALIDATION, and HANDOFF"
+                   owner)))
+        (define projection-digests
+          (for/list ([label (in-list expected-projections)])
+            (define projection (hash-ref/label projections label))
+            (unless (hash? projection)
+              (reject! (format "~a ~a projection must be a hash" owner label)))
+            (define status (and (hash? projection) (hash-ref projection 'status #f)))
+            (define digest (and (hash? projection) (hash-ref projection 'digest #f)))
+            (unless (equal? status "current")
+              (reject! (format "~a ~a projection is stale" owner label)))
+            (unless (valid-digest? digest)
+              (reject! (format "~a ~a projection digest is invalid" owner label)))
+            digest))
+        (when (and (andmap valid-digest? projection-digests)
+                   (not (andmap (lambda (digest) (equal? digest (car projection-digests)))
+                                (cdr projection-digests))))
+          (reject! (format "~a STATE/VALIDATION/HANDOFF projection digests differ" owner))))))
   (define (read-artifact key label)
     (define value (and (hash? evidence) (hash-ref evidence key #f)))
     (define path (safe-relative-artifact root-path value))
@@ -112,6 +207,9 @@
      (unless (and (valid-digest? actual-content-digest) (equal? content-digest actual-content-digest))
        (reject! "actual changed-content digest does not match evidence"))
 
+     (when (hash-has-key? evidence 'acceptance)
+       (validate-acceptance! (hash-ref evidence 'acceptance) wave "evidence"))
+
      (define required-checks (hash-ref evidence 'required-checks #f))
      (define policy
        (with-handlers ([exn:fail? (lambda (error)
@@ -143,7 +241,9 @@
          (reject! "review content digest differs from evidence"))
        (for ([key (in-list '(timestamp scope report))])
          (unless (non-empty-string? (hash-ref review key #f))
-           (reject! (format "review ~a is missing" key)))))
+           (reject! (format "review ~a is missing" key))))
+       (when (hash-has-key? review 'acceptance)
+         (validate-acceptance! (hash-ref review 'acceptance) wave "review")))
 
      (define validation (read-artifact 'validation-artifact "validation artifact"))
      (unless (hash? validation)
@@ -161,8 +261,19 @@
          (reject! "validation branch is missing"))
        (unless (equal? (hash-ref validation 'planning-sync #f) "current")
          (reject! "validation planning-sync must be current"))
-       (unless (list? (hash-ref validation 'remaining-items #f))
+       (define remaining-items (hash-ref validation 'remaining-items #f))
+       (unless (list? remaining-items)
          (reject! "validation remaining-items must be a list"))
+       (when (list? remaining-items)
+         (cond
+           [(ormap acceptance-critical-item? remaining-items)
+            (reject! "validation has acceptance-critical remaining-items")]
+           [(not (andmap valid-noncritical-remaining-item? remaining-items))
+            (reject! (string-append
+                      "validation remaining-items must be structured noncritical or "
+                      "deferred-noncritical items with nonempty owner and rationale"))]))
+       (when (hash-has-key? validation 'acceptance)
+         (validate-acceptance! (hash-ref validation 'acceptance) wave "validation"))
        (define red-first (hash-ref validation 'red-first #f))
        (unless (and (hash? red-first)
                     (non-empty-string? (hash-ref red-first 'command #f))

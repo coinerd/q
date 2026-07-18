@@ -29,6 +29,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+
+      - name: Protected governance controller tests
+        run: python3 -m unittest discover -s scripts/github -p 'test_*.py'
+
       - name: Cache Racket packages
         uses: actions/cache@v6
         with:
@@ -317,7 +321,7 @@ jobs:
           retention-days: 7
 
   # ────────────────────────────────────────────────────────────
-  # Gate 5c: GSD wave evidence (v0.99.51 W0)
+  # Gate 5c: GSD wave evidence (current protected wave)
   # Every PR must add exactly one machine-checkable wave record. Pushes to
   # main revalidate the latest retained record.
   # ────────────────────────────────────────────────────────────

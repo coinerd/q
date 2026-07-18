@@ -61,3 +61,7 @@ sidecars/playwright/node_modules/
 docs/COMPETITOR-ANALYSIS.md
 docs/audits/
 .gate-evidence/
+
+# Python bytecode caches
+__pycache__/
+*.py[cod]
