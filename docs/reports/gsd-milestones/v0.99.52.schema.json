@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/coinerd/q/schemas/gsd-milestone-truth-v0.99.52.json",
+  "title": "Canonical GSD milestone truth v0.99.52 — restricted integer-only JCS profile",
+  "description": "Closed projection schema for the restricted integer-only JCS profile; this does not claim unrestricted RFC 8785 support. The Racket validator is authoritative. This schema represents release-stage ordering/no-gaps, evidence digest requirements, W0-W10 ordering, complete/all-met, planned/none-met, and blocker uniqueness. Runtime-only checks are duplicate JSON keys, safe-integer parsing, UTF-16 canonical key ordering, canonical SHA-256 matching against the externally supplied digest, whitespace-only blocker rejection, criterion-identifier uniqueness, and declared-versus-derived release/substantive truth with fail-closed effective values because those checks depend on ordered evidence and the external digest.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema-version",
+    "milestone",
+    "release-mechanics",
+    "release-evidence",
+    "substantive-acceptance",
+    "work-items",
+    "acceptance-critical-remaining-items",
+    "review",
+    "validation"
+  ],
+  "properties": {
+    "schema-version": { "const": 1 },
+    "milestone": { "type": "string", "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "release-mechanics": {
+      "enum": ["planned", "built", "smoked", "draft-verified", "published"]
+    },
+    "release-evidence": {
+      "type": "array",
+      "maxItems": 4,
+      "prefixItems": [
+        { "$ref": "#/$defs/build-stage" },
+        { "$ref": "#/$defs/smoke-stage" },
+        { "$ref": "#/$defs/draft-stage" },
+        { "$ref": "#/$defs/publication-stage" }
+      ],
+      "items": false
+    },
+    "substantive-acceptance": {
+      "enum": ["planned", "in-progress", "rejected", "accepted"]
+    },
+    "work-items": {
+      "type": "array",
+      "minItems": 11,
+      "maxItems": 11,
+      "prefixItems": [
+        { "allOf": [{ "$ref": "#/$defs/work-item" }, { "properties": { "id": { "const": "W0" } } }] },
+        { "allOf": [{ "$ref": "#/$defs/work-item" }, { "properties": { "id": { "const": "W1" } } }] },
+        { "allOf": [{ "$ref": "#/$defs/work-item" }, { "properties": { "id": { "const": "W2" } } }] },
+        { "allOf": [{ "$ref": "#/$defs/work-item" }, { "properties": { "id": { "const": "W3" } } }] },
+        { "allOf": [{ "$ref": "#/$defs/work-item" }, { "properties": { "id": { "const": "W4" } } }] },
+        { "allOf": [{ "$ref": "#/$defs/work-item" }, { "properties": { "id": { "const": "W5" } } }] },
+        { "allOf": [{ "$ref": "#/$defs/work-item" }, { "properties": { "id": { "const": "W6" } } }] },
+        { "allOf": [{ "$ref": "#/$defs/work-item" }, { "properties": { "id": { "const": "W7" } } }] },
+        { "allOf": [{ "$ref": "#/$defs/work-item" }, { "properties": { "id": { "const": "W8" } } }] },
+        { "allOf": [{ "$ref": "#/$defs/work-item" }, { "properties": { "id": { "const": "W9" } } }] },
+        { "allOf": [{ "$ref": "#/$defs/work-item" }, { "properties": { "id": { "const": "W10" } } }] }
+      ],
+      "items": false
+    },
+    "acceptance-critical-remaining-items": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "review": { "$ref": "#/$defs/review" },
+    "validation": { "$ref": "#/$defs/validation" }
+  },
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "release-stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage", "evidence-digest"],
+      "properties": {
+        "stage": { "type": "string" },
+        "evidence-digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "build-stage": {
+      "allOf": [{ "$ref": "#/$defs/release-stage" }, { "properties": { "stage": { "const": "build" } } }]
+    },
+    "smoke-stage": {
+      "allOf": [{ "$ref": "#/$defs/release-stage" }, { "properties": { "stage": { "const": "exact-artifact-smoke" } } }]
+    },
+    "draft-stage": {
+      "allOf": [{ "$ref": "#/$defs/release-stage" }, { "properties": { "stage": { "const": "draft-verification" } } }]
+    },
+    "publication-stage": {
+      "allOf": [{ "$ref": "#/$defs/release-stage" }, { "properties": { "stage": { "const": "publication" } } }]
+    },
+    "work-item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "status", "criteria"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^W(?:[0-9]|10)$" },
+        "status": { "enum": ["planned", "in-progress", "complete"] },
+        "criteria": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/criterion" }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "complete" } }, "required": ["status"] },
+          "then": {
+            "properties": {
+              "criteria": { "items": { "$ref": "#/$defs/met-criterion" } }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "planned" } }, "required": ["status"] },
+          "then": {
+            "properties": {
+              "criteria": { "items": { "$ref": "#/$defs/unmet-criterion" } }
+            }
+          }
+        }
+      ]
+    },
+    "criterion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "met", "evidence-digest"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
+        "met": { "type": "boolean" },
+        "evidence-digest": {
+          "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }]
+        }
+      },
+      "if": { "properties": { "met": { "const": true } }, "required": ["met"] },
+      "then": { "properties": { "evidence-digest": { "$ref": "#/$defs/digest" } } }
+    },
+    "met-criterion": {
+      "allOf": [
+        { "$ref": "#/$defs/criterion" },
+        { "properties": { "met": { "const": true }, "evidence-digest": { "$ref": "#/$defs/digest" } } }
+      ]
+    },
+    "unmet-criterion": {
+      "allOf": [
+        { "$ref": "#/$defs/criterion" },
+        { "properties": { "met": { "const": false } } }
+      ]
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "independent", "evidence-digest"],
+      "properties": {
+        "status": { "enum": ["pending", "approved", "rejected"] },
+        "independent": { "type": "boolean" },
+        "evidence-digest": {
+          "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }]
+        }
+      },
+      "if": { "properties": { "status": { "const": "pending" } }, "required": ["status"] },
+      "then": { "properties": { "evidence-digest": { "type": "null" } } },
+      "else": { "properties": { "evidence-digest": { "$ref": "#/$defs/digest" } } }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "evidence-digest"],
+      "properties": {
+        "status": { "enum": ["pending", "passed", "failed"] },
+        "evidence-digest": {
+          "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }]
+        }
+      },
+      "if": { "properties": { "status": { "const": "pending" } }, "required": ["status"] },
+      "then": { "properties": { "evidence-digest": { "type": "null" } } },
+      "else": { "properties": { "evidence-digest": { "$ref": "#/$defs/digest" } } }
+    }
+  }
+}

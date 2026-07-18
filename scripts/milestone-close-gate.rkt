@@ -3,10 +3,10 @@
 
 ;; scripts/milestone-close-gate.rkt — Pre-closure milestone gate (GAP-4).
 ;;
-;; W2 (#8684): A single-command pre-closure gate that enforces ALL
-;; release-truth checks before a milestone can be closed. This wraps the
-;; existing milestone-gate.rkt and adds the claim-verifier.rkt logic into
-;; one mandatory gate.
+;; W0 milestone truth is an authoritative closure prerequisite. The command
+;; requires an independently supplied truth projection and SHA-256 digest,
+;; evaluates it through gsd-milestone-truth.rkt, and combines that result with
+;; the existing release-truth checks before a milestone can be closed.
 ;;
 ;; This tool exists because v0.99.45 closed with inaccurate test claims.
 ;; Release-truth enforcement was post-hoc (audit caught it later). This
@@ -15,10 +15,11 @@
 ;; Layering:
 ;;   ├── gate-result struct
 ;;   ├── Pure gate functions (testable without I/O)
-;;   │   ├── check-claims-gate     — claim verification (delegates to claim-verifier)
-;;   │   ├── check-release-gate    — release + assets present
-;;   │   ├── check-issues-gate     — all milestone issues closed
-;;   │   └── check-changelog-gate  — CHANGELOG entry exists
+;;   │   ├── check-milestone-truth-gate — authoritative W0 truth
+;;   │   ├── check-claims-gate           — claim verification
+;;   │   ├── check-release-gate          — release + assets present
+;;   │   ├── check-issues-gate           — all milestone issues closed
+;;   │   └── check-changelog-gate        — CHANGELOG entry exists
 ;;   ├── Aggregation
 ;;   │   ├── all-gates-passed?
 ;;   │   └── gate-summary
@@ -30,18 +31,22 @@
 ;;   └── Tests in tests/test-milestone-close-gate.rkt
 ;;
 ;; Usage:
-;;   cd q/ && racket scripts/milestone-close-gate.rkt <milestone-number>
-;;   cd q/ && racket scripts/milestone-close-gate.rkt 834 --json
+;;   cd q/ && racket scripts/milestone-close-gate.rkt <milestone-number> \
+;;     --truth-file PATH --truth-digest FULL64
+;;   cd q/ && racket scripts/milestone-close-gate.rkt 834 \
+;;     --truth-file PATH --truth-digest FULL64 --json
 ;;
 ;; Exit codes:
 ;;   0 — all gates pass, milestone may be closed
 ;;   1 — one or more gates fail, milestone must NOT be closed
+;;   2 — invalid invocation; closure checks did not run
 
 (require racket/file
          racket/match
          racket/system
          json
          "claim-verifier.rkt"
+         "gsd-milestone-truth.rkt"
          "milestone-gate.rkt")
 
 ;; ---------------------------------------------------------------------------
@@ -66,6 +71,8 @@
          all-gates-passed?
          gate-summary
          gate-counts
+         check-milestone-truth-gate
+         evaluate-milestone-truth-gate
          check-claims-gate
          check-release-gate
          check-issues-gate
@@ -108,6 +115,52 @@
 ;; Individual gate functions (pure — accept injected data)
 ;; ---------------------------------------------------------------------------
 
+;; Milestone-truth gate: closure is allowed only for independently digest-bound,
+;; effectively published, effectively accepted truth whose accepted? verdict is
+;; true and whose validated milestone identity exactly matches the current
+;; version. Reuse the canonical predicate so transparent synthetic structs must
+;; satisfy every declaration/derived/effective consistency condition.
+(define (check-milestone-truth-gate truth expected-milestone)
+  (cond
+    [(not (milestone-truth? truth))
+     (gate-result 'milestone-truth #f "Milestone truth is unavailable or malformed")]
+    [else
+     (define actual-milestone (milestone-truth-milestone truth))
+     (define digest-matches? (milestone-truth-digest-matches? truth))
+     (define effective-release (milestone-truth-effective-release-mechanics truth))
+     (define effective-substantive (milestone-truth-effective-substantive-acceptance truth))
+     (define accepted? (milestone-truth-accepted? truth))
+     (define passed?
+       (and (string? expected-milestone)
+            (equal? actual-milestone expected-milestone)
+            (milestone-truth-gate-passed? truth)
+            (equal? effective-release "published")))
+     (gate-result
+      'milestone-truth
+      passed?
+      (format
+       "milestone=~a (expected ~a), digest-match=~a, effective release=~a, effective substantive=~a, accepted?=~a"
+       actual-milestone
+       expected-milestone
+       digest-matches?
+       effective-release
+       effective-substantive
+       accepted?))]))
+
+;; Evaluate a truth file through the authoritative module. The evaluator is
+;; injectable so tests can remain pure and no file/API uncertainty can be
+;; mistaken for acceptance.
+(define (evaluate-milestone-truth-gate path
+                                       external-digest
+                                       expected-milestone
+                                       #:evaluate-file [evaluate-file evaluate-milestone-file])
+  (with-handlers ([exn:fail? (lambda (failure)
+                               (gate-result 'milestone-truth
+                                            #f
+                                            (format "Milestone truth file/API uncertainty: ~a"
+                                                    (exn-message failure))))])
+    (check-milestone-truth-gate (evaluate-file path external-digest) expected-milestone)))
+
 ;; Claims gate: verify that all claim-results have matched? = #t.
 ;;   verified-claims — list of claim-result structs from claim-verifier
 ;; Returns a gate-result.
@@ -137,9 +190,19 @@
 (define (check-release-gate release-data version)
   (define expected-tag (format "v~a" version))
   (define expected-tarball (format "q-~a.tar.gz" version))
+  (define release-assets (and (hash? release-data) (hash-ref release-data 'assets #f)))
+  (define valid-api-record?
+    (and (hash? release-data)
+         (equal? (hash-ref release-data 'tag_name #f) expected-tag)
+         (boolean? (hash-ref release-data 'draft 'missing))
+         (list? release-assets)
+         (andmap (lambda (asset) (and (hash? asset) (string? (hash-ref asset 'name #f))))
+                 release-assets)))
   (cond
     [(not release-data) (gate-result 'release #f (format "No release for ~a" expected-tag))]
-    [(hash-ref release-data 'draft #f)
+    [(not valid-api-record?)
+     (gate-result 'release #f (format "Malformed or uncertain release API data for ~a" expected-tag))]
+    [(hash-ref release-data 'draft)
      (gate-result 'release #f (format "Release ~a is draft" expected-tag))]
     [(not (release-has-asset? release-data expected-tarball))
      (gate-result 'release #f (format "Missing tarball asset ~a" expected-tarball))]
@@ -176,11 +239,18 @@
 ;;   version        — version string like "0.99.47"
 ;; Returns a gate-result.
 (define (check-changelog-gate changelog-text version)
-  ;; CHANGELOG entries use "## 0.99.XX" (without 'v' prefix).
-  ;; Also accept "## v0.99.XX" for robustness.
-  (define pattern-bare (format "## ~a" version))
-  (define pattern-v (format "## v~a" version))
-  (if (or (string-contains? changelog-text pattern-bare) (string-contains? changelog-text pattern-v))
+  ;; Compare complete level-two heading lines so 0.99.47 cannot match
+  ;; 0.99.470 or prose. Accept CRLF without accepting padded headings.
+  (define expected-headings (list (format "## ~a" version) (format "## v~a" version)))
+  (define (without-terminal-return line)
+    (if (and (positive? (string-length line))
+             (char=? (string-ref line (sub1 (string-length line))) #\return))
+        (substring line 0 (sub1 (string-length line)))
+        line))
+  (define found?
+    (for/or ([line (in-list (string-split changelog-text "\n" #:trim? #f))])
+      (member (without-terminal-return line) expected-headings)))
+  (if found?
       (gate-result 'changelog #t (format "CHANGELOG entry for v~a found" version))
       (gate-result 'changelog #f (format "No CHANGELOG entry for v~a" version))))
 
@@ -206,14 +276,25 @@
   exit-code)
 
 ;; Run all gates for a milestone. Does I/O (GitHub API, file reads).
+;; The truth evaluator remains injectable for deterministic boundary tests.
 ;; Returns a list of gate-result structs.
-(define (run-all-gates milestone-number)
+(define (run-all-gates milestone-number
+                       truth-file
+                       truth-digest
+                       #:truth-evaluator [truth-evaluator evaluate-milestone-file])
   (define version (get-current-version))
   (unless version
     (printf "ERROR: Could not determine current version from util/version.rkt~n")
     (exit 1))
 
-  ;; Gate 1: Claims — scan docs/reports/ for claims mentioning this version
+  ;; Gate 1: authoritative milestone truth supplied independently of this gate.
+  (define milestone-truth-gate
+    (evaluate-milestone-truth-gate truth-file
+                                   truth-digest
+                                   (format "v~a" version)
+                                   #:evaluate-file truth-evaluator))
+
+  ;; Gate 2: Claims — scan docs/reports/ for claims mentioning this version
   (define reports-dir "docs/reports")
   (define all-claims '())
   (when (directory-exists? reports-dir)
@@ -232,7 +313,7 @@
 
   (define claims-gate (check-claims-gate (verify-claims all-claims actual-counts)))
 
-  ;; Gate 2: Release — query GitHub API
+  ;; Gate 3: Release — query GitHub API
   (define release-data
     (with-handlers ([exn:fail? (λ (_) #f)])
       (define in
@@ -246,7 +327,7 @@
       (string->jsexpr json-text)))
   (define release-gate (check-release-gate release-data version))
 
-  ;; Gate 3: Issues — query GitHub API for milestone issues
+  ;; Gate 4: Issues — query GitHub API for milestone issues
   (define issues-data
     (with-handlers ([exn:fail? (λ (_) '())])
       (define in
@@ -264,54 +345,105 @@
           '())))
   (define issues-gate (check-issues-gate issues-data))
 
-  ;; Gate 4: Changelog — read CHANGELOG.md
+  ;; Gate 5: Changelog — read CHANGELOG.md
   (define changelog-text
     (if (file-exists? "CHANGELOG.md")
         (file->string "CHANGELOG.md")
         ""))
   (define changelog-gate (check-changelog-gate changelog-text version))
 
-  ;; Gate 5: Delegate CI + traceability + metrics to milestone-gate.rkt
+  ;; Gate 6: Delegate CI + traceability + metrics to milestone-gate.rkt
   (define mg-exit (run-milestone-gate-subprocess milestone-number))
   (define mg-gate
     (gate-result 'ci-traceability-metrics
                  (= mg-exit 0)
                  (format "milestone-gate.rkt exit code ~a" mg-exit)))
 
-  (list claims-gate release-gate issues-gate changelog-gate mg-gate))
+  (list milestone-truth-gate claims-gate release-gate issues-gate changelog-gate mg-gate))
 
 ;; ---------------------------------------------------------------------------
 ;; CLI layer
 ;; ---------------------------------------------------------------------------
 
+(define full-digest-pattern #px"^[0-9a-f]{64}$")
+
 (define (parse-close-gate-args args)
-  (match args
-    ['() (hash 'mode 'help)]
-    [(list "--help") (hash 'mode 'help)]
-    [(list n) (hash 'mode 'run 'milestone-number (string->number n) 'json #f)]
-    [(list n "--json") (hash 'mode 'run 'milestone-number (string->number n) 'json #t)]
-    [(list "--json" n) (hash 'mode 'run 'milestone-number (string->number n) 'json #t)]
-    [_ (hash 'mode 'help)]))
+  (define (invalid reason)
+    (hash 'mode 'invalid 'reason reason))
+  (cond
+    [(null? args) (invalid "arguments are required; use --help for usage")]
+    [(equal? args '("--help")) (hash 'mode 'help)]
+    [else
+     (let loop ([remaining args]
+                [milestone-number #f]
+                [truth-file #f]
+                [truth-digest #f]
+                [json? #f])
+       (match remaining
+         ['()
+          (cond
+            [(not milestone-number) (invalid "a positive milestone number is required")]
+            [(or (not truth-file) (string=? truth-file "")) (invalid "--truth-file PATH is required")]
+            [(not truth-digest) (invalid "--truth-digest FULL64 is required")]
+            [(not (regexp-match? full-digest-pattern truth-digest))
+             (invalid "--truth-digest must be exactly 64 lowercase hexadecimal characters")]
+            [else
+             (hash 'mode
+                   'run
+                   'milestone-number
+                   milestone-number
+                   'truth-file
+                   truth-file
+                   'truth-digest
+                   truth-digest
+                   'json
+                   json?)])]
+         [(list* "--json" tail)
+          (if json?
+              (invalid "--json may be supplied only once")
+              (loop tail milestone-number truth-file truth-digest #t))]
+         [(list* "--truth-file" value tail)
+          (if (or truth-file (string-prefix? value "--"))
+              (invalid "--truth-file requires exactly one PATH")
+              (loop tail milestone-number value truth-digest json?))]
+         [(list* "--truth-digest" value tail)
+          (if (or truth-digest (string-prefix? value "--"))
+              (invalid "--truth-digest requires exactly one FULL64 value")
+              (loop tail milestone-number truth-file value json?))]
+         [(list* option tail)
+          (define parsed-number (string->number option))
+          (if (and (not milestone-number) (exact-positive-integer? parsed-number))
+              (loop tail parsed-number truth-file truth-digest json?)
+              (invalid (format "unknown or invalid argument: ~a" option)))]))]))
 
 (define (print-usage)
   (displayln "USAGE:")
-  (displayln "  racket scripts/milestone-close-gate.rkt <milestone-number>")
-  (displayln "  racket scripts/milestone-close-gate.rkt <milestone-number> --json")
+  (displayln
+   "  racket scripts/milestone-close-gate.rkt <milestone-number> --truth-file PATH --truth-digest FULL64 [--json]")
+  (displayln "")
+  (displayln "FULL64 is an independently supplied 64-character lowercase SHA-256 digest.")
+  (displayln "A bare milestone number is invalid and never starts closure checks.")
   (displayln "")
   (displayln "EXIT CODES:")
   (displayln "  0 — all gates pass, milestone may be closed")
-  (displayln "  1 — one or more gates fail, milestone must NOT be closed"))
+  (displayln "  1 — one or more gates fail, milestone must NOT be closed")
+  (displayln "  2 — invalid command-line invocation"))
 
 (define (main args)
   (define opts (parse-close-gate-args args))
-  (cond
-    [(equal? (hash-ref opts 'mode) 'help) (print-usage)]
+  (case (hash-ref opts 'mode)
+    [(help) (print-usage)]
+    [(invalid)
+     (eprintf "ERROR: ~a~n~n" (hash-ref opts 'reason))
+     (print-usage)
+     (exit 2)]
     [else
      (define milestone-number (hash-ref opts 'milestone-number))
      (unless (file-exists? "main.rkt")
        (printf "ERROR: Run from the q/ directory~n")
        (exit 1))
-     (define results (run-all-gates milestone-number))
+     (define results
+       (run-all-gates milestone-number (hash-ref opts 'truth-file) (hash-ref opts 'truth-digest)))
      (cond
        [(hash-ref opts 'json)
         (define-values (passed total) (gate-counts results))

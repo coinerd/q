@@ -1,0 +1,33 @@
+{
+  "schema-version": 1,
+  "milestone": "v0.99.52",
+  "release-mechanics": "planned",
+  "release-evidence": [],
+  "substantive-acceptance": "in-progress",
+  "work-items": [
+    { "id": "W0", "status": "in-progress", "criteria": [{ "id": "W0-milestone-truth-remediation", "met": false, "evidence-digest": null }] },
+    { "id": "W1", "status": "planned", "criteria": [{ "id": "W1-session-cancellation", "met": false, "evidence-digest": null }] },
+    { "id": "W2", "status": "planned", "criteria": [{ "id": "W2-credentials", "met": false, "evidence-digest": null }] },
+    { "id": "W3", "status": "planned", "criteria": [{ "id": "W3-context", "met": false, "evidence-digest": null }] },
+    { "id": "W4", "status": "planned", "criteria": [{ "id": "W4-release-truth", "met": false, "evidence-digest": null }] },
+    { "id": "W5", "status": "planned", "criteria": [{ "id": "W5-compaction", "met": false, "evidence-digest": null }] },
+    { "id": "W6", "status": "planned", "criteria": [{ "id": "W6-distributed-execution", "met": false, "evidence-digest": null }] },
+    { "id": "W7", "status": "planned", "criteria": [{ "id": "W7-validation", "met": false, "evidence-digest": null }] },
+    { "id": "W8", "status": "planned", "criteria": [{ "id": "W8-review", "met": false, "evidence-digest": null }] },
+    { "id": "W9", "status": "planned", "criteria": [{ "id": "W9-regression", "met": false, "evidence-digest": null }] },
+    { "id": "W10", "status": "planned", "criteria": [{ "id": "W10-post-release-acceptance", "met": false, "evidence-digest": null }] }
+  ],
+  "acceptance-critical-remaining-items": [
+    "Complete W0 milestone-truth remediation and independently validate its evidence",
+    "Execute planned work W1-W10 before acceptance"
+  ],
+  "review": {
+    "status": "pending",
+    "independent": false,
+    "evidence-digest": null
+  },
+  "validation": {
+    "status": "pending",
+    "evidence-digest": null
+  }
+}
