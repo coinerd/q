@@ -100,6 +100,11 @@ jobs:
           echo "Canonical:   $CANONICAL"
           [ "$VERSION" = "$CANONICAL" ]
 
+      - name: Lint release notes (mandatory)
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          racket scripts/lint-release-notes.rkt --version "${VERSION}" --check
+
       - name: Build tarball
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"

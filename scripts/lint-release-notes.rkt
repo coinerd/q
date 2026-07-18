@@ -128,8 +128,17 @@
 
 (module+ main
   (parse-args (vector->list (current-command-line-arguments)))
+  ;; F-15 (#8753): Auto-detect version from util/version.rkt if not provided.
   (unless (cli-version)
-    (eprintf "Error: --version is required\n")
+    (define version-text
+      (with-handlers ([exn:fail? (lambda (_) #f)])
+        (file->string "util/version.rkt")))
+    (when version-text
+      (define m (regexp-match #rx"define q-version \"([^\"]+)\"" version-text))
+      (when m
+        (cli-version (cadr m)))))
+  (unless (cli-version)
+    (eprintf "Error: --version is required (or util/version.rkt must exist for auto-detection)\n")
     (exit 2))
   (unless (file-exists? (cli-file))
     (eprintf "Error: file not found: ~a\n" (cli-file))
