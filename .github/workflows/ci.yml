@@ -64,23 +64,6 @@ jobs:
       - name: Run all lint checks
         run: racket scripts/lint-all.rkt
 
-  # ────────────────────────────────────────────────────────────
-  # Gate 1b: Lint alignment — fail if pre-commit and lint-all drift
-  # ────────────────────────────────────────────────────────────
-  lint-alignment:
-    needs: lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - name: Cache Racket packages
-        uses: actions/cache@v6
-        with:
-          path: ~/.local/share/racket
-          key: racket-pkgs-lint-${{ hashFiles('**/info.rkt') }}
-          restore-keys: racket-pkgs-lint-
-      - uses: ./.github/actions/setup-racket
-        with:
-          racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
       - name: Verify lint alignment
         run: racket scripts/check-lint-alignment.rkt
 
@@ -403,6 +386,7 @@ jobs:
   # main revalidate the latest retained record.
   # ────────────────────────────────────────────────────────────
   gsd-governance:
+    if: github.event_name == 'push'
     needs: lint
     runs-on: ubuntu-latest
     steps:
