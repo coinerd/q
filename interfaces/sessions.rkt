@@ -162,18 +162,23 @@
                   #f)
         default))
   (define model
-    (let loop ([es entries])
+    (let loop ([es entries]
+               [acc "unknown"])
       (cond
-        [(null? es) "unknown"]
+        [(null? es) acc]
         [else
          (define e (car es))
          (define kind (hash-ref* e "kind" #f))
-         (if (equal? kind "model-change")
-             (let ([meta (hash-ref* e "meta" #f)])
-               (if (hash? meta)
-                   (let ([m (hash-ref* meta "model" #f)]) (or m "unknown"))
-                   "unknown"))
-             (loop (cdr es)))])))
+         ;; F-14/A-10: retain the LAST valid model change chronologically,
+         ;; not the first. Malformed meta does not clobber a prior valid model.
+         (define new-acc
+           (if (equal? kind "model-change")
+               (let ([meta (hash-ref* e "meta" #f)])
+                 (if (hash? meta)
+                     (let ([m (hash-ref* meta "model" #f)]) (or m "unknown"))
+                     acc))
+               acc))
+         (loop (cdr es) new-acc)])))
   (hasheq 'id
           session-id
           'message-count
@@ -276,10 +281,20 @@
                            key)
                        #f)
              default))
+       (define (count-tool-call-parts e)
+         ;; F-14/A-10: production tool calls are content parts with type
+         ;; "tool-call" inside assistant/message entries, not top-level entries.
+         (define content (or (hash-ref e 'content #f) (hash-ref e "content" #f)))
+         (if (list? content)
+             (for/sum ([part (in-list content)])
+                      (define ptype (or (hash-ref part 'type #f) (hash-ref part "type" #f)))
+                      (if (equal? ptype "tool-call") 1 0))
+             0))
        (define tool-call-count
          (for/sum ([e (in-list entries)])
                   (define kind (hash-ref** e "kind" #f))
-                  (if (equal? kind "tool-call") 1 0)))
+                  (+ (if (equal? kind "tool-call") 1 0) ; legacy top-level compatibility
+                     (count-tool-call-parts e))))
        (define branch-count
          (for/sum ([e (in-list entries)])
                   (if (or (hash-ref e 'parentId #f) (hash-ref e "parentId" #f)) 1 0)))

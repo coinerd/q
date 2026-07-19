@@ -36,7 +36,8 @@
 (provide (contract-out [run-gui-with-runtime (-> any/c any/c void?)]
                        [run-gui (-> void?)]
                        [gui-available? (-> boolean?)]
-                       [load-gui-action-handler-factory (-> procedure?)]))
+                       [load-gui-action-handler-factory (-> procedure?)])
+         gui-resolve-session)
 
 ;; Stable module-path index for the GUI action adapter.  A plain string passed
 ;; to dynamic-require is resolved relative to the process current-directory;
@@ -241,6 +242,13 @@
 ;; --------------------------------------------------
 ;; run-gui-with-runtime -- full GUI with agent runtime
 ;; --------------------------------------------------
+
+;; F-11/A-09 (W4): GUI must resume the EXACT requested session instead of
+;; unconditionally creating a new sibling. This pure seam delegates to the
+;; canonical open-or-resume resolver and is unit-testable without a display.
+(define (gui-resolve-session rt-config)
+  (open-or-resume-session rt-config))
+
 (define (run-gui-with-runtime rt-config cfg)
   (unless (gui-available?)
     (eprintf "No display server available. Cannot start GUI.\n")
@@ -252,8 +260,9 @@
   (define settings (dict-ref rt-config 'settings #f))
   (wire-ui-event-actions-from-config! settings)
 
-  ;; Create agent session (wires provider, tools, extensions, event bus)
-  (define sess (make-agent-session rt-config))
+  ;; Create agent session — F-11/A-09: resume the requested session when an
+  ;; id is present (no sibling), else create a new one.
+  (define sess (gui-resolve-session rt-config))
   (define bus (dict-ref rt-config 'event-bus #f))
   (define theme (default-theme))
   (define model-name (dict-ref rt-config 'model-name #f))

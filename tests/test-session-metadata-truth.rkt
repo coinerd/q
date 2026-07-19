@@ -20,6 +20,7 @@
          (only-in "../util/event/event-bus.rkt" make-event-bus)
          (only-in "../util/message/message.rkt" make-message message->jsexpr)
          (only-in "../util/json/jsonl.rkt" jsonl-append!)
+         (only-in "../util/content/content-parts.rkt" make-text-part make-tool-call-part)
          "../interfaces/sessions.rkt")
 
 (define (make-temp-dir)
@@ -141,4 +142,52 @@
                   (check-not-false (hash-has-key? meta 'model))
                   (check-not-false (hash-has-key? meta 'size-bytes))
                   (check-not-false (hash-has-key? meta 'mtime)))
+                (lambda () (delete-directory/files dir #:must-exist? #f))))
+
+;; ============================================================
+;; W4 A-10 (F-14): latest model-change wins, tool-call content parts counted
+;; ============================================================
+
+(test-case "read-session-metadata reports the latest model-change, not the first"
+  (define dir (make-temp-dir))
+  (dynamic-wind void
+                (lambda ()
+                  (define cfg (make-test-runtime-config dir))
+                  (define sess (make-agent-session cfg))
+                  (define sid (session-id sess))
+                  (define session-path (build-path dir sid))
+                  (define jsonl-path (build-path session-path "session.jsonl"))
+                  ;; Two model changes chronologically: first claude-A, then claude-B.
+                  (jsonl-append!
+                   jsonl-path
+                   (message->jsexpr
+                    (make-message "ma" #f 'system 'model-change '() 1000 (hasheq 'model "claude-A"))))
+                  (jsonl-append!
+                   jsonl-path
+                   (message->jsexpr
+                    (make-message "mb" #f 'system 'model-change '() 2000 (hasheq 'model "claude-B"))))
+                  (define meta (read-session-metadata sid session-path))
+                  (check-equal? (hash-ref meta 'model) "claude-B"))
+                (lambda () (delete-directory/files dir #:must-exist? #f))))
+
+(test-case "sessions-info counts tool-call content parts inside assistant messages"
+  (define dir (make-temp-dir))
+  (dynamic-wind void
+                (lambda ()
+                  (define cfg (make-test-runtime-config dir))
+                  (define sess (make-agent-session cfg))
+                  (define sid (session-id sess))
+                  (define session-path (build-path dir sid))
+                  (define jsonl-path (build-path session-path "session.jsonl"))
+                  ;; A production assistant message carrying two tool-call parts.
+                  (define content
+                    (list (make-text-part "running two tools")
+                          (make-tool-call-part "tc1" "bash" (hasheq 'command "ls"))
+                          (make-tool-call-part "tc2" "edit" (hasheq 'path "f.rkt"))))
+                  (jsonl-append! jsonl-path
+                                 (message->jsexpr
+                                  (make-message "a1" #f 'assistant 'assistant content 3000 (hasheq))))
+                  (define info (sessions-info dir sid))
+                  (check-not-false info)
+                  (check-equal? (hash-ref info 'tool-call-count) 2))
                 (lambda () (delete-directory/files dir #:must-exist? #f))))
