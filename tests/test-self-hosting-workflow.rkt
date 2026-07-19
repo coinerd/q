@@ -180,7 +180,7 @@
   (define reg (make-tool-registry))
   (register-default-tools! reg)
   (define prov
-    (make-mock-provider (model-response (list (hasheq 'type "text" 'text "OK")) #f "mock" #f)
+    (make-mock-provider (model-response (list (hasheq 'type "text" 'text "OK")) #f "mock" #f #f)
                         #:name "mock"))
   (define rt (make-runtime #:provider prov #:tool-registry reg))
   (check-true (runtime? rt)))

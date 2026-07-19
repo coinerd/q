@@ -126,7 +126,8 @@
          (model-response (list (hasheq 'type 'text 'text "di-test"))
                          (hasheq 'prompt-tokens 10 'completion-tokens 5 'total-tokens 15)
                          "di-test-model"
-                         'stop)
+                         'stop
+                         #f)
          #:name "di-tool-list-test"))
       (define ctx (list (make-test-msg 'user "test")))
       (define result

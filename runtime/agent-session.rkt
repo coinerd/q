@@ -53,6 +53,7 @@
          (only-in "../agent/blackboard-subscriber.rkt" stop-blackboard-subscriber!)
          (only-in "../agent/event-structs/session-events.rkt"
                   session-start-event
+                  session-resumed-event
                   session-shutdown-event)
          "session/session-types.rkt"
          (only-in "session/session-repository.rkt"
@@ -406,10 +407,9 @@
     (unless (null? conclusions)
       (guarded-set-task-conclusions! sess conclusions)))
 
-  (emit-session-event! (agent-session-event-bus sess)
-                       session-id
-                       "session.resumed"
-                       (hasheq 'session-id session-id))
+  (emit-typed-event!
+   (agent-session-event-bus sess)
+   (session-resumed-event "session.resumed" (current-inexact-milliseconds) session-id #f session-id))
 
   (define resume-start-payload (session-start-payload session-id config 'resume))
   (maybe-dispatch-hooks (config-extension-registry cfg) 'session-start resume-start-payload)

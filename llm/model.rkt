@@ -63,23 +63,28 @@
 ;; model-response
 ;; ============================================================
 
-(struct model-response (content usage model stop-reason) #:transparent)
+(struct model-response (content usage model stop-reason provenance) #:transparent)
 
-(define (make-model-response content usage model stop-reason)
-  (model-response content usage model stop-reason))
+(define (make-model-response content usage model stop-reason #:provenance [provenance #f])
+  (model-response content usage model stop-reason provenance))
 
 (define (model-response->jsexpr resp)
-  (hasheq 'content
-          (model-response-content resp)
-          'usage
-          (or (model-response-usage resp) (hasheq))
-          'model
-          (model-response-model resp)
-          'stopReason
-          (let ([sr (model-response-stop-reason resp)])
-            (if sr
-                (symbol->string sr)
-                ""))))
+  (define base
+    (hasheq 'content
+            (model-response-content resp)
+            'usage
+            (or (model-response-usage resp) (hasheq))
+            'model
+            (model-response-model resp)
+            'stopReason
+            (let ([sr (model-response-stop-reason resp)])
+              (if sr
+                  (symbol->string sr)
+                  ""))))
+  (define prov (model-response-provenance resp))
+  (if (and prov (hash? prov) (not (hash-empty? prov)))
+      (hash-set base 'provenance prov)
+      base))
 
 (define (jsexpr->model-response h)
   (define content (hash-ref h 'content #f))
@@ -97,7 +102,8 @@
                        (let ([sr (hash-ref h 'stopReason #f)])
                          (if sr
                              (string->symbol sr)
-                             #f))))
+                             #f))
+                       #:provenance (hash-ref h 'provenance #f)))
 
 ;; ============================================================
 ;; stream-chunk
@@ -161,6 +167,7 @@
          model-response-usage
          model-response-model
          model-response-stop-reason
+         model-response-provenance
          ;; Struct type stream-chunk (predicate + accessors)
          stream-chunk
          stream-chunk?
@@ -182,7 +189,9 @@
                        [model-request->jsexpr (-> model-request? hash?)]
                        [jsexpr->model-request (-> hash? model-request?)]
                        [make-model-response
-                        (-> message-list/c usage/c string? stop-reason/c model-response?)]
+                        (->* (message-list/c usage/c string? stop-reason/c)
+                             (#:provenance (or/c hash? #f))
+                             model-response?)]
                        [model-response->jsexpr (-> model-response? hash?)]
                        [jsexpr->model-response (-> hash? model-response?)]
                        [make-stream-chunk

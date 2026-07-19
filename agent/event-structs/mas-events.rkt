@@ -126,3 +126,35 @@
                     (tool-name)
                     #:optional ([server-name #f])
                     #:schema-version 1)
+
+;; ============================================================
+;; Spawn Approval / Child Lifecycle (v0.99.52 W5)
+;; ============================================================
+
+;; Emitted when a MAS child spawn requires approval.
+;; Correlation is digest-bound (no raw task/result leakage).
+(define-typed-event mas-spawn-approval-requested-event
+                    "mas.spawn-approval.requested"
+                    (request-id commitment-digest presentation-digest)
+                    #:schema-version 1)
+
+;; Emitted when a spawn approval reaches a terminal state (approved/rejected/expired).
+(define-typed-event mas-spawn-approval-terminal-event
+                    "mas.spawn-approval.terminal"
+                    (request-id commitment-digest presentation-digest terminal-status)
+                    #:schema-version 1)
+
+;; Emitted when a child subagent session starts.
+(define-typed-event mas-child-started-event
+                    "mas.child.started"
+                    (request-id role)
+                    #:optional ([commitment-digest #f])
+                    #:schema-version 1)
+
+;; Emitted when a child subagent terminates.
+;; result-digest is a redacted digest, never the raw child result.
+(define-typed-event mas-child-terminal-event
+                    "mas.child.terminal"
+                    (request-id outcome)
+                    #:optional ([commitment-digest #f] [result-digest #f])
+                    #:schema-version 1)
