@@ -19,17 +19,18 @@
 (define valid-digest "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 
 (define required-checks
-  '("lint" "lint-alignment"
-           "security"
+  '("lint" "security"
            "release-dry-run"
-           "inter-wave-gate"
-           "workflows"
+           "workflows (0)"
+           "workflows (1)"
+           "workflows-aggregate"
            "smoke (ubuntu-latest)"
            "smoke (macos-latest)"
-           "test (ubuntu-latest, 8.10)"
-           "test (ubuntu-latest, 8.11)"
-           "test (macos-latest, 8.10)"
-           "gsd-governance"))
+           "test (0)"
+           "test (1)"
+           "test (2)"
+           "test-aggregate"
+           "test-platform"))
 
 (define (write-datum path datum)
   (make-parent-directory* path)
