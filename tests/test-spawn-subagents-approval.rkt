@@ -8,13 +8,13 @@
          racket/string
          "../tools/builtins/spawn-subagent.rkt"
          (only-in "../tools/builtins/spawn-subagent-helpers.rkt" sha256-digest)
-         (only-in "../tui/approval-channel.rkt"
+         (only-in "../runtime/approval/broker.rkt"
                   make-approval-channel
                   set-approval-channel!
                   clear-approval-channel!
-                  set-headless-approval-mode!
                   pending-approval-count
-                  approval-put-for-id!)
+                  approval-request-view
+                  approval-decide!)
          "../tools/tool.rkt"
          "../llm/provider.rkt"
          "../llm/model.rkt"
@@ -61,15 +61,38 @@
   (filter (lambda (event) (string=? (car event) "subagent.terminal")) events))
 
 (define (run/capture args decision)
-  (set-headless-approval-mode!)
   (define events '())
-  (define ctx
-    (make-test-context (lambda (type payload) (set! events (cons (cons type payload) events)))))
-  (define result
-    (parameterize ([current-spawn-approval-result decision]
-                   [current-spawn-timestamps (box '())])
-      (tool-spawn-subagents args ctx)))
-  (values result (reverse events)))
+  (define (publisher type payload)
+    (define captured-payload
+      (if (string=? type "mas.spawn-approval-requested")
+          (let ([view (approval-request-view (hash-ref payload 'request-id)
+                                             (hash-ref payload 'commitment-digest))])
+            (if view
+                (for/fold ([merged payload]) ([(key value) (in-hash view)])
+                  (hash-set merged key value))
+                payload))
+          payload))
+    (set! events (append events (list (cons type captured-payload))))
+    (when (string=? type "mas.spawn-approval-requested")
+      (cond
+        [(boolean? decision)
+         (check-true (approval-decide! (hash-ref payload 'request-id)
+                                       (hash-ref payload 'commitment-digest)
+                                       decision))]
+        [(eq? decision 'cancelled) (clear-approval-channel!)])))
+  (define (run)
+    (parameterize ([current-spawn-timestamps (box '())])
+      (tool-spawn-subagents args (make-test-context publisher))))
+  (cond
+    [(eq? decision 'no-channel)
+     (clear-approval-channel!)
+     (values (run) events)]
+    [else
+     (dynamic-wind (lambda ()
+                     (set-approval-channel!
+                      (make-approval-channel #:timeout-ms (if (eq? decision 'timeout) 20 1000))))
+                   (lambda () (values (run) events))
+                   clear-approval-channel!)]))
 
 (test-case "explicit invalid capability rejects the whole batch before approval"
   (define-values (result events)
@@ -81,11 +104,13 @@
   (check-true (string-contains? (result-text result) "invalid capability"))
   (check-equal? events '()))
 
-(test-case "omitted capabilities retain bounded defaults and bind the effective model"
-  (define-values (result events) (run/capture (hasheq 'jobs (list (hasheq 'task "ordinary"))) #f))
+(test-case "omitted capabilities deny batch headlessly with bounded defaults"
+  (define-values (result events)
+    (run/capture (hasheq 'jobs (list (hasheq 'task "ordinary"))) 'no-channel))
   (check-true (tool-result-is-error? result))
+  (check-true (string-contains? (result-text result) "approval denied"))
   (check-equal? (length events) 1)
-  (define planned-job (car (hash-ref (hash-ref (cdar events) 'snapshot) 'jobs)))
+  (define planned-job (car (hash-ref (cdar events) 'jobs)))
   (check-equal? (hash-ref planned-job 'effective-capabilities) '(read-only file-write shell-exec))
   (check-equal? (hash-ref planned-job 'model-preview) "mock-model"))
 
@@ -120,7 +145,7 @@
        (hasheq 'jobs (list (hasheq 'task "bounded" 'capabilities '(read-only file-write shell-exec))))
        #f)))
   (check-true (tool-result-is-error? result))
-  (define planned-job (car (hash-ref (hash-ref (cdar events) 'snapshot) 'jobs)))
+  (define planned-job (car (hash-ref (cdar events) 'jobs)))
   (define tools (hash-ref planned-job 'effective-tools))
   (check-false (member "bash" tools))
   (check-false (member "write" tools))
@@ -144,18 +169,18 @@
   (define-values (result events) (run/capture args #f))
   (check-true (tool-result-is-error? result))
   (check-true (string-contains? (result-text result) "approval denied"))
-  (check-equal? (length events) 1)
+  (check-equal? (length events) 2)
   (define payload (cdar events))
   (check-equal? (caar events) "mas.spawn-approval-requested")
   (check-equal? (hash-ref payload 'batch-id) "batch-explicit")
   (check-equal? (length (hash-ref payload 'dangerous-jobs)) 2)
-  (check-true (non-empty-string? (hash-ref payload 'snapshot-digest)))
+  (check-true (non-empty-string? (hash-ref payload 'commitment-digest)))
   (define dangerous (car (hash-ref payload 'dangerous-jobs)))
   (check-equal? (hash-ref dangerous 'task-digest) (sha256-digest "danger"))
   (check-false (hash-has-key? dangerous 'task))
   (check-equal? (hash-ref dangerous 'task-preview) "danger")
   (check-true (string-contains? (hash-ref payload 'task-preview) "danger"))
-  (define planned-jobs (hash-ref (hash-ref payload 'snapshot) 'jobs))
+  (define planned-jobs (hash-ref payload 'jobs))
   (for ([job (in-list planned-jobs)])
     (check-true (non-empty-string? (hash-ref job 'job-id)))
     (check-true (non-empty-string? (hash-ref job 'tool-call-id)))
@@ -169,9 +194,17 @@
      (define payloads '())
      (define publisher
        (lambda (type payload)
-         (set! payloads (append payloads (list (cons type payload))))
-         (when (string=? type "mas.spawn-approval-requested")
-           (check-true (approval-put-for-id! (hash-ref payload 'request-id) #t)))))
+         (cond
+           [(string=? type "mas.spawn-approval-requested")
+            (define request-id (hash-ref payload 'request-id))
+            (define digest (hash-ref payload 'commitment-digest))
+            (define view (approval-request-view request-id digest))
+            (define captured
+              (for/fold ([merged payload]) ([(key value) (in-hash view)])
+                (hash-set merged key value)))
+            (set! payloads (append payloads (list (cons type captured))))
+            (check-true (approval-decide! request-id digest #t))]
+           [else (set! payloads (append payloads (list (cons type payload))))])))
      (define secret "api_key=super-secret-value-123456")
      (define result
        (tool-spawn-subagents (hasheq 'jobs
@@ -195,8 +228,7 @@
                                                                     "model-secret-value-123456"))])
        (check-false (string-contains? (format "~s" (cdr entry)) secret-fragment)))
      (define request (cdar payloads))
-     (for* ([job (in-list (append (hash-ref (hash-ref request 'snapshot) 'jobs)
-                                  (hash-ref request 'dangerous-jobs)))]
+     (for* ([job (in-list (append (hash-ref request 'jobs) (hash-ref request 'dangerous-jobs)))]
             [raw-key (in-list '(task role model))])
        (check-false (hash-has-key? job raw-key))))
    clear-approval-channel!))
@@ -216,13 +248,43 @@
                  #f))
   (check-true (tool-result-is-error? result))
   (define payload (cdar events))
-  (define planned-job (car (hash-ref (hash-ref payload 'snapshot) 'jobs)))
+  (define planned-job (car (hash-ref payload 'jobs)))
   (for ([payload-text (in-list (list (hash-ref payload 'task-preview)
                                      (hash-ref planned-job 'task-preview)
                                      (hash-ref planned-job 'role-preview)))])
     (check-false (for/or ([char (in-string payload-text)])
                    (define code (char->integer char))
                    (or (< code 32) (and (>= code 127) (<= code 159)))))))
+
+(test-case "terminal teardown revokes batch grant before rate or child effects"
+  (define sends (box 0))
+  (define timestamps (box '()))
+  (define events '())
+  (dynamic-wind (lambda () (set-approval-channel! (make-approval-channel #:timeout-ms 1000)))
+                (lambda ()
+                  (define ctx
+                    (make-counting-context
+                     (lambda (type payload)
+                       (set! events (cons type events))
+                       (cond
+                         [(string=? type "mas.spawn-approval-requested")
+                          (check-true (approval-decide! (hash-ref payload 'request-id)
+                                                        (hash-ref payload 'commitment-digest)
+                                                        #t))]
+                         [(string=? type "mas.spawn-approval-terminal") (clear-approval-channel!)]))
+                     sends))
+                  (parameterize ([current-spawn-timestamps timestamps])
+                    (define result
+                      (tool-spawn-subagents
+                       (hasheq 'jobs
+                               (list (hasheq 'task "revoked batch" 'capabilities '(shell-exec))))
+                       ctx))
+                    (check-true (tool-result-is-error? result))
+                    (check-equal? (hash-ref (tool-result-details result) 'terminal-status) "denied")
+                    (check-equal? (unbox sends) 0)
+                    (check-equal? (unbox timestamps) '())
+                    (check-false (member "subagent.terminal" events))))
+                clear-approval-channel!))
 
 (test-case "dangerous denial reaches zero provider sends"
   (define sends (box 0))
@@ -231,14 +293,17 @@
     (make-counting-context (lambda (type payload)
                              (set! events (append events (list (cons type payload)))))
                            sends))
+  (define timestamps (box '()))
+  (clear-approval-channel!)
   (define result
-    (parameterize ([current-spawn-approval-result #f])
+    (parameterize ([current-spawn-timestamps timestamps])
       (tool-spawn-subagents (hasheq 'jobs
                                     (list (hasheq 'task "must not run" 'capabilities '(shell-exec))))
                             ctx)))
   (check-true (tool-result-is-error? result))
   (check-equal? (unbox sends) 0)
-  (check-equal? (map car events) '("mas.spawn-approval-requested")))
+  (check-equal? (unbox timestamps) '())
+  (check-equal? (map car events) '("mas.spawn-approval-terminal")))
 
 (test-case "denial timeout and cancellation all start zero jobs"
   (for ([decision (in-list (list #f 'timeout 'cancelled))])
@@ -247,7 +312,7 @@
        (hasheq 'jobs (list (hasheq 'jobId "danger" 'task "do not run" 'capabilities '(shell-exec))))
        decision))
     (check-true (tool-result-is-error? result))
-    (check-equal? (length events) 1)))
+    (check-equal? (length events) 2)))
 
 (test-case "correlated timeout denies the whole batch and cleans the registry"
   (dynamic-wind
@@ -295,22 +360,20 @@
      (check-equal? (pending-approval-count) 0))
    clear-approval-channel!))
 
-(test-case "dangerous work after interactive teardown cannot use permissive headless hook"
+(test-case "dangerous work after interactive teardown remains denied headlessly"
   (set-approval-channel! (make-approval-channel #:timeout-ms 5000))
   (clear-approval-channel!)
   (define sends (box 0))
   (define result
-    (parameterize ([current-spawn-approval-result #t])
-      (tool-spawn-subagents
-       (hasheq 'jobs (list (hasheq 'task "must remain closed" 'capabilities '(shell-exec))))
-       (make-counting-context void sends))))
+    (tool-spawn-subagents
+     (hasheq 'jobs (list (hasheq 'task "must remain closed" 'capabilities '(shell-exec))))
+     (make-counting-context void sends)))
   (check-true (tool-result-is-error? result))
   (check-equal? (unbox sends) 0))
 
 (test-case "approved batch reserves one rate slot per child"
   (define timestamps (box '()))
-  (parameterize ([current-spawn-approval-result #t]
-                 [current-spawn-timestamps timestamps])
+  (parameterize ([current-spawn-timestamps timestamps])
     (define result
       (tool-spawn-subagents (hasheq 'jobs
                                     (list (hasheq 'task "one" 'capabilities '(read-only))
@@ -326,11 +389,11 @@
                                (hasheq 'jobId "second" 'task "two" 'capabilities '(read-only))))
                  #t))
   (check-false (tool-result-is-error? result) (result-text result))
-  (check-equal? (length (approval-events events)) 1)
+  (check-equal? (length (approval-events events)) 2)
   (check-equal? (length (terminal-events events)) 2)
   (define jobs (hash-ref (tool-result-details result) 'jobs))
   (check-equal? (map (lambda (job) (hash-ref job 'jobId)) jobs) '("first" "second"))
-  (define approved-plan (hash-ref (hash-ref (cdar events) 'snapshot) 'jobs))
+  (define approved-plan (hash-ref (cdar events) 'jobs))
   (for ([actual (in-list jobs)]
         [planned (in-list approved-plan)])
     (check-equal? (hash-ref actual 'toolCallId) (hash-ref planned 'tool-call-id))
@@ -345,8 +408,12 @@
      (define publisher
        (lambda (type payload)
          (when (string=? type "mas.spawn-approval-requested")
-           (approval-put-for-id! (hash-ref payload 'request-id)
-                                 (string-contains? (hash-ref payload 'task-preview) "allow")))))
+           (define request-id (hash-ref payload 'request-id))
+           (define digest (hash-ref payload 'commitment-digest))
+           (define view (approval-request-view request-id digest))
+           (approval-decide! request-id
+                             digest
+                             (string-contains? (hash-ref view 'task-preview) "allow")))))
      (define ctx (make-counting-context publisher sends))
      (define results (make-channel))
      (define (start task)
@@ -369,19 +436,27 @@
    clear-approval-channel!))
 
 (test-case "approved batch starts each planned provider job exactly once"
-  (set-headless-approval-mode!)
   (define sends (box 0))
-  (define result
-    (parameterize ([current-spawn-approval-result #t]
-                   [current-spawn-timestamps (box '())])
-      (tool-spawn-subagents
-       (hasheq 'jobs
-               (list (hasheq 'jobId "one" 'task "one" 'capabilities '(shell-exec))
-                     (hasheq 'jobId "two" 'task "two" 'capabilities '(read-only))
-                     (hasheq 'jobId "three" 'task "three" 'capabilities '(file-write))))
-       (make-counting-context void sends))))
-  (check-false (tool-result-is-error? result) (result-text result))
-  (check-equal? (unbox sends) 3))
+  (dynamic-wind
+   (lambda () (set-approval-channel! (make-approval-channel #:timeout-ms 1000)))
+   (lambda ()
+     (define publisher
+       (lambda (type payload)
+         (when (string=? type "mas.spawn-approval-requested")
+           (check-true (approval-decide! (hash-ref payload 'request-id)
+                                         (hash-ref payload 'commitment-digest)
+                                         #t)))))
+     (define result
+       (parameterize ([current-spawn-timestamps (box '())])
+         (tool-spawn-subagents
+          (hasheq 'jobs
+                  (list (hasheq 'jobId "one" 'task "one" 'capabilities '(shell-exec))
+                        (hasheq 'jobId "two" 'task "two" 'capabilities '(read-only))
+                        (hasheq 'jobId "three" 'task "three" 'capabilities '(file-write))))
+          (make-counting-context publisher sends))))
+     (check-false (tool-result-is-error? result) (result-text result))
+     (check-equal? (unbox sends) 3))
+   clear-approval-channel!))
 
 (test-case "mutation reorder insertion removal widening and substitution invalidate approval"
   (define mutations
@@ -406,13 +481,66 @@
     (define jobs (list danger safe))
     (define mutable-args (make-hasheq (list (cons 'jobs jobs))))
     (define events '())
-    (define ctx
-      (make-test-context (lambda (type payload)
-                           (set! events (cons (cons type payload) events))
-                           (mutate! mutable-args jobs))))
-    (define result
-      (parameterize ([current-spawn-approval-result #t])
-        (tool-spawn-subagents mutable-args ctx)))
-    (check-true (tool-result-is-error? result))
-    (check-true (string-contains? (result-text result) "changed after approval"))
-    (check-equal? (length events) 1)))
+    (dynamic-wind
+     (lambda () (set-approval-channel! (make-approval-channel #:timeout-ms 1000)))
+     (lambda ()
+       (define ctx
+         (make-test-context (lambda (type payload)
+                              (set! events (cons (cons type payload) events))
+                              (when (string=? type "mas.spawn-approval-requested")
+                                (mutate! mutable-args jobs)
+                                (check-true (approval-decide! (hash-ref payload 'request-id)
+                                                              (hash-ref payload 'commitment-digest)
+                                                              #t))))))
+       (define result (tool-spawn-subagents mutable-args ctx))
+       (check-true (tool-result-is-error? result))
+       (check-true (string-contains? (result-text result) "changed after approval"))
+       (check-equal? (length events) 2))
+     clear-approval-channel!)))
+
+(test-case "approved batch uses provider and model captured by the committed plan"
+  (define original-sends (box 0))
+  (define replacement-sends (box 0))
+  (define observed-models (box '()))
+  (define (counting-provider name counter)
+    (make-provider
+     (lambda () name)
+     (lambda () (hasheq 'streaming #f))
+     (lambda (request)
+       (set-box! counter (add1 (unbox counter)))
+       (when (string=? name "original")
+         (set-box! observed-models
+                   (cons (hash-ref (model-request-settings request) 'model #f)
+                         (unbox observed-models))))
+       (make-model-response (list (hasheq 'type "text" 'text "done"))
+                            (hasheq 'prompt-tokens 1 'completion-tokens 1 'total-tokens 2)
+                            name
+                            'stop))
+     (lambda (_request) (error name "streaming not expected"))))
+  (define original (counting-provider "original" original-sends))
+  (define replacement (counting-provider "replacement" replacement-sends))
+  (define settings (make-hasheq (list (cons 'provider original) (cons 'model "original-model"))))
+  (dynamic-wind
+   (lambda () (set-approval-channel! (make-approval-channel #:timeout-ms 1000)))
+   (lambda ()
+     (define ctx
+       (make-exec-context #:event-publisher
+                          (lambda (type payload)
+                            (when (string=? type "mas.spawn-approval-requested")
+                              (hash-set! settings 'provider replacement)
+                              (hash-set! settings 'model "replacement-model")
+                              (check-true (approval-decide! (hash-ref payload 'request-id)
+                                                            (hash-ref payload 'commitment-digest)
+                                                            #t))))
+                          #:runtime-settings settings
+                          #:call-id "provider-binding-test"))
+     (define result
+       (tool-spawn-subagents
+        (hasheq 'jobs
+                (list (hasheq 'task "bound" 'model "approved-model" 'capabilities '(shell-exec))))
+        ctx))
+     (check-false (tool-result-is-error? result) (result-text result))
+     (check-equal? (unbox original-sends) 1)
+     (check-equal? (unbox replacement-sends) 0)
+     (check-equal? (unbox observed-models) '("approved-model")))
+   clear-approval-channel!))

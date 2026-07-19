@@ -67,14 +67,17 @@
   (check-true (tool-result-is-error? result)))
 
 (test-case "#1193: spawn-subagent executes with mock provider"
-  (define result (tool-spawn-subagent (hasheq 'task "List all files")))
+  (define result
+    (tool-spawn-subagent (hasheq 'task "List all files" 'capabilities '(read-only))))
   (check-true (tool-result? result))
   ;; With mock provider it should succeed
   (check-false (tool-result-is-error? result)
                (format "expected success, got error: ~a" (tool-result-content result))))
 
 (test-case "#1193: spawn-subagent respects max-turns parameter"
-  (define result (tool-spawn-subagent (hasheq 'task "test task" 'max-turns 1)))
+  (define result
+    (tool-spawn-subagent
+     (hasheq 'task "test task" 'max-turns 1 'capabilities '(read-only))))
   (check-true (tool-result? result))
   (when (not (tool-result-is-error? result))
     (define details (tool-result-details result))

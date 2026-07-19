@@ -68,17 +68,17 @@
 (test-case "spawn-subagents rejects jobs > 12"
   (define big-jobs
     (for/list ([i (in-range 13)])
-      (hasheq 'task (format "task ~a" i))))
+      (hasheq 'task (format "task ~a" i) 'capabilities '(read-only))))
   (define result (tool-spawn-subagents (hasheq 'jobs big-jobs)))
   (check-true (tool-result-is-error? result))
   (check-true (string-contains? (result-text result) "12")))
 
 (test-case "spawn-subagents rejects maxParallel < 1"
-  (define result (tool-spawn-subagents (hasheq 'jobs (list (hasheq 'task "test")) 'maxParallel 0)))
+  (define result (tool-spawn-subagents (hasheq 'jobs (list (hasheq 'task "test" 'capabilities '(read-only))) 'maxParallel 0)))
   (check-true (tool-result-is-error? result)))
 
 (test-case "spawn-subagents rejects maxParallel > 3"
-  (define result (tool-spawn-subagents (hasheq 'jobs (list (hasheq 'task "test")) 'maxParallel 5)))
+  (define result (tool-spawn-subagents (hasheq 'jobs (list (hasheq 'task "test" 'capabilities '(read-only))) 'maxParallel 5)))
   (check-true (tool-result-is-error? result))
   (check-true (string-contains? (result-text result) "at most 3")))
 
@@ -90,7 +90,10 @@
   (define prov (make-stub-provider "single job result"))
   (define ctx (make-test-exec-ctx prov))
   (define result
-    (tool-spawn-subagents (hasheq 'jobs (list (hasheq 'task "do the thing" 'jobId "job-1"))) ctx))
+    (tool-spawn-subagents
+     (hasheq 'jobs
+             (list (hasheq 'task "do the thing" 'jobId "job-1" 'capabilities '(read-only))))
+     ctx))
   (check-false (tool-result-is-error? result) (format "expected success: ~a" (result-text result)))
   (define details (tool-result-details result))
   (check-equal? (hash-ref details 'total-jobs #f) 1)
@@ -104,7 +107,9 @@
 (test-case "spawn-subagents runs 2 jobs in parallel"
   (define prov (make-stub-provider "parallel result"))
   (define ctx (make-test-exec-ctx prov))
-  (define jobs (list (hasheq 'task "task A" 'jobId "job-a") (hasheq 'task "task B" 'jobId "job-b")))
+  (define jobs
+    (list (hasheq 'task "task A" 'jobId "job-a" 'capabilities '(read-only))
+          (hasheq 'task "task B" 'jobId "job-b" 'capabilities '(read-only))))
   (define result (tool-spawn-subagents (hasheq 'jobs jobs 'maxParallel 2) ctx))
   (check-false (tool-result-is-error? result) (format "expected success: ~a" (result-text result)))
   (define details (tool-result-details result))
@@ -117,7 +122,12 @@
   (define ctx (make-test-exec-ctx prov))
   (define jobs
     (for/list ([i (in-range 3)])
-      (hasheq 'task (format "task ~a" i) 'jobId (format "job-~a" i))))
+      (hasheq 'task
+              (format "task ~a" i)
+              'jobId
+              (format "job-~a" i)
+              'capabilities
+              '(read-only))))
   (define result (tool-spawn-subagents (hasheq 'jobs jobs 'maxParallel 3) ctx))
   (check-false (tool-result-is-error? result))
   (check-equal? (hash-ref (tool-result-details result) 'total-jobs #f) 3)
@@ -128,7 +138,9 @@
   (define ctx (make-test-exec-ctx prov))
   ;; 1 job but maxParallel=3: should still work, effectively sequential
   (define result
-    (tool-spawn-subagents (hasheq 'jobs (list (hasheq 'task "only job")) 'maxParallel 3) ctx))
+    (tool-spawn-subagents
+     (hasheq 'jobs (list (hasheq 'task "only job" 'capabilities '(read-only))) 'maxParallel 3)
+     ctx))
   (check-false (tool-result-is-error? result))
   (check-equal? (hash-ref (tool-result-details result) 'succeeded #f) 1))
 
@@ -140,7 +152,12 @@
   (define prov (make-stub-provider "summary content here"))
   (define ctx (make-test-exec-ctx prov))
   (define result
-    (tool-spawn-subagents (hasheq 'jobs (list (hasheq 'task "t1" 'jobId "j1")) 'aggregate #t) ctx))
+    (tool-spawn-subagents
+     (hasheq 'jobs
+             (list (hasheq 'task "t1" 'jobId "j1" 'capabilities '(read-only)))
+             'aggregate
+             #t)
+     ctx))
   (check-false (tool-result-is-error? result))
   (define text (result-text result))
   (check-true (string-contains? text "Batch complete"))
@@ -149,7 +166,10 @@
 (test-case "spawn-subagents aggregate=false omits details"
   (define prov (make-stub-provider "minimal"))
   (define ctx (make-test-exec-ctx prov))
-  (define result (tool-spawn-subagents (hasheq 'jobs (list (hasheq 'task "t1")) 'aggregate #f) ctx))
+  (define result
+    (tool-spawn-subagents
+     (hasheq 'jobs (list (hasheq 'task "t1" 'capabilities '(read-only))) 'aggregate #f)
+     ctx))
   (check-false (tool-result-is-error? result))
   (define text (result-text result))
   (check-true (string-contains? text "Batch complete"))
@@ -163,7 +183,9 @@
 (test-case "spawn-subagents rejects every job when one task is missing"
   (define prov (make-stub-provider "ok"))
   (define ctx (make-test-exec-ctx prov))
-  (define jobs (list (hasheq 'task "valid task" 'jobId "good") (hasheq 'jobId "bad")))
+  (define jobs
+    (list (hasheq 'task "valid task" 'jobId "good" 'capabilities '(read-only))
+          (hasheq 'jobId "bad" 'capabilities '(read-only))))
   (define result (tool-spawn-subagents (hasheq 'jobs jobs) ctx))
   (check-true (tool-result-is-error? result)))
 
@@ -182,8 +204,17 @@
   (define provider (make-mock-provider looping-response #:name "looping"))
   (define ctx (make-test-exec-ctx provider))
   (define result
-    (tool-spawn-subagents (hasheq 'jobs (list (hasheq 'task "loop" 'jobId "timed" 'max-turns 1)))
-                          ctx))
+    (tool-spawn-subagents
+     (hasheq 'jobs
+             (list (hasheq 'task
+                           "loop"
+                           'jobId
+                           "timed"
+                           'max-turns
+                           1
+                           'capabilities
+                           '(read-only))))
+     ctx))
   (check-false (tool-result-is-error? result))
   (define details (tool-result-details result))
   (check-equal? (hash-ref details 'succeeded #f) 0)
@@ -248,8 +279,15 @@
                          "test-provider"
                          'tool-calls))
   (define result
-    (tool-spawn-subagents (hasheq 'jobs (list (hasheq 'task "fail" 'jobId "failed")))
-                          (make-test-exec-ctx (make-mock-provider malformed))))
+    (tool-spawn-subagents
+     (hasheq 'jobs
+             (list (hasheq 'task
+                           "fail"
+                           'jobId
+                           "failed"
+                           'capabilities
+                           '(read-only))))
+     (make-test-exec-ctx (make-mock-provider malformed))))
   (define details (tool-result-details result))
   (check-equal? (hash-ref details 'succeeded) 0)
   (check-equal? (hash-ref details 'failed) 1)
@@ -263,7 +301,15 @@
     (make-exec-context #:cancellation-token token
                        #:runtime-settings (hasheq 'provider provider 'model "test-model")))
   (define result
-    (tool-spawn-subagents (hasheq 'jobs (list (hasheq 'task "cancel" 'jobId "cancelled"))) ctx))
+    (tool-spawn-subagents
+     (hasheq 'jobs
+             (list (hasheq 'task
+                           "cancel"
+                           'jobId
+                           "cancelled"
+                           'capabilities
+                           '(read-only))))
+     ctx))
   (define details (tool-result-details result))
   (check-equal? (hash-ref details 'succeeded) 0)
   (check-equal? (hash-ref details 'failed) 1)
@@ -274,6 +320,8 @@
 ;; ============================================================
 
 (test-case "spawn-subagents works without exec-context (mock provider)"
-  (define result (tool-spawn-subagents (hasheq 'jobs (list (hasheq 'task "no ctx test")))))
+  (define result
+    (tool-spawn-subagents
+     (hasheq 'jobs (list (hasheq 'task "no ctx test" 'capabilities '(read-only))))))
   (check-false (tool-result-is-error? result)
                (format "expected success with mock: ~a" (result-text result))))

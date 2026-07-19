@@ -57,11 +57,12 @@
 
     ;; ---- F-1b: Default max-turns = 10 ----
     (test-case "parse-subagent-config default max-turns is 10"
-      (define cfg (parse-subagent-config (hasheq 'task "test task")))
+      (define cfg (parse-subagent-config (hasheq 'task "test task" 'capabilities '(read-only))))
       (check-equal? (subagent-config-max-turns cfg) 10))
 
     (test-case "parse-subagent-config explicit max-turns respected"
-      (define cfg (parse-subagent-config (hasheq 'task "test task" 'max-turns 3)))
+      (define cfg (parse-subagent-config
+         (hasheq 'task "test task" 'max-turns 3 'capabilities '(read-only))))
       (check-equal? (subagent-config-max-turns cfg) 3))
 
     ;; ---- F-1a: Subagent retries on transient provider error ----
@@ -69,7 +70,7 @@
     (test-case "subagent retries on transient provider error"
       (define-values (provider calls-box) (make-retry-provider))
       (define exec-ctx (make-test-exec-ctx provider))
-      (define cfg (subagent-config "Simple task" "assistant" 5 #f #f #f))
+      (define cfg (subagent-config "Simple task" "assistant" 5 #f #f '(read-only)))
       (define result (run-subagent-with-config cfg exec-ctx))
       (check-false (tool-result-is-error? result) "result should not be an error after retry")
       (check-true (> (unbox calls-box) 1) "provider-send should have been called more than once"))
@@ -77,7 +78,7 @@
     (test-case "subagent succeeds without retry when no errors"
       (define provider (make-always-success-provider))
       (define exec-ctx (make-test-exec-ctx provider))
-      (define cfg (subagent-config "Simple task" "assistant" 5 #f #f #f))
+      (define cfg (subagent-config "Simple task" "assistant" 5 #f #f '(read-only)))
       (define result (run-subagent-with-config cfg exec-ctx))
       (check-false (tool-result-is-error? result)))))
 

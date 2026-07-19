@@ -4,30 +4,51 @@
 ;; @suite security
 
 ;; tests/test-spawn-approval.rkt
-;; v0.99.23 §5.3: Tests for HITL approval of dangerous subagent spawns.
-;; Verifies that:
-;; - requires-hitl-approval? identifies shell-exec and git-write as dangerous
-;; - request-spawn-approval is permissive in non-interactive mode (no publisher)
-;; - Approval denial blocks the spawn with an error result
-;; - Approval allows the spawn to proceed
+;; Tests for fail-closed, digest-bound HITL approval of subagent spawns.
 
 (require rackunit
          rackunit/text-ui
          racket/string
          racket/list
          "../tools/builtins/spawn-subagent.rkt"
-         "../tools/tool.rkt")
+         "../tools/builtins/spawn-execution-plan.rkt"
+         "../tools/tool.rkt"
+         "../llm/provider.rkt"
+         "../llm/model.rkt"
+         (only-in "../runtime/approval/broker.rkt"
+                  make-approval-channel
+                  set-approval-channel!
+                  clear-approval-channel!
+                  approval-decide!))
 
 ;; ── Helpers ──
 
-;; Build a subagent-config with given capabilities
 (define (make-cfg #:task [task "test task"] #:capabilities [caps #f])
   (subagent-config task "You are a test agent." 3 #f #f caps))
 
-;; ── Test Suite ──
+(define (make-direct-plan caps task)
+  (make-spawn-execution-plan
+   'single
+   (hasheq 'task task 'effective-capabilities caps)
+   (hasheq 'task-preview (redacted-approval-preview task) 'capabilities caps)))
+
+(define (make-counting-context sends #:publisher [publisher #f])
+  (define provider
+    (make-provider
+     (lambda () "counting-mock")
+     (lambda () (hasheq 'streaming #f))
+     (lambda (_request)
+       (set-box! sends (add1 (unbox sends)))
+       (make-model-response (list (hasheq 'type "text" 'text "done"))
+                            (hasheq 'prompt-tokens 1 'completion-tokens 1 'total-tokens 2)
+                            "counting-mock"
+                            'stop))
+     (lambda (_request) (error 'counting-mock "streaming not expected"))))
+  (make-exec-context #:event-publisher publisher
+                     #:runtime-settings (hasheq 'provider provider 'model "counting-mock")))
 
 (define suite
-  (test-suite "HITL Spawn Approval (v0.99.23 §5.3)"
+  (test-suite "HITL Spawn Approval"
 
     ;; ── requires-hitl-approval? ──
 
@@ -57,59 +78,102 @@
 
     ;; ── request-spawn-approval ──
 
-    (test-case "request-spawn-approval returns #t with no exec-ctx (non-interactive)"
-      (check-true (request-spawn-approval '(shell-exec) "dangerous task" #f)))
+    (test-case "dangerous request without interactive broker denies"
+      (clear-approval-channel!)
+      (check-false (request-spawn-approval (make-direct-plan '(shell-exec) "dangerous task") #f)))
 
-    (test-case "request-spawn-approval returns #t by default (permissive)"
-      (check-true (request-spawn-approval '(shell-exec git-write) "task" #f)))
-
-    (test-case "request-spawn-approval returns #f when parameterized to deny"
-      (parameterize ([current-spawn-approval-result #f])
-        (check-false (request-spawn-approval '(shell-exec) "dangerous task" #f))))
-
-    (test-case "request-spawn-approval emits event when publisher present"
+    (test-case "publisher without broker is telemetry, not approval authority"
+      (clear-approval-channel!)
       (define events-received '())
-      (define mock-publisher
-        (lambda (event-type payload)
-          (set! events-received (cons (cons event-type payload) events-received))))
-      (define mock-ctx (make-exec-context #:event-publisher mock-publisher))
-      (define approved (request-spawn-approval '(shell-exec) "my task" mock-ctx))
-      (check-true approved "default should be permissive")
-      (check-true (pair? events-received) "should have emitted an event")
-      (check-equal? (caar events-received) "mas.spawn-approval-requested"))
+      (define mock-ctx
+        (make-exec-context #:event-publisher (lambda (event-type payload)
+                                               (set! events-received
+                                                     (cons (cons event-type payload)
+                                                           events-received)))))
+      (check-false (request-spawn-approval (make-direct-plan '(shell-exec) "my task") mock-ctx))
+      (check-equal? (map car events-received) '("mas.spawn-approval-terminal"))
+      (check-equal? (hash-ref (cdar events-received) 'terminal-status) "denied-headless"))
 
-    (test-case "request-spawn-approval truncates long task descriptions"
+    (test-case "interactive publisher approves using request id and commitment digest"
+      (dynamic-wind
+       (lambda () (set-approval-channel! (make-approval-channel #:timeout-ms 1000)))
+       (lambda ()
+         (define events-received '())
+         (define mock-ctx
+           (make-exec-context #:event-publisher
+                              (lambda (event-type payload)
+                                (set! events-received
+                                      (append events-received (list (cons event-type payload))))
+                                (when (string=? event-type "mas.spawn-approval-requested")
+                                  (check-true (approval-decide! (hash-ref payload 'request-id)
+                                                                (hash-ref payload 'commitment-digest)
+                                                                #t))))))
+         (check-not-false (request-spawn-approval (make-direct-plan '(shell-exec) "my task")
+                                                  mock-ctx))
+         (check-equal? (map car events-received)
+                       '("mas.spawn-approval-requested" "mas.spawn-approval-terminal")))
+       clear-approval-channel!))
+
+    (test-case "request-spawn-approval carries bounded plan preview"
+      (clear-approval-channel!)
       (define events-received '())
-      (define mock-publisher
-        (lambda (event-type payload)
-          (set! events-received (cons (cons event-type payload) events-received))))
-      (define mock-ctx (make-exec-context #:event-publisher mock-publisher))
-      (define long-task (make-string 500 #\X))
-      (request-spawn-approval '(shell-exec) long-task mock-ctx)
+      (define mock-ctx
+        (make-exec-context #:event-publisher (lambda (event-type payload)
+                                               (set! events-received
+                                                     (cons (cons event-type payload)
+                                                           events-received)))))
+      (request-spawn-approval (make-direct-plan '(shell-exec) (make-string 500 #\X)) mock-ctx)
       (define preview (hash-ref (cdar events-received) 'task-preview ""))
       (check-true (<= (string-length preview) 200)))
 
     ;; ── Integration: run-subagent-with-config ──
 
-    (test-case "denial blocks spawn with error result"
-      (parameterize ([current-spawn-approval-result #f])
-        (define cfg (make-cfg #:task "dangerous task" #:capabilities '(shell-exec)))
-        (define result (run-subagent-with-config cfg #f))
-        (check-true (tool-result? result) "should return a tool-result")
-        (check-true (tool-result-is-error? result) "should be an error result")
-        (define details (tool-result-details result))
-        (check-equal? (hash-ref details 'terminal-status #f) "denied")
-        (check-false (hash-has-key? details 'child-id))
-        (check-false (hash-has-key? details 'session-id))))
-
-    (test-case "denied work does not consume spawn rate budget"
+    (test-case "dangerous no-channel denial creates no child, sends, or rate effects"
+      (clear-approval-channel!)
+      (define sends (box 0))
       (define timestamps (box '()))
-      (parameterize ([current-spawn-approval-result #f]
-                     [current-spawn-timestamps timestamps])
-        (define result
-          (run-subagent-with-config (make-cfg #:task "denied" #:capabilities '(shell-exec)) #f))
-        (check-true (tool-result-is-error? result))
-        (check-equal? (unbox timestamps) '())))
+      (define result
+        (parameterize ([current-spawn-timestamps timestamps])
+          (run-subagent-with-config (make-cfg #:task "dangerous task" #:capabilities '(shell-exec))
+                                    (make-counting-context sends))))
+      (check-true (tool-result? result))
+      (check-true (tool-result-is-error? result))
+      (define details (tool-result-details result))
+      (check-equal? (hash-ref details 'terminal-status #f) "denied")
+      (check-false (hash-has-key? details 'child-id))
+      (check-false (hash-has-key? details 'session-id))
+      (check-equal? (unbox sends) 0)
+      (check-equal? (unbox timestamps) '()))
+
+    (test-case "omitted capabilities deny single spawn without interactive approval"
+      (clear-approval-channel!)
+      (define sends (box 0))
+      (define timestamps (box '()))
+      (define result
+        (parameterize ([current-spawn-timestamps timestamps])
+          (run-subagent-with-config (make-cfg #:task "bounded defaults")
+                                    (make-counting-context sends))))
+      (check-true (tool-result-is-error? result))
+      (check-equal? (unbox sends) 0)
+      (check-equal? (unbox timestamps) '()))
+
+    (test-case "dangerous single spawn proceeds after digest-bound interactive approval"
+      (define sends (box 0))
+      (dynamic-wind
+       (lambda () (set-approval-channel! (make-approval-channel #:timeout-ms 1000)))
+       (lambda ()
+         (define publisher
+           (lambda (type payload)
+             (when (string=? type "mas.spawn-approval-requested")
+               (check-true (approval-decide! (hash-ref payload 'request-id)
+                                             (hash-ref payload 'commitment-digest)
+                                             #t)))))
+         (define result
+           (run-subagent-with-config (make-cfg #:task "approved" #:capabilities '(shell-exec))
+                                     (make-counting-context sends #:publisher publisher)))
+         (check-false (tool-result-is-error? result))
+         (check-equal? (unbox sends) 1))
+       clear-approval-channel!))
 
     (test-case "rate limiter counts recent timestamps and prunes expired timestamps"
       (define now (current-inexact-milliseconds))
@@ -129,19 +193,40 @@
           (run-subagent-with-config (make-cfg #:task "safe" #:capabilities '(read-only)) #f))
         (check-false (tool-result-is-error? allowed))))
 
-    (test-case "non-dangerous spawn not blocked even with denial parameter"
-      (parameterize ([current-spawn-approval-result #f])
-        ;; read-only caps don't trigger approval, so spawn proceeds
-        (define cfg (make-cfg #:task "safe task" #:capabilities '(read-only)))
-        (define result (run-subagent-with-config cfg #f))
-        (check-true (tool-result? result))
-        ;; Should NOT be the approval-denied error
-        (when (tool-result-is-error? result)
-          (define content (tool-result-content result))
-          (define text
-            (if (pair? content)
-                (hash-ref (car content) 'text "")
-                ""))
-          (check-false (string-contains? text "approval denied")))))))
+    (test-case "terminal teardown revokes grant before single execution with zero effects"
+      (define sends (box 0))
+      (define timestamps (box '()))
+      (define events '())
+      (dynamic-wind
+       (lambda () (set-approval-channel! (make-approval-channel #:timeout-ms 1000)))
+       (lambda ()
+         (define ctx
+           (make-counting-context
+            sends
+            #:publisher
+            (lambda (type payload)
+              (set! events (cons type events))
+              (cond
+                [(string=? type "mas.spawn-approval-requested")
+                 (check-true (approval-decide! (hash-ref payload 'request-id)
+                                               (hash-ref payload 'commitment-digest)
+                                               #t))]
+                [(string=? type "mas.spawn-approval-terminal") (clear-approval-channel!)]))))
+         (parameterize ([current-spawn-timestamps timestamps])
+           (define result
+             (run-subagent-with-config (make-cfg #:task "revoked" #:capabilities '(shell-exec)) ctx))
+           (check-true (tool-result-is-error? result))
+           (check-equal? (hash-ref (tool-result-details result) 'terminal-status) "denied")
+           (check-equal? (unbox sends) 0)
+           (check-equal? (unbox timestamps) '())
+           (check-false (member "subagent.terminal" events))))
+       clear-approval-channel!))
+
+    (test-case "safe headless spawn remains allowed"
+      (clear-approval-channel!)
+      (define cfg (make-cfg #:task "safe task" #:capabilities '(read-only)))
+      (define result (run-subagent-with-config cfg #f))
+      (check-true (tool-result? result))
+      (check-false (tool-result-is-error? result)))))
 
 (run-tests suite)

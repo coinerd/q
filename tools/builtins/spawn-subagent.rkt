@@ -55,13 +55,17 @@
                   build-blackboard-context-snippet)
          ;; W2 v0.99.35: Pure helpers extracted for testability
          "spawn-subagent-helpers.rkt"
+         "spawn-execution-plan.rkt"
+         (only-in (submod "spawn-execution-plan.rkt" orchestration)
+                  batch-execution-plan-job-arguments)
          (prefix-in approval: "spawn-approval.rkt")
          (prefix-in rate: "spawn-rate-limit.rkt")
          (only-in "../../util/cancellation.rkt" cancellation-token-cancelled?)
          (only-in "../../util/message/provider-transport.rkt"
                   provider-tool-call-type?
                   provider-tool-stop-reason?
-                  provider-completion-stop-reason?))
+                  provider-completion-stop-reason?)
+         (only-in "../../runtime/approval/broker.rkt" call-with-approval-grant))
 
 (provide (contract-out [resolve-role-prompt (-> (or/c string? #f) string?)]
                        [parse-subagent-config (-> any/c subagent-config?)])
@@ -89,7 +93,6 @@
          requires-hitl-approval?
          request-spawn-approval
          request-batch-spawn-approval
-         current-spawn-approval-result
          run-subagent-with-config
          ;; v0.99.23 §5.1: Session-wide agent pool limit
          current-agent-pool-limit
@@ -104,10 +107,6 @@
          make-safe-result-metadata
          result-has-content?)
 
-;; Subagent configuration struct — replaces ad-hoc hash extraction
-;; v0.99.21 §4.2: Added capabilities field (6th, default #f for backward compat)
-(struct subagent-config (task role max-turns tools model capabilities) #:transparent)
-
 ;; v0.99.23 §5.1: Session-wide agent pool limit parameter.
 ;; Default 3 (matching the previous hardcoded max). CLI --agent-pool overrides.
 (define current-agent-pool-limit (make-parameter 3))
@@ -116,7 +115,6 @@
 (define current-spawn-timestamps rate:current-spawn-timestamps)
 (define spawn-rate-capacity? rate:spawn-rate-capacity?)
 (define reserve-spawn-rate! rate:reserve-spawn-rate!)
-(define current-spawn-approval-result approval:current-spawn-approval-result)
 
 ;; W2 v0.99.35: requires-hitl-approval? moved to spawn-subagent-helpers.rkt
 ;; (pure function — no I/O, no mutation)
@@ -130,10 +128,6 @@
                     (hasheq 'terminal-status "denied" 'child-created? #f)
                     #t))
 
-;; Default role prompt when no role is specified
-(define default-role-prompt
-  "You are a focused assistant executing a specific delegated task. Complete the task efficiently and return the result.")
-
 ;; Resolve a role value: if it matches a skill name, load that skill as the prompt.
 ;; Otherwise use it as a literal prompt string.
 (define (resolve-role-prompt role-value)
@@ -142,20 +136,10 @@
         (if (and (tool-result? result) (not (tool-result-is-error? result)))
             ;; Skill found — use its content as the role prompt
             (let ([content (hash-ref (car (tool-result-content result)) 'text "")])
-              (if (non-empty-string? content) content default-role-prompt))
+              (if (non-empty-string? content) content default-subagent-role-prompt))
             ;; Not a skill name — use as literal prompt
-            (if (non-empty-string? role-value) role-value default-role-prompt)))
-      default-role-prompt))
-
-(define (validate-tool-allowlist tools who)
-  (unless (or (not tools) (and (list? tools) (andmap string? tools)))
-    (raise-argument-error who "#f or a list of tool-name strings" tools))
-  (when tools
-    (define available (map tool-name (child-safe-tools)))
-    (for ([name (in-list tools)])
-      (unless (member name available)
-        (raise-arguments-error who "unknown or unsafe child tool" "tool" name))))
-  tools)
+            (if (non-empty-string? role-value) role-value default-subagent-role-prompt)))
+      default-subagent-role-prompt))
 
 ;; The spawn-subagent tool implementation
 (define (tool-spawn-subagent args [exec-ctx #f])
@@ -167,88 +151,54 @@
     (define cfg (parse-subagent-config args))
     (run-subagent-with-config cfg exec-ctx)))
 
-;; Parse subagent-config from tool call args hash.
-;; v0.99.21 §4.2: Added capabilities parsing.
-;; W2 v0.99.35: Uses normalize-capabilities from helpers for deduplicated parsing.
+;; Public compatibility parser; normalization lives at the planning boundary.
 (define (parse-subagent-config args)
-  (unless (hash? args)
-    (raise-argument-error 'parse-subagent-config "hash?" args))
-  (define task (hash-ref args 'task #f))
-  (unless (and (string? task) (not (string=? (string-trim task) "")))
-    (raise-argument-error 'parse-subagent-config "a non-empty task string" task))
-  (define role (hash-ref args 'role default-role-prompt))
-  (unless (string? role)
-    (raise-argument-error 'parse-subagent-config "a role string" role))
-  (define max-turns (hash-ref args 'max-turns 10))
-  (unless (and (exact-integer? max-turns) (positive? max-turns))
-    (raise-argument-error 'parse-subagent-config "a positive exact max-turns integer" max-turns))
-  (define tools (validate-tool-allowlist (hash-ref args 'tools #f) 'parse-subagent-config))
-  (define model (hash-ref args 'model #f))
-  (unless (or (not model) (string? model))
-    (raise-argument-error 'parse-subagent-config "#f or a model string" model))
-  (define caps
-    (if (hash-has-key? args 'capabilities)
-        (normalize-capabilities/strict (hash-ref args 'capabilities))
-        #f))
-  (subagent-config (immutable-string task)
-                   (immutable-string role)
-                   max-turns
-                   (and tools (map immutable-string tools))
-                   (immutable-string model)
-                   caps))
+  (parse-subagent-config/request args (map tool-name (child-safe-tools))))
 
-;; Execute subagent using typed config struct.
-;; v0.99.23 §5.3: HITL approval gate for dangerous capabilities.
+;; Execute a normalized, digest-bound plan. Effect resolution remains here;
+;; normalization, binding assembly, redaction, and commitment live below it.
 (define (run-subagent-with-config cfg exec-ctx)
   (with-handlers ([exn:fail? (lambda (e)
                                (make-error-result (format "invalid subagent configuration: ~a"
                                                           (exn-message e))))])
-    (define task (immutable-string (subagent-config-task cfg)))
-    (unless (and task (not (string=? (string-trim task) "")))
-      (error 'run-subagent-with-config "task is required"))
-    (define role (subagent-config-role cfg))
-    (unless (string? role)
-      (error 'run-subagent-with-config "role must be a string"))
-    (define max-turns (subagent-config-max-turns cfg))
-    (unless (and (exact-integer? max-turns) (positive? max-turns))
-      (error 'run-subagent-with-config "max-turns must be a positive exact integer"))
-    (define tools (validate-tool-allowlist (subagent-config-tools cfg) 'run-subagent-with-config))
-    (define model (subagent-config-model cfg))
-    (unless (or (not model) (string? model))
-      (error 'run-subagent-with-config "model must be #f or a string"))
-    (define frozen-role (immutable-string role))
-    (define frozen-tools (and tools (map immutable-string tools)))
-    (define frozen-model (immutable-string model))
-    (define declared-caps
-      (if (eq? (subagent-config-capabilities cfg) #f)
-          #f
-          (normalize-capabilities/strict (subagent-config-capabilities cfg))))
-    (define caps (bounded-delegated-capabilities declared-caps (current-session-capabilities)))
+    (define planned-safe-mode? (safe-mode?))
+    (define request
+      (normalize-subagent-request cfg
+                                  (child-safe-tools)
+                                  (current-session-capabilities)
+                                  planned-safe-mode?))
+    (define resolved-role-prompt (resolve-role-prompt (normalized-subagent-request-role request)))
+    (define planned-blackboard-context (build-subagent-blackboard-context))
+    (define planned-provider (resolve-provider exec-ctx))
+    (define resolved-model
+      (resolve-model-name exec-ctx (hasheq 'model (normalized-subagent-request-model request))))
+    (define plan
+      (build-single-execution-plan request
+                                   resolved-role-prompt
+                                   planned-blackboard-context
+                                   exec-ctx
+                                   planned-provider
+                                   resolved-model))
+    (define approval-plan (single-execution-plan-approval-plan plan))
+    (define dangerous? (requires-hitl-approval? (single-execution-plan-capabilities plan)))
+    (define (execute!)
+      (if (reserve-spawn-rate! 1)
+          (run-subagent (single-execution-plan-execution-arguments plan)
+                        (single-execution-plan-role-prompt plan)
+                        (single-execution-plan-max-turns plan)
+                        (single-execution-plan-effective-tools plan)
+                        exec-ctx)
+          (make-error-result "spawn rate limit exceeded (30/min)")))
     (cond
       [(not (spawn-rate-capacity? 1)) (make-error-result "spawn rate limit exceeded (30/min)")]
-      [(and (requires-hitl-approval? caps) (not (request-spawn-approval caps task exec-ctx)))
-       (make-denied-spawn-result "subagent spawn blocked — HITL approval denied")]
-      [(not (reserve-spawn-rate! 1)) (make-error-result "spawn rate limit exceeded (30/min)")]
+      [(not dangerous?) (execute!)]
       [else
-       ;; Role/skill resolution is deliberately after approval; it may load
-       ;; resources and therefore must not run for denied work.
-       (define role-prompt (resolve-role-prompt frozen-role))
-       (run-subagent (hasheq 'task
-                             task
-                             'role
-                             role-prompt
-                             'max-turns
-                             max-turns
-                             'tools
-                             frozen-tools
-                             'model
-                             frozen-model
-                             'capabilities
-                             caps)
-                     role-prompt
-                     max-turns
-                     frozen-tools
-                     exec-ctx)])))
+       (define grant (request-spawn-approval approval-plan exec-ctx))
+       (if (not grant)
+           (make-denied-spawn-result "subagent spawn blocked — HITL approval denied")
+           (or (call-with-approval-grant grant (spawn-execution-plan-digest approval-plan) execute!)
+               (make-denied-spawn-result
+                "subagent spawn blocked — approval grant stale or revoked")))])))
 
 ;; Resolve the provider from exec-context runtime-settings.
 ;; Returns the real provider if available, or falls back to a mock.
@@ -406,11 +356,6 @@
                (or (eq? rc 'any) (memq rc capabilities)))
              all-tools)]))
 
-(define (effective-child-tool-names capabilities)
-  (for/list ([child-tool (in-list (child-safe-tools-filtered capabilities))]
-             #:when (or (not (safe-mode?)) (allowed-tool? (tool-name child-tool))))
-    (tool-name child-tool)))
-
 ;; v0.99.21 §4.3: Build blackboard context string for subagent injection.
 ;; Reads the parent session's blackboard via current-blackboard parameter.
 ;; Returns a formatted string with '## Parent Session Context' header when
@@ -435,8 +380,15 @@
                                    (make-error-result (sanitize-error-message
                                                        (format "subagent failed: ~a"
                                                                (exn-message error-value))))))])
-    ;; #1204: Resolve real provider from parent's runtime-settings
-    (define provider (resolve-provider exec-ctx))
+    ;; A planned provider is captured before approval and is authoritative.
+    (define planned-execution? (hash-has-key? args 'planned-provider))
+    (define provider
+      (if planned-execution?
+          (let ([captured (hash-ref args 'planned-provider)])
+            (unless (provider? captured)
+              (error 'run-subagent "planned-provider must be a provider"))
+            captured)
+          (resolve-provider exec-ctx)))
     (define model-name (resolve-model-name exec-ctx args))
 
     ;; Create scoped tool registry with child-safe tools
@@ -446,7 +398,8 @@
     ;; Capabilities set the maximum authority; an explicit tool allowlist can
     ;; only narrow that set and is enforced at registry construction.
     (define capability-tools
-      (filter (lambda (child-tool) (or (not (safe-mode?)) (allowed-tool? (tool-name child-tool))))
+      (filter (lambda (child-tool)
+                (or planned-execution? (not (safe-mode?)) (allowed-tool? (tool-name child-tool))))
               (child-safe-tools-filtered capabilities)))
     (define selected-tools
       (if allowed-tools
@@ -474,9 +427,12 @@
                    'tool-call-id
                    tool-call-id
                    'parent-call-id
-                   (if exec-ctx
-                       (exec-context-call-id exec-ctx)
-                       "")))
+                   (hash-ref args
+                             'planned-parent-call-id
+                             (lambda ()
+                               (if exec-ctx
+                                   (exec-context-call-id exec-ctx)
+                                   "")))))
       (unless (unbox terminal-emitted?)
         (set-box! terminal-emitted? #t)
         (when child-parent-publisher
@@ -499,24 +455,36 @@
 
     ;; Create execution context for child
     (define child-ctx
-      (make-exec-context
-       #:working-directory (if exec-ctx
-                               (exec-context-working-directory exec-ctx)
-                               (current-directory))
-       #:cancellation-token (and exec-ctx (exec-context-cancellation-token exec-ctx))
-       #:permission-config (and exec-ctx (exec-context-permission-config exec-ctx))
-       #:event-publisher (lambda (event-type payload)
-                           (emit-session-event! bus session-id event-type payload))
-       #:runtime-settings settings
-       #:call-id tool-call-id
-       #:session-metadata (hasheq 'session-id session-id 'child-id child-id 'role "subagent")))
+      (make-exec-context #:working-directory (if (hash-has-key? args 'planned-working-directory)
+                                                 (hash-ref args 'planned-working-directory)
+                                                 (if exec-ctx
+                                                     (exec-context-working-directory exec-ctx)
+                                                     (current-directory)))
+                         #:cancellation-token
+                         (and exec-ctx (exec-context-cancellation-token exec-ctx))
+                         #:permission-config (and exec-ctx (exec-context-permission-config exec-ctx))
+                         #:event-publisher (lambda (event-type payload)
+                                             (emit-session-event! bus session-id event-type payload))
+                         #:runtime-settings settings
+                         #:call-id tool-call-id
+                         #:session-metadata (hasheq 'session-id
+                                                    session-id
+                                                    'child-id
+                                                    child-id
+                                                    'parent-session-id
+                                                    (hash-ref args 'planned-parent-session-id "")
+                                                    'role
+                                                    "subagent")))
 
-    ;; v0.99.21 §4.3: Inject parent blackboard context into subagent system prompt
-    (define bb-context (build-subagent-blackboard-context))
+    ;; Planned executions already contain the captured blackboard context in
+    ;; their role prompt. Legacy internal callers retain dynamic injection.
     (define effective-role-prompt
-      (if (> (string-length bb-context) 0)
-          (string-append bb-context "\n" role-prompt)
-          role-prompt))
+      (if planned-execution?
+          role-prompt
+          (let ([bb-context (build-subagent-blackboard-context)])
+            (if (> (string-length bb-context) 0)
+                (string-append bb-context "\n" role-prompt)
+                role-prompt))))
 
     ;; Build messages for child
     (define system-msg
@@ -584,7 +552,13 @@
                         (lambda (_)
                           (values all-results (if (cancelled?) 'cancelled 'failed) current-turn))])
          (define provider-msgs (messages->provider-hashes msgs))
-         (define req (make-model-request provider-msgs (list-active-tools-jsexpr registry) (hasheq)))
+         (define request-model (rt-settings-ref (exec-context-runtime-settings ctx) 'model #f))
+         (define req
+           (make-model-request provider-msgs
+                               (list-active-tools-jsexpr registry)
+                               (if request-model
+                                   (hasheq 'model request-model)
+                                   (hasheq))))
          (define resp
            (with-auto-retry (lambda ()
                               (when (cancelled?)
@@ -661,155 +635,19 @@
 ;; spawn-subagents: Batch parallel execution
 ;; ============================================================
 
-;; v0.99.22 A-2: Parse capabilities from a job hash (for batch spawn path).
-;; W2 v0.99.35: Now delegates to normalize-capabilities from helpers.
-;; Returns #f when no valid capabilities, or a list of symbols.
-(define (parse-job-capabilities job)
-  (if (hash-has-key? job 'capabilities)
-      (normalize-capabilities/strict (hash-ref job 'capabilities))
-      #f))
-
-;; Immutable execution plan for a normalized batch.  The raw digest binds the
-;; exact caller-owned request while snapshot-digest binds the immutable,
-;; execution-effective representation shown for approval.
-(struct batch-execution-plan
-        (batch-id jobs snapshot snapshot-digest raw-digest dangerous-jobs max-parallel aggregate?)
-  #:transparent)
-
-(define (immutable-string value)
-  (and (string? value) (string->immutable-string (string-copy value))))
-
-;; Normalize and validate one job without resolving providers, starting
-;; threads, creating sessions, or invoking children.
-(define (normalize-batch-job job index exec-ctx)
-  (unless (hash? job)
-    (error 'tool-spawn-subagents "job ~a must be an object" index))
-  (define task (hash-ref job 'task #f))
-  (unless (and (string? task) (not (string=? (string-trim task) "")) (<= (string-length task) 100000))
-    (error 'tool-spawn-subagents "task for job ~a must be a non-empty bounded string" index))
-  (define explicit-job-id (hash-ref job 'jobId #f))
-  (when (and explicit-job-id (not (valid-plan-id? explicit-job-id)))
-    (error 'tool-spawn-subagents "jobId for job ~a must be a bounded terminal-safe identifier" index))
-  (define role-raw (hash-ref job 'role (hash-ref job 'rolePrompt #f)))
-  (when (and role-raw (or (not (string? role-raw)) (> (string-length role-raw) 10000)))
-    (error 'tool-spawn-subagents "role for job ~a must be a bounded string" index))
-  (define model-raw (hash-ref job 'model #f))
-  (when (and model-raw (or (not (string? model-raw)) (> (string-length model-raw) 200)))
-    (error 'tool-spawn-subagents "model for job ~a must be a bounded string" index))
-  (define max-turns (hash-ref job 'max-turns 10))
-  (unless (and (exact-integer? max-turns) (> max-turns 0))
-    (error 'tool-spawn-subagents "max-turns for job ~a must be a positive integer" index))
-  (define declared-caps
-    (if (hash-has-key? job 'capabilities)
-        (with-handlers ([exn:fail:contract? (lambda (_)
-                                              (error 'tool-spawn-subagents
-                                                     "invalid capability declaration for job ~a"
-                                                     index))])
-          (normalize-capabilities/strict (hash-ref job 'capabilities)))
-        #f))
-  (define caps (bounded-delegated-capabilities declared-caps (current-session-capabilities)))
-  (hasheq 'job-id
-          (immutable-string explicit-job-id)
-          'task
-          (immutable-string task)
-          'role
-          (immutable-string role-raw)
-          'model
-          (immutable-string (or model-raw (resolve-model-name exec-ctx (hasheq))))
-          'max-turns
-          max-turns
-          'effective-capabilities
-          caps
-          'effective-tools
-          (effective-child-tool-names caps)))
-
-(define (build-batch-execution-plan args jobs max-parallel aggregate? exec-ctx)
-  ;; Complete this pass before allocating identities or doing other effects.
-  (define normalized
-    (for/list ([job (in-list jobs)]
-               [index (in-naturals)])
-      (normalize-batch-job job index exec-ctx)))
-  (define explicit-ids (filter values (map (lambda (job) (hash-ref job 'job-id)) normalized)))
-  (unless (= (length explicit-ids) (length (remove-duplicates explicit-ids string=?)))
-    (error 'tool-spawn-subagents "jobId values must be unique within a batch"))
-  (define batch-id-raw (hash-ref args 'batchId (hash-ref args 'batch-id #f)))
-  (when (and batch-id-raw (not (valid-plan-id? batch-id-raw)))
-    (error 'tool-spawn-subagents "batchId must be a bounded terminal-safe identifier"))
-  (define batch-id (or (immutable-string batch-id-raw) (immutable-string (generate-id))))
-  (define planned-jobs
-    (for/list ([job (in-list normalized)])
-      (hasheq 'job-id
-              (or (hash-ref job 'job-id) (generate-id))
-              'task
-              (hash-ref job 'task)
-              'task-digest
-              (sha256-digest (or (hash-ref job 'task) ""))
-              'role
-              (hash-ref job 'role)
-              'model
-              (hash-ref job 'model)
-              'max-turns
-              (hash-ref job 'max-turns)
-              'effective-capabilities
-              (hash-ref job 'effective-capabilities)
-              'effective-tools
-              (hash-ref job 'effective-tools)
-              'tool-call-id
-              (generate-id)
-              'child-id
-              (generate-id)
-              'session-id
-              (generate-id))))
-  (define effective-parallel (min max-parallel (length planned-jobs) (current-agent-pool-limit)))
-  (define snapshot
-    (immutable-canonical-copy (hasheq 'batch-id
-                                      batch-id
-                                      'jobs
-                                      planned-jobs
-                                      'max-parallel
-                                      effective-parallel
-                                      'aggregate
-                                      (and aggregate? #t))))
-  (define snapshot-digest (sha256-digest snapshot))
-  (define dangerous-jobs
-    (filter (lambda (job) (requires-hitl-approval? (hash-ref job 'effective-capabilities #f)))
-            (hash-ref snapshot 'jobs)))
-  (batch-execution-plan batch-id
-                        (hash-ref snapshot 'jobs)
-                        snapshot
-                        snapshot-digest
-                        (sha256-digest args)
-                        dangerous-jobs
-                        effective-parallel
-                        aggregate?))
+;; Batch request parsing and immutable commitment construction are owned by
+;; spawn-execution-plan.rkt; this module only coordinates their effects.
 
 ;; Run a single already-planned job and return (cons job-id result).
-(define (run-single-job job provider parent-ctx)
+(define (run-single-job job plan parent-ctx)
   (define job-id (hash-ref job 'job-id))
   (define task (hash-ref job 'task #f))
-  (define role-prompt (or (hash-ref job 'role #f) default-role-prompt))
-  (define model-name (or (hash-ref job 'model #f) (resolve-model-name parent-ctx (hasheq))))
+  (define role-prompt (or (hash-ref job 'role #f) default-subagent-role-prompt))
   (define max-turns (hash-ref job 'max-turns))
-  (define caps (hash-ref job 'effective-capabilities #f))
   (define result
     (if (not task)
         (make-error-result "task is required for each job")
-        (run-subagent (hasheq 'task
-                              task
-                              'role
-                              role-prompt
-                              'model
-                              model-name
-                              'max-turns
-                              max-turns
-                              'capabilities
-                              caps
-                              'planned-tool-call-id
-                              (hash-ref job 'tool-call-id)
-                              'planned-child-id
-                              (hash-ref job 'child-id)
-                              'planned-session-id
-                              (hash-ref job 'session-id))
+        (run-subagent (batch-execution-plan-job-arguments plan job)
                       role-prompt
                       max-turns
                       (hash-ref job 'effective-tools)
@@ -819,50 +657,53 @@
 ;; Batch subagent execution with immutable planning and one all-or-nothing
 ;; dangerous-capability approval gate.
 (define (tool-spawn-subagents args [exec-ctx #f])
-  (define jobs (and (hash? args) (hash-ref args 'jobs #f)))
-  (define max-parallel (and (hash? args) (hash-ref args 'maxParallel 3)))
-  (define aggregate? (and (hash? args) (hash-ref args 'aggregate #t)))
-  (cond
-    [(not jobs) (make-error-result "jobs array is required")]
-    [(not (list? jobs)) (make-error-result "jobs must be an array")]
-    [(null? jobs) (make-error-result "jobs array must not be empty")]
-    [(> (length jobs) 12) (make-error-result "jobs array must not exceed 12 items")]
-    [(not (and (exact-integer? max-parallel) (>= max-parallel 1)))
-     (make-error-result "maxParallel must be at least 1")]
-    [(> max-parallel 3) (make-error-result "maxParallel must be at most 3")]
-    [(not (boolean? aggregate?)) (make-error-result "aggregate must be boolean")]
-    [else
-     (with-handlers ([exn:fail? (lambda (e)
-                                  (make-error-result (format "spawn-subagents failed: ~a"
-                                                             (exn-message e))))])
-       (define plan (build-batch-execution-plan args jobs max-parallel aggregate? exec-ctx))
-       (define spawn-count (length (batch-execution-plan-jobs plan)))
-       (cond
-         [(not (spawn-rate-capacity? spawn-count))
-          (make-error-result "spawn rate limit exceeded (30/min)")]
-         [(and (pair? (batch-execution-plan-dangerous-jobs plan))
-               (not (request-batch-spawn-approval (batch-execution-plan-batch-id plan)
-                                                  (batch-execution-plan-snapshot plan)
-                                                  (batch-execution-plan-snapshot-digest plan)
-                                                  (batch-execution-plan-dangerous-jobs plan)
-                                                  exec-ctx)))
-          (make-denied-spawn-result "subagent batch blocked — HITL approval denied")]
-         [(not (string=? (batch-execution-plan-raw-digest plan) (sha256-digest args)))
-          (make-error-result "subagent batch request changed after approval")]
-         [(not (reserve-spawn-rate! spawn-count))
-          (make-error-result "spawn rate limit exceeded (30/min)")]
-         [else
-          ;; Approval precedes provider resolution. Revalidate once more directly
-          ;; before worker creation to close mutation/reorder/widening races.
-          (define provider (resolve-provider exec-ctx))
-          (if (not (string=? (batch-execution-plan-raw-digest plan) (sha256-digest args)))
-              (make-error-result "subagent batch request changed after approval")
-              (finish-batch plan provider exec-ctx))]))]))
+  (define-values (request validation-error) (normalize-batch-request args))
+  (if validation-error
+      (make-error-result validation-error)
+      (with-handlers ([exn:fail? (lambda (e)
+                                   (make-error-result (format "spawn-subagents failed: ~a"
+                                                              (exn-message e))))])
+        (define planned-provider (resolve-provider exec-ctx))
+        (define resolved-model (resolve-model-name exec-ctx (hasheq)))
+        (define planned-safe-mode? (safe-mode?))
+        (define planned-blackboard-context (build-subagent-blackboard-context))
+        (define plan
+          (build-batch-execution-plan request
+                                      exec-ctx
+                                      planned-provider
+                                      resolved-model
+                                      planned-safe-mode?
+                                      (child-safe-tools)
+                                      (current-session-capabilities)
+                                      (current-agent-pool-limit)
+                                      planned-blackboard-context))
+        (define spawn-count (length (batch-execution-plan-jobs plan)))
+        (define dangerous? (pair? (batch-execution-plan-dangerous-jobs plan)))
+        (define approval-plan (batch-execution-plan-approval-plan plan))
+        (define (execute!)
+          (cond
+            [(not (batch-execution-plan-request-matches? plan args))
+             (make-error-result "subagent batch request changed after approval")]
+            [(not (reserve-spawn-rate! spawn-count))
+             (make-error-result "spawn rate limit exceeded (30/min)")]
+            [else (finish-batch plan exec-ctx)]))
+        (cond
+          [(not (spawn-rate-capacity? spawn-count))
+           (make-error-result "spawn rate limit exceeded (30/min)")]
+          [(not dangerous?) (execute!)]
+          [else
+           (define grant (request-batch-spawn-approval approval-plan exec-ctx))
+           (if (not grant)
+               (make-denied-spawn-result "subagent batch blocked — HITL approval denied")
+               (or
+                (call-with-approval-grant grant (spawn-execution-plan-digest approval-plan) execute!)
+                (make-denied-spawn-result
+                 "subagent batch blocked — approval grant stale or revoked")))]))))
 
-(define (finish-batch plan provider exec-ctx)
+(define (finish-batch plan exec-ctx)
   (define results
     (run-jobs-parallel (batch-execution-plan-jobs plan)
-                       provider
+                       plan
                        exec-ctx
                        (batch-execution-plan-max-parallel plan)))
   (define job-results
@@ -933,7 +774,7 @@
                                'batchId
                                (batch-execution-plan-batch-id plan)
                                'snapshot-digest
-                               (batch-execution-plan-snapshot-digest plan)
+                               (spawn-execution-plan-digest (batch-execution-plan-approval-plan plan))
                                'total-jobs
                                (length job-results)
                                'succeeded
@@ -947,11 +788,11 @@
 ;; moved to spawn-subagent-helpers.rkt (pure functions).
 
 ;; Run jobs in parallel with bounded concurrency using threads + channel
-(define (run-jobs-parallel jobs provider exec-ctx max-parallel)
+(define (run-jobs-parallel jobs plan exec-ctx max-parallel)
   (define n (length jobs))
   (cond
     ;; Single job: run directly (no thread overhead)
-    [(= n 1) (list (run-single-job (car jobs) provider exec-ctx))]
+    [(= n 1) (list (run-single-job (car jobs) plan exec-ctx))]
     ;; Multiple jobs: use threads with bounded concurrency. Each worker owns a
     ;; distinct vector slot, so completion timing cannot reorder output.
     [else
@@ -964,7 +805,7 @@
                    (call-with-semaphore
                     concurrency-sem
                     (lambda ()
-                      (vector-set! ordered-results index (run-single-job job provider exec-ctx))))))))
+                      (vector-set! ordered-results index (run-single-job job plan exec-ctx))))))))
      (for-each thread-wait threads)
      (vector->list ordered-results)]))
 

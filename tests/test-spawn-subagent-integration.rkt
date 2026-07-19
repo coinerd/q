@@ -73,7 +73,8 @@
   (define response-text "Real provider response: analyzed the codebase")
   (define prov (make-stub-provider response-text))
   (define ctx (make-test-exec-ctx prov))
-  (define result (tool-spawn-subagent (hasheq 'task "Analyze codebase") ctx))
+  (define result
+    (tool-spawn-subagent (hasheq 'task "Analyze codebase" 'capabilities '(read-only)) ctx))
   (check-true (tool-result? result))
   (check-false (tool-result-is-error? result)
                (format "expected success, got error: ~a" (tool-result-content result)))
@@ -89,7 +90,7 @@
 
 (test-case "#1204: subagent falls back to mock when no exec-context"
   ;; Backward compat: calling without exec-ctx should still work (uses mock)
-  (define result (tool-spawn-subagent (hasheq 'task "test task")))
+  (define result (tool-spawn-subagent (hasheq 'task "test task" 'capabilities '(read-only))))
   (check-true (tool-result? result))
   (check-false (tool-result-is-error? result)
                (format "expected success with mock fallback, got: ~a" (tool-result-content result))))
@@ -97,14 +98,14 @@
 (test-case "#1204: subagent falls back to mock when runtime-settings lacks provider"
   ;; exec-ctx with no provider key in runtime-settings
   (define ctx (make-exec-context #:runtime-settings (hasheq 'model "test-model") #:call-id "test"))
-  (define result (tool-spawn-subagent (hasheq 'task "test task") ctx))
+  (define result (tool-spawn-subagent (hasheq 'task "test task" 'capabilities '(read-only)) ctx))
   (check-true (tool-result? result))
   (check-false (tool-result-is-error? result)))
 
 (test-case "#1204: subagent uses model name from runtime-settings"
   (define prov (make-stub-provider "model test"))
   (define ctx (make-test-exec-ctx prov #:model "gpt-4o"))
-  (define result (tool-spawn-subagent (hasheq 'task "test task") ctx))
+  (define result (tool-spawn-subagent (hasheq 'task "test task" 'capabilities '(read-only)) ctx))
   (check-true (tool-result? result))
   (check-false (tool-result-is-error? result))
   ;; Details should reflect the run
@@ -114,7 +115,7 @@
 (test-case "#1204: subagent handles provider-send failure gracefully"
   (define failing-prov (make-failing-provider))
   (define ctx (make-test-exec-ctx failing-prov))
-  (define result (tool-spawn-subagent (hasheq 'task "This will fail") ctx))
+  (define result (tool-spawn-subagent (hasheq 'task "This will fail" 'capabilities '(read-only)) ctx))
   (check-true (tool-result? result))
   (check-true (tool-result-is-error? result) "expected error result when provider fails")
   (define content (tool-result-content result))
@@ -134,7 +135,7 @@
     (make-exec-context #:runtime-settings (hasheq 'provider prov 'model "test")
                        #:call-id (generate-id)
                        #:session-metadata (hasheq 'session-id parent-session-id)))
-  (define result (tool-spawn-subagent (hasheq 'task "test") ctx))
+  (define result (tool-spawn-subagent (hasheq 'task "test" 'capabilities '(read-only)) ctx))
   (check-true (tool-result? result))
   (when (and (not (tool-result-is-error? result)) (hash? (tool-result-details result)))
     (define child-session-id (hash-ref (tool-result-details result) 'session-id #f))
@@ -151,7 +152,8 @@
   (define loop-prov (make-tool-call-loop-provider))
   (define ctx (make-test-exec-ctx loop-prov))
   ;; Provider always returns tool_calls, but max-turns=1 should stop after 1 turn
-  (define result (tool-spawn-subagent (hasheq 'task "loop test" 'max-turns 1) ctx))
+  (define result
+    (tool-spawn-subagent (hasheq 'task "loop test" 'max-turns 1 'capabilities '(read-only)) ctx))
   (check-true (tool-result? result))
   ;; With max-turns=1, the loop runs once. The provider returns tool_calls stop reason.
   ;; The current implementation returns 'stopped for tool_calls since no tools are registered.
@@ -166,7 +168,8 @@
   (define prov (make-stub-provider "done"))
   (define ctx (make-test-exec-ctx prov))
   ;; No tools in registry — child can only do text completion
-  (define result (tool-spawn-subagent (hasheq 'task "simple task" 'tools '()) ctx))
+  (define result
+    (tool-spawn-subagent (hasheq 'task "simple task" 'tools '() 'capabilities '(read-only)) ctx))
   (check-true (tool-result? result))
   (check-false (tool-result-is-error? result)))
 
@@ -179,9 +182,15 @@
   (define prov (make-stub-provider response-text #:name "integration-prov"))
   (define ctx (make-test-exec-ctx prov #:model "gpt-4o-mini"))
   (define result
-    (tool-spawn-subagent
-     (hasheq 'task "Do the integration test" 'role "You are an integration tester." 'max-turns 3)
-     ctx))
+    (tool-spawn-subagent (hasheq 'task
+                                 "Do the integration test"
+                                 'role
+                                 "You are an integration tester."
+                                 'max-turns
+                                 3
+                                 'capabilities
+                                 '(read-only))
+                         ctx))
   (check-true (tool-result? result))
   (check-false (tool-result-is-error? result)
                (format "integration test failed: ~a" (tool-result-content result)))
@@ -200,7 +209,7 @@
   (define unique-response "UNIQUE_RESPONSE_7f3a9c_not_in_mock")
   (define prov (make-stub-provider unique-response))
   (define ctx (make-test-exec-ctx prov))
-  (define result (tool-spawn-subagent (hasheq 'task "unique test") ctx))
+  (define result (tool-spawn-subagent (hasheq 'task "unique test" 'capabilities '(read-only)) ctx))
   (check-false (tool-result-is-error? result))
   (define text
     (string-join (for/list ([c (in-list (tool-result-content result))]
@@ -225,7 +234,8 @@
   ;; Run spawn-subagent — internally creates a bus + event-publisher lambda
   ;; that calls (emit-session-event! bus session-id event-type payload)
   ;; If the calling convention were wrong (1-arg), this would fail with arity error.
-  (define result (tool-spawn-subagent (hasheq 'task "test event-publisher arity") ctx))
+  (define result
+    (tool-spawn-subagent (hasheq 'task "test event-publisher arity" 'capabilities '(read-only)) ctx))
   (check-false (tool-result-is-error? result)
                (format "expected success, got error: ~a" (tool-result-content result)))
   (check-true (tool-result? result)))

@@ -33,7 +33,8 @@
       ;; that string to provider-send.
       (define settings (make-minimal-settings #:provider "openai-compatible" #:model "test-model"))
       (define ctx (make-exec-context #:runtime-settings settings #:call-id "provider-string-test"))
-      (define result (tool-spawn-subagent (hasheq 'task "return ok") ctx))
+      (define result
+        (tool-spawn-subagent (hasheq 'task "return ok" 'capabilities '(read-only)) ctx))
       (check-true (tool-result? result))
       (check-false (tool-result-is-error? result)
                    (format "expected safe fallback, got: ~a" (text-content result)))
@@ -44,7 +45,10 @@
       (define provider (make-provider-with-text provider-response))
       (define settings (q-settings (hash) (hash) (hasheq 'provider provider 'model "test-model")))
       (define ctx (make-exec-context #:runtime-settings settings #:call-id "provider-struct-test"))
-      (define result (tool-spawn-subagent (hasheq 'task "return provider response") ctx))
+      (define result
+        (tool-spawn-subagent
+         (hasheq 'task "return provider response" 'capabilities '(read-only))
+         ctx))
       (check-true (tool-result? result))
       (check-false (tool-result-is-error? result)
                    (format "expected success, got: ~a" (text-content result)))

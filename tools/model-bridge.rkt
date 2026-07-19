@@ -21,4 +21,5 @@
           [model-response-stop-reason (-> model-response? (or/c symbol? #f))]
           [make-model-response (-> list? hash? string? (or/c symbol? #f) model-response?)]
           [make-mock-provider
-           (->* (model-response?) (#:name string? #:stream-chunks (or/c list? #f)) provider?)]))
+           (->* (model-response?) (#:name string? #:stream-chunks (or/c list? #f)) provider?)])
+         provider-name)
