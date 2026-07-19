@@ -27,7 +27,7 @@
   (displayln "  --mode <name>     Execution mode: auto (default), subprocess, in-process, grouped")
   (displayln "  --suite <name>    Run test suite: all/broad (default all), fast,")
   (displayln "                    unit-fast, slow, tui, smoke, release-smoke,")
-  (displayln "                    security, arch, runtime, extensions, workflows")
+  (displayln "                    security, arch, runtime, extensions, workflows, platform")
   (displayln "  --strict          Enable strict zero-test detection (default: on)")
   (displayln "  --repeat N        Run suite N times (exit 1 if any run fails)")
   (displayln "  --record-gate-evidence  Write .gate-evidence/<suite>.passed on success")
@@ -37,6 +37,8 @@
   (displayln
    "  --ledger PATH           Read known-failure ledger JSON and report known/new/resolved failures")
   (displayln "  --profile NAME          Environment profile: local, vps, ci, headless, full")
+  (displayln "  --shard-index N         Select shard N of M (for parallel CI sharding)")
+  (displayln "  --shard-total M         Total number of shards (default: 1, no sharding)")
   (displayln "  --help            Show this help message")
   (newline)
   (displayln "Suites:")
@@ -53,10 +55,23 @@
   (displayln "  arch    Architecture boundary/fitness tests")
   (displayln "  runtime Runtime/session/compaction/iteration tests")
   (displayln "  extensions Extension/GSD/hook tests")
-  (displayln "  workflows All tests/workflows/ including fixture self-tests (integration-level)"))
+  (displayln "  workflows All tests/workflows/ including fixture self-tests (integration-level)")
+  (displayln "  platform Curated platform-cross subset for macOS verification"))
 
 (define known-suites
-  '(all broad fast unit-fast slow smoke release-smoke tui security arch runtime extensions workflows))
+  '(all broad
+        fast
+        unit-fast
+        slow
+        smoke
+        release-smoke
+        tui
+        security
+        arch
+        runtime
+        extensions
+        workflows
+        platform))
 (define known-modes '(auto subprocess in-process grouped))
 
 (define (parse-args args)

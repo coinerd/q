@@ -44,6 +44,8 @@
                   smoke-excluded?
                   slow-patterns
                   mutating-patterns
+                  platform-file?
+                  shard-files
                   clear-metadata-cache!)
          (only-in "run-tests/parse.rkt"
                   test-file-result
@@ -129,6 +131,8 @@
          collect-test-files
          mutating-file?
          mutating-patterns
+         platform-file?
+         shard-files
          repo-surface-files
          restore-repo-surfaces!
          print-summary
@@ -481,7 +485,27 @@
     (printf ";; Run ~a/~a: PASS~n" repeat-num repeat-total))
   (values exit-code results))
 
+(define (extract-shard-args! args)
+  ;; Extract --shard-index and --shard-total from args, returning
+  ;; (values shard-index shard-total filtered-args).
+  ;; Defaults: shard-index=0, shard-total=1 (no sharding).
+  (define shard-index (box 0))
+  (define shard-total (box 1))
+  (define filtered
+    (let loop ([rest (vector->list args)])
+      (match rest
+        ['() '()]
+        [(list (== "--shard-index") n rest ...)
+         (set-box! shard-index (string->number n))
+         (loop rest)]
+        [(list (== "--shard-total") n rest ...)
+         (set-box! shard-total (string->number n))
+         (loop rest)]
+        [(list elem rest ...) (cons elem (loop rest))])))
+  (values (unbox shard-index) (unbox shard-total) (list->vector filtered)))
+
 (define (main args)
+  (define-values (shard-index shard-total filtered-args) (extract-shard-args! (list->vector args)))
   (define-values (jobs
                   sequential?
                   timeout
@@ -496,7 +520,7 @@
                   json-out
                   ledger-path
                   profile)
-    (parse-args args))
+    (parse-args (vector->list filtered-args)))
   (validate-args! jobs
                   sequential?
                   timeout
@@ -519,10 +543,19 @@
     (printf ";; run-tests: cleaned ~a stale compiled/ director~a~n"
             cleaned-dirs
             (if (= cleaned-dirs 1) "y" "ies")))
-  (define suite-files
+  (define all-suite-files
     (if (pair? extra-files)
         (map normalize-test-path extra-files)
         (collect-test-files suite)))
+  (define suite-files
+    (if (> shard-total 1)
+        (begin
+          (printf ";; run-tests: sharding ~a files — shard ~a/~a~n"
+                  (length all-suite-files)
+                  shard-index
+                  shard-total)
+          (shard-files all-suite-files shard-index shard-total))
+        all-suite-files))
   (when inventory?
     (if (pair? suite-files)
         (begin

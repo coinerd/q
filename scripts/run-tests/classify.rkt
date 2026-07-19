@@ -33,6 +33,10 @@
          file-has-suite-tag?
          support-test-module?
          file-has-rackunit-tests?
+         platform-file?
+         platform-curated-files
+         ;; Shard support
+         shard-files
          ;; Patterns (exposed for testing)
          slow-patterns
          ;; File collection
@@ -362,6 +366,77 @@
          (or module-plus-test? needs-raco-discovery?))))
 
 ;; ============================================================
+;; Platform-cross classifier
+;; Tests that exercise platform-specific paths: filesystem,
+;; subprocess, terminal detection, path handling, Unicode.
+;; These are the only tests that need macOS verification.
+;; ============================================================
+
+(define platform-curated-files
+  '("tests/test-subprocess.rkt" "tests/test-subprocess-helpers.rkt"
+                                "tests/test-subprocess-edge-cases.rkt"
+                                "tests/test-cwd-independence.rkt"
+                                "tests/test-config-paths.rkt"
+                                "tests/test-sandbox.rkt"
+                                "tests/test-worker-security.rkt"
+                                "tests/test-tool-bash-workflow.rkt"
+                                "tests/test-version.rkt"
+                                "tests/test-safe-mode.rkt"
+                                "tests/test-cli.rkt"
+                                "tests/test-spawn-subagent-serialization.rkt"
+                                "tests/test-runtime-packages.rkt"
+                                "tests/test-extension-tiers.rkt"
+                                "tests/test-capability-aware-spawn.rkt"
+                                "tests/test-execution-plane-error-label.rkt"
+                                "tests/test-error-classify.rkt"
+                                "tests/test-mutating-tool-taxonomy.rkt"
+                                "tests/test-verifier-gate.rkt"
+                                "tests/test-cli-flags.rkt"
+                                "tests/test-frontmatter-extended.rkt"
+                                "tests/test-context-assembly-config.rkt"
+                                "tests/test-metrics-helpers.rkt"
+                                "tests/test-token-estimate-cache.rkt"
+                                "tests/test-truncation.rkt"
+                                "tests/test-lockfile.rkt"
+                                "tests/test-facade-surface.rkt"
+                                "tests/test-red-module-boundaries.rkt"
+                                "tests/test-export-formats.rkt"
+                                "tests/test-message-layout.rkt"
+                                "tests/test-cell-diff-render.rkt"
+                                "tests/test-llm-model.rkt"
+                                "tests/test-llm-error-visibility.rkt"
+                                "tests/test-streaming-transitions.rkt"
+                                "tests/test-streaming-tool-bug.rkt"
+                                "tests/test-loop-cancellation.rkt"
+                                "tests/test-loop-edge-cases.rkt"
+                                "tests/test-loop-events.rkt"
+                                "tests/test-settings.rkt"
+                                "tests/test-sync-readme-status.rkt"))
+
+(define (platform-file? f)
+  (define s
+    (if (path? f)
+        (path->string f)
+        f))
+  (or (file-has-suite-tag? f "platform")
+      (for/or ([curated (in-list platform-curated-files)])
+        (string-suffix? s curated))))
+
+;; ============================================================
+;; Shard support — select files by round-robin modulo
+;; ============================================================
+
+(define (shard-files files shard-index shard-total)
+  (unless (and (integer? shard-total) (> shard-total 0))
+    (raise-argument-error 'shard-files "positive integer" shard-total))
+  (unless (and (integer? shard-index) (>= shard-index 0) (< shard-index shard-total))
+    (raise-argument-error 'shard-files (format "integer in [0, ~a)" shard-total) shard-index))
+  (for/list ([f (in-list files)]
+             [i (in-naturals)]
+             #:when (= (modulo i shard-total) shard-index))
+    f))
+
+;; ============================================================
 ;; Path resolution
 ;; ============================================================
 
@@ -422,6 +497,7 @@
        [(runtime) (filter runtime-file? all-files)]
        [(extensions) (filter extensions-file? all-files)]
        [(workflows) (filter workflows-file? all-files)]
+       [(platform) (filter platform-file? all-files)]
        [else '("tests/")])]))
 
 ;; ============================================================
