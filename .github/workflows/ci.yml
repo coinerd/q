@@ -347,10 +347,14 @@ jobs:
         run: raco test tests/test-provider-smoke.rkt
 
   # ────────────────────────────────────────────────────────────
-  # Gate 6: Workflow integration suite (parallel)
+  # Gate 6: Workflow integration suite (2-way sharded, parallel)
   # ────────────────────────────────────────────────────────────
   workflows:
     needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -361,13 +365,17 @@ jobs:
       - name: Clear stale bytecode
         run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true
 
-      - name: Workflow integration suite (parallel)
-        run: racket scripts/run-tests.rkt --suite workflows --jobs 2 --timeout 90 2>&1 | tee workflow-output.log
+      - name: Workflow integration suite shard ${{ matrix.shard }}/2
+        run: |
+          STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
+            --suite workflows --jobs 2 --timeout 90 \
+            --shard-index ${{ matrix.shard }} --shard-total 2 \
+            2>&1 | tee workflow-output.log
 
       - name: Workflow failure summary
         if: failure()
         run: |
-          echo "## Workflow Test Failures" >> $GITHUB_STEP_SUMMARY
+          echo "## Workflow Test Failures (shard ${{ matrix.shard }})" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           grep -A 4 'FAILURE\|ERROR' workflow-output.log >> $GITHUB_STEP_SUMMARY || true
           echo '```' >> $GITHUB_STEP_SUMMARY
@@ -376,9 +384,18 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: workflow-test-output
+          name: workflow-test-output-${{ matrix.shard }}
           path: workflow-output.log
           retention-days: 7
+
+  # ────────────────────────────────────────────────────────────
+  # Gate 6b: Workflows aggregate — required gate that all workflow shards passed
+  # ────────────────────────────────────────────────────────────
+  workflows-aggregate:
+    needs: [workflows]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "All workflow shards passed."
 
   # ────────────────────────────────────────────────────────────
   # Gate 7: GSD wave evidence (current protected wave)
