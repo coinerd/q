@@ -12,13 +12,12 @@
          racket/string
          "../skills/workflow-executor.rkt"
          "../skills/mas-workflow.rkt"
-         (only-in "../tools/builtins/spawn-subagent.rkt" current-spawn-approval-result)
-         (only-in "../tui/approval-channel.rkt"
+         (only-in "../tools/builtins/spawn-subagent.rkt" current-spawn-timestamps)
+         (only-in "../runtime/approval/broker.rkt"
                   make-approval-channel
                   set-approval-channel!
                   clear-approval-channel!
-                  set-headless-approval-mode!
-                  approval-put-for-id!)
+                  approval-decide!)
          "../tools/tool.rkt"
          "../llm/provider.rkt"
          "../llm/model.rkt")
@@ -56,6 +55,17 @@
                  (lambda (req) (error 'failing-provider "simulated failure"))
                  (lambda (req) (error 'failing-provider "streaming failed"))))
 
+(define (make-counting-provider sends)
+  (make-provider (lambda () "counting-mock")
+                 (lambda () (hasheq 'streaming #f))
+                 (lambda (_request)
+                   (set-box! sends (add1 (unbox sends)))
+                   (make-model-response (list (hasheq 'type "text" 'text "Done"))
+                                        (hasheq 'prompt-tokens 1 'completion-tokens 1 'total-tokens 2)
+                                        "counting-mock"
+                                        'stop))
+                 (lambda (_request) (error 'counting-mock "streaming not expected"))))
+
 ;; Provider that succeeds N times, then fails on subsequent calls.
 ;; Used to test partial workflow results.
 (define (make-succeed-then-fail-provider n)
@@ -75,20 +85,30 @@
    (lambda (req) (error 'hybrid-provider "streaming failed"))))
 
 (define (make-test-exec-ctx provider #:publisher [publisher #f])
-  (unless publisher
-    (set-headless-approval-mode!))
   (make-exec-context #:working-directory (current-directory)
                      #:event-publisher publisher
                      #:runtime-settings (hasheq 'provider provider 'model "mock-model")))
 
 ;; ── Test helpers ──
 
+(define (call-with-approved-context provider proc)
+  (dynamic-wind (lambda () (set-approval-channel! (make-approval-channel #:timeout-ms 1000)))
+                (lambda ()
+                  (define publisher
+                    (lambda (type payload)
+                      (when (string=? type "mas.spawn-approval-requested")
+                        (check-true (approval-decide! (hash-ref payload 'request-id)
+                                                      (hash-ref payload 'commitment-digest)
+                                                      #t)))))
+                  (proc (make-test-exec-ctx provider #:publisher publisher)))
+                clear-approval-channel!))
+
 (define (make-simple-workflow steps)
   (define wf-steps
     (for/list ([s (in-list steps)])
       (workflow-step (hash-ref s 'role "assistant")
                      (hash-ref s 'task "")
-                     (hash-ref s 'capabilities #f)
+                     (hash-ref s 'capabilities '(read-only))
                      (hash-ref s 'parallel #f))))
   (mas-workflow "test-wf" "test desc" wf-steps '()))
 
@@ -183,67 +203,66 @@
       (define result (execute-workflow wf (hasheq) exec-ctx))
       (check-false (tool-result-is-error? result) "read-only should not trigger HITL denial"))
 
-    (test-case "dangerous sequential capability requires approval — denied"
-      (parameterize ([current-spawn-approval-result #f])
-        (define provider (make-static-text-provider "Done"))
-        (define exec-ctx (make-test-exec-ctx provider))
-        (define wf
-          (mas-workflow "dangerous-seq"
-                        "desc"
-                        (list (workflow-step "runner" "rm -rf /" '(shell-exec) #f))
-                        '()))
-        (define result (execute-workflow wf (hasheq) exec-ctx))
-        (check-true (tool-result-is-error? result) "denied workflow should error")
-        (define content (tool-result-content result))
-        (define msg
-          (if (list? content)
-              (hash-ref (car content) 'text "")
-              (format "~a" content)))
-        (check-true (string-contains? msg "failed") "should mention failure")))
+    (test-case "dangerous sequential workflow without channel denies before sends or rate effects"
+      (clear-approval-channel!)
+      (define sends (box 0))
+      (define timestamps (box '()))
+      (define wf
+        (mas-workflow "dangerous-seq"
+                      "desc"
+                      (list (workflow-step "runner" "rm -rf /" '(shell-exec) #f))
+                      '()))
+      (define result
+        (parameterize ([current-spawn-timestamps timestamps])
+          (execute-workflow wf (hasheq) (make-test-exec-ctx (make-counting-provider sends)))))
+      (check-true (tool-result-is-error? result) "denied workflow should error")
+      (check-equal? (unbox sends) 0)
+      (check-equal? (unbox timestamps) '())
+      (check-true (string-contains? (hash-ref (car (tool-result-content result)) 'text "") "failed")))
 
-    (test-case "dangerous sequential capability approved by default in non-interactive mode"
-      (define provider (make-static-text-provider "Done"))
-      (define exec-ctx (make-test-exec-ctx provider))
+    (test-case "dangerous sequential workflow uses digest-bound interactive approval"
       (define wf
         (mas-workflow "dangerous-seq-approved"
                       "desc"
                       (list (workflow-step "runner" "echo ok" '(shell-exec) #f))
                       '()))
-      (define result (execute-workflow wf (hasheq) exec-ctx))
-      (check-false (tool-result-is-error? result) "default permissive mode should allow"))
+      (define result
+        (call-with-approved-context (make-static-text-provider "Done")
+                                    (lambda (exec-ctx) (execute-workflow wf (hasheq) exec-ctx))))
+      (check-false (tool-result-is-error? result)))
 
-    (test-case "dangerous parallel capability requires approval — denied"
-      (parameterize ([current-spawn-approval-result #f])
-        (define provider (make-static-text-provider "Done"))
-        (define exec-ctx (make-test-exec-ctx provider))
-        (define wf
-          (mas-workflow "dangerous-par"
-                        "desc"
-                        (list (workflow-step "a" "Run A" '(shell-exec) #t)
-                              (workflow-step "b" "Run B" '(shell-exec) #t)
-                              (workflow-step "c" "Clean up" '(git-write) #f))
-                        '()))
-        (define result (execute-workflow wf (hasheq) exec-ctx))
-        (check-true (tool-result-is-error? result) "denied parallel workflow should error")
-        (define content (tool-result-content result))
-        (define msg
-          (if (list? content)
-              (hash-ref (car content) 'text "")
-              (format "~a" content)))
-        (check-true (string-contains? msg "failed") "should mention failure")
-        (check-true (string-contains? msg "step 0") "should indicate first failed step")))
+    (test-case "dangerous parallel workflow without channel denies before sends or rate effects"
+      (clear-approval-channel!)
+      (define sends (box 0))
+      (define timestamps (box '()))
+      (define wf
+        (mas-workflow "dangerous-par"
+                      "desc"
+                      (list (workflow-step "a" "Run A" '(shell-exec) #t)
+                            (workflow-step "b" "Run B" '(shell-exec) #t)
+                            (workflow-step "c" "Clean up" '(git-write) #f))
+                      '()))
+      (define result
+        (parameterize ([current-spawn-timestamps timestamps])
+          (execute-workflow wf (hasheq) (make-test-exec-ctx (make-counting-provider sends)))))
+      (check-true (tool-result-is-error? result) "denied parallel workflow should error")
+      (check-equal? (unbox sends) 0)
+      (check-equal? (unbox timestamps) '())
+      (define msg (hash-ref (car (tool-result-content result)) 'text ""))
+      (check-true (string-contains? msg "failed"))
+      (check-true (string-contains? msg "step 0")))
 
-    (test-case "dangerous parallel capability approved by default in non-interactive mode"
-      (define provider (make-static-text-provider "Done"))
-      (define exec-ctx (make-test-exec-ctx provider))
+    (test-case "dangerous parallel workflow uses digest-bound interactive approval"
       (define wf
         (mas-workflow "dangerous-par-approved"
                       "desc"
                       (list (workflow-step "a" "Run A" '(shell-exec) #t)
                             (workflow-step "b" "Run B" '(shell-exec) #t))
                       '()))
-      (define result (execute-workflow wf (hasheq) exec-ctx))
-      (check-false (tool-result-is-error? result) "default permissive mode should allow parallel"))
+      (define result
+        (call-with-approved-context (make-static-text-provider "Done")
+                                    (lambda (exec-ctx) (execute-workflow wf (hasheq) exec-ctx))))
+      (check-false (tool-result-is-error? result)))
 
     (test-case "spawn APIs own exactly one interactive approval per workflow group"
       (for ([parallel? (in-list '(#f #t))])
@@ -257,7 +276,9 @@
                (cond
                  [(string=? type "mas.spawn-approval-requested")
                   (set! requests (add1 requests))
-                  (check-true (approval-put-for-id! (hash-ref payload 'request-id) #t))]
+                  (check-true (approval-decide! (hash-ref payload 'request-id)
+                                                (hash-ref payload 'commitment-digest)
+                                                #t))]
                  [(string=? type "mas.spawn-approval-terminal") (set! terminals (add1 terminals))])))
            (define provider (make-static-text-provider "Done"))
            (define exec-ctx (make-test-exec-ctx provider #:publisher publisher))
@@ -378,24 +399,24 @@
                    "step 2 should not be present (skipped)"))
 
     (test-case "HITL denied preserves denied step results in details"
-      (parameterize ([current-spawn-approval-result #f])
-        (define provider (make-static-text-provider "Done"))
-        (define exec-ctx (make-test-exec-ctx provider))
-        (define wf
-          (mas-workflow "hitl-denied-test"
-                        "desc"
-                        (list (workflow-step "runner" "rm -rf /" '(shell-exec) #f))
-                        '()))
-        (define result (execute-workflow wf (hasheq) exec-ctx))
-        (check-true (tool-result-is-error? result) "should be error")
-        (define details (tool-result-details result))
-        (check-true (hash? details) "details should be a hash")
-        (define steps (hash-ref details 'steps))
-        (check-equal? (length steps) 1 "denied step should be present")
-        (check-false (hash-ref (car steps) 'success) "denied step should be marked failed")
-        (check-false (hash-has-key? (car steps) 'task))
-        (check-false (hash-has-key? (car steps) 'result))
-        (check-true (hash-has-key? (car steps) 'resultDigest))))
+      (clear-approval-channel!)
+      (define provider (make-static-text-provider "Done"))
+      (define exec-ctx (make-test-exec-ctx provider))
+      (define wf
+        (mas-workflow "hitl-denied-test"
+                      "desc"
+                      (list (workflow-step "runner" "rm -rf /" '(shell-exec) #f))
+                      '()))
+      (define result (execute-workflow wf (hasheq) exec-ctx))
+      (check-true (tool-result-is-error? result) "should be error")
+      (define details (tool-result-details result))
+      (check-true (hash? details) "details should be a hash")
+      (define steps (hash-ref details 'steps))
+      (check-equal? (length steps) 1 "denied step should be present")
+      (check-false (hash-ref (car steps) 'success) "denied step should be marked failed")
+      (check-false (hash-has-key? (car steps) 'task))
+      (check-false (hash-has-key? (car steps) 'result))
+      (check-true (hash-has-key? (car steps) 'resultDigest)))
 
     (test-case "parallel failure preserves all parallel step results in details"
       (define provider (make-failing-provider))

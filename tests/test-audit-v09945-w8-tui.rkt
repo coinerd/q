@@ -16,7 +16,7 @@
 ;;   9. Command palette (registry, filter, resolve, completion)
 ;;  10. Scrollback (serialization, round-trip, max entries)
 ;;  11. Clipboard (OSC 52 encoding, backend detection)
-;;  12. Approval channel (make, set, clear, permissive default)
+;;  12. Approval broker (active registration, authoritative view, digest-bound decision)
 ;;  13. Cell buffer (create, set, get, clear, resize)
 ;;  14. Frame diff (same-length, grow, shrink, full redraw)
 
@@ -98,18 +98,21 @@
                   clipboard-backend-available?
                   osc-52-copy
                   detect-clipboard-tool)
-         ;; Approval channel
-         (only-in "../tui/approval-channel.rkt"
+         ;; Approval broker
+         (only-in "../runtime/approval/broker.rkt"
                   approval-channel?
                   make-approval-channel
-                  approval-channel-timeout-ms
                   set-approval-channel!
                   clear-approval-channel!
-                  set-headless-approval-mode!
                   current-approval-channel
-                  approval-await-result
-                  approval-put!
-                  DEFAULT-APPROVAL-TIMEOUT-MS)
+                  register-approval-request-for-channel!
+                  approval-request-view
+                  approval-request-pending?
+                  approval-decide!
+                  approval-await-grant
+                  approval-grant?
+                  call-with-approval-grant
+                  cancel-approval-request!)
          ;; Cell buffer
          (only-in "../tui/cell-buffer.rkt"
                   cell-buffer
@@ -834,49 +837,71 @@
   (check-true (or (not tool) (and (list? tool) (= (length tool) 2)))))
 
 ;; ---------------------------------------------------------------------------
-;; 12. Approval Channel
+;; 12. Digest-Bound Approval Broker
 ;; ---------------------------------------------------------------------------
 
+(define AUDIT-COMMITMENT-DIGEST (make-string 64 #\a))
+(define AUDIT-WRONG-DIGEST (make-string 64 #\b))
+(define AUDIT-PRESENTATION-DIGEST (make-string 64 #\c))
+(define AUDIT-APPROVAL-VIEW
+  (hasheq 'capabilities
+          '(shell-exec)
+          'task-preview
+          "authoritative preview"
+          'presentation-digest
+          AUDIT-PRESENTATION-DIGEST))
+
+(define (call-with-audit-approval-channel proc)
+  (define channel (make-approval-channel #:timeout-ms 5000))
+  (dynamic-wind (lambda () (set-approval-channel! channel))
+                (lambda () (proc channel))
+                clear-approval-channel!))
+
 (test-case "audit-approval-make-channel"
-  (define ch (make-approval-channel))
-  (check-true (approval-channel? ch))
-  (check-equal? (approval-channel-timeout-ms ch) DEFAULT-APPROVAL-TIMEOUT-MS))
-
-(test-case "audit-approval-custom-timeout"
-  (define ch (make-approval-channel #:timeout-ms 5000))
-  (check-equal? (approval-channel-timeout-ms ch) 5000))
-
-(test-case "audit-approval-explicit-headless-policy"
-  (set-headless-approval-mode!)
-  (check-true (approval-await-result))
-  (set-approval-channel! (make-approval-channel))
-  (clear-approval-channel!)
-  (check-false (approval-await-result)))
+  (check-true (approval-channel? (make-approval-channel))))
 
 (test-case "audit-approval-set-and-clear"
   (clear-approval-channel!)
   (check-false (current-approval-channel))
-  (define ch (make-approval-channel))
-  (set-approval-channel! ch)
-  (check-equal? (current-approval-channel) ch)
+  (define channel (make-approval-channel))
+  (set-approval-channel! channel)
+  (check-eq? (current-approval-channel) channel)
   (clear-approval-channel!)
   (check-false (current-approval-channel)))
 
-(test-case "audit-approval-put-and-await"
-  (clear-approval-channel!)
-  (define ch (make-approval-channel #:timeout-ms 5000))
-  (set-approval-channel! ch)
-  ;; Put approval result before awaiting
-  (approval-put! #t)
-  (check-equal? (approval-await-result) #t)
-  ;; Test denial
-  (approval-put! #f)
-  (check-equal? (approval-await-result) #f)
-  (clear-approval-channel!))
+(test-case "audit-approval-active-registration-owns-authoritative-view"
+  (call-with-audit-approval-channel
+   (lambda (channel)
+     (define request-id
+       (register-approval-request-for-channel! channel AUDIT-COMMITMENT-DIGEST AUDIT-APPROVAL-VIEW))
+     (check-true (string? request-id))
+     (define authoritative-view (approval-request-view request-id AUDIT-COMMITMENT-DIGEST))
+     (for ([(key value) (in-hash AUDIT-APPROVAL-VIEW)])
+       (check-equal? (hash-ref authoritative-view key) value))
+     (check-false (approval-request-view request-id AUDIT-WRONG-DIGEST))
+     (check-true (approval-request-pending? request-id AUDIT-COMMITMENT-DIGEST))
+     (check-true (cancel-approval-request! request-id)))))
 
-(test-case "audit-approval-default-timeout"
-  (check-true (> DEFAULT-APPROVAL-TIMEOUT-MS 0))
-  (check-true (exact-integer? DEFAULT-APPROVAL-TIMEOUT-MS)))
+(test-case "audit-approval-wrong-digest-decision-is-rejected"
+  (call-with-audit-approval-channel
+   (lambda (channel)
+     (define request-id
+       (register-approval-request-for-channel! channel AUDIT-COMMITMENT-DIGEST AUDIT-APPROVAL-VIEW))
+     (check-false (approval-decide! request-id AUDIT-WRONG-DIGEST #t))
+     (check-true (approval-request-pending? request-id AUDIT-COMMITMENT-DIGEST))
+     (check-true (cancel-approval-request! request-id)))))
+
+(test-case "audit-approval-matching-decision-yields-exact-digest-grant"
+  (call-with-audit-approval-channel
+   (lambda (channel)
+     (define request-id
+       (register-approval-request-for-channel! channel AUDIT-COMMITMENT-DIGEST AUDIT-APPROVAL-VIEW))
+     (check-true (approval-decide! request-id AUDIT-COMMITMENT-DIGEST #t))
+     (define-values (outcome grant) (approval-await-grant request-id AUDIT-COMMITMENT-DIGEST 50))
+     (check-equal? outcome 'approved)
+     (check-true (approval-grant? grant))
+     (check-false (call-with-approval-grant grant AUDIT-WRONG-DIGEST (lambda () #t)))
+     (check-true (call-with-approval-grant grant AUDIT-COMMITMENT-DIGEST (lambda () #t))))))
 
 ;; ---------------------------------------------------------------------------
 ;; 13. Cell Buffer

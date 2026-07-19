@@ -70,9 +70,9 @@
                                                   'id
                                                   "call_xyz789"
                                                   'name
-                                                  "bash"
+                                                  "read"
                                                   'arguments
-                                                  (hasheq 'command "echo CHILD_SENTINEL_42")))
+                                                  (hasheq 'path "README.md")))
                                     (hasheq 'prompt-tokens 10 'completion-tokens 10 'total-tokens 20)
                                     "test-model"
                                     'tool-calls)
@@ -83,7 +83,8 @@
                 'stop))))
       (define settings (q-settings (hash) (hash) (hasheq 'provider provider 'model "test-model")))
       (define ctx (make-exec-context #:runtime-settings settings #:call-id "req-two-test"))
-      (define result (tool-spawn-subagent (hasheq 'task "find sentinel") ctx))
+      (define result
+        (tool-spawn-subagent (hasheq 'task "find sentinel" 'capabilities '(read-only)) ctx))
       (check-false (tool-result-is-error? result))
 
       (define reqs (unbox captured))
@@ -115,7 +116,8 @@
                 'stop))))
       (define settings (q-settings (hash) (hash) (hasheq 'provider provider 'model "test-model")))
       (define ctx (make-exec-context #:runtime-settings settings #:call-id "sentinel-test"))
-      (define result (tool-spawn-subagent (hasheq 'task "produce sentinel") ctx))
+      (define result
+        (tool-spawn-subagent (hasheq 'task "produce sentinel" 'capabilities '(read-only)) ctx))
       (check-false (tool-result-is-error? result))
       (define result-text (hash-ref (car (tool-result-content result)) 'text ""))
       (check-true (string-contains? result-text "UNIQUE_CHILD_OUTPUT_99")
@@ -135,7 +137,8 @@
                                     'stop))))
       (define settings (q-settings (hash) (hash) (hasheq 'provider provider 'model "test-model")))
       (define ctx (make-exec-context #:runtime-settings settings #:call-id "completed-test"))
-      (define result (tool-spawn-subagent (hasheq 'task "produce result") ctx))
+      (define result
+        (tool-spawn-subagent (hasheq 'task "produce result" 'capabilities '(read-only)) ctx))
       (check-false (tool-result-is-error? result))
       (define details (tool-result-details result))
       (check-equal? (hash-ref details 'terminal-status #f) "completed"))
@@ -152,7 +155,8 @@
                                     'stop))))
       (define settings (q-settings (hash) (hash) (hasheq 'provider provider 'model "test-model")))
       (define ctx (make-exec-context #:runtime-settings settings #:call-id "empty-test"))
-      (define result (tool-spawn-subagent (hasheq 'task "produce nothing") ctx))
+      (define result
+        (tool-spawn-subagent (hasheq 'task "produce nothing" 'capabilities '(read-only)) ctx))
       (check-false (tool-result-is-error? result))
       (define details (tool-result-details result))
       (check-equal? (hash-ref details 'terminal-status #f)
@@ -172,7 +176,8 @@
                                     'stop))))
       (define settings (q-settings (hash) (hash) (hasheq 'provider provider 'model "test-model")))
       (define ctx (make-exec-context #:runtime-settings settings #:call-id "meta-test"))
-      (define result (tool-spawn-subagent (hasheq 'task "metadata test") ctx))
+      (define result
+        (tool-spawn-subagent (hasheq 'task "metadata test" 'capabilities '(read-only)) ctx))
       (check-false (tool-result-is-error? result))
       (define details (tool-result-details result))
       (check-true (hash-has-key? details 'content-digest) "metadata must have content-digest")
@@ -193,7 +198,8 @@
                                     'stop))))
       (define ctx
         (make-exec-context #:runtime-settings (q-settings (hash) (hash) (hasheq 'provider provider))))
-      (define result (tool-spawn-subagent (hasheq 'task "finish" 'max-turns 5) ctx))
+      (define result
+        (tool-spawn-subagent (hasheq 'task "finish" 'max-turns 5 'capabilities '(read-only)) ctx))
       (check-false (tool-result-is-error? result))
       (check-equal? (hash-ref (tool-result-details result) 'turns-used #f) 1))
 
@@ -213,7 +219,8 @@
       (define-values (provider _captured) (make-request-capturing-provider (list looping)))
       (define ctx
         (make-exec-context #:runtime-settings (q-settings (hash) (hash) (hasheq 'provider provider))))
-      (define result (tool-spawn-subagent (hasheq 'task "loop" 'max-turns 1) ctx))
+      (define result
+        (tool-spawn-subagent (hasheq 'task "loop" 'max-turns 1 'capabilities '(read-only)) ctx))
       (check-true (tool-result-is-error? result))
       (check-equal? (hash-ref (tool-result-details result) 'terminal-status #f) "timed-out")
       (check-equal? (hash-ref (tool-result-details result) 'turns-used #f) 1))
@@ -227,7 +234,7 @@
       (define-values (provider _captured) (make-request-capturing-provider (list malformed)))
       (define ctx
         (make-exec-context #:runtime-settings (q-settings (hash) (hash) (hasheq 'provider provider))))
-      (define result (tool-spawn-subagent (hasheq 'task "malformed") ctx))
+      (define result (tool-spawn-subagent (hasheq 'task "malformed" 'capabilities '(read-only)) ctx))
       (check-true (tool-result-is-error? result))
       (check-equal? (hash-ref (tool-result-details result) 'terminal-status #f) "failed"))
 
@@ -245,7 +252,7 @@
       (define ctx
         (make-exec-context #:cancellation-token token
                            #:runtime-settings (q-settings (hash) (hash) (hasheq 'provider provider))))
-      (define result (tool-spawn-subagent (hasheq 'task "cancel") ctx))
+      (define result (tool-spawn-subagent (hasheq 'task "cancel" 'capabilities '(read-only)) ctx))
       (check-true (tool-result-is-error? result))
       (check-equal? (hash-ref (tool-result-details result) 'terminal-status #f) "cancelled")
       (check-equal? (unbox sends) 0))
@@ -262,7 +269,7 @@
                            (lambda (event-type payload)
                              (set-box! events (cons (cons event-type payload) (unbox events))))
                            #:runtime-settings (q-settings (hash) (hash) (hasheq 'provider provider))))
-      (define result (tool-spawn-subagent (hasheq 'task "fail") ctx))
+      (define result (tool-spawn-subagent (hasheq 'task "fail" 'capabilities '(read-only)) ctx))
       (check-true (tool-result-is-error? result))
       (check-equal? (hash-ref (tool-result-details result) 'terminal-status #f) "failed")
       (check-equal? (hash-ref (tool-result-details result) 'turns-used #f) 1)
@@ -290,7 +297,8 @@
                            (lambda (event-type payload)
                              (set-box! events (cons (cons event-type payload) (unbox events))))
                            #:runtime-settings (q-settings (hash) (hash) (hasheq 'provider provider))))
-      (define result (tool-spawn-subagent (hasheq 'task "cancel retry") ctx))
+      (define result
+        (tool-spawn-subagent (hasheq 'task "cancel retry" 'capabilities '(read-only)) ctx))
       (check-true (tool-result-is-error? result))
       (check-equal? (hash-ref (tool-result-details result) 'terminal-status #f) "cancelled")
       (check-equal? (unbox sends) 1)
@@ -322,12 +330,13 @@
       (define ctx
         (make-exec-context #:cancellation-token token
                            #:runtime-settings (q-settings (hash) (hash) (hasheq 'provider provider))))
-      (define result (tool-spawn-subagent (hasheq 'task "cancel after response") ctx))
+      (define result
+        (tool-spawn-subagent (hasheq 'task "cancel after response" 'capabilities '(read-only)) ctx))
       (check-true (tool-result-is-error? result))
       (check-equal? (hash-ref (tool-result-details result) 'terminal-status #f) "cancelled")
       (check-equal? (unbox sends) 1))
 
-    (test-case "post-creation setup exception emits exactly one failed terminal event"
+    (test-case "pre-approval planning exception creates no child terminal event"
       (define-values (provider _captured)
         (make-request-capturing-provider
          (list
@@ -340,12 +349,11 @@
                            #:runtime-settings (q-settings (hash) (hash) (hasheq 'provider provider))))
       (define result
         (parameterize ([current-blackboard 'malformed-blackboard])
-          (tool-spawn-subagent (hasheq 'task "setup failure") ctx)))
+          (tool-spawn-subagent (hasheq 'task "setup failure" 'capabilities '(read-only)) ctx)))
       (check-true (tool-result-is-error? result))
       (define terminal-events
         (filter (lambda (event) (equal? (car event) "subagent.terminal")) (unbox events)))
-      (check-equal? (length terminal-events) 1)
-      (check-equal? (hash-ref (cdar terminal-events) 'terminal-status #f) "failed"))
+      (check-equal? (length terminal-events) 0))
 
     (test-case "created child emits exactly one safe terminal event"
       (define-values (provider _captured)
@@ -360,7 +368,7 @@
                            (lambda (event-type payload)
                              (set-box! events (cons (cons event-type payload) (unbox events))))
                            #:runtime-settings (q-settings (hash) (hash) (hasheq 'provider provider))))
-      (define result (tool-spawn-subagent (hasheq 'task "emit") ctx))
+      (define result (tool-spawn-subagent (hasheq 'task "emit" 'capabilities '(read-only)) ctx))
       (check-false (tool-result-is-error? result))
       (define terminal-events
         (filter (lambda (event) (equal? (car event) "subagent.terminal")) (unbox events)))
@@ -409,7 +417,9 @@
                                (set-box! events (cons (cons event-type payload) (unbox events))))
            #:runtime-settings (q-settings (hash) (hash) (hasheq 'provider provider))))
         (define result
-          (tool-spawn-subagent (hasheq 'task "terminal" 'max-turns 1 'tools '("read")) ctx))
+          (tool-spawn-subagent
+           (hasheq 'task "terminal" 'max-turns 1 'tools '("read") 'capabilities '(read-only))
+           ctx))
         (define terminal-events
           (filter (lambda (event) (equal? (car event) "subagent.terminal")) (unbox events)))
         (check-equal? (length terminal-events) 1 expected-status)
@@ -428,7 +438,8 @@
                                     'stop))))
       (define settings (q-settings (hash) (hash) (hasheq 'provider provider 'model "test-model")))
       (define ctx (make-exec-context #:runtime-settings settings #:call-id "unknown-type-test"))
-      (define result (tool-spawn-subagent (hasheq 'task "test unknown type") ctx))
+      (define result
+        (tool-spawn-subagent (hasheq 'task "test unknown type" 'capabilities '(read-only)) ctx))
       (check-false (tool-result-is-error? result))
       (define result-text (hash-ref (car (tool-result-content result)) 'text ""))
       (check-false (string-contains? result-text "#hasheq")

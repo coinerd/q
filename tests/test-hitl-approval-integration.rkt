@@ -1,162 +1,105 @@
-#lang racket
+#lang racket/base
 
-;; @speed fast  ;; @suite security
+;; @speed fast
+;; @suite security
 
-;; tests/test-hitl-approval-integration.rkt
-;; v0.99.25 W3 §5.3: Integration tests for the complete HITL approval flow.
-;;
-;; Tests the wiring from TUI init (set-approval-channel!) through
-;; spawn-subagent (approval-await-result) to TUI key handler (approval-put!)
-;; and teardown (clear-approval-channel!).
-;;
-;; Tests:
-;; 1. TUI init sets channel, teardown clears it
-;; 2. Full approval flow: set channel → thread blocks → put #t → result #t
-;; 3. Full denial flow: set channel → thread blocks → put #f → result #f
-;; 4. Timeout flow: set channel with short timeout → no put → returns #f
-;; 5. Explicit non-interactive mode is permissive
-;; 6. Interactive teardown remains fail closed
-;; 7. Cross-thread: approval-put! from one thread, await from another
+;; End-to-end broker lifecycle tests using digest-bound, one-use grants.
 
 (require rackunit
          rackunit/text-ui
-         racket/async-channel
-         (only-in "../tui/approval-channel.rkt"
-                  make-approval-channel
-                  approval-channel?
-                  approval-channel-ch
-                  approval-channel-timeout-ms
-                  set-approval-channel!
-                  clear-approval-channel!
-                  set-headless-approval-mode!
-                  current-approval-channel
-                  approval-await-result
-                  approval-put!))
+         "../runtime/approval/broker.rkt")
 
-;; ── Test Suite ──
+(define digest-a (make-string 64 #\a))
+(define digest-b (make-string 64 #\b))
+(define view-a (hasheq 'task-preview "integration task" 'capabilities '(shell-exec)))
+
+(define (consume-grant grant digest)
+  (call-with-approval-grant grant digest (lambda () #t)))
+
+(define (with-channel thunk #:timeout-ms [timeout-ms 500])
+  (define channel (make-approval-channel #:timeout-ms timeout-ms))
+  (dynamic-wind (lambda () (set-approval-channel! channel))
+                (lambda () (thunk channel))
+                clear-approval-channel!))
 
 (define suite
-  (test-suite "HITL Approval Integration (v0.99.25 W3)"
+  (test-suite "HITL Approval Integration"
 
-    ;; ── TUI Init/Teardown Wiring ──
+    (test-case "full approval flow yields and consumes one exact grant"
+      (with-channel (lambda (channel)
+                      (define id (register-approval-request-for-channel! channel digest-a view-a))
+                      (define result (box 'waiting))
+                      (define owner
+                        (thread (lambda ()
+                                  (define-values (outcome grant) (approval-await-grant id digest-a))
+                                  (set-box! result
+                                            (list outcome
+                                                  (and grant (consume-grant grant digest-a))
+                                                  (and grant (consume-grant grant digest-a)))))))
+                      (sleep 0.02)
+                      (check-true (approval-decide! id digest-a #t))
+                      (thread-wait owner)
+                      (check-equal? (unbox result) '(approved #t #f)))))
 
-    (test-case "set-approval-channel! makes channel available"
-      (clear-approval-channel!) ; Start clean
-      (check-false (current-approval-channel))
-      (define ch (make-approval-channel))
-      (set-approval-channel! ch)
-      (check-pred approval-channel? (current-approval-channel))
-      (clear-approval-channel!))
+    (test-case "full denial flow returns no authority"
+      (with-channel (lambda (channel)
+                      (define id (register-approval-request-for-channel! channel digest-a view-a))
+                      (check-true (approval-decide! id digest-a #f))
+                      (define-values (outcome grant) (approval-await-grant id digest-a 20))
+                      (check-equal? outcome 'denied)
+                      (check-false grant))))
 
-    (test-case "clear-approval-channel! removes channel"
-      (set-approval-channel! (make-approval-channel))
-      (check-not-false (current-approval-channel))
+    (test-case "digest mismatch cannot decide, await, or consume authority"
+      (with-channel (lambda (channel)
+                      (define id (register-approval-request-for-channel! channel digest-a view-a))
+                      (check-false (approval-decide! id digest-b #t))
+                      (define-values (wrong-outcome wrong-grant) (approval-await-grant id digest-b 1))
+                      (check-equal? wrong-outcome 'cancelled)
+                      (check-false wrong-grant)
+                      (check-true (approval-decide! id digest-a #t))
+                      (define-values (outcome grant) (approval-await-grant id digest-a 20))
+                      (check-equal? outcome 'approved)
+                      (check-false (consume-grant grant digest-b))
+                      (check-true (consume-grant grant digest-a)))))
+
+    (test-case "timeout fails closed and rejects late decisions"
+      (with-channel (lambda (channel)
+                      (define id (register-approval-request-for-channel! channel digest-a view-a))
+                      (define-values (outcome grant) (approval-await-grant id digest-a))
+                      (check-equal? outcome 'timed-out)
+                      (check-false grant)
+                      (check-false (approval-decide! id digest-a #t)))
+                    #:timeout-ms 10))
+
+    (test-case "teardown wakes blocked execution without a grant"
+      (define channel (make-approval-channel #:timeout-ms 60000))
+      (set-approval-channel! channel)
+      (define id (register-approval-request-for-channel! channel digest-a view-a))
+      (define result (box 'waiting))
+      (define owner
+        (thread (lambda ()
+                  (define-values (outcome grant) (approval-await-grant id digest-a))
+                  (set-box! result (list outcome grant)))))
+      (sleep 0.02)
       (clear-approval-channel!)
+      (check-not-false (sync/timeout 0.25 owner))
+      (check-equal? (unbox result) '(cancelled #f))
       (check-false (current-approval-channel)))
 
-    (test-case "channel can be replaced (re-init scenario)"
-      (define ch1 (make-approval-channel))
-      (set-approval-channel! ch1)
-      (check-equal? (current-approval-channel) ch1)
-      (define ch2 (make-approval-channel))
-      (set-approval-channel! ch2)
-      (check-equal? (current-approval-channel) ch2)
-      (clear-approval-channel!))
-
-    ;; ── Full Approval Flow (approve) ──
-
-    (test-case "full flow: approve via cross-thread put"
+    (test-case "re-init starts a fresh generation with no stale approval"
+      (define first (make-approval-channel))
+      (set-approval-channel! first)
+      (define stale-id (register-approval-request-for-channel! first digest-a view-a))
       (clear-approval-channel!)
-      ;; TUI init
-      (set-approval-channel! (make-approval-channel))
-      ;; Session thread: block on approval
-      (define result-box (box #f))
-      (define t (thread (lambda () (set-box! result-box (approval-await-result)))))
-      ;; Simulate TUI key handler: user presses 'y'
-      (sleep 0.05) ; Let the thread start blocking
-      (approval-put! #t)
-      (thread-wait t)
-      (check-equal? (unbox result-box) #t)
-      (clear-approval-channel!))
+      (define second (make-approval-channel))
+      (set-approval-channel! second)
+      (check-false (approval-decide! stale-id digest-a #t))
+      (define fresh-id (register-approval-request-for-channel! second digest-a view-a))
+      (check-not-equal? stale-id fresh-id)
+      (check-true (approval-decide! fresh-id digest-a #t))
+      (define-values (outcome grant) (approval-await-grant fresh-id digest-a 20))
+      (check-equal? outcome 'approved)
+      (check-true (consume-grant grant digest-a))
+      (clear-approval-channel!))))
 
-    ;; ── Full Denial Flow ──
-
-    (test-case "full flow: deny via cross-thread put"
-      (clear-approval-channel!)
-      (set-approval-channel! (make-approval-channel))
-      (define result-box (box #f))
-      (define t (thread (lambda () (set-box! result-box (approval-await-result)))))
-      ;; Simulate TUI key handler: user presses 'n'
-      (sleep 0.05)
-      (approval-put! #f)
-      (thread-wait t)
-      (check-equal? (unbox result-box) #f)
-      (clear-approval-channel!))
-
-    ;; ── Timeout Flow ──
-
-    (test-case "timeout: deny when no response"
-      (clear-approval-channel!)
-      ;; Create channel with very short timeout (100ms)
-      (set-approval-channel! (make-approval-channel #:timeout-ms 100))
-      (define result (approval-await-result))
-      (check-equal? result #f) ; Timeout → deny
-      (clear-approval-channel!))
-
-    ;; ── Non-Interactive (No Channel) ──
-
-    (test-case "explicit non-interactive mode is permissive when no channel"
-      (set-headless-approval-mode!)
-      (check-false (current-approval-channel))
-      (check-true (approval-await-result))
-      (check-false (current-approval-channel)))
-
-    ;; ── Teardown → fail closed ──
-
-    (test-case "after teardown approval remains closed"
-      (set-approval-channel! (make-approval-channel))
-      (check-not-false (current-approval-channel))
-      (clear-approval-channel!)
-      (check-false (current-approval-channel))
-      (check-false (approval-await-result)))
-
-    ;; ── Cross-thread Simulation (Full TUI Lifecycle) ──
-
-    (test-case "full TUI lifecycle: init → spawn → approve → teardown"
-      ;; 1. TUI init
-      (clear-approval-channel!)
-      (set-approval-channel! (make-approval-channel))
-      (check-not-false (current-approval-channel))
-
-      ;; 2. Session thread spawns and requests approval
-      (define result-box (box #f))
-      (define t (thread (lambda () (set-box! result-box (approval-await-result)))))
-
-      ;; 3. User approves via TUI
-      (sleep 0.05)
-      (approval-put! #t)
-      (thread-wait t)
-      (check-equal? (unbox result-box) #t)
-
-      ;; 4. TUI teardown
-      (clear-approval-channel!)
-      (check-false (current-approval-channel))
-      ;; 5. Surviving work cannot become permissive after teardown.
-      (check-false (approval-await-result)))
-
-    (test-case "full TUI lifecycle: init → spawn → deny → teardown"
-      (clear-approval-channel!)
-      (set-approval-channel! (make-approval-channel))
-
-      (define result-box (box #f))
-      (define t (thread (lambda () (set-box! result-box (approval-await-result)))))
-
-      (sleep 0.05)
-      (approval-put! #f)
-      (thread-wait t)
-      (check-equal? (unbox result-box) #f)
-
-      (clear-approval-channel!)
-      (check-false (current-approval-channel)))))
-
-(run-tests suite)
+(exit (run-tests suite))

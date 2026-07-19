@@ -225,19 +225,20 @@
     [else
      (define extra (overlay-state-extra ov))
      (define request-id (and (hash? extra) (hash-ref extra 'request-id #f)))
+     (define commitment-digest (and (hash? extra) (hash-ref extra 'commitment-digest #f)))
      (define decision
        (cond
          [(or (eq? keycode #\y) (eq? keycode #\Y) (eq? keycode 'y)) #t]
          [(or (eq? keycode #\n) (eq? keycode #\N) (eq? keycode 'n) (eq? keycode 'escape)) #f]
          [else 'no-decision]))
-     (define stale? (and (string? request-id) (not (approval-request-pending? request-id))))
-     (when (or
-            stale?
-            (and (boolean? decision) (string? request-id) (approval-put-for-id! request-id decision)))
-       ;; Re-read after delivery so a concurrently processed terminal event or
-       ;; promotion cannot be overwritten with the stale state captured above.
-       ;; A request already terminal in the registry is also safe to remove;
-       ;; otherwise an undeliverable modal could capture the TUI forever.
+     (define correlated? (and (string? request-id) (string? commitment-digest)))
+     (define stale? (and correlated? (not (approval-request-pending? request-id commitment-digest))))
+     (when (or stale?
+               (and correlated?
+                    (boolean? decision)
+                    (approval-decide! request-id commitment-digest decision)))
+       ;; Re-read after the exact digest-bound decision so concurrent terminal
+       ;; events cannot be overwritten by stale UI state.
        (define latest-state (unbox (tui-ctx-ui-state-box ctx)))
        (define updated-state (approval-overlay-remove-request latest-state request-id))
        (unless (eq? updated-state latest-state)

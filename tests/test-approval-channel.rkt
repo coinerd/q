@@ -3,89 +3,83 @@
 ;; @speed fast
 ;; @suite security
 
-;; tests/test-approval-channel.rkt
-;; v0.99.25 W0 §5.3: Tests for the HITL approval channel infrastructure.
+;; Safe, digest-bound approval broker channel tests.
 
 (require rackunit
          rackunit/text-ui
-         racket/async-channel
-         "../tui/approval-channel.rkt")
+         "../runtime/approval/broker.rkt")
+
+(define digest-a (make-string 64 #\a))
+(define digest-b (make-string 64 #\b))
+(define view-a (hasheq 'task-preview "dangerous task" 'capabilities '(shell-exec)))
+
+(define (consume-grant grant digest)
+  (call-with-approval-grant grant digest (lambda () #t)))
+
+(define (with-channel thunk #:timeout-ms [timeout-ms 200])
+  (define channel (make-approval-channel #:timeout-ms timeout-ms))
+  (dynamic-wind (lambda () (set-approval-channel! channel))
+                (lambda () (thunk channel))
+                clear-approval-channel!))
 
 (define suite
-  (test-suite "HITL Approval Channel Infrastructure (v0.99.25 W0)"
+  (test-suite "Digest-bound Approval Channel"
 
-    ;; ── make-approval-channel ──
-
-    (test-case "make-approval-channel returns approval-channel?"
-      (define ch (make-approval-channel))
-      (check-true (approval-channel? ch)))
-
-    (test-case "make-approval-channel with custom timeout"
-      (define ch (make-approval-channel #:timeout-ms 5000))
-      (check-equal? (approval-channel-timeout-ms ch) 5000))
-
-    (test-case "make-approval-channel default timeout is 120000"
-      (define ch (make-approval-channel))
-      (check-equal? (approval-channel-timeout-ms ch) 120000))
-
-    (test-case "approval-channel-ch returns an async-channel"
-      (define ch (make-approval-channel))
-      (check-true (async-channel? (approval-channel-ch ch))))
-
-    ;; ── current-approval-channel (box) ──
-
-    (test-case "current-approval-channel is #f by default (non-interactive)"
+    (test-case "make, set, and clear approval channel"
+      (clear-approval-channel!)
+      (define channel (make-approval-channel))
+      (check-true (approval-channel? channel))
+      (set-approval-channel! channel)
+      (check-eq? (current-approval-channel) channel)
       (clear-approval-channel!)
       (check-false (current-approval-channel)))
 
-    (test-case "set-approval-channel! then current-approval-channel returns it"
+    (test-case "registration requires the active channel, a digest, and a view"
       (clear-approval-channel!)
-      (define ch (make-approval-channel))
-      (set-approval-channel! ch)
-      (check-eq? (current-approval-channel) ch)
-      (clear-approval-channel!))
+      (define inactive (make-approval-channel))
+      (check-false (register-approval-request-for-channel! inactive digest-a view-a))
+      (with-channel
+       (lambda (channel)
+         (check-false (register-approval-request-for-channel! channel "short" view-a))
+         (check-exn exn:fail:contract?
+                    (lambda () (register-approval-request-for-channel! channel digest-a 'not-a-view)))
+         (define id (register-approval-request-for-channel! channel digest-a view-a))
+         (check-true (string? id))
+         (check-true (approval-request-pending? id digest-a))
+         (define registered-view (approval-request-view id digest-a))
+         (check-equal? (hash-ref registered-view 'task-preview) "dangerous task")
+         (check-equal? (hash-ref registered-view 'capabilities) '(shell-exec)))))
 
-    (test-case "clear-approval-channel! resets to #f"
-      (define ch (make-approval-channel))
-      (set-approval-channel! ch)
-      (clear-approval-channel!)
-      (check-false (current-approval-channel)))
+    (test-case "decision and await are bound to the exact digest"
+      (with-channel (lambda (channel)
+                      (define id (register-approval-request-for-channel! channel digest-a view-a))
+                      (check-false (approval-decide! id digest-b #t))
+                      (check-false (approval-request-view id digest-b))
+                      (check-true (approval-request-pending? id digest-a))
+                      (check-true (approval-decide! id digest-a #t))
+                      (define-values (outcome grant) (approval-await-grant id digest-a 20))
+                      (check-equal? outcome 'approved)
+                      (check-true (approval-grant? grant))
+                      (check-false (consume-grant grant digest-b))
+                      (check-true (consume-grant grant digest-a))
+                      (check-false (consume-grant grant digest-a)))))
 
-    ;; ── approval-await-result ──
+    (test-case "denial has no grant and a decision cannot be replayed"
+      (with-channel (lambda (channel)
+                      (define id (register-approval-request-for-channel! channel digest-a view-a))
+                      (check-true (approval-decide! id digest-a #f))
+                      (check-false (approval-decide! id digest-a #t))
+                      (define-values (outcome grant) (approval-await-grant id digest-a 20))
+                      (check-equal? outcome 'denied)
+                      (check-false grant))))
 
-    (test-case "approval-await-result permits explicit headless mode"
-      (set-headless-approval-mode!)
-      (check-true (approval-await-result)))
+    (test-case "await times out closed and removes the request"
+      (with-channel (lambda (channel)
+                      (define id (register-approval-request-for-channel! channel digest-a view-a))
+                      (define-values (outcome grant) (approval-await-grant id digest-a 10))
+                      (check-equal? outcome 'timed-out)
+                      (check-false grant)
+                      (check-equal? (pending-approval-count) 0))
+                    #:timeout-ms 10))))
 
-    (test-case "approval-await-result returns #f on timeout (no channel-put)"
-      (clear-approval-channel!)
-      (define ch (make-approval-channel #:timeout-ms 50))
-      (set-approval-channel! ch)
-      (check-false (approval-await-result))
-      (clear-approval-channel!))
-
-    ;; ── approval-put! + approval-await-result (cross-thread) ──
-
-    (test-case "approval-put! puts #t then await returns #t"
-      (clear-approval-channel!)
-      (define ch (make-approval-channel #:timeout-ms 5000))
-      (set-approval-channel! ch)
-      (approval-put! #t)
-      (check-true (approval-await-result))
-      (clear-approval-channel!))
-
-    (test-case "approval-put! puts #f then await returns #f"
-      (clear-approval-channel!)
-      (define ch (make-approval-channel #:timeout-ms 5000))
-      (set-approval-channel! ch)
-      (approval-put! #f)
-      (check-false (approval-await-result))
-      (clear-approval-channel!))
-
-    (test-case "approval-put! is no-op when no channel set"
-      (clear-approval-channel!)
-      (approval-put! #t)
-      (approval-put! #f)
-      (check-true #t))))
-
-(run-tests suite)
+(exit (run-tests suite))

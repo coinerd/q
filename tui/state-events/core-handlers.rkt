@@ -22,7 +22,7 @@
          "../state-types.rkt"
          (only-in "../../runtime/gsd-query.rkt" current-gsd-mode-query)
          (only-in "../render/message-layout.rkt" plain-line)
-         (only-in "../approval-channel.rkt" approval-request-pending?)
+         (only-in "../approval-channel.rkt" approval-request-view approval-request-pending?)
          ;; W7 v0.99.35: Pure helpers extracted from this module
          "handler-helpers.rkt"
          "helpers.rkt"
@@ -567,23 +567,41 @@
 ;; and overlay-state ABIs.  The active request keeps the historical extra keys;
 ;; queued requests are normalized hashes under 'approval-queue.
 (define (approval-request-from-payload payload)
-  (and
-   (hash? payload)
-   (let ([request-id (hash-ref payload 'request-id #f)])
-     ;; Correlation is mandatory at this security boundary.  An
-     ;; uncorrelated prompt could only be answered through the permissive
-     ;; legacy channel and must therefore not become visible.
-     (and (string? request-id)
-          (approval-request-pending? request-id)
-          (let* ([raw-capabilities (hash-ref payload 'capabilities '())]
-                 [capabilities (if (list? raw-capabilities)
-                                   raw-capabilities
-                                   '())]
-                 [raw-preview (hash-ref payload 'task-preview "")]
-                 [task-preview (if (string? raw-preview)
-                                   raw-preview
-                                   (format "~a" raw-preview))])
-            (hasheq 'request-id request-id 'capabilities capabilities 'task-preview task-preview))))))
+  (and (hash? payload)
+       (let* ([request-id (hash-ref payload 'request-id #f)]
+              [commitment-digest (hash-ref payload 'commitment-digest #f)]
+              [event-presentation-digest (hash-ref payload 'presentation-digest #f)]
+              [authoritative-view (and (string? request-id)
+                                       (string? commitment-digest)
+                                       (string? event-presentation-digest)
+                                       (approval-request-view request-id commitment-digest))]
+              [authoritative-presentation-digest
+               (and authoritative-view (hash-ref authoritative-view 'presentation-digest #f))])
+         ;; Event-carried previews are untrusted. Correlation and both digests
+         ;; must match before the broker-owned immutable view is displayed.
+         (and authoritative-view
+              (string? authoritative-presentation-digest)
+              (string=? event-presentation-digest authoritative-presentation-digest)
+              (let* ([raw-capabilities (hash-ref authoritative-view 'capabilities '())]
+                     [capabilities (if (list? raw-capabilities)
+                                       raw-capabilities
+                                       '())]
+                     [raw-preview (hash-ref authoritative-view 'task-preview "")]
+                     [task-preview (if (string? raw-preview)
+                                       raw-preview
+                                       (format "~a" raw-preview))])
+                (hasheq 'request-id
+                        request-id
+                        'commitment-digest
+                        commitment-digest
+                        'presentation-digest
+                        authoritative-presentation-digest
+                        'approval-view
+                        authoritative-view
+                        'capabilities
+                        capabilities
+                        'task-preview
+                        task-preview))))))
 
 (define (approval-request-id request)
   (and (hash? request) (hash-ref request 'request-id #f)))
@@ -604,6 +622,40 @@
               (cons (and (hash? extra) (hash-ref extra 'request-id #f))
                     (map approval-request-id (approval-overlay-queue ov))))))
 
+(define (approval-detail-lines view)
+  (define (detail label key [default ""])
+    (plain-line (format "  ~a: ~a" label (hash-ref view key default))))
+  (define common
+    (list (detail "Plan" 'plan-kind)
+          (detail "Model" 'model-preview)
+          (detail "Tools" 'effective-tools '())
+          (detail "Working directory" 'cwd-preview)
+          (detail "Provider" 'provider-preview)
+          (detail "Safe mode" 'safe-mode #f)
+          (detail "Max turns" 'max-turns)
+          (detail "Parent session" 'parent-session-preview)
+          (detail "Parent call" 'parent-call-preview)
+          (detail "Tool call" 'tool-call-id)
+          (detail "Child" 'child-id)
+          (detail "Child session" 'session-id)))
+  (define jobs (hash-ref view 'jobs '()))
+  (append
+   common
+   (if (list? jobs)
+       (for/list ([job (in-list jobs)])
+         (plain-line
+          (format "  Job ~a [~a]: model=~a turns=~a caps=~a tools=~a call=~a child=~a session=~a"
+                  (hash-ref job 'batch-order "?")
+                  (hash-ref job 'job-id "?")
+                  (hash-ref job 'model-preview "")
+                  (hash-ref job 'max-turns "")
+                  (hash-ref job 'effective-capabilities '())
+                  (hash-ref job 'effective-tools '())
+                  (hash-ref job 'tool-call-id "")
+                  (hash-ref job 'child-id "")
+                  (hash-ref job 'session-id ""))))
+       '())))
+
 (define (approval-request-overlay request queue seen-ids)
   (define capabilities (hash-ref request 'capabilities '()))
   (define task-preview (hash-ref request 'task-preview ""))
@@ -619,12 +671,14 @@
       (if (null? lines)
           (list "")
           lines)))
+  (define authoritative-view (hash-ref request 'approval-view (hasheq)))
   (define content
     (append (list (plain-line "\u26a1 Subagent Approval Required")
                   (plain-line (format "  Capabilities: ~a" caps-str)))
             (for/list ([line (in-list preview-lines)]
                        [index (in-naturals)])
               (plain-line (format "  ~a: ~a" (if (zero? index) "Task" "    ") line)))
+            (approval-detail-lines authoritative-view)
             (list (plain-line "") (plain-line "  [y] Approve   [n] Deny   [Esc] Cancel"))))
   (overlay-state 'approval-prompt
                  content
@@ -639,6 +693,12 @@
                          task-preview
                          'request-id
                          (hash-ref request 'request-id)
+                         'commitment-digest
+                         (hash-ref request 'commitment-digest)
+                         'presentation-digest
+                         (hash-ref request 'presentation-digest "")
+                         'approval-view
+                         authoritative-view
                          'approval-queue
                          queue
                          'approval-seen-request-ids
@@ -705,10 +765,30 @@
                      state
                      [active-overlay (approval-request-overlay request '() (list request-id))])])]))
 
+(define (approval-overlay-request-digest state request-id)
+  (define overlay (ui-state-active-overlay state))
+  (and overlay
+       (eq? (overlay-state-type overlay) 'approval-prompt)
+       (let* ([extra (overlay-state-extra overlay)]
+              [active-id (and (hash? extra) (hash-ref extra 'request-id #f))]
+              [active-digest (and (hash? extra) (hash-ref extra 'commitment-digest #f))])
+         (if (equal? request-id active-id)
+             active-digest
+             (for/or ([request (in-list (approval-overlay-queue overlay))])
+               (and (equal? request-id (approval-request-id request))
+                    (hash-ref request 'commitment-digest #f)))))))
+
 (define (handle-spawn-approval-terminal state evt)
   (define payload (event-payload evt))
   (define request-id (and (hash? payload) (hash-ref payload 'request-id #f)))
-  (approval-overlay-remove-request state request-id))
+  (define commitment-digest (and (hash? payload) (hash-ref payload 'commitment-digest #f)))
+  (define displayed-digest
+    (and (string? request-id) (approval-overlay-request-digest state request-id)))
+  (if (and (string? commitment-digest)
+           (equal? commitment-digest displayed-digest)
+           (not (approval-request-pending? request-id commitment-digest)))
+      (approval-overlay-remove-request state request-id)
+      state))
 
 ;; ============================================================
 ;; Register all core handlers at module load time

@@ -13,130 +13,206 @@
          (only-in "../tui/state-events/core-handlers.rkt" handle-spawn-approval-requested)
          (only-in "../tui/message-dispatch.rkt" process-tui-message!)
          (only-in "../tools/builtins/spawn-subagent.rkt" request-spawn-approval)
+         (only-in "../tools/builtins/spawn-execution-plan.rkt" make-spawn-execution-plan)
          (only-in "../tools/tool.rkt" make-exec-context)
          (only-in "../tui/context.rkt" tui-ctx-input-state-box)
          (only-in "../util/event/event.rkt" make-event)
-         (only-in "../tui/approval-channel.rkt"
+         (only-in "../runtime/approval/broker.rkt"
                   make-approval-channel
                   set-approval-channel!
                   clear-approval-channel!
                   current-approval-channel
-                  approval-channel-ch
-                  register-approval-request!
-                  pending-approval-count
-                  approval-await-for-id
-                  approval-put-for-id!))
+                  register-approval-request-for-channel!
+                  approval-request-pending?
+                  approval-decide!
+                  approval-await-grant
+                  approval-grant?
+                  call-with-approval-grant
+                  cancel-approval-request!
+                  pending-approval-count))
+
+(define DIGEST-A (make-string 64 #\a))
+(define DIGEST-B (make-string 64 #\b))
+(define PRESENTATION-A (make-string 64 #\c))
+(define PRESENTATION-B (make-string 64 #\d))
+
+(struct approval-fixture (id commitment-digest presentation-digest) #:transparent)
 
 (define (make-test-ctx)
   (make-tui-ctx #:session-runner void #:event-bus #f #:session-queue #f))
 
-(define (approval-event id task)
+(define (register-fixture task
+                          #:commitment-digest [commitment-digest DIGEST-A]
+                          #:presentation-digest [presentation-digest PRESENTATION-A])
+  (define view
+    (hasheq 'capabilities '(shell-exec) 'task-preview task 'presentation-digest presentation-digest))
+  (define id
+    (register-approval-request-for-channel! (current-approval-channel) commitment-digest view))
+  (unless id
+    (error 'register-fixture "active broker registration failed"))
+  (approval-fixture id commitment-digest presentation-digest))
+
+(define (approval-event fixture)
   (make-event "mas.spawn-approval-requested"
               (current-inexact-milliseconds)
               "test-session"
               #f
-              (hasheq 'request-id id 'capabilities '(shell-exec) 'task-preview task)))
+              (hasheq 'request-id
+                      (approval-fixture-id fixture)
+                      'commitment-digest
+                      (approval-fixture-commitment-digest fixture)
+                      'presentation-digest
+                      (approval-fixture-presentation-digest fixture))))
 
-(define (install-requests! ctx ids)
+(define (install-requests! ctx fixtures)
   (define state
-    (for/fold ([state (initial-ui-state)]) ([id (in-list ids)])
-      (handle-spawn-approval-requested state (approval-event id id))))
+    (for/fold ([state (initial-ui-state)]) ([fixture (in-list fixtures)])
+      (handle-spawn-approval-requested state (approval-event fixture))))
   (set-box! (tui-ctx-ui-state-box ctx) state))
 
 (define (active-id ctx)
-  (define ov (ui-state-active-overlay (unbox (tui-ctx-ui-state-box ctx))))
-  (and ov (hash-ref (overlay-state-extra ov) 'request-id #f)))
+  (define overlay (ui-state-active-overlay (unbox (tui-ctx-ui-state-box ctx))))
+  (and overlay (hash-ref (overlay-state-extra overlay) 'request-id #f)))
 
 (define (with-approval-channel thunk)
   (dynamic-wind (lambda () (set-approval-channel! (make-approval-channel #:timeout-ms 5000)))
                 thunk
                 clear-approval-channel!))
 
-(define (check-delivery id expected)
-  (define-values (approved? delivered?) (approval-await-for-id id 50))
-  (check-true delivered?)
-  (check-equal? approved? expected))
+(define (check-delivery fixture expected)
+  (define-values (outcome grant)
+    (approval-await-grant (approval-fixture-id fixture)
+                          (approval-fixture-commitment-digest fixture)
+                          50))
+  (check-equal? outcome (if expected 'approved 'denied))
+  (cond
+    [expected
+     (check-true (approval-grant? grant))
+     (check-true
+      (call-with-approval-grant grant (approval-fixture-commitment-digest fixture) (lambda () #t)))]
+    [else (check-false grant)]))
 
 (define suite
-  (test-suite "TUI approval overlay key handler"
+  (test-suite "TUI digest-bound approval overlay key handler"
 
-    (test-case "y variants approve and dismiss"
+    (test-case "y variants approve the exact commitment and dismiss"
       (for ([key (in-list (list #\y #\Y 'y))])
         (with-approval-channel (lambda ()
-                                 (define id (register-approval-request!))
+                                 (define fixture (register-fixture "approve"))
                                  (define ctx (make-test-ctx))
-                                 (install-requests! ctx (list id))
+                                 (install-requests! ctx (list fixture))
                                  (check-equal? (handle-approval-overlay-key ctx key) 'handled)
-                                 (check-delivery id #t)
+                                 (check-delivery fixture #t)
                                  (check-false (ui-state-active-overlay
                                                (unbox (tui-ctx-ui-state-box ctx))))))))
 
-    (test-case "n variants and Escape deny and dismiss"
+    (test-case "n variants and Escape deny the exact commitment and dismiss"
       (for ([key (in-list (list #\n #\N 'n 'escape))])
         (with-approval-channel (lambda ()
-                                 (define id (register-approval-request!))
+                                 (define fixture (register-fixture "deny"))
                                  (define ctx (make-test-ctx))
-                                 (install-requests! ctx (list id))
+                                 (install-requests! ctx (list fixture))
                                  (check-equal? (handle-approval-overlay-key ctx key) 'handled)
-                                 (check-delivery id #f)
+                                 (check-delivery fixture #f)
                                  (check-false (ui-state-active-overlay
                                                (unbox (tui-ctx-ui-state-box ctx))))))))
 
-    (test-case "successful answer promotes the next FIFO request"
-      (with-approval-channel (lambda ()
-                               (define id-a (register-approval-request!))
-                               (define id-b (register-approval-request!))
-                               (define ctx (make-test-ctx))
-                               (install-requests! ctx (list id-a id-b))
-                               (check-equal? (active-id ctx) id-a)
-                               (check-equal? (handle-approval-overlay-key ctx #\y) 'handled)
-                               (check-delivery id-a #t)
-                               (check-equal? (active-id ctx) id-b))))
-
-    (test-case "stale terminal request is removed without dismissing the queued current request"
+    (test-case "successful answer promotes the next FIFO digest-bound request"
       (with-approval-channel
        (lambda ()
-         (define stale-id (register-approval-request!))
-         (define current-id (register-approval-request!))
+         (define fixture-a
+           (register-fixture "A" #:commitment-digest DIGEST-A #:presentation-digest PRESENTATION-A))
+         (define fixture-b
+           (register-fixture "B" #:commitment-digest DIGEST-B #:presentation-digest PRESENTATION-B))
          (define ctx (make-test-ctx))
-         ;; Create the overlay while both IDs are pending, then make its active
-         ;; request terminal so the attempted key delivery must fail.
-         (install-requests! ctx (list stale-id current-id))
-         (check-true (approval-put-for-id! stale-id #t))
-         (check-equal? (handle-approval-overlay-key ctx #\n) 'handled)
-         (check-equal? (active-id ctx) current-id)
-         (check-equal? (sync/timeout 0 (approval-channel-ch (current-approval-channel))) #f))))
+         (install-requests! ctx (list fixture-a fixture-b))
+         (check-equal? (active-id ctx) (approval-fixture-id fixture-a))
+         (check-equal? (handle-approval-overlay-key ctx #\y) 'handled)
+         (check-delivery fixture-a #t)
+         (check-equal? (active-id ctx) (approval-fixture-id fixture-b))
+         (define promoted-extra
+           (overlay-state-extra (ui-state-active-overlay (unbox (tui-ctx-ui-state-box ctx)))))
+         (check-equal? (hash-ref promoted-extra 'commitment-digest) DIGEST-B)
+         (check-equal? (hash-ref promoted-extra 'presentation-digest) PRESENTATION-B))))
 
-    (test-case "missing request-id never falls back to the legacy channel"
+    (test-case "wrong-digest overlay cannot approve the broker commitment"
       (with-approval-channel
        (lambda ()
+         (define fixture (register-fixture "must remain pending"))
+         (define ctx (make-test-ctx))
+         (install-requests! ctx (list fixture))
+         (define state (unbox (tui-ctx-ui-state-box ctx)))
+         (define overlay (ui-state-active-overlay state))
+         (define forged-extra (hash-set (overlay-state-extra overlay) 'commitment-digest DIGEST-B))
+         (set-box! (tui-ctx-ui-state-box ctx)
+                   (struct-copy ui-state
+                                state
+                                [active-overlay
+                                 (struct-copy overlay-state overlay [extra forged-extra])]))
+         (check-equal? (handle-approval-overlay-key ctx #\y) 'handled)
+         (check-true (approval-request-pending? (approval-fixture-id fixture)
+                                                (approval-fixture-commitment-digest fixture)))
+         (check-false (approval-decide! (approval-fixture-id fixture) DIGEST-B #t))
+         (check-true (cancel-approval-request! (approval-fixture-id fixture))))))
+
+    (test-case "stale terminal request is pruned without deciding the queued request"
+      (with-approval-channel
+       (lambda ()
+         (define stale-fixture
+           (register-fixture "stale"
+                             #:commitment-digest DIGEST-A
+                             #:presentation-digest PRESENTATION-A))
+         (define current-fixture
+           (register-fixture "current"
+                             #:commitment-digest DIGEST-B
+                             #:presentation-digest PRESENTATION-B))
+         (define ctx (make-test-ctx))
+         (install-requests! ctx (list stale-fixture current-fixture))
+         (check-true (approval-decide! (approval-fixture-id stale-fixture)
+                                       (approval-fixture-commitment-digest stale-fixture)
+                                       #t))
+         (check-equal? (handle-approval-overlay-key ctx #\n) 'handled)
+         (check-equal? (active-id ctx) (approval-fixture-id current-fixture))
+         (check-true (approval-request-pending? (approval-fixture-id current-fixture)
+                                                (approval-fixture-commitment-digest current-fixture)))
+         (check-delivery stale-fixture #t))))
+
+    (test-case "missing commitment digest cannot deliver or dismiss"
+      (with-approval-channel
+       (lambda ()
+         (define fixture (register-fixture "correlated only by id"))
          (define ctx (make-test-ctx))
          (set-box! (tui-ctx-ui-state-box ctx)
-                   (struct-copy
-                    ui-state
-                    (initial-ui-state)
-                    [active-overlay
-                     (overlay-state
-                      'approval-prompt
-                      '()
-                      ""
-                      'top-left
-                      #f
-                      #f
-                      0
-                      (hasheq 'capabilities '(shell-exec) 'task-preview "uncorrelated"))]))
+                   (struct-copy ui-state
+                                (initial-ui-state)
+                                [active-overlay
+                                 (overlay-state 'approval-prompt
+                                                '()
+                                                ""
+                                                'top-left
+                                                #f
+                                                #f
+                                                0
+                                                (hasheq 'request-id
+                                                        (approval-fixture-id fixture)
+                                                        'capabilities
+                                                        '(shell-exec)
+                                                        'task-preview
+                                                        "missing digest"))]))
          (check-equal? (handle-approval-overlay-key ctx #\y) 'handled)
          (check-not-false (ui-state-active-overlay (unbox (tui-ctx-ui-state-box ctx))))
-         (check-false (sync/timeout 0 (approval-channel-ch (current-approval-channel)))))))
+         (check-true (approval-request-pending? (approval-fixture-id fixture)
+                                                (approval-fixture-commitment-digest fixture)))
+         (check-true (cancel-approval-request! (approval-fixture-id fixture))))))
 
     (test-case "all non-decision keys are consumed while modal"
       (with-approval-channel (lambda ()
-                               (define id (register-approval-request!))
+                               (define fixture (register-fixture "modal"))
                                (define ctx (make-test-ctx))
-                               (install-requests! ctx (list id))
+                               (install-requests! ctx (list fixture))
                                (for ([key (in-list (list #\a 'return 'up 'tab))])
                                  (check-equal? (handle-approval-overlay-key ctx key) 'handled)
-                                 (check-equal? (active-id ctx) id)))))
+                                 (check-equal? (active-id ctx) (approval-fixture-id fixture))))))
 
     (test-case "killed approval owner is cancelled and its modal is pruned"
       (with-approval-channel
@@ -151,11 +227,13 @@
                (set-box! (tui-ctx-ui-state-box ctx)
                          (handle-spawn-approval-requested (unbox (tui-ctx-ui-state-box ctx)) event))
                (semaphore-post shown))))
+         (define plan
+           (make-spawn-execution-plan 'single
+                                      (hasheq 'task "blocked" 'capabilities '(shell-exec))
+                                      (hasheq 'task-preview "blocked" 'capabilities '(shell-exec))))
          (define owner
            (thread (lambda ()
-                     (request-spawn-approval '(shell-exec)
-                                             "blocked"
-                                             (make-exec-context #:event-publisher publisher)))))
+                     (request-spawn-approval plan (make-exec-context #:event-publisher publisher)))))
          (check-not-false (sync/timeout 1 shown))
          (check-not-false (ui-state-active-overlay (unbox (tui-ctx-ui-state-box ctx))))
          (kill-thread owner)
@@ -170,9 +248,9 @@
 
     (test-case "paste and mouse are consumed while approval is modal"
       (with-approval-channel (lambda ()
-                               (define id (register-approval-request!))
+                               (define fixture (register-fixture "modal input"))
                                (define ctx (make-test-ctx))
-                               (install-requests! ctx (list id))
+                               (install-requests! ctx (list fixture))
                                (define input-before (unbox (tui-ctx-input-state-box ctx)))
                                (define ui-before (unbox (tui-ctx-ui-state-box ctx)))
                                (process-tui-message! ctx '(paste "must-not-insert"))
