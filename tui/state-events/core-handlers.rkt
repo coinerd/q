@@ -498,7 +498,8 @@
   ;; automatic compaction paths that predate correlation).  Foreign or
   ;; stale terminals must not clear the status or report completion.
   (define correlated?
-    (or (not pending-compact) (and evt-request-id (equal? evt-request-id pending-compact))))
+    (and (event-for-current-session? state evt)
+         (or (not pending-compact) (and evt-request-id (equal? evt-request-id pending-compact)))))
   (define (clear-compact-pending! s)
     (set-compact-request-id (set-status-message s #f) #f))
   (define (terminal message)
