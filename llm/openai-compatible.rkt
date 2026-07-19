@@ -22,6 +22,7 @@
          net/http-client
          "model.rkt"
          "provider.rkt"
+         "provider-telemetry.rkt"
          "stream.rkt"
          "http-helpers.rkt"
          "provider-errors.rkt")
@@ -167,7 +168,14 @@
                      tc-hash)
                    '()))]))
 
-  (make-model-response content usage model-name finish-reason))
+  (define native-id (or (hash-ref raw 'id #f) (hash-ref raw 'responseId #f)))
+  (make-model-response content
+                       usage
+                       model-name
+                       finish-reason
+                       #:provenance (response-native-identity #:adapter "openai-compatible"
+                                                              #:native-response-id native-id
+                                                              #:native-model model-name)))
 
 ;; ============================================================
 ;; HTTP request execution (non-streaming)

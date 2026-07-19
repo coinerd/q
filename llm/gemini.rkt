@@ -26,6 +26,7 @@
          "provider.rkt"
          "stream.rkt"
          "http-helpers.rkt"
+         "provider-telemetry.rkt"
          (only-in "vision-helpers.rkt" parse-data-url))
 
 ;; Provider constructor
@@ -331,7 +332,14 @@
         (list (hasheq 'type "text" 'text (format "[SYS] ⚠ ~a" filtered-reason)))
         content))
 
-  (make-model-response final-content usage model-version stop-reason))
+  (define native-id (or (hash-ref raw 'responseId #f) (hash-ref raw 'response_id #f)))
+  (make-model-response final-content
+                       usage
+                       model-version
+                       stop-reason
+                       #:provenance (response-native-identity #:adapter "gemini"
+                                                              #:native-response-id native-id
+                                                              #:native-model model-version)))
 ;; ============================================================
 ;; Stream chunk parsing
 ;; ============================================================

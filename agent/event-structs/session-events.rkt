@@ -9,6 +9,8 @@
 
 (define-typed-event session-start-event "session.started" (model) #:schema-version 1)
 
+(define-typed-event session-resumed-event "session.resumed" (resumed-id) #:schema-version 1)
+
 (define-typed-event session-shutdown-event "session.shutdown" (reason) #:schema-version 1)
 
 ;; Input events

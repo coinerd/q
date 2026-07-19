@@ -77,18 +77,19 @@
   (check-equal? mem-store-requested-event-fields '(candidate-id mem-type scope source))
   (check-equal? mem-item-stored-event-fields '(memory-id mem-type scope source redacted-snippet))
   (check-equal? mem-item-deleted-event-fields '(memory-id scope backend))
-  (check-equal? mem-retrieval-performed-event-fields
-                '(query-snippet result-count query-limit scope latency-ms))
+  (check-equal?
+   mem-retrieval-performed-event-fields
+   '(query-snippet result-count query-limit scope latency-ms result-id matched-item-ids presence))
   (check-equal? mem-policy-blocked-event-fields '(action reason source redacted-snippet))
   (check-equal? mem-backend-unavailable-event-fields '(backend action)))
 
-(test-case "SPEC memory events have schema version 1"
-  (for ([type (in-list '("memory.item.store.requested" "memory.item.stored"
-                                                       "memory.item.deleted"
-                                                       "memory.retrieval.performed"
-                                                       "memory.policy.blocked"
-                                                       "memory.backend.unavailable"))])
-    (check-equal? (lookup-event-schema-version type) 1)))
+(test-case "SPEC memory events have correct schema versions"
+  (check-equal? (lookup-event-schema-version "memory.item.store.requested") 1)
+  (check-equal? (lookup-event-schema-version "memory.item.stored") 1)
+  (check-equal? (lookup-event-schema-version "memory.item.deleted") 1)
+  (check-equal? (lookup-event-schema-version "memory.retrieval.performed") 2)
+  (check-equal? (lookup-event-schema-version "memory.policy.blocked") 1)
+  (check-equal? (lookup-event-schema-version "memory.backend.unavailable") 1))
 
 (test-case "store_memory emits requested and stored audit events"
   (define b (make-memory-hash-backend))

@@ -17,7 +17,7 @@
          "../../util/event/event-macro.rkt")
 
 ;; M13-F12: Schema version constant — bump when event fields change.
-(define MEMORY-EVENT-SCHEMA-VERSION 1)
+(define MEMORY-EVENT-SCHEMA-VERSION 2)
 
 ;; Before explicit/auto store.
 (define-typed-event mem-store-requested-event
@@ -25,6 +25,14 @@
                     (candidate-id mem-type scope source)
                     #:defaults (source 'tool)
                     #:schema-version 1)
+
+;; After search/retrieve/list.
+(define-typed-event mem-retrieval-performed-event
+                    "memory.retrieval.performed"
+                    (query-snippet result-count query-limit scope latency-ms)
+                    #:optional ([result-id #f] [matched-item-ids '()] [presence #f])
+                    #:defaults (query-snippet "" result-count 0 query-limit 5 scope #f latency-ms 0)
+                    #:schema-version 2)
 
 ;; After successful store.
 (define-typed-event mem-item-stored-event
@@ -45,13 +53,6 @@
                     "memory.item.updated"
                     (memory-id scope source redacted-snippet)
                     #:defaults (source 'tool redacted-snippet "")
-                    #:schema-version 1)
-
-;; After search/retrieve/list.
-(define-typed-event mem-retrieval-performed-event
-                    "memory.retrieval.performed"
-                    (query-snippet result-count query-limit scope latency-ms)
-                    #:defaults (query-snippet "" result-count 0 query-limit 5 scope #f latency-ms 0)
                     #:schema-version 1)
 
 ;; Policy block without raw content.

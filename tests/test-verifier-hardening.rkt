@@ -31,15 +31,16 @@
       (check-equal? (extract-response-text resp) "hello"))
 
     (test-case "extract-response-text: string part"
-      (define resp (model-response (list "world") (hasheq) "mock" 'end_turn))
+      (define resp (model-response (list "world") (hasheq) "mock" 'end_turn #f))
       (check-equal? (extract-response-text resp) "world"))
 
     (test-case "extract-response-text: unknown type produces empty string"
-      (define resp (model-response (list 12345) (hasheq) "mock" 'end_turn))
+      (define resp (model-response (list 12345) (hasheq) "mock" 'end_turn #f))
       (check-equal? (extract-response-text resp) ""))
 
     (test-case "extract-response-text: multiple parts joined"
-      (define resp (model-response (list (hasheq 'text "foo") "bar" 999) (hasheq) "mock" 'end_turn))
+      (define resp
+        (model-response (list (hasheq 'text "foo") "bar" 999) (hasheq) "mock" 'end_turn #f))
       (check-equal? (extract-response-text resp) "foobar"))
 
     ;; ── L2: risk threshold reason text ──

@@ -25,6 +25,7 @@
          "provider.rkt"
          "stream.rkt"
          "http-helpers.rkt"
+         "provider-telemetry.rkt"
          ;; W8 v0.99.35: Pure helpers extracted from this module
          "anthropic-helpers.rkt")
 
@@ -314,7 +315,14 @@
          tc-hash]
         [_ block])))
 
-  (make-model-response content usage model-name stop-reason))
+  (define native-id (hash-ref raw 'id #f))
+  (make-model-response content
+                       usage
+                       model-name
+                       stop-reason
+                       #:provenance (response-native-identity #:adapter "anthropic"
+                                                              #:native-response-id native-id
+                                                              #:native-model model-name)))
 
 ;; ============================================================
 ;; Stream chunk parsing
