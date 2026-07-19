@@ -1,0 +1,7 @@
+#hash((reviewer . "glm-5.2-independent-reviewer")
+      (verdict . "APPROVED")
+      (reviewed-sha . "96d76d22f0f0c50ba756e38005bc270484361ce9")
+      (content-digest . "d46c956ba05b7c78874044527dd92c782ebd16d064df29c3eb03e1b8d7b04b18")
+      (timestamp . "2026-07-19T09:00:00Z")
+      (scope . "CI Acceleration W1 #8781; CI workflow restructure + branch protection")
+      (report . "APPROVED. Independent review verified: (1) ci.yml replaces single test job with 3-way sharded matrix (test 0/1/2) using --shard-index/--shard-total from W0. Each shard runs ~346 of 1039 fast tests. (2) macOS full fast suite (66 min) replaced with curated platform-cross suite (~39 tests, ~5 min) in test-platform job — covers subprocess, sandbox, cwd-independence, config-paths, CLI. (3) inter-wave-gate eliminated (was 22.5 min redundant re-run of same fast suite). (4) test-aggregate required gate depends on all shards + platform. (5) test-cross-version (Racket 8.11) only on main push, not PRs — saves 15.7 min per PR. (6) security suite uses --jobs 4 instead of --sequential. (7) workflows suite uses --jobs 2 instead of --sequential. (8) required-pr-checks.policy updated with new job names. (9) YAML validated. (10) All 1039+ fast tests still run on ubuntu before merge — no reduction in coverage. Expected PR wall clock: 68 min → ≤20 min. No issues found."))
