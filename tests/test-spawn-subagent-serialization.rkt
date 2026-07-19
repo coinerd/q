@@ -96,9 +96,7 @@
       (define settings (q-settings (hash) (hash) (hasheq 'provider provider 'model "test-model")))
       (define ctx (make-exec-context #:runtime-settings settings #:call-id "serialization-test"))
       (define result
-        (tool-spawn-subagent
-         (hasheq 'task "do something" 'capabilities '(read-only))
-         ctx))
+        (tool-spawn-subagent (hasheq 'task "do something" 'capabilities '(read-only)) ctx))
       (check-true (tool-result? result))
       (check-false (tool-result-is-error? result)
                    (format "expected success, got error: ~a"
@@ -116,9 +114,7 @@
       (define result
         (tool-spawn-subagents
          (hasheq 'jobs
-                 (list (hasheq 'task "task one"
-                               'jobId "j1"
-                               'capabilities '(read-only)))
+                 (list (hasheq 'task "task one" 'jobId "j1" 'capabilities '(read-only)))
                  'maxParallel
                  1)
          ctx))
@@ -141,9 +137,7 @@
       (define settings (q-settings (hash) (hash) (hasheq 'provider provider 'model "test-model")))
       (define ctx (make-exec-context #:runtime-settings settings #:call-id "hasheq-test"))
       (define result
-        (tool-spawn-subagent
-         (hasheq 'task "check files" 'capabilities '(read-only))
-         ctx))
+        (tool-spawn-subagent (hasheq 'task "check files" 'capabilities '(read-only)) ctx))
       (check-true (tool-result? result))
       (check-false (tool-result-is-error? result)
                    (format "expected success, got error: ~a"
@@ -171,9 +165,7 @@
       (define result
         (tool-spawn-subagents
          (hasheq 'jobs
-                 (list (hasheq 'task "check files"
-                               'jobId "j1"
-                               'capabilities '(read-only)))
+                 (list (hasheq 'task "check files" 'jobId "j1" 'capabilities '(read-only)))
                  'maxParallel
                  1)
          ctx))
@@ -191,9 +183,7 @@
       (define settings (q-settings (hash) (hash) (hasheq 'provider provider 'model "test-model")))
       (define ctx (make-exec-context #:runtime-settings settings #:call-id "mixed-test"))
       (define result
-        (tool-spawn-subagent
-         (hasheq 'task "check files" 'capabilities '(read-only))
-         ctx))
+        (tool-spawn-subagent (hasheq 'task "check files" 'capabilities '(read-only)) ctx))
       (define result-text (hash-ref (car (tool-result-content result)) 'text ""))
       ;; Should have readable text from both assistant turns
       (check-false (string-contains? result-text "#hasheq")

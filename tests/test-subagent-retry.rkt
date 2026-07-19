@@ -61,8 +61,8 @@
       (check-equal? (subagent-config-max-turns cfg) 10))
 
     (test-case "parse-subagent-config explicit max-turns respected"
-      (define cfg (parse-subagent-config
-         (hasheq 'task "test task" 'max-turns 3 'capabilities '(read-only))))
+      (define cfg
+        (parse-subagent-config (hasheq 'task "test task" 'max-turns 3 'capabilities '(read-only))))
       (check-equal? (subagent-config-max-turns cfg) 3))
 
     ;; ---- F-1a: Subagent retries on transient provider error ----

@@ -77,9 +77,9 @@
   (define exec-ctx
     (make-exec-context #:working-directory (current-directory)
                        #:runtime-settings (hasheq 'provider provider 'model "mock-model")))
-  (define result (tool-spawn-subagent
-    (hasheq 'task "Read /etc/hostname" 'max-turns 3 'capabilities '(read-only))
-    exec-ctx))
+  (define result
+    (tool-spawn-subagent (hasheq 'task "Read /etc/hostname" 'max-turns 3 'capabilities '(read-only))
+                         exec-ctx))
   (check-false (tool-result-is-error? result)
                (format "should succeed, got error: ~a"
                        (if (tool-result-is-error? result)
@@ -94,12 +94,7 @@
 (test-case "spawn-subagents batch validates inputs"
   (check-true (tool-result-is-error? (tool-spawn-subagents (hasheq))))
   (check-true (tool-result-is-error? (tool-spawn-subagents (hasheq 'jobs '()))))
-  (check-true (tool-result-is-error?
-               (tool-spawn-subagents (hasheq 'jobs
-                                             (build-list
-                                              13
-                                              (lambda (_)
-                                                (hasheq 'task
-                                                        "x"
-                                                        'capabilities
-                                                        '(read-only)))))))))
+  (check-true
+   (tool-result-is-error?
+    (tool-spawn-subagents
+     (hasheq 'jobs (build-list 13 (lambda (_) (hasheq 'task "x" 'capabilities '(read-only)))))))))
