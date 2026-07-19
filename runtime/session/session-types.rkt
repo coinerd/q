@@ -39,6 +39,7 @@
          agent-session?
          agent-session-session-id
          agent-session-session-dir
+         agent-session-repository
          agent-session-provider
          agent-session-tool-registry
          agent-session-event-bus
@@ -126,7 +127,11 @@
          [pending-entries #:mutable] ; (listof message?) — buffered before persistence
          [thinking-level #:mutable] ; symbol — one of thinking-levels (#1153)
          ;; Lifecycle state (boxed sub-struct, A1-05)
-         lifecycle) ; lifecycle-state?
+         lifecycle ; lifecycle-state?
+         ;; Storage capability (W3): opaque session-repository, sole owner of the
+         ;; no-follow root descriptor. #f for sessions that use the path fallback.
+         repository ; session-repository? or #f
+         )
   #:transparent)
 
 ;; ============================================================

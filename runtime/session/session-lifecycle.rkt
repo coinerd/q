@@ -241,7 +241,7 @@
           ;; swallowed by make-loop-result.
           (define loop-st (current-loop-state-for-error-recovery))
           (when (and loop-st (pair? (loop-state-messages loop-st)))
-            (append-entries! log-path (loop-state-messages loop-st)))
+            (append-session-entries! sess (loop-state-messages loop-st)))
           ;; Emit runtime.error event with classified error-type
           (define error-type (classify-error e))
           ;; A3: Include retry metadata if retries were attempted

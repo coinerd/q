@@ -340,8 +340,17 @@
 ;; Root and session directory operations
 ;; ---------------------------------------------------------------------------
 
+;; Mutable availability flag. The load-time probe sets this to #f if the
+;; runtime syscall/constant verification fails (e.g. a new OS SDK with
+;; mismatched stat offsets). A #f flag makes the POSIX backend report as
+;; unsupported so sessions fall back to path-based persistence — the module
+;; still loads and the process never aborts merely because the hardening probe
+;; could not run. (W3: unblocks the macOS smoke path that the production cutover
+;; now exercises.)
+(define posix-probe-ok? (box #t))
+
 (define (posix-backend-supported?)
-  (and (memq (system-type 'os) '(unix macos)) #t))
+  (and (memq (system-type 'os) '(unix macos macosx)) (unbox posix-probe-ok?)))
 
 (define (path->complete-path-string p)
   (define path
@@ -544,8 +553,22 @@
 ;; ---------------------------------------------------------------------------
 
 (define (probe-platform-constants!)
-  (unless (posix-backend-supported?)
-    (void))
+  ;; The probe verifies the syscall/constant table at load time. A failure
+  ;; (e.g. a new OS SDK with mismatched stat offsets) disables the POSIX
+  ;; backend via the mutable flag rather than aborting module instantiation —
+  ;; sessions then fall back to path-based persistence. (W3.)
+  (with-handlers ([exn:fail?
+                   (lambda (e)
+                     (set-box! posix-probe-ok? #f)
+                     (fprintf (current-error-port)
+                              "warning: session-filesystem-posix probe failed (~a); "
+                              (exn-message e))
+                     (fprintf (current-error-port)
+                              "no-follow hardening disabled, using path-based fallback~n"))])
+    (when (posix-backend-supported?)
+      (probe-platform-constants/body!))))
+
+(define (probe-platform-constants/body!)
   ;; Create an isolated temp directory with a real subdir and a regular file;
   ;; verify openat NOFOLLOW and fstatat mode/regular detection agree with the
   ;; constant table for this kernel.

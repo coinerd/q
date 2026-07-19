@@ -55,6 +55,10 @@
                   session-start-event
                   session-shutdown-event)
          "session/session-types.rkt"
+         (only-in "session/session-repository.rkt"
+                  make-session-repository
+                  repository-backend-supported?
+                  close-session-repository!)
          (only-in "session/lifecycle-state.rkt" make-lifecycle-state lifecycle-state? lifecycle-state)
          (only-in "session/session-events.rkt" wire-session-event-handlers!)
          (only-in "../llm/token-budget.rkt" estimate-context-tokens)
@@ -198,6 +202,17 @@
 
 ;; make-session-struct : keyword-based pure constructor wrapping agent-session.
 ;; All fields are keyword args with sensible defaults.
+
+;; open-session-repository* : path-string -> (or/c session-repository? #f)
+;; W3 cutover: open the no-follow root capability for a session store root.
+;; Ensures the root dir exists, then opens it as the held descriptor. Any failure
+;; (unsupported backend, permission, or a swapped-root symlink) falls back to #f
+;; so the session uses the legacy path-based persistence — never escapes.
+(define (open-session-repository* base-dir)
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (make-directory* base-dir)
+    (and (repository-backend-supported?) (make-session-repository base-dir))))
+
 (define (make-session-struct #:id id
                              #:dir dir
                              #:provider [provider #f]
@@ -213,7 +228,8 @@
                              #:start-time [start-time (now-seconds)]
                              #:pending-entries [pending-entries '()]
                              #:thinking-level [thinking-level #f]
-                             #:lifecycle [lifecycle (make-lifecycle-state)])
+                             #:lifecycle [lifecycle (make-lifecycle-state)]
+                             #:repository [repository #f])
   (agent-session id
                  dir
                  provider
@@ -229,7 +245,8 @@
                  start-time
                  pending-entries
                  thinking-level
-                 lifecycle))
+                 lifecycle
+                 repository))
 
 ;; session-rollout-enabled? : string? -> boolean?
 ;; Deterministic A/B assignment using session-id hash modulo 100.
@@ -269,9 +286,12 @@
 
   (define session-created-at (now-seconds))
 
+  (define repo (open-session-repository* base-dir))
+
   (define sess
     (make-session-struct #:id sid
                          #:dir dir
+                         #:repository repo
                          #:provider (config-provider cfg-with-rollout)
                          #:tool-registry (config-tool-registry cfg-with-rollout)
                          #:event-bus (config-event-bus cfg-with-rollout)
@@ -353,6 +373,9 @@
         (build-index! log-path idx-path)
         #f))
 
+  ;; W3 cutover: the resumed session re-opens the no-follow root capability.
+  (define repo (open-session-repository* base-dir))
+
   ;; Dispatch 'session-before-switch hook
   (define switch-payload (session-switch-payload session-id 'resume))
   (define-values (_amended-switch switch-res)
@@ -363,6 +386,7 @@
   (define sess
     (make-session-struct #:id session-id
                          #:dir dir
+                         #:repository repo
                          #:provider (config-provider cfg)
                          #:tool-registry (config-tool-registry cfg)
                          #:event-bus (config-event-bus cfg)
@@ -457,9 +481,13 @@
         #f
         (build-index! new-log-path new-idx-path)))
 
+  ;; W3 cutover: the forked session re-opens the no-follow root capability.
+  (define new-repo (open-session-repository* base-dir))
+
   (define new-sess
     (make-session-struct #:id new-id
                          #:dir new-dir
+                         #:repository new-repo
                          #:provider (agent-session-provider sess)
                          #:tool-registry (agent-session-tool-registry sess)
                          #:event-bus (agent-session-event-bus sess)
@@ -538,7 +566,13 @@
   ;; v0.99.20 W3 (§3.4): Stop auto-reload watcher on session teardown.
   ;; Idempotent: safe no-op when watcher was never started.
   (with-handlers ([exn:fail? (lambda (_) (void))])
-    (stop-registry-watcher!)))
+    (stop-registry-watcher!))
+  ;; W3 (#8767): Release the no-follow root capability on session teardown
+  ;; so the held root descriptor (fd) does not leak across sessions.
+  (with-handlers ([exn:fail? (lambda (_) (void))])
+    (define repo (agent-session-repository sess))
+    (when repo
+      (close-session-repository! repo))))
 
 ;; ============================================================
 ;; Re-exported from extracted sub-modules
