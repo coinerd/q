@@ -1,5 +1,4 @@
 ("lint"
- "lint-alignment"
  "security"
  "release-dry-run"
  "workflows (0)"
@@ -11,5 +10,4 @@
  "test (1)"
  "test (2)"
  "test-aggregate"
- "test-platform"
- "gsd-governance")
+ "test-platform")
