@@ -85,55 +85,46 @@ jobs:
         run: racket scripts/check-lint-alignment.rkt
 
   # ────────────────────────────────────────────────────────────
-  # Gate 2: Test matrix — depends on lint passing
+  # Gate 2: Sharded test suite — 3 parallel shards on ubuntu
+  # Replaces the old single-job full-suite + redundant inter-wave-gate.
+  # All 1039+ fast tests still run; sharding cuts wall-clock 3×.
   # ────────────────────────────────────────────────────────────
   test:
     needs: lint
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-latest
-            racket-version: '8.10'
-          - os: ubuntu-latest
-            racket-version: '8.11'
-          - os: macos-latest
-            racket-version: '8.10'
-    runs-on: ${{ matrix.os }}
+        shard: [0, 1, 2]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - name: Cache Racket packages
         uses: actions/cache@v6
         with:
-          path: |
-            ~/.local/share/racket
-            ~/Library/Racket
-          key: racket-pkgs-${{ matrix.os }}-${{ matrix.racket-version }}-${{ hashFiles('**/info.rkt') }}
-          restore-keys: |
-            racket-pkgs-${{ matrix.os }}-${{ matrix.racket-version }}-
-            racket-pkgs-${{ matrix.os }}-
+          path: ~/.local/share/racket
+          key: racket-pkgs-test-${{ hashFiles('**/info.rkt') }}
+          restore-keys: racket-pkgs-test-
       - uses: ./.github/actions/setup-racket
         with:
-          racket-version: ${{ github.event.inputs.racket-version || matrix.racket-version }}
+          racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
 
       - name: Clear stale bytecode
         run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true
 
-      - name: Compile gate (all test modules)
-        run: |
-          # Pre-compile shared dependencies to avoid parallel compilation races
-          raco make main.rkt
-          # Now compile all test modules in parallel (shared deps already cached)
-          find tests -name '*.rkt' -not -path '*/compiled/*' -print0 \
-            | xargs -0 -n 1 -P 4 raco make
+      - name: Compile gate (shared deps)
+        run: raco make main.rkt
 
-      - name: Run tests
-        run: STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt --suite fast --jobs 4 2>&1 | tee test-output.log
+      - name: Run test shard ${{ matrix.shard }}/3
+        run: |
+          STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
+            --suite fast --jobs 4 \
+            --shard-index ${{ matrix.shard }} --shard-total 3 \
+            2>&1 | tee test-output.log
 
       - name: Test failure summary
         if: failure()
         run: |
-          echo "## Test Failures" >> $GITHUB_STEP_SUMMARY
+          echo "## Test Shard ${{ matrix.shard }} Failures" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           grep -A 4 'FAILURE\|ERROR' test-output.log >> $GITHUB_STEP_SUMMARY || true
           echo '```' >> $GITHUB_STEP_SUMMARY
@@ -142,12 +133,108 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: test-output-${{ matrix.os }}-${{ matrix.racket-version }}
+          name: test-shard-${{ matrix.shard }}
           path: test-output.log
           retention-days: 7
 
   # ────────────────────────────────────────────────────────────
-  # Gate 2b: Security tier — sandbox/permission/safe-mode tests
+  # Gate 2b: Test aggregate — required gate that all shards passed
+  # ────────────────────────────────────────────────────────────
+  test-aggregate:
+    needs: [test, test-platform]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "All test shards and platform checks passed."
+
+  # ────────────────────────────────────────────────────────────
+  # Gate 2c: macOS platform-cross verification (~5 min, not 66 min)
+  # Runs only the curated platform-sensitive tests on macOS instead
+  # of the full 1039-file fast suite.
+  # ────────────────────────────────────────────────────────────
+  test-platform:
+    needs: lint
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Cache Racket packages
+        uses: actions/cache@v6
+        with:
+          path: ~/Library/Racket
+          key: racket-pkgs-platform-macos-${{ hashFiles('**/info.rkt') }}
+          restore-keys: racket-pkgs-platform-macos-
+      - uses: ./.github/actions/setup-racket
+        with:
+          racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
+
+      - name: Clear stale bytecode
+        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true
+
+      - name: Compile gate
+        run: raco make main.rkt
+
+      - name: Run platform-cross suite
+        run: |
+          STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
+            --suite platform --jobs 4 \
+            2>&1 | tee test-output.log
+
+      - name: Platform failure summary
+        if: failure()
+        run: |
+          echo "## Platform Test Failures" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          grep -A 4 'FAILURE\|ERROR' test-output.log >> $GITHUB_STEP_SUMMARY || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload platform test log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-platform-macos
+          path: test-output.log
+          retention-days: 7
+
+  # ────────────────────────────────────────────────────────────
+  # Gate 2d: Racket 8.11 cross-version check (main push only)
+  # ────────────────────────────────────────────────────────────
+  test-cross-version:
+    if: github.event_name == 'push'
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Cache Racket packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.local/share/racket
+          key: racket-pkgs-cross-811-${{ hashFiles('**/info.rkt') }}
+          restore-keys: racket-pkgs-cross-811-
+      - uses: ./.github/actions/setup-racket
+        with:
+          racket-version: '8.11'
+
+      - name: Clear stale bytecode
+        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true
+
+      - name: Compile gate
+        run: raco make main.rkt
+
+      - name: Run fast suite (Racket 8.11)
+        run: |
+          STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
+            --suite fast --jobs 4 \
+            2>&1 | tee test-output.log
+
+      - name: Upload cross-version test log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-cross-version-811
+          path: test-output.log
+          retention-days: 7
+
+  # ────────────────────────────────────────────────────────────
+  # Gate 3: Security tier — sandbox/permission/safe-mode tests
   # ────────────────────────────────────────────────────────────
   security:
     needs: lint
@@ -167,8 +254,8 @@ jobs:
       - name: Clear stale bytecode
         run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true
 
-      - name: Run security test suite
-        run: STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt --suite security --sequential 2>&1 | tee test-output.log
+      - name: Run security test suite (parallel)
+        run: STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt --suite security --jobs 4 2>&1 | tee test-output.log
 
       - name: Upload security test log
         if: always()
@@ -179,7 +266,7 @@ jobs:
           retention-days: 7
 
   # ────────────────────────────────────────────────────────────
-  # Gate 3: Release dry-run — depends on lint passing
+  # Gate 4: Release dry-run — depends on lint passing
   # ────────────────────────────────────────────────────────────
   release-dry-run:
     needs: lint
@@ -219,7 +306,7 @@ jobs:
           echo "Release notes generated ($(wc -l < /tmp/notes.md) lines)"
 
   # ────────────────────────────────────────────────────────────
-  # Gate 4: Smoke — depends on lint only (not test)
+  # Gate 5: Smoke — depends on lint only (not test)
   # ────────────────────────────────────────────────────────────
   smoke:
     needs: lint
@@ -260,34 +347,7 @@ jobs:
         run: raco test tests/test-provider-smoke.rkt
 
   # ────────────────────────────────────────────────────────────
-  # Gate 5: Inter-wave gate — fast-suite on every PR (v0.56.1)
-  # ────────────────────────────────────────────────────────────
-  inter-wave-gate:
-    needs: lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: ./.github/actions/setup-racket
-        with:
-          racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
-
-      - name: Clear stale bytecode
-        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true
-
-      - name: Fast test suite (inter-wave gate)
-        run: racket scripts/run-tests.rkt --suite fast --jobs 4 2>&1 | tee test-output.log
-
-      - name: Test failure summary
-        if: failure()
-        run: |
-          echo "## Inter-Wave Gate Failures" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          grep -A 4 'FAILURE\|ERROR' test-output.log >> $GITHUB_STEP_SUMMARY || true
-          echo '```' >> $GITHUB_STEP_SUMMARY
-
-  # ────────────────────────────────────────────────────────────
-  # Gate 5b: Workflow integration suite (v0.59.4)
-  # Provides diagnostics for integration health
+  # Gate 6: Workflow integration suite (parallel)
   # ────────────────────────────────────────────────────────────
   workflows:
     needs: lint
@@ -301,8 +361,8 @@ jobs:
       - name: Clear stale bytecode
         run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true
 
-      - name: Workflow integration suite
-        run: racket scripts/run-tests.rkt --suite workflows --sequential --timeout 60 2>&1 | tee workflow-output.log
+      - name: Workflow integration suite (parallel)
+        run: racket scripts/run-tests.rkt --suite workflows --jobs 2 --timeout 90 2>&1 | tee workflow-output.log
 
       - name: Workflow failure summary
         if: failure()
@@ -321,7 +381,7 @@ jobs:
           retention-days: 7
 
   # ────────────────────────────────────────────────────────────
-  # Gate 5c: GSD wave evidence (current protected wave)
+  # Gate 7: GSD wave evidence (current protected wave)
   # Every PR must add exactly one machine-checkable wave record. Pushes to
   # main revalidate the latest retained record.
   # ────────────────────────────────────────────────────────────
@@ -371,7 +431,7 @@ jobs:
             --policy scripts/required-pr-checks.policy
 
   # ────────────────────────────────────────────────────────────
-  # Gate 6: Release-readiness check (v0.56.1)
+  # Gate 8: Release-readiness check (tag pushes only)
   # ────────────────────────────────────────────────────────────
   release-readiness:
     if: startsWith(github.ref, 'refs/tags/v')
