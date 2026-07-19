@@ -148,7 +148,8 @@
                        0
                        #f
                        #f
-                       (make-lifecycle-state)))
+                       (make-lifecycle-state)
+                       #f))
       (define state-box (box (make-gui-state)))
       (define lock (make-semaphore 1))
       (check-true (try-extension-dispatch mock-sess state-box lock "/test-new-session"))
@@ -184,7 +185,8 @@
                        0
                        #f
                        #f
-                       (make-lifecycle-state)))
+                       (make-lifecycle-state)
+                       #f))
       (define state-box (box (make-gui-state)))
       (define lock (make-semaphore 1))
       (check-true (try-extension-dispatch mock-sess state-box lock "/test-submit"))

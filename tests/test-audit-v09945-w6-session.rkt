@@ -83,7 +83,9 @@
                  (current-seconds) ; start-time
                  '() ; pending-entries
                  'medium ; thinking-level
-                 (make-test-lifecycle-state))) ; lifecycle
+                 (make-test-lifecycle-state) ; lifecycle
+                 #f ; repository (W3)
+                 ))
 
 (define (make-test-config [overrides '()])
   (define base

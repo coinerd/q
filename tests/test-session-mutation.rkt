@@ -35,7 +35,9 @@
                  (current-seconds) ; start-time
                  '() ; pending-entries
                  'medium ; thinking-level
-                 (make-lifecycle-state))) ; lifecycle
+                 (make-lifecycle-state) ; lifecycle
+                 #f ; repository (W3)
+                 ))
 
 ;; W-04: prompt-running? transition guards
 

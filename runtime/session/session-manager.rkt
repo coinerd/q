@@ -17,6 +17,7 @@
          racket/file
          racket/path
          "session-store.rkt"
+         "session-repository.rkt"
          (only-in "../../util/message/message.rkt" message?)
          (only-in "../../util/error/errors.rkt" raise-session-error)
          "session-path.rkt")
@@ -36,17 +37,25 @@
                        [in-memory-load (-> in-memory-session-manager? string? list?)]
                        [in-memory-list-sessions (-> in-memory-session-manager? (listof string?))]
                        [in-memory-fork!
-                        (->* (in-memory-session-manager? string? string?) (string?) string?)]))
+                        (->* (in-memory-session-manager? string? string?) (string?) string?)])
+         persistent-session-manager-base-dir
+         persistent-session-manager-repository)
 
 ;; ============================================================
 ;; Persistent session manager — wraps file-backed session-store
 ;; ============================================================
 
-(struct persistent-session-manager (base-dir) #:transparent)
+(struct persistent-session-manager (base-dir repository) #:transparent)
 
 (define (make-persistent-session-manager base-dir)
   (make-directory* base-dir)
-  (persistent-session-manager base-dir))
+  ;; W3 cutover: open the no-follow root capability. Falls back to #f on any
+  ;; failure (unsupported backend / swapped root) so the manager degrades to
+  ;; path-based persistence rather than escaping.
+  (define repo
+    (with-handlers ([exn:fail? (lambda (_) #f)])
+      (and (repository-backend-supported?) (make-session-repository base-dir))))
+  (persistent-session-manager base-dir repo))
 
 ;; Unified dispatch: check type and delegate
 
@@ -64,13 +73,18 @@
   (cond
     [(persistent-session-manager? mgr)
      (define base (persistent-session-manager-base-dir mgr))
-     (define dir (resolve-session-path base session-id))
-     (define log-path (resolve-session-path base session-id "session.jsonl"))
-     ;; append-entry! uses this write-ahead sidecar internally; validate it at
-     ;; the same containment boundary before any directory or file effect.
-     (resolve-session-path base session-id "session.jsonl.pending")
-     (make-directory* dir)
-     (append-entry! log-path msg)]
+     (define repo (persistent-session-manager-repository mgr))
+     (cond
+       ;; W3 cutover: route through the no-follow repository capability.
+       [repo (repository-append-event! repo session-id msg)]
+       [else
+        (define dir (resolve-session-path base session-id))
+        (define log-path (resolve-session-path base session-id "session.jsonl"))
+        ;; append-entry! uses this write-ahead sidecar internally; validate it at
+        ;; the same containment boundary before any directory or file effect.
+        (resolve-session-path base session-id "session.jsonl.pending")
+        (make-directory* dir)
+        (append-entry! log-path msg)])]
     [(in-memory-session-manager? mgr) (in-memory-append! mgr session-id msg)]
     [else (raise-session-error (format "not a session manager: ~a" mgr) #f)]))
 
@@ -107,9 +121,13 @@
   (cond
     [(persistent-session-manager? mgr)
      (define base (persistent-session-manager-base-dir mgr))
-     (define src-path (resolve-session-path base src-id "session.jsonl"))
-     (define dest-path (resolve-session-path base dest-id "session.jsonl"))
-     ;; fork-session! loads and validates the source before creating the destination.
-     (fork-session! src-path entry-id dest-path)]
+     (define repo (persistent-session-manager-repository mgr))
+     (cond
+       [repo (repository-fork-event-log! repo src-id dest-id entry-id)]
+       [else
+        (define src-path (resolve-session-path base src-id "session.jsonl"))
+        (define dest-path (resolve-session-path base dest-id "session.jsonl"))
+        ;; fork-session! loads and validates the source before creating the destination.
+        (fork-session! src-path entry-id dest-path)])]
     [(in-memory-session-manager? mgr) (in-memory-fork! mgr src-id dest-id entry-id)]
     [else (raise-session-error (format "not a session manager: ~a" mgr) #f)]))

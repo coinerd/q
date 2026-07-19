@@ -41,13 +41,15 @@
                  (current-seconds)
                  '() ; pending-entries
                  'off ; thinking-level
-                 (make-lifecycle-state)))
+                 (make-lifecycle-state)
+                 #f ; repository (W3)
+                 ))
 
-(test-case "agent-session has 16 fields"
+(test-case "agent-session has 17 fields"
   (define sess (make-test-session))
   (define vec (struct->vector sess))
   ;; struct->vector includes struct name at index 0
-  (check-equal? (vector-length vec) 17 "agent-session should have 16 fields + name slot"))
+  (check-equal? (vector-length vec) 18 "agent-session should have 17 fields + name slot"))
 
 (test-case "identity fields are accessible"
   (define sess (make-test-session))

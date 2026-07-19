@@ -9,6 +9,7 @@
 (require racket/contract
          "../../util/event/event-bus.rkt"
          "session-store.rkt"
+         "session-persistence.rkt"
          "../compaction/compactor.rkt"
          "../session-index/schema.rkt"
          "../session-index/mutations.rkt"
@@ -323,43 +324,43 @@
      #:filter (lambda (evt)
                 (member (event-ev evt) '("session.compact.requested" "compact.requested"))))
     ;; Subscribe to tool.execution.completed — infer task state
-    (subscribe! bus
-                (lambda (evt)
-                  (define payload (event-payload evt))
-                  (define tool-name (and (hash? payload) (hash-ref payload 'tool-name #f)))
-                  (when tool-name
-                    ;; v0.75.6: Accumulate tool calls for better inference
-                    (define current-recent (agent-session-recent-tool-calls sess))
-                    (define updated-recent (append current-recent (list tool-name)))
-                    ;; Keep last 10 tool calls
-                    (guarded-set-recent-tool-calls! sess
-                                                    (if (> (length updated-recent) 10)
-                                                        (list-tail updated-recent
-                                                                   (- (length updated-recent) 10))
-                                                        updated-recent))
-                    (define-values (inferred-state confidence)
-                      (infer-task-state-from-tools (agent-session-recent-tool-calls sess)))
-                    (when (and inferred-state (>= confidence (current-state-inference-threshold)))
-                      (define old-state (agent-session-task-fsm-state sess))
-                      (guarded-set-task-fsm-state! sess (fsm-state-name inferred-state))
-                      ;; v0.97.5 GAP-F: Mid-session bridge on major forward transitions
-                      (maybe-persist-mid-session! sess old-state (fsm-state-name inferred-state))
-                      ;; v0.75.6: Persist task state change
-                      (define log-path (session-log-path (agent-session-session-dir sess)))
-                      (when (file-exists? log-path)
-                        (append-task-state! log-path (fsm-state-name inferred-state)))
-                      (emit-session-event! bus
-                                           (agent-session-session-id sess)
-                                           "task.state.inferred"
-                                           (hasheq 'state
-                                                   (fsm-state-name inferred-state)
-                                                   'old-state
-                                                   old-state
-                                                   'confidence
-                                                   confidence
-                                                   'tool
-                                                   tool-name)))))
-                #:filter (lambda (evt) (equal? (event-ev evt) "tool.execution.completed")))
+    (subscribe!
+     bus
+     (lambda (evt)
+       (define payload (event-payload evt))
+       (define tool-name (and (hash? payload) (hash-ref payload 'tool-name #f)))
+       (when tool-name
+         ;; v0.75.6: Accumulate tool calls for better inference
+         (define current-recent (agent-session-recent-tool-calls sess))
+         (define updated-recent (append current-recent (list tool-name)))
+         ;; Keep last 10 tool calls
+         (guarded-set-recent-tool-calls! sess
+                                         (if (> (length updated-recent) 10)
+                                             (list-tail updated-recent (- (length updated-recent) 10))
+                                             updated-recent))
+         (define-values (inferred-state confidence)
+           (infer-task-state-from-tools (agent-session-recent-tool-calls sess)))
+         (when (and inferred-state (>= confidence (current-state-inference-threshold)))
+           (define old-state (agent-session-task-fsm-state sess))
+           (guarded-set-task-fsm-state! sess (fsm-state-name inferred-state))
+           ;; v0.97.5 GAP-F: Mid-session bridge on major forward transitions
+           (maybe-persist-mid-session! sess old-state (fsm-state-name inferred-state))
+           ;; v0.75.6: Persist task state change
+           (define log-path (session-log-path (agent-session-session-dir sess)))
+           (when (file-exists? log-path)
+             (append-session-entry! sess (make-task-state-message (fsm-state-name inferred-state))))
+           (emit-session-event! bus
+                                (agent-session-session-id sess)
+                                "task.state.inferred"
+                                (hasheq 'state
+                                        (fsm-state-name inferred-state)
+                                        'old-state
+                                        old-state
+                                        'confidence
+                                        confidence
+                                        'tool
+                                        tool-name)))))
+     #:filter (lambda (evt) (equal? (event-ev evt) "tool.execution.completed")))
     ;; Subscribe to tool.record_conclusion.completed — persist conclusion
     (subscribe! bus
                 (lambda (evt)
@@ -412,7 +413,7 @@
                     ;; Persist to log
                     (define log-path (session-log-path-for sess))
                     (when (file-exists? log-path)
-                      (append-conclusion! log-path c))
+                      (append-session-entry! sess (make-task-conclusion-message c)))
                     ;; Emit confirmation
                     (emit-session-event! bus
                                          (agent-session-session-id sess)
@@ -443,7 +444,7 @@
          ;; Persist task state change
          (define log-path (session-log-path-for sess))
          (when (file-exists? log-path)
-           (append-task-state! log-path target-sym))
+           (append-session-entry! sess (make-task-state-message target-sym)))
          (emit-session-event! bus
                               (agent-session-session-id sess)
                               "task.state.transitioned"

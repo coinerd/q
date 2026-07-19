@@ -111,8 +111,10 @@
          load-latest-goal-state
          ;; Task state persistence (v0.75.6)
          append-task-state!
+         make-task-state-message
          load-latest-task-state
          append-conclusion!
+         make-task-conclusion-message
          append-archive-marker!
          load-conclusions
          load-conclusions-archived
@@ -394,15 +396,17 @@
 ;; Task state & conclusion persistence (v0.75.6)
 ;; ============================================================
 
+(define (make-task-state-message state-sym)
+  (make-message (generate-id)
+                #f
+                'system
+                'task-state
+                (list (make-text-part (symbol->string state-sym)))
+                (current-seconds)
+                (hasheq)))
+
 (define (append-task-state! path state-sym)
-  (append-entry! path
-                 (make-message (generate-id)
-                               #f
-                               'system
-                               'task-state
-                               (list (make-text-part (symbol->string state-sym)))
-                               (current-seconds)
-                               (hasheq))))
+  (append-entry! path (make-task-state-message state-sym)))
 
 (define (load-latest-task-state path)
   (define entries (load-session-log path))
@@ -431,16 +435,18 @@
                     v)]
               [else v]))))
 
-(define (append-conclusion! path conclusion)
+(define (make-task-conclusion-message conclusion)
   (define json-safe (conclusion-hash->json-safe (conclusion->hash conclusion)))
-  (append-entry! path
-                 (make-message (generate-id)
-                               #f
-                               'system
-                               'task-conclusion
-                               (list (make-text-part (jsexpr->string json-safe)))
-                               (current-seconds)
-                               (hasheq))))
+  (make-message (generate-id)
+                #f
+                'system
+                'task-conclusion
+                (list (make-text-part (jsexpr->string json-safe)))
+                (current-seconds)
+                (hasheq)))
+
+(define (append-conclusion! path conclusion)
+  (append-entry! path (make-task-conclusion-message conclusion)))
 
 (define (load-conclusions path)
   (define entries (load-session-log path))
