@@ -282,6 +282,14 @@
 ;; Validate, consume, and execute as one lifecycle-atomic operation. Teardown
 ;; cannot revoke or replace the issuing frontend between grant consumption and
 ;; entry into the exact committed execution.
+;;
+;; INVARIANT: registry-sem is held for the entire thunk (including child
+;; execution). Racket semaphores are non-reentrant: the executed thunk and
+;; everything it calls must NEVER call back into this module (registration,
+;; decision, pending checks, cancellation, grant operations). Violating this
+;; invariant self-deadlocks. Concurrent approval operations block until the
+;; thunk returns; this serialization is the price of atomic consume+execute
+;; and is intentional.
 (define (call-with-approval-grant grant digest thunk)
   (call-with-semaphore registry-sem
                        (lambda ()
