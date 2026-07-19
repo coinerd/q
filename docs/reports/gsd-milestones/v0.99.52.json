@@ -9,7 +9,7 @@
     { "id": "W1", "status": "complete", "criteria": [{ "id": "W1-digest-bound-approval", "met": true, "evidence-digest": "91e78141fbe1d409e02c7c8f91ef87924541c99a0a3d17dc828e739d555ec9ff" }] },
     { "id": "W2", "status": "complete", "criteria": [{ "id": "W2-atomic-session-filesystem", "met": true, "evidence-digest": "0c81543d7b9e5ba04cb9fa4bbe8981a8681c0045730d6a635856fdd57b576adb" }] },
     { "id": "W3", "status": "complete", "criteria": [{ "id": "W3-atomic-session-cutover", "met": true, "evidence-digest": "edf96269b65dcb62f5de0f66b3333afb69f6e4a6de1290cc9bc964c8fdcd089a" }] },
-    { "id": "W4", "status": "planned", "criteria": [{ "id": "W4-release-truth", "met": false, "evidence-digest": null }] },
+    { "id": "W4", "status": "complete", "criteria": [{ "id": "W4-compact-gui-metadata-truth", "met": true, "evidence-digest": "340833c6ec80dc86d7e4473fd6a5ded89d48d69f1259c30abb4b377c44ff5b0a" }] },
     { "id": "W5", "status": "planned", "criteria": [{ "id": "W5-compaction", "met": false, "evidence-digest": null }] },
     { "id": "W6", "status": "planned", "criteria": [{ "id": "W6-distributed-execution", "met": false, "evidence-digest": null }] },
     { "id": "W7", "status": "planned", "criteria": [{ "id": "W7-validation", "met": false, "evidence-digest": null }] },
@@ -18,7 +18,7 @@
     { "id": "W10", "status": "planned", "criteria": [{ "id": "W10-post-release-acceptance", "met": false, "evidence-digest": null }] }
   ],
   "acceptance-critical-remaining-items": [
-    "Execute planned work W4-W10 before acceptance"
+    "Execute planned work W5-W10 before acceptance"
   ],
   "review": {
     "status": "pending",
