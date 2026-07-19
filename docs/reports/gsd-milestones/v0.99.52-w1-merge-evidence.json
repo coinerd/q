@@ -1,0 +1,23 @@
+{
+  "schema": "q.gsd-wave-merge-evidence/v1",
+  "milestone": 838,
+  "wave": "W1",
+  "issue": 8765,
+  "pull-request": 8778,
+  "reviewed-source-sha": "3dbd624c283be04358ca5aa0b37829c5fb709ced",
+  "attested-pr-head-sha": "1b39fecdea291af3273d3480f404bc957b52e1d4",
+  "content-digest": "3f7f35d0f22b8c4f4959371bc591bf3a5c2e9b6531d1664c99215ef7585563a4",
+  "pr-ci-run": 29676219211,
+  "pr-required-checks": 12,
+  "pr-required-checks-conclusion": "success",
+  "merge-commit-sha": "1234d456bcfa9b2315321fc20d2124ab52d6bec9",
+  "merged-at": "2026-07-19T07:27:54Z",
+  "main-ci-run": 29678148866,
+  "main-ci-event": "push",
+  "main-ci-head-sha": "1234d456bcfa9b2315321fc20d2124ab52d6bec9",
+  "main-ci-attempt": 1,
+  "main-ci-conclusion": "success",
+  "independent-review": "docs/reports/gsd-wave-reviews/v0.99.52-w1.rktd",
+  "validation": "docs/reports/gsd-wave-validation/v0.99.52-w1.rktd",
+  "noncritical-finding": 8775
+}

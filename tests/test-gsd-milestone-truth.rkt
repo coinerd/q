@@ -19,6 +19,9 @@
 (define-runtime-path current-w0-evidence
                      "../docs/reports/gsd-milestones/v0.99.52-w0-merge-evidence.json")
 (define current-w0-evidence-digest "3843bcb5520469fb4f3749b714043b78bf1a1d301d95d3adeb41b78d7d414661")
+(define-runtime-path current-w1-evidence
+                     "../docs/reports/gsd-milestones/v0.99.52-w1-merge-evidence.json")
+(define current-w1-evidence-digest "91e78141fbe1d409e02c7c8f91ef87924541c99a0a3d17dc828e739d555ec9ff")
 (define-runtime-path historical-fixture "../docs/reports/gsd-milestones/v0.99.51-historical.json")
 (define historical-fixture-digest "f6e409f9a9757ddc68d442667e86f58673f824d60dbc9be13ca0e86def6a2ba3")
 (define-runtime-path schema-fixture "../docs/reports/gsd-milestones/v0.99.52.schema.json")
@@ -320,7 +323,7 @@
 ;; Fixtures and integration --------------------------------------------------
 
 (define current-criterion-ids
-  '("W0-milestone-truth-remediation" "W1-session-cancellation"
+  '("W0-milestone-truth-remediation" "W1-digest-bound-approval"
                                      "W2-credentials"
                                      "W3-context"
                                      "W4-release-truth"
@@ -332,47 +335,50 @@
                                      "W10-post-release-acceptance"))
 
 (define independently-modeled-current
-  (hash "schema-version"
-        1
-        "milestone"
-        "v0.99.52"
-        "release-mechanics"
-        "planned"
-        "release-evidence"
-        '()
-        "substantive-acceptance"
-        "in-progress"
-        "work-items"
-        (for/list ([id (in-list current-criterion-ids)]
-                   [i (in-range 11)])
-          (hash "id"
-                (format "W~a" i)
-                "status"
-                (if (zero? i) "complete" "planned")
-                "criteria"
-                (list (if (zero? i)
-                          (hash "id" id "met" #t "evidence-digest" current-w0-evidence-digest)
-                          (make-criterion id #f)))))
-        "acceptance-critical-remaining-items"
-        '("Execute planned work W1-W10 before acceptance")
-        "review"
-        (hash "status" "pending" "independent" #f "evidence-digest" 'null)
-        "validation"
-        (hash "status" "pending" "evidence-digest" 'null)))
+  (hash
+   "schema-version"
+   1
+   "milestone"
+   "v0.99.52"
+   "release-mechanics"
+   "planned"
+   "release-evidence"
+   '()
+   "substantive-acceptance"
+   "in-progress"
+   "work-items"
+   (for/list ([id (in-list current-criterion-ids)]
+              [i (in-range 11)])
+     (hash "id"
+           (format "W~a" i)
+           "status"
+           (if (< i 2) "complete" "planned")
+           "criteria"
+           (list (cond
+                   [(zero? i) (hash "id" id "met" #t "evidence-digest" current-w0-evidence-digest)]
+                   [(= i 1) (hash "id" id "met" #t "evidence-digest" current-w1-evidence-digest)]
+                   [else (make-criterion id #f)]))))
+   "acceptance-critical-remaining-items"
+   '("Execute planned work W2-W10 before acceptance")
+   "review"
+   (hash "status" "pending" "independent" #f "evidence-digest" 'null)
+   "validation"
+   (hash "status" "pending" "evidence-digest" 'null)))
 
 (define independently-supplied-current-digest
   ;; This digest is produced from the separately modeled expected projection,
   ;; never by reading current-fixture (the integration subject).
   (canonical-json-sha256 independently-modeled-current))
 
-(test-case "v0.99.52 truthfully records completed W0 and planned W1-W10"
+(test-case "v0.99.52 truthfully records completed W0-W1 and planned W2-W10"
   (define document (strict-json-read-file current-fixture))
   (check-equal? (sha256-file current-w0-evidence) current-w0-evidence-digest)
+  (check-equal? (sha256-file current-w1-evidence) current-w1-evidence-digest)
   (check-equal? document independently-modeled-current)
   (define result (evaluate-milestone-file current-fixture independently-supplied-current-digest))
   (check-equal? (hash-ref document "milestone") "v0.99.52")
   (check-equal? (map (lambda (item) (hash-ref item "status")) (hash-ref document "work-items"))
-                (cons "complete" (make-list 10 "planned")))
+                (append (make-list 2 "complete") (make-list 9 "planned")))
   (check-equal? (milestone-truth-derived-release-mechanics result) "planned")
   (check-equal? (milestone-truth-derived-substantive-acceptance result) "in-progress")
   (check-true (milestone-truth-digest-matches? result))
