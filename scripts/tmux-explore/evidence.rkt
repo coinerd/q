@@ -75,7 +75,9 @@
                                  #:repo-sha repo-sha
                                  #:version version
                                  #:output-dir output-dir
-                                 #:scenario-count scenario-count)
+                                 #:scenario-count scenario-count
+                                 #:step-count [step-count #f]
+                                 #:step-digests [step-digests '()])
   (define files (list-artifact-files output-dir))
   (define digest (compute-directory-digest files))
   (define artifacts
@@ -99,6 +101,10 @@
           (length artifacts)
           'scenario-count
           scenario-count
+          'step-count
+          (or step-count (length step-digests))
+          'step-digests
+          step-digests
           'artifacts
           artifacts
           'timestamp

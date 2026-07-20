@@ -11,7 +11,19 @@
 
 (provide required-scenario-tags
          (struct-out verification-result)
-         verify-scenario-evidence)
+         verify-scenario-evidence
+         step-terminal-event?
+         phase=?
+         completion-event?
+         verify-memory
+         verify-gsd
+         verify-mas
+         verify-tools
+         verify-release-audit
+         verify-durable-memory
+         verify-resume
+         verify-compact
+         verify-interrupt)
 
 (define required-scenario-tags
   '("memory" "gsd" "mas" "tools" "release-audit" "durable-memory" "resume" "compact" "interrupt"))
@@ -130,6 +142,45 @@
        (for/and ([a (in-list indexes)]
                  [b (in-list (cdr indexes))])
          (< a b))))
+
+(define (step-terminal-event? tag events baseline-count turn-id)
+  (define step-events
+    (if (> (length events) baseline-count)
+        (drop events baseline-count)
+        '()))
+  ;; F-08: Reject if pre-baseline history contains turn.completed for other turns
+  (define pre-baseline-events
+    (if (> baseline-count 0)
+        (take events baseline-count)
+        '()))
+  (define stale-other-turn-completion?
+    (ormap (lambda (e) (and (completion-event? e) (not (same-value? (event-turn e) turn-id))))
+           pre-baseline-events))
+  (define candidates
+    (if stale-other-turn-completion?
+        '()
+        (if (string=? tag "compact")
+            (filter (lambda (e)
+                      (member (event-phase e)
+                              '("session.compact.completed" "session.compact.nothing-to-compact"
+                                                            "session.compact.already-running"
+                                                            "session.compact.failed")))
+                    step-events)
+            (let ([turn-started-in-step? (ormap (lambda (e)
+                                                  (and (string=? (event-phase e) "turn.started")
+                                                       (same-value? (event-turn e) turn-id)))
+                                                step-events)])
+              (if (not turn-started-in-step?)
+                  '()
+                  (let ([completions-for-turn (filter (lambda (e)
+                                                        (and (completion-event? e)
+                                                             (same-value? (event-turn e) turn-id)
+                                                             (event-session e)))
+                                                      step-events)])
+                    (if (= (length completions-for-turn) 1)
+                        completions-for-turn
+                        '())))))))
+  (and (pair? candidates) (car (reverse candidates))))
 
 (define (verify-memory events completion)
   (for/or ([event (in-list (events-with-phase events "memory.retrieval.performed"))])

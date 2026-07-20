@@ -24,6 +24,7 @@
          "tmux-explore/verifiers.rkt")
 
 (provide (struct-out explore-scenario)
+         (struct-out explore-step)
          (struct-out explore-result)
          scenario-registry
          find-scenarios
@@ -40,68 +41,129 @@
          exploration-exit-code
          print-scenario-list)
 
-(struct explore-scenario (tag title description prompt expected-status real-tools?) #:transparent)
+(struct explore-step (id prompt expected-phases tool-expectations approval-expectations)
+  #:transparent)
+(struct explore-scenario (tag title description steps expected-status real-tools?) #:transparent)
 (struct explore-result
         (tag title mode status classification report-path evidence started-at completed-at)
   #:transparent)
 
 (define scenario-registry
   (list
-   (explore-scenario "memory"
-                     "Memory/context"
-                     "Session-context recall and context-source truthfulness."
-                     "Remember that the codename is blue-harbor, then identify its source."
-                     'pass-mock-tui
-                     #f)
-   (explore-scenario "gsd"
-                     "GSD planning"
-                     "Wave planning with explicit gate evidence and no fabricated PASS."
-                     "Create W0/W1 plan and revise it for red CI without claiming unverified PASS."
-                     'pass-mock-tui
-                     #f)
-   (explore-scenario "mas"
-                     "MAS/subagents"
-                     "Subagent-oriented review scenario; W6 adds lifecycle-event proof."
-                     "Use subagents or explain their unavailability, then aggregate results."
-                     'pass-mock-tui-with-caveat
-                     #f)
-   (explore-scenario "tools"
-                     "Tools/approval"
-                     "Read-only tool scenario over README_FIXTURE_ALPHA."
-                     "Inspect README.md only and report whether README_FIXTURE_ALPHA is present."
-                     'pass-mock-tui
-                     #t)
-   (explore-scenario "release-audit"
-                     "Release/audit truth"
-                     "Release authorization refusal without live CI/release evidence."
-                     "Decide whether release is authorized when no live CI evidence is available."
-                     'pass-mock-tui-partial
-                     #f)
    (explore-scenario
-    "durable-memory"
-    "Durable memory restart"
-    "Store, resume, and retrieve one correlated durable-memory item."
-    "Persist the codename amber-quay, restart the session, and retrieve it without restating it."
+    "memory"
+    "Memory/context"
+    "Session-context recall and context-source truthfulness."
+    (list (explore-step "memory-0"
+                        "Remember that the codename is blue-harbor, then identify its source."
+                        '("turn.started" "memory.item.stored" "turn.completed")
+                        '()
+                        '()))
+    'pass-mock-tui
+    #f)
+   (explore-scenario
+    "gsd"
+    "GSD planning"
+    "Wave planning with explicit gate evidence and no fabricated PASS."
+    (list (explore-step
+           "gsd-0"
+           "Create W0/W1 plan and revise it for red CI without claiming unverified PASS."
+           '("turn.started" "gsd.transition.attempted" "gsd.transition.succeeded" "turn.completed")
+           '()
+           '()))
+    'pass-mock-tui
+    #f)
+   (explore-scenario
+    "mas"
+    "MAS/subagents"
+    "Subagent-oriented review scenario; W6 adds lifecycle-event proof."
+    (list (explore-step "mas-0"
+                        "Use subagents or explain their unavailability, then aggregate results."
+                        '("turn.started" "mas.spawn-approval-requested"
+                                         "mas.spawn-approval-terminal"
+                                         "tool.execution.correlated-completed"
+                                         "turn.completed")
+                        '()
+                        '()))
     'pass-mock-tui-with-caveat
     #f)
-   (explore-scenario "resume"
-                     "Session resume"
-                     "Resume the exact persisted session with structured continuity evidence."
-                     "Resume this session and report the prior session identifier."
+   (explore-scenario
+    "tools"
+    "Tools/approval"
+    "Read-only tool scenario over README_FIXTURE_ALPHA."
+    (list (explore-step "tools-0"
+                        "Inspect README.md only and report whether README_FIXTURE_ALPHA is present."
+                        '("turn.started" "tool.execution.started"
+                                         "tool.execution.correlated-completed"
+                                         "turn.completed")
+                        '("read")
+                        '()))
+    'pass-mock-tui
+    #t)
+   (explore-scenario
+    "release-audit"
+    "Release/audit truth"
+    "Release authorization refusal without live CI/release evidence."
+    (list (explore-step "release-audit-0"
+                        "Decide whether release is authorized when no live CI evidence is available."
+                        '("turn.started" "turn.completed")
+                        '()
+                        '()))
+    'pass-mock-tui-partial
+    #f)
+   (explore-scenario "durable-memory"
+                     "Durable memory restart"
+                     "Store, resume, and retrieve one correlated durable-memory item."
+                     (list (explore-step "durable-memory-0"
+                                         "Persist the codename amber-quay."
+                                         '("turn.started" "memory.item.stored" "turn.completed")
+                                         '()
+                                         '())
+                           (explore-step "durable-memory-1"
+                                         "Restart the session and retrieve it without restating it."
+                                         '("session.started" "memory.retrieval.performed"
+                                                             "turn.completed")
+                                         '()
+                                         '()))
                      'pass-mock-tui-with-caveat
                      #f)
+   (explore-scenario
+    "resume"
+    "Session resume"
+    "Resume the exact persisted session with structured continuity evidence."
+    (list (explore-step "resume-0"
+                        "Resume this session and report the prior session identifier."
+                        '("session.started" "session.resumed" "turn.completed")
+                        '()
+                        '()))
+    'pass-mock-tui-with-caveat
+    #f)
    (explore-scenario "compact"
                      "Durable compaction"
                      "Run compaction and require a terminal persisted lifecycle event."
-                     "/compact"
+                     (list (explore-step "compact-0"
+                                         "/compact"
+                                         '("session.compact.requested" "session.compact.started"
+                                                                       "session.compact.completed")
+                                         '()
+                                         '()))
                      'pass-mock-tui-with-caveat
                      #f)
-   (explore-scenario "interrupt"
-                     "Functional interruption"
-                     "Cancel one active turn, observe correlated acknowledgement, then recover."
-                     "Produce a detailed multi-section explanation of cooperative cancellation."
-                     'pass-mock-tui-with-caveat
-                     #f)))
+   (explore-scenario
+    "interrupt"
+    "Functional interruption"
+    "Cancel one active turn, observe correlated acknowledgement, then recover."
+    (list (explore-step "interrupt-0"
+                        "Produce a detailed multi-section explanation of cooperative cancellation."
+                        '("turn.started" "interrupt.requested"
+                                         "interrupt.accepted"
+                                         "turn.cancelled"
+                                         "turn.started"
+                                         "turn.completed")
+                        '()
+                        '()))
+    'pass-mock-tui-with-caveat
+    #f)))
 
 (define (valid-mode? mode)
   (member mode '(mock real)))
@@ -189,6 +251,11 @@
        ("truth" . "trace evidence required, not prose")
        ("reporting" . "W9: render-bundle-index-markdown generates structured summary table"))]
     [else '(("completion" . "mock turn completed"))]))
+
+(define (scenario-mock-evidence scenario)
+  (define base (scenario->mock-evidence scenario))
+  (define steps (explore-scenario-steps scenario))
+  (cons (cons 'step-order (map explore-step-id steps)) base))
 
 (define (scenario-status mode scenario)
   (cond
@@ -311,8 +378,13 @@
                          #:exists 'append))
 
 (define (default-real-executor scenario root)
+  (define steps (explore-scenario-steps scenario))
+  (define first-prompt
+    (if (null? steps)
+        ""
+        (explore-step-prompt (car steps))))
   (run-real-scenario (explore-scenario-tag scenario)
-                     (explore-scenario-prompt scenario)
+                     first-prompt
                      root
                      #:tools? (explore-scenario-real-tools? scenario)))
 
@@ -355,7 +427,7 @@
                        (scenario-classification status)
                        #f
                        (cons '("evidence-source" . "deterministic mock; never valid for real PASS")
-                             (scenario->mock-evidence scenario))
+                             (scenario-mock-evidence scenario))
                        started
                        (timestamp))]
       [else
