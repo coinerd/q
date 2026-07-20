@@ -17,6 +17,7 @@
 
 (provide sha256-file
          compute-directory-digest
+         list-artifact-files
          build-evidence-manifest
          write-evidence-manifest!
          verify-evidence-manifest
