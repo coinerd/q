@@ -175,6 +175,7 @@
 
 (define semver-rx #px"^[0-9]+\\.[0-9]+\\.[0-9]+$")
 (define sha256-rx #px"^[0-9a-fA-F]{64}$")
+(define full-sha-rx #px"^[0-9a-f]{40}$")
 
 (define (validate-manifest m)
   (define errors '())
@@ -185,6 +186,13 @@
     (set! errors (cons (format "tag must start with 'v', got: ~a" (manifest-tag m)) errors)))
   (unless (string? (manifest-commit m))
     (set! errors (cons "commit must be a string" errors)))
+  ;; F-15 (#8772): Reject short/non-full commit SHA
+  (when (and (string? (manifest-commit m)) (not (regexp-match? full-sha-rx (manifest-commit m))))
+    (set! errors
+          (cons (format "commit SHA must be full 40 hex chars, got: ~a (length ~a)"
+                        (manifest-commit m)
+                        (string-length (manifest-commit m)))
+                errors)))
   (unless (string? (manifest-date m))
     (set! errors (cons "date must be a string" errors)))
   ;; Assets
@@ -252,6 +260,28 @@
                   (equal? (manifest-asset-name (car (manifest-assets m))) expected-tarball-name))
        (set! errors
              (cons (format "tarball name mismatch: expected ~a" expected-tarball-name) errors)))
+     ;; F-15 (#8772): Reject short/non-full commit SHA (< 40 chars)
+     (when (and (string? (manifest-commit m)) (not (regexp-match? full-sha-rx (manifest-commit m))))
+       (set! errors
+             (cons (format "commit SHA must be full 40 hex chars; got: ~a (length ~a)"
+                           (manifest-commit m)
+                           (string-length (manifest-commit m)))
+                   errors)))
+     ;; F-15 (#8772): Verify traceability fields use full SHAs
+     (define t (manifest-traceability m))
+     (when t
+       (unless (regexp-match? full-sha-rx (manifest-trace-tag-commit-sha t))
+         (set! errors
+               (cons (format "tag_commit_sha must be full 40 hex chars; got: ~a"
+                             (manifest-trace-tag-commit-sha t))
+                     errors)))
+       (unless (or (not (manifest-trace-tag-object-sha t))
+                   (equal? (manifest-trace-tag-object-sha t) #f)
+                   (regexp-match? full-sha-rx (manifest-trace-tag-object-sha t)))
+         (set! errors
+               (cons (format "tag_object_sha must be full 40 hex chars; got: ~a"
+                             (manifest-trace-tag-object-sha t))
+                     errors))))
      ;; Also run the standard manifest validation
      (define std-validation (validate-manifest m))
      (set! errors (append errors (manifest-validation-errors std-validation)))

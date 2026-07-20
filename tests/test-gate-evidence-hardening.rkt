@@ -10,6 +10,9 @@
          racket/string
          racket/runtime-path)
 
+(define full-sha "abcdef0123456789abcdef0123456789abcdef01")
+(define other-sha "fedcba9876543210fedcba9876543210fedcba98")
+
 (define-runtime-path script-path "../scripts/lint-release-readiness.rkt")
 
 (test-case "validate-gate-evidence-entry: rejects wrong git_sha"
@@ -18,7 +21,7 @@
     (validate (hasheq 'version
                       "0.99.51"
                       'git_sha
-                      "abc123"
+                      other-sha
                       'timestamp
                       (current-seconds)
                       'parsed_test_count
@@ -28,7 +31,7 @@
                       'timed_out
                       0)
               "0.99.51"
-              "def456"
+              full-sha
               (current-seconds)))
   (check-false pass?)
   (check-true (string-contains? detail "sha") detail))
@@ -40,7 +43,7 @@
     (validate (hasheq 'version
                       "0.99.51"
                       'git_sha
-                      "abc123"
+                      full-sha
                       'timestamp
                       now
                       'parsed_test_count
@@ -50,7 +53,7 @@
                       'timed_out
                       0)
               "0.99.51"
-              "abc123"
+              full-sha
               now))
   (check-false pass?)
   (check-true (string-contains? detail "fail") detail))
@@ -62,7 +65,7 @@
     (validate (hasheq 'version
                       "0.99.51"
                       'git_sha
-                      "abc123"
+                      full-sha
                       'timestamp
                       now
                       'parsed_test_count
@@ -72,7 +75,7 @@
                       'timed_out
                       1)
               "0.99.51"
-              "abc123"
+              full-sha
               now))
   (check-false pass?)
   (check-true (or (string-contains? detail "timeout") (string-contains? detail "timed")) detail))
@@ -84,7 +87,7 @@
     (validate (hasheq 'version
                       "0.99.51"
                       'git_sha
-                      "abc123"
+                      full-sha
                       'timestamp
                       now
                       'parsed_test_count
@@ -94,7 +97,7 @@
                       'timed_out
                       0)
               "0.99.51"
-              "abc123"
+              full-sha
               now))
   (check-false pass?)
   (check-true (string-contains? detail "zero") detail))
@@ -106,7 +109,7 @@
     (validate (hasheq 'version
                       "0.99.51"
                       'git_sha
-                      "abc123"
+                      full-sha
                       'timestamp
                       old-time
                       'parsed_test_count
@@ -116,7 +119,7 @@
                       'timed_out
                       0)
               "0.99.51"
-              "abc123"
+              full-sha
               (current-seconds)))
   (check-false pass?)
   (check-true (string-contains? detail "stale") detail))
@@ -128,7 +131,7 @@
     (validate (hasheq 'version
                       "0.99.51"
                       'git_sha
-                      "abc123"
+                      full-sha
                       'timestamp
                       now
                       'parsed_test_count
@@ -138,18 +141,18 @@
                       'timed_out
                       0)
               "0.99.51"
-              "abc123"
+              full-sha
               now))
   (check-true pass? detail))
 
-(test-case "validate-gate-evidence-entry: rejects wrong version"
+(test-case "validate-gate-evidence-entry: rejects short SHA (< 40 chars)"
   (define validate (dynamic-require script-path 'validate-gate-evidence-entry))
   (define now (current-seconds))
   (define-values (pass? detail)
     (validate (hasheq 'version
-                      "0.0.1"
+                      "0.99.51"
                       'git_sha
-                      "abc123"
+                      "shortsha"
                       'timestamp
                       now
                       'parsed_test_count
@@ -159,7 +162,73 @@
                       'timed_out
                       0)
               "0.99.51"
-              "abc123"
+              full-sha
+              now))
+  (check-false pass?)
+  (check-true (string-contains? detail "40") detail))
+
+(test-case "validate-gate-evidence-entry: rejects future timestamp"
+  (define validate (dynamic-require script-path 'validate-gate-evidence-entry))
+  (define future-time (+ (current-seconds) 600))
+  (define-values (pass? detail)
+    (validate (hasheq 'version
+                      "0.99.51"
+                      'git_sha
+                      full-sha
+                      'timestamp
+                      future-time
+                      'parsed_test_count
+                      10
+                      'failed
+                      0
+                      'timed_out
+                      0)
+              "0.99.51"
+              full-sha
+              (current-seconds)))
+  (check-false pass?)
+  (check-true (string-contains? detail "future") detail))
+
+(test-case "validate-gate-evidence-entry: rejects unknown sha"
+  (define validate (dynamic-require script-path 'validate-gate-evidence-entry))
+  (define now (current-seconds))
+  (define-values (pass? detail)
+    (validate (hasheq 'version
+                      "0.99.51"
+                      'git_sha
+                      "unknown"
+                      'timestamp
+                      now
+                      'parsed_test_count
+                      10
+                      'failed
+                      0
+                      'timed_out
+                      0)
+              "0.99.51"
+              full-sha
+              now))
+  (check-false pass?)
+  (check-true (string-contains? detail "unknown") detail))
+
+(test-case "validate-gate-evidence-entry: rejects wrong version"
+  (define validate (dynamic-require script-path 'validate-gate-evidence-entry))
+  (define now (current-seconds))
+  (define-values (pass? detail)
+    (validate (hasheq 'version
+                      "0.0.1"
+                      'git_sha
+                      full-sha
+                      'timestamp
+                      now
+                      'parsed_test_count
+                      10
+                      'failed
+                      0
+                      'timed_out
+                      0)
+              "0.99.51"
+              full-sha
               now))
   (check-false pass?)
   (check-true (string-contains? detail "version") detail))
