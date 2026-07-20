@@ -37,6 +37,7 @@
 (define-runtime-path current-w6-evidence
                      "../docs/reports/gsd-milestones/v0.99.52-w6-merge-evidence.json")
 (define current-w6-evidence-digest "b9d3f00d0e339de810c63d490cb47ec88faceb35e002793139c908bb98ce50fe")
+(define current-w7-evidence-digest "838d080ed7c2531c820bd41444b71b32890387e39f4e03636c987a0ada3c5298")
 (define-runtime-path historical-fixture "../docs/reports/gsd-milestones/v0.99.51-historical.json")
 (define historical-fixture-digest "f6e409f9a9757ddc68d442667e86f58673f824d60dbc9be13ca0e86def6a2ba3")
 (define-runtime-path schema-fixture "../docs/reports/gsd-milestones/v0.99.52.schema.json")
@@ -344,7 +345,7 @@
                                      "W4-compact-gui-metadata-truth"
                                      "W5-provider-native-provenance"
                                      "W6-multi-step-explorers-credential-defense"
-                                     "W7-validation"
+                                     "W7-campaign-orchestrator"
                                      "W8-review"
                                      "W9-regression"
                                      "W10-post-release-acceptance"))
@@ -367,7 +368,7 @@
      (hash "id"
            (format "W~a" i)
            "status"
-           (if (< i 7) "complete" "planned")
+           (if (< i 8) "complete" "planned")
            "criteria"
            (list (cond
                    [(zero? i) (hash "id" id "met" #t "evidence-digest" current-w0-evidence-digest)]
@@ -377,9 +378,10 @@
                    [(= i 4) (hash "id" id "met" #t "evidence-digest" current-w4-evidence-digest)]
                    [(= i 5) (hash "id" id "met" #t "evidence-digest" current-w5-evidence-digest)]
                    [(= i 6) (hash "id" id "met" #t "evidence-digest" current-w6-evidence-digest)]
+                   [(= i 7) (hash "id" id "met" #t "evidence-digest" current-w7-evidence-digest)]
                    [else (make-criterion id #f)]))))
    "acceptance-critical-remaining-items"
-   '("Execute planned work W7-W10 before acceptance")
+   '("Execute planned work W8-W10 before acceptance")
    "review"
    (hash "status" "pending" "independent" #f "evidence-digest" 'null)
    "validation"
@@ -404,7 +406,7 @@
   (define result (evaluate-milestone-file current-fixture independently-supplied-current-digest))
   (check-equal? (hash-ref document "milestone") "v0.99.52")
   (check-equal? (map (lambda (item) (hash-ref item "status")) (hash-ref document "work-items"))
-                (append (make-list 7 "complete") (make-list 4 "planned")))
+                (append (make-list 8 "complete") (make-list 3 "planned")))
   (check-equal? (milestone-truth-derived-release-mechanics result) "planned")
   (check-equal? (milestone-truth-derived-substantive-acceptance result) "in-progress")
   (check-true (milestone-truth-digest-matches? result))
