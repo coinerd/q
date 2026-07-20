@@ -1,0 +1,15 @@
+{
+  "schema-version": 1,
+  "milestone": "v0.99.52",
+  "wave": "W7",
+  "issue": 8771,
+  "primary-pr": 8805,
+  "primary-merge-sha": "9807eef31d27d96963da04dbae3a8a41062e7877",
+  "evidence-prs": [8806, 8807],
+  "final-main-sha": "e5dd355ba37ef8705aaa7f50aa7a650c5d14eb39",
+  "final-main-ci": 29778616849,
+  "final-gsd-governance-pass": true,
+  "content-digest": "838d080ed7c2531c820bd41444b71b32890387e39f4e03636c987a0ada3c5298",
+  "empty-digest-attestation": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "accepted-at": "2026-07-20T20:20:00Z"
+}
