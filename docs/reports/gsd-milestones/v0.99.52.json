@@ -10,15 +10,15 @@
     { "id": "W2", "status": "complete", "criteria": [{ "id": "W2-atomic-session-filesystem", "met": true, "evidence-digest": "0c81543d7b9e5ba04cb9fa4bbe8981a8681c0045730d6a635856fdd57b576adb" }] },
     { "id": "W3", "status": "complete", "criteria": [{ "id": "W3-atomic-session-cutover", "met": true, "evidence-digest": "edf96269b65dcb62f5de0f66b3333afb69f6e4a6de1290cc9bc964c8fdcd089a" }] },
     { "id": "W4", "status": "complete", "criteria": [{ "id": "W4-compact-gui-metadata-truth", "met": true, "evidence-digest": "340833c6ec80dc86d7e4473fd6a5ded89d48d69f1259c30abb4b377c44ff5b0a" }] },
-    { "id": "W5", "status": "complete", "criteria": [{ "id": "W5-compaction", "met": true, "evidence-digest": "816df11d80290efbe0b90f34c764dbe131946e319be6962b497cf16c1fec065e" }] },
-    { "id": "W6", "status": "planned", "criteria": [{ "id": "W6-distributed-execution", "met": false, "evidence-digest": null }] },
+    { "id": "W5", "status": "complete", "criteria": [{ "id": "W5-provider-native-provenance", "met": true, "evidence-digest": "816df11d80290efbe0b90f34c764dbe131946e319be6962b497cf16c1fec065e" }] },
+    { "id": "W6", "status": "complete", "criteria": [{ "id": "W6-multi-step-explorers-credential-defense", "met": true, "evidence-digest": "b9d3f00d0e339de810c63d490cb47ec88faceb35e002793139c908bb98ce50fe" }] },
     { "id": "W7", "status": "planned", "criteria": [{ "id": "W7-validation", "met": false, "evidence-digest": null }] },
     { "id": "W8", "status": "planned", "criteria": [{ "id": "W8-review", "met": false, "evidence-digest": null }] },
     { "id": "W9", "status": "planned", "criteria": [{ "id": "W9-regression", "met": false, "evidence-digest": null }] },
     { "id": "W10", "status": "planned", "criteria": [{ "id": "W10-post-release-acceptance", "met": false, "evidence-digest": null }] }
   ],
   "acceptance-critical-remaining-items": [
-    "Execute planned work W6-W10 before acceptance"
+    "Execute planned work W7-W10 before acceptance"
   ],
   "review": {
     "status": "pending",
