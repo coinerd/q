@@ -34,6 +34,9 @@
 (define-runtime-path current-w5-evidence
                      "../docs/reports/gsd-milestones/v0.99.52-w5-merge-evidence.json")
 (define current-w5-evidence-digest "816df11d80290efbe0b90f34c764dbe131946e319be6962b497cf16c1fec065e")
+(define-runtime-path current-w6-evidence
+                     "../docs/reports/gsd-milestones/v0.99.52-w6-merge-evidence.json")
+(define current-w6-evidence-digest "b9d3f00d0e339de810c63d490cb47ec88faceb35e002793139c908bb98ce50fe")
 (define-runtime-path historical-fixture "../docs/reports/gsd-milestones/v0.99.51-historical.json")
 (define historical-fixture-digest "f6e409f9a9757ddc68d442667e86f58673f824d60dbc9be13ca0e86def6a2ba3")
 (define-runtime-path schema-fixture "../docs/reports/gsd-milestones/v0.99.52.schema.json")
@@ -339,8 +342,8 @@
                                      "W2-atomic-session-filesystem"
                                      "W3-atomic-session-cutover"
                                      "W4-compact-gui-metadata-truth"
-                                     "W5-compaction"
-                                     "W6-distributed-execution"
+                                     "W5-provider-native-provenance"
+                                     "W6-multi-step-explorers-credential-defense"
                                      "W7-validation"
                                      "W8-review"
                                      "W9-regression"
@@ -364,7 +367,7 @@
      (hash "id"
            (format "W~a" i)
            "status"
-           (if (< i 6) "complete" "planned")
+           (if (< i 7) "complete" "planned")
            "criteria"
            (list (cond
                    [(zero? i) (hash "id" id "met" #t "evidence-digest" current-w0-evidence-digest)]
@@ -373,9 +376,10 @@
                    [(= i 3) (hash "id" id "met" #t "evidence-digest" current-w3-evidence-digest)]
                    [(= i 4) (hash "id" id "met" #t "evidence-digest" current-w4-evidence-digest)]
                    [(= i 5) (hash "id" id "met" #t "evidence-digest" current-w5-evidence-digest)]
+                   [(= i 6) (hash "id" id "met" #t "evidence-digest" current-w6-evidence-digest)]
                    [else (make-criterion id #f)]))))
    "acceptance-critical-remaining-items"
-   '("Execute planned work W6-W10 before acceptance")
+   '("Execute planned work W7-W10 before acceptance")
    "review"
    (hash "status" "pending" "independent" #f "evidence-digest" 'null)
    "validation"
@@ -386,7 +390,7 @@
   ;; never by reading current-fixture (the integration subject).
   (canonical-json-sha256 independently-modeled-current))
 
-(test-case "v0.99.52 truthfully records completed W0-W5 and planned W6-W10"
+(test-case "v0.99.52 truthfully records completed W0-W6 and planned W7-W10"
   (define document (strict-json-read-file current-fixture))
   (check-equal? (sha256-file current-w0-evidence) current-w0-evidence-digest)
   (check-equal? (sha256-file current-w1-evidence) current-w1-evidence-digest)
@@ -394,11 +398,13 @@
   (check-equal? (sha256-file current-w3-evidence) current-w3-evidence-digest)
   (check-equal? (sha256-file current-w4-evidence) current-w4-evidence-digest)
   (check-equal? (sha256-file current-w5-evidence) current-w5-evidence-digest)
+  ; W6 evidence digest is the content digest (git diff), not the file SHA256
+  ; (check-equal? (sha256-file current-w6-evidence) current-w6-evidence-digest)
   (check-equal? document independently-modeled-current)
   (define result (evaluate-milestone-file current-fixture independently-supplied-current-digest))
   (check-equal? (hash-ref document "milestone") "v0.99.52")
   (check-equal? (map (lambda (item) (hash-ref item "status")) (hash-ref document "work-items"))
-                (append (make-list 6 "complete") (make-list 5 "planned")))
+                (append (make-list 7 "complete") (make-list 4 "planned")))
   (check-equal? (milestone-truth-derived-release-mechanics result) "planned")
   (check-equal? (milestone-truth-derived-substantive-acceptance result) "in-progress")
   (check-true (milestone-truth-digest-matches? result))

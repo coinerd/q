@@ -1,0 +1,16 @@
+{
+  "milestone": "v0.99.52",
+  "wave": "W6",
+  "issue": 8770,
+  "tracker": 8763,
+  "pr": 8801,
+  "merge_sha": "65195e2c64b82276d4c96ccfc712c588fd37c352",
+  "merge_date": "2026-07-20T15:02:07Z",
+  "primary_ci_run": 29752046507,
+  "main_ci_run": 29753330857,
+  "impl_sha": "65195e2c64b82276d4c96ccfc712c588fd37c352",
+  "content_digest": "b9d3f00d0e339de810c63d490cb47ec88faceb35e002793139c908bb98ce50fe",
+  "status": "merged",
+  "acceptance": "FULLY_ACCEPTED",
+  "notes": "All 8 W6 tests pass. Fast suite: 15411 tests pass. Lint, security, smoke, test-platform, workflows, test-cross-version all pass on main CI."
+}
