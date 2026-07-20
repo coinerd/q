@@ -120,19 +120,23 @@
 
 ;; --- Fixtures ---
 
+(define full-sha "abcdef0123456789abcdef0123456789abcdef01")
+(define other-sha "fedcba9876543210fedcba9876543210fedcba98")
+(define short-sha "abc1234")
+
 (define (valid-manifest-fixture)
   (make-manifest #:version "0.99.42"
-                 #:commit "abc1234"
+                 #:commit full-sha
                  #:date "2026-06-22"
                  #:assets (list (manifest-asset "q-0.99.42.tar.gz" 12345 "n/a"))
-                 #:traceability (manifest-trace "v0.99.42" "abc1234" #f "abc1234" #t)))
+                 #:traceability (manifest-trace "v0.99.42" full-sha #f full-sha #t)))
 
 (define (mismatched-commit-fixture)
   (make-manifest #:version "0.99.42"
-                 #:commit "def5678"
+                 #:commit other-sha
                  #:date "2026-06-22"
                  #:assets (list (manifest-asset "q-0.99.42.tar.gz" 12345 "n/a"))
-                 #:traceability (manifest-trace "v0.99.42" "abc1234" #f "def5678" #f)))
+                 #:traceability (manifest-trace "v0.99.42" full-sha #f other-sha #f)))
 
 ;; --- Struct construction and accessors ---
 
@@ -140,7 +144,7 @@
   (define m (valid-manifest-fixture))
   (check-equal? (manifest-version m) "0.99.42")
   (check-equal? (manifest-tag m) "v0.99.42")
-  (check-equal? (manifest-commit m) "abc1234")
+  (check-equal? (manifest-commit m) full-sha)
   (check-equal? (manifest-date m) "2026-06-22")
   (check-equal? (manifest-compatibility-min-racket m) "8.10")
   (check-equal? (manifest-verification m) "racket main.rkt --version"))
@@ -252,22 +256,22 @@
   (check-equal? (manifest-validation-errors mv) '()))
 
 (test-case "validate-manifest: non-semver version fails"
-  (define m (make-manifest #:version "abc" #:commit "c" #:date "d" #:assets '()))
+  (define m (make-manifest #:version "abc" #:commit full-sha #:date "d" #:assets '()))
   (define mv (validate-manifest m))
   (check-false (manifest-valid? mv))
   (check-true (> (length (manifest-validation-errors mv)) 0)))
 
 (test-case "validate-manifest: tag without 'v' prefix fails"
-  (define m (make-manifest #:version "1.0.0" #:commit "c" #:date "d" #:assets '()))
+  (define m (make-manifest #:version "1.0.0" #:commit full-sha #:date "d" #:assets '()))
   ;; Override tag field by constructing manifest directly
-  (define m2 (manifest "1.0.0" "1.0.0" "c" "d" '() "8.10" "ver" #f))
+  (define m2 (manifest "1.0.0" "1.0.0" full-sha "d" '() "8.10" "ver" #f))
   (define mv (validate-manifest m2))
   (check-false (manifest-valid? mv)))
 
 (test-case "validate-manifest: negative asset size fails"
   (define m
     (make-manifest #:version "1.0.0"
-                   #:commit "c"
+                   #:commit full-sha
                    #:date "d"
                    #:assets (list (manifest-asset "q.tar.gz" -1 "n/a"))))
   (define mv (validate-manifest m))
@@ -285,7 +289,7 @@
 (test-case "validate-manifest: sha256 'n/a' is allowed"
   (define m
     (make-manifest #:version "1.0.0"
-                   #:commit "c"
+                   #:commit full-sha
                    #:date "d"
                    #:assets (list (manifest-asset "q.tar.gz" 100 "n/a"))))
   (define mv (validate-manifest m))
@@ -294,7 +298,7 @@
 (test-case "validate-manifest: sha256 'unknown' is allowed"
   (define m
     (make-manifest #:version "1.0.0"
-                   #:commit "c"
+                   #:commit full-sha
                    #:date "d"
                    #:assets (list (manifest-asset "q.tar.gz" 100 "unknown"))))
   (define mv (validate-manifest m))
@@ -308,7 +312,7 @@
 (test-case "validate-manifest: valid sha256 (64 hex chars) passes"
   (define m
     (make-manifest #:version "1.0.0"
-                   #:commit "c"
+                   #:commit full-sha
                    #:date "d"
                    #:assets
                    (list (manifest-asset
@@ -484,7 +488,7 @@
 
 (test-case "build-manifest: result passes validation"
   (define ri
-    (release-inputs "0.99.42" "abc1234" "2026-06-22" "q-0.99.42.tar.gz" 12345 "n/a" "abc1234" #f))
+    (release-inputs "0.99.42" full-sha "2026-06-22" "q-0.99.42.tar.gz" 12345 "n/a" full-sha #f))
   (define m (build-manifest ri))
   (define mv (validate-manifest m))
   (check-true (manifest-valid? mv)))

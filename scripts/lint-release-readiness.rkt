@@ -141,6 +141,7 @@
 
 (define (validate-gate-evidence-entry evidence expected-version expected-sha now-seconds)
   (define max-age 7200) ;; 2 hours
+  (define max-future 300) ;; 5 minutes clock skew tolerance
   (define ev-version (hash-ref evidence 'version #f))
   (define ev-sha (hash-ref evidence 'git_sha #f))
   (define ev-time (hash-ref evidence 'timestamp #f))
@@ -150,10 +151,20 @@
   (cond
     [(not (equal? ev-version expected-version))
      (values #f (format "version mismatch: ~a ≠ ~a" ev-version expected-version))]
-    [(and expected-sha (not (equal? ev-sha expected-sha)) (not (equal? ev-sha "unknown")))
+    [(and expected-sha (or (not ev-sha) (equal? ev-sha "unknown")))
+     (values #f (format "sha is unknown: ~a" ev-sha))]
+    ;; F-15 (#8772): Reject short/non-full SHA (< 40 chars) before equality check
+    [(and expected-sha (not (= (string-length ev-sha) 40)))
+     (values
+      #f
+      (format "sha must be full 40 hex chars; got ~a (length ~a)" ev-sha (string-length ev-sha)))]
+    [(and expected-sha (not (equal? ev-sha expected-sha)))
      (values #f (format "sha mismatch: ~a ≠ ~a" ev-sha expected-sha))]
-    [(and ev-time (> (- now-seconds ev-time) max-age))
+    [(and ev-time (integer? ev-time) (>= (- now-seconds ev-time) max-age))
      (values #f (format "stale evidence (~a seconds old)" (- now-seconds ev-time)))]
+    ;; F-15 (#8772): Reject future timestamps beyond clock skew
+    [(and ev-time (integer? ev-time) (>= (- ev-time now-seconds) max-future))
+     (values #f (format "future timestamp (~a seconds ahead)" (- ev-time now-seconds)))]
     [(not (and (integer? ev-tests) (positive? ev-tests)))
      (values #f (format "zero or missing parsed_test_count: ~a" ev-tests))]
     [(and (integer? ev-failed) (positive? ev-failed))
@@ -190,7 +201,7 @@
 (define (gate-evidence-dir)
   (build-path ".gate-evidence"))
 
-(define (check-gate-evidence)
+(define (check-gate-evidence #:strict [strict? #f])
   (define evid-dir (gate-evidence-dir))
   (cond
     [(not (directory-exists? evid-dir))
@@ -212,6 +223,11 @@
            [(not evidence-file)
             (printf "  [FAIL] gate evidence missing: ~a~n" suite)
             #f]
+           [(and strict? (not (regexp-match? #rx"\\.json$" (path->string evidence-file))))
+            (printf
+             "  [FAIL] gate evidence ~a: legacy .passed format rejected in strict mode; use JSON~n"
+             suite)
+            #f]
            [else
             (define now (current-seconds))
             (define expected-sha (get-current-git-sha))
@@ -227,21 +243,22 @@
                          [parts (string-split content " ")]
                          [ev-version (and (>= (length parts) 1) (car parts))]
                          [ev-time (and (>= (length parts) 2) (string->number (cadr parts)))])
-                    (validate-gate-evidence-entry (hasheq 'version
-                                                          ev-version
-                                                          'git_sha
-                                                          "unknown"
-                                                          'timestamp
-                                                          ev-time
-                                                          'parsed_test_count
-                                                          1
-                                                          'failed
-                                                          0
-                                                          'timed_out
-                                                          0)
-                                                  ver
-                                                  expected-sha
-                                                  now))))
+                    (validate-gate-evidence-entry
+                     (hasheq 'version
+                             ev-version
+                             'git_sha
+                             (if (= (string-length expected-sha) 40) expected-sha "unknown")
+                             'timestamp
+                             ev-time
+                             'parsed_test_count
+                             1
+                             'failed
+                             0
+                             'timed_out
+                             0)
+                     ver
+                     expected-sha
+                     now))))
             (if pass?
                 (begin
                   (printf "  [PASS] gate evidence: ~a~n" suite)
@@ -300,7 +317,7 @@
   ;; Gate evidence: in strict mode only
   (define gate-result
     (if strict?
-        (check-gate-evidence)
+        (check-gate-evidence #:strict #t)
         #t))
 
   (define results

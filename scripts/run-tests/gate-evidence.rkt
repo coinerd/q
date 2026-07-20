@@ -16,7 +16,48 @@
                   test-file-result-exit-code)
          (only-in "classify.rkt" base-dir))
 
-(provide record-gate-evidence!)
+(provide record-gate-evidence!
+         validate-gate-evidence!
+         strict-sha-valid?)
+
+;; F-15 strict validation: full 40-hex-char SHA required
+(define (strict-sha-valid? sha)
+  (and (string? sha) (= (string-length sha) 40) (regexp-match? #px"^[0-9a-f]{40}$" sha)))
+
+;; F-15: Validate recorded evidence hash against strict requirements.
+;; Rejects unknown/empty version, short/missing SHA, stale/future timestamp,
+;; non-zero failed/timed-out counts, zero test count.
+(define (validate-gate-evidence! evidence-hash)
+  (define ver (hash-ref evidence-hash 'version #f))
+  (define sha (hash-ref evidence-hash 'git-sha #f))
+  (define pass-c (hash-ref evidence-hash 'passed 0))
+  (define fail-c (hash-ref evidence-hash 'failed -1))
+  (define timeout-c (hash-ref evidence-hash 'timed-out -1))
+  (define parsed (hash-ref evidence-hash 'parsed-test-count 0))
+  (define ts (hash-ref evidence-hash 'timestamp #f))
+  (define now (current-seconds))
+  (define max-age 7200) ;; 2 hours
+  (define max-future 300) ;; 5 minutes clock skew tolerance
+  (cond
+    [(or (not ver) (equal? ver "unknown"))
+     (raise-user-error 'validate-gate-evidence! "version is unknown or missing")]
+    [(or (not sha) (equal? sha "unknown"))
+     (raise-user-error 'validate-gate-evidence! "git SHA is unknown")]
+    [(not (strict-sha-valid? sha))
+     (raise-user-error 'validate-gate-evidence! "SHA must be full 40 hex chars; got ~a" sha)]
+    [(not (and (integer? parsed) (positive? parsed)))
+     (raise-user-error 'validate-gate-evidence! "parsed test count must be positive; got ~a" parsed)]
+    [(and (integer? fail-c) (positive? fail-c))
+     (raise-user-error 'validate-gate-evidence! "evidence has ~a failure(s)" fail-c)]
+    [(and (integer? timeout-c) (positive? timeout-c))
+     (raise-user-error 'validate-gate-evidence! "evidence has ~a timeout(s)" timeout-c)]
+    [(and ts (integer? ts) (>= (- now ts) max-age))
+     (raise-user-error 'validate-gate-evidence! "evidence is stale (~a seconds old)" (- now ts))]
+    [(and ts (integer? ts) (>= (- ts now) max-future))
+     (raise-user-error 'validate-gate-evidence!
+                       "evidence has future timestamp (~a seconds ahead)"
+                       (- ts now))]
+    [else (void)]))
 
 (define (get-git-sha)
   (with-handlers ([exn:fail? (lambda (_) "unknown")])
@@ -124,6 +165,8 @@
           inv-hash
           'timestamp
           (current-seconds)))
+  ;; F-15: Validate recorded evidence hash before writing
+  (validate-gate-evidence! evidence-hash)
   (call-with-output-file evidence-file
                          (lambda (out)
                            (write-json evidence-hash out)
