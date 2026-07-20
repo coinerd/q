@@ -35,7 +35,10 @@
 (define credential-key-pattern
   (string-append "(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|"
                  "capability[_-]?(?:token|secret)|code[_-]?verifier|authorization[_-]?code|"
-                 "token|secret|password|credential)"))
+                 "token|secret|password|credential|private[_-]?key|private[_-]?key[_-]?id|"
+                 "client[_-]?email|project[_-]?id|oidc[_-]?token|id[_-]?token|"
+                 "aws[_-]?access[_-]?key[_-]?id|aws[_-]?secret[_-]?access[_-]?key|session[_-]?token|"
+                 "azure[_-]?client[_-]?id|azure[_-]?client[_-]?secret|azure[_-]?tenant[_-]?id)"))
 
 (define rx-sk-key #px"\\bsk-[A-Za-z0-9_-]{20,}")
 (define rx-bearer #px"(?i:bearer) +[A-Za-z0-9._-]{20,}")
@@ -73,7 +76,19 @@
              "credential"
              "authorization"
              "codeverifier"
-             "authorizationcode"))
+             "authorizationcode"
+             "privatekey"
+             "privatekeyid"
+             "clientemail"
+             "projectid"
+             "oidctoken"
+             "idtoken"
+             "awsaccesskeyid"
+             "awssecretaccesskey"
+             "sessiontoken"
+             "azureclientid"
+             "azureclientsecret"
+             "azuretenantid"))
 
 (define (key->comparison-string key)
   (cond
