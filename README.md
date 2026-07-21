@@ -413,3 +413,4 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 **v0.74.7** — Core Loop Tests: Pure Functions (T-1a)
 
+
