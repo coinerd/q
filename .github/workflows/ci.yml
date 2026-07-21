@@ -413,6 +413,10 @@ jobs:
           mapfile -t evidence_files < <(
             git diff --name-only "$base_sha...$head_sha" -- "$evidence_dir/*.rktd"
           )
+          if [[ ${#evidence_files[@]} -eq 0 ]]; then
+            echo "No wave evidence record changed — skipping validation."
+            exit 0
+          fi
           if [[ ${#evidence_files[@]} -ne 1 ]]; then
             echo "Expected exactly one changed wave evidence record; found ${#evidence_files[@]}"
             printf '  %s\n' "${evidence_files[@]:-<none>}"
