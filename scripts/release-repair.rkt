@@ -1,32 +1,30 @@
 #!/usr/bin/env racket
 #lang racket/base
 
-;; scripts/release-repair.rkt — Manual release repair / backfill gate.
+;; scripts/release-repair.rkt — Diagnostic-only release check.
 ;;
-;; W7 (#8524): Provides a safe repair path for tags that exist but
-;; lack releases or have incomplete assets.
+;; W9 (#8773): Existing-tag repair is diagnostic only.
+;; For existing releases: no mutation is allowed.
+;; For unpublished tags: user is directed to push the tag for normal pipeline.
 ;;
 ;; Modes:
-;;   dry-run       — verify readiness, no publication (default)
-;;   publish       — create release if absent
-;;   repair-assets — upload missing assets if release exists
+;;   dry-run — verify readiness, no publication (always used)
 ;;
 ;; Safety:
-;;   - Default mode is dry-run
+;;   - Always dry-run (diagnostic only)
 ;;   - Refuses if tag version ≠ canonical version
 ;;   - Refuses if CHANGELOG entry missing
-;;   - Never mutates git tags
+;;   - Never mutates git tags or releases
 ;;   - Never claims historical gates passed unless rerun
 ;;
 ;; Exit codes:
-;;   0 — checks pass, repair may proceed
-;;   1 — checks failed, repair refused
+;;   0 — checks pass
+;;   1 — checks failed
 
 (provide validate-tag-format
          extract-tag-version
          validate-version-consistency
          validate-changelog-entry
-         validate-mode
          parse-repair-args
          repair-checks)
 
@@ -41,8 +39,6 @@
 ;; ---------------------------------------------------------------------------
 
 (define tag-format-rx #px"^v([0-9]+\\.[0-9]+\\.[0-9]+)$")
-
-(define valid-modes '("dry-run" "publish" "repair-assets"))
 
 ;; Validate tag format. Returns (list 'ok tag version) or (list 'invalid tag).
 (define (validate-tag-format tag)
@@ -73,13 +69,6 @@
       (list 'found)
       (list 'missing version)))
 
-;; Validate mode is one of the allowed values.
-;; Returns (list 'ok mode) or (list 'invalid mode).
-(define (validate-mode mode)
-  (if (member mode valid-modes)
-      (list 'ok mode)
-      (list 'invalid mode)))
-
 ;; Parse command-line arguments.
 ;; Returns (values tag mode) or #f on error.
 (define (parse-repair-args args)
@@ -90,11 +79,8 @@
       [(list "--tag" t more ...)
        (set! tag t)
        (loop more)]
-      [(list "--mode" m more ...)
-       (set! mode m)
-       (loop more)]
       [(list "--help" _ ...)
-       (displayln "Usage: release-repair.rkt --tag vX.Y.Z [--mode dry-run|publish|repair-assets]")
+       (displayln "Usage: release-repair.rkt --tag vX.Y.Z [--mode dry-run]")
        #f]
       [(list) (void)]
       [_ (loop (cdr rest))]))
@@ -102,10 +88,10 @@
       (values tag mode)
       (begin
         (displayln "ERROR: --tag is required")
-        (displayln "Usage: release-repair.rkt --tag vX.Y.Z [--mode dry-run|publish|repair-assets]")
+        (displayln "Usage: release-repair.rkt --tag vX.Y.Z [--mode dry-run]")
         #f)))
 
-;; Build the list of check descriptors for repair.
+;; Build the list of check descriptors for diagnostic repair.
 ;; Each check is (cons name thunk) where thunk returns (cons 'pass/'fail message).
 ;; Dependency-injected for testability: file->string, file-exists?.
 (define (repair-checks tag mode file-exists? file->string)
@@ -119,13 +105,12 @@
            (match tag-result
              [(list 'ok t v) (cons 'pass (format "tag ~a is valid (version ~a)" t v))]
              [(list 'invalid t) (cons 'fail (format "tag ~a is not valid semver" t))])))
-   ;; Check 2: Mode validity
+   ;; Check 2: Mode validity (must be dry-run)
    (cons "mode-valid"
          (lambda ()
-           (match (validate-mode mode)
-             [(list 'ok m) (cons 'pass (format "mode ~a is valid" m))]
-             [(list 'invalid m)
-              (cons 'fail (format "mode ~a is invalid; must be one of ~a" m valid-modes))])))
+           (if (equal? mode "dry-run")
+               (cons 'pass "mode dry-run: diagnostic only, no mutation")
+               (cons 'fail (format "mode ~a is invalid; only dry-run is supported" mode)))))
    ;; Check 3: Version consistency
    (cons
     "version-consistency"
@@ -150,14 +135,9 @@
                  (match (validate-changelog-entry cl-content tag-version)
                    [(list 'found) (cons 'pass (format "CHANGELOG has entry for v~a" tag-version))]
                    [(list 'missing v) (cons 'fail (format "CHANGELOG missing entry for v~a" v))])))))
-   ;; Check 5: Dry-run safety (only passes in dry-run mode)
-   (cons "mode-safety"
-         (lambda ()
-           (if (equal? mode "dry-run")
-               (cons 'pass "dry-run mode: no publication will occur")
-               (cons 'pass
-                     (format "~a mode: explicit action requested (tag will not be mutated)"
-                             mode)))))))
+   ;; Check 5: No-mutation safety (always passes in dry-run)
+   (cons "no-mutation-safety"
+         (lambda () (cons 'pass "dry-run: no release, tag, or asset mutation will occur")))))
 
 ;; ---------------------------------------------------------------------------
 ;; Main
@@ -170,9 +150,9 @@
     (exit 1))
   (define-values (tag mode) (values (car parsed) (cadr parsed)))
 
-  (displayln "=== Release Repair ===")
+  (displayln "=== Release Repair (Diagnostic) ===")
   (printf "Tag:  ~a~n" tag)
-  (printf "Mode: ~a~n" mode)
+  (printf "Mode: ~a (diagnostic only)~n" mode)
   (displayln "")
 
   (unless (file-exists? "util/version.rkt")
@@ -198,15 +178,12 @@
           (length results)
           (- (length results) (length failures))
           (length failures))
-
-  (cond
-    [(and (null? failures) (equal? mode "dry-run"))
-     (displayln "Dry-run complete. No release was created or modified.")]
-    [(and (null? failures) (equal? mode "publish"))
-     (displayln "All checks passed. Release may be created.")]
-    [(and (null? failures) (equal? mode "repair-assets"))
-     (displayln "All checks passed. Assets may be uploaded.")]
-    [else (displayln "Checks FAILED. Repair refused.")])
+  (displayln "")
+  (displayln "Diagnostic only. No release, tag, or asset mutation occurred.")
+  (displayln "")
+  (if (null? failures)
+      (displayln "All checks passed. For existing releases, no action needed.")
+      (displayln "Checks FAILED. See above for details."))
 
   (exit (if (null? failures) 0 1)))
 

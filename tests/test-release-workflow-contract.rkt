@@ -3,11 +3,13 @@
 ;; @suite ci
 ;; @speed fast
 ;; tests/test-release-workflow-contract.rkt
-;; W4 (#8521): Static contract tests for the release workflow YAML.
+;; W9 (#8773): Static contract tests for the release/release-core/release-repair workflows.
 ;;
-;; These tests verify the release.yml workflow structure without
-;; running it. They check that the workflow has the required triggers,
-;; jobs, steps, and asset contracts.
+;; These tests verify the YAML workflow structure without running it.
+;; They check:
+;; - release.yml triggers the build-once pipeline through release-core.yml
+;; - release-core.yml builds→smokes→drafts→verifies→publishes→verifies
+;; - release-repair.yml is diagnostic-only
 
 (require rackunit
          racket/file
@@ -18,15 +20,18 @@
 ;; ── Path helpers ──
 
 (define release-yml-path (build-path ".." ".github" "workflows" "release.yml"))
+(define release-core-yml-path (build-path ".." ".github" "workflows" "release-core.yml"))
+(define release-repair-yml-path (build-path ".." ".github" "workflows" "release-repair.yml"))
 
 (define (read-release-yml)
   (file->string release-yml-path))
-
-;; ── YAML parsing (lightweight — no yaml library available) ──
-;; We use string-based checks for structural assertions.
+(define (read-release-core-yml)
+  (file->string release-core-yml-path))
+(define (read-release-repair-yml)
+  (file->string release-repair-yml-path))
 
 ;; ============================================================
-;; Trigger contract tests
+;; release.yml — orchestrator (uses release-core.yml)
 ;; ============================================================
 
 (test-case "release.yml has push tags v* trigger"
@@ -36,256 +41,208 @@
   (check-true (string-contains? content "tags:") "must specify tags filter")
   (check-true (string-contains? content "'v*'") "must trigger on v* tags"))
 
-;; ============================================================
-;; Job contract tests
-;; ============================================================
-
 (test-case "release.yml has test job"
   (define content (read-release-yml))
   (check-true (string-contains? content "  test:") "must have 'test:' job"))
 
-(test-case "release.yml has release job"
+(test-case "release.yml has prepare job"
   (define content (read-release-yml))
-  (check-true (string-contains? content "  release:") "must have 'release:' job"))
+  (check-true (string-contains? content "  prepare:") "must have 'prepare:' job"))
 
-(test-case "release.yml has smoke job"
+(test-case "release.yml has release-core job (calls reusable workflow)"
   (define content (read-release-yml))
-  (check-true (string-contains? content "  smoke:") "must have 'smoke:' job"))
+  (check-true (string-contains? content "  release-core:") "must have 'release-core:' job"))
 
-(test-case "release job depends on test job"
+(test-case "release.yml release-core uses release-core.yml"
   (define content (read-release-yml))
-  (check-true (string-contains? content "needs: test") "release job must depend on test"))
+  (check-true (string-contains? content "release-core.yml")
+              "release-core job must use reusable release-core.yml"))
 
-(test-case "smoke job depends on release job"
+(test-case "release.yml test job is before prepare and release-core"
   (define content (read-release-yml))
-  (check-true (string-contains? content "needs: release") "smoke job must depend on release"))
+  ;; Find positions of job headers to verify ordering
+  (define test-pos (regexp-match-positions #rx"  test:" content))
+  (define prepare-pos (regexp-match-positions #rx"  prepare:" content))
+  (define release-core-pos (regexp-match-positions #rx"  release-core:" content))
+  (when (and test-pos prepare-pos release-core-pos)
+    (check-true (< (caar test-pos) (caar prepare-pos)) "test must come before prepare")
+    (check-true (< (caar prepare-pos) (caar release-core-pos))
+                "prepare must come before release-core")))
 
-;; ============================================================
-;; Setup-racket contract tests
-;; ============================================================
+(test-case "release.yml prepare job depends on test"
+  (define content (read-release-yml))
+  (check-true (string-contains? content "needs: test") "prepare job must depend on test"))
+
+(test-case "release.yml release-core depends on prepare"
+  (define content (read-release-yml))
+  (check-true (string-contains? content "needs: prepare") "release-core must depend on prepare"))
+
+(test-case "release.yml has no separate release/smoke jobs (they are in core)"
+  (define content (read-release-yml))
+  (check-false (string-contains? content "  smoke:") "smoke job must not be in release.yml")
+  (check-false (string-contains? content "  release:") "release job must not be in release.yml"))
+
+(test-case "release.yml has version extraction step"
+  (define content (read-release-yml))
+  (check-true (string-contains? content "Extract version from tag")
+              "must have version extraction step"))
+
+(test-case "release.yml has version diagnosis step"
+  (define content (read-release-yml))
+  (check-true (string-contains? content "Version context diagnostics")
+              "must have version context diagnostics step"))
+
+(test-case "release.yml passes secrets to release-core"
+  (define content (read-release-yml))
+  (check-true (string-contains? content "secrets: inherit") "must pass secrets to release-core"))
 
 (test-case "release.yml uses setup-racket composite action"
   (define content (read-release-yml))
   (check-true (string-contains? content ".github/actions/setup-racket")
               "must use setup-racket composite action"))
 
-;; ============================================================
-;; Release readiness contract tests
-;; ============================================================
-
 (test-case "release.yml has strict release readiness check"
   (define content (read-release-yml))
   (check-true (string-contains? content "lint-release-readiness.rkt --strict")
               "must have strict release readiness check"))
 
-(test-case "release.yml uses tag-publish context"
-  (define content (read-release-yml))
-  (check-true (string-contains? content "--context tag-publish")
-              "must use tag-publish context for release readiness"))
-
-;; ============================================================
-;; Version diagnostics contract tests
-;; ============================================================
-
-(test-case "release.yml has version context diagnostics step"
-  (define content (read-release-yml))
-  (check-true (string-contains? content "Version context diagnostics")
-              "must have version context diagnostics step")
-  (check-true (string-contains? content "GITHUB_REF") "diagnostics must print GITHUB_REF")
-  (check-true (string-contains? content "GITHUB_SHA") "diagnostics must print GITHUB_SHA"))
-
-(test-case "release.yml verifies version consistency"
-  (define content (read-release-yml))
-  (check-true (string-contains? content "Verify version consistency")
-              "must have version consistency check"))
-
-;; ============================================================
-;; Asset contract tests
-;; ============================================================
-
-(test-case "release.yml uses softprops/action-gh-release@v3"
-  (define content (read-release-yml))
-  (check-true (string-contains? content "softprops/action-gh-release@v3")
-              "must use softprops/action-gh-release@v3"))
-
-(test-case "release.yml uploads q-VERSION.tar.gz"
-  (define content (read-release-yml))
-  (check-true (string-contains? content "q-${{ steps.version.outputs.VERSION }}.tar.gz")
-              "must upload q-VERSION.tar.gz asset"))
-
-(test-case "release.yml uploads release-manifest.json"
-  (define content (read-release-yml))
-  (check-true (string-contains? content "release-manifest.json")
-              "must upload release-manifest.json asset"))
-
-;; ============================================================
-;; Asset verification contract tests
-;; ============================================================
-
-(test-case "release.yml has post-create asset verification step"
-  (define content (read-release-yml))
-  (check-true (string-contains? content "Verify uploaded release assets")
-              "must have post-create asset verification step"))
-
-(test-case "asset verification checks tarball existence"
-  (define content (read-release-yml))
-  (check-true (string-contains? content "tarball") "asset verification must check tarball"))
-
-(test-case "asset verification checks manifest existence"
-  (define content (read-release-yml))
-  (check-true (string-contains? content "manifest") "asset verification must check manifest"))
-
-(test-case "asset verification queries release by tag"
-  (define content (read-release-yml))
-  (check-true (string-contains? content "releases/tags/")
-              "asset verification must query releases/tags/ endpoint"))
-
-;; ============================================================
-;; Artifact generation contract tests
-;; ============================================================
-
-(test-case "release.yml has Build tarball step"
-  (define content (read-release-yml))
-  (check-true (string-contains? content "Build tarball") "must have separate Build tarball step"))
-
-(test-case "release.yml has Generate release manifest step"
-  (define content (read-release-yml))
-  (check-true (string-contains? content "Generate release manifest")
-              "must have separate Generate release manifest step"))
-
-(test-case "release.yml has Generate release notes step"
-  (define content (read-release-yml))
-  (check-true (string-contains? content "Generate release notes")
-              "must have separate Generate release notes step"))
-
-;; ============================================================
-;; YAML validity test
-;; ============================================================
-
 (test-case "release.yml is valid YAML"
   (check-true (file-exists? release-yml-path) "release.yml must exist")
-  ;; Lightweight YAML validity: check basic indentation and structure
   (define content (read-release-yml))
   (define lines (string-split content "\n"))
   (check-true (> (length lines) 10) "release.yml should have substantial content")
-  ;; Check no tabs (YAML forbids tabs)
   (for ([line (in-list lines)]
         [i (in-naturals 1)])
     (check-false (string-contains? line "\t") (format "tab found at line ~a" i))))
 
 ;; ============================================================
-;; W2: Mandatory manifest verification contract tests
+;; release-core.yml — reusable build→smoke→draft→verify→publish→verify
 ;; ============================================================
 
-(test-case "release.yml smoke job verifies manifest as mandatory"
-  (define content (read-release-yml))
-  (check-true (string-contains? content "Verify manifest (mandatory)")
-              "smoke job must have 'Verify manifest (mandatory)' step"))
+(test-case "release-core.yml has workflow_call trigger"
+  (define content (read-release-core-yml))
+  (check-true (string-contains? content "workflow_call:") "must have workflow_call trigger"))
 
-(test-case "release.yml does not contain optional manifest wording"
-  (define content (read-release-yml))
-  (check-false (string-contains? content "No release-manifest.json found (optional)")
-               "smoke job must NOT treat manifest as optional"))
+(test-case "release-core.yml has build job"
+  (define content (read-release-core-yml))
+  (check-true (string-contains? content "  build:") "must have 'build:' job"))
 
-(test-case "release.yml smoke manifest verification has failing path for missing manifest"
-  (define content (read-release-yml))
-  ;; Must have explicit error + exit 1 for missing manifest
-  (check-true (string-contains? content "ERROR: release-manifest.json")
-              "must have ERROR message for missing manifest")
-  ;; Must have exit 1 for manifest failure
-  (check-true (string-contains? content "exit 1") "must have exit 1 for manifest failures"))
+(test-case "release-core.yml has smoke job"
+  (define content (read-release-core-yml))
+  (check-true (string-contains? content "  smoke:") "must have 'smoke:' job"))
 
-(test-case "release.yml smoke manifest verifies version field"
-  (define content (read-release-yml))
-  (check-true (string-contains? content "manifest version mismatch")
-              "must verify manifest version field"))
+(test-case "release-core.yml has draft job"
+  (define content (read-release-core-yml))
+  (check-true (string-contains? content "  draft:") "must have 'draft:' job"))
 
-(test-case "release.yml smoke manifest verifies tag field"
-  (define content (read-release-yml))
-  (check-true (string-contains? content "manifest tag mismatch") "must verify manifest tag field"))
+(test-case "release-core.yml has verify-draft job"
+  (define content (read-release-core-yml))
+  (check-true (string-contains? content "  verify-draft:") "must have 'verify-draft:' job"))
 
-(test-case "release.yml smoke manifest verifies tarball asset name"
-  (define content (read-release-yml))
-  (check-true (string-contains? content "manifest tarball name mismatch")
-              "must verify manifest tarball asset name"))
+(test-case "release-core.yml has publish job"
+  (define content (read-release-core-yml))
+  (check-true (string-contains? content "  publish:") "must have 'publish:' job"))
 
-(test-case "release.yml smoke manifest verifies sha256 when available"
-  (define content (read-release-yml))
-  (check-true (string-contains? content "sha256 mismatch")
-              "must verify manifest sha256 when tarball is available"))
+(test-case "release-core.yml has verify-public job"
+  (define content (read-release-core-yml))
+  (check-true (string-contains? content "  verify-public:") "must have 'verify-public:' job"))
 
-(test-case "release.yml smoke manifest uses asset API not direct download URL"
-  (define content (read-release-yml))
-  ;; Must look up release by tag to find asset URL
-  (check-true (string-contains? content "releases/tags/${TAG}")
-              "must look up release by tag for manifest asset URL")
-  ;; Must find manifest via asset filter, not direct download URL
-  (check-false (string-contains? content "releases/download/${TAG}/release-manifest.json")
-               "must NOT use unreliable direct download URL for manifest"))
+(test-case "release-core.yml DAG order: build→smoke→draft→verify-draft→publish→verify-public"
+  (define content (read-release-core-yml))
+  ;; build is first (no needs)
+  (check-true (string-contains? content "  build:") "build must be first job")
+  ;; smoke needs build
+  (check-true (string-contains? content "needs: build") "smoke needs build")
+  ;; draft needs smoke
+  (check-true (string-contains? content "needs: smoke") "draft needs smoke")
+  ;; verify-draft needs draft
+  (check-true (string-contains? content "needs: draft") "verify-draft needs draft")
+  ;; publish needs verify-draft
+  (check-true (string-contains? content "needs: verify-draft") "publish needs verify-draft")
+  ;; verify-public needs publish
+  (check-true (string-contains? content "needs: publish") "verify-public needs publish"))
 
-(test-case "release.yml smoke manifest has no '|| true' fallback"
-  (define content (read-release-yml))
-  ;; The old code had '|| true' on the manifest curl — now it's gone.
-  ;; Extract manifest step section using regexp-match-positions
-  (define start-pos (regexp-match-positions #rx"Verify manifest .mandatory" content))
-  (define end-pos (regexp-match-positions #rx"Run test suite" content))
-  (when (and start-pos end-pos)
-    (define start-idx (caar start-pos))
-    (define end-idx (caar end-pos))
-    (when (< start-idx end-idx)
-      (define manifest-section (substring content start-idx end-idx))
-      (check-false (string-contains? manifest-section "|| true")
-                   "manifest download must NOT have '|| true' masking failures"))))
+(test-case "release-core.yml builds tarball with internal artifact upload"
+  (define content (read-release-core-yml))
+  (check-true (string-contains? content "Build tarball") "must have Build tarball step")
+  (check-true (string-contains? content "actions/upload-artifact@v7")
+              "must upload internal build artifact"))
+
+(test-case "release-core.yml has smoke with release-smoke suite"
+  (define content (read-release-core-yml))
+  (check-true (string-contains? content "release-smoke suite") "smoke must use release-smoke suite"))
+
+(test-case "release-core.yml creates draft release (not public directly)"
+  (define content (read-release-core-yml))
+  (check-true (string-contains? content "--draft") "must create draft (not public) release"))
+
+(test-case "release-core.yml verifies draft assets before publish"
+  (define content (read-release-core-yml))
+  (check-true (string-contains? content "Verifying draft release assets") "must verify draft assets"))
+
+(test-case "release-core.yml verifies public assets after publish"
+  (define content (read-release-core-yml))
+  (check-true (string-contains? content "Verifying public release assets")
+              "must verify public assets"))
+
+(test-case "release-core.yml publishes with gh release edit --draft=false"
+  (define content (read-release-core-yml))
+  (check-true (string-contains? content "--draft=false") "publish must flip draft=false"))
 
 ;; ============================================================
-;; W3: release-smoke suite in release.yml smoke job
+;; release-repair.yml — diagnostic-only for existing tags
 ;; ============================================================
 
-(test-case "release.yml smoke uses release-smoke suite"
-  (define content (read-release-yml))
-  (check-true (string-contains? content "--suite release-smoke")
-              "smoke job must use --suite release-smoke instead of default/all"))
+(test-case "release-repair.yml is workflow_dispatch only"
+  (define content (read-release-repair-yml))
+  (check-true (string-contains? content "workflow_dispatch:") "must be workflow_dispatch only")
+  (check-false (string-contains? content "push:") "must NOT have push trigger"))
 
-(test-case "release.yml smoke does NOT run default/all tests"
-  (define content (read-release-yml))
-  ;; The old invocation was just '--jobs 4' without --suite
-  ;; Verify the smoke step has --suite, not bare '--jobs 4'
-  (define smoke-section
-    (let* ([start-pos (regexp-match-positions #rx"Run release-smoke test suite" content)]
-           [end-pos (regexp-match-positions #rx"Upload smoke log" content)])
-      (if (and start-pos end-pos (< (caar start-pos) (caar end-pos)))
-          (substring content (caar start-pos) (caar end-pos))
-          "")))
-  (check-false (and (string-contains? smoke-section "run-tests.rkt")
-                    (not (string-contains? smoke-section "--suite")))
-               "smoke must NOT run run-tests.rkt without --suite"))
+(test-case "release-repair.yml has only dry-run mode"
+  (define content (read-release-repair-yml))
+  (check-true (string-contains? content "dry-run") "must have dry-run mode")
+  ;; Check that it does NOT have softprops/action-gh-release (no actual publishing)
+  (check-false (string-contains? content "softprops/action-gh-release")
+               "must NOT use softprops/action-gh-release")
+  ;; Check that it does NOT have publish or repair-assets as mode options
+  (check-false (string-contains? content "  options:\n          - publish")
+               "must NOT have publish mode option")
+  (check-false (string-contains? content "  options:\n          - repair-assets")
+               "must NOT have repair-assets mode option"))
 
-(test-case "release.yml smoke step is blocking (no continue-on-error: true)"
-  (define content (read-release-yml))
-  ;; The smoke step must not have continue-on-error: true
-  (define smoke-section
-    (let* ([start-pos (regexp-match-positions #rx"Run release-smoke test suite" content)]
-           [end-pos (regexp-match-positions #rx"Upload smoke log" content)])
-      (if (and start-pos end-pos (< (caar start-pos) (caar end-pos)))
-          (substring content (caar start-pos) (caar end-pos))
-          "")))
-  (check-false (string-contains? smoke-section "continue-on-error: true")
-               "smoke step must NOT be continue-on-error: true"))
+(test-case "release-repair.yml has contents: read permission"
+  (define content (read-release-repair-yml))
+  (check-true (string-contains? content "contents: read") "must have read-only permission")
+  (check-false (string-contains? content "contents: write") "must NOT have write permission"))
 
-(test-case "release.yml smoke uploads log on failure"
-  (define content (read-release-yml))
-  (check-true (string-contains? content "Upload smoke log on failure")
-              "must have step to upload smoke log on failure")
-  (check-true (string-contains? content "if: failure()") "log upload must trigger on failure"))
+(test-case "release-repair.yml has diagnose job"
+  (define content (read-release-repair-yml))
+  (check-true (string-contains? content "  diagnose:") "must have 'diagnose:' job"))
 
-(test-case "release.yml smoke logs selected suite"
-  (define content (read-release-yml))
-  (check-true (string-contains? content "Running release-smoke suite")
-              "smoke step must log which suite is being run"))
+(test-case "release-repair.yml checks if tag is unpublished"
+  (define content (read-release-repair-yml))
+  (check-true (string-contains? content "IS_UNPUBLISHED") "must check if tag has a release"))
 
-(test-case "release.yml smoke has failure summary step"
-  (define content (read-release-yml))
-  (check-true (string-contains? content "Smoke failure summary")
-              "must have smoke failure summary step")
-  (check-true (string-contains? content "$GITHUB_STEP_SUMMARY")
-              "failure summary must write to GITHUB_STEP_SUMMARY"))
+(test-case "release-repair.yml routes unpublished tags to normal pipeline"
+  (define content (read-release-repair-yml))
+  (check-true (string-contains? content "unpublished-tag-detected")
+              "must detect and describe unpublished tag path"))
+
+(test-case "release-repair.yml never creates or modifies releases"
+  (define content (read-release-repair-yml))
+  (check-false (string-contains? content "softprops/action-gh-release")
+               "must NOT use softprops/action-gh-release (no release mutation)"))
+
+(test-case "release-repair.yml has release diagnostics step"
+  (define content (read-release-repair-yml))
+  (check-true (string-contains? content "release-repair.rkt")
+              "must reference release-repair.rkt script"))
+
+(test-case "release-repair.yml is valid YAML"
+  (check-true (file-exists? release-repair-yml-path) "release-repair.yml must exist")
+  (define content (read-release-repair-yml))
+  (define lines (string-split content "\n"))
+  (check-true (> (length lines) 10) "release-repair.yml should have substantial content")
+  (for ([line (in-list lines)]
+        [i (in-naturals 1)])
+    (check-false (string-contains? line "\t") (format "tab found at line ~a" i))))

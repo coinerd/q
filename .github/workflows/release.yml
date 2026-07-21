@@ -12,6 +12,7 @@ permissions:
   contents: write
 
 jobs:
+  # ── Pre-publication gates (runs before any build) ──
   test:
     runs-on: ubuntu-latest
     steps:
@@ -67,18 +68,25 @@ jobs:
             release-readiness.log
           retention-days: 7
 
-  release:
+  # ── Extract version from tag ──
+  prepare:
     needs: test
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.VERSION }}
+      tag: ${{ steps.version.outputs.TAG }}
+      checkout-ref: ${{ steps.checkout.outputs.CHECKOUT_REF }}
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-racket
 
       - name: Extract version from tag
         id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "TAG=${TAG}" >> $GITHUB_OUTPUT
 
       - name: Version context diagnostics
         run: |
@@ -105,211 +113,17 @@ jobs:
           VERSION="${{ steps.version.outputs.VERSION }}"
           racket scripts/lint-release-notes.rkt --version "${VERSION}" --check
 
-      - name: Build tarball
+      - name: Determine checkout ref
+        id: checkout
         run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          mkdir -p /tmp/q
-          cp -r . /tmp/q/
-          cd /tmp
-          tar czf /tmp/q-${VERSION}.tar.gz \
-            --exclude='.git' \
-            --exclude='compiled' \
-            --exclude='*.zo' \
-            q/
+          echo "CHECKOUT_REF=${GITHUB_SHA}" >> $GITHUB_OUTPUT
 
-      - name: Generate release manifest
-        run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          racket scripts/gen-release-manifest.rkt /tmp/q-${VERSION}.tar.gz > /tmp/release-manifest.json
-          cp /tmp/release-manifest.json .
-          cat /tmp/release-manifest.json
-
-      - name: Generate release notes
-        id: notes
-        run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          racket scripts/gen-release-notes.rkt "${VERSION}" > /tmp/release-notes.md
-          echo "Generated release notes:"
-          cat /tmp/release-notes.md
-
-      - name: Create GitHub Release
-        id: create_release
-        uses: softprops/action-gh-release@v3
-        with:
-          body_path: /tmp/release-notes.md
-          files: |
-            /tmp/q-${{ steps.version.outputs.VERSION }}.tar.gz
-            release-manifest.json
-
-      - name: Verify uploaded release assets
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          TAG="${GITHUB_REF#refs/tags/}"
-          echo "Verifying release assets for ${TAG}..."
-          # Query the release by tag to confirm it exists
-          RELEASE_DATA=$(curl -sf -H "Authorization: token $GH_TOKEN" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/tags/${TAG}")
-          if [ -z "$RELEASE_DATA" ]; then
-            echo "ERROR: Release for tag ${TAG} not found"
-            exit 1
-          fi
-          echo "Release found for ${TAG}"
-          # Verify tarball asset exists
-          TARBALL="q-${VERSION}.tar.gz"
-          TARBALL_URL=$(echo "$RELEASE_DATA" | jq -r ".assets[] | select(.name==\"${TARBALL}\") | .url")
-          if [ -z "$TARBALL_URL" ] || [ "$TARBALL_URL" = "null" ]; then
-            echo "ERROR: Asset ${TARBALL} not found in release ${TAG}"
-            exit 1
-          fi
-          echo "Asset verified: ${TARBALL}"
-          # Verify manifest asset exists
-          MANIFEST_URL=$(echo "$RELEASE_DATA" | jq -r '.assets[] | select(.name=="release-manifest.json") | .url')
-          if [ -z "$MANIFEST_URL" ] || [ "$MANIFEST_URL" = "null" ]; then
-            echo "ERROR: Asset release-manifest.json not found in release ${TAG}"
-            exit 1
-          fi
-          echo "Asset verified: release-manifest.json"
-          echo "All release assets verified successfully."
-
-  smoke:
-    needs: release
-    runs-on: ubuntu-latest
-    env:
-      # Smoke job installs Racket directly to test the release tarball
-      # against a clean environment. The URL is parameterized here so
-      # it can be updated independently of the composite action version.
-      RACKET_VERSION: '8.12'
-    steps:
-      - name: Install Racket
-        run: |
-          curl -L https://download.racket-lang.org/installers/${{ env.RACKET_VERSION }}/racket-${{ env.RACKET_VERSION }}-x86_64-linux-cs.sh -o /tmp/racket.sh
-          echo "2" | sudo sh /tmp/racket.sh --in-place --create-links /usr/local
-
-      - name: Download release tarball
-        id: download
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG="${GITHUB_REF#refs/tags/}"
-          VERSION="${TAG#v}"
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          ASSET_URL=""
-          for i in $(seq 1 10); do
-            ASSET_URL=$(curl -s -H "Authorization: token $GH_TOKEN" \
-              "https://api.github.com/repos/${{ github.repository }}/releases/tags/${TAG}" \
-              | jq -r '.assets[] | select(.name=="q-'"${VERSION}"'.tar.gz") | .url')
-            if [ -n "$ASSET_URL" ]; then
-              echo "Found tarball asset (attempt $i)"
-              break
-            fi
-            echo "Waiting for tarball asset (attempt $i)..."
-            sleep 5
-          done
-          if [ -z "$ASSET_URL" ]; then
-            echo "ERROR: tarball asset not found in release ${TAG}"
-            exit 1
-          fi
-          curl -sfL -H "Authorization: token $GH_TOKEN" -H "Accept: application/octet-stream" \
-            -o "/tmp/q-${VERSION}.tar.gz" "$ASSET_URL"
-          ls -la "/tmp/q-${VERSION}.tar.gz"
-
-      - name: Extract and install
-        run: |
-          VERSION="${{ steps.download.outputs.VERSION }}"
-          cd /tmp
-          tar xzf "q-${VERSION}.tar.gz"
-          cd q
-          raco pkg install --auto --batch
-
-      - name: Verify q --version
-        run: |
-          VERSION="${{ steps.download.outputs.VERSION }}"
-          cd /tmp/q
-          OUTPUT=$(racket main.rkt --version)
-          echo "$OUTPUT"
-          echo "$OUTPUT" | grep -q "version ${VERSION}"
-
-      - name: Verify manifest (mandatory)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          EXPECTED_VERSION: ${{ steps.download.outputs.VERSION }}
-        run: |
-          TAG="${GITHUB_REF#refs/tags/}"
-          # Look up release by tag to find manifest asset URL
-          RELEASE_DATA=$(curl -sf -H "Authorization: token $GH_TOKEN" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/tags/${TAG}")
-          if [ -z "$RELEASE_DATA" ]; then
-            echo "ERROR: Release for tag ${TAG} not found"
-            exit 1
-          fi
-          # Find manifest asset URL via asset API
-          MANIFEST_URL=$(echo "$RELEASE_DATA" | jq -r '.assets[] | select(.name=="release-manifest.json") | .url')
-          if [ -z "$MANIFEST_URL" ] || [ "$MANIFEST_URL" = "null" ]; then
-            echo "ERROR: release-manifest.json asset not found in release ${TAG}"
-            exit 1
-          fi
-          # Download manifest via asset API (binary/octet-stream)
-          curl -sfL -H "Authorization: token $GH_TOKEN" -H "Accept: application/octet-stream" \
-            -o /tmp/release-manifest.json "$MANIFEST_URL"
-          if [ ! -s /tmp/release-manifest.json ]; then
-            echo "ERROR: release-manifest.json is empty or download failed"
-            exit 1
-          fi
-          # Verify manifest fields (version, tag, tarball, sha256)
-          echo "$EXPECTED_VERSION" > /tmp/expected-version.txt
-          python3 << 'PYEOF'
-          import json, hashlib, os
-          ev = open('/tmp/expected-version.txt').read().strip()
-          et = 'q-' + ev + '.tar.gz'
-          m = json.load(open('/tmp/release-manifest.json'))
-          # Version is mandatory
-          assert m['version'] == ev, 'manifest version mismatch: %s != %s' % (m['version'], ev)
-          print('Manifest version OK:', m['version'])
-          # Tag must match
-          etag = 'v' + ev
-          assert m.get('tag') == etag, 'manifest tag mismatch: %s != %s' % (m.get('tag'), etag)
-          print('Manifest tag OK:', m['tag'])
-          # Tarball asset name must match
-          assets = m.get('assets', [])
-          assert len(assets) > 0, 'manifest has no assets'
-          tarball_asset = assets[0]
-          assert tarball_asset['name'] == et, 'manifest tarball name mismatch: %s != %s' % (tarball_asset['name'], et)
-          print('Manifest tarball OK:', tarball_asset['name'])
-          # SHA256 verification if tarball is locally available
-          if 'sha256' in tarball_asset:
-              tarball_path = '/tmp/q-' + ev + '.tar.gz'
-              if os.path.exists(tarball_path):
-                  h = hashlib.sha256(open(tarball_path, 'rb').read()).hexdigest()
-                  assert h == tarball_asset['sha256'], 'sha256 mismatch: %s != %s' % (h, tarball_asset['sha256'])
-                  print('Manifest sha256 OK:', tarball_asset['sha256'])
-          print('All manifest checks passed.')
-          PYEOF
-
-      - name: Run release-smoke test suite
-        id: smoke-tests
-        continue-on-error: false
-        run: |
-          cd /tmp/q
-          echo "Running release-smoke suite (deterministic, artifact-focused)"
-          STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
-            --suite release-smoke \
-            --jobs 4 \
-            --timeout 120 \
-            2>&1 | tee smoke-output.log
-        
-      - name: Upload smoke log on failure
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: smoke-output-log
-          path: /tmp/q/smoke-output.log
-          retention-days: 30
-        
-      - name: Smoke failure summary
-        if: failure()
-        run: |
-          echo "## Release Smoke Failures" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          grep -A 4 'FAILURE\|ERROR\|FAILED\|TIMEOUT' /tmp/q/smoke-output.log >> $GITHUB_STEP_SUMMARY || true
+  # ── Build once, smoke, draft, verify, publish, verify ──
+  release-core:
+    needs: prepare
+    uses: ./.github/workflows/release-core.yml
+    with:
+      version: ${{ needs.prepare.outputs.version }}
+      tag: ${{ needs.prepare.outputs.tag }}
+      checkout-ref: ${{ needs.prepare.outputs.checkout-ref }}
+    secrets: inherit

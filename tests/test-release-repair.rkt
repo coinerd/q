@@ -3,11 +3,11 @@
 ;; @suite ci
 ;; @speed fast
 ;; tests/test-release-repair.rkt
-;; W7 (#8524): Tests for release-repair.rkt — manual release repair/backfill.
+;; W9 (#8773): Tests for release-repair.rkt — diagnostic-only release check.
 ;;
 ;; Tests the pure-logic functions: tag validation, version consistency,
-;; changelog entry validation, mode validation, arg parsing, and the
-;; complete repair-checks pipeline.
+;; changelog entry validation, arg parsing, and the complete repair-checks
+;; pipeline. publish/repair-assets modes are removed — only dry-run supported.
 
 (require rackunit
          "../scripts/release-repair.rkt")
@@ -68,20 +68,23 @@
   (check-equal? (validate-changelog-entry content "0.99.40") '(missing "0.99.40")))
 
 ;; ============================================================
-;; Mode validation
+;; Mode validation (dry-run only)
 ;; ============================================================
 
-(test-case "mode — dry-run is valid"
-  (check-equal? (validate-mode "dry-run") '(ok "dry-run")))
+(test-case "mode — dry-run is accepted (parsed from args)"
+  (define-values (tag mode) (parse-repair-args '("--tag" "v0.99.40")))
+  (check-equal? mode "dry-run"))
 
-(test-case "mode — publish is valid"
-  (check-equal? (validate-mode "publish") '(ok "publish")))
+(test-case "mode — non-dry-run in args is ignored by parser (always dry-run)"
+  ;; The parser now returns dry-run regardless of --mode (simplified for diagnostic-only)
+  (define-values (tag mode) (parse-repair-args '("--tag" "v0.99.40" "--mode" "publish")))
+  (check-equal? tag "v0.99.40")
+  (check-equal? mode "dry-run"))
 
-(test-case "mode — repair-assets is valid"
-  (check-equal? (validate-mode "repair-assets") '(ok "repair-assets")))
-
-(test-case "mode — invalid mode rejected"
-  (check-match (validate-mode "force") (list 'invalid _)))
+(test-case "mode — explicit dry-run args"
+  (define-values (tag mode) (parse-repair-args '("--tag" "v0.99.40" "--mode" "dry-run")))
+  (check-equal? tag "v0.99.40")
+  (check-equal? mode "dry-run"))
 
 ;; ============================================================
 ;; Arg parsing
@@ -91,11 +94,6 @@
   (define-values (tag mode) (parse-repair-args '("--tag" "v0.99.40")))
   (check-equal? tag "v0.99.40")
   (check-equal? mode "dry-run"))
-
-(test-case "parse args — tag and explicit mode"
-  (define-values (tag mode) (parse-repair-args '("--tag" "v0.99.40" "--mode" "publish")))
-  (check-equal? tag "v0.99.40")
-  (check-equal? mode "publish"))
 
 (test-case "parse args — missing tag returns #f"
   (check-false (parse-repair-args '())))
@@ -112,6 +110,12 @@
     [(string-contains? path "version.rkt") "(define q-version \"0.99.40\")"]
     [(string-contains? path "CHANGELOG") "## v0.99.40 — 2026-06-21\nRelease automation restoration"]
     [else ""]))
+
+(test-case "repair-checks — non-dry-run mode fails via direct call"
+  (define checks (repair-checks "v0.99.40" "publish" fake-file-exists? fake-file->string))
+  (define mode-check (findf (lambda (c) (equal? (car c) "mode-valid")) checks))
+  (define result ((cdr mode-check)))
+  (check-eq? (car result) 'fail "publish mode should be rejected directly"))
 
 (test-case "repair-checks — valid tag dry-run all pass"
   (define checks (repair-checks "v0.99.40" "dry-run" fake-file-exists? fake-file->string))
@@ -145,15 +149,35 @@
   (define result ((cdr cl-check)))
   (check-eq? (car result) 'fail))
 
-(test-case "repair-checks — publish mode passes checks but warns"
+(test-case "repair-checks — non-dry-run mode fails"
   (define checks (repair-checks "v0.99.40" "publish" fake-file-exists? fake-file->string))
-  (define safety-check (findf (lambda (c) (equal? (car c) "mode-safety")) checks))
-  (define result ((cdr safety-check)))
-  (check-eq? (car result) 'pass))
+  (define mode-check (findf (lambda (c) (equal? (car c) "mode-valid")) checks))
+  (define result ((cdr mode-check)))
+  (check-eq? (car result) 'fail "publish mode should be rejected"))
 
-(test-case "dry-run does not claim publication"
-  ;; This is the key safety property: dry-run mode must not indicate publication
+(test-case "repair-checks — repair-assets mode fails"
+  (define checks (repair-checks "v0.99.40" "repair-assets" fake-file-exists? fake-file->string))
+  (define mode-check (findf (lambda (c) (equal? (car c) "mode-valid")) checks))
+  (define result ((cdr mode-check)))
+  (check-eq? (car result) 'fail "repair-assets mode should be rejected"))
+
+(test-case "no-mutation-safety check confirms no mutation"
   (define checks (repair-checks "v0.99.40" "dry-run" fake-file-exists? fake-file->string))
-  (define safety-check (findf (lambda (c) (equal? (car c) "mode-safety")) checks))
+  (define safety-check (findf (lambda (c) (equal? (car c) "no-mutation-safety")) checks))
   (define result ((cdr safety-check)))
-  (check-true (string-contains? (cdr result) "no publication")))
+  (check-eq? (car result) 'pass)
+  (check-true (string-contains? (cdr result) "no release"))
+  (check-true (string-contains? (cdr result) "mutation")))
+
+(test-case "dry-run diagnostic message"
+  (define checks (repair-checks "v0.99.40" "dry-run" fake-file-exists? fake-file->string))
+  (define no-mutation-check (findf (lambda (c) (equal? (car c) "no-mutation-safety")) checks))
+  (define result ((cdr no-mutation-check)))
+  (check-true (string-contains? (cdr result) "no release")))
+
+(test-case "5 checks in pipeline"
+  (define checks (repair-checks "v0.99.40" "dry-run" fake-file-exists? fake-file->string))
+  (check-equal? (length checks) 5)
+  (check-equal?
+   (map car checks)
+   '("tag-format" "mode-valid" "version-consistency" "changelog-entry" "no-mutation-safety")))
