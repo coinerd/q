@@ -31,7 +31,7 @@ jobs:
       - name: Run tests (fast suite)
         run: |
           set -o pipefail
-          STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt --suite fast --jobs 4 --timeout 120 --record-gate-evidence 2>&1 | tee test-output.log
+          STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt --suite fast --jobs "$(nproc)" --timeout 180 --record-gate-evidence 2>&1 | tee test-output.log
 
       - name: Record gate evidence (arch)
         run: racket scripts/run-tests.rkt --suite arch --record-gate-evidence
