@@ -1,16 +1,10 @@
-{
-  "version": "0.99.52",
-  "wave": "W9",
-  "status": "ready-for-merge",
-  "pr": 8818,
-  "content-digest": "8a0ccfd1285bee151d8149e31c140ee83a22328460b81012ddf3a684bb86862a",
-  "scope": "build-once pre-publication release pipeline",
-  "timestamp": 1784648913,
-  "ci": {
-    "lint": "pass",
-    "fast": "pass",
-    "smoke": "pass",
-    "workflows": "pass",
-    "security": "pass"
-  }
-}
+#hash((content-digest . "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+ (implementation-sha . "e9cce4511cb4db57ea16e4730f3f7d0105d6ccf8")
+ (issue . 8773)
+ (milestone . 838)
+ (required-checks . ("lint" "security" "release-dry-run" "workflows (0)" "workflows (1)" "workflows-aggregate" "smoke (ubuntu-latest)" "smoke (macos-latest)" "test (0)" "test (1)" "test (2)" "test-aggregate" "test-platform"))
+ (review-artifact . "docs/reports/gsd-wave-reviews/v0.99.52-w9.rktd")
+ (schema-version . 2)
+ (status . "ready-for-merge")
+ (validation-artifact . "docs/reports/gsd-wave-validation/v0.99.52-w9.rktd")
+ (wave . "W9"))
