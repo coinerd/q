@@ -113,6 +113,7 @@
       (when (and chunk (not (eq? chunk #f)))
         (set-box! chunk-count (+ 1 (unbox chunk-count)))
         (when (> (unbox chunk-count) limit)
+          (set-box! received-done? #t)
           (log-warning
            (format "stream-from-provider: exceeded ~a chunks, truncating session=~a turn=~a"
                    limit

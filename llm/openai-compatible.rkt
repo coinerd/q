@@ -328,21 +328,23 @@
                        #:initial-timeout stream-timeout
                        #:stream-timeout (max 180 (quotient stream-timeout 2))
                        #:max-total-timeout max-total-timeout))
-    ;; Simple wrapper: yield chunks until done, then close port.
-    ;; No dynamic-wind — it fires before/after on every yield which
-    ;; causes the port to be closed between yields.
+    ;; v0.99.54 W3 L-2: Close response port on normal stream end or generator error.
+    ;; NOTE: Consumer-abandonment (abandoning the generator without reading to #f)
+    ;; will leak the port until GC. A thread+channel rewrite would fix this.
     (log-stream-setup-timing "openai" _stream-t0)
     (generator ()
-               (let loop ()
-                 (define chunk (gen))
-                 (match chunk
-                   [#f
-                    ;; Stream done — close port and yield final #f
-                    (close-input-port response-port)
-                    (yield #f)]
-                   [_
-                    (yield chunk)
-                    (loop)]))))
+               (with-handlers ([exn:fail? (lambda (e)
+                                            (close-input-port response-port)
+                                            (raise e))])
+                 (let loop ()
+                   (define chunk (gen))
+                   (match chunk
+                     [#f
+                      (close-input-port response-port)
+                      (yield #f)]
+                     [_
+                      (yield chunk)
+                      (loop)])))))
 
   (make-provider (lambda () "openai-compatible")
                  (lambda () (hasheq 'streaming #t 'token-counting #f))

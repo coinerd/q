@@ -269,13 +269,16 @@
         (hash-ref candidate 'finishReason "STOP")
         "STOP"))
 
-  ;; A native functionCall requires another request even when Gemini reports
-  ;; finishReason=STOP. Normalize that mixed native signal to the shared reason.
+  ;; v0.99.54 W3 L-3: Check safety/recitation BEFORE functionCall.
+  ;; When SAFETY or RECITATION is the finishReason, the content may still
+  ;; contain a functionCall but should not be routed as tool-calls.
   (define stop-reason
-    (if (for/or ([part (in-list parts)])
-          (hash-has-key? part 'functionCall))
-        'tool-calls
-        (translate-stop-reason 'gemini finish-reason)))
+    (cond
+      [(member finish-reason '("SAFETY" "RECITATION")) (translate-stop-reason 'gemini finish-reason)]
+      [(for/or ([part (in-list parts)])
+         (hash-has-key? part 'functionCall))
+       'tool-calls]
+      [else (translate-stop-reason 'gemini finish-reason)]))
 
   ;; Translate usage
   (define prompt-tokens (hash-ref usage-raw 'promptTokenCount 0))
