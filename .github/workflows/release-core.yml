@@ -1,0 +1,341 @@
+# scripts/release-core.yml — Reusable build-once pre-publication release pipeline
+#
+# F-15/W9 (#8773): Build exactly once, smoke before any publication,
+# draft then verify before promote, verify public after promote.
+#
+# Caller must provide:
+#   - version: release version string (e.g., 0.99.52)
+#   - tag: git tag name (e.g., v0.99.52)
+#   - checkout-ref: git ref to build from
+#
+# This workflow does NOT create tags — it builds/publishes from an existing tag.
+
+name: Release Core
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Release version (e.g. 0.99.52)'
+        required: true
+        type: string
+      tag:
+        description: 'Git tag (e.g. v0.99.52)'
+        required: true
+        type: string
+      checkout-ref:
+        description: 'Git ref to checkout and build from'
+        required: true
+        type: string
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.VERSION }}
+      tag: ${{ steps.version.outputs.TAG }}
+      tarball-name: ${{ steps.build.outputs.TARBALL_NAME }}
+      tarball-artifact-name: q-tarball-${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout-ref }}
+
+      - uses: ./.github/actions/setup-racket
+
+      - name: Extract version
+        id: version
+        run: |
+          echo "VERSION=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          echo "TAG=${{ inputs.tag }}" >> $GITHUB_OUTPUT
+
+      - name: Build tarball
+        id: build
+        run: |
+          VERSION="${{ inputs.version }}"
+          mkdir -p /tmp/release
+          cp -r . /tmp/release/q/
+          cd /tmp/release
+          # tarball name: q-VERSION.tar.gz
+          TARBALL_NAME="q-${VERSION}.tar.gz"
+          tar czf "${TARBALL_NAME}" \
+            --exclude='.git' \
+            --exclude='compiled' \
+            --exclude='*.zo' \
+            q/
+          ls -la "${TARBALL_NAME}"
+          echo "TARBALL_NAME=${TARBALL_NAME}" >> $GITHUB_OUTPUT
+          echo "TARBALL_PATH=/tmp/release/${TARBALL_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Generate release manifest
+        run: |
+          VERSION="${{ inputs.version }}"
+          TAG="${{ inputs.tag }}"
+          cd /tmp/release
+          racket q/scripts/gen-release-manifest.rkt "${TARBALL_NAME}" > release-manifest.json
+          cat release-manifest.json
+
+      - name: Generate release notes
+        run: |
+          VERSION="${{ inputs.version }}"
+          cd /tmp/release
+          racket q/scripts/gen-release-notes.rkt "${VERSION}" > release-notes.md
+          cat release-notes.md
+
+      - name: Upload internal build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: q-release-build-${{ inputs.version }}
+          path: |
+            /tmp/release/q-${{ inputs.version }}.tar.gz
+            /tmp/release/release-manifest.json
+            /tmp/release/release-notes.md
+          retention-days: 14
+
+  smoke:
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      RACKET_VERSION: '8.12'
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: q-release-build-${{ inputs.version }}
+          path: /tmp/release
+
+      - name: Install Racket
+        run: |
+          curl -L https://download.racket-lang.org/installers/${{ env.RACKET_VERSION }}/racket-${{ env.RACKET_VERSION }}-x86_64-linux-cs.sh -o /tmp/racket.sh
+          echo "2" | sudo sh /tmp/racket.sh --in-place --create-links /usr/local
+
+      - name: Extract and install
+        run: |
+          VERSION="${{ inputs.version }}"
+          cd /tmp/release
+          tar xzf "q-${VERSION}.tar.gz"
+          cd q
+          raco pkg install --auto --batch
+
+      - name: Verify q --version
+        run: |
+          VERSION="${{ inputs.version }}"
+          cd /tmp/release/q
+          OUTPUT=$(racket main.rkt --version)
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -q "version ${VERSION}"
+
+      - name: Run release-smoke test suite
+        run: |
+          cd /tmp/release/q
+          echo "Running release-smoke suite (deterministic, artifact-focused)"
+          STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
+            --suite release-smoke \
+            --jobs 4 \
+            --timeout 120 \
+            2>&1 | tee smoke-output.log
+
+      - name: Upload smoke log on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: smoke-output-log-${{ inputs.version }}
+          path: /tmp/release/q/smoke-output.log
+          retention-days: 30
+
+  draft:
+    needs: smoke
+    runs-on: ubuntu-latest
+    outputs:
+      release-id: ${{ steps.draft.outputs.RELEASE_ID }}
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: q-release-build-${{ inputs.version }}
+          path: /tmp/release
+
+      - name: Create draft release
+        id: draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ inputs.version }}"
+          TAG="${{ inputs.tag }}"
+          # Create draft release with assets
+          RELEASE_ID=$(gh release create "$TAG" \
+            /tmp/release/q-${VERSION}.tar.gz \
+            /tmp/release/release-manifest.json \
+            --notes-file /tmp/release/release-notes.md \
+            --draft \
+            --repo ${{ github.repository }} \
+            --json id -q '.id')
+          echo "RELEASE_ID=${RELEASE_ID}" >> $GITHUB_OUTPUT
+          echo "Created draft release: ${RELEASE_ID}"
+
+  verify-draft:
+    needs: draft
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: q-release-build-${{ inputs.version }}
+          path: /tmp/release
+
+      - name: Verify draft assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ inputs.version }}"
+          TAG="${{ inputs.tag }}"
+          echo "Verifying draft release assets for ${TAG}..."
+
+          # Await asset availability
+          for i in $(seq 1 15); do
+            RELEASE_DATA=$(curl -sf -H "Authorization: token $GH_TOKEN" \
+              "https://api.github.com/repos/${{ github.repository }}/releases/tags/${TAG}")
+            if [ -n "$RELEASE_DATA" ]; then
+              echo "Release found (attempt $i)"
+              break
+            fi
+            echo "Waiting for release (attempt $i)..."
+            sleep 5
+          done
+
+          # Verify tarball asset
+          TARBALL="q-${VERSION}.tar.gz"
+          TARBALL_URL=$(echo "$RELEASE_DATA" | jq -r ".assets[] | select(.name==\"${TARBALL}\") | .url")
+          if [ -z "$TARBALL_URL" ] || [ "$TARBALL_URL" = "null" ]; then
+            echo "ERROR: Asset ${TARBALL} not found in draft release ${TAG}"
+            exit 1
+          fi
+          echo "Tarball asset found: ${TARBALL}"
+
+          # Download and verify tarball
+          curl -sfL -H "Authorization: token $GH_TOKEN" -H "Accept: application/octet-stream" \
+            -o "/tmp/verify-${TARBALL}" "$TARBALL_URL"
+
+          # Verify manifest asset
+          MANIFEST_URL=$(echo "$RELEASE_DATA" | jq -r '.assets[] | select(.name=="release-manifest.json") | .url')
+          if [ -z "$MANIFEST_URL" ] || [ "$MANIFEST_URL" = "null" ]; then
+            echo "ERROR: Asset release-manifest.json not found in draft release ${TAG}"
+            exit 1
+          fi
+          echo "Manifest asset found"
+
+          # Download manifest
+          curl -sfL -H "Authorization: token $GH_TOKEN" -H "Accept: application/octet-stream" \
+            -o /tmp/verify-release-manifest.json "$MANIFEST_URL"
+
+          # Compare against locally-built artifact
+          LOCAL_MANIFEST="/tmp/release/release-manifest.json"
+          if [ -f "$LOCAL_MANIFEST" ]; then
+            if [ "$(sha256sum /tmp/verify-release-manifest.json | awk '{print $1}')" != \
+                 "$(sha256sum $LOCAL_MANIFEST | awk '{print $1}')" ]; then
+              echo "ERROR: Release manifest SHA256 differs from internal artifact"
+              exit 1
+            fi
+            echo "release-manifest.json SHA256 matches internal artifact"
+
+            # Compare tarball SHA256
+            if [ "$(sha256sum /tmp/verify-${TARBALL} | awk '{print $1}')" != \
+                 "$(sha256sum /tmp/release/${TARBALL} | awk '{print $1}')" ]; then
+              echo "ERROR: Tarball SHA256 differs from internal artifact"
+              exit 1
+            fi
+            echo "Tarball SHA256 matches internal artifact"
+          fi
+
+          echo "All draft assets verified successfully."
+
+  publish:
+    needs: verify-draft
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ inputs.version }}"
+          TAG="${{ inputs.tag }}"
+          echo "Publishing release ${TAG}..."
+          gh release edit "$TAG" --draft=false --repo ${{ github.repository }}
+          echo "Release published: ${TAG}"
+
+  verify-public:
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: q-release-build-${{ inputs.version }}
+          path: /tmp/release
+
+      - name: Verify public assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ inputs.version }}"
+          TAG="${{ inputs.tag }}"
+          echo "Verifying public release assets for ${TAG}..."
+
+          # Fetch public release by tag
+          for i in $(seq 1 15); do
+            RELEASE_DATA=$(curl -sf -H "Authorization: token $GH_TOKEN" \
+              "https://api.github.com/repos/${{ github.repository }}/releases/tags/${TAG}")
+            if [ -n "$RELEASE_DATA" ]; then
+              echo "Public release found (attempt $i)"
+              break
+            fi
+            echo "Waiting for public release (attempt $i)..."
+            sleep 5
+          done
+
+          # Verify tarball
+          TARBALL="q-${VERSION}.tar.gz"
+          TARBALL_URL=$(echo "$RELEASE_DATA" | jq -r ".assets[] | select(.name==\"${TARBALL}\") | .url")
+          if [ -z "$TARBALL_URL" ] || [ "$TARBALL_URL" = "null" ]; then
+            echo "ERROR: Asset ${TARBALL} not found in public release ${TAG}"
+            exit 1
+          fi
+
+          curl -sfL -H "Authorization: token $GH_TOKEN" -H "Accept: application/octet-stream" \
+            -o "/tmp/public-verify-${TARBALL}" "$TARBALL_URL"
+
+          # Verify manifest
+          MANIFEST_URL=$(echo "$RELEASE_DATA" | jq -r '.assets[] | select(.name=="release-manifest.json") | .url')
+          if [ -z "$MANIFEST_URL" ] || [ "$MANIFEST_URL" = "null" ]; then
+            echo "ERROR: Asset release-manifest.json not found in public release ${TAG}"
+            exit 1
+          fi
+
+          curl -sfL -H "Authorization: token $GH_TOKEN" -H "Accept: application/octet-stream" \
+            -o /tmp/public-verify-release-manifest.json "$MANIFEST_URL"
+
+          # Verify against internal artifact
+          LOCAL_MANIFEST="/tmp/release/release-manifest.json"
+          if [ -f "$LOCAL_MANIFEST" ]; then
+            if [ "$(sha256sum /tmp/public-verify-release-manifest.json | awk '{print $1}')" != \
+                 "$(sha256sum $LOCAL_MANIFEST | awk '{print $1}')" ]; then
+              echo "ERROR: Public manifest SHA256 differs from internal artifact"
+              exit 1
+            fi
+            echo "Public release-manifest.json SHA256 matches internal artifact"
+
+            if [ "$(sha256sum /tmp/public-verify-${TARBALL} | awk '{print $1}')" != \
+                 "$(sha256sum /tmp/release/${TARBALL} | awk '{print $1}')" ]; then
+              echo "ERROR: Public tarball SHA256 differs from internal artifact"
+              exit 1
+            fi
+            echo "Public tarball SHA256 matches internal artifact"
+          fi
+
+          echo "All public assets verified successfully."

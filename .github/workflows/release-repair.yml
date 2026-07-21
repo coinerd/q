@@ -7,29 +7,27 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Existing tag to publish/repair, e.g. v0.99.40'
+        description: 'Existing tag to inspect, e.g. v0.99.40'
         required: true
         type: string
       mode:
-        description: 'dry-run | publish | repair-assets'
+        description: 'Diagnostic mode (dry-run only for existing tags)'
         required: true
         type: choice
         options:
           - dry-run
-          - publish
-          - repair-assets
         default: dry-run
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  repair:
+  diagnose:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.VERSION }}
-      mode: ${{ github.event.inputs.mode }}
       result: ${{ steps.result.outputs.RESULT }}
+      is-unpublished: ${{ steps.check.outputs.IS_UNPUBLISHED }}
     steps:
       - name: Checkout exact tag
         uses: actions/checkout@v7
@@ -59,121 +57,81 @@ jobs:
           fi
           echo "Version match OK"
 
-      - name: Run release repair checks
-        id: checks
+      - name: Check if tag has a release
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          TAG="${{ steps.version.outputs.TAG }}"
-          MODE="${{ github.event.inputs.mode }}"
-          echo "Running release-repair in $MODE mode for $TAG"
-          racket scripts/release-repair.rkt --tag "$TAG" --mode "$MODE"
+          TAG="${{ github.event.inputs.tag }}"
+          echo "Checking release status for ${TAG}..."
+          HTTP_STATUS=$(curl -sf -o /dev/null -w "%{http_code}" \
+            -H "Authorization: token $GH_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/${TAG}" 2>/dev/null || echo "not-found")
+          if [ "$HTTP_STATUS" = "200" ]; then
+            echo "IS_UNPUBLISHED=false" >> $GITHUB_OUTPUT
+            echo "Release exists for tag ${TAG}"
+          else
+            echo "IS_UNPUBLISHED=true" >> $GITHUB_OUTPUT
+            echo "No release found for tag ${TAG} (unpublished)"
+          fi
 
-      - name: Build tarball
-        if: success() || steps.checks.outcome == 'success'
+      - name: Run diagnostics
+        id: diagnostics
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
-          mkdir -p /tmp/q
-          cp -r . /tmp/q/
-          cd /tmp
-          tar czf /tmp/q-${VERSION}.tar.gz \
+          TAG="${{ github.event.inputs.tag }}"
+          echo "Running release diagnostics for $TAG"
+          racket scripts/release-repair.rkt --tag "$TAG" --mode dry-run
+
+      - name: Build tarball (for unpublished tags — will route to release-core)
+        if: steps.check.outputs.IS_UNPUBLISHED == 'true'
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          mkdir -p /tmp/release
+          cp -r . /tmp/release/q/
+          cd /tmp/release
+          tar czf "q-${VERSION}.tar.gz" \
             --exclude='.git' \
             --exclude='compiled' \
             --exclude='*.zo' \
             q/
+          ls -la "q-${VERSION}.tar.gz"
 
-      - name: Generate release manifest
-        if: success() || steps.checks.outcome == 'success'
+      - name: Upload build artifact (for unpublished tags)
+        uses: actions/upload-artifact@v7
+        if: steps.check.outputs.IS_UNPUBLISHED == 'true'
+        with:
+          name: q-unpublished-build-${{ steps.version.outputs.VERSION }}
+          path: /tmp/release/
+          retention-days: 7
+
+      - name: Provide guidance for unpublished tag
+        if: steps.check.outputs.IS_UNPUBLISHED == 'true'
         run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          racket scripts/gen-release-manifest.rkt /tmp/q-${VERSION}.tar.gz > /tmp/release-manifest.json
-          cp /tmp/release-manifest.json .
-          cat /tmp/release-manifest.json
+          echo "## Unpublished Tag Detected" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Tag ${{ github.event.inputs.tag }} has no release. It needs normal publication:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "1. Push the tag to trigger the normal release pipeline: $(gh run list --workflow release.yml -L 1)" >> $GITHUB_STEP_SUMMARY || true
+          echo "2. The build-once pre-publication pipeline will smoke, draft, verify, publish." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
 
-      - name: Generate release notes
-        if: success() || steps.checks.outcome == 'success'
-        run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          racket scripts/gen-release-notes.rkt "${VERSION}" > /tmp/release-notes.md
-          cat /tmp/release-notes.md
-
-      - name: Set result (dry-run)
-        if: github.event.inputs.mode == 'dry-run'
+      - name: Set result
         id: result
         run: |
-          echo "RESULT=dry-run-complete" >> $GITHUB_OUTPUT
-          echo "## Dry-Run Complete" >> $GITHUB_STEP_SUMMARY
-          echo "Tag: ${{ steps.version.outputs.TAG }}" >> $GITHUB_STEP_SUMMARY
-          echo "Version: ${{ steps.version.outputs.VERSION }}" >> $GITHUB_STEP_SUMMARY
-          echo "No release was created or modified." >> $GITHUB_STEP_SUMMARY
-
-      - name: Publish release (publish mode)
-        if: github.event.inputs.mode == 'publish'
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: ${{ github.event.inputs.tag }}
-          body_path: /tmp/release-notes.md
-          files: |
-            /tmp/q-${{ steps.version.outputs.VERSION }}.tar.gz
-            release-manifest.json
-
-      - name: Set result (publish)
-        if: github.event.inputs.mode == 'publish'
-        id: result_publish
-        run: |
-          echo "RESULT=published" >> $GITHUB_OUTPUT
-          echo "## Release Published" >> $GITHUB_STEP_SUMMARY
-          echo "Tag: ${{ steps.version.outputs.TAG }}" >> $GITHUB_STEP_SUMMARY
-
-      - name: Upload assets to existing release (repair-assets mode)
-        if: github.event.inputs.mode == 'repair-assets'
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: ${{ github.event.inputs.tag }}
-          files: |
-            /tmp/q-${{ steps.version.outputs.VERSION }}.tar.gz
-            release-manifest.json
-
-      - name: Set result (repair-assets)
-        if: github.event.inputs.mode == 'repair-assets'
-        id: result_repair
-        run: |
-          echo "RESULT=assets-repaired" >> $GITHUB_OUTPUT
-          echo "## Assets Repaired" >> $GITHUB_STEP_SUMMARY
-          echo "Tag: ${{ steps.version.outputs.TAG }}" >> $GITHUB_STEP_SUMMARY
-
-      - name: Verify assets after publication
-        if: github.event.inputs.mode != 'dry-run'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          TAG="${{ steps.version.outputs.TAG }}"
-          echo "Verifying release assets for ${TAG}..."
-          RELEASE_DATA=$(curl -sf -H "Authorization: token $GH_TOKEN" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/tags/${TAG}")
-          if [ -z "$RELEASE_DATA" ]; then
-            echo "ERROR: Release for tag ${TAG} not found"
-            exit 1
+          IS_UNPUBLISHED="${{ steps.check.outputs.IS_UNPUBLISHED }}"
+          if [ "$IS_UNPUBLISHED" = "true" ]; then
+            echo "RESULT=unpublished-tag-detected" >> $GITHUB_OUTPUT
+          else
+            echo "RESULT=dry-run-complete" >> $GITHUB_OUTPUT
           fi
-          TARBALL="q-${VERSION}.tar.gz"
-          TARBALL_URL=$(echo "$RELEASE_DATA" | jq -r ".assets[] | select(.name==\"${TARBALL}\") | .url")
-          if [ -z "$TARBALL_URL" ] || [ "$TARBALL_URL" = "null" ]; then
-            echo "ERROR: Asset ${TARBALL} not found in release ${TAG}"
-            exit 1
+          echo "## Release Repair (Diagnostic)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Tag: ${{ github.event.inputs.tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "Mode: dry-run" >> $GITHUB_STEP_SUMMARY
+          if [ "$IS_UNPUBLISHED" = "true" ]; then
+            echo "Status: -> unpublishing-tag-→-release-core-pipeline" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Status: Existing release — no mutation performed." >> $GITHUB_STEP_SUMMARY
+            echo "For a new patch release, create a new tag and push it." >> $GITHUB_STEP_SUMMARY
           fi
-          MANIFEST_URL=$(echo "$RELEASE_DATA" | jq -r '.assets[] | select(.name=="release-manifest.json") | .url')
-          if [ -z "$MANIFEST_URL" ] || [ "$MANIFEST_URL" = "null" ]; then
-            echo "ERROR: Asset release-manifest.json not found in release ${TAG}"
-            exit 1
-          fi
-          echo "All release assets verified successfully."
-
-      - name: Upload repair log
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: release-repair-${{ github.event.inputs.tag }}
-          path: |
-            /tmp/release-notes.md
-            /tmp/release-manifest.json
-          retention-days: 14

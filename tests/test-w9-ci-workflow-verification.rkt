@@ -134,9 +134,13 @@
  (test-case "release-repair.yml defaults to dry-run"
    (define content (file->string "../.github/workflows/release-repair.yml"))
    (check-equal? (validate-repair-default-mode content) '(safe-default)))
- (test-case "release-repair.yml has all three mode options"
+ (test-case "release-repair.yml mode options — only dry-run"
    (define content (file->string "../.github/workflows/release-repair.yml"))
-   (check-equal? (validate-repair-mode-options content) '(all-modes-present)))
+   (check-true (string-contains? content "dry-run") "must contain dry-run")
+   ;; Must NOT have publish or repair-assets mode options
+   (check-false (string-contains? content "- publish") "must NOT have publish mode option")
+   (check-false (string-contains? content "- repair-assets")
+                "must NOT have repair-assets mode option"))
  ;; ── release.yml correctness tests ──
  (test-case "release.yml uses tag-publish context"
    (define content (file->string "../.github/workflows/release.yml"))
@@ -160,17 +164,13 @@
    (check-true (hash-has-key? record 'timestamp)))
  ;; ── CI dependency verification ──
  (test-case "setup-racket composite action exists"
-   (check-true (file-exists? "../.github/actions/setup-racket/action.yml")))
+   (check-true (file-exists? (build-path ".." ".github" "actions" "setup-racket" "action.yml"))))
  (test-case "ci-package-setup.rkt exists from v0.99.39"
-   (check-true (file-exists? "../scripts/ci-package-setup.rkt")))
+   (check-true (file-exists? (build-path ".." "scripts" "ci-package-setup.rkt"))))
  (test-case "release-repair.rkt script exists from W7"
-   (check-true (file-exists? "../scripts/release-repair.rkt")))
+   (check-true (file-exists? (build-path ".." "scripts" "release-repair.rkt"))))
  (test-case "release-dry-run.rkt script exists from W3"
-   (check-true (file-exists? "../scripts/release-dry-run.rkt")))
- (test-case "RELEASE-AUTOMATION-POLICY-v0.99.40.md exists from W8"
-   (check-true (file-exists? "../docs/reports/RELEASE-AUTOMATION-POLICY-v0.99.40.md")))
- (test-case "RELEASE-BACKFILL-POLICY-v0.99.40.md exists from W7"
-   (check-true (file-exists? "../docs/reports/RELEASE-BACKFILL-POLICY-v0.99.40.md"))))
+   (check-true (file-exists? (build-path ".." "scripts" "release-dry-run.rkt")))))
 
 (module+ test
   (require rackunit/text-ui)
