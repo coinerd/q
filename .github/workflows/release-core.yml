@@ -198,11 +198,9 @@ jobs:
           TAG="${{ inputs.tag }}"
           echo "Verifying draft release assets for ${TAG}..."
 
-          # Await asset availability
-          for i in $(seq 1 15); do
-            RELEASE_DATA=$(curl -sf -H "Authorization: token $GH_TOKEN" \
-              "https://api.github.com/repos/${{ github.repository }}/releases/tags/${TAG}")
-            if [ -n "$RELEASE_DATA" ]; then
+          # Wait for release to propagate via gh CLI
+          for i in $(seq 1 30); do
+            if gh release view "$TAG" --repo ${{ github.repository }} --json assets &>/dev/null 2>&1; then
               echo "Release found (attempt $i)"
               break
             fi
@@ -210,35 +208,28 @@ jobs:
             sleep 5
           done
 
-          # Verify tarball asset
-          TARBALL="q-${VERSION}.tar.gz"
-          TARBALL_URL=$(echo "$RELEASE_DATA" | jq -r ".assets[] | select(.name==\"${TARBALL}\") | .url")
-          if [ -z "$TARBALL_URL" ] || [ "$TARBALL_URL" = "null" ]; then
-            echo "ERROR: Asset ${TARBALL} not found in draft release ${TAG}"
-            exit 1
-          fi
-          echo "Tarball asset found: ${TARBALL}"
-
           # Download and verify tarball
-          curl -sfL -H "Authorization: token $GH_TOKEN" -H "Accept: application/octet-stream" \
-            -o "/tmp/verify-${TARBALL}" "$TARBALL_URL"
-
-          # Verify manifest asset
-          MANIFEST_URL=$(echo "$RELEASE_DATA" | jq -r '.assets[] | select(.name=="release-manifest.json") | .url')
-          if [ -z "$MANIFEST_URL" ] || [ "$MANIFEST_URL" = "null" ]; then
-            echo "ERROR: Asset release-manifest.json not found in draft release ${TAG}"
+          mkdir -p /tmp/verify
+          TARBALL="q-${VERSION}.tar.gz"
+          gh release download "$TAG" --repo ${{ github.repository }} \
+            -p "$TARBALL" -D /tmp/verify --clobber 2>&1 || {
+            echo "ERROR: Could not download ${TARBALL} from draft release"
             exit 1
-          fi
-          echo "Manifest asset found"
+          }
+          echo "Tarball asset downloaded"
 
-          # Download manifest
-          curl -sfL -H "Authorization: token $GH_TOKEN" -H "Accept: application/octet-stream" \
-            -o /tmp/verify-release-manifest.json "$MANIFEST_URL"
+          # Download and verify manifest
+          gh release download "$TAG" --repo ${{ github.repository }} \
+            -p "release-manifest.json" -D /tmp/verify --clobber 2>&1 || {
+            echo "ERROR: Could not download release-manifest.json from draft release"
+            exit 1
+          }
+          echo "Manifest asset downloaded"
 
           # Compare against locally-built artifact
           LOCAL_MANIFEST="/tmp/release/release-manifest.json"
           if [ -f "$LOCAL_MANIFEST" ]; then
-            if [ "$(sha256sum /tmp/verify-release-manifest.json | awk '{print $1}')" != \
+            if [ "$(sha256sum /tmp/verify/release-manifest.json | awk '{print $1}')" != \
                  "$(sha256sum $LOCAL_MANIFEST | awk '{print $1}')" ]; then
               echo "ERROR: Release manifest SHA256 differs from internal artifact"
               exit 1
@@ -246,7 +237,7 @@ jobs:
             echo "release-manifest.json SHA256 matches internal artifact"
 
             # Compare tarball SHA256
-            if [ "$(sha256sum /tmp/verify-${TARBALL} | awk '{print $1}')" != \
+            if [ "$(sha256sum /tmp/verify/${TARBALL} | awk '{print $1}')" != \
                  "$(sha256sum /tmp/release/${TARBALL} | awk '{print $1}')" ]; then
               echo "ERROR: Tarball SHA256 differs from internal artifact"
               exit 1
