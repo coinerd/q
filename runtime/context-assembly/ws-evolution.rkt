@@ -27,7 +27,8 @@
          (only-in "task-conclusion.rkt" task-conclusion? task-conclusion-text)
          (only-in "../../util/fsm/fsm.rkt" fsm-state? fsm-state-name)
          racket/set
-         racket/string)
+         racket/string
+         racket/path)
 
 (provide evolve-working-set-for-state
          working-set-selective-keep
@@ -36,7 +37,56 @@
          evolution-result-kept-entries
          evolution-result-archived-entries
          evolution-result-evicted-conclusions
-         evolve-working-set-for-state/result)
+         evolve-working-set-for-state/result
+         ws-entry-matches-tags?)
+
+;; v0.99.54 W4 R-5: Tag-based path classification for working-set evolution.
+;; Uses basename-derived tags instead of raw substring matching to avoid
+;; false positives (e.g. "testimonies.txt", "errors.log", "specs.md").
+;; Returns one of 'test, 'spec, 'error, 'validation, or #f.
+(define (first-path-component p)
+  ;; Extract the first directory component from a path string.
+  ;; e.g. "tests/test-foo.rkt" -> "tests"
+  ;; Returns #f for bare filenames like "error.log".
+  (define idx (regexp-match-positions #px"/" p))
+  (and idx (substring p 0 (car (car idx)))))
+
+(define (path->tag p)
+  (and (string? p)
+       (let* ([bn (path->string (file-name-from-path (string->path p)))]
+              [bn-lower (string-downcase bn)]
+              [bn-stem (let ([dot (regexp-match-positions #px"[.]" bn-lower)])
+                         (if dot
+                             (substring bn-lower 0 (caar dot))
+                             bn-lower))]
+              [dir (first-path-component p)])
+         (cond
+           ;; Test files: in "tests/" or "test/" dir, filename contains "test" component
+           [(or (and dir (member dir '("tests" "test")))
+                (string-prefix? bn-stem "test-")
+                (string-suffix? bn-stem "-test")
+                (string-contains? bn-stem "_test"))
+            'test]
+           ;; Spec files: in "spec/" dir, filename starts with "spec" or contains "_spec"
+           [(or (equal? dir "spec")
+                (string-prefix? bn-stem "spec")
+                (string-suffix? bn-stem "-spec")
+                (string-contains? bn-stem "_spec"))
+            'spec]
+           ;; Error files: in "error/" or "errors/" dir, or stem contains "error"
+           [(or (and dir (member dir '("error" "errors")))
+                (string-suffix? bn-stem "-errors")
+                (string-contains? bn-stem "-error-")
+                (string-contains? bn-stem "_error")
+                (string-contains? bn-stem "error"))
+            'error]
+           ;; Validation files: in "validation/" or "validate/" dir, or stem is "validation"
+           [(or (equal? dir "validation") (equal? dir "validate") (equal? bn-stem "validation"))
+            'validation]
+           [else #f]))))
+
+(define (ws-entry-matches-tags? entry tag)
+  (eq? (path->tag (ws-entry-path entry)) tag))
 
 ;; working-set-selective-keep : working-set? (-> any/c boolean?) → void?
 ;; Keep only entries matching predicate. Removes all others.
@@ -71,15 +121,14 @@
      (working-set-reset! ws)
      (filter task-conclusion? conclusions)]
 
+    ;; v0.99.54 W4 R-5: Use path->tag for file classification instead of raw substring matching
     ;; implementation → debugging: keep error-related files
     [(and (eq? old-name 'implementation) (eq? new-name 'debugging))
+     (define tags-to-keep '(test error spec))
      (working-set-selective-remove! ws
                                     (lambda (e)
-                                      (define p (ws-entry-path e))
-                                      (and (string? p)
-                                           (or (string-contains? p "test")
-                                               (string-contains? p "error")
-                                               (string-contains? p "spec")))))
+                                      (and (string? (ws-entry-path e))
+                                           (memq (path->tag (ws-entry-path e)) tags-to-keep))))
      (filter task-conclusion? conclusions)]
 
     ;; debugging → implementation: clear selective entries
@@ -94,58 +143,48 @@
 
     ;; GAP-B v0.97.8: planning → verification: keep spec/test files, return conclusions
     [(and (eq? old-name 'planning) (eq? new-name 'verification))
+     (define tags-to-keep '(test spec validation))
      (working-set-selective-remove! ws
                                     (lambda (e)
-                                      (define p (ws-entry-path e))
-                                      (and (string? p)
-                                           (or (string-contains? p "test")
-                                               (string-contains? p "spec")
-                                               (string-contains? p "validation")))))
+                                      (and (string? (ws-entry-path e))
+                                           (memq (path->tag (ws-entry-path e)) tags-to-keep))))
      (filter task-conclusion? conclusions)]
 
     ;; GAP-B v0.97.8: planning → debugging: keep error/test files, return conclusions
     [(and (eq? old-name 'planning) (eq? new-name 'debugging))
+     (define tags-to-keep '(test error spec))
      (working-set-selective-remove! ws
                                     (lambda (e)
-                                      (define p (ws-entry-path e))
-                                      (and (string? p)
-                                           (or (string-contains? p "test")
-                                               (string-contains? p "error")
-                                               (string-contains? p "spec")))))
+                                      (and (string? (ws-entry-path e))
+                                           (memq (path->tag (ws-entry-path e)) tags-to-keep))))
      (filter task-conclusion? conclusions)]
 
     ;; GAP-B v0.97.8: verification → implementation: clear ws, return conclusions
     ;; GAP-C v0.97.10: implementation → verification: keep test/spec, return conclusions
     [(and (eq? old-name 'implementation) (eq? new-name 'verification))
+     (define tags-to-keep '(test spec validation))
      (working-set-selective-remove! ws
                                     (lambda (e)
-                                      (define p (ws-entry-path e))
-                                      (and (string? p)
-                                           (or (string-contains? p "test")
-                                               (string-contains? p "spec")
-                                               (string-contains? p "validation")))))
+                                      (and (string? (ws-entry-path e))
+                                           (memq (path->tag (ws-entry-path e)) tags-to-keep))))
      (filter task-conclusion? conclusions)]
 
     ;; GAP-C v0.97.10: verification → debugging: keep error/test files
     [(and (eq? old-name 'verification) (eq? new-name 'debugging))
+     (define tags-to-keep '(test error spec))
      (working-set-selective-remove! ws
                                     (lambda (e)
-                                      (define p (ws-entry-path e))
-                                      (and (string? p)
-                                           (or (string-contains? p "test")
-                                               (string-contains? p "error")
-                                               (string-contains? p "spec")))))
+                                      (and (string? (ws-entry-path e))
+                                           (memq (path->tag (ws-entry-path e)) tags-to-keep))))
      (filter task-conclusion? conclusions)]
 
     ;; GAP-C v0.97.10: debugging → verification: keep test/spec/validation files
     [(and (eq? old-name 'debugging) (eq? new-name 'verification))
+     (define tags-to-keep '(test spec validation))
      (working-set-selective-remove! ws
                                     (lambda (e)
-                                      (define p (ws-entry-path e))
-                                      (and (string? p)
-                                           (or (string-contains? p "test")
-                                               (string-contains? p "spec")
-                                               (string-contains? p "validation")))))
+                                      (and (string? (ws-entry-path e))
+                                           (memq (path->tag (ws-entry-path e)) tags-to-keep))))
      (filter task-conclusion? conclusions)]
     [(and (eq? old-name 'verification) (eq? new-name 'implementation))
      (working-set-reset! ws)
