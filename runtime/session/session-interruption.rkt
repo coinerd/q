@@ -16,7 +16,9 @@
 (struct interruption-state (turn-id token request-id) #:transparent)
 
 (define interruption-lock (make-semaphore 1))
-(define interruption-states (make-weak-hasheq))
+;; Use strong hash keyed by session-id string, not weak hash keyed by session struct.
+;; A weak-hasheq keyed by mutable struct can lose interruption state during GC.
+(define interruption-states (make-hash))
 
 (define (session-token sess)
   (define token (dict-ref (agent-session-config sess) 'cancellation-token #f))
@@ -29,20 +31,23 @@
 (define (begin-session-turn! sess)
   (define turn-id (generate-id))
   (define state (interruption-state turn-id (session-token sess) #f))
-  (call-with-semaphore interruption-lock (lambda () (hash-set! interruption-states sess state)))
+  (call-with-semaphore interruption-lock
+                       (lambda ()
+                         (hash-set! interruption-states (agent-session-session-id sess) state)))
   turn-id)
 
 (define (active-session-turn-id sess)
   (call-with-semaphore interruption-lock
                        (lambda ()
-                         (define state (hash-ref interruption-states sess #f))
+                         (define state
+                           (hash-ref interruption-states (agent-session-session-id sess) #f))
                          (and state (interruption-state-turn-id state)))))
 
 (define (request-session-interrupt! sess target-session-id target-turn-id request-id)
   (call-with-semaphore
    interruption-lock
    (lambda ()
-     (define state (hash-ref interruption-states sess #f))
+     (define state (hash-ref interruption-states (agent-session-session-id sess) #f))
      (cond
        [(not (equal? target-session-id (agent-session-session-id sess))) 'unrelated]
        [(or (not (agent-session-prompt-running? sess)) (not state)) 'no-active]
@@ -52,7 +57,7 @@
         ;; Record acceptance atomically. Signalling is separate so observers
         ;; always see interrupt.accepted before cancellation can finish.
         (hash-set! interruption-states
-                   sess
+                   (agent-session-session-id sess)
                    (struct-copy interruption-state state [request-id request-id]))
         'accepted]))))
 
@@ -60,7 +65,8 @@
   (define token
     (call-with-semaphore interruption-lock
                          (lambda ()
-                           (define state (hash-ref interruption-states sess #f))
+                           (define state
+                             (hash-ref interruption-states (agent-session-session-id sess) #f))
                            (and state
                                 (equal? request-id (interruption-state-request-id state))
                                 (interruption-state-token state)))))
@@ -72,8 +78,8 @@
   (define state
     (call-with-semaphore interruption-lock
                          (lambda ()
-                           (begin0 (hash-ref interruption-states sess #f)
-                             (hash-remove! interruption-states sess)))))
+                           (begin0 (hash-ref interruption-states (agent-session-session-id sess) #f)
+                             (hash-remove! interruption-states (agent-session-session-id sess))))))
   (cond
     [state
      (when (or (interruption-state-request-id state)

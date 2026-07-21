@@ -55,8 +55,26 @@
                   gsd-session-ctx-rework-count-box
                   gsd-ctx-event-bus))
 
-;; Re-export all pure transition logic for backward compatibility.
-(provide (all-from-out "transition-logic.rkt"))
+;; Re-export pure transition logic (public API only, not internal struct accessors)
+(provide ok-result
+         ok-result?
+         err-result
+         err-result?
+         ok?
+         ok-from
+         ok-to
+         err?
+         err-reason
+         GSD-STATES
+         TRANSITIONS
+         TRANSITIONS-FLAT
+         gsm-state?
+         valid-transition?
+         valid-targets
+         find-transition-path
+         compute-next-gsm-state
+         check-state-invariants
+         compute-next-pending-wave)
 
 ;; Struct exports (plain)
 (provide gsd-runtime-state

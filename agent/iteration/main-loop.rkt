@@ -89,7 +89,6 @@
                   loop-config-cancellation-token
                   loop-config-config
                   loop-config-queue
-                  loop-config-follow-up-delivery-mode
                   loop-config-injected-box
                   loop-config-shutdown-check
                   loop-config-force-shutdown-check
@@ -108,7 +107,6 @@
                              (#:cancellation-token (or/c cancellation-token? #f)
                               #:config session-config?
                               #:queue (or/c queue? #f)
-                              #:follow-up-delivery-mode (or/c 'all 'one-at-a-time)
                               #:injected-box (or/c box? #f)
                               #:shutdown-check (or/c procedure? #f)
                               #:force-shutdown-check (or/c procedure? #f)
@@ -288,7 +286,6 @@
                             #:cancellation-token [token #f]
                             #:config [config-raw (hash->session-config (hash))]
                             #:queue [steering-queue #f]
-                            #:follow-up-delivery-mode [follow-up-mode 'all]
                             #:injected-box [injected-box #f]
                             #:shutdown-check [shutdown-check #f]
                             #:force-shutdown-check [force-shutdown-check #f]
@@ -305,7 +302,6 @@
                                            #:cancellation-token token
                                            #:config config-raw
                                            #:queue steering-queue
-                                           #:follow-up-delivery-mode follow-up-mode
                                            #:injected-box injected-box
                                            #:shutdown-check shutdown-check
                                            #:force-shutdown-check force-shutdown-check

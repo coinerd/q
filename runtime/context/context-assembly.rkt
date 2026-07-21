@@ -3,6 +3,9 @@
 
 ;; q/runtime/context-assembly.rkt — Unified context assembly pipeline
 ;;
+;; R-9 (v0.99.52): `build-assembled-context` is deprecated; use `build-assembled-context/v2`.
+;;   This facade remains for backward compatibility.
+;;
 ;; Thin facade: re-exports from context-assembly/budgeting, selection, serialization.
 ;; Also re-exports from context-summary.rkt (sibling module).
 ;; All struct definitions live in sub-modules (single source of truth).
@@ -84,6 +87,7 @@
           [context-result-catalog (-> context-result? list?)]
           [context-result-summary (-> context-result? (or/c context-summary? #f))]
           ;; Context builders
+          ;; R-9 v0.99.52: legacy API — deprecated; prefer build-assembled-context/v2
           [build-assembled-context
            (->* (session-index? context-assembly-config?)
                 (#:cache (or/c summary-cache? #f)

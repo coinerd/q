@@ -23,7 +23,6 @@
                   turn-state-build-context
                   turn-state-pre-hook
                   turn-state-stream
-                  turn-state-post-hook
                   turn-state-complete
                   turn-state-blocked
                   turn-event-start
@@ -32,7 +31,6 @@
                   turn-event-hook-block
                   turn-event-stream-complete
                   turn-event-stream-cancel
-                  turn-event-post-hook-done
                   turn-event-msg-hook-block
                   next-turn-state
                   turn-state->symbol

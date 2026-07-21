@@ -20,7 +20,6 @@
                               turn-state-build-context
                               turn-state-pre-hook
                               turn-state-stream
-                              turn-state-post-hook
                               turn-state-complete
                               turn-state-blocked))])
         (check-pred turn-state? s)))
@@ -30,7 +29,6 @@
       (check-eq? (turn-state->symbol turn-state-build-context) 'build-context)
       (check-eq? (turn-state->symbol turn-state-pre-hook) 'pre-hook)
       (check-eq? (turn-state->symbol turn-state-stream) 'stream)
-      (check-eq? (turn-state->symbol turn-state-post-hook) 'post-hook)
       (check-eq? (turn-state->symbol turn-state-complete) 'complete)
       (check-eq? (turn-state->symbol turn-state-blocked) 'blocked))
 
@@ -52,18 +50,13 @@
       (check-equal? (turn-state->symbol (next-turn-state turn-state-pre-hook turn-event-hook-block))
                     'blocked))
 
-    (test-case "agent-loop-fsm: stream + stream-complete -> post-hook"
+    (test-case "agent-loop-fsm: stream + stream-complete -> complete"
       (check-equal? (turn-state->symbol (next-turn-state turn-state-stream
                                                          turn-event-stream-complete))
-                    'post-hook))
+                    'complete))
 
     (test-case "agent-loop-fsm: stream + stream-cancel -> complete"
       (check-equal? (turn-state->symbol (next-turn-state turn-state-stream turn-event-stream-cancel))
-                    'complete))
-
-    (test-case "agent-loop-fsm: post-hook + post-hook-done -> complete"
-      (check-equal? (turn-state->symbol (next-turn-state turn-state-post-hook
-                                                         turn-event-post-hook-done))
                     'complete))
 
     ;; ── Terminal states ──
@@ -87,7 +80,7 @@
       (check-false (valid-turn-transition? turn-state-blocked turn-event-hook-pass)))
 
     ;; ── Happy path ──
-    (test-case "happy path: emit-start -> build-context -> pre-hook -> stream -> post-hook -> complete"
+    (test-case "happy path: emit-start -> build-context -> pre-hook -> stream -> complete"
       (define s0 turn-state-emit-start)
       (define s1 (next-turn-state s0 turn-event-start))
       (check-eq? (turn-state->symbol s1) 'build-context)
@@ -96,9 +89,7 @@
       (define s3 (next-turn-state s2 turn-event-hook-pass))
       (check-eq? (turn-state->symbol s3) 'stream)
       (define s4 (next-turn-state s3 turn-event-stream-complete))
-      (check-eq? (turn-state->symbol s4) 'post-hook)
-      (define s5 (next-turn-state s4 turn-event-post-hook-done))
-      (check-eq? (turn-state->symbol s5) 'complete))
+      (check-eq? (turn-state->symbol s4) 'complete))
 
     ;; ── Blocked path ──
     (test-case "blocked path: emit-start -> build-context -> pre-hook -> blocked"

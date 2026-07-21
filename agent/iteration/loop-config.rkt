@@ -40,7 +40,6 @@
          cancellation-token ; (or/c cancellation-token? #f)
          config ; session-config?
          queue ; (or/c queue? #f) — steering message queue
-         follow-up-delivery-mode ; (or/c 'all 'one-at-a-time)
          injected-box ; (or/c box? #f) — injected message box
          shutdown-check ; (or/c procedure? #f)
          force-shutdown-check ; (or/c procedure? #f)
@@ -61,7 +60,6 @@
                           #:cancellation-token [cancellation-token #f]
                           #:config [config (hash->session-config (hash))]
                           #:queue [queue #f]
-                          #:follow-up-delivery-mode [follow-up-delivery-mode 'all]
                           #:injected-box [injected-box #f]
                           #:shutdown-check [shutdown-check #f]
                           #:force-shutdown-check [force-shutdown-check #f]
@@ -78,7 +76,6 @@
                cancellation-token
                config
                queue
-               follow-up-delivery-mode
                injected-box
                shutdown-check
                force-shutdown-check
@@ -98,7 +95,6 @@
          loop-config-cancellation-token
          loop-config-config
          loop-config-queue
-         loop-config-follow-up-delivery-mode
          loop-config-injected-box
          loop-config-shutdown-check
          loop-config-force-shutdown-check
@@ -113,12 +109,11 @@
                                              string?
                                              exact-nonnegative-integer?)
                              (#:cancellation-token (or/c cancellation-token? #f)
-                              #:config (or/c session-config? #f)
-                              #:queue (or/c any/c #f)
-                              #:follow-up-delivery-mode (or/c 'all 'one-at-a-time)
-                              #:injected-box (or/c box? #f)
-                              #:shutdown-check (or/c procedure? #f)
-                              #:force-shutdown-check (or/c procedure? #f)
-                              #:working-set (or/c working-set? #f)
-                              #:session (or/c agent-session? #f))
+                                                   #:config (or/c session-config? #f)
+                                                   #:queue (or/c any/c #f)
+                                                   #:injected-box (or/c box? #f)
+                                                   #:shutdown-check (or/c procedure? #f)
+                                                   #:force-shutdown-check (or/c procedure? #f)
+                                                   #:working-set (or/c working-set? #f)
+                                                   #:session (or/c agent-session? #f))
                              loop-config?)]))

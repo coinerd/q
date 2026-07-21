@@ -6,4 +6,18 @@
 ;; This shim re-exports everything for backward compatibility.
 
 (require "../util/event/event-bus.rkt")
-(provide (all-from-out "../util/event/event-bus.rkt"))
+(provide (rename-out [make-event-bus make-event-bus]
+                     [subscribe! subscribe!]
+                     [subscribe-map! subscribe-map!]
+                     [subscribe-filter! subscribe-filter!]
+                     [unsubscribe! unsubscribe!]
+                     [publish! publish!]
+                     [typed-event->event typed-event->event]
+                     [bus-emit-typed! bus-emit-typed!])
+         event-bus?
+         current-event-bus-error-handler
+         current-circuit-breaker-threshold
+         current-circuit-breaker-cooldown-secs
+         circuit-broken?
+         record-failure!
+         record-success!)

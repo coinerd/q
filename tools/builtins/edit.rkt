@@ -253,7 +253,10 @@
               (make-error-result (make-not-found-error path old-text content))]
              [(> occurrences 1)
               (make-error-result
-               (format "old-text appears ~a times in ~a; be more specific" occurrences path))]
+               (format
+                "old-text appears ~a times in ~a; be more specific (use replace_all: true to replace all occurrences)"
+                occurrences
+                path))]
              [else
               ;; occurrences = 1 or fuzzy-match succeeded
               (define backup-path (save-backup path content))

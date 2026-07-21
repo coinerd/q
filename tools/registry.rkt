@@ -2,6 +2,11 @@
 ;; tools/registry.rkt — Thread-safe tool registry
 ;; Extracted from tools/tool.rkt (v0.30.8 W0)
 ;; STABILITY: stable
+;; CANONICAL IMPORT PATH: (require q/tools/registry)
+;;
+;; This module is the canonical source for the tool-registry API.
+;; q/tools/tool.rkt re-exports common registry bindings for convenience,
+;; but new consumers should import the registry directly from this path.
 
 (define-logger q-tool-registry)
 (require racket/contract

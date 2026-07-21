@@ -25,25 +25,19 @@
 
 ;; ── Machine definition ──
 
-(define-fsm-machine turn
-                    #:states (emit-start build-context pre-hook stream post-hook complete blocked)
-                    #:events (start context-built
-                                    hook-pass
-                                    hook-block
-                                    stream-complete
-                                    stream-cancel
-                                    post-hook-done
-                                    msg-hook-block)
-                    #:transitions [(emit-start -> build-context) start]
-                    [(build-context -> pre-hook) context-built]
-                    [(pre-hook -> stream) hook-pass]
-                    [(pre-hook -> blocked) hook-block]
-                    [(stream -> post-hook) stream-complete]
-                    [(stream -> blocked) msg-hook-block]
-                    [(stream -> complete) stream-cancel]
-                    [(post-hook -> complete) post-hook-done]
-                    [(complete -> complete) start]
-                    [(blocked -> blocked) start])
+(define-fsm-machine
+ turn
+ #:states (emit-start build-context pre-hook stream complete blocked)
+ #:events (start context-built hook-pass hook-block stream-complete stream-cancel msg-hook-block)
+ #:transitions [(emit-start -> build-context) start]
+ [(build-context -> pre-hook) context-built]
+ [(pre-hook -> stream) hook-pass]
+ [(pre-hook -> blocked) hook-block]
+ [(stream -> complete) stream-complete]
+ [(stream -> blocked) msg-hook-block]
+ [(stream -> complete) stream-cancel]
+ [(complete -> complete) start]
+ [(blocked -> blocked) start])
 
 ;; ── Backward-compatible exports ──
 
@@ -52,7 +46,6 @@
 (define turn-state-build-context turn-build-context)
 (define turn-state-pre-hook turn-pre-hook)
 (define turn-state-stream turn-stream)
-(define turn-state-post-hook turn-post-hook)
 (define turn-state-complete turn-complete)
 (define turn-state-blocked turn-blocked)
 
@@ -63,7 +56,6 @@
 (define turn-event-hook-block turn-hook-block)
 (define turn-event-stream-complete turn-stream-complete)
 (define turn-event-stream-cancel turn-stream-cancel)
-(define turn-event-post-hook-done turn-post-hook-done)
 (define turn-event-msg-hook-block turn-msg-hook-block)
 
 ;; State predicate: turn-state? now checks fsm-state? with turn state names
@@ -109,7 +101,6 @@
          turn-state-build-context
          turn-state-pre-hook
          turn-state-stream
-         turn-state-post-hook
          turn-state-complete
          turn-state-blocked
          ;; Event singletons (direct for match patterns)
@@ -119,7 +110,6 @@
          turn-event-hook-block
          turn-event-stream-complete
          turn-event-stream-cancel
-         turn-event-post-hook-done
          turn-event-msg-hook-block
          ;; Parameters and tables
          current-turn-fsm-state

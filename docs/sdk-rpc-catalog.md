@@ -59,6 +59,7 @@ Extensions interact with the agent through the extension context (`extensions/co
 |--------|------|-------|
 | `interfaces/sdk.rkt` | **stable** | Public SDK, breaking changes require major version bump |
 | `wiring/rpc-methods.rkt` | **stable** | RPC protocol, breaking changes require major version bump |
+| `tools/registry.rkt` | **stable** | Tool registry; canonical import path `(require q/tools/registry)` |
 | `interfaces/rpc-mode.rkt` | **evolving** | May change between minor versions |
 | `extensions/api.rkt` | **stable** | Extension API contract |
 | `extensions/hooks.rkt` | **evolving** | New hook types may be added |

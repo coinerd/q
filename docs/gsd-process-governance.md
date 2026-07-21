@@ -35,8 +35,8 @@ Milestone titles MUST accurately describe the actual scope of work delivered.
 ### Enforcement
 
 Milestone naming remains a required human planning/review check. The current
-`claim-verifier.rkt` verifies quantitative claims, while
-`milestone-close-gate.rkt` fails closed on missing claims and release evidence;
+`claim-verifier.rkt` *(stable)* verifies quantitative claims, while
+`milestone-close-gate.rkt` *(stable)* fails closed on missing claims and release evidence;
 neither script infers semantic scope from a milestone title. A future naming
 checker must not be claimed until executable fixtures prove it.
 
@@ -63,7 +63,7 @@ directories. The evidence record contains:
 - the expected CI inventory from `scripts/required-pr-checks.policy`.
 
 CI computes the actual changed-content digest from the PR base/head or the main
-push before/head pair. `gsd-wave-gate.rkt` verifies that digest, reads both
+push before/head pair. `gsd-wave-gate.rkt` *(stable)* verifies that digest, reads both
 retained artifacts, requires `APPROVED`, cross-checks implementation SHA and
 content digest, and validates required red-first/test/lint/fast/planning fields.
 A fabricated path or stale record therefore fails this deterministic gate.
@@ -73,7 +73,7 @@ reviewable projection and internal consistency; it cannot prove its own origin,
 the current GitHub state, or that checks succeeded on the exact head. The canonical replacement boundary requires trusted external GitHub-attested
 exact-head evidence obtained through an authenticated adapter and bound to the
 configured issuer, repository, pull request, projection digest, latest evidence
-reference, and PR head SHA. During the current remediation W0 the legacy external helper is
+reference, and PR head SHA. During the current remediation W0 the legacy external helper *(quarantined)* is
 quarantined and merge/finalization remains a manual protected operation; the
 adapter is not yet deployed. The committed policy inventory is likewise not the live merge policy:
 the active branch-protection API is the authority. The controller fails closed
@@ -108,15 +108,15 @@ observation before authorizing merge.
 
 ### 2.3 Finalizer deployment boundary
 
-`scripts/github/wave-finalizer.py` is the canonical finalizer code protected in q
+`scripts/github/wave-finalizer.py` *(quarantined)* is the canonical finalizer code protected in q
 by the same protected-main review and CI path. It is intentionally an adapter-
 only controller: it does not invoke `git` or `gh`. The injected authenticated
 GitHub adapter and the launcher that verifies the deployed finalizer digest are
 outside this repository boundary. Operators must not infer that committing the
 canonical source proves which code is deployed or authenticates an adapter;
-the external launcher establishes those bootstrap properties before injection.
+the external launcher *(quarantined)* establishes those bootstrap properties before injection.
 
-The external launcher and authenticated adapter are currently quarantined/not
+The external launcher *(quarantined)* and authenticated adapter *(quarantined)* are currently quarantined/not
 deployed; W0 uses manual exact-head protected merge and manual post-merge
 verification/synchronization. The external envelope digest is a canonical
 self-consistency check, not authenticity, integrity, or authorization. It
@@ -212,14 +212,14 @@ omitting either is an invalid invocation and exits with code 2.
 
 | # | Gate | Source |
 |---|------|--------|
-| 1 | Milestone truth — digest-bound, identity-matched, consistent, published, and accepted | `gsd-milestone-truth.rkt` |
-| 2 | Claim verification — test counts match actual | `claim-verifier.rkt` |
+| 1 | Milestone truth — digest-bound, identity-matched, consistent, published, and accepted | `gsd-milestone-truth.rkt` *(stable)* |
+| 2 | Claim verification — test counts match actual | `claim-verifier.rkt` *(stable)* |
 | 3 | CI green on main — all required jobs passed | GitHub Actions API |
 | 4 | Release assets present — tarball + manifest | GitHub Releases API |
-| 5 | Manifest traceability — version/tag/commit match | `milestone-gate.rkt` |
+| 5 | Manifest traceability — version/tag/commit match | `milestone-gate.rkt` *(stable)* |
 | 6 | All milestone issues closed | GitHub Issues API |
 | 7 | CHANGELOG entry exists for version | `CHANGELOG.md` |
-| 8 | Metrics synced — README matches codebase | `lint-widened-ledger.rkt` |
+| 8 | Metrics synced — README matches codebase | `lint-widened-ledger.rkt` *(stable)* |
 
 ### Enforcement
 
@@ -279,10 +279,10 @@ MUST be cleaned up after successful runs.
 ### Protocol
 
 - The tmux harness (`tests/helpers/tmux-q-harness.rkt`) calls
-  `cleanup-tmux-env!` after successful test completion.
-- Failure artifacts (when `write-failure-artifacts!` was called) are
+  `cleanup-tmux-env!` *(stable)* after successful test completion.
+- Failure artifacts (when `write-failure-artifacts!` *(stable)* was called) are
   preserved for debugging.
-- The report script (`scripts/tmux-tui-report.rkt`) distinguishes:
+- The report script (`scripts/tmux-tui-report.rkt` *(stable)*) distinguishes:
   - "no failure artifacts (expected on success)" — empty dir, test passed
   - "incomplete failure bundle" — artifacts exist but missing expected files
   - "complete" — all expected artifact files present
@@ -325,11 +325,11 @@ extended to 2026-10-01, but no resolution milestone was scheduled.
 
 | Gap | Rule | Enforcement tool |
 |-----|------|------------------|
-| GAP-1 | Claims must match reality; empty evidence fails | `claim-verifier.rkt`, `milestone-close-gate.rkt` |
+| GAP-1 | Claims must match reality; empty evidence fails | `claim-verifier.rkt` *(stable)*, `milestone-close-gate.rkt` *(stable)* |
 | GAP-2 | Titles must match scope | Planning + independent review (no automated semantic checker yet) |
 | GAP-3 | Findings must have issues | Wave closure checklist + GitHub sub-issues |
-| F-10/F-13 | Current checks and review/validation evidence before merge | active branch protection, `gsd-wave-gate.rkt`, protected external final controller |
-| GAP-4 | Release truth before close | `milestone-close-gate.rkt` |
+| F-10/F-13 | Current checks and review/validation evidence before merge | active branch protection, `gsd-wave-gate.rkt` *(stable)*, protected external final controller |
+| GAP-4 | Release truth before close | `milestone-close-gate.rkt` *(stable)* |
 | GAP-5 | HANDOFF.json must be current | Per-wave review/evidence (external planning is not parsed by close gate) |
-| GAP-6 | Temp dirs cleaned on success | `cleanup-tmux-env!` |
+| GAP-6 | Temp dirs cleaned on success | `cleanup-tmux-env!` *(stable)* |
 | GAP-7 | Boundary debt must be tracked | Dedicated resolution milestone |

@@ -299,8 +299,7 @@
                             temp-log-path
                             "sess-i6"
                             10
-                            #:queue queue
-                            #:follow-up-delivery-mode 'one-at-a-time))
+                            #:queue queue))
 
       (check-equal? (loop-result-termination-reason result)
                     'completed
