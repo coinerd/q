@@ -1,4 +1,4 @@
-<!-- verified-against: 0.99.51 -->
+<!-- verified-against: 0.99.52 -->
 # Architecture Overview
 
 ## Native TUI Stack
