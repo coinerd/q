@@ -39,7 +39,7 @@
 (define current-w6-evidence-digest "b9d3f00d0e339de810c63d490cb47ec88faceb35e002793139c908bb98ce50fe")
 (define current-w7-evidence-digest "838d080ed7c2531c820bd41444b71b32890387e39f4e03636c987a0ada3c5298")
 (define-runtime-path historical-fixture "../docs/reports/gsd-milestones/v0.99.51-historical.json")
-(define historical-fixture-digest "f6e409f9a9757ddc68d442667e86f58673f824d60dbc9be13ca0e86def6a2ba3")
+(define historical-fixture-digest "ee727fca427f5f58762e887e96b62f73bb602e52ad9be7fa0df4b93b353cd9a6")
 (define-runtime-path schema-fixture "../docs/reports/gsd-milestones/v0.99.52.schema.json")
 (define-runtime-path historical-evidence-dir "../docs/reports/gsd-milestones/v0.99.51-evidence")
 (define-runtime-path historical-validation-dir "../docs/reports/gsd-wave-validation")

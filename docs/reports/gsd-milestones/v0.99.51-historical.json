@@ -3,24 +3,146 @@
   "milestone": "v0.99.51",
   "release-mechanics": "published",
   "release-evidence": [
-    { "stage": "build", "evidence-digest": "b3b4accb296f8dcf9a6b8e28d8d9c980ad22b0a3df400a6d2d7dd78c7ebce2a1" },
-    { "stage": "exact-artifact-smoke", "evidence-digest": "b3b4accb296f8dcf9a6b8e28d8d9c980ad22b0a3df400a6d2d7dd78c7ebce2a1" },
-    { "stage": "draft-verification", "evidence-digest": "b3b4accb296f8dcf9a6b8e28d8d9c980ad22b0a3df400a6d2d7dd78c7ebce2a1" },
-    { "stage": "publication", "evidence-digest": "b3b4accb296f8dcf9a6b8e28d8d9c980ad22b0a3df400a6d2d7dd78c7ebce2a1" }
+    {
+      "stage": "build",
+      "evidence-digest": "b3b4accb296f8dcf9a6b8e28d8d9c980ad22b0a3df400a6d2d7dd78c7ebce2a1"
+    },
+    {
+      "stage": "exact-artifact-smoke",
+      "evidence-digest": "b3b4accb296f8dcf9a6b8e28d8d9c980ad22b0a3df400a6d2d7dd78c7ebce2a1"
+    },
+    {
+      "stage": "draft-verification",
+      "evidence-digest": "b3b4accb296f8dcf9a6b8e28d8d9c980ad22b0a3df400a6d2d7dd78c7ebce2a1"
+    },
+    {
+      "stage": "publication",
+      "evidence-digest": "b3b4accb296f8dcf9a6b8e28d8d9c980ad22b0a3df400a6d2d7dd78c7ebce2a1"
+    }
   ],
   "substantive-acceptance": "rejected",
   "work-items": [
-    { "id": "W0", "status": "complete", "criteria": [{ "id": "W0-baseline", "met": true, "evidence-digest": "cb211b67b9661a7d32a2f03c36c7e74d29a0141fb5dc2c071f3b67f890bfd464" }] },
-    { "id": "W1", "status": "complete", "criteria": [{ "id": "W1-session-cancellation", "met": true, "evidence-digest": "f281adad5672852d7e4a6382ac4b0e91570acc7acf44c43092cfae751d811e04" }] },
-    { "id": "W2", "status": "complete", "criteria": [{ "id": "W2-credentials", "met": true, "evidence-digest": "cf0078f6d08a72193b87ae88bf4edfdaba5a1d61aba28b766f7b19b1cceb4292" }] },
-    { "id": "W3", "status": "complete", "criteria": [{ "id": "W3-context", "met": true, "evidence-digest": "013a940b9e5b1f3326628a878511f25036c64e35b00dfe494eb89fbdde01c1dd" }] },
-    { "id": "W4", "status": "complete", "criteria": [{ "id": "W4-release-truth", "met": true, "evidence-digest": "1e798fbf333a139c4b35af894a5b060252386469533bfed7cf98b2513877d0a6" }] },
-    { "id": "W5", "status": "complete", "criteria": [{ "id": "W5-compaction", "met": true, "evidence-digest": "7c1285ada28b528311fcd507bd9ef907b329266d182432bf8435be53b10863ea" }] },
-    { "id": "W6", "status": "in-progress", "criteria": [{ "id": "W6-distributed-execution", "met": false, "evidence-digest": null }] },
-    { "id": "W7", "status": "complete", "criteria": [{ "id": "W7-validation", "met": true, "evidence-digest": "b983d2dea1809f52b7e435d1e7dad01ff325c596d50fa0b0008680b6a9fb85c1" }] },
-    { "id": "W8", "status": "complete", "criteria": [{ "id": "W8-review", "met": true, "evidence-digest": "44deaebb6f807380ba8626325664c32d651766eed3eb03b9fb2eecd318092499" }] },
-    { "id": "W9", "status": "complete", "criteria": [{ "id": "W9-regression", "met": true, "evidence-digest": "3759f04b376cf00a77d1264d5913839a8f1e330833308155cbe1fc045ba8d2a6" }] },
-    { "id": "W10", "status": "in-progress", "criteria": [{ "id": "W10-post-release-acceptance", "met": false, "evidence-digest": null }] }
+    {
+      "id": "W0",
+      "status": "complete",
+      "criteria": [
+        {
+          "id": "W0-baseline",
+          "met": true,
+          "evidence-digest": "cb211b67b9661a7d32a2f03c36c7e74d29a0141fb5dc2c071f3b67f890bfd464"
+        }
+      ]
+    },
+    {
+      "id": "W1",
+      "status": "complete",
+      "criteria": [
+        {
+          "id": "W1-session-cancellation",
+          "met": true,
+          "evidence-digest": "f281adad5672852d7e4a6382ac4b0e91570acc7acf44c43092cfae751d811e04"
+        }
+      ]
+    },
+    {
+      "id": "W2",
+      "status": "complete",
+      "criteria": [
+        {
+          "id": "W2-credentials",
+          "met": true,
+          "evidence-digest": "cf0078f6d08a72193b87ae88bf4edfdaba5a1d61aba28b766f7b19b1cceb4292"
+        }
+      ]
+    },
+    {
+      "id": "W3",
+      "status": "complete",
+      "criteria": [
+        {
+          "id": "W3-context",
+          "met": true,
+          "evidence-digest": "013a940b9e5b1f3326628a878511f25036c64e35b00dfe494eb89fbdde01c1dd"
+        }
+      ]
+    },
+    {
+      "id": "W4",
+      "status": "complete",
+      "criteria": [
+        {
+          "id": "W4-release-truth",
+          "met": true,
+          "evidence-digest": "1e798fbf333a139c4b35af894a5b060252386469533bfed7cf98b2513877d0a6"
+        }
+      ]
+    },
+    {
+      "id": "W5",
+      "status": "complete",
+      "criteria": [
+        {
+          "id": "W5-compaction",
+          "met": true,
+          "evidence-digest": "7c1285ada28b528311fcd507bd9ef907b329266d182432bf8435be53b10863ea"
+        }
+      ]
+    },
+    {
+      "id": "W6",
+      "status": "in-progress",
+      "criteria": [
+        {
+          "id": "W6-distributed-execution",
+          "met": false,
+          "evidence-digest": null
+        }
+      ]
+    },
+    {
+      "id": "W7",
+      "status": "complete",
+      "criteria": [
+        {
+          "id": "W7-validation",
+          "met": true,
+          "evidence-digest": "b983d2dea1809f52b7e435d1e7dad01ff325c596d50fa0b0008680b6a9fb85c1"
+        }
+      ]
+    },
+    {
+      "id": "W8",
+      "status": "complete",
+      "criteria": [
+        {
+          "id": "W8-review",
+          "met": true,
+          "evidence-digest": "44deaebb6f807380ba8626325664c32d651766eed3eb03b9fb2eecd318092499"
+        }
+      ]
+    },
+    {
+      "id": "W9",
+      "status": "complete",
+      "criteria": [
+        {
+          "id": "W9-regression",
+          "met": true,
+          "evidence-digest": "3759f04b376cf00a77d1264d5913839a8f1e330833308155cbe1fc045ba8d2a6"
+        }
+      ]
+    },
+    {
+      "id": "W10",
+      "status": "in-progress",
+      "criteria": [
+        {
+          "id": "W10-post-release-acceptance",
+          "met": false,
+          "evidence-digest": null
+        }
+      ]
+    }
   ],
   "acceptance-critical-remaining-items": [
     "Retained W6 validation explicitly lacked the required all-nine real-provider acceptance campaign",
@@ -29,7 +151,7 @@
   "review": {
     "status": "rejected",
     "independent": true,
-    "evidence-digest": "5ab0fc18dd6c38fb470d62639d9e9f73aa19fe4bebcea5fb3c9d0a5342b6ccae"
+    "evidence-digest": "7a3417528651ffb2c43d150e0e18e2174a6e285a02a8f2711b83121ff6fd1021"
   },
   "validation": {
     "status": "passed",
