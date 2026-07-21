@@ -5,6 +5,9 @@ compiled/
 *.rktd
 !docs/architecture/*.rktd
 !runtime/providers.rktd
+!docs/reports/gsd-wave-evidence/*.rktd
+!docs/reports/gsd-wave-reviews/*.rktd
+!docs/reports/gsd-wave-validation/*.rktd
 
 # Coverage reports
 coverage/
