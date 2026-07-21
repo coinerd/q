@@ -169,13 +169,14 @@ jobs:
           VERSION="${{ inputs.version }}"
           TAG="${{ inputs.tag }}"
           # Create draft release with assets
-          RELEASE_ID=$(gh release create "$TAG" \
+          gh release create "$TAG" \
             /tmp/release/q-${VERSION}.tar.gz \
             /tmp/release/release-manifest.json \
             --notes-file /tmp/release/release-notes.md \
             --draft \
-            --repo ${{ github.repository }} \
-            --json id -q '.id')
+            --repo ${{ github.repository }}
+          # Get the newly created release ID
+          RELEASE_ID=$(gh release view "$TAG" --repo ${{ github.repository }} --json id -q '.id')
           echo "RELEASE_ID=${RELEASE_ID}" >> $GITHUB_OUTPUT
           echo "Created draft release: ${RELEASE_ID}"
 
