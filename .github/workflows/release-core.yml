@@ -77,9 +77,9 @@ jobs:
         run: |
           VERSION="${{ inputs.version }}"
           TAG="${{ inputs.tag }}"
-          cd /tmp/release
-          racket q/scripts/gen-release-manifest.rkt "${TARBALL_NAME}" > release-manifest.json
-          cat release-manifest.json
+          cd /tmp/release/q
+          racket scripts/gen-release-manifest.rkt /tmp/release/"${TARBALL_NAME}" > /tmp/release/release-manifest.json
+          cat /tmp/release/release-manifest.json
 
       - name: Generate release notes
         run: |
