@@ -1,15 +1,15 @@
-# AUDIT — v0.99.51 Post-Release In Depth
+# AUDIT — v0.99.52 Post-Release In Depth
 
 **Date:** 2026-07-18  
-**Audited release:** `v0.99.51`  
+**Audited release:** `v0.99.52`  
 **Release/main/tag target:** `7b169a7f354fd8655e2726297c704f36e6b9ddbb`  
 **Source milestone:** GitHub milestone #837  
-**Source plan:** `.planning/PLAN-v0.99.51-v0.99.50-AUDIT-REMEDIATION.md`  
+**Source plan:** `.planning/PLAN-v0.99.52-v0.99.50-AUDIT-REMEDIATION.md`  
 **Audit disposition:** **REJECTED — release authentic; substantive milestone acceptance failed**
 
 ## 1. Executive Summary
 
-v0.99.51 is an authentic published release. Main, the annotated tag, downloaded tarball, and manifest agree sufficiently to identify the released source and artifact. Current deterministic lint, compile, fast, smoke, architecture, workflow, and TUI gates pass after one superseded stale-compiled failure. All nine PRs were merged from heads with successful protected checks, and milestone #837 is mechanically closed with 25/25 issues closed.
+v0.99.52 is an authentic published release. Main, the annotated tag, downloaded tarball, and manifest agree sufficiently to identify the released source and artifact. Current deterministic lint, compile, fast, smoke, architecture, workflow, and TUI gates pass after one superseded stale-compiled failure. All nine PRs were merged from heads with successful protected checks, and milestone #837 is mechanically closed with 25/25 issues closed.
 
 Those facts do **not** establish that all F-01 through F-15 were remediated. The audit found acceptance-critical defects and evidence gaps:
 
@@ -23,7 +23,7 @@ Those facts do **not** establish that all F-01 through F-15 were remediated. The
 8. release publication occurs before exact-artifact smoke, and release repair retains the same bypass;
 9. gate-evidence and uploaded-manifest validators retain fail-open/under-specified paths.
 
-Accordingly, the v0.99.51 tag and release should remain historical facts, but milestone #837 must not be treated as substantively acceptance-complete. Remediation belongs in a follow-up milestone; do not rewrite the release.
+Accordingly, the v0.99.52 tag and release should remain historical facts, but milestone #837 must not be treated as substantively acceptance-complete. Remediation belongs in a follow-up milestone; do not rewrite the release.
 
 ## 2. Method
 
@@ -35,7 +35,7 @@ The audit followed GSD review discipline:
 - ran focused and broad deterministic tests at exact release SHA;
 - downloaded and independently hashed/extracted release assets;
 - separated release authenticity from substantive acceptance;
-- retained evidence under `.planning/v0.99.51-post-release-audit/`.
+- retained evidence under `.planning/v0.99.52-post-release-audit/`.
 
 No credential-bearing real-provider run was performed. Existing retained evidence was audited instead; no provider cost was incurred.
 
@@ -43,23 +43,23 @@ No credential-bearing real-provider run was performed. Existing retained evidenc
 
 ### 3.1 Authenticity — PASS
 
-- `main`, `origin/main`, and `v0.99.51^{}` resolve to `7b169a7f354fd8655e2726297c704f36e6b9ddbb`.
+- `main`, `origin/main`, and `v0.99.52^{}` resolve to `7b169a7f354fd8655e2726297c704f36e6b9ddbb`.
 - Annotated tag object: `dcb887e74c3a3b52b8478a760a06002d29855b3c`.
 - Main CI run `29640934881`: success.
 - Release workflow run `29640943562`: success.
 - Public assets:
-  - `q-0.99.51.tar.gz`: 3,380,925 bytes, SHA-256 `aa0cca5566c86d3e4ae5011e31b061802fdb5f306226d56818c8d028d8909074`;
+  - `q-0.99.52.tar.gz`: 3,380,925 bytes, SHA-256 `aa0cca5566c86d3e4ae5011e31b061802fdb5f306226d56818c8d028d8909074`;
   - `release-manifest.json`: 506 bytes, SHA-256 `f9d340e03f479afe772061cecf54fe942b50af22cd57ec3d675b7a150a7ad67f`.
 - Manifest asset name, size, and digest match the downloaded tarball.
 - Manifest traceability contains the full tag commit and annotated tag object matching Git.
-- Clean extraction reports `q version 0.99.51`.
+- Clean extraction reports `q version 0.99.52`.
 - Milestone #837 is closed with 0 open / 25 closed.
 
-Raw independent download/hash/tag/extraction output is retained in `v0.99.51-post-release-audit/release-asset-verification.log`; GitHub governance state is retained in `github-governance.json`.
+Raw independent download/hash/tag/extraction output is retained in `v0.99.52-post-release-audit/release-asset-verification.log`; GitHub governance state is retained in `github-governance.json`.
 
 ### 3.2 PR gate truth — mostly PASS
 
-PRs #8754–#8762 have final heads and squash merge SHAs recorded in `v0.99.51-post-release-audit/pr-merge-inventory.tsv`. Protected checks succeeded on each final head before merge. Earlier cancelled/failed runs exist but were superseded; they must not be conflated with the final head conclusion.
+PRs #8754–#8762 have final heads and squash merge SHAs recorded in `v0.99.52-post-release-audit/pr-merge-inventory.tsv`. Protected checks succeeded on each final head before merge. Earlier cancelled/failed runs exist but were superseded; they must not be conflated with the final head conclusion.
 
 This is stronger than the retained external ledger for W7/W8, which omits final exact-head evidence. GitHub establishes green-before-merge mechanics, but does not cure missing substantive acceptance evidence.
 
@@ -80,9 +80,9 @@ At exact release SHA:
 | fast, superseding run | PASS — 1038/1038 files, 15317/15317 tests |
 | focused audit defect set | PASS — 90 tests |
 | focused accepted-findings set | PASS — 89 tests |
-| release-note lint 0.99.51 | PASS |
+| release-note lint 0.99.52 | PASS |
 
-Raw timestamped output for the current compile/lint/suite/focused run is retained in `v0.99.51-post-release-audit/current-deterministic-gates.log`; accepted-finding focused output is in `accepted-findings-focused.log`. The first fast failure logs are retained separately and classified as stale compiled-artifact interference, not silently replaced. The complete superseding run establishes current deterministic suite health. Green tests do not negate boundary defects absent from those tests.
+Raw timestamped output for the current compile/lint/suite/focused run is retained in `v0.99.52-post-release-audit/current-deterministic-gates.log`; accepted-finding focused output is in `accepted-findings-focused.log`. The first fast failure logs are retained separately and classified as stale compiled-artifact interference, not silently replaced. The complete superseding run establishes current deterministic suite health. Green tests do not negate boundary defects absent from those tests.
 
 ## 5. Finding-by-Finding Disposition
 
@@ -136,11 +136,11 @@ Required remediation: use descriptor-relative/no-follow opens and mutations or a
 
 ### A-04 — Critical — Required all-nine real-provider acceptance evidence is absent (F-03/F-08)
 
-`docs/reports/gsd-wave-validation/v0.99.51-w6.rktd` explicitly leaves this remaining item:
+`docs/reports/gsd-wave-validation/v0.99.52-w6.rktd` explicitly leaves this remaining item:
 
 > Real-provider acceptance campaign: all nine scenarios must PASS at exact PR-head SHA before merge.
 
-No v0.99.51 evidence manifest, real summary, captures, or trace campaign exists under `.planning/` or `docs/reports/`. No evidence binds all nine scenarios to W6 final head `06df4536…`, merged main `233b9ac9…`, or release `7b169a7f…`.
+No v0.99.52 evidence manifest, real summary, captures, or trace campaign exists under `.planning/` or `docs/reports/`. No evidence binds all nine scenarios to W6 final head `06df4536…`, merged main `233b9ac9…`, or release `7b169a7f…`.
 
 Required remediation: do not infer acceptance from deterministic verifier tests. Run a protected, credential-redacted, default-executor campaign for all nine exact tags at a remediation PR head and merged main; retain immutable manifest, per-scenario traces/captures, provider/model/session/turn correlation, digests, cleanup proof, and exact SHA.
 
@@ -259,7 +259,7 @@ Required remediation: replace it with exact-head two-phase finalize; verify all 
 
 - Production owner: `util/message/provider-transport.rkt`; parent/child bridges delegate and provider adapters translate at native boundaries.
 - Focused tests: `tests/test-provider-tool-transport.rkt` and `tests/test-provider-transport-architecture.rkt`.
-- Current focused evidence: `v0.99.51-post-release-audit/accepted-findings-focused.log` (part of 89 tests PASS).
+- Current focused evidence: `v0.99.52-post-release-audit/accepted-findings-focused.log` (part of 89 tests PASS).
 
 ### F-05 — PASS
 
@@ -330,4 +330,4 @@ These partial successes should be preserved during remediation.
 | All F-01–F-15 substantively closed | **NO** |
 | Milestone #837 substantive acceptance | **REJECTED** |
 
-v0.99.51 remains a valid historical release, but the statement “all 15 audit findings are now closed” is not supported by implementation and evidence. A follow-up remediation milestone is required.
+v0.99.52 remains a valid historical release, but the statement “all 15 audit findings are now closed” is not supported by implementation and evidence. A follow-up remediation milestone is required.

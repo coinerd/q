@@ -1,3 +1,69 @@
+## 0.99.52
+
+Released: 2026-07-21
+
+### Overview
+
+Build-once exact-artifact release pipeline and milestone closure.
+v0.99.52 completes the post-v0.99.51 acceptance remediation
+(milestone #838) with three targeted waves:
+
+- **W8 (PR #8811):** Strict gate evidence hardening, lint-release-readiness
+  `#:strict`, gen-release-manifest SHA validation, new
+  `verify-release-bundle.rkt`.
+- **W9 (PR #8818):** Build-once pre-publication release pipeline.
+  `release-core.yml` enforces build→smoke→draft→verify→publish→verify
+  as a reusable workflow. `release-repair.yml` is diagnostic-only.
+- **W10:** Final independent audit, version bump to 0.99.52, pre-tag 9/9
+  campaign, exact-artifact release, and milestone closure.
+
+### User-Visible Changes
+
+- Release pipeline restructured: release.yml now orchestrates test→prepare
+  →release-core (reusable). Build-once tarball enforced.
+- release-repair.yml is diagnostic-only (workflow_dispatch, contents: read).
+  No longer creates or modifies releases.
+
+### Features
+
+- Reusable `release-core.yml` workflow: build→smoke→draft→verify→publish→verify
+- `verify-release-bundle.rkt`: downloaded tarball/manifest/content-digest verification
+- `scripts/lint-release-readiness.rkt` strict mode (`#:strict`) for pre-tag gate
+
+### Bug Fixes
+
+- Build-once guarantee: tarball built exactly once, uploaded as internal artifact,
+  downloaded and verified before any publication
+- Draft-before-publish: release created as draft, verified, then promoted
+- Repair safety: `release-repair.yml` never creates or modifies releases
+
+### Breaking / Behavior Changes
+
+- `release-repair.rkt`: removed all mutation logic (`publish`, `repair-assets`,
+  `attempt-auto-repair`). Only `dry-run` mode supported.
+- `release-repair.yml`: `publish` and `repair-assets` mode options removed.
+  Existing tags no longer repaired — only dry-run diagnostics.
+
+### Migration Notes
+
+- Release repair users must use `--mode dry-run` exclusively for diagnostics.
+  Tag publication uses the normal `release-core.yml` pipeline.
+- No migration needed for normal users; the release pipeline is internal.
+
+### Testing
+
+- 27 `test-release-repair.rkt` tests: dry-run diagnostic only
+- 38 `test-release-workflow-contract.rkt` tests: YAML structure and DAG order
+- 17 `test-w9-ci-workflow-verification.rkt` tests: CI references and mode safety
+
+### Operational / Release
+
+- `release.yml` DAG: test → prepare → release-core
+- `release-core.yml` DAG: build → smoke → draft → verify-draft → publish → verify-public
+- `release-repair.yml` is workflow_dispatch only, read-only, never mutating
+
+---
+
 ## 0.99.51
 
 Released: 2026-07-18

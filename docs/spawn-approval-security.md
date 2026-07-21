@@ -1,4 +1,4 @@
-<!-- verified-against: 0.99.51 -->
+<!-- verified-against: 0.99.52 -->
 # Subagent Spawn Approval Security
 
 Dangerous subagent delegation (`shell-exec` or `git-write`) is fail-closed. In CLI, JSON, RPC, SDK, or any other headless mode without an attached interactive approval frontend, both `spawn-subagent` and `spawn-subagents` deny dangerous plans unconditionally. A publisher, callback, Boolean parameter, or process-mode switch cannot grant authority. Safe delegated plans continue to run headlessly.
