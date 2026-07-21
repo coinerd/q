@@ -160,6 +160,7 @@
               "benchmark"
               "workflow-"
               "e2e-"
+              "tmux-explore-campaign"
               "ci-local"
               "metrics-readme"
               "bump-version"
