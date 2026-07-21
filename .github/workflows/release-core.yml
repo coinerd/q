@@ -84,9 +84,9 @@ jobs:
       - name: Generate release notes
         run: |
           VERSION="${{ inputs.version }}"
-          cd /tmp/release
-          racket q/scripts/gen-release-notes.rkt "${VERSION}" > release-notes.md
-          cat release-notes.md
+          cd /tmp/release/q
+          racket scripts/gen-release-notes.rkt "${VERSION}" > /tmp/release/release-notes.md
+          cat /tmp/release/release-notes.md
 
       - name: Upload internal build artifact
         uses: actions/upload-artifact@v7
