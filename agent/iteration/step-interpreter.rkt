@@ -345,7 +345,7 @@
      ;; Reuse make-next-counters for consistent counter increment
      (directive-recurse updated-ctx
                         (struct-copy loop-counters
-                                     (make-next-counters counters)
-                                     [recent-tool-names
-                                      (loop-counters-recent-tool-names new-counters)])
+                                     new-counters
+                                     [iteration (add1 (loop-counters-iteration new-counters))]
+                                     [stall-retry-count 0])
                         ws)]))
