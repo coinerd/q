@@ -3,8 +3,8 @@
       (wave . "W5")
       (issue . 8841)
       (status . "ready-for-merge")
-      (implementation-sha . "99d9954130d2e6a06e959683ca434e0dfe260873")
-      (content-digest . "1c063e073f4dc61cc339aac35731617ad3205281265f42d4624ab7fa77245d8c")
+      (implementation-sha . "2db70660d81f8c057e7d547069598c85069b19d8")
+      (content-digest . "4207f11d2a462634c85f047c3d29f6376e03f18383322e755c5e35158633bec4")
       (review-artifact . "docs/reports/gsd-wave-reviews/v0.99.55-w5.rktd")
       (validation-artifact . "docs/reports/gsd-wave-validation/v0.99.55-w5.rktd")
       (required-checks . ("lint"
