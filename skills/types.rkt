@@ -13,5 +13,16 @@
          "template.rkt")
 
 (provide ;; Re-export resource loader and template types
- (all-from-out "resource-loader.rkt")
-         (all-from-out "template.rkt"))
+ (struct-out resource)
+         (struct-out resource-set)
+         (rename-out [empty-resource-set empty-resource-set]
+                     [load-global-resources load-global-resources]
+                     [load-project-resources load-project-resources]
+                     [merge-resources merge-resources]
+                     [skill-summary-text skill-summary-text]
+                     [skills-summary-section skills-summary-section]
+                     [parse-skill parse-skill]
+                     [strip-leading-frontmatter-lines strip-leading-frontmatter-lines]
+                     [try-read-file try-read-file])
+         render-template
+         render-template-with-positional-args)

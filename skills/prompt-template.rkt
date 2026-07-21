@@ -8,4 +8,5 @@
 (require "template.rkt")
 
 (provide ;; Re-export template rendering
- (all-from-out "template.rkt"))
+ render-template
+ render-template-with-positional-args)

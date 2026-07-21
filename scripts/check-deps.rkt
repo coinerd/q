@@ -81,6 +81,7 @@
             "gsd-planning"
             "github/handlers"
             "racket-tooling"
+            "q"
             ;; Additional internal subdirectories
             "compaction"
             "content"

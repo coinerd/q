@@ -11,4 +11,9 @@
 
 (require "../util/capability.rkt")
 
-(provide (all-from-out "../util/capability.rkt"))
+(provide (rename-out (valid-capability? valid-capability?)
+                     (role-has-capability? role-has-capability?)
+                     (all-capabilities all-capabilities))
+         VALID-CAPABILITIES
+         ROLE-CAPABILITIES
+         current-session-capabilities)

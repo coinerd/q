@@ -21,7 +21,7 @@
 (define VERIFIER-VERDICTS '(approve reject escalate))
 
 ;; Valid risk levels for a verifier decision.
-(define VERIFIER-RISK-LEVELS '(low medium high))
+(define VERIFIER-RISK-LEVELS '(low medium high critical))
 
 ;; Predicate: is this a valid verdict symbol?
 (define (verifier-verdict? v)

@@ -101,7 +101,7 @@
                        [tui-main-loop (-> tui-ctx? void?)]
                        [drain-events! (-> tui-ctx? void?)])
          ;; W17: handle-user-submit! extracted to submit-handler.rkt
-         (all-from-out "submit-handler.rkt"))
+         (rename-out [handle-user-submit! handle-user-submit!]))
 
 ;; ============================================================
 ;; ============================================================

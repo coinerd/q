@@ -13,7 +13,15 @@
          (only-in "../../util/version.rkt" q-version)
          "scorer.rkt")
 
-(provide (all-from-out "scorer.rkt")
+(provide (struct-out score-result)
+         score-execution
+         score-correctness
+         score-tool-discipline
+         score-efficiency
+         score-skill-compliance
+         score-no-regressions
+         aggregate-scores
+         score->verdict
          (struct-out benchmark-report)
          (struct-out comparison-result)
          generate-report

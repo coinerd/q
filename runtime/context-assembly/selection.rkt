@@ -2,6 +2,9 @@
 
 ;; runtime/context-assembly/selection.rkt — message partitioning, fitting, context building
 ;;
+;; R-9 (v0.99.52): The legacy `build-assembled-context` keyword API is deprecated.
+;;   New callers should use `build-assembled-context/v2` with `context-assembly-call-options`.
+;;
 ;; Selection logic: what messages to include/exclude, pinning, pair-preserving fit.
 ;;
 ;; TR MIGRATION DEFERRED (v0.30.9 investigation):
@@ -39,8 +42,8 @@
                   summary-cache?
                   context-summary-from-id
                   context-summary-to-id)
-         ;; LF4 fix: removed dead import warn-deprecated! (GAP-K removed its only usage)
-         (only-in "../../llm/provider.rkt" provider?))
+         (only-in "../../llm/provider.rkt" provider?)
+         (only-in "../../util/error/errors.rkt" warn-deprecated!))
 
 ;; R10: Call-options struct bundling keyword args for build-assembled-context
 (struct context-assembly-call-options
@@ -102,6 +105,7 @@
                          #:estimate-text-proc (or/c procedure? #f))
                 context-assembly-call-options?)]
           [build-assembled-context
+           ;; R-9 v0.99.52: legacy keyword API — deprecated; prefer build-assembled-context/v2
            (->* [any/c context-assembly-config?]
                 [#:cache (or/c summary-cache? #f)
                  #:provider (or/c provider? #f)
@@ -113,14 +117,15 @@
                  #:estimate-text-proc (or/c procedure? #f)]
                 context-result?)]
           [build-assembled-context/raw
-           (->* [(listof message?) context-assembly-config? (or/c working-set? #f) #:memo hash?]
+           (->* [(listof message?) context-assembly-config? (or/c working-set? #f)]
                 [#:estimate-text-proc (or/c procedure? #f)
                  #:generate-summary-proc (or/c procedure? #f)
                  #:generate-catalog-proc (or/c procedure? #f)
                  #:provider (or/c provider? #f)
                  #:model-name (or/c string? #f)
                  #:cache (or/c summary-cache? #f)
-                 #:trace (or/c procedure? #f)]
+                 #:trace (or/c procedure? #f)
+                 #:memo hash?]
                 context-result?)]
           [build-assembled-context/v2
            (-> any/c context-assembly-config? context-assembly-call-options? context-result?)]
@@ -155,6 +160,8 @@
                                  #:generate-summary-proc [generate-summary-proc #f]
                                  #:generate-catalog-proc [generate-catalog-proc #f]
                                  #:estimate-text-proc [estimate-text-proc #f])
+  ;; R-9 v0.99.52: warn that the legacy keyword API is deprecated.
+  (warn-deprecated! 'build-assembled-context "v1.0.0" "Use build-assembled-context/v2 instead.")
   (build-assembled-context/v2 idx
                               config
                               (make-context-assembly-call-options
@@ -202,7 +209,7 @@
 (define (build-assembled-context/raw raw-messages
                                      config
                                      ws
-                                     #:memo memo
+                                     #:memo [memo (make-hash)]
                                      #:estimate-text-proc [estimate-text-proc #f]
                                      #:generate-summary-proc [generate-summary-proc #f]
                                      #:generate-catalog-proc [generate-catalog-proc #f]

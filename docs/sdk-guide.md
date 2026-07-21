@@ -66,6 +66,11 @@ Options: `'off`, `'low`, `'medium`, `'high`
  #:tool-registry registry)
 ```
 
+> **Canonical import path:** The full tool-registry API is available at
+> `(require q/tools/registry)`. `q/tools/tool.rkt` re-exports the common
+> registry helpers for convenience, but `q/tools/registry` is the canonical
+> source for registry-specific bindings.
+
 ## Event Subscription
 
 ```racket

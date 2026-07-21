@@ -34,10 +34,26 @@
           [clear-and-rebuild-text! (-> any/c list? ui-theme? void?)]
           [apply-diff-to-text!
            (-> any/c list? list? ui-theme? (or/c (box/c exact-nonnegative-integer?) #f) void?)])
-         (all-from-out "markdown-parser.rkt")
-         (all-from-out "keybindings.rkt")
-         (all-from-out "scroll-state.rkt")
-         (all-from-out "input-helpers.rkt"))
+         (rename-out [contains-code-blocks? contains-code-blocks?]
+                     [parse-code-blocks parse-code-blocks]
+                     [render-message-with-code-blocks render-message-with-code-blocks]
+                     [code-block-style code-block-style]
+                     [code-block-header-style code-block-header-style])
+         parse-markdown-elements
+         contains-markdown?
+         (rename-out [default-keybindings default-keybindings]
+                     [lookup-keybinding lookup-keybinding]
+                     [key-event->action key-event->action]
+                     [list-keybindings list-keybindings])
+         (rename-out [make-scroll-state make-scroll-state]
+                     [scroll-state-auto-scroll? scroll-state-auto-scroll?]
+                     [scroll-state-user-scrolled-up? scroll-state-user-scrolled-up?]
+                     [scroll-state-on-scroll scroll-state-on-scroll]
+                     [scroll-state-on-submit scroll-state-on-submit])
+         (rename-out [input-key-should-submit? input-key-should-submit?]
+                     [prepare-input-for-submit prepare-input-for-submit]
+                     [input-line-count input-line-count]
+                     [input-looks-like-code? input-looks-like-code?]))
 
 ;; ──────────────────────────────
 ;; Pure helpers (headless-testable)

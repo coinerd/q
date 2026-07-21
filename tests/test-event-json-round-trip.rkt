@@ -17,7 +17,8 @@
          "../agent/event-structs/session-events.rkt"
          "../agent/event-structs/tool-events.rkt"
          "../agent/event-structs/hook-events.rkt"
-         "../agent/event-structs/base.rkt")
+         "../agent/event-structs/base.rkt"
+         (only-in "../util/event/event-macro.rkt" lookup-event-serializer lookup-event-deserializer))
 
 (define (round-trip evt)
   (jsexpr->typed-event (typed-event->jsexpr evt)))
@@ -347,6 +348,14 @@
   (check-true (list? types))
   (check > (length types) 25))
 
+;; A-8: every publicly known event type must have both a serializer and a deserializer
+;; registered in the global event registry. This guards against drift between the
+;; static `all-known-event-types` list and the runtime registry populated by
+;; define-typed-event and per-tool event registrations.
+(test-case "every known event type has a registered serializer and deserializer"
+  (for ([type (all-known-event-types)])
+    (check-not-false (lookup-event-serializer type) (format "missing serializer for ~a" type))
+    (check-not-false (lookup-event-deserializer type) (format "missing deserializer for ~a" type))))
 (test-case "unknown type round-trips as base typed-event"
   (define h (hasheq 'type "bogus.event" 'timestamp 100 'sessionId "s1" 'turnId "t1"))
   (define rt (jsexpr->typed-event h))
