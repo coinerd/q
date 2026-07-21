@@ -53,7 +53,8 @@
                   config-task-state-aware?
                   config-context-assembly-profile
                   config-max-context-tokens
-                  apply-context-assembly-profile!)
+                  profile->options
+                  context-assembly-options?)
          ;; tiered-context? needed for provide contract
          (only-in "context/context-assembly.rkt" tiered-context?)
          (only-in "context-assembly/turn-context.rkt"
@@ -118,11 +119,10 @@
   ;; Phase 1: Prepare task state and conclusions
   (define-values (task-state-raw task-state augmented-conclusions)
     (prepare-turn-context-state ctx-to-use config-raw session))
-  ;; Phase 2: Apply profile and run pure assembly
+  ;; Phase 2: Build options from profile and run pure assembly
+  ;; v0.99.54 W2 R-8: Use profile->options (pure) instead of apply-context-assembly-profile! (parameter mutation)
   (define profile (config-context-assembly-profile config-raw))
-  (unless (eq? profile 'off)
-    ;; v0.97.4 GAP-E: Dynamic conclusion budget from actual max-context-tokens
-    (apply-context-assembly-profile! profile (config-max-context-tokens config-raw)))
+  (define ca-options (profile->options profile (config-max-context-tokens config-raw)))
   (define-values (ctx-assembled assembly-hook-result tc-struct)
     (assemble-context/pure ctx-to-use
                            config-raw
@@ -130,6 +130,7 @@
                            #:task-state task-state
                            #:conclusions augmented-conclusions
                            #:state-aware? (config-task-state-aware? config)
+                           #:ca-options ca-options
                            #:recent-tool-calls (if session
                                                    (agent-session-recent-tool-calls session)
                                                    '())))

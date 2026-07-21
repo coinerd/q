@@ -58,6 +58,30 @@
 (define current-context-assembly-profile (make-parameter 'off))
 (define current-goal-loop-enabled? (make-parameter #t))
 
+;; v0.99.54 W2 R-8: Explicit context assembly options struct.
+;; Replaces global parameter mutation from apply-context-assembly-profile!.
+;; Each field corresponds to a feature flag that was previously set via parameter.
+(struct context-assembly-options
+        (task-state-aware? graph-conclusion-selection?
+                           auto-distillation-enabled?
+                           rollback-action-execution?
+                           ws-evolution-enabled?
+                           conclusion-to-memory-bridge-enabled
+                           conclusion-token-budget)
+  #:transparent)
+
+;; Profile -> context-assembly-options conversion.
+;; Pure function — no parameter mutation.
+(define (profile->options profile [max-context-tokens 128000])
+  (define budget (compute-conclusion-budget max-context-tokens))
+  (case profile
+    [(off) (context-assembly-options #f #f #f #f #f #f budget)]
+    [(observe) (context-assembly-options #t #f #f #f #f #f budget)]
+    [(bounded) (context-assembly-options #t #t #f #f #f #f budget)]
+    [(self-healing) (context-assembly-options #t #t #t #t #f #t budget)]
+    [(full) (context-assembly-options #t #t #t #t #t #t budget)]
+    [else (context-assembly-options #f #f #f #f #f #f budget)]))
+
 (define valid-profiles '(off observe bounded self-healing full))
 
 (define (context-assembly-profile? v)
@@ -113,6 +137,8 @@
     [else (void)]))
 
 (provide session-config?
+         (struct-out context-assembly-options)
+         profile->options
          current-task-state-aware-rollout-rate
          current-context-assembly-profile
          current-goal-loop-enabled?

@@ -54,6 +54,10 @@
                   current-rollback-action-log
                   rollback-action-reason)
          (only-in "auto-distillation.rkt" current-auto-distillation-enabled?)
+         (only-in "../../runtime/session/session-config.rkt"
+                  context-assembly-options?
+                  context-assembly-options-graph-conclusion-selection?
+                  context-assembly-options-conclusion-token-budget)
          (only-in "config.rkt"
                   current-task-state-aware-assembly?
                   current-graph-conclusion-selection?
@@ -97,6 +101,7 @@
                                           #:conclusions [conclusions '()]
                                           #:trace [trace-cb #f]
                                           #:recent-tool-calls [recent-tool-calls '()]
+                                          #:ca-options [ca-options #f]
                                           #:session-config [session-config #f])
   ;; Accept both fsm-state structs and bare symbols
   (define state-name (coerce-task-state task-state))
@@ -120,10 +125,15 @@
        (map (λ (m) (ws-entry->conclusion-or-self m conclusions)) filtered)]
       [else ws-messages]))
 
+  ;; v0.99.54 W2 R-8: Use ca-options when provided, fall back to global parameter
+  (define graph-selection-enabled?
+    (if ca-options
+        (context-assembly-options-graph-conclusion-selection? ca-options)
+        (current-graph-conclusion-selection?)))
   ;; v0.77.3 W3.3 + v0.77.9 T1.1: Graph-based conclusion filtering when flag is enabled
   (define effective-conclusions
     (cond
-      [(not (current-graph-conclusion-selection?)) conclusions]
+      [(not graph-selection-enabled?) conclusions]
       [(null? conclusions) '()]
       [else
        ;; GAP-4: Map WS message IDs → conclusion IDs via origin-message-ids
