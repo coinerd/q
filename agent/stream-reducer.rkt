@@ -23,6 +23,22 @@
          (contract-out [accumulate-stream-chunks (-> list? hash?)]))
 
 ;; ============================================================
+;; Usage merging helper
+;; ============================================================
+
+;; Merge two usage hash tables by summing fields.
+;; Stream chunks emit usage incrementally (prompt_tokens early, completion_tokens later).
+(define (merge-usages u1 u2)
+  (hasheq 'prompt_tokens
+          (+ (hash-ref u1 'prompt_tokens 0) (hash-ref u2 'prompt_tokens 0))
+          'completion_tokens
+          (+ (hash-ref u1 'completion_tokens 0) (hash-ref u2 'completion_tokens 0))
+          'total_tokens
+          (+ (hash-ref u1 'total_tokens 0) (hash-ref u2 'total_tokens 0))))
+
+(provide merge-usages)
+
+;; ============================================================
 ;; accumulate-stream-chunks : pure helper (S11-F1)
 ;; ============================================================
 
@@ -39,9 +55,12 @@
       (stream-chunk-delta-thinking c)))
   (define tool-calls (accumulate-tool-call-deltas chunks))
   (define usage
-    (for/first ([c (in-list chunks)]
-                #:when (stream-chunk-usage c))
-      (stream-chunk-usage c)))
+    (for/fold ([acc #f]) ([c (in-list chunks)])
+      (define cu (stream-chunk-usage c))
+      (cond
+        [(and cu acc) (merge-usages acc cu)]
+        [cu cu]
+        [else acc])))
   (define finish-reason
     (for/first ([c (in-list chunks)]
                 #:when (stream-chunk-finish-reason c))
