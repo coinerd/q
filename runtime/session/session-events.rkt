@@ -5,6 +5,33 @@
 ;;
 ;; Extracted from agent-session.rkt (ARCH-05b).
 ;; Handles fork.requested and compact.requested events from TUI/CLI.
+;;
+;; ============================================================
+;; R-4 (v0.99.55): Event Subscriber Transition Table
+;; ============================================================
+;;
+;; This file registers 7 event-bus subscribers for session-level runtime
+;; events. Each subscriber is documented below with its side-effect
+;; classification (control-plane = state mutation, data-plane = I/O).
+;;
+;; | # | Event | Side Effects (Control-Plane) | Side Effects (Data-Plane) |
+;; |---|-------|------------------------------|---------------------------|
+;; | 1 | fork.requested | Creates new session struct | Emits fork.completed/failed |
+;; | 2 | interrupt.requested | Sets cancellation token via guarded-set-config! | Emits interrupt.accepted/already/no-active |
+;; | 3 | session.compact.requested / compact.requested | Claims/releases compaction guard; updates in-memory index | Reads/writes session log; compact-and-persist!; trace logging |
+;; | 4 | tool.execution.completed | guarded-set-recent-tool-calls!; guarded-set-task-fsm-state! (inference) | append-session-entry!; persist-high-value-conclusions! (memory backend) |
+;; | 5 | tool.record_conclusion.completed | guarded-set-task-conclusions! | append-session-entry! |
+;; | 6 | tool.set-task-state.completed | guarded-set-task-fsm-state! (explicit) | append-session-entry!; persist-high-value-conclusions! |
+;; | 7 | session.closed | — | persist-high-value-conclusions! (memory backend) |
+;;
+;; Control-plane mutations: task FSM state, tool call history, conclusions list,
+;; compaction guard, session config (interrupt), session creation (fork).
+;; Data-plane operations: session.jsonl writes, memory backend writes, trace files.
+;;
+;; Future work (R-4): Extract durable I/O (persistence, compaction) into a
+;; dedicated async worker so event subscribers only handle control-plane state
+;; transitions. See .planning/PLAN-v0.99.55-AUDIT-REMEDIATION-PHASE2.md for scope.
+;; ============================================================
 
 (require racket/contract
          "../../util/event/event-bus.rkt"

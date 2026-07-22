@@ -87,60 +87,35 @@
 (define (context-assembly-profile? v)
   (and (symbol? v) (memq v valid-profiles) #t))
 
+;; X-1 (v0.99.55): Combined context-assembly-options parameter.
+;; New consumers should read from this parameter instead of individual flags.
+;; The individual parameters remain for backward compatibility.
+(define current-context-assembly-options-parameter (make-parameter (profile->options 'off)))
+
 ;; Apply a profile: sets individual feature flags according to the profile.
 ;; v0.78.1 G1: Proper activation matrix with all feature flags.
 ;; v0.97.4 GAP-E: Dynamic conclusion budget from max-context-tokens (default 128000).
 ;; Each profile is a superset of the previous one.
+;; X-1 (v0.99.55): Also sets current-context-assembly-options-parameter for combined access.
 (define (apply-context-assembly-profile! profile [max-context-tokens 128000])
   (current-context-assembly-profile profile)
-  (case profile
-    [(off)
-     (current-task-state-aware-assembly? #f)
-     (current-graph-conclusion-selection? #f)
-     (current-auto-distillation-enabled? #f)
-     (current-rollback-action-execution? #f)
-     (current-ws-evolution-enabled? #f)
-     (current-conclusion-to-memory-bridge-enabled #f)
-     (current-conclusion-token-budget (compute-conclusion-budget max-context-tokens))]
-    [(observe)
-     (current-task-state-aware-assembly? #t)
-     (current-graph-conclusion-selection? #f)
-     (current-auto-distillation-enabled? #f)
-     (current-rollback-action-execution? #f)
-     (current-ws-evolution-enabled? #f)
-     (current-conclusion-to-memory-bridge-enabled #f)
-     (current-conclusion-token-budget (compute-conclusion-budget max-context-tokens))]
-    [(bounded)
-     (current-task-state-aware-assembly? #t)
-     (current-graph-conclusion-selection? #t)
-     (current-auto-distillation-enabled? #f)
-     (current-rollback-action-execution? #f)
-     (current-ws-evolution-enabled? #f)
-     (current-conclusion-to-memory-bridge-enabled #f)
-     (current-conclusion-token-budget (compute-conclusion-budget max-context-tokens))]
-    [(self-healing)
-     (current-task-state-aware-assembly? #t)
-     (current-graph-conclusion-selection? #t)
-     (current-auto-distillation-enabled? #t)
-     (current-rollback-action-execution? #t)
-     (current-ws-evolution-enabled? #f)
-     (current-conclusion-to-memory-bridge-enabled #t)
-     (current-conclusion-token-budget (compute-conclusion-budget max-context-tokens))]
-    [(full)
-     (current-task-state-aware-assembly? #t)
-     (current-graph-conclusion-selection? #t)
-     (current-auto-distillation-enabled? #t)
-     (current-rollback-action-execution? #t)
-     (current-ws-evolution-enabled? #t)
-     (current-conclusion-to-memory-bridge-enabled #t)
-     (current-conclusion-token-budget (compute-conclusion-budget max-context-tokens))]
-    [else (void)]))
+  (define opts (profile->options profile max-context-tokens))
+  (current-context-assembly-options-parameter opts)
+  (current-task-state-aware-assembly? (context-assembly-options-task-state-aware? opts))
+  (current-graph-conclusion-selection? (context-assembly-options-graph-conclusion-selection? opts))
+  (current-auto-distillation-enabled? (context-assembly-options-auto-distillation-enabled? opts))
+  (current-rollback-action-execution? (context-assembly-options-rollback-action-execution? opts))
+  (current-ws-evolution-enabled? (context-assembly-options-ws-evolution-enabled? opts))
+  (current-conclusion-to-memory-bridge-enabled
+   (context-assembly-options-conclusion-to-memory-bridge-enabled opts))
+  (current-conclusion-token-budget (context-assembly-options-conclusion-token-budget opts)))
 
 (provide session-config?
          (struct-out context-assembly-options)
          profile->options
          current-task-state-aware-rollout-rate
          current-context-assembly-profile
+         current-context-assembly-options-parameter
          current-goal-loop-enabled?
          context-assembly-profile?
          apply-context-assembly-profile!
