@@ -44,24 +44,24 @@
                (define st (make-loop-state "s" "t"))
                (phase-emit-start "s" "t" st (list (hasheq 'role "user"))))))
 
-(test-case "phase-pre-hook: returns #f when no hook dispatcher"
+(test-case "phase-pre-hook: returns payload and dispatch-hook effect"
   (define msgs (list (hasheq 'role "user" 'content "hello")))
   (define req (make-model-request msgs #f (hasheq)))
   (define mock-prov
     (make-provider (lambda () "mock") (lambda () (hasheq)) (lambda (r) (hasheq)) (lambda (r) '())))
-  (define-values (result effects) (phase-pre-hook #f mock-prov msgs req "s" "t"))
-  (check-false result)
-  (check-equal? effects '()))
+  (define-values (result effects) (phase-pre-hook mock-prov msgs req))
+  (check-true (hash? result))
+  (check-true (pair? effects))
+  (check-true (effect:dispatch-hook? (car effects))))
 
-(test-case "phase-msg-hook: returns #f when no hook dispatcher"
+(test-case "phase-msg-hook: returns payload and dispatch-hook effect"
   (define msgs (list (hasheq 'role "user" 'content "hello")))
-  (define req (make-model-request msgs #f (hasheq)))
   (define mock-prov
     (make-provider (lambda () "mock") (lambda () (hasheq)) (lambda (r) (hasheq)) (lambda (r) '())))
-  (define st (make-loop-state "s" "t"))
-  (define-values (result effects) (phase-msg-hook #f mock-prov req msgs "s" "t" st))
-  (check-false result)
-  (check-equal? effects '()))
+  (define-values (result effects) (phase-msg-hook mock-prov msgs "s" "t"))
+  (check-true (hash? result))
+  (check-true (pair? effects))
+  (check-true (effect:dispatch-hook? (car effects))))
 
 (test-case "phase-build-context: procedure exists"
   (check-pred procedure? phase-build-context))

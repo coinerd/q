@@ -2,7 +2,8 @@
 
 ;; runtime/session-index/mutations.rkt — append, update, branch, bookmark, persist operations
 ;;
-;; Mutation operations on session-index: building, persisting, branching, bookmarking.
+;; R-6: Session index is now fully immutable — hash-set/hash-update/hash-remove
+;; return new hashes; no more mutable hash round-trip.
 
 (require "../../util/error/error-helpers.rkt")
 (require racket/contract
@@ -41,11 +42,13 @@
           [navigate-next-leaf! (-> session-index? (or/c navigate-result? #f))]
           [navigate-prev-leaf! (-> session-index? (or/c navigate-result? #f))]
           [branch! (-> session-index? (or/c string? #f) (or/c message? #f))]
-          [branch-with-summary! (-> session-index? (or/c string? #f) string? (or/c message? #f))]
+          [branch-with-summary!
+           (-> session-index? (or/c string? #f) string? (values session-index? (or/c message? #f)))]
           [reset-leaf! (-> session-index? void?)]
-          [append-to-leaf! (-> session-index? message? message?)]
-          [add-bookmark! (-> session-index? (or/c string? #f) string? (or/c string? #f))]
-          [remove-bookmark! (-> session-index? (or/c string? #f) boolean?)]
+          [append-to-leaf! (-> session-index? message? (values session-index? message?))]
+          [add-bookmark!
+           (-> session-index? (or/c string? #f) string? (values session-index? (or/c string? #f)))]
+          [remove-bookmark! (-> session-index? (or/c string? #f) (values session-index? boolean?))]
           [list-bookmarks (-> session-index? (listof bookmark?))]
           [find-bookmark-by-label (-> session-index? string? (or/c bookmark? #f))]
           [get-bookmark (-> session-index? (or/c string? #f) (or/c bookmark? #f))]
@@ -77,7 +80,7 @@
 
 (define (build-index! session-path index-path)
   (define messages (load-session-log session-path))
-  ;; M11 (v0.97.15): Immutable for/fold replaces mutable make-hash + hash-set!
+  ;; R-6: Use immutable hashes throughout — no mutable hash round-trip.
   (define-values (by-id-0 children-0)
     (for/fold ([bid (hash)]
                [chd (hash)])
@@ -101,17 +104,12 @@
       (if (and pid (hash-has-key? chd pid))
           (hash-update chd pid (lambda (lst) (append lst (list msg))))
           chd)))
-  ;; Convert immutable hashes to mutable for session-index
-  ;; (session-index uses mutable hash-set! for subsequent mutations)
-  (define by-id-mut (make-hash))
-  (hash-for-each by-id-1 (lambda (k v) (hash-set! by-id-mut k v)))
-  (define children-mut (make-hash))
-  (hash-for-each children-final (lambda (k v) (hash-set! children-mut k v)))
+  ;; R-6: Use immutable hashes directly in session-index struct
   (define idx
-    (session-index by-id-mut
-                   children-mut
+    (session-index by-id-1
+                   children-final
                    (list->vector fixed-messages)
-                   (make-hash)
+                   (hash)
                    (box #f)
                    (make-semaphore 1)))
   (save-index! index-path idx)
@@ -145,7 +143,7 @@
            (make-empty-index)]
           [else
            (define entries (map jsexpr->message (cdr raw)))
-           ;; M11 (v0.97.15): Immutable for/fold replaces mutable make-hash + hash-set!
+           ;; R-6: Use immutable hashes throughout — no mutable hash round-trip.
            (define-values (by-id children-0)
              (for/fold ([bid (hash)]
                         [chd (hash)])
@@ -157,15 +155,11 @@
                (if (and pid (hash-has-key? chd pid))
                    (hash-update chd pid (lambda (lst) (append lst (list msg))))
                    chd)))
-           ;; Convert immutable hashes to mutable for session-index
-           (define by-id-mut (make-hash))
-           (hash-for-each by-id (lambda (k v) (hash-set! by-id-mut k v)))
-           (define children-mut (make-hash))
-           (hash-for-each children (lambda (k v) (hash-set! children-mut k v)))
-           (session-index by-id-mut
-                          children-mut
+           ;; R-6: Use immutable hashes directly — no mutable conversion
+           (session-index by-id
+                          children
                           (list->vector entries)
-                          (make-hash)
+                          (hash)
                           (box #f)
                           (make-semaphore 1))]))))
 
@@ -255,7 +249,7 @@
 (define (branch-with-summary! idx entry-id summary-text)
   (define entry (branch! idx entry-id))
   (cond
-    [(not entry) #f]
+    [(not entry) (values idx #f)]
     [else
      (define summary-msg
        (make-message (string-append "bs-" (generate-id))
@@ -265,13 +259,15 @@
                      (list (make-text-part summary-text))
                      (current-seconds)
                      (hasheq 'type "branch-summary" 'from-id entry-id)))
-     (append-to-leaf! idx summary-msg)
-     summary-msg]))
+     ;; R-6: append-to-leaf! now returns (values idx entry); capture updated index
+     (define-values (new-idx _summary-msg) (append-to-leaf! idx summary-msg))
+     (values new-idx summary-msg)]))
 
 (define (reset-leaf! idx)
   (set-box! (session-index-active-leaf-id idx) #f)
   (void))
 
+;; R-6: Returns (values session-index? message?) — immutable hash operations
 (define (append-to-leaf! idx entry)
   (define parent (active-leaf idx))
   (define parent-id
@@ -282,41 +278,65 @@
     (if (and parent-id (not (message-parent-id entry)))
         (struct-copy message entry [parent-id parent-id])
         entry))
-  (hash-set! (session-index-by-id idx) (message-id fixed-entry) fixed-entry)
-  (when parent-id
-    (hash-update! (session-index-children idx)
-                  parent-id
-                  (lambda (lst) (append lst (list fixed-entry)))))
-  (hash-set! (session-index-children idx) (message-id fixed-entry) '())
+  ;; R-6: Use immutable hash-set/hash-update instead of hash-set!/hash-update!
+  (define new-by-id (hash-set (session-index-by-id idx) (message-id fixed-entry) fixed-entry))
+  (define new-children
+    (if parent-id
+        (hash-update (session-index-children idx)
+                     parent-id
+                     (lambda (lst) (append lst (list fixed-entry))))
+        (session-index-children idx)))
+  (define new-children2 (hash-set new-children (message-id fixed-entry) '()))
   (set-box! (session-index-active-leaf-id idx) (message-id fixed-entry))
-  fixed-entry)
+  ;; Return updated index with immutable hashes, along with the entry
+  (values (session-index new-by-id
+                         new-children2
+                         (session-index-entry-order idx)
+                         (session-index-bookmarks idx)
+                         (session-index-active-leaf-id idx)
+                         (session-index-bookmark-sem idx))
+          fixed-entry))
 
 ;; ============================================================
 ;; Bookmarks
 ;; ============================================================
 
+;; R-6: Returns (values session-index? (or/c string? #f))
 (define (add-bookmark! idx entry-id label)
   (call-with-semaphore (session-index-bookmark-sem idx)
                        (lambda ()
-                         (define bookmarks (session-index-bookmarks idx))
+                         (define old-bookmarks (session-index-bookmarks idx))
                          (define existing (find-bookmark-by-label idx label))
-                         (when existing
-                           (hash-remove! bookmarks (bookmark-id existing)))
+                         (define bookmarks-after-remove
+                           (if existing
+                               (hash-remove old-bookmarks (bookmark-id existing))
+                               old-bookmarks))
                          (define id (generate-bookmark-id))
                          (define ts (current-seconds))
                          (define bm (make-bookmark id entry-id label ts))
-                         (hash-set! bookmarks id bm)
-                         id)))
+                         (define new-bookmarks (hash-set bookmarks-after-remove id bm))
+                         (values (session-index (session-index-by-id idx)
+                                                (session-index-children idx)
+                                                (session-index-entry-order idx)
+                                                new-bookmarks
+                                                (session-index-active-leaf-id idx)
+                                                (session-index-bookmark-sem idx))
+                                 id))))
 
+;; R-6: Returns (values session-index? boolean?)
 (define (remove-bookmark! idx bookmark-id)
   (call-with-semaphore (session-index-bookmark-sem idx)
                        (lambda ()
                          (define bookmarks (session-index-bookmarks idx))
                          (if (hash-has-key? bookmarks bookmark-id)
-                             (begin
-                               (hash-remove! bookmarks bookmark-id)
-                               #t)
-                             #f))))
+                             (values (session-index (session-index-by-id idx)
+                                                    (session-index-children idx)
+                                                    (session-index-entry-order idx)
+                                                    (hash-remove bookmarks bookmark-id)
+                                                    (session-index-active-leaf-id idx)
+                                                    (session-index-bookmark-sem idx))
+                                     #t)
+                             (values idx #f)))))
 
 (define (list-bookmarks idx)
   (hash-values (session-index-bookmarks idx)))
@@ -380,12 +400,13 @@
                              (map jsexpr->bookmark data)
                              '()))]))
 
+;; R-6: Use immutable hashes for bookmarks in the index
 (define (load-index-with-bookmarks session-path index-path)
   (define idx (load-index index-path))
   (define bookmarks (load-bookmarks session-path))
-  (define bm-hash (make-hash))
-  (for ([bm (in-list bookmarks)])
-    (hash-set! bm-hash (bookmark-id bm) bm))
+  (define bm-hash
+    (for/fold ([h (hash)]) ([bm (in-list bookmarks)])
+      (hash-set h (bookmark-id bm) bm)))
   (session-index (session-index-by-id idx)
                  (session-index-children idx)
                  (session-index-entry-order idx)

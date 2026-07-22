@@ -167,8 +167,9 @@
     (define-values (req _fx3) (phase-build-request raw-messages tools provider-settings))
 
     ;; Phase 4: Pre-hook (via phase pipeline)
-    (define-values (pre-hook-result _)
-      (phase-pre-hook hook-dispatcher provider raw-messages req session-id turn-id))
+    (define-values (pre-hook-payload _) (phase-pre-hook provider raw-messages req))
+    (define pre-hook-result
+      (and hook-dispatcher (hook-dispatcher 'model-request-pre pre-hook-payload)))
 
     ;; v0.43.0: Reducer-driven dispatch
     (define d-pre (decide-after-pre-hook pre-hook-result))

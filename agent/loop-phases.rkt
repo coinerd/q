@@ -65,22 +65,10 @@
                             (or/c hash? #f)
                             (values model-request? (listof effect?)))])
          (contract-out [phase-pre-hook
-                        (-> (or/c procedure? #f)
-                            provider?
-                            (listof hash?)
-                            model-request?
-                            string?
-                            string?
-                            (values (or/c any/c #f) (listof effect?)))])
-         (contract-out [phase-msg-hook
-                        (-> (or/c procedure? #f)
-                            provider?
-                            model-request?
-                            (listof hash?)
-                            string?
-                            string?
-                            loop-state?
-                            (values (or/c any/c #f) (listof effect?)))])
+                        (-> provider? (listof hash?) model-request? (values hash? (listof effect?)))])
+         (contract-out
+          [phase-msg-hook
+           (-> provider? (listof hash?) string? string? (values hash? (listof effect?)))])
          (contract-out [phase-stream
                         (-> provider?
                             model-request?
@@ -157,41 +145,39 @@
 ;; Phase 4: Pre-hook dispatch
 ;; ---------------------------------------------------------------------------
 
-;; Returns (values hook-result (listof effect?))
-;; hook-result is #f if no hook dispatcher, or the hook result
-(define (phase-pre-hook hook-dispatcher provider raw-messages req session-id turn-id)
-  (define result
-    (and hook-dispatcher
-         (hook-dispatcher 'model-request-pre
-                          (hasheq 'model-name
-                                  (provider-name provider)
-                                  'message-count
-                                  (length raw-messages)
-                                  'messages
-                                  raw-messages
-                                  'settings
-                                  (model-request-settings req)))))
-  (values result '()))
+;; Returns (values payload (listof effect?))
+;; payload is #f if no hook dispatcher, or the hook payload hash
+;; Effect describes what hook should be dispatched; caller executes it
+(define (phase-pre-hook provider raw-messages req)
+  (define payload
+    (hasheq 'model-name
+            (provider-name provider)
+            'message-count
+            (length raw-messages)
+            'messages
+            raw-messages
+            'settings
+            (model-request-settings req)))
+  (values payload (list (effect:dispatch-hook 'model-request-pre payload))))
 
 ;; ---------------------------------------------------------------------------
 ;; Phase 5: Message-start hook dispatch
 ;; ---------------------------------------------------------------------------
 
-;; Returns (values msg-hook-result (listof effect?))
-;; msg-hook-result: the raw hook result (for reducer)
-(define (phase-msg-hook hook-dispatcher provider req raw-messages session-id turn-id st)
-  (define msg-start-result
-    (and hook-dispatcher
-         (hook-dispatcher 'message-start
-                          (hasheq 'session-id
-                                  session-id
-                                  'turn-id
-                                  turn-id
-                                  'model-name
-                                  (provider-name provider)
-                                  'message-count
-                                  (length raw-messages)))))
-  (values msg-start-result '()))
+;; Returns (values payload (listof effect?))
+;; payload: the hook payload hash
+;; Effect describes what hook should be dispatched; caller executes it
+(define (phase-msg-hook provider raw-messages session-id turn-id)
+  (define payload
+    (hasheq 'session-id
+            session-id
+            'turn-id
+            turn-id
+            'model-name
+            (provider-name provider)
+            'message-count
+            (length raw-messages)))
+  (values payload (list (effect:dispatch-hook 'message-start payload))))
 
 ;; ---------------------------------------------------------------------------
 ;; Phase 6: Stream from provider + completion dispatch

@@ -91,8 +91,8 @@
                        #:state st)
 
     ;; Phase 5: Message-start hook
-    (define-values (msg-start-result _fx5)
-      (phase-msg-hook hook-dispatcher provider req raw-messages session-id turn-id st))
+    (define-values (msg-payload _fx5) (phase-msg-hook provider raw-messages session-id turn-id))
+    (define msg-start-result (and hook-dispatcher (hook-dispatcher 'message-start msg-payload)))
 
     (define d-msg (decide-after-msg-hook msg-start-result))
     (match (turn-decision-tag d-msg)
