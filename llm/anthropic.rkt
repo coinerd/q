@@ -27,7 +27,8 @@
          "http-helpers.rkt"
          "provider-telemetry.rkt"
          ;; W8 v0.99.35: Pure helpers extracted from this module
-         "anthropic-helpers.rkt")
+         "anthropic-helpers.rkt"
+         "adapters/eager-stream.rkt")
 
 ;; Provider constructor
 (provide (contract-out [make-anthropic-provider (-> hash? provider?)])
@@ -438,12 +439,11 @@
 ;; ============================================================
 ;; Provider constructor
 ;; ============================================================
-;; Kimi eager-stream helper: reads full HTTP response inside
-;; dynamic-wind, parses as JSON, replays as stream chunks.
+;; Kimi eager-stream helper: uses the generic eager-stream adapter
+;; from llm/adapters/eager-stream.rkt instead of inline code.
 ;; ============================================================
 
 (define (kimi-eager-stream-chunks req base-url api-key provider-name default-model)
-  (define chunks-box (box '()))
   (define merged-req (ensure-model-setting req default-model))
   ;; Non-streaming request — response is pure JSON, easier to parse
   (define body (anthropic-build-request-body merged-req #:stream? #f))
@@ -464,96 +464,49 @@
           "User-Agent: KimiCLI/1.5"))
   (define body-bytes (jsexpr->bytes body))
   (define response-port-box (box #f))
+  ;; Define a completion function that makes the HTTP call and returns parsed JSON
+  (define (kimi-completion-fn _req)
+    (define result-vec
+      (call-with-request-timeout #:cleanup (lambda ()
+                                             (define rp (unbox response-port-box))
+                                             (when rp
+                                               (with-logged-error "port cleanup"
+                                                                  (close-input-port rp))))
+                                 (lambda ()
+                                   (define-values (sl rh rp)
+                                     (http-sendrecv host
+                                                    path-str
+                                                    #:port port-num
+                                                    #:ssl? ssl?
+                                                    #:method #"POST"
+                                                    #:headers headers
+                                                    #:data body-bytes))
+                                   (set-box! response-port-box rp)
+                                   (vector sl rh rp))))
+    (define status-line (vector-ref result-vec 0))
+    (define response-port (vector-ref result-vec 2))
+    (define status-code
+      (let ([parts (regexp-match #rx"^HTTP/[^ ]+ ([0-9]+)" (bytes->string/utf-8 status-line))])
+        (if parts
+            (string->number (cadr parts))
+            0)))
+    (when (>= status-code 400)
+      (define resp-body (port->bytes response-port))
+      (check-provider-status! "Anthropic" status-line (bytes->string/utf-8 resp-body)))
+    ;; Read full response body inside dynamic-wind (port is still open)
+    (define full-body
+      (if (>= status-code 400)
+          #""
+          (port->bytes response-port)))
+    (string->jsexpr (bytes->string/utf-8 full-body)))
+  ;; Use the generic eager-stream adapter
   (dynamic-wind
    (lambda () (void))
-   (lambda ()
-     (define result-vec
-       (call-with-request-timeout #:cleanup (lambda ()
-                                              (define rp (unbox response-port-box))
-                                              (when rp
-                                                (with-logged-error "port cleanup"
-                                                                   (close-input-port rp))))
-                                  (lambda ()
-                                    (define-values (sl rh rp)
-                                      (http-sendrecv host
-                                                     path-str
-                                                     #:port port-num
-                                                     #:ssl? ssl?
-                                                     #:method #"POST"
-                                                     #:headers headers
-                                                     #:data body-bytes))
-                                    (set-box! response-port-box rp)
-                                    (vector sl rh rp))))
-     (define status-line (vector-ref result-vec 0))
-     (define response-port (vector-ref result-vec 2))
-     (define status-code
-       (let ([parts (regexp-match #rx"^HTTP/[^ ]+ ([0-9]+)" (bytes->string/utf-8 status-line))])
-         (if parts
-             (string->number (cadr parts))
-             0)))
-     (when (>= status-code 400)
-       (define resp-body (port->bytes response-port))
-       (check-provider-status! "Anthropic" status-line (bytes->string/utf-8 resp-body)))
-     ;; Read full response body inside dynamic-wind (port is still open)
-     (define full-body
-       (if (>= status-code 400)
-           #""
-           (port->bytes response-port)))
-     ;; Parse as non-streaming JSON response
-     (define resp-json (string->jsexpr (bytes->string/utf-8 full-body)))
-     (define resp (anthropic-parse-response resp-json))
-     ;; Emit chunks for each content block
-     (for ([part (in-list (model-response-content resp))]
-           [idx (in-naturals)])
-       (cond
-         [(hash-ref part 'text #f)
-          ;; Text content block
-          (set-box! chunks-box
-                    (cons (make-stream-chunk (hash-ref part 'text) #f #f #f) (unbox chunks-box)))]
-         [(equal? (hash-ref part 'type #f) "tool-call")
-          ;; Tool call — emit as tool-call delta with full arguments
-          (define raw-id (hash-ref part 'id #f))
-          (define tcid
-            (if (and (string? raw-id) (> (string-length raw-id) 0))
-                raw-id
-                (begin
-                  (log-warning "KIMI: tool-call block missing id, generating one")
-                  (format "tc_~a" (gensym)))))
-          (define args-str (jsexpr->string (hash-ref part 'arguments (hasheq))))
-          (set-box! chunks-box
-                    (cons (make-stream-chunk
-                           #f
-                           (hasheq 'index
-                                   idx
-                                   'id
-                                   tcid
-                                   'function
-                                   (hasheq 'name (hash-ref part 'name "") 'arguments args-str))
-                           #f
-                           #f)
-                          (unbox chunks-box)))]))
-     ;; Collect done chunk with usage
-     (when (model-response-usage resp)
-       (set-box! chunks-box
-                 (cons (make-stream-chunk #f
-                                          #f
-                                          (model-response-usage resp)
-                                          #t
-                                          #:finish-reason
-                                          (symbol->string (model-response-stop-reason resp)))
-                       (unbox chunks-box)))))
+   (lambda () (eager-stream kimi-completion-fn merged-req #:parse-response anthropic-parse-response))
    (lambda ()
      (define rp (unbox response-port-box))
      (when rp
-       (with-logged-error "port cleanup" (close-input-port rp)))))
-  ;; Replay collected chunks from an in-memory generator
-  (define all-chunks (reverse (unbox chunks-box)))
-  (generator ()
-             (for ([c (in-list all-chunks)])
-               (yield c))
-             (let loop ()
-               (yield #f)
-               (loop))))
+       (with-logged-error "port cleanup" (close-input-port rp))))))
 
 ;; ============================================================
 

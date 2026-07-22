@@ -137,14 +137,16 @@ jobs:
   test-platform:
     needs: lint
     runs-on: macos-latest
+    strategy:
+      fail-fast: false
     steps:
       - uses: actions/checkout@v7
       - name: Cache Racket packages
         uses: actions/cache@v6
         with:
           path: ~/Library/Racket
-          key: racket-pkgs-platform-macos-${{ hashFiles('**/info.rkt') }}
-          restore-keys: racket-pkgs-platform-macos-
+          key: ${{ runner.os }}-racket-packages-${{ hashFiles('**/info.rkt') }}
+          restore-keys: ${{ runner.os }}-racket-packages-
       - uses: ./.github/actions/setup-racket
         with:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
