@@ -10,6 +10,8 @@
 ;;; v0.72.5 W0: Further decomposed into:
 ;;;   session-store/versioning.rkt — session versioning constants and functions
 ;;;   session-store/in-memory.rkt  — in-memory session manager and custom entry helpers
+;;; v0.99.58 W2-2 P1-ST: Further decomposed into:
+;;;   session-store-goal-task.rkt — goal state persistence & archive markers
 ;;; This module retains: append, load/replay, forking, import, naming, sinks.
 ;;; Re-exports all symbols from extracted modules for backward compatibility.
 
@@ -56,7 +58,9 @@
                   tree-info)
          ;; Extracted sub-modules (v0.72.5 W0)
          "../session-store/versioning.rkt"
-         "../session-store/in-memory.rkt")
+         "../session-store/in-memory.rkt"
+         ;; Extracted sub-module (v0.99.58 W2-2 P1-ST): goal state & archive markers
+         "session-store-goal-task.rkt")
 (require (only-in "../../util/error/error-helpers.rkt" with-safe-fallback))
 
 ;; F11: Consumer/Admin tier split:
@@ -106,7 +110,7 @@
          ;; Custom entry helpers (#1147)
          append-custom-entry!
          load-custom-entries
-         ;; Goal state persistence (v0.71.0)
+         ;; Goal state persistence (v0.71.0) — re-exported from session-store-goal-task.rkt
          append-goal-state!
          load-latest-goal-state
          ;; Task state persistence (v0.75.6)
@@ -115,9 +119,12 @@
          load-latest-task-state
          append-conclusion!
          make-task-conclusion-message
+         ;; Archive markers (v0.77.1 W1.4) — re-exported from session-store-goal-task.rkt
          append-archive-marker!
          load-conclusions
          load-conclusions-archived
+         ;; Shared helper re-exported from session-store-goal-task.rkt
+         conclusion-hash->json-safe
          ;; R-09/R-10: Session sink interface (v0.39.0)
          session-sink<%>
          file-session-sink%
@@ -286,6 +293,10 @@
 (current-load-session-log load-session-log)
 (current-append-entry! append-entry!)
 
+;; Wire goal-task parameters to break cycle (v0.99.58 W2-2 P1-ST)
+(current-load-session-log-gt load-session-log)
+(current-append-entry!-gt append-entry!)
+
 (define (replay-session path)
   (load-session-log path))
 
@@ -365,32 +376,9 @@
 ;; ============================================================
 ;; Goal state persistence (v0.71.0)
 ;; ============================================================
-
-(define (append-goal-state! path gs)
-  ;; Store goal-state as a JSON string in a system message
-  ;; so it survives message->jsexpr serialization
-  (define gs-json-str (jsexpr->string (goal-state->hash gs)))
-  (append-entry! path
-                 (make-message (goal-state-id gs)
-                               #f
-                               'system
-                               'goal-state
-                               (list (make-text-part gs-json-str))
-                               (goal-state-updated-at gs)
-                               #f)))
-
-(define (load-latest-goal-state path)
-  (define entries (load-session-log path))
-  (define goal-entries
-    (filter (lambda (e) (and (message? e) (eq? (message-kind e) 'goal-state))) entries))
-  (if (null? goal-entries)
-      #f
-      (let* ([last-entry (car (reverse goal-entries))]
-             [content (message-content last-entry)]
-             [json-str (if (string? content)
-                           content
-                           (text-part-text (car content)))])
-        (hash->goal-state (string->jsexpr json-str)))))
+;; append-goal-state! and load-latest-goal-state were extracted to
+;; session-store-goal-task.rkt (v0.99.58 W2-2 P1-ST).
+;; They are re-exported via the module require at the top.
 
 ;; ============================================================
 ;; Task state & conclusion persistence (v0.75.6)
@@ -421,19 +409,8 @@
                        (text-part-text (car content)))])
         (string->symbol text))))
 
-;; Convert conclusion hash to JSON-safe (symbols → strings)
-(define (conclusion-hash->json-safe h)
-  (for/hash ([(k v) (in-hash h)])
-    (values k
-            (cond
-              [(symbol? v) (symbol->string v)]
-              [(list? v)
-               (map (lambda (x)
-                      (if (symbol? x)
-                          (symbol->string x)
-                          x))
-                    v)]
-              [else v]))))
+;; conclusion-hash->json-safe was extracted to session-store-goal-task.rkt
+;; (v0.99.58 W2-2 P1-ST) and is available via the module require.
 
 (define (make-task-conclusion-message conclusion)
   (define json-safe (conclusion-hash->json-safe (conclusion->hash conclusion)))
@@ -481,53 +458,12 @@
                    [else v]))))
      (hash->conclusion restored))))
 
-;; v0.77.1 W1.4: Append-only archive markers for evicted conclusions.
-;; Archived conclusions are logged but skipped by load-conclusions by default.
-;; Use load-conclusions-archived to include them.
-
-(define (append-archive-marker! path conclusion)
-  (define json-safe (conclusion-hash->json-safe (conclusion->hash conclusion)))
-  (append-entry! path
-                 (make-message (generate-id)
-                               #f
-                               'system
-                               'task-conclusion-archived
-                               (list (make-text-part (jsexpr->string json-safe)))
-                               (current-seconds)
-                               (hasheq))))
-
-(define (load-conclusions-archived path)
-  (define entries (load-session-log path))
-  (define conc-entries
-    (filter (lambda (e)
-              (and (message? e)
-                   (or (eq? (message-kind e) 'task-conclusion)
-                       (eq? (message-kind e) 'task-conclusion-archived))))
-            entries))
-  (for/list ([e (in-list conc-entries)]
-             #:when (message? e))
-    (define content (message-content e))
-    (define text
-      (if (string? content)
-          content
-          (text-part-text (car content))))
-    (with-safe-fallback
-     #f
-     (define raw (string->jsexpr text))
-     (define restored
-       (for/hash ([(k v) (in-hash raw)])
-         (values k
-                 (cond
-                   [(and (string? v) (memq k '(category fsm-state-origin))) (string->symbol v)]
-                   [(and (list? v) (eq? k 'relevance-tags))
-                    (map (lambda (x)
-                           (if (string? x)
-                               (string->symbol x)
-                               x))
-                         v)]
-                   [(and (list? v) (eq? k 'origin-message-ids)) v]
-                   [else v]))))
-     (hash->conclusion restored))))
+;; ============================================================
+;; Archive markers (v0.77.1 W1.4)
+;; ============================================================
+;; append-archive-marker! and load-conclusions-archived were extracted to
+;; session-store-goal-task.rkt (v0.99.58 W2-2 P1-ST).
+;; They are re-exported via the module require at the top.
 
 ;; ---------------------------------------------------------------------------
 ;; F11: Consumer/Admin submodule split

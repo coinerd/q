@@ -72,6 +72,23 @@
       (define result (decode-mouse-message #(tmousemsg press 10 20 #t #f #f)))
       (check-true (list? result)))
 
+    ;; v0.99.58 W2-4 (P2-M): 4-field raw vectors from make-tmousemsg-raw now decode
+    (test-case "decode-mouse-message: decodes 4-field raw vector (left click)"
+      (define result (decode-mouse-message #(tmousemsg 32 40 20)))
+      (check-equal? result '(mouse click 0 40 20)))
+
+    (test-case "decode-mouse-message: decodes 4-field raw vector (motion/drag)"
+      (define result (decode-mouse-message #(tmousemsg 64 40 20)))
+      (check-equal? result '(mouse drag 0 40 20)))
+
+    (test-case "decode-mouse-message: decodes 4-field raw vector (scroll)"
+      (define result (decode-mouse-message #(tmousemsg 96 40 20)))
+      (check-equal? result '(mouse scroll-up 40 20)))
+
+    (test-case "decode-mouse-message: decodes 4-field raw vector (release)"
+      (define result (decode-mouse-message #(tmousemsg 35 40 20)))
+      (check-equal? result '(mouse release 40 20)))
+
     ;; ── Edge cases ──
 
     (test-case "decode-mouse-x10: coordinates at origin (0, 0)"

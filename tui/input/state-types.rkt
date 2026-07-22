@@ -186,30 +186,56 @@
     [else #f]))
 
 ;; Decode a native tmousemsg into q's internal mouse event format.
+;; Handles two vector shapes:
+;;   - 4-field raw:  #(tmousemsg cb cx cy)         — produced by make-tmousemsg-raw
+;;   - 7-field decoded: #(tmousemsg kind x y l? m? r?) — produced by tui-term struct bridge
+;; v0.99.58 W2-4 (P2-M): Added 4-field path (previously dropped as #f).
 (define (decode-mouse-message msg)
-  (with-safe-fallback #f
-                      (define kind (tmousemsg-kind msg))
-                      (define x (tmousemsg-pos-x msg))
-                      (define y (tmousemsg-pos-y msg))
-                      (define left (tmousemsg-left? msg))
-                      (case kind
-                        [(wheel-up) (list 'mouse 'scroll-up x y)]
-                        [(wheel-down) (list 'mouse 'scroll-down x y)]
-                        [(press)
-                         (define button
-                           (cond
-                             [(tmousemsg-left? msg) 0]
-                             [(tmousemsg-middle? msg) 1]
-                             [(tmousemsg-right? msg) 2]
-                             [else 0]))
-                         (list 'mouse 'click button x y)]
-                        [(release) (list 'mouse 'release x y)]
-                        [(move)
-                         (if (or left (tmousemsg-right? msg) (tmousemsg-middle? msg))
-                             (list 'mouse 'drag x y)
-                             #f)]
-                        [(leave) #f]
-                        [else #f])))
+  (with-safe-fallback
+   #f
+   (cond
+     ;; 4-field raw vector from terminal-input.rkt — decode cb byte (X10/SGR encoding)
+     [(and (vector? msg)
+           (= (vector-length msg) 4)
+           (eq? (vector-ref msg 0) 'tmousemsg)
+           (integer? (vector-ref msg 1)))
+      (define cb (vector-ref msg 1))
+      (define cx (vector-ref msg 2))
+      (define cy (vector-ref msg 3))
+      (define button-code (- cb 32))
+      (define button (bitwise-and button-code #x03))
+      (define motion? (= (bitwise-and button-code 32) 32))
+      (define scroll? (= (bitwise-and button-code 64) 64))
+      (cond
+        [scroll? (list 'mouse (if (= button 0) 'scroll-up 'scroll-down) cx cy)]
+        [(= button 3) (list 'mouse 'release cx cy)]
+        [(and motion? (<= button 2)) (list 'mouse 'drag button cx cy)]
+        [(and (<= button 2) (not motion?)) (list 'mouse 'click button cx cy)]
+        [else #f])]
+     ;; 7-field decoded vector — use symbolic kind + boolean flags
+     [else
+      (define kind (tmousemsg-kind msg))
+      (define x (tmousemsg-pos-x msg))
+      (define y (tmousemsg-pos-y msg))
+      (define left (tmousemsg-left? msg))
+      (case kind
+        [(wheel-up) (list 'mouse 'scroll-up x y)]
+        [(wheel-down) (list 'mouse 'scroll-down x y)]
+        [(press)
+         (define button
+           (cond
+             [(tmousemsg-left? msg) 0]
+             [(tmousemsg-middle? msg) 1]
+             [(tmousemsg-right? msg) 2]
+             [else 0]))
+         (list 'mouse 'click button x y)]
+        [(release) (list 'mouse 'release x y)]
+        [(move)
+         (if (or left (tmousemsg-right? msg) (tmousemsg-middle? msg))
+             (list 'mouse 'drag x y)
+             #f)]
+        [(leave) #f]
+        [else #f])])))
 
 ;; Normalize selection so start <= end (row-major order)
 (define (normalize-selection-range anchor end)
