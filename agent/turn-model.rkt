@@ -128,12 +128,14 @@
                                                      [budget-ctx hash?]
                                                      [extension-registry
                                                       (or/c extension-registry? #f)])))
-         ;; TODO(v0.88): Consider per-tag union contract for payload
+         ;; Deferred: per-tag union contract would require dispatch-on-tag; any/c is pragmatic for now.
          (contract-out (struct turn-command ([tag turn-command-tag/c] [payload any/c])))
-         (contract-out (struct turn-decision
-                               ([tag turn-decision-tag/c]
-                                [payload any/c]
-                                [metadata hash?]))) ;; TODO(v0.88): Consider per-tag union contract
+         (contract-out
+          (struct turn-decision
+                  ([tag turn-decision-tag/c]
+                   [payload any/c]
+                   [metadata
+                    hash?]))) ;; Deferred: per-tag union contract not worth the complexity (v0.99.58)
          make-turn-start
          make-turn-hook-result
          make-turn-stream-complete
@@ -168,5 +170,5 @@
                                                       [all-chunks list?])))
          make-stream-completion
          ;; Hook stage payload
-         ;; TODO(v0.88): Consider per-tag union contract for result
+         ;; Deferred: per-tag union contract not worth the complexity (v0.99.58) for result
          (contract-out (struct hook-stage-payload ([stage symbol?] [result any/c]))))

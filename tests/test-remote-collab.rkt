@@ -139,6 +139,52 @@
   (check-exn exn:fail? (lambda () (remote-tmux "host" "; rm -rf /" 'status (hasheq)))))
 
 ;; ============================================================
+;; SEC-1: Shell argument validation tests
+;; ============================================================
+
+(require (only-in "../extensions/remote-collab/remote-collab.rkt" valid-shell-arg? valid-cwd?))
+
+(test-case "valid-shell-arg? accepts safe strings"
+  (check-true (valid-shell-arg? "sonnet-4"))
+  (check-true (valid-shell-arg? "claude-3.5"))
+  (check-true (valid-shell-arg? "medium"))
+  (check-true (valid-shell-arg? "gpt-4o-mini"))
+  (check-true (valid-shell-arg? "a/b/c")))
+
+(test-case "valid-shell-arg? rejects shell injection"
+  (check-false (valid-shell-arg? "; rm -rf /"))
+  (check-false (valid-shell-arg? "$(pwned)"))
+  (check-false (valid-shell-arg? "`id`"))
+  (check-false (valid-shell-arg? "foo|cat"))
+  (check-false (valid-shell-arg? "foo'inject"))
+  (check-false (valid-shell-arg? "foo && bar"))
+  (check-false (valid-shell-arg? ""))
+  (check-false (valid-shell-arg? 123)))
+
+(test-case "valid-cwd? accepts safe paths"
+  (check-true (valid-cwd? "~/src/q-agent"))
+  (check-true (valid-cwd? "/opt/src"))
+  (check-true (valid-cwd? "/tmp")))
+
+(test-case "valid-cwd? rejects shell injection"
+  (check-false (valid-cwd? "; rm -rf /"))
+  (check-false (valid-cwd? "$(pwned)"))
+  (check-false (valid-cwd? "`id`")))
+
+(test-case "remote-tmux start rejects shell injection in model"
+  (check-exn exn:fail?
+             (lambda () (remote-tmux "host" "session" 'start (hasheq 'model "$(rm -rf /)")))))
+
+(test-case "remote-tmux start rejects shell injection in thinking"
+  (check-exn exn:fail?
+             (lambda ()
+               (remote-tmux "host" "session" 'start (hasheq 'thinking "; cat /etc/passwd")))))
+
+(test-case "remote-tmux start rejects shell injection in cwd"
+  (check-exn exn:fail?
+             (lambda () (remote-tmux "host" "session" 'start (hasheq 'cwd "~/.ssh' && echo pwned")))))
+
+;; ============================================================
 ;; S16: SSH host validation
 ;; ============================================================
 

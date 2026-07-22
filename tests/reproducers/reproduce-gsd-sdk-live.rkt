@@ -1,7 +1,9 @@
 #!/usr/bin/env racket
 #lang racket
 
-;; scripts/test-gsd-sdk-live.rkt — Live GSD planning test via SDK
+;; @speed slow
+;; @suite gsd
+;; tests/reproducers/test-gsd-sdk-live.rkt — Live GSD planning test via SDK
 ;;
 ;; Exercises the q:plan → q:go workflow against the real LLM provider
 ;; from ~/.q/config.json, observing GSD state transitions.
@@ -12,16 +14,16 @@
 (require racket/port
          racket/string
          racket/set
-         "../runtime/settings.rkt"
-         (only-in "../llm/provider.rkt" provider-name)
-         "../runtime/provider/provider-factory.rkt"
-         "../extensions/loader.rkt"
-         "../extensions/gsd-planning.rkt"
-         "../util/event/event-bus.rkt"
-         (only-in "../util/event/event.rkt" event-ev event-payload)
-         "../tools/tool.rkt"
-         "../interfaces/sdk.rkt"
-         (only-in "../extensions/gsd/state-machine.rkt" [gsm-snapshot gsd-snapshot]))
+         "../../runtime/settings.rkt"
+         (only-in "../../llm/provider.rkt" provider-name)
+         "../../runtime/provider/provider-factory.rkt"
+         "../../extensions/loader.rkt"
+         "../../extensions/gsd-planning.rkt"
+         "../../util/event/event-bus.rkt"
+         (only-in "../../util/event/event.rkt" event-ev event-payload)
+         "../../tools/tool.rkt"
+         "../../interfaces/sdk.rkt"
+         (only-in "../../extensions/gsd/state-machine.rkt" [gsm-snapshot gsd-snapshot]))
 
 ;; ============================================================
 ;; 1. Build real provider + extensions via SDK

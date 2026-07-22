@@ -19,10 +19,23 @@
 ;; ---------------------------------------------------------------------------
 
 (define slow-patterns
-  '("sandbox" "subprocess" "integration" "benchmark" "workflow-" "e2e-"
-              "ci_local" "metrics-readme" "bump-version" "examples-compile"
-              "pre-commit" "racket-tooling" "run-tests" "audit-script"
-              "test-doctor" "check-deps" "self-hosting" "tui-terminal" "sync-readme"))
+  '("sandbox" "subprocess"
+              "integration"
+              "benchmark"
+              "workflow-"
+              "e2e-"
+              "ci_local"
+              "metrics-readme"
+              "examples-compile"
+              "pre-commit"
+              "racket-tooling"
+              "run-tests"
+              "audit-script"
+              "test-doctor"
+              "check-deps"
+              "self-hosting"
+              "tui-terminal"
+              "sync-readme"))
 
 (define (detect-speed-tag f)
   (define base (path->string (file-name-from-path f)))
@@ -30,8 +43,7 @@
     [(for/or ([p (in-list slow-patterns)])
        (string-contains? base p))
      "slow"]
-    [(string-contains? f "/workflows/")
-     "slow"]
+    [(string-contains? f "/workflows/") "slow"]
     [else "fast"]))
 
 (define (detect-suite-tag f)
@@ -72,10 +84,10 @@
 (define (read-first-n-lines path n)
   (with-handlers ([exn:fail? (lambda (_) '())])
     (call-with-input-file path
-      (lambda (port)
-        (for/list ([_ (in-range n)]
-                   #:break (eof-object? (peek-byte port)))
-          (read-line port))))))
+                          (lambda (port)
+                            (for/list ([_ (in-range n)]
+                                       #:break (eof-object? (peek-byte port)))
+                              (read-line port))))))
 
 (define (has-tag? lines tag-name)
   (define rx (regexp (format ";+[ \\t]*@~a[ \\t]+" tag-name)))
@@ -98,12 +110,12 @@
         (add1 i)))
     (define idx (or insert-idx 1))
     (define tag-line
-      (format ";; @speed ~a~a" speed
-              (if suite (format "  ;; @suite ~a" suite) "")))
-    (define new-lines
-      (append (take lines idx)
-              (list "" tag-line)
-              (drop lines idx)))
+      (format ";; @speed ~a~a"
+              speed
+              (if suite
+                  (format "  ;; @suite ~a" suite)
+                  "")))
+    (define new-lines (append (take lines idx) (list "" tag-line) (drop lines idx)))
     (display-lines-to-file new-lines f #:exists 'replace)))
 
 ;; ---------------------------------------------------------------------------
@@ -136,8 +148,7 @@
       (define has-suite? (has-tag? lines "suite"))
       (list f has-speed? has-suite?)))
 
-  (define untagged
-    (filter (lambda (r) (or (not (cadr r)) (not (caddr r)))) results))
+  (define untagged (filter (lambda (r) (or (not (cadr r)) (not (caddr r)))) results))
 
   (cond
     [(null? untagged)
@@ -153,7 +164,9 @@
        (printf "Tagged: ~a (@speed ~a~a)\n"
                (path->string (file-name-from-path f))
                speed
-               (if suite (format " @suite ~a" suite) "")))
+               (if suite
+                   (format " @suite ~a" suite)
+                   "")))
      (printf "Tagged ~a files.\n" (length untagged))
      (exit 0)]
     [else

@@ -1,32 +1,34 @@
 #!/usr/bin/env racket
 #lang racket/base
 
-;; scripts/test-gsd-go-replanning.rkt
+;; @speed slow
+;; @suite gsd
+;; tests/reproducers/test-gsd-go-replanning.rkt
 ;;
 ;; Reproduce the bug where /go execution falls back into planning mode.
 
 (require racket/port
          racket/string
          racket/list
-         "../llm/provider.rkt"
-         "../util/event/event-bus.rkt"
-         (only-in "../tools/tool.rkt" make-tool-registry tool-registry?)
-         (only-in "../tools/registry-defaults.rkt" register-default-tools!)
-         (only-in "../extensions/gsd/session-state.rkt"
+         "../../llm/provider.rkt"
+         "../../util/event/event-bus.rkt"
+         (only-in "../../tools/tool.rkt" make-tool-registry tool-registry?)
+         (only-in "../../tools/registry-defaults.rkt" register-default-tools!)
+         (only-in "../../extensions/gsd/session-state.rkt"
                   current-gsd-mode
                   current-gsd-state
                   set-gsd-state!
                   current-gsd-ctx)
-         (only-in "../extensions/gsd/state-machine.rkt"
+         (only-in "../../extensions/gsd/state-machine.rkt"
                   gsm-ctx-current
                   gsm-ctx-reset!
                   gsm-ctx-transition-to!
                   gsm-ctx-transition!)
-         (only-in "../extensions/gsd/core.rkt" reset-all-gsd-state!)
-         (only-in "../extensions/api.rkt" make-extension-registry extension-registry?)
-         (only-in "../extensions/loader.rkt" load-extension! discover-extension-files)
-         (only-in "../extensions/hooks.rkt" dispatch-hooks hook-result? hook-result-payload)
-         (only-in "../util/hook-types.rkt" hook-result-action))
+         (only-in "../../extensions/gsd/core.rkt" reset-all-gsd-state!)
+         (only-in "../../extensions/api.rkt" make-extension-registry extension-registry?)
+         (only-in "../../extensions/loader.rkt" load-extension! discover-extension-files)
+         (only-in "../../extensions/hooks.rkt" dispatch-hooks hook-result? hook-result-payload)
+         (only-in "../../util/hook-types.rkt" hook-result-action))
 
 (define ext-dir (build-path (find-system-path 'home-dir) "src/q-agent/q/extensions"))
 
@@ -158,7 +160,7 @@
   (set-gsd-state! 'executing)
 
   ;; Agent uses write tool to overwrite PLAN.md
-  (define plan-path "/home/user/src/q-agent/q/.planning/PLAN.md")
+  (define plan-path (build-path (current-directory) ".planning" "PLAN.md"))
   (define write-payload
     (hasheq 'tool-name
             "write"
