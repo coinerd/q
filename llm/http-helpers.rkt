@@ -22,6 +22,8 @@
           [extract-status-code (-> (or/c bytes? string?) exact-nonnegative-integer?)]
           [http-error? (-> exact-nonnegative-integer? boolean?)]
           [raise-http-error! (->* (string?) ((or/c exact-nonnegative-integer? #f)) any)]
+          [parse-provider-url
+           (-> string? (values string? string? exact-nonnegative-integer? boolean?))]
           [make-provider-http-request
            (->* (string? (listof string?) bytes?)
                 (#:timeout (or/c exact-positive-integer? #f) #:status-checker (or/c procedure? #f))
@@ -70,6 +72,28 @@
 ;; Consolidated HTTP request (QUAL-02)
 ;; ============================================================
 
+;; parse-provider-url : string? -> (values string? string? exact-nonnegative-integer? boolean?)
+;;
+;; Shared URL parser for LLM provider HTTP requests. Returns:
+;;   - host (string)
+;;   - path-str (string, starts with /)
+;;   - port (exact-nonnegative-integer, 443 for https / 80 for http if not in URL)
+;;   - ssl? (boolean, true for https)
+;;
+;; Eliminates duplicated string->url/url-host/url-path/url-port/url-scheme logic
+;; across anthropic.rkt, gemini.rkt, openai-compatible.rkt (v0.99.58 W1-1 / P1-S).
+(define (parse-provider-url url-str)
+  (define uri (string->url url-str))
+  (define host (url-host uri))
+  (define path-str
+    (string-append "/"
+                   (string-join (for/list ([p (in-list (url-path uri))])
+                                  (path/param-path p))
+                                "/")))
+  (define ssl? (and (url-scheme uri) (not (equal? (url-scheme uri) "http"))))
+  (define port (or (url-port uri) (if ssl? 443 80)))
+  (values host path-str port ssl?))
+
 ;; make-provider-http-request : string? (listof string?) bytes?
 ;;   [#:timeout exact-positive-integer?]
 ;;   [#:status-checker (bytes? bytes? -> void?)]
@@ -90,15 +114,7 @@
                                     body-bytes
                                     #:timeout [timeout-secs #f]
                                     #:status-checker [status-checker #f])
-  (define uri (string->url url-str))
-  (define host (url-host uri))
-  (define path-str
-    (string-append "/"
-                   (string-join (for/list ([p (in-list (url-path uri))])
-                                  (path/param-path p))
-                                "/")))
-  (define ssl? (and (url-scheme uri) (not (equal? (url-scheme uri) "http"))))
-  (define port (or (url-port uri) (if ssl? 443 80)))
+  (define-values (host path-str port ssl?) (parse-provider-url url-str))
   (define effective-timeout (or timeout-secs (current-http-request-timeout)))
   (call-with-request-timeout (lambda ()
                                (define-values (status-line response-headers response-port)

@@ -159,12 +159,7 @@
                                'arguments
                                args))
                      ;; Shadow: validate round-trip through tool-call-intent
-                     (define tci (hash->tool-call-intent tc-hash))
-                     (define round-trip (tool-call-intent->hash tci))
-                     (unless (equal? (hash-ref tc-hash 'name) (hash-ref round-trip 'name))
-                       (log-q-openai-warning "tool-call-intent shadow mismatch in openai: ~a vs ~a"
-                                             (hash-ref tc-hash 'name)
-                                             (hash-ref round-trip 'name)))
+                     (validate-tool-call-intent! tc-hash "openai")
                      tc-hash)
                    '()))]))
 

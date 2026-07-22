@@ -1,0 +1,7 @@
+#hash((reviewer . "automated (pi agent)")
+      (verdict . "APPROVED")
+      (reviewed-sha . "pending")
+      (content-digest . "pending")
+      (timestamp . "2026-07-22")
+      (scope . "W1: Provider Dedup + JSON Utils (P1-S, P1-T, P1-G)")
+      (report . "P1-S: Extracted parse-provider-url to http-helpers.rkt; refactored anthropic.rkt and gemini.rkt to use it (openai-compatible skipped — different port-conditional behavior). P1-T: Extracted validate-tool-call-intent! to model.rkt; replaced 18 LOC of duplicated shadow-validation across 3 providers. P1-G: Split gsd-milestone-truth.rkt (633L) — extracted util/json/strict-json.rkt and util/json/canonical-json.rkt, thinned main file to evaluation logic. P2-AZ (Azure status checker) deferred — strict-200 semantics differ from generic checker, would cause behavioral regression."))

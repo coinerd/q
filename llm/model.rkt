@@ -149,6 +149,17 @@
                         args0
                         (hasheq))))
 
+;; validate-tool-call-intent! — shared shadow-validation for provider tool-call hashes.
+;; Round-trips through tool-call-intent to detect name loss and logs a warning on mismatch.
+(define (validate-tool-call-intent! tc-hash provider-name)
+  (define tci (hash->tool-call-intent tc-hash))
+  (define round-trip (tool-call-intent->hash tci))
+  (unless (equal? (hash-ref tc-hash 'name) (hash-ref round-trip 'name))
+    (log-warning "tool-call-intent shadow mismatch in ~a: ~a vs ~a"
+                 provider-name
+                 (hash-ref tc-hash 'name)
+                 (hash-ref round-trip 'name))))
+
 ;; ============================================================
 ;; Provide with contracts
 ;; ============================================================
@@ -200,4 +211,5 @@
                              stream-chunk?)]
                        [make-tool-call-intent (-> string? string? hash? tool-call-intent?)]
                        [tool-call-intent->hash (-> tool-call-intent? hash?)]
-                       [hash->tool-call-intent (-> hash? tool-call-intent?)]))
+                       [hash->tool-call-intent (-> hash? tool-call-intent?)])
+         validate-tool-call-intent!)

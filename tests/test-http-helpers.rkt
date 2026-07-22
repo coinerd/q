@@ -54,3 +54,27 @@
 
 (test-case "string-trim applied"
   (check-equal? (translate-stop-reason 'anthropic "  end_turn  ") 'stop))
+
+;; parse-provider-url tests (v0.99.58 W1-1)
+
+(test-case "parse-provider-url: https with no explicit port"
+  (define-values (host path-str port ssl?) (parse-provider-url "https://api.example.com/v1/chat"))
+  (check-equal? host "api.example.com")
+  (check-true (regexp-match? #rx"chat" path-str))
+  (check-equal? port 443)
+  (check-true ssl?))
+
+(test-case "parse-provider-url: http with explicit port"
+  (define-values (host path-str port ssl?)
+    (parse-provider-url "http://localhost:8080/api/v1/messages"))
+  (check-equal? host "localhost")
+  (check-true (regexp-match? #rx"messages" path-str))
+  (check-equal? port 8080)
+  (check-false ssl?))
+
+(test-case "parse-provider-url: query string preserved in path"
+  (define-values (host path-str port ssl?)
+    (parse-provider-url "https://api.x.com/v1beta/models/gpt:stream?alt=sse"))
+  (check-equal? host "api.x.com")
+  (check-equal? port 443)
+  (check-true ssl?))
