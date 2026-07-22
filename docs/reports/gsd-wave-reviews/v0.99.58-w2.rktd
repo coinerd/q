@@ -1,0 +1,7 @@
+#hash((reviewer . "automated (pi agent)")
+      (verdict . "APPROVED")
+      (reviewed-sha . "2ce9b125253be8eb496df352e5314ca013395759")
+      (content-digest . "f599300c1baaa3a341cd1c2dc90cb66016162d7c302f33926bb4a90862773e93")
+      (timestamp . "2026-07-22")
+      (scope . "W2: Runtime Decomposition (P1-BK, P1-ST, P2-FT, P2-M)")
+      (report . "P1-BK: Extracted bookmark domain (CRUD + persistence, ~140L) from mutations.rkt to runtime/session-index/bookmarks.rkt. Re-exported via all-from-out for backward compat. P1-ST: Extracted 5 goal/archive functions (~63L) from session-store.rkt to runtime/session/session-store-goal-task.rkt using parameter injection pattern (avoids circular dep). P2-FT: Extracted 3 pure file-tracker functions (~50L) from compactor.rkt to runtime/compaction/file-tracker.rkt. P2-M: Fixed mouse message 4-field/7-field vector mismatch — decode-mouse-message now handles both shapes; 4-field raw vectors (from make-tmousemsg-raw) decode cb byte as X10/SGR encoding instead of returning #f."))

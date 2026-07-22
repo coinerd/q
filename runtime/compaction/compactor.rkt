@@ -59,7 +59,8 @@
                   find-split-turn
                   split-turn-result-is-split?
                   split-turn-result-turn-messages
-                  generate-turn-prefix))
+                  generate-turn-prefix)
+         "file-tracker.rkt")
 
 (provide compaction-strategy
          compaction-strategy?
@@ -90,10 +91,8 @@
                        [write-compaction-entry! (-> (or/c path-string? #f) compaction-result? void?)]
                        [compaction-result->message-list (-> compaction-result? list?)]
                        [default-strategy (-> compaction-strategy?)]
-                       [default-summarize (-> list? string?)]
-                       [extract-file-tracker (-> list? hash?)]
-                       [find-previous-file-tracker (-> list? hash?)]
-                       [merge-file-trackers (->* () () #:rest list? hash?)]))
+                       [default-summarize (-> list? string?)])
+         (all-from-out "file-tracker.rkt"))
 
 ;; ============================================================
 ;; Structs
@@ -137,35 +136,6 @@
 ;; LLM-powered summarization (v0.8.9)
 ;; ============================================================
 
-;; Walk messages to find file paths from tool calls.
-;; Returns a hash: 'readFiles -> list of paths,
-;;                  'modifiedFiles -> list of paths.
-(define (extract-file-tracker messages)
-  (define-values (reads writes)
-    (for*/fold ([reads (set)]
-                [writes (set)])
-               ([m (in-list messages)]
-                [part (in-list (message-content m))])
-      (cond
-        [(not (tool-call-part? part)) (values reads writes)]
-        [else
-         (define tool-name (tool-call-part-name part))
-         (define args (tool-call-part-arguments part))
-         (define path
-           (cond
-             [(hash? args) (hash-ref args 'path #f)]
-             [(string? args)
-              (and (string-contains? args "path")
-                   (let ([m (regexp-match #rx"\"path\"[[:space:]]*:[[:space:]]*\"([^\"]+)\"" args)])
-                     (and m (cadr m))))]
-             [else #f]))
-         (cond
-           [(not path) (values reads writes)]
-           [(member tool-name '("read" "find" "grep" "ls")) (values (set-add reads path) writes)]
-           [(member tool-name '("edit" "write")) (values reads (set-add writes path))]
-           [else (values reads writes)])])))
-  (hasheq 'readFiles (set->list reads) 'modifiedFiles (set->list writes)))
-
 ;; Find the most recent compaction-summary message in the list.
 ;; Returns the text of the summary or #f.
 (define (find-previous-summary messages)
@@ -175,27 +145,6 @@
                             #:when (text-part? part))
                    (text-part-text part))
                  "")))
-
-;; #768: Find the file tracker from the most recent compaction summary.
-;; Returns a hash like (hasheq 'readFiles (...) 'modifiedFiles (...)) or (hasheq).
-(define (find-previous-file-tracker messages)
-  (or (for/first ([m (in-list (reverse messages))]
-                  #:when (eq? (message-kind m) 'compaction-summary))
-        (define meta (message-meta-safe m))
-        (hash-ref meta 'fileTracker (hasheq)))
-      (hasheq)))
-
-;; #768: Merge two file trackers, deduplicating file paths.
-(define (merge-file-trackers . trackers)
-  (define-values (all-reads all-writes)
-    (for*/fold ([reads (set)]
-                [writes (set)])
-               ([ft (in-list trackers)])
-      (values (for/fold ([r reads]) ([path (in-list (hash-ref ft 'readFiles '()))])
-                (set-add r path))
-              (for/fold ([w writes]) ([path (in-list (hash-ref ft 'modifiedFiles '()))])
-                (set-add w path)))))
-  (hasheq 'readFiles (set->list all-reads) 'modifiedFiles (set->list all-writes)))
 
 ;; ============================================================
 ;; build-summary-window
