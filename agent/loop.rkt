@@ -1,7 +1,9 @@
 #lang racket/base
 ;;
-;; COMPOSITION ROOT: This module wires together dependencies from
-;; lower layers. It should not be imported by other production modules.
+;; Turn orchestrator — stable public interface for agent turn lifecycle.
+;; Imported by runtime/turn-orchestrator.rkt for downward dependency.
+;; This is NOT a composition root (phase functions extracted to loop-phases.rkt,
+;; effect execution to effect-executor.rkt, streaming dispatch to loop-dispatch.rkt).
 ;;
 
 ;; agent/loop.rkt — effectful agent turn orchestrator
