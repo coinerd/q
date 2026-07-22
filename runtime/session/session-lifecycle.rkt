@@ -128,7 +128,8 @@
 ;;   instead of linear load-session-log.
 (define (build-session-context-for-prompt sess user-message ensure-persisted!-fn buffer-or-append!-fn)
   (define log-path (session-log-path-for sess))
-  (define idx-path (session-index-path (agent-session-session-dir sess)))
+  (define idx-path
+    (session-index-path (session-identity-facet-session-dir (session->identity-facet sess))))
 
   ;; Ensure index exists (build if first time)
   (unless (agent-session-index sess)
@@ -150,7 +151,7 @@
         user-message))
 
   ;; v0.26.0: Reset working set on new user message
-  (define ws (config-working-set (agent-session-config sess)))
+  (define ws (config-working-set (session-provider-facet-config (session->provider-facet sess))))
   (when ws
     (working-set-reset! ws))
 
@@ -209,12 +210,12 @@
 ;;   Runs the core agent loop with error handling. Returns a loop-result.
 ;;   v0.32.0: Starts trace logger for session diagnostics.
 (define (dispatch-iteration sess context-with-system max-iterations)
-  (define bus (agent-session-event-bus sess))
-  (define prov (agent-session-provider sess))
-  (define reg (agent-session-tool-registry sess))
+  (define bus (session-tool-facet-event-bus (session->tool-facet sess)))
+  (define prov (session-provider-facet-provider (session->provider-facet sess)))
+  (define reg (session-tool-facet-tool-registry (session->tool-facet sess)))
   (define log-path (session-log-path-for sess))
-  (define sid (agent-session-session-id sess))
-  (define cfg (agent-session-config sess))
+  (define sid (session-identity-facet-session-id (session->identity-facet sess)))
+  (define cfg (session-provider-facet-config (session->provider-facet sess)))
   (define cancellation-tok (dict-ref cfg 'cancellation-token #f))
 
   ;; Dispatch 'model-select hook — extensions can override model
@@ -307,8 +308,7 @@
 
   ;; v0.26.0: Create working set for this prompt and attach to session config
   (define ws (make-working-set))
-  (define base-cfg (agent-session-config sess))
-  ;; v0.30.4: dict-set works on both hash? and session-config?
+  (define base-cfg (session-provider-facet-config (session->provider-facet sess)))
   (guarded-set-config!
    sess
    (dict-set (dict-set base-cfg 'working-set ws) 'session-index (agent-session-index sess)))
@@ -384,13 +384,14 @@
       (if (agent-session-compacting? sess)
           "Session compaction is active — retry the prompt after it completes"
           "Prompt already running — ignoring concurrent submission"))
-    (emit-session-event! (agent-session-event-bus sess)
-                         (agent-session-session-id sess)
+    (emit-session-event! (session-tool-facet-event-bus (session->tool-facet sess))
+                         (session-identity-facet-session-id (session->identity-facet sess))
                          "runtime.error"
                          (hasheq 'error reason))
-    (raise-session-error (format "run-prompt!: ~a" reason) (agent-session-session-id sess)))
-  (define bus (agent-session-event-bus sess))
-  (define sid (agent-session-session-id sess))
+    (raise-session-error (format "run-prompt!: ~a" reason)
+                         (session-identity-facet-session-id (session->identity-facet sess))))
+  (define bus (session-tool-facet-event-bus (session->tool-facet sess)))
+  (define sid (session-identity-facet-session-id (session->identity-facet sess)))
   ;; Bind one fresh prompt-turn identity to this prompt's cancellation token.
   ;; Inner model iterations have their own IDs, but user interruption targets
   ;; this stable outer turn.
@@ -404,7 +405,7 @@
                         active-turn-id
                         (hasheq 'scope "prompt")))
   ;; begin-session-turn! may install a token when this session had none.
-  (define base-cfg (agent-session-config sess))
+  (define base-cfg (session-provider-facet-config (session->provider-facet sess)))
   ;; Safety-net control: emit cleanup turn.completed only on abnormal exit.
   ;; Normal turn flow already emits turn.completed from the core loop.
   (define emit-cleanup-turn-completed? (box #t))
