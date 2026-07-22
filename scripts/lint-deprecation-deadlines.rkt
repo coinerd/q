@@ -48,7 +48,7 @@
 
 ;; --- Scan for TODO patterns ---
 
-(define todo-pattern #px"TODO\\(#v([0-9]+\\.[0-9]+\\.[0-9]+)\\)")
+(define todo-pattern #px"TODO\\(#?v([0-9]+\\.[0-9]+\\.[0-9]+)\\)")
 
 (define (scan-file path current-version)
   (define lines (file->lines path))
@@ -58,7 +58,7 @@
     (define matches (regexp-match* todo-pattern line))
     (for/fold ([acc expired]) ([m (in-list matches)])
       ;; m is like "TODO(#vX.Y.Z)"
-      (define ver-match (regexp-match #px"#v([0-9]+\\.[0-9]+\\.[0-9]+)" m))
+      (define ver-match (regexp-match #px"#?v([0-9]+\\.[0-9]+\\.[0-9]+)" m))
       (if ver-match
           (let ([target-ver (parse-version (cadr ver-match))])
             (if (version<=? target-ver current-version)

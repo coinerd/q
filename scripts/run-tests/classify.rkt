@@ -170,7 +170,6 @@
               "tmux-tui-"
               "ci-local"
               "metrics-readme"
-              "bump-version"
               "examples-compile"
               "pre-commit"
               "racket-tooling"

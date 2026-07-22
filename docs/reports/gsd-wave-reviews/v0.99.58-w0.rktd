@@ -1,0 +1,7 @@
+#hash((reviewer . "automated (pi agent)")
+      (verdict . "APPROVED")
+      (reviewed-sha . "2854fea52981872eeb3bb22b499c0259bb2ed9c4")
+      (content-digest . "ea8941eee7ed618854e4cbaec1afa14946fc9c19bc0169e841502ca37ab46816")
+      (timestamp . "2026-07-22")
+      (scope . "W0: Security + Dead Code Removal (SEC-1, P1-B, P2-A, P2-R, P2-L)")
+      (report . "SEC-1: Added valid-shell-arg? and valid-cwd? validators to remote-collab.rkt. All model/thinking/cwd args validated against [a-zA-Z0-9._/~-]+ regex before shell interpolation. 6 new tests. P1-B: Removed bump-version.rkt (135L) + test (50L). P2-A: Removed 9 dead event-structs aliases. P2-R: Moved reproducer scripts. P2-L: Fixed TODO linter regex + resolved expired TODOs."))

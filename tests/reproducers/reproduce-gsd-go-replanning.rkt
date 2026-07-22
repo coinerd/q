@@ -1,7 +1,9 @@
 #!/usr/bin/env racket
 #lang racket/base
 
-;; scripts/test-gsd-go-replanning.rkt
+;; @speed slow
+;; @suite gsd
+;; tests/reproducers/test-gsd-go-replanning.rkt
 ;;
 ;; Reproduce the bug where /go execution falls back into planning mode.
 
@@ -158,7 +160,7 @@
   (set-gsd-state! 'executing)
 
   ;; Agent uses write tool to overwrite PLAN.md
-  (define plan-path "/home/user/src/q-agent/q/.planning/PLAN.md")
+  (define plan-path (build-path (current-directory) ".planning" "PLAN.md"))
   (define write-payload
     (hasheq 'tool-name
             "write"

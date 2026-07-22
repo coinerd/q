@@ -20,6 +20,8 @@
 (provide the-extension
          handle-remote-q
          valid-session-name?
+         valid-shell-arg?
+         valid-cwd?
          remote-tmux)
 
 ;; ============================================================
@@ -29,6 +31,15 @@
 ;; Validate session name: only alphanumeric, hyphens, underscores
 (define (valid-session-name? s)
   (and (string? s) (regexp-match? #rx"^[a-zA-Z0-9_-]+$" s)))
+
+;; Validate shell argument: only alphanumeric, dots, dashes, underscores, slashes
+;; Prevents shell injection by rejecting all metacharacters
+(define (valid-shell-arg? s)
+  (and (string? s) (non-empty-string? s) (regexp-match? #rx"^[a-zA-Z0-9._/-]+$" s)))
+
+;; Validate working directory: same as shell-arg but allows ~ and $HOME
+(define (valid-cwd? s)
+  (and (string? s) (non-empty-string? s) (regexp-match? #rx"^[a-zA-Z0-9._/~/-]+$" s)))
 
 ;; Build a remote command that wraps tmux operations via SSH
 (define (remote-tmux host session action args)
@@ -42,6 +53,19 @@
      (define provider (hash-ref args 'provider "default"))
      (define model (hash-ref args 'model ""))
      (define thinking (hash-ref args 'thinking "medium"))
+     ;; SEC-1: Validate all string args before shell interpolation
+     (unless (valid-cwd? cwd)
+       (raise-extension-error (format "invalid cwd (contains shell metacharacters): ~a" cwd)
+                              'remote-collab
+                              'validate))
+     (unless (or (string=? model "") (valid-shell-arg? model))
+       (raise-extension-error (format "invalid model (contains shell metacharacters): ~a" model)
+                              'remote-collab
+                              'validate))
+     (unless (valid-shell-arg? thinking)
+       (raise-extension-error (format "invalid thinking level: ~a" thinking)
+                              'remote-collab
+                              'validate))
      (define base-cmd "pi")
      (define cmd
        (if (non-empty-string? model)

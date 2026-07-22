@@ -1,7 +1,9 @@
 #!/usr/bin/env racket
 #lang racket
 
-;; scripts/test-gsd-sdk-live.rkt — Live GSD planning test via SDK
+;; @speed slow
+;; @suite gsd
+;; tests/reproducers/test-gsd-sdk-live.rkt — Live GSD planning test via SDK
 ;;
 ;; Exercises the q:plan → q:go workflow against the real LLM provider
 ;; from ~/.q/config.json, observing GSD state transitions.
