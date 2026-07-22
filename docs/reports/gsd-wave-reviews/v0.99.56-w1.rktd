@@ -1,0 +1,7 @@
+#hash((reviewer . "automated (pi agent)")
+      (verdict . "APPROVED")
+      (reviewed-sha . "70c4a7382fbad7ce35aa7e8e1578ced8277ff051")
+      (content-digest . "6fe3fe7ac35abf18e46a224dabc0de3b34ca4cdb4d65074661835858483ea541")
+      (timestamp . "2026-07-22")
+      (scope . "W1: Provider + Scheduler (L-1, T-2, CI-3)")
+      (report . "L-1: eager-stream.rkt created, anthropic.rkt uses it. T-2: scheduler split (548L -> 221L + 139L + 289L). CI-3: macOS caching. Smoke 289/289. Lint 23 passed."))
