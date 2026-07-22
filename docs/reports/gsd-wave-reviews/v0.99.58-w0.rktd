@@ -1,6 +1,6 @@
 #hash((reviewer . "automated (pi agent)")
       (verdict . "APPROVED")
-      (reviewed-sha . "2854fea52981872eeb3bb22b499c0259bb2ed9c4")
+      (reviewed-sha . "21e7eb2bf125291669d60ebb5b4f40cd5f1ad23c")
       (content-digest . "ea8941eee7ed618854e4cbaec1afa14946fc9c19bc0169e841502ca37ab46816")
       (timestamp . "2026-07-22")
       (scope . "W0: Security + Dead Code Removal (SEC-1, P1-B, P2-A, P2-R, P2-L)")
