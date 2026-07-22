@@ -16,9 +16,24 @@
          "event-json.rkt"
          "../util/event/event-access.rkt")
 
+;; NOTE: (all-from-out "event-structs.rkt") is intentional — this file is
+;; a backward-compatible facade. event-structs.rkt provides ~200 explicit
+;; identifiers across all event categories. Listing them all here would
+;; duplicate event-structs.rkt's provide list and create maintenance burden.
+;; ADR-0028 (no all-from-out) is relaxed for facade re-exports.
 (provide (all-from-out "event-structs.rkt")
-         (all-from-out "event-json.rkt")
-         (all-from-out "../util/event/event-access.rkt")
+         typed-event->jsexpr
+         jsexpr->typed-event
+         all-known-event-types
+         event-name->tool-name
+         register-tool-event-serializer!
+         event-type-ref
+         event-timestamp-ref
+         event-session-id-ref
+         event-turn-id-ref
+         event-payload-ref
+         event?
+         make-event
          (contract-out [valid-typed-event-type? (-> string? boolean?)]))
 
 ;; Thin validation helper — contract-gated facade utility

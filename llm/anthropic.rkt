@@ -445,68 +445,10 @@
 
 (define (kimi-eager-stream-chunks req base-url api-key provider-name default-model)
   (define merged-req (ensure-model-setting req default-model))
-  ;; Non-streaming request — response is pure JSON, easier to parse
   (define body (anthropic-build-request-body merged-req #:stream? #f))
-  (define url-str (string-append (string-trim base-url "/") "/v1/messages"))
-  (define uri (string->url url-str))
-  (define host (url-host uri))
-  (define path-str
-    (string-append "/"
-                   (string-join (for/list ([p (in-list (url-path uri))])
-                                  (path/param-path p))
-                                "/")))
-  (define ssl? (and (url-scheme uri) (not (equal? (url-scheme uri) "http"))))
-  (define port-num (or (url-port uri) (if ssl? 443 80)))
-  (define headers
-    (list (format "x-api-key: ~a" api-key)
-          (format "anthropic-version: ~a" ANTHROPIC-VERSION)
-          "Content-Type: application/json"
-          "User-Agent: KimiCLI/1.5"))
-  (define body-bytes (jsexpr->bytes body))
-  (define response-port-box (box #f))
-  ;; Define a completion function that makes the HTTP call and returns parsed JSON
   (define (kimi-completion-fn _req)
-    (define result-vec
-      (call-with-request-timeout #:cleanup (lambda ()
-                                             (define rp (unbox response-port-box))
-                                             (when rp
-                                               (with-logged-error "port cleanup"
-                                                                  (close-input-port rp))))
-                                 (lambda ()
-                                   (define-values (sl rh rp)
-                                     (http-sendrecv host
-                                                    path-str
-                                                    #:port port-num
-                                                    #:ssl? ssl?
-                                                    #:method #"POST"
-                                                    #:headers headers
-                                                    #:data body-bytes))
-                                   (set-box! response-port-box rp)
-                                   (vector sl rh rp))))
-    (define status-line (vector-ref result-vec 0))
-    (define response-port (vector-ref result-vec 2))
-    (define status-code
-      (let ([parts (regexp-match #rx"^HTTP/[^ ]+ ([0-9]+)" (bytes->string/utf-8 status-line))])
-        (if parts
-            (string->number (cadr parts))
-            0)))
-    (when (>= status-code 400)
-      (define resp-body (port->bytes response-port))
-      (check-provider-status! "Anthropic" status-line (bytes->string/utf-8 resp-body)))
-    ;; Read full response body inside dynamic-wind (port is still open)
-    (define full-body
-      (if (>= status-code 400)
-          #""
-          (port->bytes response-port)))
-    (string->jsexpr (bytes->string/utf-8 full-body)))
-  ;; Use the generic eager-stream adapter
-  (dynamic-wind
-   (lambda () (void))
-   (lambda () (eager-stream kimi-completion-fn merged-req #:parse-response anthropic-parse-response))
-   (lambda ()
-     (define rp (unbox response-port-box))
-     (when rp
-       (with-logged-error "port cleanup" (close-input-port rp))))))
+    (anthropic-do-http-request base-url api-key "/v1/messages" body provider-name))
+  (eager-stream kimi-completion-fn merged-req #:parse-response anthropic-parse-response))
 
 ;; ============================================================
 
