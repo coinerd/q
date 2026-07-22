@@ -37,8 +37,8 @@
 ;;; events, and returns compacted message list. Otherwise returns input
 ;;; unchanged.
 (define (maybe-compact-context sess context-with-system token-budget-threshold)
-  (define bus (agent-session-event-bus sess))
-  (define sid (agent-session-session-id sess))
+  (define bus (session-tool-facet-event-bus (session->tool-facet sess)))
+  (define sid (session-identity-facet-session-id (session->identity-facet sess)))
 
   (define raw-messages
     (for/list ([msg (in-list context-with-system)])
@@ -135,6 +135,7 @@
 ;;; context exceeds 90% budget during tool-call loops.
 ;;; Returns compacted context or original if compaction not possible.
 (define (compact-context-mid-turn sess context)
-  (define max-tokens (config-max-context-tokens (agent-session-config sess)))
+  (define max-tokens
+    (config-max-context-tokens (session-provider-facet-config (session->provider-facet sess))))
   (define budget-threshold (inexact->exact (floor (* max-tokens 0.9))))
   (maybe-compact-context sess context budget-threshold))
