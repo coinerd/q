@@ -307,12 +307,7 @@
                    'arguments
                    (hash-ref block 'input (hasheq))))
          ;; Shadow: validate round-trip through tool-call-intent
-         (define tci (hash->tool-call-intent tc-hash))
-         (define round-trip (tool-call-intent->hash tci))
-         (unless (equal? (hash-ref tc-hash 'name) (hash-ref round-trip 'name))
-           (log-warning "tool-call-intent shadow mismatch in anthropic: ~a vs ~a"
-                        (hash-ref tc-hash 'name)
-                        (hash-ref round-trip 'name)))
+         (validate-tool-call-intent! tc-hash "anthropic")
          tc-hash]
         [_ block])))
 
@@ -480,15 +475,7 @@
           (define merged-req (ensure-model-setting req default-model))
           (define body (anthropic-build-request-body merged-req #:stream? #t))
           (define url-str (string-append (string-trim base-url "/") "/v1/messages"))
-          (define uri (string->url url-str))
-          (define host (url-host uri))
-          (define path-str
-            (string-append "/"
-                           (string-join (for/list ([p (in-list (url-path uri))])
-                                          (path/param-path p))
-                                        "/")))
-          (define ssl? (and (url-scheme uri) (not (equal? (url-scheme uri) "http"))))
-          (define port (or (url-port uri) (if ssl? 443 80)))
+          (define-values (host path-str port ssl?) (parse-provider-url url-str))
           (define headers
             (list* (format "x-api-key: ~a" api-key)
                    (format "anthropic-version: ~a" ANTHROPIC-VERSION)
