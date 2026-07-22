@@ -336,3 +336,27 @@
 (test-case "config-context-assembly-profile defaults to off"
   (define cfg (hash->session-config (hash)))
   (check-eq? (config-context-assembly-profile cfg) 'off))
+
+;; X-1 (v0.99.55): Combined context-assembly-options parameter
+(test-case "current-context-assembly-options-parameter mirrors profile 'off"
+  (apply-context-assembly-profile! 'off)
+  (define opts (current-context-assembly-options-parameter))
+  (check-pred context-assembly-options? opts)
+  (check-false (context-assembly-options-task-state-aware? opts))
+  (check-false (context-assembly-options-graph-conclusion-selection? opts))
+  (check-false (context-assembly-options-auto-distillation-enabled? opts))
+  (check-false (context-assembly-options-rollback-action-execution? opts))
+  (check-false (context-assembly-options-ws-evolution-enabled? opts))
+  (check-false (context-assembly-options-conclusion-to-memory-bridge-enabled opts)))
+
+(test-case "current-context-assembly-options-parameter mirrors profile 'full"
+  (apply-context-assembly-profile! 'full)
+  (define opts (current-context-assembly-options-parameter))
+  (check-pred context-assembly-options? opts)
+  (check-true (context-assembly-options-task-state-aware? opts))
+  (check-true (context-assembly-options-graph-conclusion-selection? opts))
+  (check-true (context-assembly-options-auto-distillation-enabled? opts))
+  (check-true (context-assembly-options-rollback-action-execution? opts))
+  (check-true (context-assembly-options-ws-evolution-enabled? opts))
+  (check-true (context-assembly-options-conclusion-to-memory-bridge-enabled opts))
+  (apply-context-assembly-profile! 'off))
