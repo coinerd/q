@@ -288,7 +288,8 @@
   (navigate-to-entry! idx "b")
   ;; Append a child of 'b'
   (define new-entry (make-test-msg "new-child" "b" "new content"))
-  (append-to-leaf! idx new-entry)
+  (define-values (_ridx1 _) (append-to-leaf! idx new-entry))
+  (set! idx _ridx1)
   ;; 'b' should now have two children: c and new-child
   (define children-of-b (children-of idx "b"))
   (check-equal? (length children-of-b) 2)
@@ -302,7 +303,8 @@
                                                         ("b" "a" "b content"))))
   (navigate-to-entry! idx "b")
   (define new-entry (make-test-msg "new-child" "b"))
-  (append-to-leaf! idx new-entry)
+  (define-values (_ridx2 _) (append-to-leaf! idx new-entry))
+  (set! idx _ridx2)
   (define active (active-leaf idx))
   (check-not-false active)
   (check-equal? (message-id active) "new-child"))
@@ -316,14 +318,16 @@
     (build-index-from-spec '(("root" #f "root content") ("a" "root" "a content")
                                                         ("b" "a" "b content")
                                                         ("c" "b" "c content"))))
-  (define summary (branch-with-summary! idx "b" "Summary of branch b"))
+  (define-values (_ridx3 summary) (branch-with-summary! idx "b" "Summary of branch b"))
+  (set! idx _ridx3)
   (check-true (message? summary))
   (check-equal? (message-kind summary) 'branch-summary)
   (check-equal? (message-parent-id summary) "b"))
 
 (test-case "branch-with-summary! summary has correct content"
   (define idx (build-index-from-spec '(("root" #f "root content") ("a" "root" "a content"))))
-  (define summary (branch-with-summary! idx "a" "Test summary"))
+  (define-values (_ridx4 summary) (branch-with-summary! idx "a" "Test summary"))
+  (set! idx _ridx4)
   (define content-text
     (string-join (for/list ([part (message-content summary)])
                    (if (text-part? part)
@@ -334,7 +338,8 @@
 
 (test-case "branch-with-summary! moves active leaf to summary child"
   (define idx (build-index-from-spec '(("root" #f "root content") ("a" "root" "a content"))))
-  (branch-with-summary! idx "a" "Summary")
+  (define-values (_ridx5 _summary) (branch-with-summary! idx "a" "Summary"))
+  (set! idx _ridx5)
   ;; Active leaf should be set (to the new summary message)
   (define active (active-leaf idx))
   (check-not-false active)
@@ -342,13 +347,15 @@
 
 (test-case "session-tree-nav: branch-with-summary! returns #f for nonexistent entry"
   (define idx (build-index-from-spec '(("root" #f "root content"))))
-  (check-false (branch-with-summary! idx "nonexistent" "Summary")))
+  (define-values (_ridx6 _result) (branch-with-summary! idx "nonexistent" "Summary"))
+  (check-false _result))
 
 (test-case "branch-with-summary! adds child to target entry"
   (define idx
     (build-index-from-spec '(("root" #f "root content") ("a" "root" "a content")
                                                         ("b" "a" "b content"))))
-  (define summary (branch-with-summary! idx "a" "Summary"))
+  (define-values (_ridx7 summary) (branch-with-summary! idx "a" "Summary"))
+  (set! idx _ridx7)
   ;; 'a' originally had child 'b'; now also has the summary as child
   (define children-of-a (children-of idx "a"))
   (check-equal? (length children-of-a) 2))

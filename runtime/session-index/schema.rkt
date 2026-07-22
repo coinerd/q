@@ -43,4 +43,4 @@
   (bookmark id entry-id label timestamp))
 
 (define (make-empty-index)
-  (session-index (make-hash) (make-hash) (vector) (make-hash) (box #f) (make-semaphore 1)))
+  (session-index (hash) (hash) (vector) (hash) (box #f) (make-semaphore 1)))

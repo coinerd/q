@@ -159,7 +159,10 @@
 
   ;; Update index with new entry
   (when idx
-    (append-to-leaf! idx user-msg))
+    ;; R-6: append-to-leaf! now returns updated index; store it back
+    (define-values (new-idx _returned-msg) (append-to-leaf! idx user-msg))
+    (when new-idx
+      (guarded-set-index! sess new-idx)))
 
   ;; Build context: use tiered context assembly when provider available, else tree walk
   ;; v0.45.7 (NF4/ARCH-01): Migrated from raw build-assembled-context to tiered path
