@@ -18,8 +18,10 @@
 ;; |---|-------|------------------------------|---------------------------|
 ;; | 1 | fork.requested | Creates new session struct | Emits fork.completed/failed |
 ;; | 2 | interrupt.requested | Sets cancellation token via guarded-set-config! | Emits interrupt.accepted/already/no-active |
-;; | 3 | session.compact.requested / compact.requested | Claims/releases compaction guard; updates in-memory index | Reads/writes session log; compact-and-persist!; trace logging |
-;; | 4 | tool.execution.completed | guarded-set-recent-tool-calls!; guarded-set-task-fsm-state! (inference) | append-session-entry!; persist-high-value-conclusions! (memory backend) |
+;; | 3 | session.compact.requested / compact.requested | Claims/releases compaction guard; | Reads/writes session log;
+;; |   |                                  | updates in-memory index           | compact-and-persist!; trace logging |
+;; | 4 | tool.execution.completed | guarded-set-recent-tool-calls!;       | append-session-entry!;
+;; |   |                          | guarded-set-task-fsm-state! (inference) | persist-high-value-conclusions! (memory backend) |
 ;; | 5 | tool.record_conclusion.completed | guarded-set-task-conclusions! | append-session-entry! |
 ;; | 6 | tool.set-task-state.completed | guarded-set-task-fsm-state! (explicit) | append-session-entry!; persist-high-value-conclusions! |
 ;; | 7 | session.closed | — | persist-high-value-conclusions! (memory backend) |
