@@ -39,6 +39,7 @@
          default-max-output-bytes
          current-secret-scrub-denylist
          current-secret-scrub-allowlist
+         current-secret-scrub-patterns
          ;; Contracted functions
          (contract-out [run-subprocess
                         (->* (string?)
@@ -188,12 +189,22 @@
 ;; Allowlist: env vars matching these patterns are kept even if they match deny.
 (define current-secret-scrub-allowlist (make-parameter '()))
 
+;; Replaceable denylist: if non-empty, REPLACES the default secret-patterns entirely.
+;; When empty (default), the built-in secret-patterns from subprocess-helpers.rkt are used.
+(define current-secret-scrub-patterns (make-parameter '()))
+
 (define (secret-env-var? name)
   (define name-str
     (if (bytes? name)
         (bytes->string/utf-8 name)
         name))
-  (check-secret-var? name-str (current-secret-scrub-denylist) (current-secret-scrub-allowlist)))
+  (define effective-patterns (current-secret-scrub-patterns))
+  (if (pair? effective-patterns)
+      ;; User-provided patterns REPLACE the defaults entirely
+      (for/or ([pat (in-list effective-patterns)])
+        (regexp-match? pat name-str))
+      ;; Use default patterns + extra denylist (backward compatible)
+      (check-secret-var? name-str (current-secret-scrub-denylist) (current-secret-scrub-allowlist))))
 
 ;; DESIGN FACT (W6, v0.99.38 adapter audit): sanitize-env is the sole mutation
 ;; boundary for environment variables crossing into subprocesses. The pure
