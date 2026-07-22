@@ -156,7 +156,9 @@
           'secret-scrub-extra-denylist
           (hash-ref merged 'secret-scrub.extra-denylist '())
           'secret-scrub-allowlist
-          (hash-ref merged 'secret-scrub.allowlist '())))
+          (hash-ref merged 'secret-scrub.allowlist '())
+          'secret-scrub-patterns
+          (hash-ref merged 'secret-scrub.patterns '())))
 
 ;; ============================================================
 ;; Sandbox settings — re-exported from util/sandbox-config.rkt

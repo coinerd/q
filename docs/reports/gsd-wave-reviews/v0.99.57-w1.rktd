@@ -1,0 +1,7 @@
+#hash((reviewer . "automated (pi agent)")
+      (verdict . "APPROVED")
+      (reviewed-sha . "92c05dc6c72e16ddacc396a703c4ebec2c6b6e44")
+      (content-digest . "d723499d46e0fd69c9fc8df1b2c87593b7355d6d317e9a394ca2c0ab90c4f34f")
+      (timestamp . "2026-07-22")
+      (scope . "W1: Security + CLI Cleanup (S-1, I-3)")
+      (report . "S-1: current-secret-scrub-patterns parameter added to subprocess.rkt (replaces defaults when non-empty). Wired through settings-query.rkt and mode-helpers.rkt. I-3: cli/args.rkt (634L) split into 4 sub-modules: flags.rkt (251L), parser.rkt (164L), config-builder.rkt (172L), print.rkt (92L). Facade now 50L. Tests: cli-flags 9/9, subprocess 29/29, settings 73/73."))

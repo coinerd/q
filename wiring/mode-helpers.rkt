@@ -21,7 +21,8 @@
          (only-in "../tools/builtins/bash.rkt" current-execution-policy current-allowed-commands)
          (only-in "../sandbox/subprocess.rkt"
                   current-secret-scrub-denylist
-                  current-secret-scrub-allowlist)
+                  current-secret-scrub-allowlist
+                  current-secret-scrub-patterns)
          (only-in "../llm/stream.rkt" current-http-request-timeout current-model-timeouts)
          (only-in "../runtime/trace-logger.rkt" make-trace-logger start-trace-logger!)
          (only-in "../runtime/project-tree.rkt" project-tree->string)
@@ -59,7 +60,14 @@
                                            (if (regexp? s)
                                                s
                                                (regexp s)))
-                                         scrub-allowlist))))
+                                         scrub-allowlist)))
+  (define scrub-patterns (hash-ref sec-config 'secret-scrub-patterns '()))
+  (when (pair? scrub-patterns)
+    (current-secret-scrub-patterns (map (lambda (s)
+                                          (if (regexp? s)
+                                              s
+                                              (regexp s)))
+                                        scrub-patterns))))
 
 ;; Apply timeout settings from config to current parameters.
 ;; Used in both build-runtime-from-cli and reload-config!.
