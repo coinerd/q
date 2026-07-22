@@ -4,6 +4,9 @@
 ;; STABILITY: internal
 ;;
 ;; All non-goal event handlers + registration at module load time.
+;;
+;; W7 v0.99.35: Streaming, tool, and approval handlers extracted to
+;; specialist modules that register their own reducers at load time.
 
 (require racket/string
          racket/match
@@ -16,170 +19,30 @@
                   event-session-id
                   event-turn-id
                   event?)
-         (only-in "../../util/message/message.rkt" message)
-         "../../util/cost-tracker.rkt"
-         "../../util/content/content-helpers.rkt"
          "../state-types.rkt"
          (only-in "../../runtime/gsd-query.rkt" current-gsd-mode-query)
-         (only-in "../render/message-layout.rkt" plain-line)
-         (only-in "../approval-channel.rkt" approval-request-view approval-request-pending?)
          ;; W7 v0.99.35: Pure helpers extracted from this module
          "handler-helpers.rkt"
          "helpers.rkt"
-         "registry.rkt")
+         "registry.rkt"
+         ;; Specialist modules (registration side-effects at load time)
+         "streaming-events.rkt"
+         "tool-events.rkt"
+         "approval-events.rkt")
 
 ;; ============================================================
-;; Message / streaming handlers
+;; Re-exports from specialist modules
 ;; ============================================================
 
-(define (handle-assistant-message-completed state evt)
-  (define payload (event-payload evt))
-  (define streamed (ui-state-streaming-text state))
-  (define content (or streamed (hash-ref payload 'content "")))
-  (define ts (event-time evt))
-  (define thinking (ui-state-streaming-thinking state))
-  (define s0
-    (if (and thinking
-             (> (string-length (string-trim thinking)) 0)
-             (string=? (string-trim content) ""))
-        (append-entry state (make-entry 'thinking thinking ts (hash)))
-        state))
-  (clear-streaming (set-pending-tool-name
-                    (set-busy (append-entry s0 (make-entry 'assistant content ts (hash))) #f)
-                    #f)))
+(require (only-in "approval-events.rkt"
+                  handle-spawn-approval-requested
+                  handle-spawn-approval-terminal
+                  approval-overlay-remove-request))
 
-(define (handle-model-stream-delta state evt)
-  (define payload (event-payload evt))
-  (define delta (hash-ref payload 'delta ""))
-  (define current-streaming (ui-state-streaming-text state))
-  (define new-streaming (string-append (or current-streaming "") delta))
-  ;; BF1b (v0.99.4): Record delta timestamp for streaming stall watchdog
-  (define now (current-inexact-milliseconds))
-  (set-last-delta-ms (set-streaming-phase (set-streaming-text (set-busy state #t) new-streaming)
-                                          'streaming)
-                     now))
-
-(define (handle-model-stream-thinking state evt)
-  (define payload (event-payload evt))
-  (define delta (hash-ref payload 'delta ""))
-  (define current-thinking (ui-state-streaming-thinking state))
-  (define new-thinking (string-append (or current-thinking "") delta))
-  ;; BF1b (v0.99.4): Record thinking timestamp for streaming stall watchdog
-  (define now (current-inexact-milliseconds))
-  (set-last-delta-ms (set-streaming-thinking (set-busy state #t) new-thinking) now))
-
-(define (handle-model-stream-completed state evt)
-  (define payload (event-payload evt))
-  (define raw-usage (and (hash? payload) (hash-ref payload 'usage (hasheq))))
-  (define usage
-    (if (hash? raw-usage)
-        raw-usage
-        (hasheq)))
-  (define in-tok (hash-ref usage 'prompt_tokens (hash-ref usage 'input_tokens 0)))
-  (define out-tok (hash-ref usage 'completion_tokens (hash-ref usage 'output_tokens 0)))
-  (define ct (ui-state-cost-tracker state))
-  (when (and ct (or (positive? in-tok) (positive? out-tok)))
-    (cost-tracker-update! ct in-tok out-tok (ui-model-label state)))
-  (clear-streaming state))
-
-(define (handle-model-request-started state evt)
-  (set-busy state #t))
-
-(define (handle-context-built state evt)
-  (define payload (event-payload evt))
-  (define tok
-    (and (hash? payload) (or (hash-ref payload 'tokenCount #f) (hash-ref payload 'token-count #f))))
-  (if tok
-      (struct-copy ui-state state [context-tokens tok])
-      state))
-
-;; ============================================================
-;; Tool handlers
-;; ============================================================
-
-(define (handle-tool-call-started state evt)
-  (define payload (event-payload evt))
-  (define name (hash-ref payload 'name "?"))
-  ;; MF2 (v0.99.5): Clear stale streaming text when transitioning to tool
-  ;; execution. Without this, old streaming-text triggers false watchdog
-  ;; stall detection during tool calls.
-  (define cleared-stream (clear-streaming state))
-  (if (recent-tool-start? state name)
-      (set-streaming-phase (set-pending-tool-name (set-busy cleared-stream #t) name) 'tool-pending)
-      (let* ([args-raw (hash-ref payload 'arguments #f)]
-             [arg-summary (if args-raw
-                              (extract-arg-summary args-raw)
-                              "")]
-             [text arg-summary]
-             [ts (event-time evt)]
-             [meta (hasheq 'name name 'arguments (or args-raw ""))]
-             [new-state (append-entry cleared-stream (make-entry 'tool-start text ts meta))])
-        (if (ui-state-pending-tool-name state)
-            (set-busy new-state #t)
-            (set-pending-tool-name (set-busy new-state #t) name)))))
-
-(define (handle-tool-execution-started state evt)
-  (define payload (event-payload evt))
-  (define name (hash-ref payload 'toolName "?"))
-  (if (recent-tool-start? state name)
-      (set-streaming-phase (set-pending-tool-name (set-busy state #t) name) 'tool-pending)
-      (let* ([args-raw (hash-ref payload 'arguments #f)]
-             [arg-summary (if args-raw
-                              (extract-arg-summary args-raw)
-                              "")]
-             [text arg-summary]
-             [ts (event-time evt)]
-             [meta (hasheq 'name name 'arguments (or args-raw ""))]
-             [new-state (append-entry state (make-entry 'tool-start text ts meta))])
-        (if (ui-state-pending-tool-name state)
-            (set-busy new-state #t)
-            (set-pending-tool-name (set-busy new-state #t) name)))))
-
-(define (handle-tool-execution-completed state evt)
-  (define payload (event-payload evt))
-  (define name (hash-ref payload 'toolName (lambda () (hash-ref payload 'name "?"))))
-  (define result-summary
-    (hash-ref payload 'resultSummary (lambda () (if (hash-ref payload 'error #f) 'error 'completed))))
-  (define result-raw (hash-ref payload 'result #f))
-  (define error-raw (or (hash-ref payload 'resultError #f) (hash-ref payload 'error #f)))
-  (define ts (event-time evt))
-  (if (recent-tool-end? state name)
-      (set-pending-tool-name state #f)
-      (if (eq? result-summary 'completed)
-          (let* ([result-text
-                  (if result-raw
-                      (string-replace (truncate-string (tool-result-content->string result-raw) 80)
-                                      "\n"
-                                      " | ")
-                      "")]
-                 [text result-text]
-                 [meta (hasheq 'name name 'result (or result-raw ""))])
-            (set-pending-tool-name (append-entry state (make-entry 'tool-end text ts meta)) #f))
-          (let* ([err (or error-raw "tool failed")]
-                 [text (string-replace err "\n" " | ")]
-                 [meta (hasheq 'name name 'error err)])
-            (set-pending-tool-name (append-entry state (make-entry 'tool-fail text ts meta)) #f)))))
-
-;; B3 fix: Show progress during long-running tool batches
-(define (handle-tool-execution-update state evt)
-  (define payload (event-payload evt))
-  (define tool-name (hash-ref payload 'toolName "?"))
-  (define progress (hash-ref payload 'progress (hasheq)))
-  (define total (hash-ref progress 'total 0))
-  (define running (hash-ref progress 'running 0))
-  (define status-text (tool-progress-status-text tool-name total running))
-  (set-status-message state status-text))
-
-(define (handle-tool-call-blocked state evt)
-  (define payload (event-payload evt))
-  (define name (hash-ref payload 'name "?"))
-  (define reason (hash-ref payload 'reason "blocked by extension"))
-  (set-pending-tool-name (append-entry state
-                                       (make-entry 'system
-                                                   (format "[tool blocked: ~a -- ~a]" name reason)
-                                                   (event-time evt)
-                                                   (hasheq 'name name)))
-                         #f))
+(provide verification-payload-ref
+         handle-spawn-approval-requested
+         handle-spawn-approval-terminal
+         approval-overlay-remove-request)
 
 ;; ============================================================
 ;; Session / turn handlers
@@ -315,7 +178,7 @@
          cleared)]))
 
 ;; ============================================================
-;; Error / compaction / retry handlers
+;; Error / compaction handlers
 ;; ============================================================
 
 (define (handle-runtime-error state evt)
@@ -363,18 +226,6 @@
   (if (string=? reason "compaction-complete")
       (set-status-message state #f)
       (set-status-message state "Compacting...")))
-
-(define (handle-auto-retry state evt)
-  (define payload (event-payload evt))
-  (define attempt (hash-ref payload 'attempt "?"))
-  (define max-attempts (hash-ref payload 'max-attempts "?"))
-  (define error-type (hash-ref payload 'error-type #f))
-  (define type-label (retry-error-type-label error-type))
-  (define msg
-    (if type-label
-        (format "[retry: ~a, ~a/~a...]" type-label attempt max-attempts)
-        (format "[retry: attempt ~a/~a]" attempt max-attempts)))
-  (clear-streaming (append-entry state (make-entry 'system msg (event-time evt) (hash)))))
 
 (define (handle-injection state evt)
   (define payload (event-payload evt))
@@ -425,9 +276,6 @@
 ;; ============================================================
 ;; Verification event handlers (W6 v0.99.5)
 ;; ============================================================
-
-;; W7 v0.99.35: kebab->camel, hash-ref-multi, verification-payload-ref
-;; extracted to handler-helpers.rkt (imported at top).
 
 (define (handle-verification-started state evt)
   (define artifact-count (verification-payload-ref evt 'artifact-count 0))
@@ -536,280 +384,16 @@
          state)]
     [_ state]))
 
-(define (handle-auto-retry-lifecycle state evt)
-  (define ev (event-ev evt))
-  (define payload (event-payload evt))
-  (match ev
-    ["auto-retry.start"
-     (define attempt (hash-ref payload 'attempt "?"))
-     (define max-attempts (hash-ref payload 'maxRetries "?"))
-     (define error-type (hash-ref payload 'errorType #f))
-     (define type-label (retry-error-type-label error-type))
-     (define msg
-       (if type-label
-           (format "[retry: ~a, ~a/~a...]" type-label attempt max-attempts)
-           (format "[retry: attempt ~a/~a]" attempt max-attempts)))
-     (clear-streaming (append-entry state (make-entry 'system msg (event-time evt) (hash))))]
-    ["auto-retry.context-reduced"
-     (define original (hash-ref payload 'original-messages 0))
-     (define reduced (hash-ref payload 'reduced-messages 0))
-     (append-entry state
-                   (make-entry 'system
-                               (format "[retry: reduced context ~a -> ~a messages]" original reduced)
-                               (event-time evt)
-                               (hash)))]
-    [_ state]))
-
 ;; ============================================================
-;; HITL Approval handler (v0.99.25 §5.3)
+;; Register core handlers at module load time
 ;; ============================================================
 
-;; Approval requests stay in the overlay's extra field to preserve the ui-state
-;; and overlay-state ABIs.  The active request keeps the historical extra keys;
-;; queued requests are normalized hashes under 'approval-queue.
-(define (approval-request-from-payload payload)
-  (and (hash? payload)
-       (let* ([request-id (hash-ref payload 'request-id #f)]
-              [commitment-digest (hash-ref payload 'commitment-digest #f)]
-              [event-presentation-digest (hash-ref payload 'presentation-digest #f)]
-              [authoritative-view (and (string? request-id)
-                                       (string? commitment-digest)
-                                       (string? event-presentation-digest)
-                                       (approval-request-view request-id commitment-digest))]
-              [authoritative-presentation-digest
-               (and authoritative-view (hash-ref authoritative-view 'presentation-digest #f))])
-         ;; Event-carried previews are untrusted. Correlation and both digests
-         ;; must match before the broker-owned immutable view is displayed.
-         (and authoritative-view
-              (string? authoritative-presentation-digest)
-              (string=? event-presentation-digest authoritative-presentation-digest)
-              (let* ([raw-capabilities (hash-ref authoritative-view 'capabilities '())]
-                     [capabilities (if (list? raw-capabilities)
-                                       raw-capabilities
-                                       '())]
-                     [raw-preview (hash-ref authoritative-view 'task-preview "")]
-                     [task-preview (if (string? raw-preview)
-                                       raw-preview
-                                       (format "~a" raw-preview))])
-                (hasheq 'request-id
-                        request-id
-                        'commitment-digest
-                        commitment-digest
-                        'presentation-digest
-                        authoritative-presentation-digest
-                        'approval-view
-                        authoritative-view
-                        'capabilities
-                        capabilities
-                        'task-preview
-                        task-preview))))))
+;; M2 fix (v0.99.6): verification-payload-ref is provided from handler-helpers.rkt
+;; and re-exported here. Approval handler exports come from approval-events.rkt.
 
-(define (approval-request-id request)
-  (and (hash? request) (hash-ref request 'request-id #f)))
-
-(define (approval-overlay-queue ov)
-  (define extra (overlay-state-extra ov))
-  (define queue (and (hash? extra) (hash-ref extra 'approval-queue '())))
-  (if (list? queue)
-      queue
-      '()))
-
-(define (approval-overlay-seen-ids ov)
-  (define extra (overlay-state-extra ov))
-  (define stored (and (hash? extra) (hash-ref extra 'approval-seen-request-ids #f)))
-  (if (list? stored)
-      stored
-      (filter string?
-              (cons (and (hash? extra) (hash-ref extra 'request-id #f))
-                    (map approval-request-id (approval-overlay-queue ov))))))
-
-(define (approval-detail-lines view)
-  (define (detail label key [default ""])
-    (plain-line (format "  ~a: ~a" label (hash-ref view key default))))
-  (define common
-    (list (detail "Plan" 'plan-kind)
-          (detail "Model" 'model-preview)
-          (detail "Tools" 'effective-tools '())
-          (detail "Working directory" 'cwd-preview)
-          (detail "Provider" 'provider-preview)
-          (detail "Safe mode" 'safe-mode #f)
-          (detail "Max turns" 'max-turns)
-          (detail "Parent session" 'parent-session-preview)
-          (detail "Parent call" 'parent-call-preview)
-          (detail "Tool call" 'tool-call-id)
-          (detail "Child" 'child-id)
-          (detail "Child session" 'session-id)))
-  (define jobs (hash-ref view 'jobs '()))
-  (append
-   common
-   (if (list? jobs)
-       (for/list ([job (in-list jobs)])
-         (plain-line
-          (format "  Job ~a [~a]: model=~a turns=~a caps=~a tools=~a call=~a child=~a session=~a"
-                  (hash-ref job 'batch-order "?")
-                  (hash-ref job 'job-id "?")
-                  (hash-ref job 'model-preview "")
-                  (hash-ref job 'max-turns "")
-                  (hash-ref job 'effective-capabilities '())
-                  (hash-ref job 'effective-tools '())
-                  (hash-ref job 'tool-call-id "")
-                  (hash-ref job 'child-id "")
-                  (hash-ref job 'session-id ""))))
-       '())))
-
-(define (approval-request-overlay request queue seen-ids)
-  (define capabilities (hash-ref request 'capabilities '()))
-  (define task-preview (hash-ref request 'task-preview ""))
-  (define caps-str
-    (string-join (map (lambda (capability)
-                        (if (symbol? capability)
-                            (symbol->string capability)
-                            (format "~a" capability)))
-                      capabilities)
-                 ", "))
-  (define preview-lines
-    (let ([lines (string-split task-preview "\n" #:trim? #f)])
-      (if (null? lines)
-          (list "")
-          lines)))
-  (define authoritative-view (hash-ref request 'approval-view (hasheq)))
-  (define content
-    (append (list (plain-line "\u26a1 Subagent Approval Required")
-                  (plain-line (format "  Capabilities: ~a" caps-str)))
-            (for/list ([line (in-list preview-lines)]
-                       [index (in-naturals)])
-              (plain-line (format "  ~a: ~a" (if (zero? index) "Task" "    ") line)))
-            (approval-detail-lines authoritative-view)
-            (list (plain-line "") (plain-line "  [y] Approve   [n] Deny   [Esc] Cancel"))))
-  (overlay-state 'approval-prompt
-                 content
-                 ""
-                 'top-left
-                 #f
-                 #f
-                 0
-                 (hasheq 'capabilities
-                         capabilities
-                         'task-preview
-                         task-preview
-                         'request-id
-                         (hash-ref request 'request-id)
-                         'commitment-digest
-                         (hash-ref request 'commitment-digest)
-                         'presentation-digest
-                         (hash-ref request 'presentation-digest "")
-                         'approval-view
-                         authoritative-view
-                         'approval-queue
-                         queue
-                         'approval-seen-request-ids
-                         seen-ids)))
-
-;; Remove exactly one correlated request.  If it is active, promote the next
-;; queued request in FIFO order; if it is queued, leave the active request in
-;; place.  This helper is shared with the key handler so a failed/stale channel
-;; delivery can never dismiss a newer prompt.
-(define (approval-overlay-remove-request state request-id)
-  (define ov (ui-state-active-overlay state))
-  (cond
-    [(not (and (string? request-id) ov (eq? (overlay-state-type ov) 'approval-prompt))) state]
-    [else
-     (define extra (overlay-state-extra ov))
-     (define active-id (and (hash? extra) (hash-ref extra 'request-id #f)))
-     (define queue (approval-overlay-queue ov))
-     (define seen-ids (approval-overlay-seen-ids ov))
-     (cond
-       [(equal? request-id active-id)
-        (if (null? queue)
-            (struct-copy ui-state state [active-overlay #f])
-            (struct-copy ui-state
-                         state
-                         [active-overlay
-                          (approval-request-overlay (car queue) (cdr queue) seen-ids)]))]
-       [(ormap (lambda (request) (equal? request-id (approval-request-id request))) queue)
-        (define remaining
-          (filter (lambda (request) (not (equal? request-id (approval-request-id request)))) queue))
-        (define new-extra (hash-set extra 'approval-queue remaining))
-        (struct-copy ui-state
-                     state
-                     [active-overlay (struct-copy overlay-state ov [extra new-extra])])]
-       [else state])]))
-
-;; Handle a correlated spawn approval request.  Existing approval prompts are
-;; never replaced: new requests queue FIFO and duplicate deliveries are ignored.
-(define (handle-spawn-approval-requested state evt)
-  (define request (approval-request-from-payload (event-payload evt)))
-  (cond
-    [(not request) state]
-    [else
-     (define request-id (approval-request-id request))
-     (define ov (ui-state-active-overlay state))
-     (cond
-       [(and ov (eq? (overlay-state-type ov) 'approval-prompt))
-        (define seen-ids (approval-overlay-seen-ids ov))
-        (if (member request-id seen-ids)
-            state
-            (let* ([queue (approval-overlay-queue ov)]
-                   [old-extra (overlay-state-extra ov)]
-                   [base-extra (if (hash? old-extra)
-                                   old-extra
-                                   (hasheq))]
-                   [new-extra
-                    (hash-set (hash-set base-extra 'approval-queue (append queue (list request)))
-                              'approval-seen-request-ids
-                              (append seen-ids (list request-id)))])
-              (struct-copy ui-state
-                           state
-                           [active-overlay (struct-copy overlay-state ov [extra new-extra])])))]
-       [else
-        (struct-copy ui-state
-                     state
-                     [active-overlay (approval-request-overlay request '() (list request-id))])])]))
-
-(define (approval-overlay-request-digest state request-id)
-  (define overlay (ui-state-active-overlay state))
-  (and overlay
-       (eq? (overlay-state-type overlay) 'approval-prompt)
-       (let* ([extra (overlay-state-extra overlay)]
-              [active-id (and (hash? extra) (hash-ref extra 'request-id #f))]
-              [active-digest (and (hash? extra) (hash-ref extra 'commitment-digest #f))])
-         (if (equal? request-id active-id)
-             active-digest
-             (for/or ([request (in-list (approval-overlay-queue overlay))])
-               (and (equal? request-id (approval-request-id request))
-                    (hash-ref request 'commitment-digest #f)))))))
-
-(define (handle-spawn-approval-terminal state evt)
-  (define payload (event-payload evt))
-  (define request-id (and (hash? payload) (hash-ref payload 'request-id #f)))
-  (define commitment-digest (and (hash? payload) (hash-ref payload 'commitment-digest #f)))
-  (define displayed-digest
-    (and (string? request-id) (approval-overlay-request-digest state request-id)))
-  (if (and (string? commitment-digest)
-           (equal? commitment-digest displayed-digest)
-           (not (approval-request-pending? request-id commitment-digest)))
-      (approval-overlay-remove-request state request-id)
-      state))
-
-;; ============================================================
-;; Register all core handlers at module load time
-;; ============================================================
-
-;; M2 fix (v0.99.6): Exported for testing.
-(provide verification-payload-ref
-         handle-spawn-approval-requested
-         handle-spawn-approval-terminal
-         approval-overlay-remove-request)
-
-(register-event-reducer! "assistant.message.completed" handle-assistant-message-completed)
-(register-event-reducer! "tool.call.started" handle-tool-call-started)
-(register-event-reducer! "tool.execution.started" handle-tool-execution-started)
-(register-event-reducer! "tool.execution.completed" handle-tool-execution-completed)
-(register-event-reducer! "tool.execution.updated" handle-tool-execution-update)
 (register-event-reducer! "runtime.error" handle-runtime-error)
 (register-event-reducer! "session.started" handle-session-started)
 (register-event-reducer! "session.resumed" handle-session-resumed)
-(register-event-reducer! "model.stream.delta" handle-model-stream-delta)
 (register-event-reducer! "turn.started" handle-turn-started)
 (register-event-reducer! "turn.completed" handle-turn-completed)
 (register-event-reducer! "turn.cancelled" handle-turn-cancelled)
@@ -818,11 +402,7 @@
 (register-event-reducer! "compaction.warning" handle-compaction-warning)
 (register-event-reducer! "session.forked" handle-session-forked)
 (register-event-reducer! "compaction" handle-compaction)
-(register-event-reducer! "auto-retry" handle-auto-retry)
 (register-event-reducer! "injection" handle-injection)
-(register-event-reducer! "model.request.started" handle-model-request-started)
-(register-event-reducer! "context.built" handle-context-built)
-(register-event-reducer! "tool.call.blocked" handle-tool-call-blocked)
 (register-event-reducer! "queue.status-update" handle-queue-status-update)
 (register-event-reducer! "iteration.soft-warning" handle-iteration-soft-warning)
 (register-event-reducer! "exploration.progress" handle-exploration-progress)
@@ -838,14 +418,8 @@
 (register-event-reducer! "compaction.start" handle-compaction-lifecycle)
 (register-event-reducer! "compaction.completed" handle-compaction-lifecycle)
 (register-event-reducer! "compaction.end" handle-compaction-lifecycle)
-(register-event-reducer! "auto-retry.start" handle-auto-retry-lifecycle)
-(register-event-reducer! "auto-retry.context-reduced" handle-auto-retry-lifecycle)
-(register-event-reducer! "model.stream.thinking" handle-model-stream-thinking)
-(register-event-reducer! "model.stream.completed" handle-model-stream-completed)
 (register-event-reducer! "stream.turn.completed" handle-stream-turn-completed)
 (register-event-reducer! "context.pressure" handle-context-pressure)
 (register-event-reducer! "gsd.verification.started" handle-verification-started)
 (register-event-reducer! "gsd.verification.completed" handle-verification-completed)
 (register-event-reducer! "gsd.verification.escalated" handle-verification-escalated)
-(register-event-reducer! "mas.spawn-approval-requested" handle-spawn-approval-requested)
-(register-event-reducer! "mas.spawn-approval-terminal" handle-spawn-approval-terminal)
