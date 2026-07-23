@@ -3,6 +3,7 @@
 ;; tests/test-gap-e4-dynamic-context-tokens.rkt
 ;; v0.97.6 W1: F4+F5 — Dynamic context tokens from model registry + startup log
 
+;; @speed fast
 (require rackunit
          rackunit/text-ui
          (only-in "../runtime/provider/model-registry.rkt"

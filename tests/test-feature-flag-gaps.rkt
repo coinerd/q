@@ -3,6 +3,7 @@
 ;; q/tests/test-feature-flag-gaps.rkt — Regression tests for AXIS2-F08/F13/F14
 ;; Verify memory warning, goal-loop wiring, and bounded event channel.
 
+;; @speed fast
 (require rackunit
          "../runtime/session/session-config.rkt"
          "../util/event/event-bus.rkt"

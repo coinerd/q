@@ -6,6 +6,7 @@
 ;; Verifies that mas.execution-plane.enabled defaults to #t (Phase 3)
 ;; and that the flag can still be explicitly disabled.
 
+;; @speed fast
 (require rackunit
          rackunit/text-ui
          (only-in "../runtime/settings-core.rkt" q-settings)

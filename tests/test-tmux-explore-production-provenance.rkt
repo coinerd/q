@@ -4,6 +4,7 @@
 ;; F-08: verifier phase names match production event phases.
 ;; F-03: evidence manifest with SHA and artifact digests.
 
+;; @speed slow
 (require rackunit
          racket/list
          racket/string

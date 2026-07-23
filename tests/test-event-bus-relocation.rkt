@@ -3,6 +3,7 @@
 ;; q/tests/test-event-bus-relocation.rkt — Regression test for AXIS1-F12
 ;; Verify event bus works from canonical location util/event/event-bus.rkt.
 
+;; @speed fast
 (require rackunit
          "../util/event/event-bus.rkt"
          "../util/event/event.rkt"

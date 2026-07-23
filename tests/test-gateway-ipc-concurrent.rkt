@@ -3,6 +3,7 @@
 ;; tests/test-gateway-ipc-concurrent.rkt
 ;; v0.99.3 W0: Concurrent regression tests for C1-C4 fixes.
 
+;; @speed fast
 (require rackunit
          rackunit/text-ui
          racket/async-channel

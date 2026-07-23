@@ -2,6 +2,7 @@
 
 ;; tests/test-tmux-explore-campaign.rkt — W7 campaign orchestrator tests
 
+;; @speed slow
 (require rackunit
          racket/file
          racket/hash

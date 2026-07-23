@@ -2,6 +2,7 @@
 
 ;; tests/test-browser-screenshot-type.rkt — NF-01: screenshot bytes type fix
 
+;; @speed fast
 (require rackunit
          net/base64)
 

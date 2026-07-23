@@ -4,6 +4,7 @@
 ;; Red-first: strict gate evidence must reject wrong SHA, non-zero
 ;; failed/timed-out, zero test count, stale time.
 
+;; @speed fast
 (require rackunit
          racket/file
          racket/port

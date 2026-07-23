@@ -2,6 +2,7 @@
 
 ;; tests/test-gateway-ipc.rkt — Gateway IPC layer tests
 
+;; @speed fast
 (require rackunit
          rackunit/text-ui
          racket/port

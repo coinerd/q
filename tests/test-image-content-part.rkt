@@ -4,6 +4,7 @@
 ;;
 ;; Tests for the new image-part struct added in v0.98.1 W0.
 
+;; @speed fast
 (require rackunit
          "../util/content/content-parts.rkt")
 

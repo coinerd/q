@@ -3,6 +3,7 @@
 ;; tests/test-gapc-tool-result-summaries.rkt
 ;; GAP-C: Content summaries include tool-result-parts
 
+;; @speed fast
 (require rackunit
          rackunit/text-ui
          (only-in "../util/content/content-parts.rkt"

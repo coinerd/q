@@ -4,6 +4,7 @@
 ;; These complement tests/test-gsd-milestone-truth.rkt by exercising the new
 ;; module boundaries directly.
 
+;; @speed fast
 (require rackunit
          "../util/json/strict-json.rkt"
          "../util/json/canonical-json.rkt")

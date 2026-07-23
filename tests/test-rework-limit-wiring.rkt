@@ -4,6 +4,7 @@
 ;; v0.99.21 W0 (F-2): Verify that verifier-max-rework-iterations setting
 ;; actually controls the gsd-max-rework-iterations parameter.
 
+;; @speed fast
 (require rackunit
          rackunit/text-ui
          "../extensions/gsd/state-machine.rkt"

@@ -6,6 +6,7 @@
 ;; H5: profile-kind string→symbol normalization
 ;; H8: interactive-elements string→symbol key normalization
 
+;; @speed fast
 (require rackunit
          racket/string
          "../browser/types.rkt"

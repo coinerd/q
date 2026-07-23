@@ -7,6 +7,7 @@
 ;; M6: merge-consecutive-roles handles list content
 ;; M7: summarize-tool-result handles image-part
 
+;; @speed fast
 (require rackunit
          racket/string
          "../tools/tool.rkt"

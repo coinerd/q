@@ -2,6 +2,7 @@
 
 ;; tests/test-worker-main.rkt — Worker process and worker-tools tests
 
+;; @speed fast
 (require rackunit
          rackunit/text-ui
          json

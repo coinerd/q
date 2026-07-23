@@ -5,6 +5,7 @@
 ;; SEC-03: session count under lock
 ;; SEC-08: send-command! requires pending-sema
 
+;; @speed fast
 (require rackunit
          (only-in racket/base make-semaphore)
          "../browser/session.rkt"

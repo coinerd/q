@@ -2,6 +2,7 @@
 
 ;; test-provider-vision-serialization.rkt — Provider vision API tests
 
+;; @speed fast
 (require rackunit
          "../agent/loop-messages.rkt"
          "../util/message/message.rkt"

@@ -4,6 +4,7 @@
 ;;
 ;; Tests for retry-with-restart logic when the Node.js sidecar crashes.
 
+;; @speed fast
 (require rackunit
          racket/match
          json

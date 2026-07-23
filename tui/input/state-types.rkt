@@ -32,6 +32,7 @@
          ;; Constants
          MAX-UNDO-STACK
          MAX-KILL-RING
+         current-input-prompt-width
          INPUT-PROMPT-WIDTH
          CURSOR_MARKER
 
@@ -68,7 +69,9 @@
 (define MAX-KILL-RING 10)
 
 ;; Visible input width helper — prompt takes 3 columns (">> ")
-(define INPUT-PROMPT-WIDTH 3)
+;; v0.99.58 W4-1 (P4-C): Parameterized for UI customization.
+(define current-input-prompt-width (make-parameter 3))
+(define INPUT-PROMPT-WIDTH 3) ;; kept as value alias
 
 ;; Input state
 (struct input-state
@@ -271,7 +274,7 @@
   (define buf (input-state-buffer st))
   (define cur (input-state-cursor st))
   (define offset (input-state-scroll-offset st))
-  (define max-visible (max 1 (- cols INPUT-PROMPT-WIDTH)))
+  (define max-visible (max 1 (- cols (current-input-prompt-width))))
   (define cursor-offset-width
     (if (or (>= offset (string-length buf)) (< cur offset))
         0
@@ -285,7 +288,7 @@
   (define end-pos (find-end-pos buf clamped-offset max-visible))
   (define visible-text (substring buf clamped-offset end-pos))
   (define cursor-display-col
-    (+ INPUT-PROMPT-WIDTH
+    (+ (current-input-prompt-width)
        (if (>= clamped-offset cur)
            0
            (string-visible-width (substring buf clamped-offset cur)))))

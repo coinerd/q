@@ -3,6 +3,7 @@
 ;; tests/test-mas-executor-role.rkt
 ;; Tests for the executor agent role.
 
+;; @speed fast
 (require rackunit
          rackunit/text-ui
          (only-in racket/string string-contains?)

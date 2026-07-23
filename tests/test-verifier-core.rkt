@@ -9,6 +9,7 @@
 ;;   - Provider errors → escalate
 ;;   - Risk threshold enforcement
 
+;; @speed fast
 (require rackunit
          rackunit/text-ui
          json

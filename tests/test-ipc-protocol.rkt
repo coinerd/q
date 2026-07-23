@@ -2,6 +2,7 @@
 
 ;; tests/test-ipc-protocol.rkt — IPC protocol unit tests
 
+;; @speed fast
 (require rackunit
          rackunit/text-ui
          "../sandbox/ipc-protocol.rkt")

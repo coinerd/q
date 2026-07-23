@@ -1,5 +1,6 @@
 #lang racket
 
+;; @speed fast
 (require rackunit
          racket/runtime-path
          racket/string)

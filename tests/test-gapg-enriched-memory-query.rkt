@@ -4,6 +4,7 @@
 ;; v0.97.5 W0: GAP-G enriched memory query + active-tags threading
 ;; FIXED: Tests real project code (observe-memory-for-context #:tags, major-forward-transition?)
 
+;; @speed fast
 (require rackunit
          rackunit/text-ui
          racket/string

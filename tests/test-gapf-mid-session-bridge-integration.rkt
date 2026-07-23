@@ -4,6 +4,7 @@
 ;; v0.97.6 LF4: Integration test for maybe-persist-mid-session!
 ;; Tests the actual function body, not just the gate condition.
 
+;; @speed slow
 (require rackunit
          rackunit/text-ui
          (only-in "../runtime/session/session-events.rkt"

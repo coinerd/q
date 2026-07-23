@@ -4,6 +4,7 @@
 ;;
 ;; Tests build-verifier-system-prompt and build-verifier-user-message.
 
+;; @speed fast
 (require rackunit
          rackunit/text-ui
          racket/string

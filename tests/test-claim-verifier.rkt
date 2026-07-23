@@ -8,6 +8,7 @@
 ;; extracting claimed counts from markdown report text, and verifying
 ;; that claimed counts match actual counts.
 
+;; @speed fast
 (require rackunit
          "../scripts/claim-verifier.rkt")
 

@@ -7,6 +7,7 @@
 ;; SEC-10: Ping-based readiness after restart
 ;; SEC-15: Reader dead? flag
 
+;; @speed fast
 (require rackunit
          racket/async-channel
          (only-in racket/base make-semaphore call-with-semaphore)

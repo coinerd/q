@@ -4,6 +4,7 @@
 ;; Verify production code no longer calls deprecated gsm-* wrappers directly.
 ;; Production callers should use gsm-ctx-* with explicit context.
 
+;; @speed fast
 (require rackunit
          "../extensions/gsd/state-machine.rkt"
          (only-in "../extensions/gsd/session-state.rkt" current-gsd-ctx)

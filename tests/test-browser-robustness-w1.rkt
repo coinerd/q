@@ -5,6 +5,7 @@
 ;; Dead events cleanup, screenshot-max-bytes enforcement,
 ;; session manager thread safety.
 
+;; @speed fast
 (require rackunit
          racket/match
          "../browser/settings.rkt"

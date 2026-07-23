@@ -3,6 +3,7 @@
 ;; tests/test-gap-dynamic-budget.rkt
 ;; v0.97.4 W0: GAP-E dynamic conclusion budget
 
+;; @speed fast
 (require rackunit
          rackunit/text-ui
          (only-in "../runtime/context-assembly/config.rkt" compute-conclusion-budget)

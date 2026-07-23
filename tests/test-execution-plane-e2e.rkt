@@ -8,6 +8,7 @@
 ;;
 ;; These tests spawn real worker subprocesses.
 
+;; @speed slow
 (require rackunit
          rackunit/text-ui
          racket/runtime-path

@@ -5,6 +5,7 @@
 ;; W0+W1: Tests for q-id injection in page-state.js and
 ;; Racket-side observation parser for interactive-elements.
 
+;; @speed fast
 (require rackunit
          racket/port
          "../browser/types.rkt")

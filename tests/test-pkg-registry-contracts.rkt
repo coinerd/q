@@ -3,6 +3,7 @@
 ;; test-pkg-registry-contracts.rkt — Contract blame tests for pkg/registry
 ;; Wave W0: F1 — Verify typed contracts on all exported functions.
 
+;; @speed fast
 (require rackunit
          racket/contract
          (only-in racket/port)

@@ -3,6 +3,7 @@
 ;; tests/test-content-part-to-text.rkt
 ;; v0.97.6 W0: F3 — Extracted content-part->text behavioral tests
 
+;; @speed fast
 (require rackunit
          rackunit/text-ui
          (only-in "../runtime/context-assembly/turn-context.rkt" content-part->text)

@@ -2,6 +2,7 @@
 
 ;; test-ephemeral-vision.rkt — Ephemeral vision context management tests
 
+;; @speed fast
 (require rackunit
          "../runtime/context-assembly/session-walk.rkt"
          "../util/message/message.rkt"
