@@ -103,4 +103,6 @@
       (format "~a~a" indent fname)))
   (if (null? tree-lines)
       ""
-      (format "Project file tree:\n~a" (string-join tree-lines "\n"))))
+      (format "Working directory: ~a\nProject file tree:\n~a"
+              (path->string (simplify-path project-dir))
+              (string-join tree-lines "\n"))))

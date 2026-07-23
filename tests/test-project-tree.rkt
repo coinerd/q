@@ -89,6 +89,8 @@
 (test-case "project-tree->string: produces formatted output"
   (define tmp (make-temp-project-tree '("a.rkt" "src/b.rkt")))
   (define str (project-tree->string tmp))
+  (check-true (string-contains? str "Working directory:"))
+  (check-true (string-contains? str (path->string tmp)))
   (check-true (string-contains? str "Project file tree:"))
   (check-true (string-contains? str "a.rkt"))
   (check-true (string-contains? str "b.rkt"))
