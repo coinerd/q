@@ -16,7 +16,9 @@
          "../llm/provider.rkt"
          "../llm/openai-compatible.rkt"
          "../llm/http-helpers.rkt"
-         "../llm/stream.rkt")
+         "../llm/stream.rkt"
+         "../llm/model.rkt"
+         "../util/message/provider-transport.rkt")
 
 ;; ============================================================
 ;; Tests for error message formatting (BUG-34)
@@ -230,6 +232,94 @@
                      (check-equal? result (current-http-request-timeout))))
 
 ;; ============================================================
+;; v0.99.58 FIX: Assistant messages with tool_calls must have content key
+;; OpenAI-compatible APIs reject messages without content (400:
+;; "messages parameter is illegal").
+;; ============================================================
+
+(define-test-suite
+ content-key-fix-tests
+ (test-case "make-provider-assistant-message always includes content key"
+   ;; Even with empty text, content must be present (as JSON null)
+   (define msg (make-provider-assistant-message "" '()))
+   (check-true (hash-has-key? msg 'content)
+               "assistant message with empty text must still have content key"))
+ (test-case "make-provider-assistant-message with tool_calls has content key"
+   (define msg
+     (make-provider-assistant-message
+      ""
+      (list (hasheq 'id "tc1" 'type "function" 'function (hasheq 'name "test" 'arguments "{}")))))
+   (check-true (hash-has-key? msg 'content) "assistant message with tool_calls must have content key")
+   ;; Content should serialize as JSON null
+   (define json-str (bytes->string/utf-8 (jsexpr->bytes msg)))
+   (check-true (string-contains? json-str "\"content\":null")
+               "content should serialize as JSON null"))
+ (test-case "openai-normalize-message adds content to messages without it"
+   ;; Simulate a message that arrives without content (legacy/buggy upstream)
+   (define msg-no-content
+     (hasheq
+      'role
+      "assistant"
+      'tool_calls
+      (list
+       (hasheq 'id "tc1" 'type "function" 'function (hasheq 'name "search_memory" 'arguments "{}")))))
+   (define normalized (openai-normalize-message msg-no-content))
+   (check-true (hash-has-key? normalized 'content)
+               "normalize must add content key to messages without it")
+   ;; Content should be JSON null
+   (define json-str (bytes->string/utf-8 (jsexpr->bytes normalized)))
+   (check-true (string-contains? json-str "\"content\":null")
+               "added content should serialize as JSON null"))
+ (test-case "openai-build-request-body includes content in all messages"
+   ;; Build a request with an assistant message that has tool_calls but no text
+   (define assistant-msg
+     (make-provider-assistant-message
+      ""
+      (list
+       (hasheq 'id "tc1" 'type "function" 'function (hasheq 'name "list_memory" 'arguments "{}")))))
+   (define tool-result-msg (hasheq 'role "tool" 'tool_call_id "tc1" 'content "no memories found"))
+   (define req
+     (make-model-request
+      (list (hasheq 'role "user" 'content "What is in my memory?") assistant-msg tool-result-msg)
+      #f
+      (hasheq 'model "test-model")))
+   (define body (openai-build-request-body req))
+   (define body-json (bytes->string/utf-8 (jsexpr->bytes body)))
+   ;; Every message in the array should have a content field
+   (check-true (string-contains? body-json "\"content\":null")
+               "request body should contain content:null for assistant with tool_calls"))
+ (test-case "full request body is valid for memory tool scenario"
+   ;; Simulate the exact scenario: user asks to test memory tools,
+   ;; model calls list_memory, gets result, then sends follow-up request.
+   ;; The follow-up request must include all messages with content fields.
+   (define messages
+     ;; System message
+     (list (hasheq 'role "system" 'content "You are a helpful assistant.")
+           ;; User message
+           (hasheq 'role "user" 'content "Test your memory tools.")
+           ;; Assistant message with tool_call but no text content
+           (make-provider-assistant-message
+            ""
+            (list (hasheq 'id
+                          "call_abc"
+                          'type
+                          "function"
+                          'function
+                          (hasheq 'name "search_memory" 'arguments "{\"query\":\"\"}"))))
+           ;; Tool result
+           (hasheq 'role "tool" 'tool_call_id "call_abc" 'content "No memories found.")))
+   (define req (make-model-request messages #f (hasheq 'model "test-model")))
+   (define body (openai-build-request-body req))
+   (define body-str (bytes->string/utf-8 (jsexpr->bytes body)))
+   ;; Verify NO message is missing content (check for role without content nearby)
+   ;; The body should be parseable JSON with all messages having content
+   (define parsed (string->jsexpr body-str))
+   (define msgs (hash-ref parsed 'messages))
+   (for ([m (in-list msgs)])
+     (check-true (hash-has-key? m 'content)
+                 (format "message with role=~a must have content key" (hash-ref m 'role #f))))))
+
+;; ============================================================
 ;; Run all tests (updated to include new suites)
 ;; ============================================================
 
@@ -238,4 +328,5 @@
   (run-tests api-key-validation-tests)
   (run-tests response-size-limit-tests)
   (run-tests rate-limit-guidance-tests)
-  (run-tests sse-timeout-scaling-tests))
+  (run-tests sse-timeout-scaling-tests)
+  (run-tests content-key-fix-tests))
