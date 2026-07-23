@@ -346,10 +346,16 @@
     ;; For GLM-5.1 (900s): max-total = 1800s (30 min).
     ;; For fast models (120s): max-total = 600s (10 min floor).
     (define max-total-timeout (max 600 (* 2 stream-timeout)))
+    ;; v0.99.65 W0: Separate thinking-phase timeout from content-phase timeout.
+    ;; #:initial-timeout = stream-timeout (full request timeout, covers reasoning phase)
+    ;; #:stream-timeout = http-stream-timeout-default (60s tight per-chunk for content)
+    ;; Reasoning models like GLM-5.2 emit reasoning_content chunks for 450+ seconds
+    ;; before first content chunk. The initial timeout covers the reasoning phase;
+    ;; once content chunks arrive, they must come within 60s each.
     (define gen
       (read-sse-chunks response-port
                        #:initial-timeout stream-timeout
-                       #:stream-timeout (max 180 (quotient stream-timeout 2))
+                       #:stream-timeout http-stream-timeout-default
                        #:max-total-timeout max-total-timeout))
     ;; v0.99.54 W3 L-2: Close response port on normal stream end or generator error.
     ;; NOTE: Consumer-abandonment (abandoning the generator without reading to #f)

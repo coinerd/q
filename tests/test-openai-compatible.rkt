@@ -416,4 +416,17 @@
   (run-tests rate-limit-guidance-tests)
   (run-tests sse-timeout-scaling-tests)
   (run-tests content-key-fix-tests)
-  (run-tests array-items-fix-tests))
+  (run-tests array-items-fix-tests)
+  (run-tests stream-parameter-tests))
+
+;; ============================================================
+;; v0.99.65 W0: Stream parameter tests
+;; ============================================================
+
+(define-test-suite
+ stream-parameter-tests
+ (test-case "W0: http-stream-timeout-default is 60s"
+   (check-equal? http-stream-timeout-default 60 "default stream timeout should be 60 seconds"))
+ (test-case "W0: http-stream-timeout-default < http-read-timeout-default"
+   (check-true (< http-stream-timeout-default http-read-timeout-default)
+               "stream timeout should be shorter than read timeout")))

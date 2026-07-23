@@ -19,34 +19,40 @@
 (struct tool-call-accum (id name arguments) #:transparent)
 
 ;; — SSE line-level helpers —
-(provide (contract-out
-          ;; SSE parsing
-          [parse-sse-lines (-> string? (listof hash?))]
-          [parse-sse-line (-> string? (or/c hash? 'done #f))]
-          [parse-sse-data-line (-> string? (or/c string? #f))]
-          [sse-done? (-> string? boolean?)]
-          ;; OpenAI chunk normalization
-          [normalize-openai-chunks (-> (listof hash?) (listof (or/c stream-chunk? any/c)))]
-          [normalize-openai-chunk (-> hash? (or/c stream-chunk? any/c))]
-          [accumulate-tool-call-deltas (-> list? (listof hash?))]
-          ;; Incremental SSE reading (generator yields stream-chunk? or #f)
-          [read-sse-chunks
-           (->* (input-port?)
-                (#:initial-timeout positive? #:stream-timeout positive? #:max-total-timeout positive?)
-                generator?)]
-          [stream-sse-events
-           (->* (input-port? procedure?)
-                (#:initial-timeout positive? #:stream-timeout positive? #:max-total-timeout positive?)
-                generator?)]
-          ;; Response body reading
-          [read-response-body (-> input-port? bytes?)]
-          [read-response-body/timeout (->* (input-port?) (#:timeout positive?) bytes?)]
-          ;; Timeout-aware line reading
-          [read-line/timeout (->* (input-port?) (#:timeout positive?) any/c)]
-          ;; Timeout helpers
-          [effective-request-timeout-for (-> (or/c string? #f) positive?)]
-          [call-with-request-timeout
-           (->* (procedure?) (#:timeout positive? #:cleanup procedure?) any/c)])
+(provide ;; SSE parsing
+         (contract-out [parse-sse-lines (-> string? (listof hash?))]
+                       [parse-sse-line (-> string? (or/c hash? 'done #f))]
+                       [parse-sse-data-line (-> string? (or/c string? #f))]
+                       [sse-done? (-> string? boolean?)]
+                       ;; OpenAI chunk normalization
+                       [normalize-openai-chunks
+                        (-> (listof hash?) (listof (or/c stream-chunk? any/c)))]
+                       [normalize-openai-chunk (-> hash? (or/c stream-chunk? any/c))]
+                       [accumulate-tool-call-deltas (-> list? (listof hash?))]
+                       ;; Incremental SSE reading (generator yields stream-chunk? or #f)
+                       [read-sse-chunks
+                        (->* (input-port?)
+                             (#:initial-timeout positive?
+                                                #:stream-timeout positive?
+                                                #:thinking-timeout positive?
+                                                #:max-total-timeout positive?)
+                             generator?)]
+                       [stream-sse-events
+                        (->* (input-port? procedure?)
+                             (#:initial-timeout positive?
+                                                #:stream-timeout positive?
+                                                #:thinking-timeout positive?
+                                                #:max-total-timeout positive?)
+                             generator?)]
+                       ;; Response body reading
+                       [read-response-body (-> input-port? bytes?)]
+                       [read-response-body/timeout (->* (input-port?) (#:timeout positive?) bytes?)]
+                       ;; Timeout-aware line reading
+                       [read-line/timeout (->* (input-port?) (#:timeout positive?) any/c)]
+                       ;; Timeout helpers
+                       [effective-request-timeout-for (-> (or/c string? #f) positive?)]
+                       [call-with-request-timeout
+                        (->* (procedure?) (#:timeout positive? #:cleanup procedure?) any/c)])
          ;; Struct and predicates (direct export for match compatibility)
          tool-call-accum
          tool-call-accum?
@@ -368,16 +374,25 @@
 ;; Once streaming has started, chunks should arrive quickly.
 (define http-stream-timeout-default 60)
 
-;; read-sse-chunks : input-port? [#:initial-timeout seconds] [#:stream-timeout seconds] -> generator?
+;; read-sse-chunks : input-port? [#:initial-timeout seconds] [#:stream-timeout seconds]
+;;                  [#:thinking-timeout seconds] -> generator?
 ;; Returns a generator that yields stream-chunk? values as they arrive from the port.
 ;; Yields #f when the stream is complete ([DONE] received or EOF).
 ;; Raises exn:fail:network:timeout on read timeout.
+;;
 ;; Uses #:initial-timeout for the first read (waiting for stream to start),
-;; then #:stream-timeout for subsequent reads (chunks should arrive fast).
+;; then a phase-aware timeout for subsequent reads:
+;;   - If only reasoning_content chunks have been received (no content yet),
+;;     uses #:thinking-timeout (default = initial-timeout, covers long thinking phases).
+;;   - Once content chunks start arriving, switches to #:stream-timeout (tight, default 60s).
+;;
+;; This prevents premature timeout on reasoning models like GLM-5.2 that emit
+;; reasoning_content chunks for 450+ seconds before emitting the first content chunk.
 ;; The port is NOT closed by this function — the caller is responsible.
 (define (read-sse-chunks port
                          #:initial-timeout [initial-secs http-read-timeout-default]
                          #:stream-timeout [stream-secs http-stream-timeout-default]
+                         #:thinking-timeout [thinking-secs initial-secs]
                          #:max-total-timeout [max-total-secs 600])
   (generator ()
              (define stream-start (current-inexact-milliseconds))
@@ -386,7 +401,8 @@
              ;; Prevents infinite loops when server sends keep-alives indefinitely.
              (define max-consecutive-empty 100)
              (let loop ([first-read? #t]
-                        [consecutive-empty 0])
+                        [consecutive-empty 0]
+                        [seen-content? #f])
                ;; v0.45.11: Wall-clock deadline — fires regardless of keep-alives
                (when (> (current-inexact-milliseconds) deadline)
                  (raise (exn:fail:network:timeout
@@ -396,13 +412,15 @@
                  (raise (exn:fail:network:timeout (format "Stream exceeded ~a consecutive empty lines"
                                                           max-consecutive-empty)
                                                   (current-continuation-marks))))
-               ;; v0.14.1: Adaptive per-chunk timeout for long generation
-               (define elapsed-ms (- (current-inexact-milliseconds) stream-start))
-               (define base-timeout (if first-read? initial-secs stream-secs))
+               ;; v0.99.65 W0: Phase-aware timeout.
+               ;; - First read: use initial-secs (full request timeout).
+               ;; - After first read, no content yet (thinking phase): use thinking-secs.
+               ;; - After first content chunk (content phase): use stream-secs (tight).
                (define timeout-secs
-                 (if (and (not first-read?) (> elapsed-ms (* stream-secs 1000.0)))
-                     (min (* stream-secs 2) (* base-timeout 2))
-                     base-timeout))
+                 (cond
+                   [first-read? initial-secs]
+                   [(not seen-content?) thinking-secs]
+                   [else stream-secs]))
                (define line (read-line/timeout port #:timeout timeout-secs))
                (cond
                  [(eq? line #f)
@@ -416,9 +434,17 @@
                   (cond
                     [(eq? parsed 'done) (yield #f)]
                     [(hash? parsed)
-                     (yield (normalize-openai-chunk parsed))
-                     (loop #f 0)]
-                    [else (loop #f (add1 consecutive-empty))])]))))
+                     (define chunk (normalize-openai-chunk parsed))
+                     ;; v0.99.65 W0: Detect if this chunk has actual content
+                     ;; (not just reasoning_content). Once content appears,
+                     ;; switch to tight stream-timeout for remaining chunks.
+                     (define has-content
+                       (and (stream-chunk? chunk)
+                            (let ([txt (stream-chunk-delta-text chunk)])
+                              (and (string? txt) (positive? (string-length txt))))))
+                     (yield chunk)
+                     (loop #f 0 (or seen-content? has-content))]
+                    [else (loop #f (add1 consecutive-empty) seen-content?)])]))))
 
 ;; Provider-agnostic SSE event generator.
 ;; Takes a port and an event->chunks callback that converts parsed JSON events
@@ -428,13 +454,15 @@
                            event->chunks
                            #:initial-timeout [initial-secs http-read-timeout-default]
                            #:stream-timeout [stream-secs http-stream-timeout-default]
+                           #:thinking-timeout [thinking-secs initial-secs]
                            #:max-total-timeout [max-total-secs 600])
   (generator ()
              (define stream-start (current-inexact-milliseconds))
              (define deadline (+ stream-start (* max-total-secs 1000.0)))
              (define max-consecutive-empty 100)
              (let loop ([first-read? #t]
-                        [consecutive-empty 0])
+                        [consecutive-empty 0]
+                        [seen-content? #f])
                (when (> (current-inexact-milliseconds) deadline)
                  (raise (exn:fail:network:timeout
                          (format "Stream exceeded maximum total duration (~a seconds)" max-total-secs)
@@ -443,12 +471,12 @@
                  (raise (exn:fail:network:timeout (format "Stream exceeded ~a consecutive empty lines"
                                                           max-consecutive-empty)
                                                   (current-continuation-marks))))
-               (define elapsed-ms (- (current-inexact-milliseconds) stream-start))
-               (define base-timeout (if first-read? initial-secs stream-secs))
+               ;; v0.99.65 W0: Phase-aware timeout (same as read-sse-chunks)
                (define timeout-secs
-                 (if (and (not first-read?) (> elapsed-ms (* stream-secs 1000.0)))
-                     (min (* stream-secs 2) (* base-timeout 2))
-                     base-timeout))
+                 (cond
+                   [first-read? initial-secs]
+                   [(not seen-content?) thinking-secs]
+                   [else stream-secs]))
                (define line (read-line/timeout port #:timeout timeout-secs))
                (cond
                  [(eq? line #f)
@@ -462,7 +490,13 @@
                     [(eq? parsed 'done) (yield #f)]
                     [(hash? parsed)
                      (define chunks (event->chunks parsed))
+                     ;; Detect if any chunk in this event has actual content
+                     (define any-content
+                       (for/or ([ch (in-list chunks)])
+                         (and (stream-chunk? ch)
+                              (let ([txt (stream-chunk-delta-text ch)])
+                                (and (string? txt) (positive? (string-length txt)))))))
                      (for ([ch (in-list chunks)])
                        (yield ch))
-                     (loop #f 0)]
-                    [else (loop #f (add1 consecutive-empty))])]))))
+                     (loop #f 0 (or seen-content? any-content))]
+                    [else (loop #f (add1 consecutive-empty) seen-content?)])]))))
