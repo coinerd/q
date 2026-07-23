@@ -373,8 +373,7 @@
   (check-true (procedure? clipboard-copy-via-tool) "clipboard-copy-via-tool is a procedure"))
 
 (let ()
-  ;; clipboard-copy is exported and callable
-  (check-pred procedure? clipboard-copy "clipboard-copy is a procedure")
+  ;; v0.99.58 W3-3: clipboard-copy deprecated wrapper removed; use copy-text! directly.
   (check-true (procedure? detect-clipboard-tool) "detect-clipboard-tool is a procedure"))
 
 ;; ============================================================

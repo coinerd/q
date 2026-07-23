@@ -1,0 +1,7 @@
+#hash((reviewer . "automated (pi agent)")
+      (verdict . "APPROVED")
+      (reviewed-sha . "c35048530c10c298be724c28309800be696b87c3")
+      (content-digest . "387f5fb12c87ce8303aeebd19b52da4d91cc0b1b120d625becd3c6b7bf0ad7e4")
+      (timestamp . "2026-07-23")
+      (scope . "W3: Scripts + TUI Cleanup (P3-CL, P3-AN, P3-TUI; P3-CH and P3-P deferred)")
+      (report . "P3-CL: Split classify.rkt (565L) into classify-metadata.rkt (139L, metadata+base-dir), classify-filters.rkt (290L, predicates+patterns), classify.rkt facade (185L). All original functions preserved verbatim. P3-AN: Replaced ~150 LOC of near-identical compute-summary boilerplate with data-driven metric table loop (493L->449L). P3-TUI: Removed compute-layout-legacy (dead), clipboard-copy deprecated wrapper (+ test update), string-prefix? redefinition in theme.rkt (shadows racket/string). P3-CH DEFERRED: command-handlers.rkt /go helpers are tightly coupled to 20+ imports; extraction risk outweighs P3 benefit. P3-P DEFERRED: protocol-types.rkt facade has 10+ test consumers; removal would cascade."))

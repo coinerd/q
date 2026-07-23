@@ -322,10 +322,6 @@
 (define (register-theme! name theme)
   (hash-set! registered-themes name theme))
 
-(define (string-prefix? s prefix)
-  (and (>= (string-length s) (string-length prefix))
-       (string=? (substring s 0 (string-length prefix)) prefix)))
-
 ;; ============================================================
 ;; JSON theme loading (GC-25)
 ;; ============================================================
