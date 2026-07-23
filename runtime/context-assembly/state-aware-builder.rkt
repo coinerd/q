@@ -288,7 +288,7 @@
   (when session-config
     (define observed
       (observe-memory-for-context session-config
-                                  #:scope #f
+                                  #:scope 'project
                                   #:query-text (or enriched-query-text memory-query-text)
                                   #:tags active-tags))
     (when trace-cb
@@ -297,7 +297,7 @@
     (when (current-memory-injection-budget)
       (define injected
         (inject-memory-for-context session-config
-                                   #:scope #f
+                                   #:scope 'project
                                    #:query-text (or enriched-query-text memory-query-text)
                                    #:tags active-tags))
       (define section (car injected))
