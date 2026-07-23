@@ -217,6 +217,7 @@
 ;; classify-error looks up this table instead of inline pattern matching.
 (define ERROR-CLASSIFICATION-TABLE
   '((max-iterations . ("max.iterations"))
+    (bad-request . ("bad request" "400" "tool_call_ids did not"))
     (rate-limit . ("429" "rate" "overloaded" "quota"))
     (auth . ("401" "403" "auth" "unauthorized" "permission"))
     (context-overflow . ("context_length" "context length"

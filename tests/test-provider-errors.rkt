@@ -23,6 +23,9 @@
         (raise-provider-error "rate limited" 'rate-limit 429)
         (check-false "should not reach here")))
 
+    (test-case "classify-http-status maps 400 to bad-request"
+      (check-equal? (classify-http-status 400) 'bad-request))
+
     (test-case "classify-http-status returns correct categories"
       (check-equal? (classify-http-status 401) 'auth)
       (check-equal? (classify-http-status 403) 'auth)
