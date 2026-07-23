@@ -1,3 +1,26 @@
+## 0.99.64
+
+Released: 2026-07-23
+
+### Overview
+
+Fix MAS Batch Timeout Regression: The v0.99.63 batch timeout introduced a
+critical `choice-evt` bug that fired on the FIRST thread death instead of
+ALL, causing most subagent results to be silently discarded as false timeouts
+(milestone #851):
+
+- **W0 (PR #8915):** Fix `run-jobs-parallel` synchronization. Replace
+  `choice-evt` with sequential `thread-wait` loop using shrinking remaining-
+  time budget. Increase default deadline from 3min (180000ms) to 5min
+  (300000ms). Fix error message to say "cancelled: batch deadline exceeded"
+  instead of "timed out". Propagate `exec-context-browser-service` to child
+  context.
+
+- **W1 (PR #8916):** Background thread cleanup + tool timing guidance.
+  Force-kill orphaned threads with `kill-thread` after grace period. Update
+  `spawn-subagents` tool description with timing guidance and add
+  `batch-timeout-ms` parameter to schema (10000-600000ms).
+
 ## 0.99.63
 
 Released: 2026-07-23
