@@ -30,7 +30,8 @@
 ;; Provider constructor
 (provide (contract-out [make-openai-compatible-provider (-> (or/c hash? openai-config?) provider?)]
                        [openai-build-request-body (->* (model-request?) (#:stream? boolean?) hash?)]
-                       [openai-parse-response (-> (or/c hash? #f) model-response?)]))
+                       [openai-parse-response (-> (or/c hash? #f) model-response?)])
+         openai-normalize-message)
 
 ;; ============================================================
 ;; OpenAI Config struct (T2-4)
@@ -68,10 +69,18 @@
 ;; ============================================================
 
 (define (openai-normalize-message msg)
-  (define calls (hash-ref msg 'tool_calls #f))
+  ;; v0.99.58 FIX: Ensure all messages have a content key.
+  ;; OpenAI-compatible APIs reject messages without content (400:
+  ;; "messages parameter is illegal"). Assistant messages with tool_calls
+  ;; but no content are the most common offender.
+  (define msg-with-content
+    (if (hash-has-key? msg 'content)
+        msg
+        (hash-set msg 'content (json-null))))
+  (define calls (hash-ref msg-with-content 'tool_calls #f))
   (if (not (list? calls))
-      msg
-      (hash-set msg
+      msg-with-content
+      (hash-set msg-with-content
                 'tool_calls
                 (for/list ([call (in-list calls)])
                   (define fn (hash-ref call 'function (hasheq)))
