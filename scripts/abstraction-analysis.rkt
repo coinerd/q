@@ -383,109 +383,65 @@
   (define sorted-by-size (sort findings > #:key (lambda (f) (hash-ref f 'line-count 0))))
   (define largest (take-at-most sorted-by-size 20))
 
-  (define all-params (filter (lambda (f) (> (hash-ref f 'parameter-count 0) 0)) findings))
-  (define all-macros (filter (lambda (f) (> (hash-ref f 'macro-count 0) 0)) findings))
-  (define all-struct-out (filter (lambda (f) (hash-ref f 'has-struct-out? #f)) findings))
-  (define all-io-mixed (filter (lambda (f) (hash-ref f 'io-mixed-with-logic? #f)) findings))
-  (define all-serialization (filter (lambda (f) (> (hash-ref f 'serialization-count 0) 0)) findings))
-  (define all-errors (filter (lambda (f) (> (hash-ref f 'error-count 0) 0)) findings))
-  (define all-handlers (filter (lambda (f) (> (hash-ref f 'handler-count 0) 0)) findings))
+  ;; Data-driven metric table: each entry is (list findings-key result-key count-key).
+  ;; For each metric, filter findings with count > 0 and build a sorted {path, count} list.
+  ;; v0.99.58 W3-2 (P3-AN): Replaced ~150 LOC of near-identical boilerplate with a loop.
+  (define count-metrics
+    '((parameter-count parameter-usage parameter-count)
+      (macro-count macro-usage macro-count)
+      (struct-out-count struct-out-exports struct-out-count)
+      (io-count io-mixed-with-logic io-count)
+      (serialization-count serialization-hotspots serialization-count)
+      (error-count error-density error-count)
+      (handler-count handler-density handler-count)
+      (mutable-cache-count mutable-cache-modules mutable-cache-count)
+      (bench-timing-count bench-timing-modules bench-timing-count)
+      (ad-hoc-parse-count ad-hoc-parse-modules ad-hoc-parse-count)
+      (event-handler-count event-handler-modules event-handler-count)
+      (cwd-sensitive-path-count cwd-sensitive-path-modules cwd-sensitive-path-count)
+      (mutation-site-count mutation-site-modules mutation-site-count)
+      (hash-ref-chain-count hash-ref-chain-modules hash-ref-chain-count)
+      (inline-config-path-count inline-config-path-modules inline-config-path-count)
+      (stringly-verdict-count stringly-verdict-modules stringly-verdict-count)
+      (effectful-classifier-count effectful-classifier-modules effectful-classifier-count)
+      (optional-mandatory-count optional-mandatory-modules optional-mandatory-count)))
+
+  (define (build-count-metric findings-key _result-key count-key)
+    (define matched (filter (lambda (f) (> (hash-ref f findings-key 0) 0)) findings))
+    (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f count-key 0)))
+         (sort matched > #:key (lambda (f) (hash-ref f count-key 0)))))
+
+  (define count-results
+    (for/list ([spec (in-list count-metrics)])
+      (define result-key (cadr spec))
+      (cons result-key (apply build-count-metric spec))))
+
+  ;; Boolean metric: all-defined-out (returns paths only, not counts)
   (define all-all-defined-out
     (filter (lambda (f)
               (and (list? (hash-ref f 'provide-shapes '()))
                    (member 'all-defined-out (hash-ref f 'provide-shapes '()))))
             findings))
-  (define all-mutable-cache (filter (lambda (f) (> (hash-ref f 'mutable-cache-count 0) 0)) findings))
-  (define all-bench-timing (filter (lambda (f) (> (hash-ref f 'bench-timing-count 0) 0)) findings))
-  (define all-ad-hoc-parse (filter (lambda (f) (> (hash-ref f 'ad-hoc-parse-count 0) 0)) findings))
-  (define all-event-handlers (filter (lambda (f) (> (hash-ref f 'event-handler-count 0) 0)) findings))
 
-  ;; v0.99.38 W8: Change-locality signals
-  (define all-cwd-sensitive
-    (filter (lambda (f) (> (hash-ref f 'cwd-sensitive-path-count 0) 0)) findings))
-  (define all-mutation-sites (filter (lambda (f) (> (hash-ref f 'mutation-site-count 0) 0)) findings))
-  (define all-hash-ref-chains
-    (filter (lambda (f) (> (hash-ref f 'hash-ref-chain-count 0) 0)) findings))
-  (define all-inline-config-paths
-    (filter (lambda (f) (> (hash-ref f 'inline-config-path-count 0) 0)) findings))
+  ;; Build the final summary hash, starting with the non-metric entries.
+  (define base
+    (hash 'total-modules
+          (length findings)
+          'largest-modules
+          (map (lambda (f)
+                 (hash 'path
+                       (hash-ref f 'path)
+                       'lines
+                       (hash-ref f 'line-count)
+                       'exports
+                       (hash-ref f 'export-count)))
+               largest)
+          'all-defined-out-modules
+          (map (lambda (f) (hash-ref f 'path)) all-all-defined-out)))
 
-  ;; v0.99.42 W1: Manual red-flag signals
-  (define all-stringly-verdicts
-    (filter (lambda (f) (> (hash-ref f 'stringly-verdict-count 0) 0)) findings))
-  (define all-effectful-classifiers
-    (filter (lambda (f) (> (hash-ref f 'effectful-classifier-count 0) 0)) findings))
-  (define all-optional-mandatory
-    (filter (lambda (f) (> (hash-ref f 'optional-mandatory-count 0) 0)) findings))
-
-  (hash
-   'total-modules
-   (length findings)
-   'largest-modules
-   (map (lambda (f)
-          (hash 'path
-                (hash-ref f 'path)
-                'lines
-                (hash-ref f 'line-count)
-                'exports
-                (hash-ref f 'export-count)))
-        largest)
-   'parameter-usage
-   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'parameter-count)))
-        (sort all-params > #:key (lambda (f) (hash-ref f 'parameter-count 0))))
-   'macro-usage
-   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'macro-count)))
-        (sort all-macros > #:key (lambda (f) (hash-ref f 'macro-count 0))))
-   'struct-out-exports
-   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'struct-out-count 0)))
-        (sort all-struct-out > #:key (lambda (f) (hash-ref f 'struct-out-count 0))))
-   'io-mixed-with-logic
-   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'io-count 0)))
-        (sort all-io-mixed > #:key (lambda (f) (hash-ref f 'io-count 0))))
-   'serialization-hotspots
-   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'serialization-count)))
-        (sort all-serialization > #:key (lambda (f) (hash-ref f 'serialization-count 0))))
-   'error-density
-   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'error-count 0)))
-        (sort all-errors > #:key (lambda (f) (hash-ref f 'error-count 0))))
-   'handler-density
-   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'handler-count 0)))
-        (sort all-handlers > #:key (lambda (f) (hash-ref f 'handler-count 0))))
-   'all-defined-out-modules
-   (map (lambda (f) (hash-ref f 'path)) all-all-defined-out)
-   'mutable-cache-modules
-   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'mutable-cache-count 0)))
-        (sort all-mutable-cache > #:key (lambda (f) (hash-ref f 'mutable-cache-count 0))))
-   'bench-timing-modules
-   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'bench-timing-count 0)))
-        (sort all-bench-timing > #:key (lambda (f) (hash-ref f 'bench-timing-count 0))))
-   'ad-hoc-parse-modules
-   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'ad-hoc-parse-count 0)))
-        (sort all-ad-hoc-parse > #:key (lambda (f) (hash-ref f 'ad-hoc-parse-count 0))))
-   'event-handler-modules
-   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'event-handler-count 0)))
-        (sort all-event-handlers > #:key (lambda (f) (hash-ref f 'event-handler-count 0))))
-   'cwd-sensitive-path-modules
-   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'cwd-sensitive-path-count 0)))
-        (sort all-cwd-sensitive > #:key (lambda (f) (hash-ref f 'cwd-sensitive-path-count 0))))
-   'mutation-site-modules
-   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'mutation-site-count 0)))
-        (sort all-mutation-sites > #:key (lambda (f) (hash-ref f 'mutation-site-count 0))))
-   'hash-ref-chain-modules
-   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'hash-ref-chain-count 0)))
-        (sort all-hash-ref-chains > #:key (lambda (f) (hash-ref f 'hash-ref-chain-count 0))))
-   'inline-config-path-modules
-   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'inline-config-path-count 0)))
-        (sort all-inline-config-paths > #:key (lambda (f) (hash-ref f 'inline-config-path-count 0))))
-   'stringly-verdict-modules
-   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'stringly-verdict-count 0)))
-        (sort all-stringly-verdicts > #:key (lambda (f) (hash-ref f 'stringly-verdict-count 0))))
-   'effectful-classifier-modules
-   (map
-    (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'effectful-classifier-count 0)))
-    (sort all-effectful-classifiers > #:key (lambda (f) (hash-ref f 'effectful-classifier-count 0))))
-   'optional-mandatory-modules
-   (map (lambda (f) (hash 'path (hash-ref f 'path) 'count (hash-ref f 'optional-mandatory-count 0)))
-        (sort all-optional-mandatory > #:key (lambda (f) (hash-ref f 'optional-mandatory-count 0))))))
+  ;; Merge the data-driven count metrics into the base hash.
+  (for/fold ([h base]) ([kv (in-list count-results)])
+    (hash-set h (car kv) (cdr kv))))
 
 (define (take-at-most lst n)
   (if (> (length lst) n)

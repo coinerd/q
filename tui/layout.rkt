@@ -117,14 +117,6 @@
                   #:widget-bar-h widget-line-count
                   #:has-widgets? (positive? widget-line-count)))
 
-;; Convenience: accept old (cols rows) positional order.
-;; Use keyword args for unambiguous calls.
-(define (compute-layout-legacy cols
-                               rows
-                               #:widget-bar-h [widget-bar-h 0]
-                               #:has-widgets? [has-widgets? #f])
-  (compute-layout rows cols #:widget-bar-h widget-bar-h #:has-widgets? has-widgets?))
-
 ;; Clip lines to a region's height.
 (define (clip-to-region lines region)
   (take (append lines (make-list (layout-region-height region) "")) (layout-region-height region)))
@@ -158,5 +150,4 @@
          tui-layout-transcript-height
          tui-layout-status-row
          tui-layout-input-row
-         compute-layout-with-widgets
-         compute-layout-legacy)
+         compute-layout-with-widgets)

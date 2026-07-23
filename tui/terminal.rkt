@@ -88,7 +88,6 @@
          detect-kitty-support!
 
          ;; Clipboard
-         clipboard-copy
          osc-52-copy ;; internal, exported for testing
          detect-clipboard-tool ;; exported for testing
          clipboard-copy-via-tool ;; exported for testing
@@ -494,16 +493,6 @@
 ;; ============================================================
 
 ;; Clipboard functions are in clipboard.rkt.
-;; Re-exported for backward compatibility:
-;;   detect-clipboard-tool, clipboard-copy-via-tool, osc-52-copy
-;; clipboard-copy is replaced by copy-text! from clipboard.rkt
-
-;; Backward-compatible wrapper: clipboard-copy calls copy-text!
-;; DEPRECATED: Use copy-text! directly. This wrapper will be removed
-;; in a future version.
-(define (clipboard-copy text)
-  (copy-text! text))
-
 ;; ============================================================
 ;; Key helpers (pure)
 ;; ============================================================
