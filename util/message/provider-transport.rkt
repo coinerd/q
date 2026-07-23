@@ -10,6 +10,7 @@
 (require racket/contract
          racket/list
          racket/string
+         json
          (only-in "../content/content-parts.rkt"
                   text-part?
                   text-part-text
@@ -39,9 +40,17 @@
   (hasheq 'id (or id "") 'type "function" 'function (hasheq 'name (or name "") 'arguments arguments)))
 
 (define (make-provider-assistant-message text tool-calls)
-  (if (string=? text "")
-      (hasheq 'role "assistant" 'tool_calls tool-calls)
-      (hasheq 'role "assistant" 'content text 'tool_calls tool-calls)))
+  ;; v0.99.58 FIX: Always include content key. OpenAI-compatible APIs reject
+  ;; assistant messages that have tool_calls but no content field (400:
+  ;; "messages parameter is illegal"). Use JSON null for empty text.
+  (hasheq 'role
+          "assistant"
+          'content
+          (if (string=? text "")
+              (json-null)
+              text)
+          'tool_calls
+          tool-calls))
 
 (define (make-provider-tool-result-message tool-call-id content)
   (hasheq 'role "tool" 'tool_call_id tool-call-id 'content content))
