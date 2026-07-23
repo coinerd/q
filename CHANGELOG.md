@@ -1,3 +1,22 @@
+## 0.99.59
+
+Released: 2026-07-23
+
+### Overview
+
+Memory Behavior Alignment: Addresses the behavioral gap between memory context
+injection (shows ALL scopes) and memory tools (filter to ONE scope) (milestone #846):
+
+- **W0 (PR #8891):** Scope-aligned context injection. Changed `#:scope #f` to
+  `#:scope 'project` in `state-aware-builder.rkt`. Added `build-scope-manifest` helper
+  that prepends a `[Memory: N project, M session]` summary line to the injected section.
+  Enabled by default via `#:show-scope-manifest?`.
+- **W1 (PR #8892):** Tool documentation & default transparency. Updated
+  `store-memory`, `search-memory`, and `list-memory` descriptions with explicit
+  scope resolution docs and cross-scope hints.
+- **W2 (PR #8893):** Cross-scope discovery tool. Added `memory-inventory` tool
+  that returns item counts per scope without loading full item data.
+
 ## 0.99.58
 
 Released: 2026-07-23
