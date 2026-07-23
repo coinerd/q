@@ -10,6 +10,7 @@
 (require racket/list
          racket/match
          racket/string
+         racket/set
          (only-in "../../util/content/content-parts.rkt"
                   make-text-part
                   image-part?
@@ -18,6 +19,7 @@
          (only-in "../../util/message/message.rkt"
                   message
                   message-id
+                  message-parent-id
                   message-kind
                   message-role
                   message-content
@@ -32,7 +34,11 @@
                   tool-result-part-content
                   tool-result-part-is-error?)
          (only-in "../../util/content/content-helpers.rkt" result-content->string)
-         (only-in "../session-index.rkt" active-leaf get-branch))
+         (only-in "../session-index.rkt"
+                  active-leaf
+                  get-branch
+                  children-of
+                  session-index-entry-order))
 
 (provide build-session-context
          assemble-context
@@ -53,7 +59,47 @@
      (define path (get-branch idx (message-id leaf)))
      (match path
        [#f '()]
-       [_ (assemble-context path)])]))
+       [_ (assemble-context (collect-sibling-tool-results idx path))])]))
+
+;; Collect tool-result siblings that share a parentId with a tool-result
+;; already in the linear branch path but were missed because the tree walk
+;; can only follow a single parent chain.
+(define (collect-sibling-tool-results idx path)
+  (define order-vec (session-index-entry-order idx))
+  (define (find-entry-index msg)
+    (for/first ([e (in-vector order-vec)]
+                [i (in-naturals)]
+                #:when (equal? (message-id e) (message-id msg)))
+      i))
+  (define path-ids
+    (for/set ([msg (in-list path)])
+      (message-id msg)))
+  (define (collect-siblings msg)
+    (define pid (message-parent-id msg))
+    (cond
+      [(not pid) '()]
+      [else
+       (define all-children (children-of idx pid))
+       (define siblings
+         (filter (lambda (s)
+                   (and (eq? (message-kind s) 'tool-result)
+                        (not (equal? (message-id s) (message-id msg)))))
+                 all-children))
+       (define missing (filter (lambda (s) (not (set-member? path-ids (message-id s)))) siblings))
+       (sort missing < #:key (lambda (s) (or (find-entry-index s) 0)))]))
+  (let loop ([remaining path]
+             [acc '()])
+    (cond
+      [(null? remaining) (reverse acc)]
+      [else
+       (define msg (car remaining))
+       (cond
+         [(eq? (message-kind msg) 'tool-result)
+          (define siblings (collect-siblings msg))
+          ;; Insert missing siblings BEFORE current tool-result
+          ;; (they were appended to the JSONL first)
+          (loop (cdr remaining) (cons msg (append (reverse siblings) acc)))]
+         [else (loop (cdr remaining) (cons msg acc))])])))
 
 ;; Token-aware variant lives in serialization.rkt
 
