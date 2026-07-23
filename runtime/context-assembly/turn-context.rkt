@@ -51,6 +51,7 @@
                   config-working-set
                   config-task-state-aware?
                   config-context-assembly-profile
+                  config-project-dir
                   apply-context-assembly-profile!
                   context-assembly-options?
                   context-assembly-options-task-state-aware?
@@ -149,6 +150,7 @@
     (cond
       ;; v0.76.3: State-aware assembly when enabled (global flag, per-session rollout, or explicit options)
       [(and state-aware-enabled task-state)
+       (define project-dir (config-project-dir config))
        (define sa-tc
          (build-tiered-context/state-aware ctx-to-use
                                            #:tier-b-count tier-b-count
@@ -158,6 +160,7 @@
                                            #:conclusions conclusions
                                            #:ca-options ca-options
                                            #:recent-tool-calls recent-tool-calls
+                                           #:project-dir project-dir
                                            #:session-config config))
        (values sa-tc #f)]
       ;; Standard assembly path

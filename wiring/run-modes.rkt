@@ -439,7 +439,11 @@
                (lambda (h)
                  (define ev-type (hash-ref h 'type "ui.unknown"))
                  (define evt (make-event ev-type (current-inexact-milliseconds) #f #f h))
-                 (publish! bus evt))))
+                 (publish! bus evt))
+               ;; v0.99.60: Pass project-dir through to session-config so memory
+               ;; context injection can filter by project root.
+               'project-dir
+               project-dir))
 
   ;; v0.14.2 Wave 3: Set per-model timeouts from settings
   (wire-timeouts! settings)
