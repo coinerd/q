@@ -60,6 +60,7 @@
          batch-execution-plan-dangerous-jobs
          batch-execution-plan-max-parallel
          batch-execution-plan-aggregate?
+         batch-execution-plan-batch-timeout-ms
          batch-execution-plan-approval-plan
          batch-execution-plan-request-matches?)
 
@@ -425,6 +426,7 @@
                   dangerous-jobs
                   max-parallel
                   aggregate?
+                  batch-timeout-ms
                   approval-plan
                   provider))
 
@@ -525,6 +527,9 @@
   (when (and batch-id-raw (not (valid-plan-id? batch-id-raw)))
     (error 'tool-spawn-subagents "batchId must be a bounded terminal-safe identifier"))
   (define batch-id (or (immutable-string batch-id-raw) (immutable-string (generate-id))))
+  (define batch-timeout-ms
+    (let ([raw (hash-ref args 'batch-timeout-ms (hash-ref args 'batchTimeoutMs #f))])
+      (if (and (exact-integer? raw) (positive? raw)) raw 180000)))
   (define planned-jobs
     (for/list ([job (in-list normalized)]
                [batch-order (in-naturals)])
@@ -567,6 +572,8 @@
                                       effective-parallel
                                       'aggregate
                                       (and (batch-request-aggregate? request) #t)
+                                      'batch-timeout-ms
+                                      batch-timeout-ms
                                       'cwd
                                       (hash-ref bindings 'cwd)
                                       'parent-session-id
@@ -650,6 +657,7 @@
                         dangerous-jobs
                         effective-parallel
                         (batch-request-aggregate? request)
+                        batch-timeout-ms
                         approval-plan
                         planned-provider))
 
