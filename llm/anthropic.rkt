@@ -193,12 +193,24 @@
                  [else (loop remaining (cons (hasheq 'role "user" 'content blocks) acc))]))
              (loop (cdr msgs) (cons cur acc)))])))
 
-  ;; Filter orphaned tool_results: context assembly may drop assistant tool_use
-  ;; messages while keeping tool results. These orphaned tool_results cause
-  ;; Anthropic API 400 errors. Filter them out here.
+  ;; Filter orphaned tool_results and tool_use blocks (two-pass):
+  ;;   Pass 1: Collect tool_use_id values from tool_result blocks → result-ids
+  ;;   Pass 2: Strip orphaned tool_use + orphaned tool_result blocks
+  (define result-ids
+    (for/fold ([ids (set)]) ([m (in-list merged-messages)])
+      (define m-role (hash-ref m 'role #f))
+      (define m-content (hash-ref m 'content #f))
+      (if (and (equal? m-role "user") (list? m-content))
+          (for/fold ([s ids]) ([block (in-list m-content)])
+            (if (equal? (hash-ref block 'type #f) "tool_result")
+                (let ([tuid (hash-ref block 'tool_use_id #f)])
+                  (if (and (string? tuid) (> (string-length tuid) 0))
+                      (set-add s tuid)
+                      s))
+                s))
+          ids)))
   (define filtered-messages
     (let loop ([msgs merged-messages]
-               [seen-use-ids (set)]
                [acc '()])
       (if (null? msgs)
           (reverse acc)
@@ -206,17 +218,28 @@
                  [m-role (hash-ref m 'role #f)]
                  [m-content (hash-ref m 'content #f)])
             (cond
-              [(equal? m-role "assistant")
-               (define new-ids
-                 (if (list? m-content)
-                     (for/fold ([s seen-use-ids]) ([block (in-list m-content)])
-                       (if (equal? (hash-ref block 'type #f) "tool_use")
-                           (set-add s (hash-ref block 'id #f))
-                           s))
-                     seen-use-ids))
-               (loop (cdr msgs) new-ids (cons m acc))]
+              [(and (equal? m-role "assistant") (list? m-content))
+               ;; Strip orphaned tool_use blocks whose id is not in result-ids
+               (define filtered-content
+                 (for/list ([block (in-list m-content)])
+                   (cond
+                     [(equal? (hash-ref block 'type #f) "tool_use")
+                      (define tuid (hash-ref block 'id #f))
+                      (cond
+                        [(not (and (string? tuid) (> (string-length tuid) 0)))
+                         (log-warning "ANTHROPIC: dropping tool_use with blank id")
+                         #f]
+                        [(not (set-member? result-ids tuid))
+                         (log-warning "ANTHROPIC: stripping orphaned tool_use id=~a" tuid)
+                         #f]
+                        [else block])]
+                     [else block])))
+               (define kept (filter (lambda (x) x) filtered-content))
+               (if (null? kept)
+                   (loop (cdr msgs) acc)
+                   (loop (cdr msgs) (cons (hash-set m 'content kept) acc)))]
               [(and (equal? m-role "user") (list? m-content))
-               ;; Filter tool_result blocks, keep only those with matching tool_use
+               ;; Filter orphaned tool_result blocks against pre-collected result-ids
                (define filtered-content
                  (for/list ([block (in-list m-content)])
                    (cond
@@ -226,16 +249,16 @@
                         [(not (and (string? tuid) (> (string-length tuid) 0)))
                          (log-warning "ANTHROPIC: dropping tool_result with blank tool_use_id")
                          #f]
-                        [(not (set-member? seen-use-ids tuid))
+                        [(not (set-member? result-ids tuid))
                          (log-warning "ANTHROPIC: dropping orphaned tool_result tuid=~a" tuid)
                          #f]
                         [else block])]
                      [else block])))
                (define kept (filter (lambda (x) x) filtered-content))
                (if (null? kept)
-                   (loop (cdr msgs) seen-use-ids acc) ; drop empty user message
-                   (loop (cdr msgs) seen-use-ids (cons (hash-set m 'content kept) acc)))]
-              [else (loop (cdr msgs) seen-use-ids (cons m acc))])))))
+                   (loop (cdr msgs) acc)
+                   (loop (cdr msgs) (cons (hash-set m 'content kept) acc)))]
+              [else (loop (cdr msgs) (cons m acc))])))))
 
   (define base
     (hasheq 'model model-name 'max_tokens max-tokens 'messages filtered-messages 'stream stream?))

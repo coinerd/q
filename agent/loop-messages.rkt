@@ -174,12 +174,24 @@
   ;; Safety net: merge consecutive user messages.
   ;; Some providers (GLM) reject consecutive same-role messages.
   (define merged (collect-system-messages-front (merge-consecutive-roles raw-msgs)))
-  ;; Safety: remove orphaned tool messages whose tool_call_id doesn't match
-  ;; any preceding assistant tool_call. Context assembly may drop assistant
-  ;; messages while keeping tool results, creating orphans that cause API errors.
+  ;; Two-pass orphan cleanup:
+  ;;   Pass 1: Collect tool_call_ids from tool messages → answered-ids
+  ;;   Pass 2: Strip orphaned assistant tool_calls + orphaned tool results
+  ;;
+  ;; Context assembly may drop assistant messages while keeping tool results,
+  ;; or drop tool results while keeping assistant tool_calls. Both cases
+  ;; cause API errors.
+  (define answered-ids
+    (for/fold ([ids (set)]) ([m (in-list merged)])
+      (if (equal? (hash-ref m 'role #f) "tool")
+          (let ([tcid (hash-ref m 'tool_call_id #f)])
+            (if (and (string? tcid) (> (string-length tcid) 0))
+                (set-add ids tcid)
+                ids))
+          ids)))
   (define merged-clean
     (let loop ([msgs merged]
-               [seen-ids (set)]
+               [assistant-ids (set)]
                [acc '()])
       (if (null? msgs)
           (reverse acc)
@@ -188,20 +200,39 @@
             (cond
               [(equal? role "assistant")
                (define tcs (hash-ref m 'tool_calls #f))
-               (define new-ids
-                 (if tcs
-                     (for/fold ([s seen-ids]) ([tc (in-list tcs)])
-                       (set-add s (hash-ref tc 'id #f)))
-                     seen-ids))
-               (loop (cdr msgs) new-ids (cons m acc))]
+               (cond
+                 [tcs
+                  ;; Strip orphaned tool_calls whose id is not in answered-ids
+                  (define kept-tcs
+                    (for/list ([tc (in-list tcs)]
+                               #:when (set-member? answered-ids (hash-ref tc 'id #f)))
+                      tc))
+                  (define new-ids
+                    (for/fold ([s assistant-ids]) ([tc (in-list kept-tcs)])
+                      (set-add s (hash-ref tc 'id #f))))
+                  (cond
+                    [(null? kept-tcs)
+                     ;; All tool_calls were orphaned — strip entire tool_calls field
+                     (when (pair? tcs)
+                       (log-warning "BUILD-RAW: stripping ~a orphaned tool_calls from assistant msg"
+                                    (length tcs)))
+                     (loop (cdr msgs) assistant-ids (cons (hash-remove m 'tool_calls) acc))]
+                    [(< (length kept-tcs) (length tcs))
+                     ;; Some tool_calls were orphaned
+                     (log-warning "BUILD-RAW: kept ~a of ~a tool_calls in assistant msg"
+                                  (length kept-tcs)
+                                  (length tcs))
+                     (loop (cdr msgs) new-ids (cons (hash-set m 'tool_calls kept-tcs) acc))]
+                    [else (loop (cdr msgs) new-ids (cons m acc))])]
+                 [else (loop (cdr msgs) assistant-ids (cons m acc))])]
               [(equal? role "tool")
                (define tcid (hash-ref m 'tool_call_id #f))
-               (if (and tcid (set-member? seen-ids tcid))
-                   (loop (cdr msgs) seen-ids (cons m acc))
+               (if (and tcid (set-member? assistant-ids tcid))
+                   (loop (cdr msgs) assistant-ids (cons m acc))
                    (begin
                      (log-warning "BUILD-RAW: dropping orphaned tool msg with tool_call_id=~a" tcid)
-                     (loop (cdr msgs) seen-ids acc)))]
-              [else (loop (cdr msgs) seen-ids (cons m acc))])))))
+                     (loop (cdr msgs) assistant-ids acc)))]
+              [else (loop (cdr msgs) assistant-ids (cons m acc))])))))
   ;; Safety net: providers with enable_thinking (qwen3/llama.cpp) reject
   ;; assistant-last messages as "prefill". Strip trailing assistant messages.
   (define merged-trimmed
