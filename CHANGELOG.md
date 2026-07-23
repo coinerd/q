@@ -1,3 +1,25 @@
+## 0.99.63
+
+Released: 2026-07-23
+
+### Overview
+
+Spawn Subagent Batch Timeout + Agent Working Directory Awareness: Two
+waves to improve spawn-subagents reliability and agent spatial awareness
+(milestone #850):
+
+- **W0 (PR #8909):** Batch timeout for spawn-subagents. `run-jobs-parallel`
+  now uses `alarm-evt`/`sync/timeout` to race thread completion against a
+  3-minute default deadline. On timeout, remaining threads are cancelled and
+  error results are produced. Adds `DEFAULT-BATCH-DEADLINE-MS` (180000 ms)
+  constant and `batch-timeout-ms` field to `batch-execution-plan` struct.
+  Existing spawn tests pass.
+
+- **W1 (PR #8910):** Agent working directory awareness. `project-tree->string`
+  output now includes a `Working directory: /path/to/project` header line
+  before the file tree, giving the agent awareness of its project root.
+  Existing project-tree tests pass.
+
 ## 0.99.62
 
 Released: 2026-07-23
