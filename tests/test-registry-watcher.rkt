@@ -11,6 +11,7 @@
 ;;   5. stop-registry-watcher! terminates thread cleanly
 ;;   6. no memory leak after multiple start/stop cycles
 
+;; @speed fast
 (require rackunit
          rackunit/text-ui
          racket/file

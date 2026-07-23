@@ -4,6 +4,7 @@
 ;;
 ;; W2: Tool description updates for q-id selector support.
 
+;; @speed fast
 (require rackunit
          "../tools/registry-table/spec.rkt"
          "../tools/registry-table/browser-tools.rkt")

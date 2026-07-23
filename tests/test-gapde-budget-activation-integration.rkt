@@ -3,6 +3,7 @@
 ;; tests/test-gapde-budget-activation-integration.rkt
 ;; v0.97.4 W2: Integration tests for dynamic budget + activation chain
 
+;; @speed slow
 (require rackunit
          rackunit/text-ui
          (only-in "../runtime/context-assembly/config.rkt"

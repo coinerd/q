@@ -1,0 +1,7 @@
+#hash((reviewer . "automated (pi agent)")
+      (verdict . "APPROVED")
+      (reviewed-sha . "03ce0a3a96aa28d20b00f77aad85fdd355cafcf0")
+      (content-digest . "0f9a7cb4ecc5ad0ee3db6299d4afc76297b7faa209dd1b0c51c77007641bb264")
+      (timestamp . "2026-07-23")
+      (scope . "W4: Polish + Speed Tags (P4-C, P4-S, P1-SPEED)")
+      (report . "P4-C: Parameterized 5 TUI constants (MIN-RENDER-INTERVAL-MS, BLINK-INTERVAL-MS, FULL-RENDER-INTERVAL-FRAMES in tui-render-loop.rkt; FULL-RENDER-THRESHOLD in cell-diff-render.rkt; INPUT-PROMPT-WIDTH in state-types.rkt). Each has make-parameter with current default. Code uses parameter calls; tests use value aliases. P4-S: Extracted extract-arg-summary (~50 LOC) from state-types.rkt to new tui/arg-summary.rkt. Re-exported for backward compatibility. P1-SPEED: Added @speed tags to all 75 unclassified test files (67 fast, 8 slow). All test files now have explicit speed classification."))

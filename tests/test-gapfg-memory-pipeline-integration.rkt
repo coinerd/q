@@ -3,6 +3,7 @@
 ;; tests/test-gapfg-memory-pipeline-integration.rkt
 ;; v0.97.5 W2: Integration tests for GAP-F+G memory pipeline
 
+;; @speed slow
 (require rackunit
          rackunit/text-ui
          racket/string

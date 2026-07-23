@@ -10,6 +10,7 @@
 ;; 4. execute-delete-lines validates line range bounds
 ;; 5. dispatch-tool routes delete-lines to execute-delete-lines
 
+;; @speed fast
 (require rackunit
          rackunit/text-ui
          racket/file

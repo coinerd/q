@@ -4,6 +4,7 @@
 ;; The milestone traceability check must download and parse the uploaded
 ;; release-manifest.json and verify all commit/tag/hash fields match.
 
+;; @speed fast
 (require rackunit
          racket/string
          racket/runtime-path)

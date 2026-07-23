@@ -2,6 +2,7 @@
 
 ;; test-browser-vision-tool.rkt — Screenshot vision dual-path tests
 
+;; @speed fast
 (require rackunit
          "../tools/builtins/browser-tools.rkt"
          "../browser/settings.rkt"

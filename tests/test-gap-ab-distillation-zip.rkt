@@ -4,6 +4,7 @@
 ;; GAP-A: Distillation for/list zip truncation fix
 ;; GAP-B: Unique conclusion IDs via generate-id
 
+;; @speed fast
 (require rackunit
          racket/list
          racket/string

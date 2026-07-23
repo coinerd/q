@@ -179,7 +179,9 @@
 ;; ============================================================
 
 ;; If deltas represent > 50% of all cells, do a full render instead.
-(define FULL-RENDER-THRESHOLD 0.5)
+;; v0.99.58 W4-1 (P4-C): Parameterized for performance tuning.
+(define current-full-render-threshold (make-parameter 0.5))
+(define FULL-RENDER-THRESHOLD 0.5) ;; kept as value alias
 
 (define (render-smart! prev-buf curr-buf out #:sync? [sync? #t])
   (define cols (cell-buffer-cols curr-buf))
@@ -188,7 +190,7 @@
   (define deltas (diff-cell-buffers prev-buf curr-buf))
   (define n (length deltas))
   (cond
-    [(or (not prev-buf) (> n (* total-cells FULL-RENDER-THRESHOLD)))
+    [(or (not prev-buf) (> n (* total-cells (current-full-render-threshold))))
      (render-buffer-to-port! curr-buf out #:sync? sync?)]
     [else (render-deltas-to-port! deltas curr-buf out #:sync? sync?)]))
 
@@ -203,4 +205,5 @@
           [render-smart!
            (->* ((or/c cell-buffer? #f) cell-buffer? output-port?) (#:sync? boolean?) void?)])
          cell->sgr
+         current-full-render-threshold
          FULL-RENDER-THRESHOLD)

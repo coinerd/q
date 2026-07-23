@@ -6,6 +6,7 @@
 ;;   verification-started-event, verification-completed-event,
 ;;   verification-escalated-event
 
+;; @speed fast
 (require rackunit
          rackunit/text-ui
          "../agent/event-structs/verification-events.rkt"

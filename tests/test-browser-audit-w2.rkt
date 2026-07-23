@@ -9,6 +9,7 @@
 ;; H2/H3: Reader and heartbeat threads restarted after recovery
 ;; M1: Reader thread death detection in heartbeat
 
+;; @speed fast
 (require rackunit
          racket/async-channel
          (only-in racket/base make-semaphore call-with-semaphore)

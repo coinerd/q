@@ -2,6 +2,7 @@
 
 ;; tests/test-tool-gateway-bridge.rkt — Bridge and tool-gateway activation tests
 
+;; @speed fast
 (require rackunit
          rackunit/text-ui
          racket/match

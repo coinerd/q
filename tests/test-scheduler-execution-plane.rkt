@@ -3,6 +3,7 @@
 ;; tests/test-scheduler-execution-plane.rkt
 ;; Tests for execution-plane routing in the scheduler.
 
+;; @speed fast
 (require rackunit
          rackunit/text-ui
          racket/runtime-path

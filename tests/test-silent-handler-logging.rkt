@@ -3,6 +3,7 @@
 ;; q/tests/test-silent-handler-logging.rkt — Regression tests for AXIS2-F07
 ;; Verify that previously silent error handlers now log appropriately.
 
+;; @speed fast
 (require rackunit
          racket/string
          racket/file

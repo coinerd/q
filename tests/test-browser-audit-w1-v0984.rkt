@@ -3,6 +3,7 @@
 ;; tests/test-browser-audit-w1-v0984.rkt — Tests for Wave 1 audit fixes (v0.98.4)
 ;; NF-03, NF-04, NF-05, NF-06: Sidecar lifecycle hardening
 
+;; @speed fast
 (require rackunit
          racket/async-channel
          "../browser/adapters/playwright-sidecar.rkt"

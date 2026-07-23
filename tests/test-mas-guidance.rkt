@@ -3,6 +3,7 @@
 ;; tests/test-mas-guidance.rkt
 ;; v0.99.21 W1 (§4.1): Tests for MAS delegation guidance in system prompt.
 
+;; @speed fast
 (require racket/string
          rackunit
          rackunit/text-ui

@@ -5,6 +5,7 @@
 ;; Tests the verifier-decision struct, JSON round-trip, and convenience
 ;; constructors.
 
+;; @speed fast
 (require rackunit
          rackunit/text-ui
          json

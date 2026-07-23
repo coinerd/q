@@ -3,6 +3,7 @@
 ;; tests/test-gapd-memory-injection-default.rkt
 ;; v0.97.4 W1: GAP-D default memory injection budget
 
+;; @speed fast
 (require rackunit
          rackunit/text-ui
          (only-in "../runtime/context-assembly/memory-builder.rkt" current-memory-injection-budget))

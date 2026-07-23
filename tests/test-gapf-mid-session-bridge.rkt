@@ -3,6 +3,7 @@
 ;; tests/test-gapf-mid-session-bridge.rkt
 ;; v0.97.5 W1: GAP-F mid-session bridge on state transitions
 
+;; @speed fast
 (require rackunit
          rackunit/text-ui
          racket/string

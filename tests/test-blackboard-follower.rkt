@@ -9,6 +9,7 @@
 ;; 3. rebuild-blackboard-from-log! replays JSONL events correctly
 ;; 4. The follower module works independently of blackboard-subscriber.rkt
 
+;; @speed fast
 (require rackunit
          rackunit/text-ui
          racket/file

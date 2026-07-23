@@ -3,6 +3,7 @@
 ;; tests/test-browser-audit-w4-v0983.rkt — Tests for Wave 4 audit fixes (v0.98.3)
 ;; GAP-V1: Cross-provider vision image serialization
 
+;; @speed fast
 (require rackunit
          "../llm/anthropic.rkt"
          "../llm/gemini.rkt"

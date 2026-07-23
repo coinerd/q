@@ -4,6 +4,7 @@
 ;; M1: dead unless guard, M2: externalizable? default, M8: gateway-start!/stop! removed,
 ;; L3: port comments (already correct), L7: current-execution-plane-timeout-ms wired
 
+;; @speed fast
 (require rackunit
          rackunit/text-ui
          (only-in "../util/message/mas-envelope.rkt" make-mas-envelope)

@@ -5,6 +5,7 @@
 ;; W3: Integration-level tests verifying observation round-trip and
 ;; tool handler exports work correctly with interactive-elements.
 
+;; @speed fast
 (require rackunit
          "../browser/types.rkt"
          "../tools/builtins/browser-tools.rkt")

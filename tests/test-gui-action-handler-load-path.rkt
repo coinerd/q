@@ -1,5 +1,6 @@
 #lang racket/base
 
+;; @speed fast
 (require rackunit
          "../gui/main.rkt")
 

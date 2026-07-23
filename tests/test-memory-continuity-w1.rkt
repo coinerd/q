@@ -3,6 +3,7 @@
 ;; test-memory-continuity-w1.rkt — Tests for memory continuity & looping prevention
 ;; Plan: .planning/PLAN-v0.96.13-MEMORY-CONTINUITY-LOOPING-PREVENTION.md
 
+;; @speed fast
 (require rackunit
          racket/string
          (only-in "../util/message/message.rkt"

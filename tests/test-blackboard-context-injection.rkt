@@ -3,6 +3,7 @@
 ;; tests/test-blackboard-context-injection.rkt
 ;; v0.99.21 W3 (§4.3): Tests for blackboard context injection into subagent system prompt.
 
+;; @speed fast
 (require rackunit
          rackunit/text-ui
          racket/list

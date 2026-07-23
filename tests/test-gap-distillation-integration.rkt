@@ -3,6 +3,7 @@
 ;; tests/test-gap-distillation-integration.rkt
 ;; v0.97.3 W2: Integration tests for distillation pipeline
 
+;; @speed slow
 (require rackunit
          racket/list
          racket/string

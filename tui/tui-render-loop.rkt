@@ -74,6 +74,9 @@
          current-busy-watchdog-ms
          current-streaming-watchdog-ms
          current-resize-poll-interval-ms
+         current-min-render-interval-ms
+         current-blink-interval-ms
+         current-full-render-interval-frames
          resize-poll-due?
          reset-idle-render-state!
          apply-cursor-blink-timer!
@@ -106,11 +109,15 @@
 ;; ============================================================
 ;; ============================================================
 
-(define MIN-RENDER-INTERVAL-MS 16)
+;; v0.99.58 W4-1 (P4-C): Parameterized for accessibility/performance tuning.
+;; Defaults match previous hardcoded values; backward compatible.
+(define current-min-render-interval-ms (make-parameter 16))
+(define MIN-RENDER-INTERVAL-MS 16) ;; kept as value alias for tests
 
 (define last-render-ms (box 0.0))
 
-(define BLINK-INTERVAL-MS 530)
+(define current-blink-interval-ms (make-parameter 530))
+(define BLINK-INTERVAL-MS 530) ;; kept as value alias for tests
 
 (define last-blink-toggle-ms (box 0.0))
 (define blink-phase (box #t))
@@ -126,7 +133,8 @@
 ;; F-TUI-02 (v0.99.16 W1): Periodic full-render safety net.
 ;; After this many consecutive incremental renders, force a full render
 ;; to clear any accumulated snapshot drift.
-(define FULL-RENDER-INTERVAL-FRAMES 300)
+(define current-full-render-interval-frames (make-parameter 300))
+(define FULL-RENDER-INTERVAL-FRAMES 300) ;; kept as value alias for tests
 (define incremental-frame-count (box 0))
 
 (define (reset-idle-render-state!)
@@ -156,7 +164,7 @@
 
 (define (apply-cursor-blink-timer! now-ms)
   (cond
-    [(> (- now-ms (unbox last-blink-toggle-ms)) BLINK-INTERVAL-MS)
+    [(> (- now-ms (unbox last-blink-toggle-ms)) (current-blink-interval-ms))
      (set-box! blink-phase (not (unbox blink-phase)))
      (set-box! last-blink-toggle-ms now-ms)
      (set-box! cursor-blink-redraw-needed-box #t)
@@ -281,10 +289,10 @@
   ;; Sync bracket prevents frame tearing on capable terminals.
   (define prev-ubuf (unbox (tui-ctx-prev-ubuf-box ctx)))
   ;; F-TUI-02 (v0.99.16 W1): Periodic full-render safety net.
-  ;; After FULL-RENDER-INTERVAL-FRAMES incremental renders, force a
+  ;; After current-full-render-interval-frames incremental renders, force a
   ;; full render to clear any accumulated snapshot drift.
   (define force-full-render?
-    (and prev-ubuf (>= (unbox incremental-frame-count) FULL-RENDER-INTERVAL-FRAMES)))
+    (and prev-ubuf (>= (unbox incremental-frame-count) (current-full-render-interval-frames))))
   (cond
     ;; Safety net tripped — reset counter and force full render
     [force-full-render? (set-box! incremental-frame-count 0)]
@@ -445,9 +453,9 @@
        (define now (current-inexact-milliseconds))
        (define elapsed (- now (unbox last-render-ms)))
        (cond
-         [(< elapsed MIN-RENDER-INTERVAL-MS)
+         [(< elapsed (current-min-render-interval-ms))
           ;; Too soon — sleep the remainder, then render
-          (sleep (/ (- MIN-RENDER-INTERVAL-MS elapsed) 1000.0))
+          (sleep (/ (- (current-min-render-interval-ms) elapsed) 1000.0))
           ;; Re-check in case resize happened during sleep
           (when (unbox (tui-ctx-needs-redraw-box ctx))
             (render-frame! ctx))]

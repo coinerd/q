@@ -2,6 +2,7 @@
 
 ;; Regression coverage for v0.99.30 W2 zero-parsed false-green elimination.
 
+;; @speed slow
 (require rackunit
          rackunit/text-ui
          "../scripts/run-tests.rkt")

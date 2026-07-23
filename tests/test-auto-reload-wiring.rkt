@@ -10,6 +10,7 @@
 ;; 4. stop-registry-watcher! is callable from close-session! path
 ;; 5. watcher can be started and stopped cleanly
 
+;; @speed fast
 (require rackunit
          rackunit/text-ui
          racket/hash

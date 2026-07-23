@@ -5,6 +5,7 @@
 ;; DUP-02: launch-sidecar-process! extracted
 ;; SEC-05: Heartbeat reads reader-thread from state, not closure
 
+;; @speed fast
 (require rackunit
          racket/async-channel
          (only-in racket/base make-semaphore call-with-semaphore)
