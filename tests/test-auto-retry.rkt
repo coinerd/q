@@ -513,6 +513,33 @@
   (check-true (retry-exhausted? (unbox exn-result))))
 
 ;; ============================================================
+;; W0: 400 bad-request is NOT retryable tests (v0.99.61)
+;; ============================================================
+
+(test-case "W0: 400 bad-request is NOT retryable (provider-error)"
+  (define err (provider-error "bad request" (current-continuation-marks) (hash) 'bad-request 400))
+  (check-false (retryable-error? err)))
+
+(test-case "W0: 429 rate-limit IS retryable (regression)"
+  (define err (provider-error "rate limited" (current-continuation-marks) (hash) 'rate-limit 429))
+  (check-true (retryable-error? err)))
+
+(test-case "W0: 500 server IS retryable (regression)"
+  (define err (provider-error "server error" (current-continuation-marks) (hash) 'server 500))
+  (check-true (retryable-error? err)))
+
+(test-case "W0: string-based 'bad request' classified as bad-request"
+  (check-equal?
+   (classify-error
+    (exn:fail "Anthropic API bad request (400): tool_call_ids did not have response messages"
+              (current-continuation-marks)))
+   'bad-request))
+
+(test-case "W0: string-based '400' classified as bad-request"
+  (check-equal? (classify-error (exn:fail "HTTP 400 bad request" (current-continuation-marks)))
+                'bad-request))
+
+;; ============================================================
 ;; W-06: Structured provider-error path tests (M-11)
 ;; ============================================================
 

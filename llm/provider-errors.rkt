@@ -57,6 +57,7 @@
 (define (classify-http-status status-code)
   (cond
     [(not (and (exact-integer? status-code) (>= status-code 400))) #f]
+    [(= status-code 400) 'bad-request]
     [(= status-code 401) 'auth]
     [(= status-code 403) 'auth]
     [(= status-code 413) 'context-overflow]
