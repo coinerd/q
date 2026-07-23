@@ -1,3 +1,17 @@
+## 0.99.60
+
+Released: 2026-07-23
+
+### Overview
+
+Memory Cross-Project Leakage Fix: The `project-root` filter was never passed to
+the context assembly pipeline, so `scope='project'` returned items from ALL
+projects, not just the current one (milestone #847):
+
+- **W0 (PR #8896):** Pass `project-dir` through the context-assembly pipeline.
+  Adds `'project-dir` to session-config, accepts `#:project-dir` parameter in
+  `state-aware-builder.rkt`, and extracts it from config in `turn-context.rkt`.
+
 ## 0.99.59
 
 Released: 2026-07-23
