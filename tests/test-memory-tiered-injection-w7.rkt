@@ -141,3 +141,39 @@
   (define section (build-memory-section items #:budget-tokens 500))
   (define sub-headers (regexp-match* #rx"\\[[-a-z]+/[-a-z]+\\]" section))
   (check-true (>= (length sub-headers) 2) "at least 2 sub-headers"))
+
+;; ============================================================
+;; W0: Scope manifest summary line
+;; ============================================================
+
+(test-case "W0: scope manifest shows item counts per scope"
+  (define items
+    (list (make-item "s1" 'semantic 'project "project fact 1")
+          (make-item "s2" 'semantic 'project "project fact 2")
+          (make-item "s3" 'semantic 'session "session fact 1")))
+  (define section (build-memory-section items #:budget-tokens 500))
+  (check-true (string-contains? section "[Memory: 1 session, 2 project]")
+              "manifest counts per scope"))
+
+(test-case "W0: build-scope-manifest returns correct format"
+  (define items
+    (list (make-item "i1" 'semantic 'project "p1")
+          (make-item "i2" 'semantic 'session "s1")
+          (make-item "i3" 'semantic 'project "p2")
+          (make-item "i4" 'semantic 'user "u1")))
+  (check-equal? (build-scope-manifest items)
+                "[Memory: 1 session, 1 user, 2 project]"
+                "sorted alphabetically by scope name"))
+
+(test-case "W0: scope manifest is empty string for single scope"
+  (define items
+    (list (make-item "i1" 'semantic 'project "fact1") (make-item "i2" 'semantic 'project "fact2")))
+  (define section (build-memory-section items #:budget-tokens 500))
+  (check-true (string-contains? section "[Memory: 2 project]") "single scope"))
+
+(test-case "W0: scope manifest can be disabled"
+  (define items
+    (list (make-item "i1" 'semantic 'project "fact1") (make-item "i2" 'semantic 'session "fact2")))
+  (define section (build-memory-section items #:budget-tokens 500 #:show-scope-manifest? #f))
+  (check-false (string-contains? section "[Memory:") "no manifest when disabled")
+  (check-true (string-contains? section "[semantic/project]") "groups still present"))
