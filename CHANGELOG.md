@@ -1,3 +1,56 @@
+## 0.99.58
+
+Released: 2026-07-23
+
+### Overview
+
+Remediation Phase 5: In-depth audit-driven decomposition and cleanup.
+v0.99.58 addresses 20 findings from `AUDIT-v0.99.57-IN-DEPTH.md`
+across 7 subsystems (milestone #845) with five waves:
+
+- **W0 (PR #8877):** Security fix (SEC-1 shell injection in remote-collab),
+  dead code removal (bump-version.rkt, event-structs aliases, reproducer scripts),
+  TODO linter regex fix.
+- **W1 (PR #8878):** Provider URL parsing dedup (`parse-provider-url`),
+  tool-call-intent validation extraction, JSON utils split
+  (`strict-json.rkt` + `canonical-json.rkt`).
+- **W2 (PR #8879):** Runtime decomposition: bookmarks extraction,
+  goal/task extraction, file-tracker extraction, mouse message bugfix
+  (4-field vector handling).
+- **W3 (PR #8880):** Scripts + TUI cleanup: classify.rkt 3-way split,
+  data-driven abstraction-analysis, dead TUI code removal.
+- **W4 (PR #8881):** TUI constant parameterization, arg-summary extraction,
+  @speed tags on all 75 unclassified test files.
+
+### Features
+
+- All TUI render constants are now parameterized (`make-parameter`):
+  blink interval, render interval, full-render threshold, input prompt width.
+- All test files have explicit `@speed` classification (67 fast, 8 slow tagged).
+
+### Bug Fixes
+
+- SEC-1: Shell injection vulnerability in `remote-collab.rkt` (CRITICAL).
+- Mouse events silently lost when raw 4-field `#(tmousemsg cb cx cy)` vectors
+  were passed to `decode-mouse-message`.
+
+### Refactoring
+
+- `scripts/run-tests/classify.rkt` split into 3 modules (metadata, filters, facade).
+- `scripts/abstraction-analysis.rkt`: data-driven `compute-summary` (150 LOC → loop).
+- `tui/state-types.rkt`: `extract-arg-summary` extracted to `tui/arg-summary.rkt`.
+- `runtime/session-index/mutations.rkt`: bookmarks extracted to `bookmarks.rkt`.
+- `runtime/session/session-store.rkt`: goal/task extracted to `session-store-goal-task.rkt`.
+- `runtime/compaction/compactor.rkt`: file-tracker extracted to `file-tracker.rkt`.
+- `llm/anthropic.rkt` + `llm/gemini.rkt`: shared URL parsing via `llm/http-helpers.rkt`.
+- `scripts/gsd-milestone-truth.rkt`: split into `util/json/strict-json.rkt` + `canonical-json.rkt`.
+
+### Deferred
+
+- P3-CH: GSD command-handlers.rkt /go helpers (tight coupling).
+- P3-P: protocol-types.rkt facade removal (10+ test consumers).
+- P1-AS: async-sink extraction from session-store.
+
 ## 0.99.52
 
 Released: 2026-07-21

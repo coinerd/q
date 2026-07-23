@@ -32,7 +32,7 @@ These modules form the public API contract. Breaking changes require:
 | `extensions/api.rkt` | `make-extension`, `extension?` | v0.24.9 |
 | `util/protocol-types.rkt` | Core message/event types (formerly `agent/types.rkt`) | v0.24.9 |
 | `tools/tool.rkt` | `make-tool`, `tool-registry?` | v0.24.9 |
-| `tools/registry.rkt` | `make-tool-registry`, `register-tool!`, `lookup-tool`, `with-registry-snapshot` | v0.99.52 |
+| `tools/registry.rkt` | `make-tool-registry`, `register-tool!`, `lookup-tool`, `with-registry-snapshot` | v0.99.58 |
 ### Evolving
 
 These modules are functional but may receive backwards-compatible additions or
