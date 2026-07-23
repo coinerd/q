@@ -59,7 +59,10 @@
                   batch-execution-plan-job-arguments)
          (prefix-in approval: "spawn-approval.rkt")
          (prefix-in rate: "spawn-rate-limit.rkt")
-         (only-in "../../util/cancellation.rkt" cancellation-token-cancelled?)
+         (only-in "../../util/cancellation.rkt"
+                  cancellation-token-cancelled?
+                  make-cancellation-token
+                  cancel-token!)
          (only-in "../../util/message/provider-transport.rkt"
                   provider-tool-call-type?
                   provider-tool-stop-reason?
@@ -106,7 +109,10 @@
          ;; v0.99.50 W1 (TMUX-04): Typed terminal outcomes and safe metadata
          classify-terminal-status
          make-safe-result-metadata
-         result-has-content?)
+         result-has-content?
+         ;; v0.99.63 W0: Batch timeout configuration and execution
+         DEFAULT-BATCH-DEADLINE-MS
+         run-jobs-parallel)
 
 ;; v0.99.23 §5.1: Session-wide agent pool limit parameter.
 ;; Default 3 (matching the previous hardcoded max). CLI --agent-pool overrides.
@@ -328,7 +334,8 @@
     (run-jobs-parallel (batch-execution-plan-jobs plan)
                        plan
                        exec-ctx
-                       (batch-execution-plan-max-parallel plan)))
+                       (batch-execution-plan-max-parallel plan)
+                       #:batch-deadline-ms (batch-execution-plan-batch-timeout-ms plan)))
   (define job-results
     (for/list ([entry (in-list results)]
                [job (in-list (batch-execution-plan-jobs plan))])
@@ -411,17 +418,42 @@
                                'jobs
                                job-results)))
 
-;; Run jobs in parallel with bounded concurrency using threads + channel
-(define (run-jobs-parallel jobs plan exec-ctx max-parallel)
+;; Default batch timeout: 3 minutes (180000 ms)
+(define DEFAULT-BATCH-DEADLINE-MS 180000)
+
+;; Run jobs in parallel with bounded concurrency using threads.
+;; If #:batch-deadline-ms is provided, the batch is cancelled if all jobs
+;; don't complete within the deadline. Timed-out jobs get error results.
+(define (run-jobs-parallel jobs
+                           plan
+                           exec-ctx
+                           max-parallel
+                           #:batch-deadline-ms [deadline-ms DEFAULT-BATCH-DEADLINE-MS])
   (define n (length jobs))
   (cond
-    ;; Single job: run directly (no thread overhead)
+    ;; Single job: run directly (no thread overhead, no timeout needed)
     [(= n 1) (list (run-single-job (car jobs) plan exec-ctx))]
     ;; Multiple jobs: use threads with bounded concurrency. Each worker owns a
     ;; distinct vector slot, so completion timing cannot reorder output.
+    ;; Race thread completion against a deadline to prevent hanging.
     [else
      (define ordered-results (make-vector n #f))
      (define concurrency-sem (make-semaphore max-parallel))
+     ;; Create a dedicated cancellation token for batch-level timeout
+     (define batch-token (make-cancellation-token))
+     ;; Build child exec-context with batch token (replacing parent token)
+     ;; Handle #f exec-ctx for testing compatibility
+     (define child-ctx
+       (if exec-ctx
+           (make-exec-context #:working-directory (exec-context-working-directory exec-ctx)
+                              #:cancellation-token batch-token
+                              #:event-publisher (exec-context-event-publisher exec-ctx)
+                              #:runtime-settings (exec-context-runtime-settings exec-ctx)
+                              #:call-id (exec-context-call-id exec-ctx)
+                              #:session-metadata (exec-context-session-metadata exec-ctx)
+                              #:progress-callback (exec-context-progress-callback exec-ctx)
+                              #:permission-config (exec-context-permission-config exec-ctx))
+           (make-exec-context #:cancellation-token batch-token)))
      (define threads
        (for/list ([job (in-list jobs)]
                   [index (in-naturals)])
@@ -429,6 +461,30 @@
                    (call-with-semaphore
                     concurrency-sem
                     (lambda ()
-                      (vector-set! ordered-results index (run-single-job job plan exec-ctx))))))))
-     (for-each thread-wait threads)
+                      (vector-set! ordered-results index (run-single-job job plan child-ctx))))))))
+     ;; Race: wait for all threads OR timeout
+     (define deadline-evt (alarm-evt (+ (current-inexact-milliseconds) deadline-ms)))
+     (define completed-all?
+       (sync/timeout
+        #f
+        (handle-evt (apply choice-evt (map thread-dead-evt threads)) (lambda (_) #t))
+        (handle-evt deadline-evt
+                    (lambda (_)
+                      ;; Log cancellation for diagnostics
+                      (log-warning "SPAWN-BATCH: timeout after ~a ms, cancelling ~a remaining jobs"
+                                   deadline-ms
+                                   n)
+                      (cancel-token! batch-token)
+                      ;; Give threads a grace period to check cancellation
+                      (for-each (lambda (t) (sync/timeout 5000 (thread-dead-evt t))) threads)
+                      #f))))
+     ;; Fill in error results for any unfinished jobs
+     (for ([i (in-range n)])
+       (unless (vector-ref ordered-results i)
+         (define job (list-ref jobs i))
+         (define job-id (hash-ref job 'job-id))
+         (vector-set!
+          ordered-results
+          i
+          (cons job-id (make-error-result (format "subagent timed out after ~a ms" deadline-ms))))))
      (vector->list ordered-results)]))
