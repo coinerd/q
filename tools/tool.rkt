@@ -99,7 +99,8 @@
                               #:call-id string?
                               #:session-metadata (or/c hash? #f)
                               #:progress-callback (or/c procedure? #f)
-                              #:permission-config (or/c permission-config? #f))
+                              #:permission-config (or/c permission-config? #f)
+                              #:browser-service (or/c any/c #f))
                              exec-context?)])
          exec-context?
          exec-context-working-directory
@@ -111,6 +112,7 @@
          exec-context-progress-callback
          exec-context-permission-config
          exec-context-bytes-written
+         exec-context-browser-service
          emit-progress!
          ;; ── Tool-call struct (re-exported from agent/types.rkt) ──
          tool-call
