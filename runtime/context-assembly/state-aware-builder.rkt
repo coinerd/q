@@ -102,7 +102,8 @@
                                           #:trace [trace-cb #f]
                                           #:recent-tool-calls [recent-tool-calls '()]
                                           #:ca-options [ca-options #f]
-                                          #:session-config [session-config #f])
+                                          #:session-config [session-config #f]
+                                          #:project-dir [project-dir #f])
   ;; Accept both fsm-state structs and bare symbols
   (define state-name (coerce-task-state task-state))
   (define ws-level (and state-name (context-level-for-state state-name 'working-set)))
@@ -290,6 +291,7 @@
       (observe-memory-for-context session-config
                                   #:scope 'project
                                   #:query-text (or enriched-query-text memory-query-text)
+                                  #:project project-dir
                                   #:tags active-tags))
     (when trace-cb
       (trace-cb 'memory-observe (memory-telemetry->jsexpr (cdr observed))))
@@ -299,6 +301,7 @@
         (inject-memory-for-context session-config
                                    #:scope 'project
                                    #:query-text (or enriched-query-text memory-query-text)
+                                   #:project project-dir
                                    #:tags active-tags))
       (define section (car injected))
       (when (and section (positive? (string-length section)))
