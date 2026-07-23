@@ -163,7 +163,10 @@
     ;; R-6: append-to-leaf! now returns updated index; store it back
     (define-values (new-idx _returned-msg) (append-to-leaf! idx user-msg))
     (when new-idx
-      (guarded-set-index! sess new-idx)))
+      (guarded-set-index! sess new-idx)
+      ;; v0.99.58 FIX: Use new-idx (post-append) instead of idx (pre-append)
+      ;; for context building, so the user message is included.
+      (set! idx new-idx)))
 
   ;; Build context: use tiered context assembly when provider available, else tree walk
   ;; v0.45.7 (NF4/ARCH-01): Migrated from raw build-assembled-context to tiered path
@@ -182,7 +185,8 @@
              (build-tiered-context-with-hooks raw-msgs
                                               #:max-tokens DEFAULT-TOKEN-BUDGET-THRESHOLD
                                               #:working-set-messages ws-msgs))
-           (tiered-context->message-list tc)]
+           (define result-tc (tiered-context->message-list tc))
+           result-tc]
           ;; Fallback: context-assembly tree walk (no LLM summarization)
           [else (build-session-context/from-index idx)])
         ;; Fallback: no index — use linear history (backward compat)

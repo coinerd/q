@@ -266,7 +266,9 @@
     (define headers
       (list (format "Authorization: Bearer ~a" api-key) "Content-Type: application/json"))
     (define body-bytes (jsexpr->bytes body))
+    ;; HARD DEBUG: dump to file
     (define stream-model-name (and (hash? body) (hash-ref body 'model #f)))
+
     (define stream-timeout
       (if stream-model-name
           (effective-request-timeout-for stream-model-name)
