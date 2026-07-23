@@ -9,6 +9,7 @@
          racket/list
          racket/string
          "../../tools/tool.rkt"
+         (only-in "../../tools/exec-context.rkt" exec-context-browser-service)
          (only-in "../../util/capability.rkt" valid-capability? current-session-capabilities)
          (only-in "../../util/safe-mode/safe-mode-predicates.rkt" safe-mode? allowed-tool?)
          (only-in "../../runtime/runtime-helpers.rkt" emit-session-event! make-event-bus)
@@ -418,8 +419,8 @@
                                'jobs
                                job-results)))
 
-;; Default batch timeout: 3 minutes (180000 ms)
-(define DEFAULT-BATCH-DEADLINE-MS 180000)
+;; Default batch timeout: 5 minutes (300000 ms)
+(define DEFAULT-BATCH-DEADLINE-MS 300000)
 
 ;; Run jobs in parallel with bounded concurrency using threads.
 ;; If #:batch-deadline-ms is provided, the batch is cancelled if all jobs
@@ -452,7 +453,8 @@
                               #:call-id (exec-context-call-id exec-ctx)
                               #:session-metadata (exec-context-session-metadata exec-ctx)
                               #:progress-callback (exec-context-progress-callback exec-ctx)
-                              #:permission-config (exec-context-permission-config exec-ctx))
+                              #:permission-config (exec-context-permission-config exec-ctx)
+                              #:browser-service (exec-context-browser-service exec-ctx))
            (make-exec-context #:cancellation-token batch-token)))
      (define threads
        (for/list ([job (in-list jobs)]
@@ -462,29 +464,36 @@
                     concurrency-sem
                     (lambda ()
                       (vector-set! ordered-results index (run-single-job job plan child-ctx))))))))
-     ;; Race: wait for all threads OR timeout
-     (define deadline-evt (alarm-evt (+ (current-inexact-milliseconds) deadline-ms)))
-     (define completed-all?
-       (sync/timeout
-        #f
-        (handle-evt (apply choice-evt (map thread-dead-evt threads)) (lambda (_) #t))
-        (handle-evt deadline-evt
-                    (lambda (_)
-                      ;; Log cancellation for diagnostics
-                      (log-warning "SPAWN-BATCH: timeout after ~a ms, cancelling ~a remaining jobs"
-                                   deadline-ms
-                                   n)
-                      (cancel-token! batch-token)
-                      ;; Give threads a grace period to check cancellation
-                      (for-each (lambda (t) (sync/timeout 5000 (thread-dead-evt t))) threads)
-                      #f))))
+     ;; Wait for ALL threads to complete with wall-clock deadline.
+     ;; BUGFIX v0.99.64: Previously used (apply choice-evt (map thread-dead-evt threads))
+     ;; which fires on the FIRST thread death, not ALL. Now loops through threads
+     ;; sequentially with a shrinking remaining-time budget.
+     (define deadline-ms* (+ (current-inexact-milliseconds) deadline-ms))
+     (define timed-out? #f)
+     (for ([t (in-list threads)])
+       (unless timed-out?
+         (define remaining (- deadline-ms* (current-inexact-milliseconds)))
+         (cond
+           [(<= remaining 0) (set! timed-out? #t)]
+           [else
+            (define result (sync/timeout (/ remaining 1000.0) (thread-dead-evt t)))
+            (when (not result)
+              (set! timed-out? #t))])))
+     ;; If timed out, cancel remaining threads
+     (when timed-out?
+       (log-warning "SPAWN-BATCH: timeout after ~a ms, cancelling ~a remaining jobs" deadline-ms n)
+       (cancel-token! batch-token)
+       ;; Grace period for cooperative cancellation
+       (for-each (lambda (t) (sync/timeout 5000 (thread-dead-evt t))) threads))
      ;; Fill in error results for any unfinished jobs
      (for ([i (in-range n)])
        (unless (vector-ref ordered-results i)
          (define job (list-ref jobs i))
          (define job-id (hash-ref job 'job-id))
-         (vector-set!
-          ordered-results
-          i
-          (cons job-id (make-error-result (format "subagent timed out after ~a ms" deadline-ms))))))
+         (vector-set! ordered-results
+                      i
+                      (cons job-id
+                            (make-error-result
+                             (format "subagent cancelled: batch deadline (~a ms) exceeded"
+                                     deadline-ms))))))
      (vector->list ordered-results)]))

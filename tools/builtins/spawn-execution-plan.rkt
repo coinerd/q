@@ -529,7 +529,7 @@
   (define batch-id (or (immutable-string batch-id-raw) (immutable-string (generate-id))))
   (define batch-timeout-ms
     (let ([raw (hash-ref args 'batch-timeout-ms (hash-ref args 'batchTimeoutMs #f))])
-      (if (and (exact-integer? raw) (positive? raw)) raw 180000)))
+      (if (and (exact-integer? raw) (positive? raw)) raw 300000)))
   (define planned-jobs
     (for/list ([job (in-list normalized)]
                [batch-order (in-naturals)])
