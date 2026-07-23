@@ -145,7 +145,13 @@
    ;; spawn-subagents
    (make-tool-spec*
     "spawn-subagents"
-    "Run multiple subagent tasks in parallel with bounded concurrency."
+    (string-append "Run multiple subagent tasks in parallel with bounded concurrency. "
+                   "Each subagent runs its own agent loop (up to max-turns iterations). "
+                   "The entire batch must complete within a 5-minute deadline "
+                   "(configurable via batch-timeout-ms). "
+                   "Recommended: keep tasks focused (1-3 tool calls each), "
+                   "use max-turns=5 for quick lookups, max-turns=10 for analysis. "
+                   "Fewer jobs (2-3) complete faster than many (6+).")
     (hasheq
      'type
      "object"
@@ -162,6 +168,16 @@
               128
               'pattern
               "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+      'batch-timeout-ms
+      (hasheq
+       'type
+       "integer"
+       'minimum
+       10000
+       'maximum
+       600000
+       'description
+       "Batch deadline in milliseconds. Default 300000 (5 min). Jobs not finished by deadline are cancelled.")
       'jobs
       (hasheq
        'type

@@ -483,8 +483,13 @@
      (when timed-out?
        (log-warning "SPAWN-BATCH: timeout after ~a ms, cancelling ~a remaining jobs" deadline-ms n)
        (cancel-token! batch-token)
-       ;; Grace period for cooperative cancellation
-       (for-each (lambda (t) (sync/timeout 5000 (thread-dead-evt t))) threads))
+       ;; Grace period for cooperative cancellation, then force-kill orphaned threads
+       (for ([t (in-list threads)]
+             [i (in-naturals)])
+         (unless (vector-ref ordered-results i)
+           (unless (sync/timeout 5 (thread-dead-evt t))
+             (kill-thread t)
+             (log-warning "SPAWN-BATCH: force-killed thread ~a after grace period" i)))))
      ;; Fill in error results for any unfinished jobs
      (for ([i (in-range n)])
        (unless (vector-ref ordered-results i)
