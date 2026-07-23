@@ -17,14 +17,22 @@
 
 (define-tool
  store-memory
- #:description "Store a piece of information in memory for later retrieval."
+ #:description
+ "Store a piece of information in memory.
+
+ Scope resolution (applied when scope is not explicitly provided):
+  - If 'project-root' is set (i.e., within a project directory): defaults to 'project'
+  - Otherwise: defaults to 'session'
+
+ Cross-scope hint: Use scope='project' explicitly to share info across sessions.
+ User scope is disabled by default — enable via policy."
  #:required ("content")
  #:properties
  [(content "string" "The information to store")
   (type "string" "Memory type: episodic, semantic, or procedural (default: semantic)")
   (scope
    "string"
-   "Visibility: session, project, or user (default: project when project root exists, else session; user disabled by default)")
+   "Visibility: session, project, or user (default: project when project-root exists, else session; user disabled by policy unless enabled)")
   (tags "array" "List of string tags for categorization")
   (sensitivity "string" "Sensitivity: public, internal, or sensitive (default: public)")]
  store-memory-handler)
@@ -32,7 +40,14 @@
 (define-tool
  search-memory
  #:description
- "Search stored memories by query, scope, type, or tags. Defaults to project scope when project root exists, else session."
+ "Search stored memories by query, scope, type, or tags.
+
+ Scope resolution (applied when scope is not explicitly provided):
+  - If 'project-root' is set: defaults to 'project'
+  - Otherwise: defaults to 'session'
+
+ Cross-scope hint: Omit scope to search within default scope, or set explicitly
+ to search another scope. Searches only within one scope at a time."
  #:required ("query")
  #:properties
  [(query "string" "Search query text")
@@ -53,7 +68,14 @@
 (define-tool
  list-memory
  #:description
- "List stored memories, optionally filtered by scope and type. Defaults to project scope when project root exists, else session."
+ "List stored memories, optionally filtered by scope and type.
+
+ Scope resolution (applied when scope is not explicitly provided):
+  - If 'project-root' is set: defaults to 'project'
+  - Otherwise: defaults to 'session'
+
+ Cross-scope hint: Use scope='session' to list per-session memories, or
+ scope='project' to list project-wide memories."
  #:required ()
  #:properties
  [(scope "string" "Filter by scope: session, project, or user (user disabled by default)")
