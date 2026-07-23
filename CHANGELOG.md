@@ -1,3 +1,23 @@
+## 0.99.62
+
+Released: 2026-07-23
+
+### Overview
+
+Session Tree Walk Drops Sibling Tool Results: When the model makes multiple
+tool calls in a single assistant turn, the session tree walk drops one tool
+result because it can only follow a linear parent chain. The dropped tool
+result creates an orphaned `tool_call_id` that causes a persistent Anthropic
+API 400 error. This fix adds `collect-sibling-tool-results` to scan for sibling
+tool results not in the linear branch and inserts them in chronological order
+(milestone #849):
+
+- **W0 (PR #8905):** Add `collect-sibling-tool-results` in `session-walk.rkt`.
+  After `get-branch` returns the linear path, scan for `tool-result` entries,
+  check for siblings (same parentId, kind='tool-result') via `children-of`,
+  and insert missing siblings before the found entry preserving entry-order.
+  Works retroactively on existing broken sessions.
+
 ## 0.99.61
 
 Released: 2026-07-23
