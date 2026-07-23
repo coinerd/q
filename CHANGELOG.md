@@ -1,3 +1,23 @@
+## 0.99.61
+
+Released: 2026-07-23
+
+### Overview
+
+Orphaned Tool Call 400 Error Fix: The Anthropic API returns 400 "bad request"
+when `tool_call_ids` reference non-existent tool responses. This fix stops
+retrying permanent 400 errors and strips orphaned tool_calls from conversation
+history before sending to the API (milestone #848):
+
+- **W0 (PR #8900):** Stop retrying permanent 400 errors. Classifies HTTP 400
+  as `'bad-request` instead of `'network`, so retry logic skips it immediately.
+  Adds `'bad-request` to `ERROR-CLASSIFICATION-TABLE` for string-based matching.
+
+- **W1 (PR #8902):** Strip orphaned tool_calls defense-in-depth. Two-layer
+  cleanup: `build-raw-messages` strips orphaned `tool_calls` from assistant
+  messages at the transport layer; `anthropic-build-request-body` strips
+  orphaned `tool_use` blocks from assistant content at the Anthropic layer.
+
 ## 0.99.60
 
 Released: 2026-07-23

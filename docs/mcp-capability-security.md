@@ -1,13 +1,13 @@
-<!-- verified-against: 0.99.60 -->
+<!-- verified-against: 0.99.61 -->
 # MCP and Capability-Token Security Notes
 
 This document describes the security state for MAS Schritt 6 Phases 1 and 2.
 
-> **Phase 2 (v0.99.60) update:** Remote execution via mTLS TCP broker is now available. See [Distributed Execution Guide](distributed-execution-guide.md) and [mTLS Security Model](security-mtls.md) for details.
+> **Phase 2 (v0.99.61) update:** Remote execution via mTLS TCP broker is now available. See [Distributed Execution Guide](distributed-execution-guide.md) and [mTLS Security Model](security-mtls.md) for details.
 
 ## Scope
 
-v0.99.60 preserves the existing Phase 1 MCP/capability-token hardening. It does **not** introduce a new network broker, mTLS channel, or remote executor beyond the existing opt-in distributed execution support.
+v0.99.61 preserves the existing Phase 1 MCP/capability-token hardening. It does **not** introduce a new network broker, mTLS channel, or remote executor beyond the existing opt-in distributed execution support.
 
 Phase 1 provides:
 
@@ -24,7 +24,7 @@ Phase 1 does **not** provide:
 - ~~mTLS or cross-host authentication.~~ **→ Phase 2 provides full mTLS with mutual certificate verification.**
 - ~~Remote route execution.~~ **→ Phase 2 routes high/critical risk requests to the remote executor via mTLS.**
 
-> **v0.99.60 status:** The `remote-tagged-but-executed-local` annotation remains removed. Risk-based routing dispatches `'remote` decisions to the actual remote executor when `mas.broker.enabled = true`. When the broker is disabled (default), risk-based routing falls back to local execution with a clear warning.
+> **v0.99.61 status:** The `remote-tagged-but-executed-local` annotation remains removed. Risk-based routing dispatches `'remote` decisions to the actual remote executor when `mas.broker.enabled = true`. When the broker is disabled (default), risk-based routing falls back to local execution with a clear warning.
 
 ## Feature gates
 
@@ -67,7 +67,7 @@ The default event sink is a no-op. Integrations can parameterize `current-mcp-ev
 
 ## Capability-token API
 
-Capability tokens are HMAC-authenticated strings with strict parsing. v0.99.60 preserves the legacy API while retaining claim-aware validation.
+Capability tokens are HMAC-authenticated strings with strict parsing. v0.99.61 preserves the legacy API while retaining claim-aware validation.
 
 Primary APIs:
 
