@@ -469,3 +469,43 @@
     (check equal? (length call) 2 "each call must be (event-type payload)")
     (check-pred string? (car call) "first arg must be event-type string")
     (check-pred hash? (cadr call) "second arg must be payload hash")))
+
+;; ---------------------------------------------------------------------------
+;; W2 v0.99.59: memory-inventory tool
+;; ---------------------------------------------------------------------------
+
+(test-case "memory-inventory: returns error when backend is #f"
+  (define r (tool-memory-inventory (hash)))
+  (check-true (tool-result-is-error? r)))
+
+(test-case "memory-inventory: returns per-scope counts"
+  (define b (make-memory-hash-backend))
+  (define ctx
+    (make-exec-context #:working-directory "/tmp/q-inventory-test"
+                       #:session-metadata (hasheq 'session-id "inv-test")))
+  (with-backend b
+                (lambda ()
+                  ;; Store items in different scopes
+                  (tool-store-memory (hash 'content "project fact 1" 'scope "project") ctx)
+                  (tool-store-memory (hash 'content "project fact 2" 'scope "project") ctx)
+                  (tool-store-memory (hash 'content "session fact 1" 'scope "session") ctx)
+                  ;; Query inventory
+                  (define r (tool-memory-inventory (hash) ctx))
+                  (check-false (tool-result-is-error? r))
+                  (define details (tool-result-details r))
+                  (define scopes (hash-ref details 'scopes))
+                  (check-equal? (hash-ref scopes 'project) 2 "project should have 2 items")
+                  (check-equal? (hash-ref scopes 'session) 1 "session should have 1 item")
+                  (check-equal? (hash-ref details 'total) 3 "total should be 3"))))
+
+(test-case "memory-inventory: returns zero counts for empty backend"
+  (define b (make-memory-hash-backend))
+  (define ctx
+    (make-exec-context #:working-directory "/tmp/q-inventory-empty"
+                       #:session-metadata (hasheq 'session-id "inv-empty")))
+  (with-backend b
+                (lambda ()
+                  (define r (tool-memory-inventory (hash) ctx))
+                  (check-false (tool-result-is-error? r))
+                  (define details (tool-result-details r))
+                  (check-equal? (hash-ref details 'total) 0 "total should be 0"))))

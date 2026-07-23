@@ -8,7 +8,10 @@
 (require "../tool.rkt"
          "../define-tool.rkt"
          (only-in "memory-tools-store.rkt" store-memory-handler update-memory-handler)
-         (only-in "memory-tools-query.rkt" search-memory-handler list-memory-handler)
+         (only-in "memory-tools-query.rkt"
+                  search-memory-handler
+                  list-memory-handler
+                  memory-inventory-handler)
          (only-in "memory-tools-manage.rkt"
                   delete-memory-handler
                   clear-memory-handler
@@ -131,10 +134,28 @@
                    "If true (default), keep original items. If false, delete them after merge.")]
  consolidate-memory-handler)
 
+(define-tool
+ memory-inventory
+ #:description
+ "List memory item counts across all accessible scopes (session, project, user).
+
+ This is a lightweight cross-scope read: it returns how many items exist in each
+ scope without loading full item data. Use it to decide which scope to query
+ with list_memory or search_memory.
+
+ Cross-scope hint: If inventory shows 0 items in project scope but 3 in session
+ scope, use list_memory scope='session' to browse session memories.
+
+ Returns a hash with per-scope counts and a total count."
+ #:required ()
+ #:properties []
+ memory-inventory-handler)
+
 (provide store-memory
          search-memory
          delete-memory
          list-memory
+         memory-inventory
          clear-memory
          update-memory
          cleanup-expired-memory
