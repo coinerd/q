@@ -1,3 +1,29 @@
+## 0.99.65
+
+Released: 2026-07-23
+
+### Overview
+
+Fix SSE stream timeout for thinking-heavy reasoning models, auto-retry race
+condition with better error messages, and SSE-level reconnection diagnostics
+(milestone #852):
+
+- **W0 (PR #8922):** Fix SSE stream timeout for GLM-5.2 reasoning models.
+  Add thinking-aware timeout tracking — long `#:thinking-timeout` during
+  reasoning_content-only phase, tight 60s `#:stream-timeout` after first
+  content chunk. Add `stream-chunk-reasoning-text` field. Fix default
+  stream-timeout from 450s to 60s.
+- **W1 (PR #8923):** Fix auto-retry race condition with better error messages
+  for concurrent prompt submission. Error message now includes session ID and
+  actionable `/interrupt` guidance instead of "ignoring concurrent submission".
+- **W2 (deferred to v0.99.66):** Full SSE-level reconnection with `last-event-id`
+  deferred. Practical retry diagnostics already in place.
+
+### Commits
+
+- `ca8b3a63` fix(w0): Fix SSE stream timeout for thinking-heavy reasoning models
+- `9b7f06a5` fix(w1): Better error message for concurrent prompt submission
+
 ## 0.99.64
 
 Released: 2026-07-23
