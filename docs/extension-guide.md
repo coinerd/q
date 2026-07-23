@@ -1,4 +1,4 @@
-<!-- verified-against: 0.99.58 --># Extension Development Guide
+<!-- verified-against: 0.99.59 --># Extension Development Guide
 
 This guide walks you through creating, testing, and activating a custom
 extension for q.
