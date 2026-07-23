@@ -320,6 +320,92 @@
                  (format "message with role=~a must have content key" (hash-ref m 'role #f))))))
 
 ;; ============================================================
+;; v0.99.58 FIX: Array tool properties must have "items" schema
+;; Strict OpenAI-compatible APIs (ZhipuAI/GLM) reject tool schemas
+;; where type:"array" properties lack an "items" field.
+;; ============================================================
+
+(define-test-suite
+ array-items-fix-tests
+ (test-case "openai-normalize-tool adds items to array properties"
+   (define tool
+     (hasheq 'type
+             "function"
+             'function
+             (hasheq 'name
+                     "test-tool"
+                     'description
+                     "A test tool"
+                     'parameters
+                     (hasheq 'type
+                             "object"
+                             'required
+                             '("query")
+                             'properties
+                             (hasheq 'query
+                                     (hasheq 'type "string" 'description "Query")
+                                     'tags
+                                     (hasheq 'type "array" 'description "Tags"))))))
+   (define normalized (openai-normalize-tool tool))
+   (define fn (hash-ref normalized 'function))
+   (define params (hash-ref fn 'parameters))
+   (define props (hash-ref params 'properties))
+   (define tags-prop (hash-ref props 'tags))
+   (check-true (hash-has-key? tags-prop 'items) "array property must have items after normalization")
+   (define items (hash-ref tags-prop 'items))
+   (check-equal? (hash-ref items 'type #f) "string" "items should default to type:string"))
+ (test-case "openai-normalize-tool preserves existing items"
+   (define tool
+     (hasheq
+      'type
+      "function"
+      'function
+      (hasheq
+       'name
+       "test-tool"
+       'parameters
+       (hasheq 'type
+               "object"
+               'properties
+               (hasheq 'items
+                       (hasheq 'type "array" 'description "List" 'items (hasheq 'type "integer")))))))
+   (define normalized (openai-normalize-tool tool))
+   (define props (hash-ref (hash-ref (hash-ref normalized 'function) 'parameters) 'properties))
+   (define arr-prop (hash-ref props 'items))
+   (check-equal? (hash-ref (hash-ref arr-prop 'items) 'type)
+                 "integer"
+                 "existing items schema should be preserved"))
+ (test-case "openai-build-request-body normalizes all tool arrays"
+   ;; Build a request with tools that have array properties
+   (define tools
+     (list (hasheq 'type
+                   "function"
+                   'function
+                   (hasheq 'name
+                           "search"
+                           'parameters
+                           (hasheq 'type
+                                   "object"
+                                   'required
+                                   '("query")
+                                   'properties
+                                   (hasheq 'query
+                                           (hasheq 'type "string" 'description "Q")
+                                           'tags
+                                           (hasheq 'type "array" 'description "Tags")))))))
+   (define req
+     (make-model-request (list (hasheq 'role "user" 'content "test")) tools (hasheq 'model "test")))
+   (define body (openai-build-request-body req))
+   (define body-str (bytes->string/utf-8 (jsexpr->bytes body)))
+   (define parsed (string->jsexpr body-str))
+   (define body-tools (hash-ref parsed 'tools))
+   (for ([t (in-list body-tools)])
+     (define props (hash-ref (hash-ref (hash-ref t 'function) 'parameters) 'properties))
+     (for ([(k v) (in-hash props)])
+       (when (equal? (hash-ref v 'type #f) "array")
+         (check-true (hash-has-key? v 'items) (format "array property ~a must have items" k)))))))
+
+;; ============================================================
 ;; Run all tests (updated to include new suites)
 ;; ============================================================
 
@@ -329,4 +415,5 @@
   (run-tests response-size-limit-tests)
   (run-tests rate-limit-guidance-tests)
   (run-tests sse-timeout-scaling-tests)
-  (run-tests content-key-fix-tests))
+  (run-tests content-key-fix-tests)
+  (run-tests array-items-fix-tests))

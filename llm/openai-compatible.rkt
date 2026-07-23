@@ -31,7 +31,8 @@
 (provide (contract-out [make-openai-compatible-provider (-> (or/c hash? openai-config?) provider?)]
                        [openai-build-request-body (->* (model-request?) (#:stream? boolean?) hash?)]
                        [openai-parse-response (-> (or/c hash? #f) model-response?)])
-         openai-normalize-message)
+         openai-normalize-message
+         openai-normalize-tool)
 
 ;; ============================================================
 ;; OpenAI Config struct (T2-4)
@@ -93,6 +94,22 @@
                                           args
                                           (jsexpr->string args))))))))
 
+;; v0.99.58 FIX: Normalize tool schemas for strict OpenAI-compatible APIs.
+;; Some providers (ZhipuAI/GLM) reject tool schemas where array properties
+;; lack an "items" field. This adds {"items": {"type": "string"}} to any
+;; array property missing it.
+(define (openai-normalize-tool tool)
+  (define fn (hash-ref tool 'function (hasheq)))
+  (define params (hash-ref fn 'parameters (hasheq)))
+  (define props (hash-ref params 'properties (hasheq)))
+  (define fixed-props
+    (for/hash ([(k v) (in-hash props)])
+      (if (and (hash? v) (equal? (hash-ref v 'type #f) "array") (not (hash-has-key? v 'items)))
+          (values k (hash-set v 'items (hasheq 'type "string")))
+          (values k v))))
+  (define fixed-params (hash-set params 'properties fixed-props))
+  (hash-set tool 'function (hash-set fn 'parameters fixed-params)))
+
 (define (openai-build-request-body req #:stream? [stream? #f])
   (define settings (model-request-settings req))
   (define base
@@ -112,7 +129,7 @@
         with-temp))
   (define with-tools
     (if (model-request-tools req)
-        (hash-set with-max-tokens 'tools (model-request-tools req))
+        (hash-set with-max-tokens 'tools (map openai-normalize-tool (model-request-tools req)))
         with-max-tokens))
   (if stream?
       (hash-set with-tools 'stream_options (hasheq 'include_usage #t))
