@@ -384,12 +384,14 @@
                          (agent-session-session-id sess)))
   ;; Atomically exclude both another prompt and manual/automatic compaction.
   (unless (try-claim-prompt! sess)
+    (define sid (session-identity-facet-session-id (session->identity-facet sess)))
     (define reason
       (if (agent-session-compacting? sess)
           "Session compaction is active — retry the prompt after it completes"
-          "Prompt already running — ignoring concurrent submission"))
+          (format "Prompt already running — session ~a is processing. Use /interrupt to cancel."
+                  sid)))
     (emit-session-event! (session-tool-facet-event-bus (session->tool-facet sess))
-                         (session-identity-facet-session-id (session->identity-facet sess))
+                         sid
                          "runtime.error"
                          (hasheq 'error reason))
     (raise-session-error (format "run-prompt!: ~a" reason)
