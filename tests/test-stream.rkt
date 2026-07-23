@@ -6,6 +6,8 @@
 ;; BOUNDARY: integration
 
 (require rackunit
+         racket/string
+         json
          "../llm/stream.rkt"
          "../llm/model.rkt"
          "../agent/loop-stream.rkt")
@@ -583,3 +585,101 @@
   ;; deadline fires BEFORE the second read-line/timeout.
   (sleep 0.1) ;; Sleep past the 50ms deadline (10x margin for slow CI)
   (check-exn exn:fail:network:timeout? (lambda () (gen))))
+
+;; ============================================================
+;; v0.99.65 W0: Thinking-aware timeout for reasoning models
+;; ============================================================
+
+(test-case "W0: thinking-only chunks do not trigger stream-timeout"
+  ;; Simulate a reasoning model that emits only reasoning_content chunks
+  ;; for a period exceeding the default stream-timeout (60s).
+  ;; With thinking-timeout = initial-secs (or longer), the timeout should
+  ;; not fire during the thinking phase.
+  (define thinking-chunk
+    ;; A chunk with reasoning_content but no content field
+    (format "data: ~a\n\n"
+            (jsexpr->string (hasheq 'id
+                                    "r1"
+                                    'object
+                                    "chat.completion.chunk"
+                                    'choices
+                                    (list (hasheq 'index
+                                                  0
+                                                  'delta
+                                                  (hasheq 'reasoning_content "Let me think...")
+                                                  'finish_reason
+                                                  'null))))))
+  (define lines (apply string-append (make-list 5 thinking-chunk)))
+  (define in (open-input-string lines))
+  ;; Use short thinking-timeout = 10s, stream-timeout = 2s
+  ;; With only thinking chunks, read should use thinking-timeout (10s)
+  ;; and not time out w/ 2s timeout since 5 chunks arrive instantly.
+  (define gen
+    (read-sse-chunks in
+                     #:initial-timeout 10
+                     #:stream-timeout 2
+                     #:thinking-timeout 10
+                     #:max-total-timeout 60))
+  (for ([_ (in-range 5)])
+    (define chunk (gen))
+    (check-not-false chunk "should yield chunks for thinking data")
+    (check-false (stream-chunk-delta-text chunk) "thinking chunk has no content text"))
+  (check-false (gen) "stream ends after all chunks"))
+
+(test-case "W0: once content starts, tight stream-timeout applies"
+  ;; After a content chunk arrives, subsequent reads should use stream-timeout (tight).
+  ;; Create a content chunk followed by another that arrives within stream-timeout.
+  (define content-chunk1
+    (format
+     "data: ~a\n\n"
+     (jsexpr->string
+      (hasheq 'id
+              "c1"
+              'object
+              "chat.completion.chunk"
+              'choices
+              (list (hasheq 'index 0 'delta (hasheq 'content "Hello") 'finish_reason 'null))))))
+  (define content-chunk2
+    (format
+     "data: ~a\n\n"
+     (jsexpr->string
+      (hasheq 'id
+              "c2"
+              'object
+              "chat.completion.chunk"
+              'choices
+              (list (hasheq 'index 0 'delta (hasheq 'content "World") 'finish_reason 'null))))))
+  ;; Send both chunks — tight stream-timeout applies but both chunks arrive instantly
+  (define input (string-append content-chunk1 content-chunk2))
+  (define in (open-input-string input))
+  (define gen
+    (read-sse-chunks in
+                     #:initial-timeout 10
+                     #:stream-timeout 1 ;; 1 second — tight
+                     #:thinking-timeout 10
+                     #:max-total-timeout 60))
+  ;; Both chunks should succeed since input string delivers all data instantly
+  (define first (gen))
+  (check-not-false first "first chunk should be yielded")
+  (define second (gen))
+  (check-not-false second "second chunk should be yielded")
+  (check-false (gen) "stream ends"))
+
+(test-case "W0: thinking-chunk detection with reasoning_content field"
+  ;; Ensure normalize-openai-chunk correctly detects reasoning_content
+  ;; vs content in the delta
+  (define thinking-only
+    (normalize-openai-chunk
+     (hasheq 'id
+             "t1"
+             'choices
+             (list (hasheq 'delta (hasheq 'reasoning_content "thinking") 'finish_reason 'null)))))
+  (check-pred stream-chunk? thinking-only)
+  (check-false (stream-chunk-delta-text thinking-only)
+               "thinking-only chunk should have no delta-text")
+
+  (define with-content
+    (normalize-openai-chunk
+     (hasheq 'id "c1" 'choices (list (hasheq 'delta (hasheq 'content "Hi") 'finish_reason 'null)))))
+  (check-pred stream-chunk? with-content)
+  (check-equal? (stream-chunk-delta-text with-content) "Hi" "content chunk should have delta-text"))
