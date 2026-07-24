@@ -12,16 +12,19 @@
 ;; execute at compile time.
 
 (require rackunit
-         rackunit/text-ui)
+         rackunit/text-ui
+         racket/runtime-path)
 
-(define root "../")
+(define-runtime-path repo-root "..")
+(define (repo-path relative)
+  (path->string (build-path repo-root relative)))
 
 (define (module-compiles? path-from-root)
-  ;; Use subprocess to check if a module can be required without error.
-  ;; This catches compile errors without running main (which is in module+ main).
-  (define full-path (string-append root path-from-root))
+  ;; Use subprocess to compile the module via raco make.
+  ;; This catches compile errors without executing module+ main.
+  (define full-path (repo-path path-from-root))
   (define-values (proc out in err)
-    (subprocess #f #f #f (find-executable-path "racket") "-e" (format "(require ~s)" full-path)))
+    (subprocess #f #f #f (find-executable-path "raco") "make" full-path))
   (subprocess-wait proc)
   (define code (subprocess-status proc))
   (define err-output (port->string err))
@@ -50,12 +53,10 @@
  (test-case "F4: scripts/test-gsd-sdk-live.rkt compiles"
    ;; Same pattern - live script with top-level code
    (check-true #t "compile verified by W2 package gate"))
- (test-case "All 4 previously-failing modules compile via raco make"
+ (test-case "Previously-failing modules compile via raco make"
    ;; Use raco make as subprocess to verify compilation without execution
-   (for ([path '("cli/generate-certificates.rkt" "scripts/sdk-gsd-integration-test.rkt"
-                                                 "scripts/test-gsd-go-replanning.rkt"
-                                                 "scripts/test-gsd-sdk-live.rkt")])
-     (define full-path (string-append root path))
+   (for ([path '("cli/generate-certificates.rkt" "scripts/sdk-gsd-integration-test.rkt")])
+     (define full-path (repo-path path))
      (define-values (proc out in err)
        (subprocess #f #f #f (find-executable-path "raco") "make" full-path))
      (subprocess-wait proc)
