@@ -164,9 +164,12 @@
       (define registry (make-tool-registry))
       (register-tool! registry test-tool)
 
-      (define results (run-tool-batch (list tc) registry #:hook-dispatcher hook-dispatcher
-                                       #:exec-context (make-exec-context
-                                                       #:permission-config (make-permissive-permission-config))))
+      (define results
+        (run-tool-batch (list tc)
+                        registry
+                        #:hook-dispatcher hook-dispatcher
+                        #:exec-context (make-exec-context #:permission-config
+                                                          (make-permissive-permission-config))))
 
       (check-true (unbox hook-called?) "tool-call-pre hook should be called")
       (check-equal? (unbox captured-name) "test-tool" "payload should contain tool name"))
@@ -196,9 +199,12 @@
       (define registry (make-tool-registry))
       (register-tool! registry test-tool)
 
-      (define results (run-tool-batch (list tc) registry #:hook-dispatcher hook-dispatcher
-                                       #:exec-context (make-exec-context
-                                                       #:permission-config (make-permissive-permission-config))))
+      (define results
+        (run-tool-batch (list tc)
+                        registry
+                        #:hook-dispatcher hook-dispatcher
+                        #:exec-context (make-exec-context #:permission-config
+                                                          (make-permissive-permission-config))))
 
       (check-true (unbox hook-called?) "tool-result-post hook should be called")
       (check-not-false (unbox captured-result) "payload should contain result"))

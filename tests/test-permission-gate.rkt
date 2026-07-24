@@ -40,25 +40,41 @@
     (test-case "auto-approved tools return #f from tool-needs-approval?"
       (define cfg (make-default-permission-config))
       ;; Real auto-approved tool names from tool-classification.rkt
-      (for ([name '("read" "ls" "find" "grep" "date"
-                    "session_recall" "skill-route"
-                    "save-conclusion" "record_conclusion" "set-task-state"
-                    "browser_observe" "browser_extract" "browser_screenshot"
-                    "browser_scroll" "browser_close"
-                    "list-memory" "search-memory")])
-        (check-false (tool-needs-approval? cfg name)
-                     (format "~a should be auto-approved" name))))
+      (for ([name '("read" "ls"
+                           "find"
+                           "grep"
+                           "date"
+                           "session_recall"
+                           "skill-route"
+                           "save-conclusion"
+                           "record_conclusion"
+                           "set-task-state"
+                           "browser_observe"
+                           "browser_extract"
+                           "browser_screenshot"
+                           "browser_scroll"
+                           "browser_close"
+                           "list-memory"
+                           "search-memory")])
+        (check-false (tool-needs-approval? cfg name) (format "~a should be auto-approved" name))))
 
     ;; ── Needs-approval tools require approval ──
     (test-case "needs-approval tools return #t from tool-needs-approval?"
       (define cfg (make-default-permission-config))
       ;; Real needs-approval tool names from tool-classification.rkt
-      (for ([name '("edit" "write" "bash" "delete-lines"
-                    "spawn-subagent" "spawn-subagents" "firecrawl"
-                    "browser_open" "browser_click" "browser_type" "browser_press"
-                    "delete-memory" "clear-memory")])
-        (check-true (tool-needs-approval? cfg name)
-                    (format "~a should need approval" name))))
+      (for ([name '("edit" "write"
+                           "bash"
+                           "delete-lines"
+                           "spawn-subagent"
+                           "spawn-subagents"
+                           "firecrawl"
+                           "browser_open"
+                           "browser_click"
+                           "browser_type"
+                           "browser_press"
+                           "delete-memory"
+                           "clear-memory")])
+        (check-true (tool-needs-approval? cfg name) (format "~a should need approval" name))))
 
     ;; ── Unknown tools require approval by default (fail closed) ──
     (test-case "unknown tools require approval (safe default / fail closed)"
@@ -107,17 +123,15 @@
       (define auto (permission-config-auto-approved-tools cfg))
       (check-true (set? auto))
       (for ([name '("read" "ls" "find" "grep" "date" "session_recall" "skill-route")])
-        (check-true (set-member? auto name)
-                    (format "~a should be in auto-approved set" name))))
+        (check-true (set-member? auto name) (format "~a should be in auto-approved set" name))))
 
     (test-case "make-default-permission-config needs-approval set (from classification)"
       (define cfg (make-default-permission-config))
       (define needs (permission-config-needs-approval-tools cfg))
       (check-true (set? needs))
-      (for ([name '("edit" "write" "bash" "delete-lines"
-                    "spawn-subagent" "spawn-subagents" "firecrawl")])
-        (check-true (set-member? needs name)
-                    (format "~a should be in needs-approval set" name))))
+      (for ([name
+             '("edit" "write" "bash" "delete-lines" "spawn-subagent" "spawn-subagents" "firecrawl")])
+        (check-true (set-member? needs name) (format "~a should be in needs-approval set" name))))
 
     ;; ── W1: make-strict-permission-config always denies dangerous tools ──
     (test-case "make-strict-permission-config denies all dangerous tools"

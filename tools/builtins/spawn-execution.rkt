@@ -411,28 +411,28 @@
 
     ;; Create execution context for child
     (define child-ctx
-      (make-exec-context #:working-directory (if (hash-has-key? args 'planned-working-directory)
-                                                 (hash-ref args 'planned-working-directory)
-                                                 (if exec-ctx
-                                                     (exec-context-working-directory exec-ctx)
-                                                     (current-directory)))
-                         #:cancellation-token
-                         (and exec-ctx (exec-context-cancellation-token exec-ctx))
-                         #:permission-config (if (and exec-ctx (exec-context-permission-config exec-ctx))
-                                                  (exec-context-permission-config exec-ctx)
-                                                  (make-strict-permission-config))
-                         #:event-publisher (lambda (event-type payload)
-                                             (emit-session-event! bus session-id event-type payload))
-                         #:runtime-settings settings
-                         #:call-id tool-call-id
-                         #:session-metadata (hasheq 'session-id
-                                                    session-id
-                                                    'child-id
-                                                    child-id
-                                                    'parent-session-id
-                                                    (hash-ref args 'planned-parent-session-id "")
-                                                    'role
-                                                    "subagent")))
+      (make-exec-context
+       #:working-directory (if (hash-has-key? args 'planned-working-directory)
+                               (hash-ref args 'planned-working-directory)
+                               (if exec-ctx
+                                   (exec-context-working-directory exec-ctx)
+                                   (current-directory)))
+       #:cancellation-token (and exec-ctx (exec-context-cancellation-token exec-ctx))
+       #:permission-config (if (and exec-ctx (exec-context-permission-config exec-ctx))
+                               (exec-context-permission-config exec-ctx)
+                               (make-strict-permission-config))
+       #:event-publisher (lambda (event-type payload)
+                           (emit-session-event! bus session-id event-type payload))
+       #:runtime-settings settings
+       #:call-id tool-call-id
+       #:session-metadata (hasheq 'session-id
+                                  session-id
+                                  'child-id
+                                  child-id
+                                  'parent-session-id
+                                  (hash-ref args 'planned-parent-session-id "")
+                                  'role
+                                  "subagent")))
 
     ;; Build messages for child
     (define system-msg

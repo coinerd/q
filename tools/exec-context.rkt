@@ -6,9 +6,7 @@
 (require racket/contract
          (only-in "../util/cancellation.rkt" cancellation-token?)
          (only-in "../runtime/settings.rkt" q-settings?)
-         (only-in "../tools/permission-gate.rkt"
-                  permission-config?
-                  make-strict-permission-config))
+         (only-in "../tools/permission-gate.rkt" permission-config? make-strict-permission-config))
 
 (provide exec-context
          exec-context?

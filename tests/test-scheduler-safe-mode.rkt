@@ -335,9 +335,7 @@
     ;; permissive permission-config (--auto-approve equivalent) to bypass
     ;; the approval gate and focus assertions on safe-mode tool/path
     ;; restrictions.
-    (define exec-ctx
-      (make-exec-context
-       #:permission-config (make-permissive-permission-config)))
+    (define exec-ctx (make-exec-context #:permission-config (make-permissive-permission-config)))
     (define sr (run-tool-batch tcs reg #:exec-context exec-ctx))
     (define results (scheduler-result-results sr))
     (for ([r (in-list results)])

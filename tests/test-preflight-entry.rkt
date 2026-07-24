@@ -14,7 +14,8 @@
 
 ;; A no-op hook dispatcher (no transformations, nothing blocked).
 ;; Signature: (hook-dispatcher event-symbol tool-call) -> tool-call | #f | hook-result
-(define (identity-hook-dispatcher event tc) #f)
+(define (identity-hook-dispatcher event tc)
+  #f)
 
 ;; ============================================================
 ;; W-10: preflight-entry struct
@@ -60,9 +61,7 @@
 (define (make-shell-tool)
   (make-tool "bash"
              "dummy bash tool"
-             (hasheq 'type "object"
-                     'properties (hasheq)
-                     'required '())
+             (hasheq 'type "object" 'properties (hasheq) 'required '())
              (lambda (args) (make-tool-result "ok" #f #f))
              #:required-capability 'shell-exec))
 
@@ -79,5 +78,4 @@
   (define entry (car result))
   (check-eq? (preflight-entry-status entry) 'blocked)
   (check-false (preflight-entry-tool entry))
-  (check-regexp-match #rx"requires capability 'shell-exec"
-                      (preflight-entry-error-message entry)))
+  (check-regexp-match #rx"requires capability 'shell-exec" (preflight-entry-error-message entry)))

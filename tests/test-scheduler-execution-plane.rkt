@@ -85,8 +85,11 @@
       (parameterize ([current-execution-plane-enabled #f])
         (define reg (make-tool-registry))
         (register-tool! reg (make-local-bash-tool))
-        (define result (run-tool-batch (list (make-tool-call "tc-1" "bash" (hasheq))) reg
-                                       #:exec-context (make-exec-context #:permission-config (make-permissive-permission-config))))
+        (define result
+          (run-tool-batch (list (make-tool-call "tc-1" "bash" (hasheq)))
+                          reg
+                          #:exec-context (make-exec-context #:permission-config
+                                                            (make-permissive-permission-config))))
         (define results (scheduler-result-results result))
         (check-equal? (length results) 1)
         (check-false (tool-result-is-error? (first results)))
@@ -109,8 +112,11 @@
       (parameterize ([current-execution-plane-enabled #t])
         (define reg (make-tool-registry))
         (register-tool! reg (make-non-externalizable-tool))
-        (define result (run-tool-batch (list (make-tool-call "tc-3" "special" (hasheq))) reg
-                                       #:exec-context (make-exec-context #:permission-config (make-permissive-permission-config))))
+        (define result
+          (run-tool-batch (list (make-tool-call "tc-3" "special" (hasheq)))
+                          reg
+                          #:exec-context (make-exec-context #:permission-config
+                                                            (make-permissive-permission-config))))
         (define results (scheduler-result-results result))
         (check-equal? (length results) 1)
         (check-false (tool-result-is-error? (first results)))
@@ -152,7 +158,8 @@
           (run-tool-batch (list (make-tool-call "tc-4" "bash" (hasheq))
                                 (make-tool-call "tc-5" "read" (hasheq)))
                           reg
-                          #:exec-context (make-exec-context #:permission-config (make-permissive-permission-config))))
+                          #:exec-context (make-exec-context #:permission-config
+                                                            (make-permissive-permission-config))))
         (define results (scheduler-result-results result))
         (check-equal? (length results) 2)
         ;; Both should succeed locally
@@ -173,7 +180,8 @@
         (define result
           (run-tool-batch (list (make-tool-call "tc-6" "bash" (hasheq 'command "echo via-worker")))
                           reg
-                          #:exec-context (make-exec-context #:permission-config (make-permissive-permission-config))))
+                          #:exec-context (make-exec-context #:permission-config
+                                                            (make-permissive-permission-config))))
         (define results (scheduler-result-results result))
         (check-equal? (length results) 1)
         ;; The local execute function should NOT have been called
@@ -191,8 +199,11 @@
       (parameterize ([current-execution-plane-enabled #f])
         (define reg (make-tool-registry))
         (register-tool! reg (make-local-bash-tool))
-        (define local-result (run-tool-batch (list (make-tool-call "tc-7" "bash" (hasheq))) reg
-                                             #:exec-context (make-exec-context #:permission-config (make-permissive-permission-config))))
+        (define local-result
+          (run-tool-batch (list (make-tool-call "tc-7" "bash" (hasheq)))
+                          reg
+                          #:exec-context (make-exec-context #:permission-config
+                                                            (make-permissive-permission-config))))
         (define local-results (scheduler-result-results local-result))
         (check-true (tool-result? (first local-results)))))))
 

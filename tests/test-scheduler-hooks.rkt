@@ -31,6 +31,7 @@
                   tool-call-arguments
                   make-tool-call
                   make-exec-context)
+         (only-in "../tools/permission-gate.rkt" make-permissive-permission-config)
          "../tools/scheduler.rkt")
 
 ;; ============================================================
@@ -73,6 +74,11 @@
         (handler payload)
         #f)))
 
+;; v0.99.66: custom test tools are "unknown" to the classifier, so they
+;; require a permissive permission config to run without approval.
+(define (make-test-exec-context)
+  (make-exec-context #:permission-config (make-permissive-permission-config)))
+
 ;; ============================================================
 ;; Tests
 ;; ============================================================
@@ -89,7 +95,7 @@
       (define tc (make-tool-call "tc-1" "echo" (hasheq 'msg "hello")))
       (define dispatcher
         (make-hook-dispatcher 'tool-call-pre (lambda (payload) (hook-block "blocked by policy"))))
-      (define result (run-tool-batch (list tc) reg #:hook-dispatcher dispatcher))
+      (define result (run-tool-batch (list tc) reg #:hook-dispatcher dispatcher #:exec-context (make-test-exec-context)))
       (define results (scheduler-result-results result))
       (check-equal? (length results) 1)
       (check-true (tool-result-is-error? (car results)) "blocked pre hook produces error result")
@@ -107,12 +113,14 @@
       (define dispatcher
         (make-hook-dispatcher 'tool-call-pre
                               (lambda (payload) (hook-amend (hasheq 'args (hasheq 'amended #t))))))
-      (define result (run-tool-batch (list tc) reg #:hook-dispatcher dispatcher))
+      (define result (run-tool-batch (list tc) reg #:hook-dispatcher dispatcher #:exec-context (make-test-exec-context)))
       (define results (scheduler-result-results result))
       (check-equal? (length results) 1)
       (check-false (tool-result-is-error? (car results)) "amended args should succeed")
-      ;; Check that tool received amended args
-      (check-equal? (unbox exec-log) (list (hasheq 'amended #t)) "tool received amended arguments"))
+      ;; Check that tool received amended args (scheduler injects working-directory)
+      (check-equal? (hash-remove (car (unbox exec-log)) 'working-directory)
+                    (hasheq 'amended #t)
+                    "tool received amended arguments"))
 
     ;; ============================================================
     ;; TS3: tool-call-pre hook amend with non-hash payload falls through
@@ -127,13 +135,13 @@
                               (lambda (payload)
                                 ;; Return amend with non-hash payload (a string)
                                 (hook-amend "not a hash"))))
-      (define result (run-tool-batch (list tc) reg #:hook-dispatcher dispatcher))
+      (define result (run-tool-batch (list tc) reg #:hook-dispatcher dispatcher #:exec-context (make-test-exec-context)))
       (define results (scheduler-result-results result))
       (check-false (tool-result-is-error? (car results))
                    "non-hash amend falls through to original args")
-      ;; Original args should be used
-      (check-equal? (unbox exec-log)
-                    (list (hasheq 'original #t))
+      ;; Original args should be used (working-directory is injected by scheduler)
+      (check-equal? (hash-remove (car (unbox exec-log)) 'working-directory)
+                    (hasheq 'original #t)
                     "original args used when amend payload is not a hash"))
 
     ;; ============================================================
@@ -145,7 +153,7 @@
       (define tc (make-tool-call "tc-4" "echo" (hasheq 'msg "test")))
       (define dispatcher
         (make-hook-dispatcher 'tool-result-post (lambda (payload) (hook-block "result blocked"))))
-      (define result (run-tool-batch (list tc) reg #:hook-dispatcher dispatcher))
+      (define result (run-tool-batch (list tc) reg #:hook-dispatcher dispatcher #:exec-context (make-test-exec-context)))
       (define results (scheduler-result-results result))
       (check-true (tool-result-is-error? (car results))
                   "blocked result-post hook produces error result")
@@ -163,7 +171,7 @@
       (define dispatcher
         (make-hook-dispatcher 'tool-result-post
                               (lambda (payload) (hook-amend (hasheq 'result amended-result)))))
-      (define result (run-tool-batch (list tc) reg #:hook-dispatcher dispatcher))
+      (define result (run-tool-batch (list tc) reg #:hook-dispatcher dispatcher #:exec-context (make-test-exec-context)))
       (define results (scheduler-result-results result))
       (check-false (tool-result-is-error? (car results)) "amended result should not be error")
       (check-equal? (tool-result-content (car results))
@@ -182,7 +190,7 @@
                               (lambda (payload)
                                 ;; Return amend with non-tool-result value
                                 (hook-amend (hasheq 'result "not a tool-result")))))
-      (define result (run-tool-batch (list tc) reg #:hook-dispatcher dispatcher))
+      (define result (run-tool-batch (list tc) reg #:hook-dispatcher dispatcher #:exec-context (make-test-exec-context)))
       (define results (scheduler-result-results result))
       (check-false (tool-result-is-error? (car results))
                    "invalid amend falls back to original result")
@@ -224,7 +232,7 @@
            (format "tc-~a" i)
            "write"
            (hasheq 'path "/tmp/test-scheduler-file.txt" 'content (format "content ~a" i)))))
-      (define result (run-tool-batch tcs reg #:parallel? #t))
+      (define result (run-tool-batch tcs reg #:parallel? #t #:exec-context (make-test-exec-context)))
       (define results (scheduler-result-results result))
       (check-equal? (length results) 3 "all three writes completed")
       ;; File mutation queue should serialize writes to same path
@@ -241,7 +249,7 @@
       (define tc (make-tool-call "tc-8" "echo" (hasheq 'msg "test")))
       (define dispatcher
         (make-hook-dispatcher 'tool-call (lambda (payload) (error "preflight boom!"))))
-      (define result (run-tool-batch (list tc) reg #:hook-dispatcher dispatcher))
+      (define result (run-tool-batch (list tc) reg #:hook-dispatcher dispatcher #:exec-context (make-test-exec-context)))
       (define results (scheduler-result-results result))
       (check-true (tool-result-is-error? (car results)) "preflight exception produces error result")
       (check-not-false (regexp-match? #rx"hook error" (error-text (car results)))

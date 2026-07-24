@@ -13,15 +13,23 @@
 ;;; Exports:
 ;;;   permission-config, permission-config?     — config struct
 ;;;   make-default-permission-config             — headless-friendly defaults
+;;;   make-strict-permission-config              — hard-deny (W1 v0.99.66)
+;;;   make-permissive-permission-config          — --auto-approve opt-in (W2 v0.99.66)
 ;;;   tool-needs-approval?                       — predicate
 ;;;   request-approval                           — invoke the callback
 ;;;   permission-config-auto-approved-tools      — accessor
 ;;;   permission-config-needs-approval-tools     — accessor
 ;;;   permission-config-approval-callback        — accessor
 ;;;   permission-config-policy-mode              — accessor
+;;;
+;;; Source of truth: the auto-approved / needs-approval tool sets are
+;;; defined once in tool-classification.rkt (the single classification
+;;; source introduced in v0.99.66).  This module consumes them to
+;;; populate default configs; it no longer maintains a parallel list.
 
 (require racket/set
-         racket/contract)
+         racket/contract
+         "tool-classification.rkt")
 
 ;; ============================================================
 ;; Struct
@@ -32,61 +40,46 @@
          needs-approval-tools ; (set/c string?)
          approval-callback ; (string? hash? -> boolean?)
          policy-mode) ; (or/c 'strict 'permissive)
-  #:transparent)
+   #:transparent)
 
 ;; ============================================================
-;; Default config — headless mode (auto-approve everything)
+;; Default config
 ;; ============================================================
 
+;; make-default-permission-config — general-purpose config builder.
+;;
+;; v0.99.66 (W2, finding #2 HIGH): the default approval callback now
+;; DENIES by default.  A dangerous tool that reaches the approval
+;; branch is blocked unless the caller explicitly supplies an
+;; approving callback (e.g. interactive TUI broker or --auto-approve).
 (define (make-default-permission-config #:auto-approved [auto-approved #f]
-                                        #:needs-approval [needs-approval #f]
-                                        #:callback [callback #f]
-                                        #:policy-mode [mode 'strict])
-  (permission-config (or auto-approved
-                         (set "read"
-                              "glob"
-                              "ls"
-                              "find"
-                              "grep"
-                              "context-files"
-                              "date"
-                              "session_recall"
-                              "skill-route"
-                              "save-conclusion"
-                              "record_conclusion"
-                              "set-task-state"
-                              "browser_observe"
-                              "browser_extract"
-                              "browser_screenshot"
-                              "browser_scroll"
-                              "browser_close"
-                              ;; Memory tools (read-only / safe state mutation)
-                              "list-memory"
-                              "search-memory"
-                              "store-memory"
-                              "update-memory"
-                              "consolidate-memory"
-                              "cleanup-expired-memory"))
-                     (or needs-approval
-                         (set "edit"
-                              "write"
-                              "bash"
-                              "delete"
-                              "move"
-                              "delete-lines"
-                              "spawn-subagent"
-                              "spawn-subagents"
-                              "firecrawl"
-                              "browser_open"
-                              "browser_click"
-                              "browser_type"
-                              "browser_press"
-                              "browser_check_local_app"
-                              ;; Destructive memory tools
-                              "delete-memory"
-                              "clear-memory"))
-                     (or callback (lambda (tool-name args) #t))
+                                         #:needs-approval [needs-approval #f]
+                                         #:callback [callback #f]
+                                         #:policy-mode [mode 'strict])
+  (permission-config (or auto-approved auto-approved-tool-names)
+                     (or needs-approval needs-approval-tool-names)
+                     (or callback (lambda (tool-name args) #f))   ; W2: deny-by-default
                      (if (memq mode '(strict permissive)) mode 'strict)))
+
+;; make-strict-permission-config — the hard-deny config.
+;;
+;; v0.99.66 (W1, finding #1 CRITICAL): this is the default assigned to
+;; every exec-context that does not explicitly configure permissions.
+;; It never auto-approves a dangerous tool and never returns #f/'skip.
+;; Safe (read-only) tools bypass the gate entirely via classification.
+(define (make-strict-permission-config)
+  (make-default-permission-config #:callback (lambda (tool-name args) #f)))
+
+;; make-permissive-permission-config — explicit opt-in for dangerous tools.
+;;
+;; v0.99.66 (W2): used by --auto-approve and trusted-CLI paths.  All
+;; dangerous calls are approved.  This is the ONLY way to get
+;; auto-approval of dangerous tools post-W2.
+(define (make-permissive-permission-config)
+  (make-default-permission-config
+   #:callback (lambda (tool-name args) #t)
+   #:policy-mode 'permissive))
+
 
 ;; ============================================================
 ;; Predicate — does this tool call require approval?
@@ -120,6 +113,8 @@
          permission-config-needs-approval-tools
          permission-config-approval-callback
          permission-config-policy-mode
+         make-strict-permission-config
+         make-permissive-permission-config
          (contract-out [make-default-permission-config
                         (->* ()
                              (#:auto-approved (or/c (set/c string?) #f)

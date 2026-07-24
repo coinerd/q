@@ -19,7 +19,9 @@
                   tool-call-arguments
                   lookup-tool
                   validate-tool-args
-                  format-tool-schema-hint)
+                  format-tool-schema-hint
+                  tool-required-capability)
+         (only-in "../util/capability.rkt" current-session-capabilities)
          (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload)
          (only-in "../util/safe-mode/safe-mode-predicates.rkt"
                   safe-mode?
@@ -120,6 +122,23 @@
                "Access denied: ~a is outside project root (~a). Safe mode restricts file access to the project directory."
                path-arg
                (safe-mode-project-root)))]
+            ;; Check capability enforcement (W3 — v0.99.66 Finding #3)
+            ;; A tool may only execute if its required capability is granted by
+            ;; the session's capability set. If the session has 'any, all tools
+            ;; pass (backward compatibility). Tools requiring 'any (e.g. read)
+            ;; also always pass.
+            [(let ([required (tool-required-capability t)]
+                   [granted (current-session-capabilities)])
+               (not (or (eq? required 'any)
+                        (memq 'any granted)
+                        (memq required granted))))
+             (preflight-entry
+              'blocked
+              tc-after-hook
+              #f
+              (format "tool '~a' requires capability '~a' which is not granted to this session"
+                      (tool-call-name tc-after-hook)
+                      (tool-required-capability t)))]
             [else
              ;; Revalidate arguments after potential hook mutation (v0.19.3 W1)
              ;; Capture exception detail to produce actionable error feedback

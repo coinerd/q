@@ -19,12 +19,11 @@
                              (hasheq 'type "object")
                              (lambda (a ctx) (make-success-result "ok"))
                              #:dangerous?
-                             (or (equal? name "bash")
-                                 (equal? name "write")
-                                 (equal? name "edit"))))
-  (define exec-ctx (if perm-cfg
-                       (make-exec-context #:permission-config perm-cfg)
-                       (make-exec-context)))
+                             (or (equal? name "bash") (equal? name "write") (equal? name "edit"))))
+  (define exec-ctx
+    (if perm-cfg
+        (make-exec-context #:permission-config perm-cfg)
+        (make-exec-context)))
   (define tool-calls (list (make-tool-call "tc-1" name args-hash)))
   (run-tool-batch tool-calls reg #:exec-context exec-ctx))
 
@@ -42,9 +41,7 @@
   (test-suite "permission denial-path integration tests"
 
     (test-case "strict mode: unknown tool blocked"
-      (define cfg (make-default-permission-config
-                   #:policy-mode 'strict
-                   #:callback (lambda (n a) #f)))
+      (define cfg (make-default-permission-config #:policy-mode 'strict #:callback (lambda (n a) #f)))
       (define result (run-single-tool "mystery-tool" (hash) cfg))
       (check-true (result-is-error? result)))
 
@@ -54,23 +51,19 @@
       (check-true (result-is-success? result)))
 
     (test-case "needs-approval tool succeeds when approved"
-      (define cfg (make-default-permission-config
-                   #:policy-mode 'strict
-                   #:callback (lambda (n a) (equal? n "bash"))))
+      (define cfg
+        (make-default-permission-config #:policy-mode 'strict
+                                        #:callback (lambda (n a) (equal? n "bash"))))
       (define result (run-single-tool "bash" (hash) cfg))
       (check-true (result-is-success? result)))
 
     (test-case "needs-approval tool blocked when denied"
-      (define cfg (make-default-permission-config
-                   #:policy-mode 'strict
-                   #:callback (lambda (n a) #f)))
+      (define cfg (make-default-permission-config #:policy-mode 'strict #:callback (lambda (n a) #f)))
       (define result (run-single-tool "bash" (hash) cfg))
       (check-true (result-is-error? result)))
 
     (test-case "auto-approved tool bypasses deny-all callback"
-      (define cfg (make-default-permission-config
-                   #:policy-mode 'strict
-                   #:callback (lambda (n a) #f)))
+      (define cfg (make-default-permission-config #:policy-mode 'strict #:callback (lambda (n a) #f)))
       (define result (run-single-tool "read" (hash) cfg))
       (check-true (result-is-success? result)))
 
