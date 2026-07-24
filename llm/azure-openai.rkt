@@ -117,6 +117,7 @@
   (define headers (list (format "api-key: ~a" api-key) "Content-Type: application/json"))
   (define body-bytes (jsexpr->bytes body))
   (define response-port-box (box #f))
+  (define stream-owns-port? (box #f))
   (log-stream-setup-timing "azure" _stream-t0)
   (dynamic-wind (lambda () (void))
                 (lambda ()
@@ -145,10 +146,12 @@
                      (check-azure-status! status-line #"")
                      ;; v0.81.0 W1: Replaced inline SSE loop with shared stream-sse-events.
                      ;; Bonus: now handles tool_calls deltas (was missing in inline version).
-                     (stream-sse-events response-port
-                                        (lambda (parsed) (list (normalize-openai-chunk parsed)))))))
+                     (set-box! stream-owns-port? #t)
+                     (close-port-after-stream
+                      (stream-sse-events response-port
+                                         (lambda (parsed) (list (normalize-openai-chunk parsed))))
+                      response-port))))
                 (lambda ()
-                  ;; W2.4: always close response port on exit
                   (define rp (unbox response-port-box))
-                  (when rp
+                  (when (and rp (not (unbox stream-owns-port?)))
                     (with-logged-error "port cleanup" (close-input-port rp))))))

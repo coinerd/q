@@ -12,6 +12,7 @@
          racket/port
          racket/path
          racket/list
+         racket/vector
          json
          "../../util/json/json-helpers.rkt"
          (only-in "../../util/content/content-parts.rkt" make-text-part)
@@ -246,10 +247,9 @@
 ;; R-6: Returns (values session-index? message?) — immutable hash operations
 (define (append-to-leaf! idx entry)
   (define parent (active-leaf idx))
-  (define parent-id
-    (if parent
-        (message-id parent)
-        #f))
+  ;; Honor an explicit parent; otherwise attach to the active leaf. Children
+  ;; and by-id must describe the same topology.
+  (define parent-id (or (message-parent-id entry) (and parent (message-id parent))))
   (define fixed-entry
     (if (and parent-id (not (message-parent-id entry)))
         (struct-copy message entry [parent-id parent-id])
@@ -267,7 +267,7 @@
   ;; Return updated index with immutable hashes, along with the entry
   (values (session-index new-by-id
                          new-children2
-                         (session-index-entry-order idx)
+                         (vector-append (session-index-entry-order idx) (vector fixed-entry))
                          (session-index-bookmarks idx)
                          (session-index-active-leaf-id idx)
                          (session-index-bookmark-sem idx))

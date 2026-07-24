@@ -19,8 +19,8 @@
 (struct tool-call-accum (id name arguments) #:transparent)
 
 ;; — SSE line-level helpers —
-(provide ;; SSE parsing
-         (contract-out [parse-sse-lines (-> string? (listof hash?))]
+;; SSE parsing
+(provide (contract-out [parse-sse-lines (-> string? (listof hash?))]
                        [parse-sse-line (-> string? (or/c hash? 'done #f))]
                        [parse-sse-data-line (-> string? (or/c string? #f))]
                        [sse-done? (-> string? boolean?)]
@@ -44,6 +44,7 @@
                                                 #:thinking-timeout positive?
                                                 #:max-total-timeout positive?)
                              generator?)]
+                       [close-port-after-stream (-> generator? input-port? generator?)]
                        ;; Response body reading
                        [read-response-body (-> input-port? bytes?)]
                        [read-response-body/timeout (->* (input-port?) (#:timeout positive?) bytes?)]
@@ -382,17 +383,16 @@
 ;;
 ;; Uses #:initial-timeout for the first read (waiting for stream to start),
 ;; then a phase-aware timeout for subsequent reads:
-;;   - If only reasoning_content chunks have been received (no content yet),
-;;     uses #:thinking-timeout (default = initial-timeout, covers long thinking phases).
-;;   - Once content chunks start arriving, switches to #:stream-timeout (tight, default 60s).
-;;
-;; This prevents premature timeout on reasoning models like GLM-5.2 that emit
-;; reasoning_content chunks for 450+ seconds before emitting the first content chunk.
+;;   - The first chunk may use the full request timeout.
+;;   - After any chunk (including reasoning_content), the bounded stream timeout
+;;     is the default inactivity deadline. Continuous reasoning remains valid,
+;;     but a silent/closed peer cannot hold prompt ownership for the full request timeout.
+;;   - Callers may explicitly widen #:thinking-timeout when provider evidence requires it.
 ;; The port is NOT closed by this function — the caller is responsible.
 (define (read-sse-chunks port
                          #:initial-timeout [initial-secs http-read-timeout-default]
                          #:stream-timeout [stream-secs http-stream-timeout-default]
-                         #:thinking-timeout [thinking-secs initial-secs]
+                         #:thinking-timeout [thinking-secs stream-secs]
                          #:max-total-timeout [max-total-secs 600])
   (generator ()
              (define stream-start (current-inexact-milliseconds))
@@ -446,6 +446,30 @@
                      (loop #f 0 (or seen-content? has-content))]
                     [else (loop #f (add1 consecutive-empty) seen-content?)])]))))
 
+;; Own a response port for the lifetime of a lazy stream generator. The port
+;; remains open while the generator is merely returned, then closes on normal
+;; termination, read failure, or cancellation while consuming.
+(define (close-port-after-stream source port)
+  (define (cleanup!)
+    (unless (port-closed? port)
+      (close-input-port port)))
+  (generator ()
+             (with-handlers ([exn:break? (lambda (e)
+                                           (cleanup!)
+                                           (raise e))]
+                             [exn:fail? (lambda (e)
+                                          (cleanup!)
+                                          (raise e))])
+               (let loop ()
+                 (define chunk (source))
+                 (cond
+                   [chunk
+                    (yield chunk)
+                    (loop)]
+                   [else
+                    (cleanup!)
+                    (yield #f)])))))
+
 ;; Provider-agnostic SSE event generator.
 ;; Takes a port and an event->chunks callback that converts parsed JSON events
 ;; into provider-specific chunks. Handles SSE lifecycle, timeouts, and
@@ -454,7 +478,7 @@
                            event->chunks
                            #:initial-timeout [initial-secs http-read-timeout-default]
                            #:stream-timeout [stream-secs http-stream-timeout-default]
-                           #:thinking-timeout [thinking-secs initial-secs]
+                           #:thinking-timeout [thinking-secs stream-secs]
                            #:max-total-timeout [max-total-secs 600])
   (generator ()
              (define stream-start (current-inexact-milliseconds))

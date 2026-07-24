@@ -17,6 +17,8 @@
                   build-session-context-for-prompt
                   run-prompt-internal)
          "../runtime/session/session-types.rkt"
+         (only-in "../runtime/session-index/mutations.rkt" load-index)
+         (only-in "../runtime/session-index/schema.rkt" session-index-entry-order)
          (only-in "../runtime/session/session-mutation.rkt" guarded-set-config!)
          (except-in "../runtime/agent-session.rkt" run-prompt!)
          "../util/message/protocol-types.rkt"
@@ -77,6 +79,20 @@
        ;; build-session-context should reset ws
        (build-session-context-for-prompt sess "hello" ensure-persisted! buffer-or-append!)
        (check-equal? (working-set-entry-count ws) 0)))
+
+    (test-case "live-session regression: durable user append also saves session index"
+      (with-temp-dir
+       (dir)
+       (define cfg (make-mutable-config dir))
+       (define sess (make-agent-session cfg))
+       ;; Match run-prompt!: establish session-info/index before user append.
+       (ensure-persisted! sess)
+       (build-session-context-for-prompt sess "durable input" ensure-persisted! buffer-or-append!)
+       (define disk-index (load-index (session-index-path (agent-session-session-dir sess))))
+       (check-equal?
+        (vector-length (session-index-entry-order disk-index))
+        2
+        "session-info and user message must both be indexed before provider completion")))
 
     ;; ── T02: run-prompt-internal creates ws in mutable config ──
     (test-case "T02: run-prompt-internal creates working set in mutable config"

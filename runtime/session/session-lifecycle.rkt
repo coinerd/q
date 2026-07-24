@@ -14,6 +14,11 @@
 ;; Provides:
 
 (define-logger q-session-lifecycle)
+
+;; Expected ownership contention is distinct from an internal session failure.
+;; UI adapters use this type to avoid duplicating runtime-owned error events.
+(struct exn:fail:session:busy exn:fail (session-id) #:transparent)
+
 ;;   run-prompt!             — main entry point for running a user prompt
 ;;   build-session-context-for-prompt — build context from history + system instructions
 ;;   dispatch-iteration      — model-select hook + iteration loop dispatch
@@ -103,7 +108,8 @@
           [write-crash-log! (-> (or/c string? #f) string? string? void?)]
           [compute-parent-id (->* ((listof message?)) ((or/c session-index? #f)) (or/c string? #f))]
           [build-user-message (-> string? (or/c string? #f) message?)]
-          [inject-system-instructions (-> (listof message?) (listof string?) (listof message?))]))
+          [inject-system-instructions (-> (listof message?) (listof string?) (listof message?))])
+         (struct-out exn:fail:session:busy))
 
 ;; ============================================================
 ;; Helpers
@@ -155,18 +161,22 @@
   (when ws
     (working-set-reset! ws))
 
-  ;; #771: Buffer user message (deferred persistence) — flushed on first assistant response
-  (buffer-or-append!-fn sess user-msg)
-
-  ;; Update index with new entry
+  ;; Canonicalize parent linkage in the index before persisting the message so
+  ;; session.jsonl and session.index cannot disagree for message-struct input.
   (when idx
-    ;; R-6: append-to-leaf! now returns updated index; store it back
-    (define-values (new-idx _returned-msg) (append-to-leaf! idx user-msg))
+    (define-values (new-idx returned-msg) (append-to-leaf! idx user-msg))
     (when new-idx
+      (set! user-msg returned-msg)
       (guarded-set-index! sess new-idx)
+      ;; Keep durable index in lockstep with the durable/buffered user append.
+      ;; A provider stall must not leave resume context behind session.jsonl.
+      (save-index! idx-path new-idx)
       ;; v0.99.58 FIX: Use new-idx (post-append) instead of idx (pre-append)
       ;; for context building, so the user message is included.
       (set! idx new-idx)))
+
+  ;; #771: Buffer canonical user message (deferred persistence).
+  (buffer-or-append!-fn sess user-msg)
 
   ;; Build context: use tiered context assembly when provider available, else tree walk
   ;; v0.45.7 (NF4/ARCH-01): Migrated from raw build-assembled-context to tiered path
@@ -394,8 +404,8 @@
                          sid
                          "runtime.error"
                          (hasheq 'error reason))
-    (raise-session-error (format "run-prompt!: ~a" reason)
-                         (session-identity-facet-session-id (session->identity-facet sess))))
+    (raise
+     (exn:fail:session:busy (format "run-prompt!: ~a" reason) (current-continuation-marks) sid)))
   (define bus (session-tool-facet-event-bus (session->tool-facet sess)))
   (define sid (session-identity-facet-session-id (session->identity-facet sess)))
   ;; Bind one fresh prompt-turn identity to this prompt's cancellation token.

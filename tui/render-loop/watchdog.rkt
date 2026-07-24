@@ -16,6 +16,7 @@
                   ui-state-streaming-thinking
                   ui-state-last-delta-ms
                   ui-state-interrupt-request-id
+                  set-last-delta-ms
                   set-busy
                   set-busy-since
                   set-status-message
@@ -48,18 +49,17 @@
           (not (ui-state-streaming-thinking state)))
      (let ([since (ui-state-busy-since state)])
        (if (and since (> (- now-ms since) watchdog-ms))
-           (let* ([cleared (set-busy-since (set-status-message (clear-streaming (set-pending-tool-name
-                                                                                 (set-busy state #f)
-                                                                                 #f))
-                                                               "watchdog: busy timeout")
-                                           #f)]
+           (let* ([warned (set-busy-since (set-status-message state
+                                                              "watchdog: busy; runtime still active")
+                                          now-ms)]
                   [watchdog-entry
-                   (make-entry 'system
-                               (format "[Watchdog: busy state timed out — force-cleared after ~a min]"
-                                       (/ watchdog-ms 60000))
-                               now-ms
-                               (hasheq 'watchdog #t))])
-             (add-transcript-entry cleared watchdog-entry))
+                   (make-entry
+                    'system
+                    (format "[Watchdog: busy for ~a min — runtime still active; use /interrupt]"
+                            (/ watchdog-ms 60000))
+                    now-ms
+                    (hasheq 'watchdog #t))])
+             (add-transcript-entry warned watchdog-entry))
            #f))]
     ;; Case 2: BF1b (v0.99.4) — Streaming stall detection
     ;; HF1 (v0.99.5): Now triggers on EITHER text or thinking stream being
@@ -70,17 +70,23 @@
      (let* ([last-delta (ui-state-last-delta-ms state)]
             [swd-ms (current-streaming-watchdog-ms)])
        (if (and last-delta (> (- now-ms last-delta) swd-ms))
-           (let* ([cleared (set-busy-since (set-status-message (clear-streaming (set-pending-tool-name
-                                                                                 (set-busy state #f)
-                                                                                 #f))
-                                                               "watchdog: streaming stall")
-                                           #f)]
+           ;; Runtime owns prompt availability.  A display watchdog must not
+           ;; clear busy/streaming state while run-prompt! still owns the
+           ;; prompt claim, or the TUI will submit a conflicting second turn.
+           ;; Advance the activity timestamp only to rate-limit this warning;
+           ;; a correlated runtime terminal or /interrupt clears the state.
+           (let* ([warned (set-last-delta-ms
+                           (set-status-message state
+                                               "watchdog: streaming stalled; runtime still active")
+                           now-ms)]
                   [watchdog-entry
-                   (make-entry 'system
-                               (format "[Watchdog: streaming stalled — force-cleared after ~a min]"
-                                       (/ swd-ms 60000))
-                               now-ms
-                               (hasheq 'watchdog #t 'stall #t))])
-             (add-transcript-entry cleared watchdog-entry))
+                   (make-entry
+                    'system
+                    (format
+                     "[Watchdog: streaming stalled after ~a min — runtime still active; use /interrupt]"
+                     (/ swd-ms 60000))
+                    now-ms
+                    (hasheq 'watchdog #t 'stall #t))])
+             (add-transcript-entry warned watchdog-entry))
            #f))]
     [else #f]))

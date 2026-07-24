@@ -88,6 +88,18 @@
   (check-not-false (regexp-match #rx"^202[0-9]-" ts))
   (delete-directory/files dir))
 
+(test-case "trace logger normalizes millisecond event timestamps"
+  (define dir (make-temp-dir))
+  (define bus (make-event-bus))
+  (define logger (make-trace-logger bus dir #:enabled? #t))
+  (start-trace-logger! logger)
+  (publish! bus (make-event "test.ms" (current-inexact-milliseconds) "s1" #f (hasheq)))
+  (flush-trace-logger! logger)
+  (stop-trace-logger! logger)
+  (define ts (hash-ref (car (read-trace-jsonl dir)) 'ts #f))
+  (check-not-false (regexp-match #rx"^202[0-9]-" ts))
+  (delete-directory/files dir))
+
 (test-case "disabled logger does not write any file"
   (define dir (make-temp-dir))
   (define bus (make-event-bus))

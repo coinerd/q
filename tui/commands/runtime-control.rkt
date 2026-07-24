@@ -14,6 +14,7 @@
          "../../runtime/auth/oauth.rkt"
          "../../runtime/auth/oauth-callback.rkt"
          "../../runtime/auth/auth-store.rkt"
+         (only-in "../../runtime/session/session-lifecycle.rkt" exn:fail:session:busy?)
          "context.rkt"
          (only-in "../../util/ids.rkt" generate-id))
 
@@ -110,7 +111,8 @@
      (when runner
        (thread
         (lambda ()
-          (with-handlers ([exn:fail?
+          (with-handlers ([exn:fail:session:busy? (lambda (_e) (void))]
+                          [exn:fail?
                            (lambda (e)
                              (define bus (cmd-ctx-event-bus cctx))
                              (define sid (ui-state-session-id (unbox (cmd-ctx-state-box cctx))))
