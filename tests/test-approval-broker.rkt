@@ -87,6 +87,24 @@
                       (hash-set! mutable-view 'task-preview "forged")
                       (check-equal? (hash-ref (approval-request-view id digest-a) 'task-preview)
                                     "x"))))
+    (test-case "approved thunk runs after registry lock is released"
+      (with-channel
+       (lambda (ch)
+         (define id (register-approval-request-for-channel! ch digest-a view-a))
+         (check-true (approval-decide! id digest-a #t))
+         (define-values (outcome grant) (approval-await-grant id digest-a 20))
+         (check-equal? outcome 'approved)
+         ;; A bounded child probe avoids hanging the suite if the
+         ;; approved thunk is accidentally run under the registry lock.
+         (check-equal? (call-with-approval-grant
+                        grant
+                        digest-a
+                        (lambda ()
+                          (define observed (box #f))
+                          (define probe
+                            (thread (lambda () (set-box! observed (pending-approval-count)))))
+                          (and (sync/timeout 0.2 (thread-dead-evt probe)) (unbox observed))))
+                       0))))
     (test-case "frontend teardown revokes an approved but unconsumed grant"
       (define channel (make-approval-channel #:timeout-ms 200))
       (set-approval-channel! channel)

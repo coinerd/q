@@ -10,7 +10,10 @@
 (require rackunit
          rackunit/text-ui
          "../tools/tool.rkt"
-         "../tools/scheduler.rkt")
+         "../tools/scheduler.rkt"
+         (only-in "../tools/permission-gate.rkt" make-permissive-permission-config))
+
+(define permissive-ctx (make-exec-context #:permission-config (make-permissive-permission-config)))
 
 (define (make-echo-tool name)
   (make-tool name
@@ -44,7 +47,7 @@
               (make-tool-call "tc-2" "fast-echo" (hasheq 'msg "B"))))
 
       (define start-time (current-inexact-milliseconds))
-      (define result (run-tool-batch tool-calls reg #:parallel? #t))
+      (define result (run-tool-batch tool-calls reg #:exec-context permissive-ctx #:parallel? #t))
       (define elapsed (- (current-inexact-milliseconds) start-time))
 
       ;; Two 50ms sleeps in parallel should complete well under 2×50ms.
@@ -59,7 +62,7 @@
         (for/list ([i (in-range 5)])
           (make-tool-call (format "tc-~a" i) "echo" (hasheq 'out (format "out-~a" i)))))
 
-      (define result (run-tool-batch tool-calls reg #:parallel? #t))
+      (define result (run-tool-batch tool-calls reg #:exec-context permissive-ctx #:parallel? #t))
       (define results (scheduler-result-results result))
 
       (for ([r (in-list results)]
@@ -74,7 +77,7 @@
         (list (make-tool-call "tc-1" "echo" (hasheq 'out "A"))
               (make-tool-call "tc-2" "echo" (hasheq 'out "B"))))
 
-      (define result (run-tool-batch tool-calls reg #:parallel? #f))
+      (define result (run-tool-batch tool-calls reg #:exec-context permissive-ctx #:parallel? #f))
       (check-equal? (length (scheduler-result-results result)) 2))
 
     (test-case "single tool call works in parallel mode"
@@ -82,7 +85,7 @@
       (register-tool! reg (make-echo-tool "echo"))
       (define tool-calls (list (make-tool-call "tc-1" "echo" (hasheq 'out "only"))))
 
-      (define result (run-tool-batch tool-calls reg #:parallel? #t))
+      (define result (run-tool-batch tool-calls reg #:exec-context permissive-ctx #:parallel? #t))
       (define results (scheduler-result-results result))
       (check-equal? (length results) 1)
       (check-not-false (string-contains? (tool-result-content (car results)) "only")))

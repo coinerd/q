@@ -62,6 +62,7 @@
          "../llm/model.rkt"
          "../llm/provider.rkt"
          (only-in "../tools/tool.rkt" make-tool make-tool-registry register-tool! make-success-result)
+         (only-in "../tools/permission-gate.rkt" make-permissive-permission-config)
          (only-in "../extensions/api.rkt"
                   extension-registry?
                   make-extension-registry
@@ -100,6 +101,9 @@
 
 (define (make-temp-dir)
   (make-temporary-file "q-agent-session-test-~a" 'directory))
+
+(define (with-permissive-permissions config)
+  (hash-set config 'permission-config (make-permissive-permission-config)))
 
 (define (make-event-collector bus)
   (define collected (box '()))
@@ -333,7 +337,8 @@
                             "mock"
                             'stop))))
 
-   (define sess (make-agent-session (make-test-config dir bus prov reg)))
+   (define sess
+     (make-agent-session (with-permissive-permissions (make-test-config dir bus prov reg))))
    (define-values (s result) (run-prompt! sess "Echo hello world"))
 
    ;; Should complete
@@ -404,7 +409,9 @@
                                'max-iterations
                                2
                                'max-iterations-hard
-                               2)))
+                               2
+                               'permission-config
+                               (make-permissive-permission-config))))
 
    (define-values (s result) (run-prompt! sess "keep looping"))
 
@@ -551,7 +558,8 @@
              'tool-calls)
             (make-model-response (list (hash 'type "text" 'text "Done")) (hash) "mock" 'stop))))
 
-   (define sess (make-agent-session (make-test-config dir bus prov reg)))
+   (define sess
+     (make-agent-session (with-permissive-permissions (make-test-config dir bus prov reg))))
    (define-values (s result) (run-prompt! sess "Echo hi"))
 
    (define names (event-names evts))

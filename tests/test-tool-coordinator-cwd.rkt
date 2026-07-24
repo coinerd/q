@@ -59,8 +59,9 @@
          (define reg (make-tool-registry))
          (register-tool! reg (make-bash-tool))
          ;; Create exec-ctx pointing to our temp dir
-         (define ctx (make-exec-context #:working-directory dir
-                                        #:permission-config (make-permissive-permission-config)))
+         (define ctx
+           (make-exec-context #:working-directory dir
+                              #:permission-config (make-permissive-permission-config)))
          ;; Run ls via bash — should list from our temp dir
          (define tc (make-tool-call "bash-1" "bash" (hasheq 'command "ls unique-marker-cwd.txt")))
          (define result (run-tool-batch (list tc) reg #:exec-context ctx))
@@ -73,8 +74,9 @@
     (test-case "bash tool with current-directory succeeds"
       (define reg (make-tool-registry))
       (register-tool! reg (make-bash-tool))
-      (define ctx (make-exec-context #:working-directory (current-directory)
-                                     #:permission-config (make-permissive-permission-config)))
+      (define ctx
+        (make-exec-context #:working-directory (current-directory)
+                           #:permission-config (make-permissive-permission-config)))
       (define tc (make-tool-call "bash-2" "bash" (hasheq 'command "echo ok")))
       (define result (run-tool-batch (list tc) reg #:exec-context ctx))
       (define results (scheduler-result-results result))

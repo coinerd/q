@@ -18,6 +18,7 @@
 ;; header comment for full rationale.
 
 (require racket/contract
+         racket/dict
          racket/list
          racket/path
          json
@@ -73,6 +74,7 @@
          (only-in "../util/content/content-helpers.rkt" tool-result-content->string)
          (only-in "../util/ids.rkt" generate-id now-seconds)
          (only-in "../util/cancellation.rkt" cancellation-token?)
+         (only-in "../util/capability.rkt" current-session-capabilities)
          (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload hook-result?)
          ;; QUAL-01 (v0.22.0): shared runtime helpers
          (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
@@ -101,7 +103,8 @@
 ;; Pure helpers (W2 #4192)
 (provide classify-tool-results
          build-blocked-tool-results
-         permission-config-for-execution)
+         permission-config-for-execution
+         capabilities-for-tool-execution)
 
 ;; v0.31.5 W1: export struct
 (provide tool-call-actions
@@ -140,6 +143,14 @@
 ;; config; the final fallback remains deny-by-default.
 (define (permission-config-for-execution config explicit)
   (or explicit (config-permission-config config) (make-default-permission-config)))
+
+;; Resolve capability authority at the runtime boundary. A configured session
+;; value wins; otherwise capture the current session parameter. make-exec-context
+;; canonicalizes this value into an immutable fail-closed snapshot.
+(define (capabilities-for-tool-execution config)
+  (if (dict-has-key? config 'capabilities)
+      (dict-ref config 'capabilities)
+      (current-session-capabilities)))
 
 ;; ============================================================
 ;; Helpers (QUAL-01: emit-session-event! and maybe-dispatch-hooks
@@ -277,7 +288,8 @@
                           #:call-id (generate-id)
                           #:session-metadata
                           (hasheq 'session-id session-id 'session-index (config-session-index config))
-                          #:permission-config (permission-config-for-execution config perm-cfg))
+                          #:permission-config (permission-config-for-execution config perm-cfg)
+                          #:capabilities (capabilities-for-tool-execution config))
                          #:parallel? (config-parallel-tools config)))]))
   ;; Dispatch 'tool.execution.completed hook after tool batch
   (when (and ext-reg (not (null? tool-calls-to-run)))

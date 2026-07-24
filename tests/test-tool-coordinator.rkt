@@ -29,6 +29,8 @@
                   make-tool-call
                   tool-call-name)
          (only-in "../tools/tool.rkt" make-success-result make-error-result)
+         (only-in "../runtime/session/session-config.rkt" hash->session-config)
+         (only-in "../util/capability.rkt" current-session-capabilities)
          "../runtime/tool-coordinator.rkt")
 
 (define-test-suite
@@ -83,6 +85,14 @@
    (define tcs (list (make-tool-call "tc1" "read" (hasheq)) (make-tool-call "tc2" "write" (hasheq))))
    (define results (list (make-success-result "ok") (make-success-result "done")))
    (define msgs (make-tool-result-messages tcs results "p1"))
-   (check-equal? (length msgs) 2)))
+   (check-equal? (length msgs) 2))
+ (test-case "configured capability authority takes precedence"
+   (define config (hash->session-config (hasheq 'capabilities '(read-only))))
+   (parameterize ([current-session-capabilities '(any)])
+     (check-equal? (capabilities-for-tool-execution config) '(read-only))))
+ (test-case "session capability authority is used when config has none"
+   (define config (hash->session-config (hasheq)))
+   (parameterize ([current-session-capabilities '(shell-exec)])
+     (check-equal? (capabilities-for-tool-execution config) '(shell-exec)))))
 
 (run-tests test-tool-coordinator-suite)

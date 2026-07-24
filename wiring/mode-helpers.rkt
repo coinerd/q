@@ -21,7 +21,8 @@
          (only-in "../runtime/settings-query.rkt" setting-permission-mode)
          (only-in "../tools/permission-gate.rkt"
                   make-strict-permission-config
-                  make-permissive-permission-config)
+                  make-permissive-permission-config
+                  make-interactive-permission-config)
          (only-in "../tools/builtins/bash.rkt" current-execution-policy current-allowed-commands)
          (only-in "../sandbox/subprocess.rkt"
                   current-secret-scrub-denylist
@@ -75,14 +76,16 @@
                                         scrub-patterns))))
 
 ;; Resolve permission configuration with fail-closed precedence:
-;; explicit per-call config > CLI --auto-approve > settings > strict.
+;; explicit > CLI --auto-approve > settings permissive > TUI interactive > strict.
 (define (resolve-permission-config settings
                                    #:explicit [explicit #f]
-                                   #:cli-auto-approve? [cli-auto-approve? #f])
+                                   #:cli-auto-approve? [cli-auto-approve? #f]
+                                   #:tui? [tui? #f])
   (cond
     [explicit explicit]
     [cli-auto-approve? (make-permissive-permission-config)]
     [(eq? (setting-permission-mode settings) 'permissive) (make-permissive-permission-config)]
+    [tui? (make-interactive-permission-config)]
     [else (make-strict-permission-config)]))
 
 ;; Apply timeout settings from config to current parameters.

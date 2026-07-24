@@ -20,8 +20,11 @@
                   lookup-tool
                   validate-tool-args
                   format-tool-schema-hint
-                  tool-required-capability)
-         (only-in "../util/capability.rkt" current-session-capabilities)
+                  tool-required-capability
+                  make-exec-context
+                  exec-context?
+                  exec-context-capabilities)
+         (only-in "../util/capability.rkt" capability-authorized?)
          (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload)
          (only-in "../util/safe-mode/safe-mode-predicates.rkt"
                   safe-mode?
@@ -65,8 +68,13 @@
 ;; Preflight stage (serial)
 ;; ============================================================
 
-(define (run-preflight tool-calls registry hook-dispatcher)
+(define (run-preflight tool-calls registry hook-dispatcher [exec-ctx (make-exec-context)])
   ;; Returns a list of preflight entries, one per tool-call, in order.
+  ;; Capability authority is the immutable snapshot carried by exec-ctx.
+  (define capabilities
+    (if (exec-context? exec-ctx)
+        (exec-context-capabilities exec-ctx)
+        '()))
   (for/list ([tc (in-list tool-calls)])
     (define tc-after-hook
       (if hook-dispatcher
@@ -122,16 +130,8 @@
                "Access denied: ~a is outside project root (~a). Safe mode restricts file access to the project directory."
                path-arg
                (safe-mode-project-root)))]
-            ;; Check capability enforcement (W3 — v0.99.66 Finding #3)
-            ;; A tool may only execute if its required capability is granted by
-            ;; the session's capability set. If the session has 'any, all tools
-            ;; pass (backward compatibility). Tools requiring 'any (e.g. read)
-            ;; also always pass.
-            [(let ([required (tool-required-capability t)]
-                   [granted (current-session-capabilities)])
-               (not (or (eq? required 'any)
-                        (memq 'any granted)
-                        (memq required granted))))
+            ;; Check capability enforcement against context-owned authority.
+            [(not (capability-authorized? (tool-required-capability t) capabilities))
              (preflight-entry
               'blocked
               tc-after-hook

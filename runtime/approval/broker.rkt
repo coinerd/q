@@ -279,23 +279,16 @@
                                  (set-box! (approval-grant-consumed? grant) #t)
                                  #t])))))
 
-;; Validate, consume, and execute as one lifecycle-atomic operation. Teardown
-;; cannot revoke or replace the issuing frontend between grant consumption and
-;; entry into the exact committed execution.
-;;
-;; INVARIANT: registry-sem is held for the entire thunk (including child
-;; execution). Racket semaphores are non-reentrant: the executed thunk and
-;; everything it calls must NEVER call back into this module (registration,
-;; decision, pending checks, cancellation, grant operations). Violating this
-;; invariant self-deadlocks. Concurrent approval operations block until the
-;; thunk returns; this serialization is the price of atomic consume+execute
-;; and is intentional.
+;; Validate and consume atomically, then release the registry lock before
+;; invoking approved work. Once consumed, the one-use grant authorizes this
+;; exact committed execution; unrelated approval lifecycle operations must not
+;; be serialized behind an arbitrarily long tool or child execution.
 (define (call-with-approval-grant grant digest thunk)
-  (call-with-semaphore registry-sem
-                       (lambda ()
-                         (if (consume-grant-locked! grant digest)
-                             (thunk)
-                             #f))))
+  (define consumed?
+    (call-with-semaphore registry-sem (lambda () (consume-grant-locked! grant digest))))
+  (if consumed?
+      (thunk)
+      #f))
 
 (define (cancel-approval-request! id)
   (call-with-semaphore registry-sem

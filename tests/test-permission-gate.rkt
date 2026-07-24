@@ -45,7 +45,6 @@
                            "grep"
                            "date"
                            "session_recall"
-                           "skill-route"
                            "save-conclusion"
                            "record_conclusion"
                            "set-task-state"
@@ -65,8 +64,7 @@
       (for ([name '("edit" "write"
                            "bash"
                            "delete-lines"
-                           "spawn-subagent"
-                           "spawn-subagents"
+                           "skill-route"
                            "firecrawl"
                            "browser_open"
                            "browser_click"
@@ -75,6 +73,11 @@
                            "delete-memory"
                            "clear-memory")])
         (check-true (tool-needs-approval? cfg name) (format "~a should need approval" name))))
+
+    (test-case "tool-owned spawn tools still report that authorization is required"
+      (define cfg (make-default-permission-config))
+      (for ([name '("spawn-subagent" "spawn-subagents")])
+        (check-true (tool-needs-approval? cfg name))))
 
     ;; ── Unknown tools require approval by default (fail closed) ──
     (test-case "unknown tools require approval (safe default / fail closed)"
@@ -122,15 +125,14 @@
       (define cfg (make-default-permission-config))
       (define auto (permission-config-auto-approved-tools cfg))
       (check-true (set? auto))
-      (for ([name '("read" "ls" "find" "grep" "date" "session_recall" "skill-route")])
+      (for ([name '("read" "ls" "find" "grep" "date" "session_recall")])
         (check-true (set-member? auto name) (format "~a should be in auto-approved set" name))))
 
     (test-case "make-default-permission-config needs-approval set (from classification)"
       (define cfg (make-default-permission-config))
       (define needs (permission-config-needs-approval-tools cfg))
       (check-true (set? needs))
-      (for ([name
-             '("edit" "write" "bash" "delete-lines" "spawn-subagent" "spawn-subagents" "firecrawl")])
+      (for ([name '("edit" "write" "bash" "delete-lines" "skill-route" "firecrawl")])
         (check-true (set-member? needs name) (format "~a should be in needs-approval set" name))))
 
     ;; ── W1: make-strict-permission-config always denies dangerous tools ──

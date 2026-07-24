@@ -21,7 +21,7 @@
                   tool-prompt-guidelines
                   tool-timeout-seconds
                   tool-required-capability)
-         (only-in "../util/capability.rkt" valid-capability?))
+         (only-in "../util/capability.rkt" valid-capability? capability-authorized?))
 
 (provide (contract-out [make-tool-registry (-> tool-registry?)]
                        [tool-registry-tools (-> tool-registry? (listof tool?))]
@@ -151,12 +151,10 @@
 ;; ── Capability-based filtering ──
 
 ;; tools-for-capability : tool-registry? symbol? -> (listof tool?)
-;; Returns tools whose required-capability matches the given capability
-;; or is 'any (the permissive wildcard).
+;; Returns tools authorized by the given capability grant. A tool requiring
+;; 'any is visible only to the legacy 'any grant.
 (define (tools-for-capability reg cap)
   (unless (valid-capability? cap)
     (raise-argument-error 'tools-for-capability "valid capability symbol" cap))
-  (filter (lambda (t)
-            (define rc (tool-required-capability t))
-            (or (eq? rc 'any) (eq? rc cap)))
+  (filter (lambda (t) (capability-authorized? (tool-required-capability t) (list cap)))
           (list-active-tools reg)))

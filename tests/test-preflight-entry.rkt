@@ -73,8 +73,10 @@
   (register-tool! reg (make-shell-tool))
   (define tc (tool-call #f "bash" (hasheq)))
   (define result
-    (parameterize ([current-session-capabilities '(read-only)])
-      (run-preflight (list tc) reg identity-hook-dispatcher)))
+    (run-preflight (list tc)
+                   reg
+                   identity-hook-dispatcher
+                   (make-exec-context #:capabilities '(read-only))))
   (define entry (car result))
   (check-eq? (preflight-entry-status entry) 'blocked)
   (check-false (preflight-entry-tool entry))

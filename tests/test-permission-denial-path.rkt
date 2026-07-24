@@ -62,6 +62,11 @@
       (define result (run-single-tool "bash" (hash) cfg))
       (check-true (result-is-error? result)))
 
+    (test-case "skill-route is blocked when workflow-spawn approval is denied"
+      (define cfg (make-default-permission-config #:policy-mode 'strict #:callback (lambda (n a) #f)))
+      (define result (run-single-tool "skill-route" (hash) cfg))
+      (check-true (result-is-error? result)))
+
     (test-case "auto-approved tool bypasses deny-all callback"
       (define cfg (make-default-permission-config #:policy-mode 'strict #:callback (lambda (n a) #f)))
       (define result (run-single-tool "read" (hash) cfg))

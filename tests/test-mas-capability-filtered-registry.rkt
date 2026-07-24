@@ -85,7 +85,7 @@
       (check-equal? (length result) 1)
       (check-equal? (tool-name (car result)) "reader"))
 
-    (test-case "tools-for-capability: 'any tools pass through all filters"
+    (test-case "tools-for-capability: restricted grants exclude default-any tools"
       (define reg (make-tool-registry))
       (register-tool! reg
                       (make-tool "reader"
@@ -105,12 +105,25 @@
                                  (hasheq 'type "object")
                                  (lambda (args) "ok")
                                  #:required-capability 'any))
-      ;; 'any required-capability passes through read-only filter
       (define result (tools-for-capability reg 'read-only))
-      (check-equal? (length result) 2)
+      (check-equal? (length result) 1)
       (define names (map tool-name result))
       (check-not-false (member "reader" names))
-      (check-not-false (member "general" names)))
+      (check-false (member "general" names)))
+
+    (test-case "tools-for-capability: any grant includes concrete and default-any tools"
+      (define reg (make-tool-registry))
+      (register-tool! reg
+                      (make-tool "reader"
+                                 "read tool"
+                                 (hasheq 'type "object")
+                                 (lambda (args) "ok")
+                                 #:required-capability 'read-only))
+      (register-tool!
+       reg
+       (make-tool "general" "legacy tool" (hasheq 'type "object") (lambda (args) "ok")))
+      (check-equal? (sort (map tool-name (tools-for-capability reg 'any)) string<?)
+                    '("general" "reader")))
 
     (test-case "tools-for-capability: rejects invalid capability"
       (define reg (make-tool-registry))

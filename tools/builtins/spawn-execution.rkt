@@ -60,7 +60,7 @@
          (only-in "../../util/ids.rkt" generate-id)
          (only-in "../../util/json/json-helpers.rkt" ensure-hash-args)
          (only-in "../../util/error/error-sanitizer.rkt" sanitize-error-message)
-         (only-in "../../util/capability.rkt" valid-capability?)
+         (only-in "../../util/capability.rkt" valid-capability? capability-authorized?)
          (only-in "../../util/safe-mode/safe-mode-predicates.rkt" safe-mode? allowed-tool?)
          (only-in "../permission-gate.rkt" make-strict-permission-config)
          (only-in "../../runtime/auto-retry.rkt" with-auto-retry)
@@ -209,8 +209,9 @@
 ;; v0.99.21 §4.2: Capability-aware tool filtering for subagent children.
 ;; Returns child-safe tools filtered by the given capabilities list.
 ;; - When capabilities is #f or empty, returns ALL child-safe tools (backward compat).
-;; - When capabilities is a list of symbols, returns only tools whose
-;;   required-capability is 'any or is in the capabilities list.
+;; - When capabilities is a concrete list, returns only tools authorized by
+;;   that exact delegated authority. Default-'any tools require unrestricted
+;;   authority and are excluded from restricted children.
 (define (child-safe-tools-filtered capabilities)
   (define all-tools (child-safe-tools))
   (cond
@@ -219,9 +220,7 @@
     [(memq 'any capabilities)
      (error 'child-safe-tools-filtered "delegated any wildcard is not permitted")]
     [else
-     (filter (lambda (t)
-               (define rc (tool-required-capability t))
-               (or (eq? rc 'any) (memq rc capabilities)))
+     (filter (lambda (t) (capability-authorized? (tool-required-capability t) capabilities))
              all-tools)]))
 
 ;; ============================================================
@@ -421,6 +420,7 @@
        #:permission-config (if (and exec-ctx (exec-context-permission-config exec-ctx))
                                (exec-context-permission-config exec-ctx)
                                (make-strict-permission-config))
+       #:capabilities (or capabilities '(any))
        #:event-publisher (lambda (event-type payload)
                            (emit-session-event! bus session-id event-type payload))
        #:runtime-settings settings

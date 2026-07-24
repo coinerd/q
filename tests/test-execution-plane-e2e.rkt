@@ -58,8 +58,7 @@
 ;; the execution-plane worker routing, NOT permission enforcement, so
 ;; they must use a permissive config so dangerous tools reach the code
 ;; under test.
-(define permissive-ctx
-  (make-exec-context #:permission-config (make-permissive-permission-config)))
+(define permissive-ctx (make-exec-context #:permission-config (make-permissive-permission-config)))
 
 (define (make-dangerous-bash-tool)
   (make-tool "bash"
@@ -107,7 +106,8 @@
         (register-tool! reg (make-dangerous-bash-tool))
         (define result
           (run-tool-batch (list (make-tool-call-from-name "bash" (hasheq 'command "echo local")))
-                          reg #:exec-context permissive-ctx))
+                          reg
+                          #:exec-context permissive-ctx))
         (define results (scheduler-result-results result))
         (check-equal? (unbox call-counter) 1)
         (check-false (tool-result-is-error? (car results)))))
@@ -121,7 +121,8 @@
         (register-tool! reg (make-dangerous-bash-tool))
         (define result
           (run-tool-batch (list (make-tool-call-from-name "bash" (hasheq 'command "echo via-worker")))
-                          reg #:exec-context permissive-ctx))
+                          reg
+                          #:exec-context permissive-ctx))
         (define results (scheduler-result-results result))
         ;; Local execute NOT called when routed through worker
         (check-equal? (unbox call-counter) 0)
@@ -135,8 +136,10 @@
       (parameterize ([current-execution-plane-enabled #t])
         (define reg (make-tool-registry))
         (register-tool! reg (make-safe-tool))
-        (define result (run-tool-batch (list (make-tool-call-from-name "echo" (hasheq)))
-                                       reg #:exec-context permissive-ctx))
+        (define result
+          (run-tool-batch (list (make-tool-call-from-name "echo" (hasheq)))
+                          reg
+                          #:exec-context permissive-ctx))
         (define results (scheduler-result-results result))
         (check-false (tool-result-is-error? (car results)))
         (check-equal? (tool-result-content (car results)) "echoed")
@@ -153,7 +156,8 @@
         (define result
           (run-tool-batch (list (make-tool-call-from-name "echo" (hasheq))
                                 (make-tool-call-from-name "bash" (hasheq 'command "ls")))
-                          reg #:exec-context permissive-ctx))
+                          reg
+                          #:exec-context permissive-ctx))
         (define results (scheduler-result-results result))
         (check-equal? (length results) 2)
         ;; Both succeed
@@ -232,7 +236,8 @@
         (register-tool! reg (make-dangerous-bash-tool))
         (define result
           (run-tool-batch (list (make-tool-call-from-name "bash" (hasheq 'command "echo lazy-start")))
-                          reg #:exec-context permissive-ctx))
+                          reg
+                          #:exec-context permissive-ctx))
         ;; Worker should have been spawned by now
         (check-false (tool-result-is-error? (car (scheduler-result-results result))))
         (shutdown-worker!)))
@@ -244,14 +249,16 @@
         (register-tool! reg (make-dangerous-bash-tool))
         (run-tool-batch (list (make-tool-call-from-name "bash"
                                                         (hasheq 'command "echo before-shutdown")))
-                        reg #:exec-context permissive-ctx)
+                        reg
+                        #:exec-context permissive-ctx)
         ;; Now shut it down
         (shutdown-worker!)
         ;; Next request should auto-start a new worker
         (define result2
           (run-tool-batch (list (make-tool-call-from-name "bash"
                                                           (hasheq 'command "echo after-restart")))
-                          reg #:exec-context permissive-ctx))
+                          reg
+                          #:exec-context permissive-ctx))
         (check-false (tool-result-is-error? (car (scheduler-result-results result2))))
         (shutdown-worker!)))
 
@@ -265,7 +272,8 @@
           (define result
             (run-tool-batch
              (list (make-tool-call-from-name "bash" (hasheq 'command (format "echo req-~a" i))))
-             reg #:exec-context permissive-ctx))
+             reg
+             #:exec-context permissive-ctx))
           (check-false (tool-result-is-error? (car (scheduler-result-results result)))))
         (shutdown-worker!)))
 
@@ -275,8 +283,10 @@
       (parameterize ([current-execution-plane-enabled #t])
         (define reg (make-tool-registry))
         (register-tool! reg (make-dangerous-bash-tool))
-        (define result (run-tool-batch (list (make-tool-call-from-name "nonexistent" (hasheq)))
-                                       reg #:exec-context permissive-ctx))
+        (define result
+          (run-tool-batch (list (make-tool-call-from-name "nonexistent" (hasheq)))
+                          reg
+                          #:exec-context permissive-ctx))
         (define results (scheduler-result-results result))
         (check-true (tool-result-is-error? (car results)))
         (shutdown-worker!)))
@@ -315,7 +325,8 @@
         (register-tool! reg (make-dangerous-bash-tool))
         ;; Start worker with a normal request
         (run-tool-batch (list (make-tool-call-from-name "bash" (hasheq 'command "echo start")))
-                        reg #:exec-context permissive-ctx)
+                        reg
+                        #:exec-context permissive-ctx)
         ;; Now kill the worker
         (define gw (ensure-worker!))
         (subprocess-kill (gateway-worker-process gw) #t)
@@ -324,7 +335,8 @@
         (define result
           (run-tool-batch (list (make-tool-call-from-name "bash"
                                                           (hasheq 'command "echo after-crash")))
-                          reg #:exec-context permissive-ctx))
+                          reg
+                          #:exec-context permissive-ctx))
         (define results (scheduler-result-results result))
         ;; Should still work (auto-restart)
         (check-false (tool-result-is-error? (car results)))

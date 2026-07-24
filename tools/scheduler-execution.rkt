@@ -20,15 +20,16 @@
                   tool-call-id
                   tool-call-name
                   tool-call-arguments
-                  make-tool-call
                   make-error-result
                   make-success-result
+                  validate-tool-args
                   validate-tool-result
                   exec-context?
                   exec-context-working-directory
                   exec-context-cancellation-token
                   exec-context-event-publisher
                   exec-context-permission-config
+                  exec-context-capabilities
                   tool-execute)
          (only-in "tool-struct.rkt"
                   tool-execute
@@ -46,9 +47,16 @@
                   ipc-response-details
                   ipc-response-error-message)
          (only-in "file-mutation-queue.rkt" with-file-mutation-queue)
-         (only-in "permission-gate.rkt" permission-config? tool-needs-approval? request-approval)
+         (only-in "permission-gate.rkt"
+                  permission-config?
+                  tool-needs-approval?
+                  request-approval
+                  tool-approval-commitment-digest)
+         (only-in "tool-classification.rkt" tool-name-tool-owned-approval?)
+         (only-in "../runtime/approval/broker.rkt" approval-grant? call-with-approval-grant)
          (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload)
          (only-in "../util/cancellation.rkt" cancellation-token-cancelled?)
+         (only-in "../util/capability.rkt" capability-authorized?)
          (only-in "scheduler-preflight.rkt"
                   preflight-entry
                   preflight-entry?
@@ -83,6 +91,36 @@
 ;; v0.21.5 (F6): Maximum parallel tool execution threads.
 ;; Default 8 — prevents unbounded thread spawning.
 (define max-parallel-tools (make-parameter 8))
+
+;; Deep-copy invocation data into immutable containers. Approval callbacks and
+;; execution handlers share this exact snapshot, preventing post-approval
+;; mutation through hook-owned nested values.
+(define (immutable-invocation-copy value)
+  (cond
+    [(hash? value)
+     (define copied-pairs
+       (for/list ([(key item) (in-hash value)])
+         (cons (immutable-invocation-copy key) (immutable-invocation-copy item))))
+     (cond
+       [(hash-eq? value)
+        (for/hasheq ([item (in-list copied-pairs)])
+          (values (car item) (cdr item)))]
+       [(hash-eqv? value)
+        (for/hasheqv ([item (in-list copied-pairs)])
+          (values (car item) (cdr item)))]
+       [else
+        (for/hash ([item (in-list copied-pairs)])
+          (values (car item) (cdr item)))])]
+    [(list? value) (map immutable-invocation-copy value)]
+    [(pair? value)
+     (cons (immutable-invocation-copy (car value)) (immutable-invocation-copy (cdr value)))]
+    [(vector? value)
+     (vector->immutable-vector (for/vector ([item (in-vector value)])
+                                 (immutable-invocation-copy item)))]
+    [(string? value) (string->immutable-string (string-copy value))]
+    [(bytes? value) (bytes->immutable-bytes (bytes-copy value))]
+    [(box? value) (box-immutable (immutable-invocation-copy (unbox value)))]
+    [else value]))
 
 ;; ============================================================
 ;; Execution-plane bridge: route dangerous tools through worker
@@ -140,90 +178,133 @@
         #f))
 
   (cond
+    ;; Defense in depth: plans may be retained or constructed independently,
+    ;; so execution rechecks the authority snapshot supplied for this run.
+    [(not (capability-authorized? (tool-required-capability t) (exec-context-capabilities exec-ctx)))
+     (make-error-result (format "tool '~a' blocked — required capability '~a' is not authorized"
+                                tc-name
+                                (tool-required-capability t)))]
     [(and (hook-result? pre-hook-result) (eq? (hook-result-action pre-hook-result) 'block))
      ;; Return early with blocked result
      (make-error-result (format "tool '~a' blocked by tool-call-pre hook" tc-name))]
     [else
-     ;; Determine which tool call to execute (possibly amended args)
-     ;; Validate that hook-amended args is a hash before use
-     (define tc-to-execute
-       (if (and (hook-result? pre-hook-result)
-                (eq? (hook-result-action pre-hook-result) 'amend)
-                (hash? (hook-result-payload pre-hook-result))
-                (hash-has-key? (hook-result-payload pre-hook-result) 'args))
-           (let ([amended-args (hash-ref (hook-result-payload pre-hook-result) 'args)])
-             (if (hash? amended-args)
-                 (make-tool-call tc-id tc-name amended-args)
-                 tc))
-           tc))
+     ;; A declared amendment must contain hash arguments. Malformed amendments
+     ;; fail closed rather than silently executing the original invocation.
+     (define amendment?
+       (and (hook-result? pre-hook-result) (eq? (hook-result-action pre-hook-result) 'amend)))
+     (define amendment-payload (and amendment? (hook-result-payload pre-hook-result)))
+     (define amended-args
+       (and (hash? amendment-payload)
+            (hash-has-key? amendment-payload 'args)
+            (hash-ref amendment-payload 'args)))
+     (define raw-args
+       (cond
+         [(not amendment?) tc-args]
+         [(hash? amended-args) amended-args]
+         [else #f]))
 
-     ;; G3.4: Permission gate — check if tool needs approval.
-     ;; v0.99.66 (W1, finding #1 CRITICAL): fail-closed.  If perm-cfg
-     ;; is missing or not a permission-config, execution is refused
-     ;; outright — the gate never silently allows.  This is the
-     ;; defense-in-depth backstop that does not rely on the exec-context
-     ;; constructor contract alone.
-     (define perm-cfg (exec-context-permission-config exec-ctx))
      (cond
-       [(not (permission-config? perm-cfg))
-        (make-error-result (format "tool '~a' blocked — permission gate misconfigured (no config)"
-                                   tc-name))]
-       [(and (tool-needs-approval? perm-cfg tc-name)
-             (not (request-approval perm-cfg tc-name (tool-call-arguments tc-to-execute))))
-        (make-error-result (format "tool '~a' blocked — approval denied" tc-name))]
+       [(not raw-args)
+        (make-error-result (format "tool '~a' blocked — invalid tool-call-pre amendment" tc-name))]
        [else
-        ;; R-03/R-22: Use tool-dangerous? metadata instead of hardcoded list
-        (define raw-args (tool-call-arguments tc-to-execute))
-        ;; v0.70.7: Inject per-tool timeout into args if the tool defines one
-        (define args
-          (let* ([with-timeout (if (and (tool-timeout-seconds t)
-                                        (not (hash-has-key? raw-args 'timeout)))
-                                   (hash-set raw-args 'timeout (tool-timeout-seconds t))
-                                   raw-args)]
-                 ;; W3: Inject working-directory from exec-ctx for worker path
-                 ;; so relative edit paths resolve correctly.
-                 [wd (and exec-ctx (exec-context-working-directory exec-ctx))])
-            (if wd
-                (hash-set with-timeout 'working-directory (path->string wd))
-                with-timeout)))
-        (define exec-result
-          (cond
-            [(and (current-execution-plane-enabled) (tool-dangerous? t) (tool-externalizable? t))
-             ;; H4: Route through gateway-bridge facade (consolidated IPC logic)
-             (define resp (execute-tool-via-worker tc-name args (tool-required-capability t)))
-             (ipc-response->tool-result resp)]
-            [else
-             ;; Existing in-process execution (unchanged)
-             (with-handlers ([exn:fail? (lambda (e)
-                                          (make-error-result
-                                           (format "tool '~a' raised: ~a" tc-name (exn-message e))))])
-               (define path-arg (and (tool-dangerous? t) (hash? args) (hash-ref args 'path #f)))
-               (with-file-mutation-queue path-arg (lambda () ((tool-execute t) args exec-ctx))))]))
+        ;; Construct the complete invocation before approval: hook amendments,
+        ;; scheduler timeout, and scheduler CWD are committed together.
+        (define final-args
+          (immutable-invocation-copy
+           (let* ([args-copy (immutable-invocation-copy raw-args)]
+                  [with-timeout (if (and (tool-timeout-seconds t)
+                                         (not (hash-has-key? args-copy 'timeout)))
+                                    (hash-set args-copy 'timeout (tool-timeout-seconds t))
+                                    args-copy)]
+                  ;; Inject working-directory for both worker and in-process paths
+                  ;; so approval describes the exact execution invocation.
+                  [wd (and exec-ctx (exec-context-working-directory exec-ctx))]
+                  [wd-string (and wd
+                                  (if (path? wd)
+                                      (path->string wd)
+                                      wd))])
+             (if wd-string
+                 (hash-set with-timeout 'working-directory wd-string)
+                 with-timeout))))
 
-        ;; Dispatch 'tool-result-post hook
-        (define post-payload (tool-post-hook-payload tc-name exec-result tc-id args))
+        ;; Validate the final post-hook, post-injection invocation. Invalid
+        ;; amendments never reach either approval or execution.
+        (define validation-error
+          (with-handlers ([exn:fail? (lambda (e) e)])
+            (validate-tool-args t final-args)
+            #f))
+        (cond
+          [validation-error (make-error-result (exn-message validation-error))]
+          [else
+           ;; G3.4: Permission gate — check if tool needs approval.
+           ;; v0.99.66 (W1, finding #1 CRITICAL): fail-closed. If perm-cfg
+           ;; is missing or not a permission-config, execution is refused.
+           (define perm-cfg (exec-context-permission-config exec-ctx))
+           (define (execute-committed-invocation)
+             ;; R-03/R-22: Use tool-dangerous? metadata instead of hardcoded list.
+             ;; final-args is the exact immutable object approved above.
+             (define exec-result
+               (cond
+                 [(and (current-execution-plane-enabled) (tool-dangerous? t) (tool-externalizable? t))
+                  ;; H4: Route through gateway-bridge facade (consolidated IPC logic)
+                  (define resp
+                    (execute-tool-via-worker tc-name final-args (tool-required-capability t)))
+                  (ipc-response->tool-result resp)]
+                 [else
+                  ;; Existing in-process execution (unchanged)
+                  (with-handlers ([exn:fail? (lambda (e)
+                                               (make-error-result (format "tool '~a' raised: ~a"
+                                                                          tc-name
+                                                                          (exn-message e))))])
+                    (define path-arg (and (tool-dangerous? t) (hash-ref final-args 'path #f)))
+                    (with-file-mutation-queue path-arg
+                                              (lambda () ((tool-execute t) final-args exec-ctx))))]))
 
-        (define post-hook-result
-          (if hook-dispatcher
-              (with-handlers ([exn:fail? (lambda (e)
-                                           (log-warning "tool-result-post hook threw: ~a"
-                                                        (exn-message e))
-                                           #f)])
-                (hook-dispatcher 'tool-result-post post-payload))
-              #f))
+             ;; Dispatch 'tool-result-post hook with the committed invocation.
+             (define post-payload (tool-post-hook-payload tc-name exec-result tc-id final-args))
+             (define post-hook-result
+               (if hook-dispatcher
+                   (with-handlers ([exn:fail? (lambda (e)
+                                                (log-warning "tool-result-post hook threw: ~a"
+                                                             (exn-message e))
+                                                #f)])
+                     (hook-dispatcher 'tool-result-post post-payload))
+                   #f))
+             (match post-hook-result
+               [(? hook-result? (app hook-result-action 'block))
+                (make-error-result (format "tool '~a' result blocked by tool-result-post hook"
+                                           tc-name))]
+               [(? hook-result? (app hook-result-action 'amend) (app hook-result-payload (? hash?)))
+                (define payload (hook-result-payload post-hook-result))
+                (if (hash-has-key? payload 'result)
+                    (let ([amended-result (hash-ref payload 'result)])
+                      (if (validate-tool-result amended-result) amended-result exec-result))
+                    exec-result)]
+               [_ exec-result]))
 
-        (match post-hook-result
-          [(? hook-result? (app hook-result-action 'block))
-           ;; Treat block as error
-           (make-error-result (format "tool '~a' result blocked by tool-result-post hook" tc-name))]
-          [(? hook-result? (app hook-result-action 'amend) (app hook-result-payload (? hash?)))
-           (define payload (hook-result-payload post-hook-result))
-           (if (hash-has-key? payload 'result)
-               (let ([amended-result (hash-ref payload 'result)])
-                 (if (validate-tool-result amended-result) amended-result exec-result))
-               exec-result)]
-          ;; Return original result
-          [_ exec-result])])]))
+           (cond
+             [(not (permission-config? perm-cfg))
+              (make-error-result
+               (format "tool '~a' blocked — permission gate misconfigured (no config)" tc-name))]
+             ;; Tool-owned approval (spawn) executes without the generic
+             ;; callback; the handler's internal broker gate remains authoritative.
+             [(tool-name-tool-owned-approval? tc-name) (execute-committed-invocation)]
+             [(not (tool-needs-approval? perm-cfg tc-name)) (execute-committed-invocation)]
+             [else
+              (define commitment-digest (tool-approval-commitment-digest tc-name final-args))
+              (define approval
+                (with-handlers ([exn:fail? (lambda (_) #f)])
+                  (request-approval perm-cfg tc-name final-args ev-pub)))
+              (cond
+                [(eq? approval #t) (execute-committed-invocation)]
+                [(approval-grant? approval)
+                 ;; Consume the one-use grant immediately around execution of
+                 ;; the same final-args object committed by the callback.
+                 (or
+                  (call-with-approval-grant approval commitment-digest execute-committed-invocation)
+                  (make-error-result (format "tool '~a' blocked — approval grant invalid" tc-name)))]
+                [else
+                 (make-error-result (format "tool '~a' blocked — approval denied" tc-name))])])])])]))
 
 ;; ============================================================
 ;; Execution stage

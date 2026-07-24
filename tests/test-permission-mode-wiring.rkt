@@ -19,8 +19,15 @@
          (only-in "../runtime/tool-coordinator.rkt" permission-config-for-execution)
          (only-in "../tools/permission-gate.rkt"
                   make-strict-permission-config
+                  make-interactive-permission-config
                   permission-config-approval-callback
-                  permission-config-policy-mode)
+                  permission-config-policy-mode
+                  request-approval)
+         (only-in "../runtime/approval/broker.rkt"
+                  make-approval-channel
+                  set-approval-channel!
+                  clear-approval-channel!
+                  approval-decide!)
          (only-in "../tools/registry.rkt" make-tool-registry register-tool!)
          (only-in "../tools/tool.rkt" make-success-result make-tool)
          (only-in "../wiring/mode-helpers.rkt" resolve-permission-config)
@@ -50,7 +57,7 @@
   (check-equal? (setting-permission-mode (settings-with-permission-mode "invalid")) 'strict)
   (check-equal? (setting-permission-mode (settings-with-permission-mode #t)) 'strict))
 
-(test-case "permission precedence is explicit per-call over CLI over settings over strict"
+(test-case "permission precedence is explicit over CLI over settings over TUI over strict"
   (define strict-settings (settings-with-permission-mode "strict"))
   (define permissive-settings (settings-with-permission-mode "permissive"))
   (define explicit (make-strict-permission-config))
@@ -62,6 +69,24 @@
                 'permissive)
   (check-equal? (permission-config-policy-mode (resolve-permission-config permissive-settings))
                 'permissive)
+  (define tui-config (resolve-permission-config strict-settings #:tui? #t))
+  (check-equal? (permission-config-policy-mode tui-config) 'strict)
+  (define approved? (box #f))
+  (dynamic-wind (lambda () (set-approval-channel! (make-approval-channel #:timeout-ms 100)))
+                (lambda ()
+                  (define grant
+                    (request-approval tui-config
+                                      "bash"
+                                      (hasheq 'command "echo tui")
+                                      (lambda (type payload)
+                                        (when (string=? type "tool.approval-requested")
+                                          (set-box! approved? #t)
+                                          (approval-decide! (hash-ref payload 'request-id)
+                                                            (hash-ref payload 'commitment-digest)
+                                                            #t)))))
+                  (check-true (unbox approved?))
+                  (check-not-false grant))
+                clear-approval-channel!)
   (check-equal?
    (permission-config-policy-mode (resolve-permission-config (q-settings (hash) (hash) (hash))))
    'strict))
@@ -138,5 +163,36 @@
                                    (make-strict-permission-config))))
      (define-values (cli-reloaded __) (reload-config! cli-base))
      (check-equal? (permission-config-policy-mode (config-permission-config cli-reloaded))
-                   'permissive))
+                   'permissive)
+
+     ;; A TUI marker survives reload and reselects interactive strict approval.
+     (define tui-base
+       (hash->session-config (hash 'project-dir
+                                   dir
+                                   'home-dir
+                                   dir
+                                   'config-path
+                                   config-path
+                                   'context-assembly-profile
+                                   'off
+                                   'tui-interactive-approval?
+                                   #t
+                                   'permission-config
+                                   (make-interactive-permission-config))))
+     (define-values (tui-reloaded ___) (reload-config! tui-base))
+     (define requested? (box #f))
+     (dynamic-wind
+      (lambda () (set-approval-channel! (make-approval-channel #:timeout-ms 100)))
+      (lambda ()
+        (check-not-false (request-approval (config-permission-config tui-reloaded)
+                                           "bash"
+                                           (hasheq 'command "echo reloaded")
+                                           (lambda (type payload)
+                                             (when (string=? type "tool.approval-requested")
+                                               (set-box! requested? #t)
+                                               (approval-decide! (hash-ref payload 'request-id)
+                                                                 (hash-ref payload 'commitment-digest)
+                                                                 #t)))))
+        (check-true (unbox requested?)))
+      clear-approval-channel!))
    (lambda () (delete-directory/files dir #:must-exist? #f))))

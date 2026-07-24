@@ -214,9 +214,11 @@
   (define project-dir (or (hash-ref base-config 'project-dir #f) (current-directory)))
   (define config-path (hash-ref base-config 'config-path #f))
   (define settings (load-settings project-dir #:config-path config-path))
+  (define tui-interactive-approval? (eq? (cli-config-mode cfg) 'tui))
   (define permission-config
     (resolve-permission-config settings
-                               #:cli-auto-approve? (hash-ref base-config 'cli-auto-approve? #f)))
+                               #:cli-auto-approve? (hash-ref base-config 'cli-auto-approve? #f)
+                               #:tui? tui-interactive-approval?))
 
   ;; Load resources (system instructions, skills, templates)
   (define global-resources (load-global-resources))
@@ -429,6 +431,10 @@
                settings
                'permission-config
                permission-config
+               ;; Persist interface authority so reload reselects interactive
+               ;; strict approval without treating non-TUI modes as interactive.
+               'tui-interactive-approval?
+               tui-interactive-approval?
                'max-iterations
                max-iter
                'model-name
@@ -635,7 +641,8 @@
   ;; positive CLI override marker. Missing/invalid settings remain strict.
   (define new-permission-config
     (resolve-permission-config new-settings
-                               #:cli-auto-approve? (dict-ref base-config 'cli-auto-approve? #f)))
+                               #:cli-auto-approve? (dict-ref base-config 'cli-auto-approve? #f)
+                               #:tui? (dict-ref base-config 'tui-interactive-approval? #f)))
   ;; Return updated config + registry
   (values (hash->session-config (hash-set* (session-config->hash base-config)
                                            'settings

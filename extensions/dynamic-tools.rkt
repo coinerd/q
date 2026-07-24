@@ -3,7 +3,6 @@
 ;; JSON Schema predicate (same as hash? for now, defined locally)
 (define json-schema? hash?)
 
-
 ;; extensions/dynamic-tools.rkt — dynamic tool registration from extensions
 ;;
 ;; FEAT-62: Provides the extension-facing API for dynamically registering
@@ -25,7 +24,7 @@
                                              string? ; description
                                              json-schema? ; schema (JSON Schema)
                                              procedure?) ; handler (hash? -> tool-result?)
-                             (#:prompt-guidelines (or/c string? #f))
+                             (#:prompt-guidelines (or/c string? #f) #:required-capability symbol?)
                              void?)]
                        [ext-unregister-tool! (-> extension-ctx? string? void?)]
                        [ext-list-dynamic-tools (-> extension-ctx? (listof string?))]
@@ -47,7 +46,8 @@
                             description
                             schema
                             handler
-                            #:prompt-guidelines [prompt-guidelines #f])
+                            #:prompt-guidelines [prompt-guidelines #f]
+                            #:required-capability [required-capability 'any])
   (define reg (ctx-tool-registry ctx))
   (unless reg
     (error
@@ -57,7 +57,13 @@
   ;; Wrap handler to always accept (args exec-ctx) — defense against arity mismatch
   ;; when the scheduler calls ((tool-execute t) args exec-ctx).
   (define wrapped-handler (lambda (args exec-ctx) (handler args)))
-  (define t (make-tool name description schema wrapped-handler #:prompt-guidelines prompt-guidelines))
+  (define t
+    (make-tool name
+               description
+               schema
+               wrapped-handler
+               #:prompt-guidelines prompt-guidelines
+               #:required-capability required-capability))
   (register-tool! reg t))
 
 ;; ============================================================
@@ -68,7 +74,9 @@
 (define (ext-unregister-tool! ctx name)
   (define reg (ctx-tool-registry ctx))
   (unless reg
-    (raise-extension-error "no tool-registry available in extension context" 'dynamic-tools 'unregister))
+    (raise-extension-error "no tool-registry available in extension context"
+                           'dynamic-tools
+                           'unregister))
   (unregister-tool! reg name))
 
 ;; ============================================================
@@ -90,5 +98,7 @@
 (define (ext-set-active-tools! ctx active-names)
   (define reg (ctx-tool-registry ctx))
   (unless reg
-    (raise-extension-error "no tool-registry available in extension context" 'dynamic-tools 'set-active))
+    (raise-extension-error "no tool-registry available in extension context"
+                           'dynamic-tools
+                           'set-active))
   (set-active-tools! reg active-names))
