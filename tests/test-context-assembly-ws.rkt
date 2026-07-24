@@ -41,11 +41,12 @@
                            (lambda (m) 20))
       (define msgs
         (list (make-test-msg "sys" 'system 'system-instruction "System prompt")
-              (make-test-msg "u1" 'user 'message "Hello")
-              tool-msg))
+              (make-test-msg "u1" 'user 'message "Hello")))
       (define tc (build-tiered-context msgs #:working-set-messages (list tool-msg)))
       (define assembled (tiered-context->message-list tc))
-      (check-not-false (member tool-msg assembled))
+      ;; A tool result absent from source history has no assistant tool-call pair;
+      ;; retain its Tier-A classification but never emit an invalid standalone result.
+      (check-false (member tool-msg assembled))
       (check-not-false (member tool-msg (tiered-context-tier-a tc))))
 
     (test-case "T02: working set messages survive pair-preserving truncation"

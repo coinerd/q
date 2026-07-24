@@ -297,7 +297,6 @@
   (define tier-a-len (length (tiered-context-tier-a tc-struct)))
   (define tier-b-len (length (tiered-context-tier-b tc-struct)))
   (define tier-c-len (length (tiered-context-tier-c tc-struct)))
-  (define assembled-total (+ tier-a-len tier-b-len tier-c-len))
   (define assembled-ids
     (for/set ([m (in-list ctx-assembled)])
       (message-id m)))
@@ -320,7 +319,11 @@
                       #:tier-a-count tier-a-len
                       #:tier-b-count tier-b-len
                       #:tier-c-count tier-c-len
-                      #:excluded-count (- (length ctx-to-use) assembled-total)
+                      ;; Tier A can intentionally overlap retention tiers (for
+                      ;; example, a working-set result already in history).
+                      ;; Exclusions are raw source records not present in the
+                      ;; provider-ordered output, never a subtraction of tier sizes.
+                      #:excluded-count (length excluded-id-list)
                       #:excluded-ids excluded-ids-str
                       #:summary-length summary-len
                       #:gsd-pinned-count gsd-pinned
