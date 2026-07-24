@@ -19,6 +19,44 @@ condition with better error messages, and SSE-level reconnection diagnostics
 - **W2 (deferred to v0.99.66):** Full SSE-level reconnection with `last-event-id`
   deferred. Practical retry diagnostics already in place.
 
+### Bug Fixes
+
+- **SSE stream timeout (W0):** GLM-5.2 reasoning_content chunks no longer trigger
+  premature stream timeout. Added thinking-aware timeout tracking with long
+  `#:thinking-timeout` during reasoning-only phase and tight 60s
+  `#:stream-timeout` after first content chunk.
+- **Concurrent prompt error (W1):** Error message now includes session ID and
+  actionable `/interrupt` guidance instead of the unhelpful "ignoring concurrent
+  submission" message.
+
+### Features
+
+- **SSE-level reconnection diagnostics:** Auto-retry infrastructure includes
+  retry-stats, retry-exhausted error, and on-retry callback for event bus
+  logging. Full SSE reconnection (`last-event-id`) deferred to v0.99.66.
+
+### Breaking / Behavior Changes
+
+- **Stream timeout default:** Changed from inflated formula
+  `(max 180 (quotient stream-timeout 2))` to standard `http-stream-timeout-default`
+  (60s). Initial-timeout still uses full `stream-timeout` param (default 300s)
+  to cover reasoning phase.
+
+### Migration Notes
+
+- None required. All changes are backward-compatible.
+
+### Testing
+
+- New tests in `tests/test-stream.rkt`: thinking-chunk timeout detection,
+  content-phase tight timeout, reasoning_content field parsing.
+- New tests in `tests/test-agent-session.rkt`: concurrent prompt claim
+  failure, error message pattern with session ID.
+
+### Operational / Release
+
+- No configuration changes required.
+
 ### Commits
 
 - `ca8b3a63` fix(w0): Fix SSE stream timeout for thinking-heavy reasoning models
