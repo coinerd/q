@@ -22,7 +22,9 @@
   (check-true (string-contains? bridge "util/message/provider-transport.rkt"))
   (check-true (string-contains? loop "util/message/provider-transport.rkt"))
   (check-true (string-contains? loop "serialize-provider-messages"))
-  (check-true (string-contains? spawn "util/message/provider-transport.rkt"))
+  ;; v0.99.65: spawn-subagent no longer directly imports provider-transport.
+  ;; Provider transport ownership moved to the message layer.
+  (check-false (string-contains? spawn "util/message/provider-transport.rkt"))
   (check-false (string-contains? spawn "../../agent/")))
 
 (test-case "compatibility bridge contains no provider wire constructors"
