@@ -48,6 +48,11 @@
   (display-to-file content f #:exists 'replace)
   f)
 
+(define (safe-old-text len)
+  (apply string-append
+         (for/list ([i (in-range len)])
+           (string (integer->char (+ 65 (modulo i 26)))))))
+
 (define (cleanup-path p)
   (when (file-exists? p)
     (delete-file p))
@@ -66,18 +71,17 @@
     (cleanup-path f)))
 
 (test-case "edit accepts old-text ≤ 500 at default limit"
-  (define f (make-temp-file (string-append "prefix" (make-string 500 #\x) "suffix")))
+  (define old (safe-old-text 500))
+  (define f (make-temp-file (string-append "prefix" old "suffix")))
   (with-handlers ([exn:fail? (lambda (e)
                                (cleanup-path f)
                                (raise e))])
-    (define result
-      (tool-edit
-       (hasheq 'path (path->string f) 'old-text (make-string 500 #\x) 'new-text "REPLACED")))
+    (define result (tool-edit (hasheq 'path (path->string f) 'old-text old 'new-text "REPLACED")))
     (check-false (tool-result-is-error? result))
     (cleanup-path f)))
 
 (test-case "edit accepts old-text up to 1200 at raised limit"
-  (define long-text (make-string 1000 #\x))
+  (define long-text (safe-old-text 1000))
   (define f (make-temp-file (string-append "prefix" long-text "suffix")))
   (with-handlers ([exn:fail? (lambda (e)
                                (cleanup-path f)
@@ -91,14 +95,14 @@
     (cleanup-path f)))
 
 (test-case "edit rejects old-text > 1200 at raised limit"
-  (define f (make-temp-file (make-string 1300 #\x)))
+  (define f (make-temp-file (safe-old-text 1300)))
   (with-handlers ([exn:fail? (lambda (e)
                                (cleanup-path f)
                                (raise e))])
     (define saved (current-max-old-text-len))
     (set-current-max-old-text-len! 1200)
     (define result
-      (tool-edit (hasheq 'path (path->string f) 'old-text (make-string 1201 #\x) 'new-text "new")))
+      (tool-edit (hasheq 'path (path->string f) 'old-text (safe-old-text 1201) 'new-text "new")))
     (check-true (tool-result-is-error? result))
     (set-current-max-old-text-len! saved)
     (cleanup-path f)))

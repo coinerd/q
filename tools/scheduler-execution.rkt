@@ -25,6 +25,7 @@
                   make-success-result
                   validate-tool-result
                   exec-context?
+                  exec-context-working-directory
                   exec-context-cancellation-token
                   exec-context-event-publisher
                   exec-context-permission-config
@@ -156,21 +157,35 @@
                  tc))
            tc))
 
-     ;; G3.4: Permission gate -- check if tool needs approval
+     ;; G3.4: Permission gate — check if tool needs approval.
+     ;; v0.99.66 (W1, finding #1 CRITICAL): fail-closed.  If perm-cfg
+     ;; is missing or not a permission-config, execution is refused
+     ;; outright — the gate never silently allows.  This is the
+     ;; defense-in-depth backstop that does not rely on the exec-context
+     ;; constructor contract alone.
      (define perm-cfg (exec-context-permission-config exec-ctx))
      (cond
-       [(and (permission-config? perm-cfg)
-             (tool-needs-approval? perm-cfg tc-name)
+       [(not (permission-config? perm-cfg))
+        (make-error-result (format "tool '~a' blocked — permission gate misconfigured (no config)"
+                                   tc-name))]
+       [(and (tool-needs-approval? perm-cfg tc-name)
              (not (request-approval perm-cfg tc-name (tool-call-arguments tc-to-execute))))
-        (make-error-result (format "tool '~a' blocked -- approval denied" tc-name))]
+        (make-error-result (format "tool '~a' blocked — approval denied" tc-name))]
        [else
         ;; R-03/R-22: Use tool-dangerous? metadata instead of hardcoded list
         (define raw-args (tool-call-arguments tc-to-execute))
         ;; v0.70.7: Inject per-tool timeout into args if the tool defines one
         (define args
-          (if (and (tool-timeout-seconds t) (not (hash-has-key? raw-args 'timeout)))
-              (hash-set raw-args 'timeout (tool-timeout-seconds t))
-              raw-args))
+          (let* ([with-timeout (if (and (tool-timeout-seconds t)
+                                        (not (hash-has-key? raw-args 'timeout)))
+                                   (hash-set raw-args 'timeout (tool-timeout-seconds t))
+                                   raw-args)]
+                 ;; W3: Inject working-directory from exec-ctx for worker path
+                 ;; so relative edit paths resolve correctly.
+                 [wd (and exec-ctx (exec-context-working-directory exec-ctx))])
+            (if wd
+                (hash-set with-timeout 'working-directory (path->string wd))
+                with-timeout)))
         (define exec-result
           (cond
             [(and (current-execution-plane-enabled) (tool-dangerous? t) (tool-externalizable? t))

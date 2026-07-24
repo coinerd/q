@@ -29,6 +29,7 @@
                   config-model-name
                   config-session-index
                   config-parallel-tools
+                  config-permission-config
                   config-project-dir)
          (only-in "../util/tool/tool-types.rkt" tool-call?)
          (only-in "layer-adapters.rkt" tool-result? tool-registry?)
@@ -99,7 +100,8 @@
                              (listof message?))]))
 ;; Pure helpers (W2 #4192)
 (provide classify-tool-results
-         build-blocked-tool-results)
+         build-blocked-tool-results
+         permission-config-for-execution)
 
 ;; v0.31.5 W1: export struct
 (provide tool-call-actions
@@ -132,6 +134,12 @@
   (if (q-settings? settings)
       (q-settings (q-settings-global settings) (q-settings-project settings) with-model)
       with-model))
+
+;; Select the permission config used by normal agent tool execution.
+;; A valid explicit per-call config takes precedence over the session-resolved
+;; config; the final fallback remains deny-by-default.
+(define (permission-config-for-execution config explicit)
+  (or explicit (config-permission-config config) (make-default-permission-config)))
 
 ;; ============================================================
 ;; Helpers (QUAL-01: emit-session-event! and maybe-dispatch-hooks
@@ -269,7 +277,7 @@
                           #:call-id (generate-id)
                           #:session-metadata
                           (hasheq 'session-id session-id 'session-index (config-session-index config))
-                          #:permission-config (or perm-cfg (make-default-permission-config)))
+                          #:permission-config (permission-config-for-execution config perm-cfg))
                          #:parallel? (config-parallel-tools config)))]))
   ;; Dispatch 'tool.execution.completed hook after tool batch
   (when (and ext-reg (not (null? tool-calls-to-run)))

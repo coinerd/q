@@ -62,6 +62,7 @@
          (only-in "../../util/error/error-sanitizer.rkt" sanitize-error-message)
          (only-in "../../util/capability.rkt" valid-capability?)
          (only-in "../../util/safe-mode/safe-mode-predicates.rkt" safe-mode? allowed-tool?)
+         (only-in "../permission-gate.rkt" make-strict-permission-config)
          (only-in "../../runtime/auto-retry.rkt" with-auto-retry)
          (only-in "../../runtime/runtime-helpers.rkt" emit-session-event! make-event-bus)
          (only-in "../../util/cancellation.rkt" cancellation-token-cancelled?)
@@ -97,96 +98,104 @@
 ;; Each tool is annotated with required-capability for MAS filtering.
 ;; Schemas match those in registry-defaults.rkt.
 (define (child-safe-tools)
-  (list (make-tool "read"
-                   "Read file contents"
-                   (hasheq 'type
-                           "object"
-                           'required
-                           '("path")
-                           'properties
-                           (hasheq 'path
-                                   (hasheq 'type "string" 'description "Path to file")
-                                   'offset
-                                   (hasheq 'type "integer" 'description "Line offset")
-                                   'limit
-                                   (hasheq 'type "integer" 'description "Max lines")))
-                   tool-read
-                   #:required-capability 'read-only)
-        (make-tool "write"
-                   "Write content to a file"
-                   (hasheq 'type
-                           "object"
-                           'required
-                           '("path" "content")
-                           'properties
-                           (hasheq 'path
-                                   (hasheq 'type "string" 'description "Path to file")
-                                   'content
-                                   (hasheq 'type "string" 'description "Content to write")))
-                   tool-write
-                   #:required-capability 'file-write)
-        (make-tool "edit"
-                   "Edit a file with exact text replacement"
-                   (hasheq 'type
-                           "object"
-                           'required
-                           '("path" "edits")
-                           'properties
-                           (hasheq 'path
-                                   (hasheq 'type "string" 'description "Path to file")
-                                   'edits
-                                   (hasheq 'type "array" 'description "Edit operations")))
-                   tool-edit
-                   #:required-capability 'file-write)
-        (make-tool "bash"
-                   "Execute a bash command"
-                   (hasheq 'type
-                           "object"
-                           'required
-                           '("command")
-                           'properties
-                           (hasheq 'command
-                                   (hasheq 'type "string" 'description "Bash command")
-                                   'timeout
-                                   (hasheq 'type "integer" 'description "Timeout in seconds")))
-                   tool-bash
-                   #:required-capability 'shell-exec)
-        (make-tool "grep"
-                   "Search file contents with regex"
-                   (hasheq 'type
-                           "object"
-                           'required
-                           '("pattern")
-                           'properties
-                           (hasheq 'pattern
-                                   (hasheq 'type "string" 'description "Regex pattern")
-                                   'path
-                                   (hasheq 'type "string" 'description "File or directory path")))
-                   tool-grep
-                   #:required-capability 'read-only)
-        (make-tool "find"
-                   "Find files by name pattern"
-                   (hasheq 'type
-                           "object"
-                           'required
-                           '("pattern")
-                           'properties
-                           (hasheq 'pattern
-                                   (hasheq 'type "string" 'description "Name pattern")
-                                   'path
-                                   (hasheq 'type "string" 'description "Search directory")))
-                   tool-find
-                   #:required-capability 'read-only)
-        (make-tool "ls"
-                   "List directory contents"
-                   (hasheq 'type
-                           "object"
-                           'required
-                           '("path")
-                           'properties
-                           (hasheq 'path (hasheq 'type "string" 'description "Directory path")))
-                   tool-ls
-                   #:required-capability 'read-only)))
+  (list
+   (make-tool "read"
+              "Read file contents"
+              (hasheq 'type
+                      "object"
+                      'required
+                      '("path")
+                      'properties
+                      (hasheq 'path
+                              (hasheq 'type "string" 'description "Path to file")
+                              'offset
+                              (hasheq 'type "integer" 'description "Line offset")
+                              'limit
+                              (hasheq 'type "integer" 'description "Max lines")))
+              tool-read
+              #:required-capability 'read-only)
+   (make-tool "write"
+              "Write content to a file"
+              (hasheq 'type
+                      "object"
+                      'required
+                      '("path" "content")
+                      'properties
+                      (hasheq 'path
+                              (hasheq 'type "string" 'description "Path to file")
+                              'content
+                              (hasheq 'type "string" 'description "Content to write")))
+              tool-write
+              #:required-capability 'file-write)
+   (make-tool
+    "edit"
+    "Edit a file by replacing exact text. old-text MUST be copied verbatim from a prior read result — do not guess."
+    (hasheq
+     'type
+     "object"
+     'required
+     '("path" "old-text" "new-text")
+     'properties
+     (hasheq
+      'path
+      (hasheq 'type "string" 'description "Path to file to edit")
+      'old-text
+      (hasheq 'type "string" 'description "EXACT text to replace, copied verbatim from a read result")
+      'new-text
+      (hasheq 'type "string" 'description "Replacement text")
+      'fuzzy?
+      (hasheq 'type "boolean" 'description "Enable whitespace-tolerant matching (default false)")))
+    tool-edit
+    #:required-capability 'file-write)
+   (make-tool "bash"
+              "Execute a bash command"
+              (hasheq 'type
+                      "object"
+                      'required
+                      '("command")
+                      'properties
+                      (hasheq 'command
+                              (hasheq 'type "string" 'description "Bash command")
+                              'timeout
+                              (hasheq 'type "integer" 'description "Timeout in seconds")))
+              tool-bash
+              #:required-capability 'shell-exec)
+   (make-tool "grep"
+              "Search file contents with regex"
+              (hasheq 'type
+                      "object"
+                      'required
+                      '("pattern")
+                      'properties
+                      (hasheq 'pattern
+                              (hasheq 'type "string" 'description "Regex pattern")
+                              'path
+                              (hasheq 'type "string" 'description "File or directory path")))
+              tool-grep
+              #:required-capability 'read-only)
+   (make-tool "find"
+              "Find files by name pattern"
+              (hasheq 'type
+                      "object"
+                      'required
+                      '("pattern")
+                      'properties
+                      (hasheq 'pattern
+                              (hasheq 'type "string" 'description "Name pattern")
+                              'path
+                              (hasheq 'type "string" 'description "Search directory")))
+              tool-find
+              #:required-capability 'read-only)
+   (make-tool "ls"
+              "List directory contents"
+              (hasheq 'type
+                      "object"
+                      'required
+                      '("path")
+                      'properties
+                      (hasheq 'path (hasheq 'type "string" 'description "Directory path")))
+              tool-ls
+              #:required-capability 'read-only)))
 
 ;; M5: Validate all child-safe tools have valid capability annotations.
 ;; Runs at module load to catch annotation bugs early.
@@ -409,7 +418,9 @@
                                                      (current-directory)))
                          #:cancellation-token
                          (and exec-ctx (exec-context-cancellation-token exec-ctx))
-                         #:permission-config (and exec-ctx (exec-context-permission-config exec-ctx))
+                         #:permission-config (if (and exec-ctx (exec-context-permission-config exec-ctx))
+                                                  (exec-context-permission-config exec-ctx)
+                                                  (make-strict-permission-config))
                          #:event-publisher (lambda (event-type payload)
                                              (emit-session-event! bus session-id event-type payload))
                          #:runtime-settings settings

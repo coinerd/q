@@ -26,6 +26,8 @@
           [default-normalization-options normalize-options?]
           [normalize-text (->* (string?) (normalize-options?) string?)]
           [similarity-score (-> string? string? real?)]
+          [fuzzy-find-matches
+           (->* (string? string?) (#:threshold real? #:options normalize-options?) (listof pair?))]
           [fuzzy-find-match
            (->* (string? string?) (#:threshold real? #:options normalize-options?) (or/c pair? #f))]))
 
@@ -157,9 +159,18 @@
   (define-values (normalized maps) (normalize-with-map s opts))
   normalized)
 
-(define (substring-index haystack needle)
-  (define m (regexp-match-positions (regexp-quote needle) haystack))
-  (and m (caar m)))
+(define (substring-indices haystack needle)
+  ;; Advance one character at a time so overlapping occurrences remain visible.
+  (define needle-len (string-length needle))
+  (if (zero? needle-len)
+      '()
+      (let loop ([start 0]
+                 [found '()])
+        (cond
+          [(> (+ start needle-len) (string-length haystack)) (reverse found)]
+          [(string=? (substring haystack start (+ start needle-len)) needle)
+           (loop (add1 start) (cons start found))]
+          [else (loop (add1 start) found)]))))
 
 (define (lcs-length a b)
   (define la (string-length a))
@@ -182,27 +193,38 @@
     [(or (zero? (string-length a)) (zero? (string-length b))) 0.0]
     [else (/ (lcs-length a b) (max (string-length a) (string-length b)))]))
 
-(define (normalized-end->original-end maps norm-end original-len)
+(define (normalized-end->original-end maps norm-end original)
+  (define original-len (string-length original))
   (cond
     [(zero? norm-end) 0]
     [(>= norm-end (length maps)) original-len]
-    [else (add1 (list-ref maps (sub1 norm-end)))]))
+    [else
+     (define last-original-index (list-ref maps (sub1 norm-end)))
+     ;; A normalized newline maps to the CR at the start of CRLF. Include the
+     ;; following LF when the match ends exactly at that normalized newline.
+     (if (and (< (add1 last-original-index) original-len)
+              (char=? (string-ref original last-original-index) #\return)
+              (char=? (string-ref original (add1 last-original-index)) #\newline))
+         (+ last-original-index 2)
+         (add1 last-original-index))]))
 
-(define (best-window-start normalized-content normalized-old threshold)
+(define (best-window-starts normalized-content normalized-old threshold)
   (define content-len (string-length normalized-content))
   (define old-len (string-length normalized-old))
   (cond
-    [(or (zero? old-len) (< content-len old-len)) #f]
+    [(or (zero? old-len) (< content-len old-len)) '()]
     [else
-     (for/fold ([best-start #f]
-                [best-score 0.0]
-                #:result (and best-start (>= best-score threshold) best-start))
-               ([start (in-range 0 (add1 (- content-len old-len)))])
-       (define score
-         (similarity-score (substring normalized-content start (+ start old-len)) normalized-old))
-       (if (> score best-score)
-           (values start score)
-           (values best-start best-score)))]))
+     (define scored
+       (for/list ([start (in-range 0 (add1 (- content-len old-len)))])
+         (cons start
+               (similarity-score (substring normalized-content start (+ start old-len))
+                                 normalized-old))))
+     (define best-score (apply max (map cdr scored)))
+     (if (< best-score threshold)
+         '()
+         (for/list ([candidate (in-list scored)]
+                    #:when (= (cdr candidate) best-score))
+           (car candidate)))]))
 
 (define (normalize-text-keep-trailing-nl s opts)
   (define text (normalize-text s opts))
@@ -224,26 +246,32 @@
       (string-append text "\n")
       text))
 
+(define (fuzzy-find-matches content
+                            old-text
+                            #:threshold (threshold 0.85)
+                            #:options (opts default-normalization-options))
+  (define normalized-old (normalize-text-keep-trailing-nl old-text opts))
+  (define-values (normalized-content content-map) (normalize-with-map content opts))
+  (cond
+    [(or (zero? (string-length normalized-old)) (null? content-map)) '()]
+    [else
+     (define exact-starts (substring-indices normalized-content normalized-old))
+     (define starts
+       (if (pair? exact-starts)
+           exact-starts
+           (best-window-starts normalized-content normalized-old threshold)))
+     (remove-duplicates (for/list ([start (in-list starts)])
+                          (define norm-end (+ start (string-length normalized-old)))
+                          (define original-start (list-ref content-map start))
+                          (define original-end
+                            (normalized-end->original-end content-map norm-end content))
+                          (cons original-start original-end))
+                        equal?)]))
+
 (define (fuzzy-find-match content
                           old-text
                           #:threshold (threshold 0.85)
                           #:options (opts default-normalization-options))
-  (define normalized-old/precheck (normalize-text-keep-trailing-nl old-text opts))
-  (define exact-start
-    (and (positive? (string-length normalized-old/precheck)) (substring-index content old-text)))
-  (cond
-    [exact-start (cons exact-start (+ exact-start (string-length old-text)))]
-    [else
-     (define-values (normalized-content content-map) (normalize-with-map content opts))
-     (define normalized-old normalized-old/precheck)
-     (define start
-       (or (substring-index normalized-content normalized-old)
-           (best-window-start normalized-content normalized-old threshold)))
-     (cond
-       [(or (not start) (zero? (string-length normalized-old)) (null? content-map)) #f]
-       [else
-        (define norm-end (+ start (string-length normalized-old)))
-        (define original-start (list-ref content-map start))
-        (define original-end
-          (normalized-end->original-end content-map norm-end (string-length content)))
-        (cons original-start original-end)])]))
+  ;; Return a match only when normalization identifies one unique span.
+  (define matches (fuzzy-find-matches content old-text #:threshold threshold #:options opts))
+  (and (= (length matches) 1) (car matches)))

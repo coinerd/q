@@ -28,6 +28,7 @@
           [effective-request-timeout (-> q-settings? string? number?)]
           [warn-on-destructive? (-> q-settings? boolean?)]
           [security-config-from-settings (-> q-settings? hash?)]
+          [setting-permission-mode (-> q-settings? (or/c 'strict 'permissive))]
           [default-session-dir (-> path-string?)]
           [default-project-dir (-> path?)]
           [session-dir-from-settings (-> q-settings? (or/c path-string? #f))]
@@ -159,6 +160,17 @@
           (hash-ref merged 'secret-scrub.allowlist '())
           'secret-scrub-patterns
           (hash-ref merged 'secret-scrub.patterns '())))
+
+;; Permission mode is fail-closed: only the two documented values are
+;; accepted, and missing or malformed values resolve to strict.
+(define (setting-permission-mode settings)
+  (define raw (setting-ref* settings '(security permission-mode) 'strict))
+  (cond
+    [(memq raw '(strict permissive)) raw]
+    [(string? raw)
+     (define mode (string->symbol (string-downcase raw)))
+     (if (memq mode '(strict permissive)) mode 'strict)]
+    [else 'strict]))
 
 ;; ============================================================
 ;; Sandbox settings — re-exported from util/sandbox-config.rkt

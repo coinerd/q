@@ -38,6 +38,7 @@
                   make-error-result
                   make-success-result)
          (only-in "../tools/tool-struct.rkt" tool-execute)
+         (only-in "../tools/permission-gate.rkt" make-permissive-permission-config)
          (only-in "../tools/registry-defaults.rkt" register-default-tools!)
          "../tools/scheduler.rkt"
          (only-in "../util/message/protocol-types.rkt"
@@ -105,6 +106,15 @@
       (hash-ref (car content) 'text "")
       ""))
 
+;; Helper: build a permissive exec-context for tests that exercise the
+;; scheduler mechanics (order, hooks, parallelism, metadata) rather than
+;; the permission gate.  The v0.99.66 W1 change made the default strict,
+;; so these tests must explicitly opt in to a permissive config.
+(define (make-test-exec-context #:cancellation-token [cancellation-token #f])
+  (make-exec-context
+   #:permission-config (make-permissive-permission-config)
+   #:cancellation-token cancellation-token))
+
 ;; ============================================================
 ;; 1. Single tool call executes correctly
 ;; ============================================================
@@ -112,7 +122,7 @@
 (test-case "Single tool call executes correctly"
   (define reg (make-test-registry))
   (define tc (tool-call "tc-1" "echo" (hasheq 'msg "hello")))
-  (define sr (run-tool-batch (list tc) reg))
+  (define sr (run-tool-batch (list tc) reg #:exec-context (make-test-exec-context)))
   (define results (scheduler-result-results sr))
   (check-equal? (length results) 1)
   (check-equal? (result-text (car results)) "hello")
@@ -128,7 +138,7 @@
     (list (tool-call "tc-1" "echo" (hasheq 'msg "first"))
           (tool-call "tc-2" "echo" (hasheq 'msg "second"))
           (tool-call "tc-3" "echo" (hasheq 'msg "third"))))
-  (define sr (run-tool-batch tcs reg #:parallel? #f))
+  (define sr (run-tool-batch tcs reg #:parallel? #f #:exec-context (make-test-exec-context)))
   (check-equal? (map result-text (scheduler-result-results sr)) '("first" "second" "third")))
 
 ;; ============================================================
@@ -142,7 +152,7 @@
   (define tcs
     (list (tool-call "tc-1" "slow-echo" (hasheq 'msg "slow"))
           (tool-call "tc-2" "echo" (hasheq 'msg "fast"))))
-  (define sr (run-tool-batch tcs reg #:parallel? #t))
+  (define sr (run-tool-batch tcs reg #:parallel? #t #:exec-context (make-test-exec-context)))
   (check-equal? (map result-text (scheduler-result-results sr)) '("slow" "fast")))
 
 ;; ============================================================
@@ -156,7 +166,7 @@
           (tool-call "tc-2" "echo" (hasheq 'msg "B"))
           (tool-call "tc-3" "slow-echo" (hasheq 'msg "C"))
           (tool-call "tc-4" "echo" (hasheq 'msg "D"))))
-  (define sr (run-tool-batch tcs reg #:parallel? #t))
+  (define sr (run-tool-batch tcs reg #:parallel? #t #:exec-context (make-test-exec-context)))
   (check-equal? (map result-text (scheduler-result-results sr)) '("A" "B" "C" "D")))
 
 ;; ============================================================
@@ -173,7 +183,7 @@
   (define tcs
     (list (tool-call "tc-1" "echo" (hasheq 'msg "blocked"))
           (tool-call "tc-2" "add" (hasheq 'a 1 'b 2))))
-  (define sr (run-tool-batch tcs reg #:hook-dispatcher hook))
+  (define sr  (run-tool-batch tcs reg #:hook-dispatcher hook #:exec-context (make-test-exec-context)))
   (define results (scheduler-result-results sr))
   ;; First is blocked → error
   (check-true (tool-result-is-error? (first results)))
@@ -195,7 +205,7 @@
           (struct-copy tool-call data [arguments (hasheq 'msg "mutated")])
           data)))
   (define tcs (list (tool-call "tc-1" "echo" (hasheq 'msg "original"))))
-  (define sr (run-tool-batch tcs reg #:hook-dispatcher hook))
+  (define sr  (run-tool-batch tcs reg #:hook-dispatcher hook #:exec-context (make-test-exec-context)))
   (check-equal? (result-text (car (scheduler-result-results sr))) "mutated")
   (check-false (tool-result-is-error? (car (scheduler-result-results sr)))))
 
@@ -212,7 +222,7 @@
           (struct-copy tool-call data [arguments (hasheq 'a "not-a-number" 'b 2)])
           data)))
   (define tcs (list (tool-call "tc-1" "add" (hasheq 'a 1 'b 2))))
-  (define sr (run-tool-batch tcs reg #:hook-dispatcher hook))
+  (define sr  (run-tool-batch tcs reg #:hook-dispatcher hook #:exec-context (make-test-exec-context)))
   (check-true (tool-result-is-error? (car (scheduler-result-results sr))))
   (check-true (string-contains? (result-text (car (scheduler-result-results sr)))
                                 "validate-tool-args")))
@@ -224,7 +234,7 @@
 (test-case "Tool exception caught → error result"
   (define reg (make-test-registry))
   (define tcs (list (tool-call "tc-1" "fail" (hasheq))))
-  (define sr (run-tool-batch tcs reg))
+  (define sr  (run-tool-batch tcs reg #:exec-context (make-test-exec-context)))
   (check-equal? (length (scheduler-result-results sr)) 1)
   (check-true (tool-result-is-error? (car (scheduler-result-results sr)))))
 
@@ -235,7 +245,7 @@
 (test-case "Unknown tool name → error result"
   (define reg (make-test-registry))
   (define tcs (list (tool-call "tc-1" "nonexistent_tool" (hasheq))))
-  (define sr (run-tool-batch tcs reg))
+  (define sr  (run-tool-batch tcs reg #:exec-context (make-test-exec-context)))
   (check-true (tool-result-is-error? (car (scheduler-result-results sr)))))
 
 ;; ============================================================
@@ -244,7 +254,7 @@
 
 (test-case "Empty tool-calls list → empty results with zero metadata"
   (define reg (make-test-registry))
-  (define sr (run-tool-batch '() reg))
+  (define sr  (run-tool-batch '() reg #:exec-context (make-test-exec-context)))
   (check-equal? (length (scheduler-result-results sr)) 0)
   (define meta (scheduler-result-metadata sr))
   (check-pred scheduler-batch-stats? meta)
@@ -267,7 +277,7 @@
           (tool-call "tc-2" "add" (hasheq 'a 3 'b 4)) ; success
           (tool-call "tc-3" "fail" (hasheq)) ; exception
           (tool-call "tc-4" "nonexistent" (hasheq)))) ; unknown
-  (define sr (run-tool-batch tcs reg #:hook-dispatcher hook))
+  (define sr  (run-tool-batch tcs reg #:hook-dispatcher hook #:exec-context (make-test-exec-context)))
   (define meta (scheduler-result-metadata sr))
   (check-pred scheduler-batch-stats? meta)
   (check-equal? (scheduler-batch-stats-total meta) 4)
@@ -299,7 +309,7 @@
           (tool-call "tc-2" "add" (hasheq 'a 1 'b 2)) ; mutated-invalid
           (tool-call "tc-3" "slow-echo" (hasheq 'msg "x")) ; mutated-valid
           (tool-call "tc-4" "fail" (hasheq)))) ; exception
-  (define sr (run-tool-batch tcs reg #:hook-dispatcher hook))
+  (define sr  (run-tool-batch tcs reg #:hook-dispatcher hook #:exec-context (make-test-exec-context)))
   (define results (scheduler-result-results sr))
   ;; All but slow-echo are errors
   (check-true (tool-result-is-error? (first results))) ; blocked
@@ -317,7 +327,7 @@
   (define tcs
     (list (tool-call "tc-1" "echo" (hasheq 'msg "no-hook"))
           (tool-call "tc-2" "add" (hasheq 'a 10 'b 20))))
-  (define sr (run-tool-batch tcs reg))
+  (define sr  (run-tool-batch tcs reg #:exec-context (make-test-exec-context)))
   (check-equal? (result-text (first (scheduler-result-results sr))) "no-hook")
   (check-equal? (result-text (second (scheduler-result-results sr))) "30"))
 
@@ -334,7 +344,7 @@
         [(eq? hook-point 'tool-call-pre) (error 'test-hook "deliberate pre-hook crash")]
         [else data])))
   (define tcs (list (tool-call "tc-1" "echo" (hasheq 'msg "parallel-resilient"))))
-  (define sr (run-tool-batch tcs reg #:hook-dispatcher hook #:parallel? #t))
+  (define sr  (run-tool-batch tcs reg #:hook-dispatcher hook #:parallel? #t #:exec-context (make-test-exec-context)))
   (define results (scheduler-result-results sr))
   (check-equal? (length results) 1 "parallel with throwing pre-hook should return results")
   ;; Tool should still execute (hook error is caught, treated as #f)
@@ -356,7 +366,7 @@
         [(eq? hook-point 'tool-call-pre) (error 'test-hook "deliberate pre-hook crash")]
         [else data])))
   (define tcs (list (tool-call "tc-1" "echo" (hasheq 'msg "serial-resilient"))))
-  (define sr (run-tool-batch tcs reg #:hook-dispatcher hook #:parallel? #f))
+  (define sr  (run-tool-batch tcs reg #:hook-dispatcher hook #:parallel? #f #:exec-context (make-test-exec-context)))
   (define results (scheduler-result-results sr))
   (check-equal? (length results) 1 "serial with throwing pre-hook should return results")
   (check-false (tool-result-is-error? (car results))
@@ -377,7 +387,7 @@
         [(eq? hook-point 'tool-result-post) (error 'test-hook "deliberate post-hook crash")]
         [else data])))
   (define tcs (list (tool-call "tc-1" "echo" (hasheq 'msg "post-resilient"))))
-  (define sr (run-tool-batch tcs reg #:hook-dispatcher hook #:parallel? #t))
+  (define sr  (run-tool-batch tcs reg #:hook-dispatcher hook #:parallel? #t #:exec-context (make-test-exec-context)))
   (define results (scheduler-result-results sr))
   (check-equal? (length results) 1 "parallel with throwing post-hook should return results")
   (check-false (tool-result-is-error? (car results))
@@ -442,7 +452,7 @@
               (lambda (args ctx) (make-success-result 'ok))))
   ;; Call with empty args — should get error with 'path' and schema hint
   (define tc (tool-call "tc-missing" "read" (hasheq)))
-  (define sr (run-tool-batch (list tc) reg))
+  (define sr  (run-tool-batch (list tc) reg #:exec-context (make-test-exec-context)))
   (define results (scheduler-result-results sr))
   (check-equal? (length results) 1)
   (define tr (car results))
@@ -469,7 +479,7 @@
                              (lambda (args ctx) (make-success-result 'ok))))
   ;; Call with wrong type — should get error with type info and schema hint
   (define tc (tool-call "tc-wrong-type" "add" (hasheq 'a "not-int" 'b 1)))
-  (define sr (run-tool-batch (list tc) reg))
+  (define sr  (run-tool-batch (list tc) reg #:exec-context (make-test-exec-context)))
   (define results (scheduler-result-results sr))
   (define tr (car results))
   (check-true (tool-result-is-error? tr))
@@ -508,7 +518,7 @@
       (make-tool-call (number->string i) "thread-recorder" (hasheq))))
   (define result
     (parameterize ([max-parallel-tools 2])
-      (run-tool-batch tool-calls reg #:parallel? #t)))
+      (run-tool-batch tool-calls reg #:parallel? #t #:exec-context (make-test-exec-context))))
   (check-equal? (length (scheduler-result-results result)) 6)
   ;; Verify all succeeded
   (for ([r (in-list (scheduler-result-results result))])
@@ -587,7 +597,9 @@
     (run-tool-batch (list (make-tool-call "first" "cancel-first" (hasheq))
                           (make-tool-call "second" "must-not-run" (hasheq)))
                     registry
-                    #:exec-context (make-exec-context #:cancellation-token token)))
+                    #:exec-context (make-exec-context
+                                    #:cancellation-token token
+                                    #:permission-config (make-permissive-permission-config))))
   (check-equal? (unbox second-runs) 0)
   (check-false (tool-result-is-error? (car (scheduler-result-results result))))
   (check-true (tool-result-is-error? (cadr (scheduler-result-results result))))

@@ -76,6 +76,18 @@
   (define span (fuzzy-find-match s "alpha\nbeta"))
   (check-equal? (slice s span) "alpha\r\nbeta"))
 
+(test-case "fuzzy-find-match includes LF when match ends at CRLF newline"
+  (define s "alpha\r\nbeta")
+  (define span (fuzzy-find-match s "alpha\n"))
+  (check-equal? span (cons 0 7))
+  (check-equal? (slice s span) "alpha\r\n"))
+
+(test-case "fuzzy-find-matches reports normalized ambiguity"
+  (define s "alpha  \nbeta\n---\nalpha\t\nbeta")
+  (define spans (fuzzy-find-matches s "alpha\nbeta"))
+  (check-equal? (length spans) 2)
+  (check-equal? (map (lambda (span) (slice s span)) spans) (list "alpha  \nbeta" "alpha\t\nbeta")))
+
 (test-case "fuzzy-find-match tolerates tab indentation drift"
   (define s "(define (f)\n\t(+ 1 2))")
   (define span (fuzzy-find-match s "(define (f)\n  (+ 1 2))"))

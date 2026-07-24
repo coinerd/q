@@ -74,8 +74,10 @@
       (define result (run-single-tool "read" (hash) cfg))
       (check-true (result-is-success? result)))
 
-    (test-case "no permission config: tool executes (backward compat)"
+    ;; v0.99.66 (W1, finding #1 CRITICAL): no permission config now FAILS CLOSED.
+    ;; The scheduler refuses to execute when perm-cfg is absent/misconfigured.
+    (test-case "no permission config: tool BLOCKED (W1 fail-closed)"
       (define result (run-single-tool "bash" (hash) #f))
-      (check-true (result-is-success? result)))))
+      (check-true (result-is-error? result)))))
 
 (run-tests denial-path-suite)

@@ -6,7 +6,9 @@
 (require racket/contract
          (only-in "../util/cancellation.rkt" cancellation-token?)
          (only-in "../runtime/settings.rkt" q-settings?)
-         (only-in "../tools/permission-gate.rkt" permission-config?))
+         (only-in "../tools/permission-gate.rkt"
+                  permission-config?
+                  make-strict-permission-config))
 
 (provide exec-context
          exec-context?
@@ -30,7 +32,7 @@
                                                   #:call-id (or/c string? #f)
                                                   #:session-metadata (or/c hash? #f)
                                                   #:progress-callback (or/c procedure? #f)
-                                                  #:permission-config (or/c permission-config? #f)
+                                                  #:permission-config permission-config?
                                                   #:browser-service (or/c any/c #f))
                              exec-context?)]))
 
@@ -46,10 +48,14 @@
                            session-metadata
                            progress-callback
                            permission-config
-                           bytes-written ; G3.4: permission gate config or #f
+                           bytes-written
                            browser-service) ; (or/c secure-browser-service? #f) — F7
   #:transparent)
 
+;; v0.99.66 (W1, finding #1 CRITICAL): the default permission-config is
+;; now make-strict-permission-config instead of #f.  This closes the
+;; bypass where a #f config caused scheduler-execution to short-circuit
+;; the gate and run dangerous tools without any enforcement.
 (define (make-exec-context #:working-directory [working-directory (current-directory)]
                            #:cancellation-token [cancellation-token #f]
                            #:event-publisher [event-publisher #f]
@@ -57,7 +63,7 @@
                            #:call-id [call-id ""]
                            #:session-metadata [session-metadata #f]
                            #:progress-callback [progress-callback #f]
-                           #:permission-config [permission-config #f]
+                           #:permission-config [permission-config (make-strict-permission-config)]
                            #:browser-service [browser-service #f])
   (exec-context working-directory
                 cancellation-token

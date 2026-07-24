@@ -233,7 +233,7 @@
                        (define is-err (result-is-error? r))
                        (check-true is-err)
                        (define c (string-join (result-content r) ""))
-                       (check-true (regexp-match? #rx"more specific" c))
+                       (check-true (regexp-match? #rx"unique exact" c))
                        (check-equal? (file->string f) "aaa bbb aaa bbb aaa"))))
 
     (test-case "edit with multi-line old-text"

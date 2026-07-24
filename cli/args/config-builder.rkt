@@ -31,6 +31,7 @@
          cli-config-memory
          cli-config-agent-pool
          cli-config-parallel?
+         cli-config-auto-approve?
          make-initial-acc
          acc->cli-config
          cli-config->runtime-config)
@@ -62,6 +63,13 @@
          parallel?) ; boolean — --parallel mode (v0.99.23 §5.1)
   #:transparent)
 
+;; Weak hash maps cli-config -> boolean. Keeps auto-approve? off the
+;; positional struct to preserve arity compatibility with existing callers.
+(define auto-approve-by-config (make-weak-hasheq))
+
+(define (cli-config-auto-approve? cfg)
+  (hash-ref auto-approve-by-config cfg #f))
+
 ;; Helper: construct a "help" config (used for parse errors and --help)
 (define (make-help-config)
   (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f #f #f #f #f))
@@ -83,7 +91,8 @@
                      (print-mode? . #f)
                      (memory . #f)
                      (agent-pool . #f)
-                     (parallel? . #f)))
+                     (parallel? . #f)
+                     (auto-approve? . #f)))
 
 ;; Construct a cli-config from an accumulator alist.
 (define (acc->cli-config acc)
@@ -113,26 +122,30 @@
          (match final-command
            ['prompt 'single]
            [_ 'interactive])])))
-  (cli-config final-command
-              (acc-ref acc 'session-id)
-              (acc-ref acc 'prompt)
-              (acc-ref acc 'model)
-              final-mode
-              (acc-ref acc 'project-dir)
-              (acc-ref acc 'config-path)
-              (acc-ref acc 'verbose?)
-              (acc-ref acc 'max-turns)
-              (acc-ref acc 'no-tools?)
-              (reverse (acc-ref acc 'tools))
-              (acc-ref acc 'session-dir)
-              #f ; sessions-subcommand
-              '() ; sessions-args
-              (acc-ref acc 'keybindings-path)
-              (acc-ref acc 'print-mode?)
-              (acc-ref acc 'context-profile)
-              (acc-ref acc 'memory)
-              (acc-ref acc 'agent-pool)
-              (acc-ref acc 'parallel?)))
+  (define cfg
+    (cli-config final-command
+                (acc-ref acc 'session-id)
+                (acc-ref acc 'prompt)
+                (acc-ref acc 'model)
+                final-mode
+                (acc-ref acc 'project-dir)
+                (acc-ref acc 'config-path)
+                (acc-ref acc 'verbose?)
+                (acc-ref acc 'max-turns)
+                (acc-ref acc 'no-tools?)
+                (reverse (acc-ref acc 'tools))
+                (acc-ref acc 'session-dir)
+                #f ; sessions-subcommand
+                '() ; sessions-args
+                (acc-ref acc 'keybindings-path)
+                (acc-ref acc 'print-mode?)
+                (acc-ref acc 'context-profile)
+                (acc-ref acc 'memory)
+                (acc-ref acc 'agent-pool)
+                (acc-ref acc 'parallel?)))
+  (when (acc-ref acc 'auto-approve? #f)
+    (hash-set! auto-approve-by-config cfg #t))
+  cfg)
 
 ;; ============================================================
 ;; Pure: cli-config->runtime-config
@@ -168,5 +181,8 @@
                 h)]
          [h (if (cli-config-memory cfg)
                 (hash-set h 'memory-backend (cli-config-memory cfg))
+                h)]
+         [h (if (cli-config-auto-approve? cfg)
+                (hash-set h 'cli-auto-approve? #t)
                 h)])
     h))

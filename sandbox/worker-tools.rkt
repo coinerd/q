@@ -21,7 +21,14 @@
          json
          "ipc-protocol.rkt"
          "subprocess.rkt"
-         "limits.rkt")
+         "limits.rkt"
+         (only-in "../tools/builtins/edit-contract.rkt"
+                  DEFAULT-MAX-OLD-TEXT-LEN
+                  apply-edit-contract
+                  edit-contract-result-status
+                  edit-contract-result-content
+                  edit-contract-result-occurrences
+                  edit-contract-result-replacements))
 
 ;; ── Path Safety ─────────────────────────────────────────────────
 
@@ -106,7 +113,8 @@
 
 ;; ── Tool Execution Functions ────────────────────────────────────
 
-;; Each function: (-> hash? ipc-response?)
+;; Each function accepts a hash and returns an ipc-response. execute-edit also
+;; accepts optional internal policy keywords while preserving its one-argument API.
 ;; Returns ipc-response with content and details populated.
 
 (define (execute-bash args)
@@ -192,13 +200,19 @@
   (call-with-output-file tmp #:exists 'replace proc)
   (rename-file-or-directory tmp path #t))
 
-(define (execute-edit args)
+(define (execute-edit args
+                      #:max-old-text-len [max-old-text-len DEFAULT-MAX-OLD-TEXT-LEN]
+                      #:fuzzy-edit-enabled? [global-fuzzy-enabled? #f])
   (define path (hash-ref args 'path #f))
   (define old-text (hash-ref args 'old-text #f))
   (define new-text (hash-ref args 'new-text ""))
   (cond
     [(not path) (make-error-response #f "edit: missing 'path' argument")]
     [(not old-text) (make-error-response #f "edit: missing 'old-text' argument")]
+    [(and (hash-has-key? args 'fuzzy?) (not (boolean? (hash-ref args 'fuzzy?))))
+     (make-error-response #f "edit: fuzzy? must be a boolean (#t or #f)")]
+    [(not (boolean? global-fuzzy-enabled?))
+     (make-error-response #f "edit: fuzzy edit policy must be boolean")]
     [(not (path-allowed? path)) (make-error-response #f (format "edit: path not allowed: ~a" path))]
     [else
      (define resolved (path->complete-path (expand-user-path path) (current-directory)))
@@ -207,16 +221,44 @@
         (make-error-response #f (format "edit: file not found: ~a" path))]
        [else
         (define content (file->string resolved))
-        (cond
-          [(not (string-contains? content old-text))
-           (make-error-response #f "edit: old-text not found in file")]
-          [else
-           (define new-content (string-replace content old-text new-text))
+        (define fuzzy-allowed? (or (hash-ref args 'fuzzy? #f) global-fuzzy-enabled?))
+        (define edit-result
+          (apply-edit-contract content
+                               old-text
+                               new-text
+                               #:fuzzy? fuzzy-allowed?
+                               #:max-old-text-len max-old-text-len))
+        (case (edit-contract-result-status edit-result)
+          [(empty-old-text) (make-error-response #f "edit: old-text must not be empty")]
+          [(too-long)
+           (make-error-response #f
+                                (format "edit: old-text is too long (~a chars, max ~a)"
+                                        (string-length old-text)
+                                        max-old-text-len))]
+          [(not-found)
+           (define detail (build-not-found-detail content old-text))
+           (make-error-response #f (format "edit: old-text not found in file\n~a" detail))]
+          [(duplicate)
+           (make-error-response
+            #f
+            (format "edit: old-text appears ~a times; provide one unique exact snippet"
+                    (edit-contract-result-occurrences edit-result)))]
+          [(ambiguous)
+           (make-error-response
+            #f
+            (format "edit: fuzzy matching found ~a possible matches; provide exact text"
+                    (edit-contract-result-occurrences edit-result)))]
+          [(line-count-mismatch) (make-error-response #f "edit: line count changed unexpectedly")]
+          [(ok)
+           (define new-content (edit-contract-result-content edit-result))
            (call-with-atomic-output-file resolved (lambda (port) (display new-content port)))
            (ipc-response #f
                          'ok
                          "edit applied"
-                         (hasheq 'path (path->string resolved) 'replacements 1)
+                         (hasheq 'path
+                                 (path->string resolved)
+                                 'replacements
+                                 (edit-contract-result-replacements edit-result))
                          #f
                          IPC-SCHEMA-VERSION)])])]))
 
@@ -336,6 +378,74 @@
         execute-git
         "delete-lines"
         execute-delete-lines))
+
+;; --------------------------------------------------
+;; Enhanced diagnostics: first-difference offset, escaped code points, whitespace count
+;; (W3 parity with tools/builtins/edit.rkt)
+;; --------------------------------------------------
+
+(define (first-differing-offset a b)
+  (define len-a (string-length a))
+  (define len-b (string-length b))
+  (define min-len (min len-a len-b))
+  (let loop ([i 0])
+    (cond
+      [(= i min-len)
+       (if (= len-a len-b)
+           (values #f #f #f)
+           (values i (and (< i len-a) (string-ref a i)) (and (< i len-b) (string-ref b i))))]
+      [(not (char=? (string-ref a i) (string-ref b i))) (values i (string-ref a i) (string-ref b i))]
+      [else (loop (+ i 1))])))
+
+(define (escape-char c)
+  (format "U+~X" (char->integer c)))
+
+(define (escaped-context s offset [context-radius 6])
+  (define len (string-length s))
+  (define start (max 0 (- offset context-radius)))
+  (define end (min len (+ offset context-radius 1)))
+  (define parts
+    (for/list ([i (in-range start end)])
+      (escape-char (string-ref s i))))
+  (format "[~a]" (string-join parts " ")))
+
+(define (count-leading-spaces s)
+  (for/fold ([count 0])
+            ([ch (in-string s)]
+             #:break (not (char=? ch #\space)))
+    (add1 count)))
+
+(define (build-not-found-detail content old-text)
+  (define-values (diff-offset content-char old-char) (first-differing-offset content old-text))
+  (define diff-detail
+    (cond
+      [(and diff-offset content-char old-char)
+       (format
+        "First differing offset: ~a (~a vs ~a)\nContext around mismatch in file:  ~a\nContext around mismatch in old-text: ~a"
+        diff-offset
+        (escape-char content-char)
+        (escape-char old-char)
+        (escaped-context content diff-offset)
+        (escaped-context old-text diff-offset))]
+      [diff-offset
+       (format "First differing offset: ~a (file has ~a chars, old-text has ~a chars)"
+               diff-offset
+               (string-length content)
+               (string-length old-text))]
+      [else ""]))
+  (define ws-info
+    (let* ([c-lines (string-split content "\n" #:trim? #f)]
+           [o-lines (string-split old-text "\n" #:trim? #f)]
+           [diff-lines (for/list ([c (in-list c-lines)]
+                                  [o (in-list o-lines)]
+                                  #:when (and c o (not (equal? c o))))
+                         (define c-spaces (count-leading-spaces c))
+                         (define o-spaces (count-leading-spaces o))
+                         (format "  file has ~a leading spaces, old-text has ~a" c-spaces o-spaces))])
+      (if (pair? diff-lines)
+          (string-append "Whitespace differences:\n" (string-join diff-lines "\n"))
+          "")))
+  (string-append diff-detail (if (equal? diff-detail "") "" "\n") ws-info))
 
 (define (dispatch-tool tool-name arguments)
   (define executor (hash-ref worker-tool-registry tool-name #f))

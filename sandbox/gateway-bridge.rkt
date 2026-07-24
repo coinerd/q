@@ -226,6 +226,8 @@
 ;; Execute a tool via the worker, returning ipc-response directly.
 ;; This is the scheduler's single entry point — it bypasses the envelope layer.
 ;; The scheduler then translates the ipc-response to tool-result.
+;; If args contains 'working-directory, it is used as the IPC working directory
+;; and removed from the forwarded args to avoid polluting the tool's argument namespace.
 (define (execute-tool-via-worker tool-name args required-capability)
   (with-handlers ([exn:fail?
                    (lambda (e)
@@ -236,8 +238,20 @@
         (if (and (real? t) (positive? t))
             (inexact->exact (* t 1000))
             (current-execution-plane-timeout-ms))))
+    ;; Extract working-directory from args for IPC, then remove from forwarded args
+    (define wd (hash-ref args 'working-directory #f))
+    (define clean-args
+      (if wd
+          (hash-remove args 'working-directory)
+          args))
     (define req
-      (ipc-request req-id tool-name args timeout-ms #f required-capability IPC-SCHEMA-VERSION))
+      (ipc-request req-id
+                   tool-name
+                   clean-args
+                   timeout-ms
+                   (and (string? wd) wd)
+                   required-capability
+                   IPC-SCHEMA-VERSION))
     (define gw (ensure-worker!))
     (send-request! gw req timeout-ms)))
 

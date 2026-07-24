@@ -27,7 +27,7 @@
          racket/contract
          (only-in "../working-set.rkt" working-set?)
          (only-in "../../llm/provider.rkt" provider?)
-         (only-in "../layer-adapters.rkt" tool-registry?)
+         (only-in "../layer-adapters.rkt" tool-registry? permission-config?)
          (only-in "../../util/event/event-bus.rkt" event-bus?)
          (only-in "../layer-adapters.rkt" extension-registry?)
          (only-in "../provider/model-registry.rkt" model-registry?)
@@ -144,6 +144,7 @@
           [config-thinking-level (-> session-config? (or/c 'off 'minimal 'low 'medium 'high 'xhigh))]
           [config-working-set (-> session-config? (or/c #f working-set?))]
           [config-parallel-tools (-> session-config? (or/c #f boolean?))]
+          [config-permission-config (-> session-config? (or/c #f permission-config?))]
           [config-cancellation-token (-> session-config? (or/c #f cancellation-token?))]
           [config-tier-b-count (-> session-config? exact-nonnegative-integer?)]
           [config-tier-c-count (-> session-config? exact-nonnegative-integer?)]
@@ -233,6 +234,8 @@
   (hash-ref (session-config-data c) 'working-set #f))
 (define (config-parallel-tools c)
   (hash-ref (session-config-data c) 'parallel-tools #f))
+(define (config-permission-config c)
+  (hash-ref (session-config-data c) 'permission-config #f))
 (define (config-cancellation-token c)
   (hash-ref (session-config-data c) 'cancellation-token #f))
 (define (config-tier-b-count c)
@@ -303,6 +306,8 @@
                thinking-level
                working-set
                parallel-tools
+               permission-config
+               cli-auto-approve?
                cancellation-token
                tier-b-count
                tier-c-count
