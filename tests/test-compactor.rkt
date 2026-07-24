@@ -624,16 +624,11 @@
    ;; Convert to message list
    (define msg-list (tiered-context->message-list tc))
 
-   ;; Order should be: Tier A (pinned user) -> Tier B (was 3 msgs) -> Tier C (was 4 msgs)
+   ;; Tier amendments change retention membership, not chat chronology.
+   ;; Selected records remain in their original provider protocol order.
    (check-equal? (length msg-list) 8)
-   ;; First should be pinned user msg0
-   (check-equal? (message-id (first msg-list)) "msg0")
-   ;; Next 3 should be what was originally tier-c
-   (check-equal? (message-id (second msg-list)) "msg7")
-   (check-equal? (message-id (fourth msg-list)) "msg9")
-   ;; Next 4 should be what was originally tier-b
-   (check-equal? (message-id (fifth msg-list)) "msg3")
-   (check-equal? (message-id (eighth msg-list)) "msg6"))
+   (check-equal? (map message-id msg-list)
+                 '("msg0" "msg3" "msg4" "msg5" "msg6" "msg7" "msg8" "msg9")))
  (test-case "build-tiered-context: system-instruction always included"
    ;; v0.15.2: System instruction must survive tiered context building
    ;; even when it's the oldest message and doesn't fit in tier-b/c.

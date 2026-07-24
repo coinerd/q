@@ -385,7 +385,7 @@
           (log-warning "context-assembly: executed rollback action: ~a" executed)))))
   (if (and (null? preamble-entries) (null? memory-entries) (null? conclusion-entries))
       base-tc
-      (tiered-context new-tier-a (tiered-context-tier-b base-tc) (tiered-context-tier-c base-tc))))
+      (tiered-context-with-tier-a base-tc new-tier-a)))
 
 ;; build-state-awareness-preamble : task-state? (listof task-conclusion?) -> (or/c #f message?)
 ;; Generates a system prompt section describing the current task state.
