@@ -139,7 +139,7 @@
     (set-trace-logger-seq! logger seq)
     (define entry
       (hasheq 'ts
-              (seconds->iso8601 (event-time evt))
+              (seconds->iso8601 (event-time->seconds (event-time evt)))
               'seq
               seq
               'phase
@@ -172,6 +172,13 @@
 ;; ============================================================
 ;; Helpers
 ;; ============================================================
+
+;; Event producers historically use both Unix seconds and milliseconds because
+;; TUI reducers need millisecond precision. Normalize only at the trace boundary.
+(define (event-time->seconds timestamp)
+  (if (> timestamp 100000000000)
+      (/ timestamp 1000.0)
+      timestamp))
 
 (define (seconds->iso8601 secs)
   (define d (seconds->date secs #f))

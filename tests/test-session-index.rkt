@@ -679,8 +679,12 @@
   (define idx (build-index! sp ip))
   ;; Now append a new entry
   (define new-entry (make-test-message "app1" #f 'assistant 'message))
+  (define old-count (vector-length (session-index-entry-order idx)))
   (define-values (_v1 returned) (append-to-leaf! idx new-entry))
   (set! idx _v1)
+  (check-equal? (vector-length (session-index-entry-order idx))
+                (add1 old-count)
+                "append must update traversal/persistence order")
   ;; Must return a message struct, not void
   (check-pred message? returned "append-to-leaf! should return the entry")
   (check-equal? (message-id returned) "app1")

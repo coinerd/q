@@ -15,7 +15,7 @@
          "../util/event/event-bus.rkt"
          "../util/event/event.rkt"
          "../agent/queue.rkt"
-         (only-in "../runtime/session/session-lifecycle.rkt" write-crash-log!))
+         (only-in "../runtime/session/session-lifecycle.rkt" exn:fail:session:busy? write-crash-log!))
 
 ;; Handle a user submit: enqueue if busy, debounce duplicates, or run via runner.
 ;; Mutates ctx's ui-state-box and spawns a thread for the runner.
@@ -73,7 +73,8 @@
         (thread
          (lambda ()
            (with-handlers
-               ([exn:fail? (lambda (e)
+               ([exn:fail:session:busy? (lambda (_e) (void))]
+                [exn:fail? (lambda (e)
                              (define bus (tui-ctx-event-bus ctx))
                              (define sid (ui-state-session-id (unbox (tui-ctx-ui-state-box ctx))))
                              ;; B3-A: Write crash log for unhandled exceptions

@@ -626,6 +626,24 @@
     (check-false (stream-chunk-delta-text chunk) "thinking chunk has no content text"))
   (check-false (gen) "stream ends after all chunks"))
 
+(test-case "live-session regression: thinking activity uses bounded inter-chunk timeout"
+  (define-values (in out) (make-pipe))
+  (display (format "data: ~a\n\n"
+                   (jsexpr->string (hasheq 'choices
+                                           (list (hasheq 'delta
+                                                         (hasheq 'reasoning_content "thinking")
+                                                         'finish_reason
+                                                         'null)))))
+           out)
+  (flush-output out)
+  ;; No #:thinking-timeout override: after the first activity, the bounded
+  ;; stream inactivity timeout must apply rather than the full initial timeout.
+  (define gen (read-sse-chunks in #:initial-timeout 5 #:stream-timeout 0.01 #:max-total-timeout 10))
+  (check-pred stream-chunk? (gen))
+  (check-exn #rx"HTTP read timeout \\(0.01 seconds\\)" (lambda () (gen)))
+  (close-output-port out)
+  (close-input-port in))
+
 (test-case "W0: once content starts, tight stream-timeout applies"
   ;; After a content chunk arrives, subsequent reads should use stream-timeout (tight).
   ;; Create a content chunk followed by another that arrives within stream-timeout.

@@ -509,6 +509,7 @@
                        '())))
           (define body-bytes (jsexpr->bytes body))
           (define response-port-box (box #f))
+          (define stream-owns-port? (box #f))
           (dynamic-wind (lambda () (void))
                         (lambda ()
                           ;; Wrap initial HTTP request in overall timeout (SEC-11)
@@ -548,15 +549,18 @@
                           (define current-tool-name (box #f))
                           (define current-tool-index (box 0))
                           (log-stream-setup-timing "anthropic" _stream-t0)
-                          (stream-sse-events raw-port
-                                             (lambda (parsed)
-                                               (anthropic-parse-single-event parsed
-                                                                             current-tool-id
-                                                                             current-tool-name
-                                                                             current-tool-index))))
+                          (set-box! stream-owns-port? #t)
+                          (close-port-after-stream
+                           (stream-sse-events raw-port
+                                              (lambda (parsed)
+                                                (anthropic-parse-single-event parsed
+                                                                              current-tool-id
+                                                                              current-tool-name
+                                                                              current-tool-index)))
+                           raw-port))
                         (lambda ()
                           (define rp (unbox response-port-box))
-                          (when rp
+                          (when (and rp (not (unbox stream-owns-port?)))
                             (with-logged-error "port cleanup" (close-input-port rp))))))))
 
   (make-provider (lambda () (anthropic-provider-name config))

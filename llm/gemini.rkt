@@ -478,6 +478,7 @@
     (define headers (list "Content-Type: application/json" (format "x-goog-api-key: ~a" api-key)))
     (define body-bytes (jsexpr->bytes body))
     (define response-port-box (box #f))
+    (define stream-owns-port? (box #f))
     (dynamic-wind
      (lambda () (void))
      (lambda ()
@@ -520,10 +521,13 @@
          ;; Incremental SSE parsing — generator yields chunks one at a time
          (define raw-port response-port)
          (log-stream-setup-timing "gemini" _stream-t0)
-         (stream-sse-events raw-port (lambda (parsed) (gemini-parse-single-event parsed)))))
+         (set-box! stream-owns-port? #t)
+         (close-port-after-stream
+          (stream-sse-events raw-port (lambda (parsed) (gemini-parse-single-event parsed)))
+          raw-port)))
      (lambda ()
        (define rp (unbox response-port-box))
-       (when rp
+       (when (and rp (not (unbox stream-owns-port?)))
          (with-logged-error "port cleanup" (close-input-port rp))))))
 
   (make-provider (lambda () "gemini")

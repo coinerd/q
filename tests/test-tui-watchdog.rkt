@@ -51,10 +51,9 @@
   (define st (make-test-state #:busy? #t #:busy-since thirty-one-min-ago))
   (define result (check-busy-watchdog st now (* 30 60 1000)))
   (check-not-false result)
-  ;; Verify busy? cleared
-  (check-false (ui-state-busy? result))
-  ;; Verify status message set
-  (check-equal? (ui-state-status-message result) "watchdog: busy timeout")
+  ;; Runtime owns availability; watchdog only warns.
+  (check-true (ui-state-busy? result))
+  (check-equal? (ui-state-status-message result) "watchdog: busy; runtime still active")
   ;; Verify streaming text cleared
   (check-false (ui-state-streaming-text result))
   (check-false (ui-state-streaming-thinking result))
@@ -72,7 +71,7 @@
   (define fired? (apply-busy-watchdog! ctx now (* 30 60 1000)))
   (check-true fired?)
   (check-false (unbox (tui-ctx-goal-cancel-box ctx))) ;; NOT cancelled by watchdog
-  (check-false (ui-state-busy? (unbox (tui-ctx-ui-state-box ctx)))))
+  (check-true (ui-state-busy? (unbox (tui-ctx-ui-state-box ctx)))))
 
 (test-case "watchdog: cleared state has watchdog transcript entry"
   (define now (current-inexact-milliseconds))
@@ -146,15 +145,12 @@
   (check-not-false watchdog-entry "watchdog transcript entry exists")
   ;; Verify the text content matches expected message
   (check-equal? (transcript-entry-text watchdog-entry)
-                (format "[Watchdog: busy state timed out — force-cleared after ~a min]"
+                (format "[Watchdog: busy for ~a min — runtime still active; use /interrupt]"
                         (/ (* 30 60 1000) 60000)))
   ;; Verify timestamp matches the 'now' argument passed to check-busy-watchdog
   (check-equal? (transcript-entry-timestamp watchdog-entry) now)
-  ;; Verify busy? is cleared
-  (check-false (ui-state-busy? result) "busy? is cleared after watchdog fires")
-  ;; busy-since is now cleared to #f when watchdog fires (v0.85.x fix:
-  ;; prevents watchdog spam when tool events re-set busy?=#t with stale timestamp)
-  (check-false (ui-state-busy-since result) "busy-since cleared to #f after watchdog fires"))
+  (check-true (ui-state-busy? result) "busy remains runtime-owned")
+  (check-equal? (ui-state-busy-since result) now "warning is rate-limited"))
 
 (test-case "v0.45.13 M2: existing transcript entries preserved after watchdog"
   ;; Add a pre-existing transcript entry, then fire watchdog, verify both exist
@@ -182,7 +178,8 @@
   ;; Even with busy-since very recent (< 500ms), handle-turn-completed must clear busy?
   (define now (current-inexact-milliseconds))
   (define st
-    (set-busy (set-busy-since (initial-ui-state #:session-id "test-session" #:model-name "m") now) #t))
+    (set-busy (set-busy-since (initial-ui-state #:session-id "test-session" #:model-name "m") now)
+              #t))
   ;; Create a turn.completed event
   (define evt (make-test-event "turn.completed" (hasheq) #:time (+ now 100)))
   (define result (apply-event-to-state st evt))
@@ -226,7 +223,8 @@
 (test-case "v0.45.14: turn-cancelled clears busy-since"
   (define now (current-inexact-milliseconds))
   (define st
-    (set-busy (set-busy-since (initial-ui-state #:session-id "test-session" #:model-name "m") now) #t))
+    (set-busy (set-busy-since (initial-ui-state #:session-id "test-session" #:model-name "m") now)
+              #t))
   (define evt (make-test-event "turn.cancelled" (hasheq) #:time (+ now 100)))
   (define result (apply-event-to-state st evt))
   (check-false (ui-state-busy? result))
@@ -275,8 +273,8 @@
   ;; Watchdog fires
   (define result1 (check-busy-watchdog st now (* 30 60 1000)))
   (check-not-false result1)
-  (check-false (ui-state-busy? result1))
-  (check-false (ui-state-busy-since result1))
+  (check-true (ui-state-busy? result1))
+  (check-equal? (ui-state-busy-since result1) now)
   ;; Tool event re-sets busy (simulates goal thread still running)
   (define re-busy (set-busy result1 #t))
   (check-true (ui-state-busy? re-busy))
@@ -311,7 +309,7 @@
 
 (test-case "BF1b: streaming stall detected when last-delta-ms is stale"
   ;; When busy and streaming-text exists but last-delta is old (>3 min),
-  ;; the watchdog should force-clear the stalled streaming state.
+  ;; the watchdog should warn without clearing runtime-owned state.
   (parameterize ([current-busy-watchdog-ms (* 5 60 1000)]
                  [current-streaming-watchdog-ms (* 3 60 1000)])
     (define now (* 10 60 1000))
@@ -320,8 +318,8 @@
     (define st (set-last-delta-ms (set-streaming-text base "stalled text...") last-delta))
     (define result (check-busy-watchdog st now (* 5 60 1000)))
     (check-not-false result "Should fire for stale streaming")
-    (check-false (ui-state-busy? result))
-    (check-false (ui-state-streaming-text result))))
+    (check-true (ui-state-busy? result))
+    (check-equal? (ui-state-streaming-text result) "stalled text...")))
 
 (test-case "BF1b: streaming stall NOT triggered when deltas are recent"
   ;; When last-delta-ms is recent (<3 min), watchdog should not fire.
@@ -357,7 +355,8 @@
     (define st (set-last-delta-ms (set-streaming-text base "text") last-delta))
     (define result (check-busy-watchdog st now (* 5 60 1000)))
     (check-not-false result)
-    (check-false (ui-state-busy? result))))
+    (check-true (ui-state-busy? result))
+    (check-equal? (ui-state-last-delta-ms result) now)))
 
 (test-case "BF1b: stall transcript entry has stall marker"
   ;; MF4 (v0.99.5): Strengthened assertions — exact text, timestamp, full metadata.
@@ -376,19 +375,19 @@
                     (hash-ref (transcript-entry-meta e) 'stall #f)))
              entries))
     (check-not-false stall-entry "Should have stall-marked entry")
-    ;; MF4: Exact text match
+    ;; Ownership-safe policy: report the stall but do not advertise readiness
+    ;; while runtime still owns the active prompt.
     (check-equal? (transcript-entry-text stall-entry)
-                  "[Watchdog: streaming stalled — force-cleared after 3 min]")
-    ;; MF4: Exact timestamp match
+                  "[Watchdog: streaming stalled after 3 min — runtime still active; use /interrupt]")
     (check-equal? (transcript-entry-timestamp stall-entry) now)
-    ;; MF4: Full metadata verification
     (define meta (transcript-entry-meta stall-entry))
     (check-true (hash-ref meta 'watchdog #f) "meta should have 'watchdog #t")
     (check-true (hash-ref meta 'stall #f) "meta should have 'stall #t")
-    ;; MF4: Verify cleared state
-    (check-false (ui-state-busy? result) "busy? should be cleared")
-    (check-false (ui-state-streaming-text result) "streaming-text should be cleared")
-    (check-false (ui-state-busy-since result) "busy-since should be cleared")))
+    (check-true (ui-state-busy? result) "runtime-owned busy state must remain set")
+    (check-equal? (ui-state-streaming-text result) "stalled")
+    (check-equal? (ui-state-last-delta-ms result) now "watchdog warning should be rate-limited")
+    (check-equal? (ui-state-status-message result)
+                  "watchdog: streaming stalled; runtime still active")))
 
 (test-case "BF1b: last-delta-ms field is #f by default"
   (check-false (ui-state-last-delta-ms (initial-ui-state))))
@@ -434,7 +433,8 @@
     (define st (set-last-delta-ms (set-streaming-thinking base "thinking...") last-delta))
     (define result (check-busy-watchdog st now (* 5 60 1000)))
     (check-not-false result "HF1: thinking-only stall should be detected")
-    (check-false (ui-state-busy? result))))
+    (check-true (ui-state-busy? result))
+    (check-equal? (ui-state-streaming-thinking result) "thinking...")))
 
 (test-case "HF1: both text and thinking stream active does not false-trigger busy timeout"
   (parameterize ([current-busy-watchdog-ms (* 5 60 1000)])

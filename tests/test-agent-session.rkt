@@ -13,12 +13,14 @@
 (require rackunit
          racket/format
          "../runtime/agent-session.rkt"
+         (only-in "../runtime/session/session-lifecycle.rkt" exn:fail:session:busy?)
          "../runtime/session/session-types.rkt"
          (only-in "../runtime/session/session-mutation.rkt"
                   guarded-set-prompt-running!
                   try-claim-prompt!
                   release-prompt!)
          "../util/event/event-bus.rkt"
+         "../util/event/event.rkt"
          "../tools/tool.rkt"
          (only-in "helpers/temp-fs.rkt" with-temp-dir))
 
@@ -52,6 +54,15 @@
    (define sess (make-test-session dir))
    (check-true (try-claim-prompt! sess) "first claim should succeed")
    (check-false (try-claim-prompt! sess) "second claim should fail")
+   (release-prompt! sess))
+ (test-case "W1: concurrent run-prompt has typed outcome and one runtime event"
+   (define sess (make-test-session dir))
+   (define events '())
+   (subscribe! (agent-session-event-bus sess) (lambda (evt) (set! events (cons evt events))))
+   (check-true (try-claim-prompt! sess))
+   (check-exn exn:fail:session:busy? (lambda () (run-prompt! sess "second prompt")))
+   (check-equal? (count (lambda (evt) (string=? (event-ev evt) "runtime.error")) events) 1)
+   (check-equal? (count (lambda (evt) (string=? (event-ev evt) "turn.completed")) events) 0)
    (release-prompt! sess))
  (test-case "W1: error message pattern includes session ID and /interrupt"
    (define sid "TEST-SESSION-ID")

@@ -362,14 +362,17 @@
     ;; will leak the port until GC. A thread+channel rewrite would fix this.
     (log-stream-setup-timing "openai" _stream-t0)
     (generator ()
-               (with-handlers ([exn:fail? (lambda (e)
-                                            (close-input-port response-port)
+               (with-handlers ([exn:break? (lambda (e)
+                                             (cleanup-thunk)
+                                             (raise e))]
+                               [exn:fail? (lambda (e)
+                                            (cleanup-thunk)
                                             (raise e))])
                  (let loop ()
                    (define chunk (gen))
                    (match chunk
                      [#f
-                      (close-input-port response-port)
+                      (cleanup-thunk)
                       (yield #f)]
                      [_
                       (yield chunk)
