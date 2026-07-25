@@ -192,7 +192,7 @@
         (session-id task-id
                     branch-id
                     last-event-id
-                    seq-count ; last processed session-seq
+                    seq-count ; last processed session-seq (0 for empty)
                     payload ; hash with reduced state
                     event-count ; total events applied
                     content-digest ; integrity hash
@@ -204,7 +204,7 @@
                          (string? t-id)
                          (string? b-id)
                          (string? le)
-                         (exact-positive-integer? sc)
+                         (exact-nonnegative-integer? sc)
                          (hash? pl)
                          (exact-nonnegative-integer? ec)
                          (and (string? cd) (positive? (string-length cd)))
