@@ -14,12 +14,14 @@
 (require racket/dict
          racket/match
          racket/string
-         "policy.rkt"
-         "protocol.rkt"
-         "backends/memory-hash.rkt"
-         "backends/file-jsonl.rkt"
-         "backends/chained.rkt"
-         "backends/mem0-api.rkt")
+         "../memory/policy.rkt"
+         "../memory/protocol.rkt"
+         "../memory/backends/memory-hash.rkt"
+         "../memory/backends/file-jsonl.rkt"
+         "../memory/backends/chained.rkt"
+         "../memory/backends/mem0-api.rkt"
+         "../memory/project-identity.rkt"
+         "../memory/project-keyed-factory.rkt")
 
 ;; ---------------------------------------------------------------------------
 ;; Service parameters
@@ -97,6 +99,28 @@
            (string->path session-dir)
            (find-system-path 'temp-dir)))
      (make-file-jsonl-backend memory-root)]
+    [(eq? spec 'project-jsonl)
+     ;; W5 (#8942): Project-keyed memory backend.
+     ;; Derives identity from the workspace root and builds an isolated
+     ;; project-keyed backend. Fail-closed: returns #f if identity is
+     ;; unavailable (caller falls through to no memory or hash backend).
+     (define workspace
+       (if (dict? cfg)
+           (dict-ref cfg 'workspace #f)
+           #f))
+     (define identity
+       (if workspace
+           (derive-project-identity #:start-dir workspace)
+           ;; If no workspace in cfg, try session-dir as fallback
+           (let ([session-dir (if (dict? cfg)
+                                  (dict-ref cfg 'session-dir #f)
+                                  #f)])
+             (and session-dir (derive-project-identity #:start-dir (path->string session-dir))))))
+     (cond
+       [identity (make-project-keyed-backend identity)]
+       [else
+        (log-warning "memory: project-jsonl: could not derive project identity, falling back")
+        #f])]
     [(hash? spec)
      (define spec-type (hash-ref spec 'type #f))
      (cond
@@ -154,13 +178,16 @@
 ;; Creates a new policy based on the current one with user-scope enabled/disabled.
 (define (update-memory-policy! #:user-scope-enabled? [enabled? #f])
   (define current (current-memory-policy))
-  (match-define
-    (memory-policy max-items max-retrieve max-content sensitivities
-                   patterns allow-delete _user-scope)
+  (match-define (memory-policy max-items
+                               max-retrieve
+                               max-content
+                               sensitivities
+                               patterns
+                               allow-delete
+                               _user-scope)
     current)
   (current-memory-policy
-   (memory-policy max-items max-retrieve max-content sensitivities
-                  patterns allow-delete enabled?)))
+   (memory-policy max-items max-retrieve max-content sensitivities patterns allow-delete enabled?)))
 
 ;; ---------------------------------------------------------------------------
 ;; Provide
