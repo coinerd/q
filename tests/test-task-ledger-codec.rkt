@@ -141,15 +141,18 @@
 
 (test-case "json->ledger-event with invalid JSON raises error"
   (check-exn exn:fail? (thunk (json->ledger-event "not-json"))))
-
 (test-case "json->ledger-event with wrong type for field raises error"
-  (check-exn
-   #rx"task-ledger-event: invalid field"
-   (thunk
-    (json->ledger-event
-     "{\"schema-version\":\"wrong\",\"session-seq\":1,\"event-id\":\"e1\",\"session-id\":\"s1\",\"project-id\":\"p1\",\"task-id\":\"t1\",\"parent-task-id\":null,\"branch-id\":\"b1\",\"turn-id\":\"tu1\",\"request-id\":\"r1\",\"assembly-id\":\"a1\",\"correlation-id\":\"c1\",\"causation-id\":null,\"source-class\":\"runtime-observed\",\"event-kind\":\"task-started\",\"payload\":{},\"timestamp\":1,\"evidence-refs\":[],\"content-digest\":\"d1\"}"))))
+  (check-exn #rx"task-ledger-event: invalid field"
+             (thunk (json->ledger-event
+                     (string-append
+                      "{\"schema-version\":\"wrong\",\"session-seq\":1,\"event-id\":\"e1\","
+                      "\"session-id\":\"s1\",\"project-id\":\"p1\",\"task-id\":\"t1\","
+                      "\"parent-task-id\":null,\"branch-id\":\"b1\",\"turn-id\":\"tu1\","
+                      "\"request-id\":\"r1\",\"assembly-id\":\"a1\",\"correlation-id\":\"c1\","
+                      "\"causation-id\":null,\"source-class\":\"runtime-observed\","
+                      "\"event-kind\":\"task-started\",\"payload\":{},\"timestamp\":1,"
+                      "\"evidence-refs\":[],\"content-digest\":\"d1\"}")))))
 
-;; ============================================================
 ;; 4. JSONL format (append-only line format)
 ;; ============================================================
 
