@@ -59,7 +59,8 @@
          ;; v0.95.16 W3: Post-turn auto-extraction
          (only-in "../runtime/memory/auto-extraction.rkt" maybe-auto-extract-after-response!)
          ;; v0.95.21 W3: Post-turn auto-reflection
-         (only-in "../runtime/memory/reflection.rkt" maybe-reflect-session-memories!))
+         (only-in "../runtime/memory/reflection.rkt" maybe-reflect-session-memories!)
+         (only-in "stream-runner.rkt" safe-hook-dispatch))
 
 (provide classify-chunk
          chunk-has-data?
@@ -88,7 +89,8 @@
 ;; Emits turn.cancelled and turn.completed events, returns a cancelled loop-result.
 (define (handle-cancellation bus session-id turn-id state #:hook-dispatcher [hook-dispatcher #f])
   (when hook-dispatcher
-    (hook-dispatcher
+    (safe-hook-dispatch
+     hook-dispatcher
      'agent-end
      (hasheq 'session-id (loop-state-session-id state) 'turn-id turn-id 'termination 'cancelled)))
   (emit-typed-event! bus
@@ -135,9 +137,14 @@
 
   ;; v0.95.17 W1: Post-turn auto-extraction (non-fatal, gated by parameter)
   ;; Must fire for both text-only and tool-call turns.
-  (maybe-auto-extract-after-response! final-text #:session-id session-id)
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-warning "auto-extract-after-response failed: ~a"
+                                            (exn-message e)))])
+    (maybe-auto-extract-after-response! final-text #:session-id session-id))
   ;; v0.95.21 W3: Post-turn auto-reflection (non-fatal, gated by parameter)
-  (maybe-reflect-session-memories! #:session-id session-id)
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-warning "reflect-session-memories failed: ~a" (exn-message e)))])
+    (maybe-reflect-session-memories! #:session-id session-id))
   (cond
     [(null? tool-call-parts)
      (emit-typed-event! bus
@@ -155,8 +162,9 @@
                                                           #:turn-id-str turn-id)
                         #:state state)
      (when hook-dispatcher
-       (hook-dispatcher 'agent-end
-                        (hasheq 'session-id session-id 'turn-id turn-id 'termination 'completed)))
+       (safe-hook-dispatch hook-dispatcher
+                           'agent-end
+                           (hasheq 'session-id session-id 'turn-id turn-id 'termination 'completed)))
      (make-loop-result
       (loop-state-messages state)
       'completed
@@ -186,7 +194,8 @@
                                                           #:turn-id-str turn-id)
                         #:state state)
      (when hook-dispatcher
-       (hook-dispatcher
+       (safe-hook-dispatch
+        hook-dispatcher
         'agent-end
         (hasheq 'session-id session-id 'turn-id turn-id 'termination 'tool-calls-pending)))
      (make-loop-result (loop-state-messages state)
@@ -275,7 +284,7 @@
               (or stream-usage (hasheq))
               'tool-call-count
               (length tool-call-parts)))
-    (hook-dispatcher 'model-response-post post-payload))
+    (safe-hook-dispatch hook-dispatcher 'model-response-post post-payload))
 
   (define msg-end-payload
     (hasheq 'session-id
@@ -288,7 +297,7 @@
             (length tool-call-parts)
             'usage
             (or effective-usage (hasheq))))
-  (define msg-end-result (and hook-dispatcher (hook-dispatcher 'message-end msg-end-payload)))
+  (define msg-end-result (safe-hook-dispatch hook-dispatcher 'message-end msg-end-payload))
 
   (define final-text-box (box accumulated-text))
 
