@@ -307,8 +307,20 @@
                  (make-error-result (format "tool '~a' blocked — approval denied" tc-name))])])])])]))
 
 ;; ============================================================
-;; Execution stage
+;; Guarded execution helper (W0-execution: failure symmetry)
 ;; ============================================================
+
+;; Execute a single tool with consistent exception handling for both
+;; serial and parallel paths. Catches exn:fail? and exn:break?,
+;; converting them to error results without crashing the batch.
+(define (guard-execute tc t exec-ctx hook-dispatcher)
+  (define tc-name (tool-call-name tc))
+  (with-handlers
+      ([exn:break? (lambda (e)
+                     (make-error-result (format "tool '~a' cancelled: ~a" tc-name (exn-message e))))]
+       [exn:fail? (lambda (e)
+                    (make-error-result (format "tool '~a' raised: ~a" tc-name (exn-message e))))])
+    (execute-single tc t exec-ctx hook-dispatcher)))
 
 (define (run-execution preflight-entries exec-ctx parallel? hook-dispatcher)
   ;; Returns a list of tool-result in the same order as preflight-entries.
@@ -341,17 +353,13 @@
                   (define tc (preflight-entry-tool-call entry))
                   (define t (preflight-entry-tool entry))
                   (thread (lambda ()
-                            (semaphore-wait sem)
                             (define result
-                              (if (cancelled?)
-                                  (cancelled-result)
-                                  (with-handlers ([exn:fail? (lambda (e)
-                                                               (make-error-result
-                                                                (format "tool '~a' raised: ~a"
-                                                                        (tool-call-name tc)
-                                                                        (exn-message e))))])
-                                    (execute-single tc t exec-ctx hook-dispatcher))))
-                            (semaphore-post sem)
+                              (dynamic-wind (lambda () (semaphore-wait sem))
+                                            (lambda ()
+                                              (if (cancelled?)
+                                                  (cancelled-result)
+                                                  (guard-execute tc t exec-ctx hook-dispatcher)))
+                                            (lambda () (semaphore-post sem))))
                             (channel-put ch (cons idx result))))
                   ch)])
           (for/list ([ch (in-list channels)])
@@ -365,7 +373,7 @@
           (cons idx
                 (if (cancelled?)
                     (cancelled-result)
-                    (execute-single tc t exec-ctx hook-dispatcher))))))
+                    (guard-execute tc t exec-ctx hook-dispatcher))))))
 
   ;; Build a map from index -> result
   (define results-by-idx
