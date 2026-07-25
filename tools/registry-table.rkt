@@ -19,6 +19,7 @@
 (provide register-tools-from-specs!
          dangerous-tool-names
          externalizable-tool-names
+         mutates-filesystem-tool-names
          tool-specs
          tool-spec
          tool-spec?
@@ -51,6 +52,10 @@
 ;; externalizable because they require a running Chromium process that only
 ;; exists in the main process. A pass-through proxy architecture is planned
 ;; for M4 (v1.0.0-rc2) per the MAS Enablement Strategy §3.2.
+;; Tools that mutate the filesystem (write, edit, delete-lines)
+;; Used to select filesystem mutation serialization via with-file-mutation-queue.
+(define mutates-filesystem-tool-names '("write" "edit" "delete-lines"))
+
 (define externalizable-tool-names '("bash" "write" "edit" "delete-lines"))
 
 ;; Register tools from tool-spec structs.
@@ -65,6 +70,7 @@
          ;; v0.99.66 R1: classification is the sole authority for danger metadata.
          (define dangerous? (tool-name-needs-approval? name))
          (define externalizable? (and (member name externalizable-tool-names) #t))
+         (define mutates-filesystem? (and (member name mutates-filesystem-tool-names) #t))
          (if pg
              (register-tool! registry
                              (make-tool name
@@ -73,6 +79,7 @@
                                         (tool-spec-handler spec)
                                         #:prompt-guidelines pg
                                         #:dangerous? dangerous?
+                                        #:mutates-filesystem? mutates-filesystem?
                                         #:required-capability rc
                                         #:externalizable? externalizable?))
              (register-tool! registry
@@ -81,6 +88,7 @@
                                         (tool-spec-schema spec)
                                         (tool-spec-handler spec)
                                         #:dangerous? dangerous?
+                                        #:mutates-filesystem? mutates-filesystem?
                                         #:required-capability rc
                                         #:externalizable? externalizable?))))]))
   (void))
