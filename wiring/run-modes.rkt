@@ -31,6 +31,7 @@
          "../runtime/provider/model-registry.rkt"
          (only-in "../runtime/provider/provider-factory.rkt" build-provider)
          "../tools/tool.rkt"
+         (only-in "../tools/permission-gate.rkt" make-strict-permission-config)
          (only-in "../tools/registry-defaults.rkt" register-default-tools!)
          "../util/event/event-bus.rkt"
          (only-in "../util/event/event.rkt" make-event)
@@ -44,7 +45,8 @@
                   wire-timeouts!
                   make-trace-logger
                   start-trace-logger!
-                  project-tree->string)
+                  project-tree->string
+                  resolve-permission-config)
          (only-in "extension-setup.rkt" make-wired-extension-registry load-extensions-from-dir!)
          (only-in "../runtime/session/session-config.rkt" apply-context-assembly-profile!)
          (only-in "../runtime/context-assembly/memory-builder.rkt" current-memory-injection-budget)
@@ -158,7 +160,8 @@
                                       #:event-publisher [event-publisher #f]
                                       #:runtime-settings [runtime-settings #f]
                                       #:session-metadata [session-metadata #f]
-                                      #:permission-config [permission-config #f]
+                                      #:permission-config
+                                      [permission-config (make-strict-permission-config)]
                                       #:hook-dispatcher [hook-dispatcher #f])
   (lambda (tool-name args)
     (define call-id (format "mcp-~a" (current-inexact-milliseconds)))
@@ -211,6 +214,11 @@
   (define project-dir (or (hash-ref base-config 'project-dir #f) (current-directory)))
   (define config-path (hash-ref base-config 'config-path #f))
   (define settings (load-settings project-dir #:config-path config-path))
+  (define tui-interactive-approval? (eq? (cli-config-mode cfg) 'tui))
+  (define permission-config
+    (resolve-permission-config settings
+                               #:cli-auto-approve? (hash-ref base-config 'cli-auto-approve? #f)
+                               #:tui? tui-interactive-approval?))
 
   ;; Load resources (system instructions, skills, templates)
   (define global-resources (load-global-resources))
@@ -395,7 +403,8 @@
                              #:event-publisher (make-mcp-event-publisher bus (current-gsd-session-id))
                              #:runtime-settings settings
                              #:session-metadata
-                             (hasheq 'session-id (current-gsd-session-id) 'route 'mcp)))
+                             (hasheq 'session-id (current-gsd-session-id) 'route 'mcp)
+                             #:permission-config permission-config))
     (run-mcp-stdio-server! reg)
     (exit 0))
 
@@ -420,6 +429,12 @@
                model-reg
                'settings
                settings
+               'permission-config
+               permission-config
+               ;; Persist interface authority so reload reselects interactive
+               ;; strict approval without treating non-TUI modes as interactive.
+               'tui-interactive-approval?
+               tui-interactive-approval?
                'max-iterations
                max-iter
                'model-name
@@ -613,7 +628,7 @@
   (wire-timeouts! new-settings)
   ;; v0.97.6 LF3: Re-apply context-assembly profile with updated context window
   (define new-profile
-    (or (cli-config-context-profile base-config) (setting-context-assembly-profile new-settings)))
+    (dict-ref base-config 'context-assembly-profile (setting-context-assembly-profile new-settings)))
   (define new-model-name (dict-ref base-config 'model #f))
   (define new-cw (model-registry-context-window new-reg (or new-model-name "")))
   (define new-max-ctx (or new-cw (dict-ref base-config 'max-context-tokens 128000)))
@@ -622,8 +637,18 @@
   ;; v0.99.6: Re-wire verifier provider from session config
   (when (dict-ref base-config 'provider #f)
     (current-verifier-provider (dict-ref base-config 'provider)))
+  ;; Re-resolve permissions from reloaded settings while preserving the
+  ;; positive CLI override marker. Missing/invalid settings remain strict.
+  (define new-permission-config
+    (resolve-permission-config new-settings
+                               #:cli-auto-approve? (dict-ref base-config 'cli-auto-approve? #f)
+                               #:tui? (dict-ref base-config 'tui-interactive-approval? #f)))
   ;; Return updated config + registry
-  (values
-   (hash->session-config
-    (hash-set* (session-config->hash base-config) 'settings new-settings 'model-registry new-reg))
-   new-reg))
+  (values (hash->session-config (hash-set* (session-config->hash base-config)
+                                           'settings
+                                           new-settings
+                                           'model-registry
+                                           new-reg
+                                           'permission-config
+                                           new-permission-config))
+          new-reg))

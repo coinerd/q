@@ -18,6 +18,7 @@
 ;; header comment for full rationale.
 
 (require racket/contract
+         racket/dict
          racket/list
          racket/path
          json
@@ -29,6 +30,7 @@
                   config-model-name
                   config-session-index
                   config-parallel-tools
+                  config-permission-config
                   config-project-dir)
          (only-in "../util/tool/tool-types.rkt" tool-call?)
          (only-in "layer-adapters.rkt" tool-result? tool-registry?)
@@ -72,6 +74,7 @@
          (only-in "../util/content/content-helpers.rkt" tool-result-content->string)
          (only-in "../util/ids.rkt" generate-id now-seconds)
          (only-in "../util/cancellation.rkt" cancellation-token?)
+         (only-in "../util/capability.rkt" current-session-capabilities)
          (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload hook-result?)
          ;; QUAL-01 (v0.22.0): shared runtime helpers
          (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
@@ -99,7 +102,9 @@
                              (listof message?))]))
 ;; Pure helpers (W2 #4192)
 (provide classify-tool-results
-         build-blocked-tool-results)
+         build-blocked-tool-results
+         permission-config-for-execution
+         capabilities-for-tool-execution)
 
 ;; v0.31.5 W1: export struct
 (provide tool-call-actions
@@ -132,6 +137,20 @@
   (if (q-settings? settings)
       (q-settings (q-settings-global settings) (q-settings-project settings) with-model)
       with-model))
+
+;; Select the permission config used by normal agent tool execution.
+;; A valid explicit per-call config takes precedence over the session-resolved
+;; config; the final fallback remains deny-by-default.
+(define (permission-config-for-execution config explicit)
+  (or explicit (config-permission-config config) (make-default-permission-config)))
+
+;; Resolve capability authority at the runtime boundary. A configured session
+;; value wins; otherwise capture the current session parameter. make-exec-context
+;; canonicalizes this value into an immutable fail-closed snapshot.
+(define (capabilities-for-tool-execution config)
+  (if (dict-has-key? config 'capabilities)
+      (dict-ref config 'capabilities)
+      (current-session-capabilities)))
 
 ;; ============================================================
 ;; Helpers (QUAL-01: emit-session-event! and maybe-dispatch-hooks
@@ -269,7 +288,8 @@
                           #:call-id (generate-id)
                           #:session-metadata
                           (hasheq 'session-id session-id 'session-index (config-session-index config))
-                          #:permission-config (or perm-cfg (make-default-permission-config)))
+                          #:permission-config (permission-config-for-execution config perm-cfg)
+                          #:capabilities (capabilities-for-tool-execution config))
                          #:parallel? (config-parallel-tools config)))]))
   ;; Dispatch 'tool.execution.completed hook after tool batch
   (when (and ext-reg (not (null? tool-calls-to-run)))

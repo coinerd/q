@@ -35,28 +35,12 @@
 ;; MCP Event Emission
 ;; ============================================================
 
-;; Event sink parameter for the real MCP path.
-;; Procedure shape: (event-name-symbol data-hash -> void). Default is no-op.
-(define current-mcp-event-sink (make-parameter void))
-
-(define (safe-emit-mcp-event! event-name data)
-  (define sink (current-mcp-event-sink))
-  (when (procedure? sink)
-    (with-handlers ([exn:fail? (lambda (_) (void))])
-      (sink event-name data))))
-
+;; The shared sink and tool-call emission live in tool-bridge.rkt at the
+;; execution-result boundary. Protocol owns only connection lifecycle events.
 (define (emit-mcp-connected! method)
   (safe-emit-mcp-event!
    'mas.mcp.connected
    (hasheq 'server-name MCP-SERVER-NAME 'method method 'protocol-version MCP-PROTOCOL-VERSION)))
-
-(define (emit-mcp-tool-called! tool-name success? #:route [route 'local] #:error-code [error-code #f])
-  (define base
-    (hasheq 'tool-name tool-name 'server-name MCP-SERVER-NAME 'success? success? 'route route))
-  (safe-emit-mcp-event! 'mas.mcp.tool.called
-                        (if error-code
-                            (hash-set base 'error-code error-code)
-                            base)))
 
 ;; ============================================================
 ;; MCP Server: Tool Execution Parameter

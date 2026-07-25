@@ -238,7 +238,15 @@
                   'boolean
                   "Enable parallel execution mode: auto-partition task into subtasks"
                   #f
-                  (lambda (val acc) (acc-set acc 'parallel? #t)))))
+                  (lambda (val acc) (acc-set acc 'parallel? #t)))
+        ;; --auto-approve (v0.99.66 W2)
+        (flag-def "auto-approve"
+                  #f
+                  "auto-approve"
+                  'boolean
+                  "Auto-approve tools that normally require permission"
+                  #f
+                  (lambda (val acc) (acc-set acc 'auto-approve? #t)))))
 
 ;; Build lookup tables for fast matching
 (define long-flag-table

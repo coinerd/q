@@ -15,6 +15,7 @@
          racket/string
          "../extensions/mcp-adapter.rkt"
          (only-in "../wiring/run-modes.rkt" make-mcp-governed-execute-fn)
+         (only-in "../tools/permission-gate.rkt" make-permissive-permission-config)
          "../tools/registry.rkt"
          (only-in "../tools/tool.rkt"
                   make-tool
@@ -111,7 +112,10 @@
                                  (lambda (args ctx)
                                    (set-box! observed-ctx ctx)
                                    (make-success-result "ok"))))
-      (define exec-fn (make-mcp-governed-execute-fn reg #:working-directory (current-directory)))
+      (define exec-fn
+        (make-mcp-governed-execute-fn reg
+                                      #:working-directory (current-directory)
+                                      #:permission-config (make-permissive-permission-config)))
       (define req (json-roundtrip (build-mcp-tools-call 1 "ctx-probe" (hasheq))))
       (define resp (handle-mcp-request req reg exec-fn))
       (check-not-false (hash-ref resp 'result #f))

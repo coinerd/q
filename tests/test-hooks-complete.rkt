@@ -42,6 +42,7 @@
                   tool-call-arguments
                   make-error-result
                   make-success-result)
+         (only-in "../tools/permission-gate.rkt" make-permissive-permission-config)
          (only-in "../tools/tool-struct.rkt" tool-execute)
          "../util/ids.rkt"
          (only-in "../llm/provider.rkt" make-mock-provider)
@@ -163,7 +164,12 @@
       (define registry (make-tool-registry))
       (register-tool! registry test-tool)
 
-      (define results (run-tool-batch (list tc) registry #:hook-dispatcher hook-dispatcher))
+      (define results
+        (run-tool-batch (list tc)
+                        registry
+                        #:hook-dispatcher hook-dispatcher
+                        #:exec-context (make-exec-context #:permission-config
+                                                          (make-permissive-permission-config))))
 
       (check-true (unbox hook-called?) "tool-call-pre hook should be called")
       (check-equal? (unbox captured-name) "test-tool" "payload should contain tool name"))
@@ -193,7 +199,12 @@
       (define registry (make-tool-registry))
       (register-tool! registry test-tool)
 
-      (define results (run-tool-batch (list tc) registry #:hook-dispatcher hook-dispatcher))
+      (define results
+        (run-tool-batch (list tc)
+                        registry
+                        #:hook-dispatcher hook-dispatcher
+                        #:exec-context (make-exec-context #:permission-config
+                                                          (make-permissive-permission-config))))
 
       (check-true (unbox hook-called?) "tool-result-post hook should be called")
       (check-not-false (unbox captured-result) "payload should contain result"))

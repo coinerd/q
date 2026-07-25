@@ -380,8 +380,9 @@
   (define reg (make-tool-registry))
   (register-tool! reg (make-test-tool #:name "anytool" #:cap 'any))
   (define tools (tools-for-capability reg 'read-only))
-  (check-not-false (findf (lambda (t) (equal? (tool-name t) "anytool")) tools)
-                   "'any capability tools should appear in all filters"))
+  (check-false
+   (findf (lambda (t) (equal? (tool-name t) "anytool")) tools)
+   "default-'any tools require unrestricted authority and must not enter restricted filters"))
 
 (test-case "audit-reg-capability-filter-invalid"
   (define reg (make-tool-registry))

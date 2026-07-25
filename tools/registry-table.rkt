@@ -13,7 +13,8 @@
          "registry-table/core-tools.rkt"
          "registry-table/browser-tools.rkt"
          "registry-table/memory-tools.rkt"
-         "registry-table/skill-tools.rkt")
+         "registry-table/skill-tools.rkt"
+         "tool-classification.rkt")
 
 (provide register-tools-from-specs!
          dangerous-tool-names
@@ -34,9 +35,9 @@
 
 (define tool-specs (append core-tool-specs browser-tool-specs memory-tool-specs skill-tool-specs))
 
-;; R-03/R-22: Metadata-driven dangerous tool classification
-(define dangerous-tool-names
-  '("write" "edit" "bash" "delete-lines" "browser_click" "browser_type" "browser_press"))
+;; Compatibility/introspection view only. Classification remains authoritative;
+;; registration never consults this derived list.
+(define dangerous-tool-names (filter tool-name-needs-approval? (all-classified-tool-names)))
 
 ;; M2: Tools explicitly marked as externalizable (safe to run in worker process).
 ;; The worker process supports: bash, write, edit, delete-lines (plus git via worker-tools.rkt).
@@ -61,7 +62,8 @@
        (when (or (not only) (member name only))
          (define pg (tool-spec-prompt-guidelines spec))
          (define rc (tool-spec-required-capability spec))
-         (define dangerous? (and (member name dangerous-tool-names) #t))
+         ;; v0.99.66 R1: classification is the sole authority for danger metadata.
+         (define dangerous? (tool-name-needs-approval? name))
          (define externalizable? (and (member name externalizable-tool-names) #t))
          (if pg
              (register-tool! registry

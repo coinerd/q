@@ -47,4 +47,5 @@
          q-version
          cli-config-memory
          cli-config-agent-pool
-         cli-config-parallel?)
+         cli-config-parallel?
+         cli-config-auto-approve?)

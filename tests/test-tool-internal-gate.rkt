@@ -11,12 +11,8 @@
          rackunit/text-ui
          (only-in "../tools/tool-struct.rkt" tool? tool-name tool-execute tool-dangerous?)
          (only-in "../tools/tool.rkt" make-tool)
-         (only-in "../tools/registry-table.rkt"
-                  register-tools-from-specs!
-                  tool-specs
-                  tool-spec-name
-                  tool-spec?
-                  dangerous-tool-names)
+         (only-in "../tools/registry-table.rkt" register-tools-from-specs! tool-specs)
+         (only-in "../tools/tool-classification.rkt" tool-name-needs-approval?)
          (only-in "../tools/registry.rkt" make-tool-registry lookup-tool))
 
 (define gate-suite
@@ -26,17 +22,14 @@
     (test-case "tool-internal provides tool-execute"
       (check-pred procedure? tool-execute))
 
-    ;; ── dangerous tool metadata ──
-    (test-case "dangerous-tool-names includes write/edit/bash/delete-lines"
-      (check-not-false (member "write" dangerous-tool-names))
-      (check-not-false (member "edit" dangerous-tool-names))
-      (check-not-false (member "bash" dangerous-tool-names))
-      (check-not-false (member "delete-lines" dangerous-tool-names)))
+    ;; ── authoritative dangerous tool classification ──
+    (test-case "approval classification identifies dangerous tools"
+      (for ([name '("write" "edit" "bash" "delete-lines" "skill-route")])
+        (check-true (tool-name-needs-approval? name))))
 
-    (test-case "non-dangerous tools not in list"
-      (check-false (member "read" dangerous-tool-names))
-      (check-false (member "grep" dangerous-tool-names))
-      (check-false (member "ls" dangerous-tool-names)))
+    (test-case "read-only tools are not classified as dangerous"
+      (for ([name '("read" "grep" "ls")])
+        (check-false (tool-name-needs-approval? name))))
 
     ;; ── registration marks dangerous tools ──
     (test-case "registered write tool is dangerous"
@@ -55,6 +48,12 @@
       (define reg (make-tool-registry))
       (register-tools-from-specs! reg tool-specs #:only '("bash"))
       (define t (lookup-tool reg "bash"))
+      (check-true (tool-dangerous? t)))
+
+    (test-case "registered skill-route tool is dangerous"
+      (define reg (make-tool-registry))
+      (register-tools-from-specs! reg tool-specs #:only '("skill-route"))
+      (define t (lookup-tool reg "skill-route"))
       (check-true (tool-dangerous? t)))
 
     (test-case "registered read tool is not dangerous"

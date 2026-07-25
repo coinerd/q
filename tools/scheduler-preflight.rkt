@@ -19,7 +19,12 @@
                   tool-call-arguments
                   lookup-tool
                   validate-tool-args
-                  format-tool-schema-hint)
+                  format-tool-schema-hint
+                  tool-required-capability
+                  make-exec-context
+                  exec-context?
+                  exec-context-capabilities)
+         (only-in "../util/capability.rkt" capability-authorized?)
          (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload)
          (only-in "../util/safe-mode/safe-mode-predicates.rkt"
                   safe-mode?
@@ -63,8 +68,13 @@
 ;; Preflight stage (serial)
 ;; ============================================================
 
-(define (run-preflight tool-calls registry hook-dispatcher)
+(define (run-preflight tool-calls registry hook-dispatcher [exec-ctx (make-exec-context)])
   ;; Returns a list of preflight entries, one per tool-call, in order.
+  ;; Capability authority is the immutable snapshot carried by exec-ctx.
+  (define capabilities
+    (if (exec-context? exec-ctx)
+        (exec-context-capabilities exec-ctx)
+        '()))
   (for/list ([tc (in-list tool-calls)])
     (define tc-after-hook
       (if hook-dispatcher
@@ -120,6 +130,15 @@
                "Access denied: ~a is outside project root (~a). Safe mode restricts file access to the project directory."
                path-arg
                (safe-mode-project-root)))]
+            ;; Check capability enforcement against context-owned authority.
+            [(not (capability-authorized? (tool-required-capability t) capabilities))
+             (preflight-entry
+              'blocked
+              tc-after-hook
+              #f
+              (format "tool '~a' requires capability '~a' which is not granted to this session"
+                      (tool-call-name tc-after-hook)
+                      (tool-required-capability t)))]
             [else
              ;; Revalidate arguments after potential hook mutation (v0.19.3 W1)
              ;; Capture exception detail to produce actionable error feedback

@@ -17,6 +17,8 @@
          ROLE-CAPABILITIES
          current-session-capabilities
          (contract-out [valid-capability? (-> any/c boolean?)]
+                       [canonical-capabilities-snapshot (-> any/c (listof symbol?))]
+                       [capability-authorized? (-> any/c any/c boolean?)]
                        [role-has-capability? (-> symbol? symbol? boolean?)]
                        [all-capabilities (-> (listof symbol?))]))
 
@@ -25,7 +27,8 @@
 ;; ============================================================
 
 ;; All valid capability symbols in the MAS system.
-;; 'any is the permissive wildcard — tools with 'any require no special capability.
+;; 'any is the legacy wildcard. As a grant it authorizes every valid tool;
+;; as a requirement it is authorized only by an explicit 'any grant.
 (define VALID-CAPABILITIES
   '(read-only ; Read files, search, grep, find
     plan-write ; Create and modify GSD plans
@@ -43,6 +46,28 @@
 
 (define (all-capabilities)
   (filter (lambda (c) (not (eq? c 'any))) VALID-CAPABILITIES))
+
+;; Capture an authority value as a fresh immutable, duplicate-free list.
+;; Invalid authority is represented by the empty snapshot so downstream
+;; authorization checks fail closed.
+(define (canonical-capabilities-snapshot capabilities)
+  (if (and (list? capabilities) (andmap valid-capability? capabilities))
+      (for/fold ([snapshot '()]) ([capability (in-list capabilities)])
+        (if (memq capability snapshot)
+            snapshot
+            (append snapshot (list capability))))
+      '()))
+
+;; A required 'any capability is a legacy wildcard declaration, not an
+;; unprivileged declaration: only legacy '(any) authority may invoke it.
+;; Concrete requirements accept either an exact grant or the 'any grant.
+(define (capability-authorized? required granted)
+  (and (valid-capability? required)
+       (list? granted)
+       (andmap valid-capability? granted)
+       (if (eq? required 'any)
+           (and (memq 'any granted) #t)
+           (and (or (memq required granted) (memq 'any granted)) #t))))
 
 ;; ============================================================
 ;; Role → Capability Mapping
@@ -72,5 +97,5 @@
 
 ;; Controls which capabilities a session's tools may exercise.
 ;; Default is '(any) — all tools available (backward compat).
-;; When set to a specific list, tools-for-capability filters the registry.
+;; New execution contexts snapshot this parameter when no authority is supplied.
 (define current-session-capabilities (make-parameter '(any)))

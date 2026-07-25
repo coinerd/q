@@ -11,8 +11,10 @@
          rackunit/text-ui
          json
          "../extensions/mcp-adapter.rkt"
+         (only-in "../wiring/run-modes.rkt" make-mcp-governed-execute-fn)
          "../tools/registry.rkt"
          (only-in "../tools/tool.rkt" make-tool make-success-result)
+         (only-in "../tools/permission-gate.rkt" make-permissive-permission-config)
          "../util/version.rkt")
 
 (define (json-roundtrip v)
@@ -25,14 +27,19 @@
    (make-tool "echo"
               "Echo an input string"
               (hasheq 'type "object" 'properties (hasheq 'text (hasheq 'type "string")))
-              (lambda (args ctx) (make-success-result (hash-ref args 'text "")))))
+              (lambda (args ctx)
+                (make-success-result
+                 (list (hasheq 'type "text" 'text (format "echo:~a" (hash-ref args 'text ""))))))))
   reg)
 
-(define (make-recording-execute-fn calls)
+(define (make-recording-execute-fn calls #:registry [reg (make-integration-registry)])
+  (define governed-execute
+    (make-mcp-governed-execute-fn reg
+                                  #:working-directory (current-directory)
+                                  #:permission-config (make-permissive-permission-config)))
   (lambda (name args)
     (set-box! calls (cons (list name args) (unbox calls)))
-    (hasheq 'content
-            (list (hasheq 'type "text" 'text (format "~a:~a" name (hash-ref args 'text "")))))))
+    (governed-execute name args)))
 
 (define (make-event-recorder events)
   (lambda (event-name data) (set-box! events (append (unbox events) (list (cons event-name data))))))
@@ -88,7 +95,7 @@
       (define reg (make-integration-registry))
       (define calls (box '()))
       (define req (json-roundtrip (build-mcp-tools-call 3 "echo" (hasheq 'text "hello"))))
-      (define resp (handle-mcp-request req reg (make-recording-execute-fn calls)))
+      (define resp (handle-mcp-request req reg (make-recording-execute-fn calls #:registry reg)))
       (define content (parse-mcp-tools-call-response resp))
       (check-equal? (unbox calls) (list (list "echo" (hasheq 'text "hello"))))
       (check-equal? (length content) 1)
@@ -102,7 +109,7 @@
           (handle-mcp-request
            (json-roundtrip (build-mcp-tools-call 303 "echo" (hasheq 'text "hello")))
            reg
-           (make-recording-execute-fn (box '()))))
+           (make-recording-execute-fn (box '()) #:registry reg)))
         (check-equal? (length (parse-mcp-tools-call-response resp)) 1))
       (check-equal? (map car (unbox events)) '(mas.mcp.tool.called))
       (define data (cdr (car (unbox events))))

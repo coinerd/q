@@ -36,6 +36,27 @@
   (map tool->mcp-jsexpr (list-active-tools registry)))
 
 ;; ============================================================
+;; MCP Server: Tool-call telemetry
+;; ============================================================
+
+;; Shared here rather than protocol.rkt so the execution-result boundary can
+;; emit without creating a protocol ↔ tool-bridge import cycle.
+(define current-mcp-event-sink (make-parameter void))
+
+(define (safe-emit-mcp-event! event-name data)
+  (define sink (current-mcp-event-sink))
+  (when (procedure? sink)
+    (with-handlers ([exn:fail? (lambda (_) (void))])
+      (sink event-name data))))
+
+(define (emit-mcp-tool-called! tool-name success? #:route [route 'local] #:error-code [error-code #f])
+  (define base (hasheq 'tool-name tool-name 'server-name "q" 'success? success? 'route route))
+  (safe-emit-mcp-event! 'mas.mcp.tool.called
+                        (if error-code
+                            (hash-set base 'error-code error-code)
+                            base)))
+
+;; ============================================================
 ;; MCP Server: Tools/Call Handling
 ;; ============================================================
 
@@ -121,8 +142,10 @@
     [(and (hash? raw-result) (hash-has-key? raw-result '__internal-error))
      ;; F-03 (v0.99.11 W2): Do NOT expose internal exception details to clients.
      ;; The error message is logged server-side only.
+     (emit-mcp-tool-called! tool-name-str #f #:error-code -32603)
      (hasheq 'jsonrpc "2.0" 'id id 'error (hasheq 'code -32603 'message "Internal error"))]
     [else
+     (emit-mcp-tool-called! tool-name-str #t #:route (raw-result-route raw-result))
      ;; C2 (v0.99.10 W1): Convert tool-result structs to MCP-compatible jsexpr.
      (define result
        (cond
@@ -135,9 +158,13 @@
 ;; Provides
 ;; ============================================================
 
-(provide (contract-out [tool->mcp-jsexpr (-> tool? hash?)]
+(provide current-mcp-event-sink
+         safe-emit-mcp-event!
+         emit-mcp-tool-called!
+         (contract-out [tool->mcp-jsexpr (-> tool? hash?)]
                        [tools->mcp-list (-> tool-registry? (listof hash?))]
                        [handle-tools-call (-> hash? any/c tool-registry? procedure? hash?)]
-                       [handle-tools-call-exec (-> any/c string? hash? tool-registry? procedure? hash?)]
+                       [handle-tools-call-exec
+                        (-> any/c string? hash? tool-registry? procedure? hash?)]
                        [handle-tools-call-result (-> any/c string? any/c hash?)]
                        [raw-result-route (-> any/c symbol?)]))

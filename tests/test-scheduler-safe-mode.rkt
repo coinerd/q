@@ -32,6 +32,7 @@
                   make-error-result
                   make-success-result)
          (only-in "../tools/tool-struct.rkt" tool-execute)
+         (only-in "../tools/permission-gate.rkt" make-permissive-permission-config)
          (only-in "../tools/scheduler.rkt"
                   run-tool-batch
                   scheduler-result
@@ -329,7 +330,13 @@
             (tool-call "tc-2" "read" (hasheq 'path "/etc/passwd"))
             (tool-call "tc-3" "edit" (hasheq 'path "/tmp/foo"))
             (tool-call "tc-4" "firecrawl" (hasheq 'url "https://example.com"))))
-    (define sr (run-tool-batch tcs reg))
+    ;; v0.99.66 (W2): dangerous tools deny-by-default at the permission
+    ;; gate.  This test isolates *safe-mode* behavior, so we supply a
+    ;; permissive permission-config (--auto-approve equivalent) to bypass
+    ;; the approval gate and focus assertions on safe-mode tool/path
+    ;; restrictions.
+    (define exec-ctx (make-exec-context #:permission-config (make-permissive-permission-config)))
+    (define sr (run-tool-batch tcs reg #:exec-context exec-ctx))
     (define results (scheduler-result-results sr))
     (for ([r (in-list results)])
       (check-false (tool-result-is-error? r) "tool should succeed when safe mode off"))))

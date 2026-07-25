@@ -186,11 +186,12 @@
   (define calls (scheduler-problem-calls problem))
   (define registry (scheduler-problem-registry problem))
   (define hook-dispatcher (scheduler-problem-hook-dispatcher problem))
+  (define exec-ctx (or (scheduler-problem-exec-context problem) (make-exec-context)))
   (define parallel? (scheduler-problem-parallel? problem))
   (define strat (or (scheduler-problem-strategy problem) (default-scheduler-strategy)))
   (define filtered-calls ((scheduler-strategy-preflight-filter strat) calls))
   (define ordered-calls ((scheduler-strategy-execution-order strat) filtered-calls))
-  (define entries (run-preflight ordered-calls registry hook-dispatcher))
+  (define entries (run-preflight ordered-calls registry hook-dispatcher exec-ctx))
   (scheduler-plan entries ordered-calls (if parallel? 'parallel 'serial) #f))
 
 ;; v0.44.2 (R3): Effectful execution phase — runs a scheduler-plan

@@ -7,7 +7,8 @@
 
 (require rackunit
          "../tools/tool.rkt"
-         "../tools/tool-struct.rkt")
+         "../tools/tool-struct.rkt"
+         (only-in "../util/capability.rkt" current-session-capabilities))
 
 ;; ============================================================
 ;; Tool struct
@@ -79,7 +80,8 @@
 (test-case "make-exec-context with defaults"
   (define ctx (make-exec-context))
   (check-pred exec-context? ctx)
-  (check-equal? (exec-context-call-id ctx) ""))
+  (check-equal? (exec-context-call-id ctx) "")
+  (check-equal? (exec-context-capabilities ctx) '(any)))
 
 (test-case "make-exec-context with all keywords"
   (define ctx
@@ -87,6 +89,24 @@
                        #:call-id "call-123"
                        #:session-metadata (hasheq 'key "val")))
   (check-equal? (exec-context-call-id ctx) "call-123"))
+
+(test-case "make-exec-context captures a canonical immutable capability snapshot"
+  (define source (list 'read-only 'shell-exec 'read-only))
+  (define ctx (make-exec-context #:capabilities source))
+  (check-equal? (exec-context-capabilities ctx) '(read-only shell-exec))
+  (check-false (eq? (exec-context-capabilities ctx) source))
+  (check-true (list? (exec-context-capabilities ctx))))
+
+(test-case "make-exec-context snapshots ambient authority at construction"
+  (define ctx
+    (parameterize ([current-session-capabilities '(read-only)])
+      (make-exec-context)))
+  (parameterize ([current-session-capabilities '(any)])
+    (check-equal? (exec-context-capabilities ctx) '(read-only))))
+
+(test-case "make-exec-context canonicalizes malformed capability authority to deny-all"
+  (check-equal? (exec-context-capabilities (make-exec-context #:capabilities '(read-only bogus))) '())
+  (check-equal? (exec-context-capabilities (make-exec-context #:capabilities 'malformed)) '()))
 
 ;; ============================================================
 ;; Tool registry

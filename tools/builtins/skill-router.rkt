@@ -11,7 +11,8 @@
 ;;   load   — return full content of a named skill
 ;;
 ;; Scans .q/skills/ and .pi/skills/ directories from the working directory.
-;; This is a read-only discovery tool — no modification.
+;; Discovery actions are read-only; workflow execution spawns child work, so
+;; the registry classifies the combined tool as requiring approval.
 
 (require "../../util/error/error-helpers.rkt"
          racket/runtime-path)
@@ -213,9 +214,10 @@
          [else (make-error-result (format "Skill not found: ~a" ctx-name))])]
 
       ;; workflow: execute a mas-workflow skill
-      ;; Safety: the router itself is read-only; execution is delegated to the
-      ;; workflow-executor, which runs each step through a child-safe subagent
-      ;; whose tool set is filtered by the step's declared capabilities.
+      ;; Safety: entering this action requires approval at the scheduler gate;
+      ;; execution is delegated to the workflow-executor, which runs each step
+      ;; through a child-safe subagent whose tool set is filtered by the step's
+      ;; declared capabilities.
       ;; Uses dynamic-require to avoid circular dependency:
       ;; skill-router → workflow-executor → spawn-subagent → skill-router
       [(string=? action "workflow")

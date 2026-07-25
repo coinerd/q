@@ -1,3 +1,65 @@
+## 0.99.66
+
+Released: 2026-07-24
+
+### Overview
+
+Harden tool execution security with authoritative classification, strict
+deny-by-default permissions, broker-backed interactive TUI approval, immutable
+capability authority, and final-invocation validation.
+
+### Features
+
+- Added authoritative tool classification for auto-approved, generic-approval,
+  and tool-owned-approval operations. Unknown tools fail closed.
+- Added immutable capabilities to execution contexts and delegated child agents.
+- Added correlated broker-backed approval for dangerous TUI tool calls, bound
+  to the exact frozen arguments that execute.
+
+### Bug Fixes
+
+- Revalidate hook-amended arguments after timeout and working-directory
+  injection and before approval or execution.
+- Prevent spawn tools from being double-gated while preserving spawn's
+  digest-bound execution-plan approval.
+- Release the approval broker lock before approved work to permit nested
+  approval without deadlock.
+- Restore MCP tool-call lifecycle telemetry.
+
+### Breaking / Behavior Changes
+
+- Permission configuration defaults to strict denial. Dangerous tools no longer
+  execute when approval wiring is absent.
+- Intentional non-interactive auto-approval requires `--auto-approve` or
+  `security.permission-mode = permissive`.
+- Restricted contexts reject tools with omitted/default `any` capability until
+  those tools declare an explicit required capability.
+- `skill-route` requires approval because workflow execution can spawn agents.
+
+### Migration Notes
+
+- Non-interactive callers that intentionally run dangerous tools must opt into
+  permissive mode explicitly.
+- Extension tools should declare `#:required-capability`.
+- Delegated callers should pass `#:capabilities` when constructing execution
+  contexts. Legacy top-level contexts remain unrestricted for compatibility.
+
+### Testing
+
+- Added capability-authority, generic approval, spawn single-gate, immutable
+  invocation, classification parity, MCP, and scheduler regressions.
+- Fresh TUI approval smoke passes with three tests.
+
+### Operational / Release
+
+- Approval telemetry uses bounded redacted presentation and correlated digests;
+  raw credentials and complete tool arguments are not emitted.
+
+### Commits
+
+- `8b70c1a3` feat(security): enforce tool classification, capability, and preflight hardening
+- Release remediation: approval, authority propagation, invocation binding, and release gates
+
 ## 0.99.65
 
 Released: 2026-07-23

@@ -38,6 +38,28 @@
                                                    (lambda () (display (add1 val)))
                                                    #:exists 'replace))))
 
+(define (check-path-spellings-serialize first-path second-path)
+  (define holder-entered (make-semaphore 0))
+  (define release-holder (make-semaphore 0))
+  (define contender-entered (make-semaphore 0))
+  (define holder
+    (thread (lambda ()
+              (with-file-mutation-queue first-path
+                                        (lambda ()
+                                          (semaphore-post holder-entered)
+                                          (semaphore-wait release-holder))))))
+  (semaphore-wait holder-entered)
+  (define contender
+    (thread (lambda ()
+              (with-file-mutation-queue second-path (lambda () (semaphore-post contender-entered))))))
+  (check-false (sync/timeout 0.05 contender-entered)
+               "equivalent path spellings must share one queue lock")
+  (semaphore-post release-holder)
+  (thread-wait holder)
+  (thread-wait contender)
+  (check-not-false (sync/timeout 0 contender-entered)
+                   "contender should run after the shared lock is released"))
+
 ;; ============================================================
 ;; Tests
 ;; ============================================================
@@ -102,6 +124,71 @@
       (poll (add1 attempts))))
   (check-equal? (mutation-queue-stats) 0 "active lock cleaned up after completion")
   (delete-file tmp))
+
+(test-case "registration and semaphore lookup are one atomic lifecycle step"
+  (define tmp (make-temp-file))
+  (define path-str (path->string tmp))
+  (define first-registration-ready (make-semaphore 0))
+  (define release-first-registration (make-semaphore 0))
+  (define a-entered (make-semaphore 0))
+  (define c-entered (make-semaphore 0))
+  (define release-c (make-semaphore 0))
+  (define first-registration? #t)
+  (define (interleave-hook event _path)
+    (when (and (eq? event 'registered) first-registration?)
+      (set! first-registration? #f)
+      (semaphore-post first-registration-ready)
+      (semaphore-wait release-first-registration)))
+  (parameterize ([current-file-mutation-queue-hook interleave-hook])
+    (define a #f)
+    (define b #f)
+    (define c #f)
+    ;; A is registered but deliberately held before waiting on the path semaphore.
+    (set! a
+          (thread (lambda ()
+                    (with-file-mutation-queue path-str (lambda () (semaphore-post a-entered))))))
+    (semaphore-wait first-registration-ready)
+    ;; B may finish while A is paused. The registry must retain A's semaphore.
+    (set! b (thread (lambda () (with-file-mutation-queue path-str void))))
+    (thread-wait b)
+    ;; C must still receive that same semaphore.
+    (set! c
+          (thread (lambda ()
+                    (with-file-mutation-queue path-str
+                                              (lambda ()
+                                                (semaphore-post c-entered)
+                                                (semaphore-wait release-c))))))
+    (semaphore-wait c-entered)
+    (semaphore-post release-first-registration)
+    (check-false (sync/timeout 0.05 a-entered)
+                 "A must not enter on a detached semaphore while C holds the path lock")
+    (semaphore-post release-c)
+    (thread-wait c)
+    (thread-wait a)
+    (check-equal? (mutation-queue-stats) 0))
+  (delete-file tmp))
+
+(test-case "relative and absolute paths share the same lock"
+  (define dir (make-temporary-file "mq-relative-~a" 'directory))
+  (dynamic-wind void
+                (lambda ()
+                  (define absolute (build-path dir "target.txt"))
+                  (display-to-file "unchanged" absolute)
+                  (parameterize ([current-directory dir])
+                    (check-path-spellings-serialize "target.txt" absolute)))
+                (lambda () (delete-directory/files dir))))
+
+(test-case "nonexistent target path spellings share the same lock"
+  (define dir (make-temporary-file "mq-nonexistent-~a" 'directory))
+  (dynamic-wind void
+                (lambda ()
+                  (define absolute (build-path dir "future.txt"))
+                  (check-false (file-exists? absolute))
+                  (parameterize ([current-directory dir])
+                    (check-path-spellings-serialize "./future.txt" absolute))
+                  (check-false (file-exists? absolute)
+                               "queue canonicalization must not create the target"))
+                (lambda () (delete-directory/files dir))))
 
 (test-case "symlink resolves to same lock"
   (define tmp (make-temp-file))

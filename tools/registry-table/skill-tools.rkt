@@ -308,11 +308,10 @@
     tool-skill-route
     #f
     'read-only)
-   ;; NOTE: skill-route is tagged 'read-only because discovery/list/load/match
-   ;; actions are purely read-only. The optional 'workflow' action delegates
-   ;; execution to child-safe subagent tools whose own capability filtering
-   ;; governs runtime permissions; the router itself does not mutate files or
-   ;; spawn dangerous processes directly.)
+   ;; NOTE: discovery actions are read-only, but the workflow action spawns
+   ;; child work. The coarse tool-level permission classification therefore
+   ;; marks skill-route as needs-approval. Its capability remains read-only for
+   ;; compatibility; spawned steps enforce their own declared capabilities.)
    ;; delete-lines
    (make-tool-spec*
     "delete-lines"

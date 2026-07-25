@@ -55,6 +55,48 @@
     (check-true (id-in? (message-id m) all-tier-ids)
                 (format "user message ~a must appear somewhere in tiered context" (message-id m)))))
 
+(test-case "pinning preserves chronological provider order"
+  (define original (make-text-msg "u1" 'user 'message "original task"))
+  (define assistant (make-text-msg "a1" 'assistant 'message "working" "u1"))
+  (define tool-result (make-text-msg "t1" 'tool 'tool-result "result" "a1"))
+  (define retry (make-text-msg "u2" 'user 'message "Retry" "t1"))
+  (define msgs (list original assistant tool-result retry))
+  (define tiered (build-tiered-context msgs #:tier-b-count 1 #:tier-c-count 1))
+  (check-equal? (map message-id (tiered-context->message-list tiered))
+                '("u1" "a1" "t1" "u2")
+                "retained user prompts must not be moved ahead of later history"))
+
+(test-case "working-set pinning deduplicates by canonical message id"
+  (define original (make-text-msg "u1" 'user 'message "task"))
+  (define tool-result (make-text-msg "t1" 'tool 'tool-result "result" "u1"))
+  (define copied-result (make-text-msg "t1" 'tool 'tool-result "copied result" "u1"))
+  (define retry (make-text-msg "u2" 'user 'message "Retry" "t1"))
+  (define tiered
+    (build-tiered-context (list original tool-result retry)
+                          #:working-set-messages (list copied-result)))
+  (check-equal? (map message-id (tiered-context->message-list tiered)) '("u1" "t1" "u2")))
+
+(test-case "payload round trip preserves provider chronology"
+  (define msgs
+    (list (make-text-msg "u1" 'user 'message "task")
+          (make-text-msg "a1" 'assistant 'message "working" "u1")
+          (make-text-msg "u2" 'user 'message "Retry" "a1")))
+  (define original (build-tiered-context msgs #:tier-b-count 1 #:tier-c-count 1))
+  (define round-tripped (payload->tiered-context (tiered-context->payload original 1000)))
+  (check-equal? (map message-id (tiered-context->message-list round-tripped)) '("u1" "a1" "u2")))
+
+(test-case "tiered-context retains three-field match compatibility"
+  (check-equal? (match (tiered-context '(a) '(b) '(c))
+                  [(tiered-context a b c) (append a b c)])
+                '(a b c)))
+
+(test-case "new working-set injection stays before the latest user prompt"
+  (define system (make-text-msg "s1" 'system 'system-instruction "system"))
+  (define original (make-text-msg "u1" 'user 'message "task" "s1"))
+  (define injected (make-text-msg "w1" 'system 'system-instruction "working context"))
+  (define tiered (build-tiered-context (list system original) #:working-set-messages (list injected)))
+  (check-equal? (map message-id (tiered-context->message-list tiered)) '("s1" "w1" "u1")))
+
 (test-case "truncate-messages-to-budget preserves all user messages"
   (define users
     (for/list ([i (in-range 10)])

@@ -19,12 +19,11 @@
                              (hasheq 'type "object")
                              (lambda (a ctx) (make-success-result "ok"))
                              #:dangerous?
-                             (or (equal? name "bash")
-                                 (equal? name "write")
-                                 (equal? name "edit"))))
-  (define exec-ctx (if perm-cfg
-                       (make-exec-context #:permission-config perm-cfg)
-                       (make-exec-context)))
+                             (or (equal? name "bash") (equal? name "write") (equal? name "edit"))))
+  (define exec-ctx
+    (if perm-cfg
+        (make-exec-context #:permission-config perm-cfg)
+        (make-exec-context)))
   (define tool-calls (list (make-tool-call "tc-1" name args-hash)))
   (run-tool-batch tool-calls reg #:exec-context exec-ctx))
 
@@ -42,9 +41,7 @@
   (test-suite "permission denial-path integration tests"
 
     (test-case "strict mode: unknown tool blocked"
-      (define cfg (make-default-permission-config
-                   #:policy-mode 'strict
-                   #:callback (lambda (n a) #f)))
+      (define cfg (make-default-permission-config #:policy-mode 'strict #:callback (lambda (n a) #f)))
       (define result (run-single-tool "mystery-tool" (hash) cfg))
       (check-true (result-is-error? result)))
 
@@ -54,28 +51,31 @@
       (check-true (result-is-success? result)))
 
     (test-case "needs-approval tool succeeds when approved"
-      (define cfg (make-default-permission-config
-                   #:policy-mode 'strict
-                   #:callback (lambda (n a) (equal? n "bash"))))
+      (define cfg
+        (make-default-permission-config #:policy-mode 'strict
+                                        #:callback (lambda (n a) (equal? n "bash"))))
       (define result (run-single-tool "bash" (hash) cfg))
       (check-true (result-is-success? result)))
 
     (test-case "needs-approval tool blocked when denied"
-      (define cfg (make-default-permission-config
-                   #:policy-mode 'strict
-                   #:callback (lambda (n a) #f)))
+      (define cfg (make-default-permission-config #:policy-mode 'strict #:callback (lambda (n a) #f)))
       (define result (run-single-tool "bash" (hash) cfg))
       (check-true (result-is-error? result)))
 
+    (test-case "skill-route is blocked when workflow-spawn approval is denied"
+      (define cfg (make-default-permission-config #:policy-mode 'strict #:callback (lambda (n a) #f)))
+      (define result (run-single-tool "skill-route" (hash) cfg))
+      (check-true (result-is-error? result)))
+
     (test-case "auto-approved tool bypasses deny-all callback"
-      (define cfg (make-default-permission-config
-                   #:policy-mode 'strict
-                   #:callback (lambda (n a) #f)))
+      (define cfg (make-default-permission-config #:policy-mode 'strict #:callback (lambda (n a) #f)))
       (define result (run-single-tool "read" (hash) cfg))
       (check-true (result-is-success? result)))
 
-    (test-case "no permission config: tool executes (backward compat)"
+    ;; v0.99.66 (W1, finding #1 CRITICAL): no permission config now FAILS CLOSED.
+    ;; The scheduler refuses to execute when perm-cfg is absent/misconfigured.
+    (test-case "no permission config: tool BLOCKED (W1 fail-closed)"
       (define result (run-single-tool "bash" (hash) #f))
-      (check-true (result-is-success? result)))))
+      (check-true (result-is-error? result)))))
 
 (run-tests denial-path-suite)

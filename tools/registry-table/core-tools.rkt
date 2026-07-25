@@ -73,13 +73,20 @@
               'description
               "EXACT text to replace, copied verbatim from a read result. Do not type from memory.")
       'new-text
-      (hasheq 'type "string" 'description "Replacement text")))
+      (hasheq 'type "string" 'description "Replacement text")
+      'fuzzy?
+      (hasheq
+       'type
+       "boolean"
+       'description
+       "Enable whitespace-tolerant matching (default false). Ambiguous matches are rejected; boolean values only.")))
     tool-edit
     (string-append
      "IMPORTANT: old-text must match the file content exactly. Copy it verbatim from a prior "
      "read tool result. If edit fails, re-read the file first. "
      "Keep old-text short — ideally under 500 chars (~20 lines). "
-     "If you need to change a large block, split into multiple smaller edits.")
+     "If you need to change a large block, split into multiple smaller edits. "
+     "Set fuzzy? to boolean true only for whitespace drift; ambiguous fuzzy matches are rejected.")
     'file-write)
    ;; bash
    (make-tool-spec* "bash"

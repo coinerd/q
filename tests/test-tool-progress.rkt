@@ -10,7 +10,8 @@
 (require rackunit
          rackunit/text-ui
          "../tools/tool.rkt"
-         "../tools/scheduler.rkt")
+         "../tools/scheduler.rkt"
+         "../tools/permission-gate.rkt")
 
 (define progress-tests
   (test-suite "tool progress callbacks"
@@ -54,7 +55,8 @@
       (define ctx
         (make-exec-context #:progress-callback
                            (lambda (pct msg)
-                             (set! progress-calls (cons (list pct msg) progress-calls)))))
+                             (set! progress-calls (cons (list pct msg) progress-calls)))
+                           #:permission-config (make-permissive-permission-config)))
       (define reg (make-tool-registry))
       (register-tool! reg
                       (make-tool "progress-tool"
@@ -77,7 +79,8 @@
       (define ctx
         (make-exec-context #:progress-callback
                            (lambda (pct msg)
-                             (set! progress-calls (cons (list pct msg) progress-calls)))))
+                             (set! progress-calls (cons (list pct msg) progress-calls)))
+                           #:permission-config (make-permissive-permission-config)))
       (define reg (make-tool-registry))
       (register-tool! reg
                       (make-tool "tool-a"

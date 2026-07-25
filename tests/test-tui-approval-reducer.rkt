@@ -11,6 +11,7 @@
          (only-in "../tui/state-events/core-handlers.rkt"
                   handle-spawn-approval-requested
                   handle-spawn-approval-terminal)
+         (only-in "../tui/state-events/approval-events.rkt" handle-tool-approval-requested)
          (only-in "../tui/render/message-layout.rkt"
                   styled-line?
                   styled-line-segments
@@ -280,9 +281,39 @@
      (check-true (string-contains? (overlay-text (ui-state-active-overlay new-state))
                                    "shell-exec, git-write, file-write")))
 
+    (approval-test-case
+     "generic tool request renders broker-owned bounded presentation"
+     (define tool-view
+       (hasheq 'approval-kind
+               "tool"
+               'tool-name
+               "bash"
+               'arguments-preview
+               "#hasheq((command . deploy))"
+               'arguments-digest
+               DIGEST-B
+               'presentation-digest
+               PRESENTATION-B))
+     (define id
+       (register-approval-request-for-channel! (current-approval-channel) DIGEST-A tool-view))
+     (define evt
+       (make-event
+        "tool.approval-requested"
+        (current-inexact-milliseconds)
+        "test-session"
+        #f
+        (hasheq 'request-id id 'commitment-digest DIGEST-A 'presentation-digest PRESENTATION-B)))
+     (define state (handle-tool-approval-requested (make-initial-state) evt))
+     (define text (overlay-text (ui-state-active-overlay state)))
+     (check-true (string-contains? text "Tool Approval Required"))
+     (check-true (string-contains? text "bash"))
+     (check-true (string-contains? text "deploy")))
+
     (approval-test-case "approval lifecycle reducers are registered"
                         (check-true (event-reducer-registered? "mas.spawn-approval-requested"))
-                        (check-true (event-reducer-registered? "mas.spawn-approval-terminal")))
+                        (check-true (event-reducer-registered? "mas.spawn-approval-terminal"))
+                        (check-true (event-reducer-registered? "tool.approval-requested"))
+                        (check-true (event-reducer-registered? "tool.approval-terminal")))
 
     (approval-test-case
      "apply-event-to-state dispatches to approval handler"

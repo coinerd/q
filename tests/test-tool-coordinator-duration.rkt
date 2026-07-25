@@ -13,6 +13,7 @@
          (only-in "../runtime/tool-coordinator.rkt" handle-tool-calls-pending)
          (only-in "../runtime/session/session-config.rkt" hash->session-config)
          (only-in "../tools/tool.rkt" make-tool make-tool-registry register-tool! make-success-result)
+         (only-in "../tools/permission-gate.rkt" make-permissive-permission-config)
          (only-in "../util/message/protocol-types.rkt" make-message make-tool-call-part)
          (only-in "../util/ids.rkt" generate-id)
          (only-in "../util/event/event.rkt" event-event event-payload)
@@ -65,7 +66,8 @@
                              "test-session"
                              (format "/tmp/test-~a-dur.log" (random 1000000))
                              #f
-                             (hash->session-config (hash)))
+                             (hash->session-config (hash))
+                             #:permission-config (make-permissive-permission-config))
   (define durations (unbox collected-durations))
   (check-equal? (length durations) 1)
   (check-true (> (car durations) 0)))
@@ -90,7 +92,8 @@
                              "test-session"
                              (format "/tmp/test-~a-dur.log" (random 1000000))
                              #f
-                             (hash->session-config (hash)))
+                             (hash->session-config (hash))
+                             #:permission-config (make-permissive-permission-config))
   (define durations (unbox collected-durations))
   (check-equal? (length durations) 1)
   (define dur (car durations))
@@ -115,7 +118,8 @@
                              "test-session"
                              (format "/tmp/test-~a-correlated.log" (random 1000000))
                              #f
-                             (hash->session-config (hash)))
+                             (hash->session-config (hash))
+                             #:permission-config (make-permissive-permission-config))
   (check-equal? (length (unbox records)) 1)
   (define payload (car (unbox records)))
   (check-true (string? (hash-ref payload 'tool-call-id #f)))

@@ -10,6 +10,8 @@
          (only-in "../../util/content/content-parts.rkt" make-text-part)
          (only-in "../../util/message/message.rkt"
                   message
+                  message?
+                  message-id
                   message-kind
                   message-role
                   message-content
@@ -36,7 +38,8 @@
          context-assembly-payload-metadata
          payload->tiered-context
          tiered-context->payload
-         gsd-progress-message?)
+         gsd-progress-message?
+         tiered-context-with-tier-a)
 
 ;; Default tier boundaries
 (define DEFAULT-TIER-B-COUNT 20)
@@ -57,19 +60,89 @@
 (struct context-assembly-payload (tier-a-messages tier-b-messages tier-c-messages max-tokens metadata)
   #:transparent)
 
+;; Retention tier and provider protocol order are independent concerns. Keep
+;; ordering metadata out of the public three-field struct so constructor and
+;; match compatibility remain unchanged.
 (struct tiered-context (tier-a tier-b tier-c) #:transparent)
 
+(define provider-order-by-context (make-weak-hasheq))
+(define PROVIDER-ORDER-METADATA-KEY 'q:provider-message-order)
+
+(define (tiered-context-ordered tc)
+  (hash-ref provider-order-by-context tc #f))
+
+(define (make-tiered-context/ordered tier-a tier-b tier-c ordered)
+  (define tc (tiered-context tier-a tier-b tier-c))
+  (hash-set! provider-order-by-context tc ordered)
+  tc)
+
+(define (message-key m)
+  (if (message? m)
+      (message-id m)
+      m))
+
+(define (deduplicate/messages messages)
+  (define seen (make-hash))
+  (for/list ([m (in-list messages)]
+             #:unless (hash-ref seen (message-key m) #f)
+             #:do [(hash-set! seen (message-key m) #t)])
+    m))
+
+(define deduplicate/identity deduplicate/messages)
+
+;; Retention tiers may classify messages out of chronology. Reconstruct selected
+;; persisted messages in source order, then add genuinely injected records once.
+(define (provider-ordered-messages source tier-a tier-b tier-c)
+  (define selected (deduplicate/messages (append tier-a tier-b tier-c)))
+  (define selected-keys
+    (for/hash ([m (in-list selected)])
+      (values (message-key m) #t)))
+  (define source-keys
+    (for/hash ([m (in-list source)])
+      (values (message-key m) #t)))
+  (define from-source
+    (deduplicate/messages (for/list ([m (in-list source)]
+                                     #:when (hash-ref selected-keys (message-key m) #f))
+                            m)))
+  (define injected
+    (for/list ([m (in-list selected)]
+               #:unless (hash-ref source-keys (message-key m) #f)
+               ;; A standalone tool result has no assistant tool-call pair and
+               ;; is invalid provider protocol. Working-set tool records that
+               ;; belong to history are already retained through from-source.
+               #:unless (and (message? m) (eq? (message-role m) 'tool)))
+      m))
+  (define-values (leading-system conversation)
+    (splitf-at from-source (lambda (m) (eq? (message-kind m) 'system-instruction))))
+  (append leading-system injected conversation))
+
 (define (payload->tiered-context payload)
-  (tiered-context (context-assembly-payload-tier-a-messages payload)
-                  (context-assembly-payload-tier-b-messages payload)
-                  (context-assembly-payload-tier-c-messages payload)))
+  (define tc
+    (tiered-context (context-assembly-payload-tier-a-messages payload)
+                    (context-assembly-payload-tier-b-messages payload)
+                    (context-assembly-payload-tier-c-messages payload)))
+  (define original-ordered
+    (hash-ref (context-assembly-payload-metadata payload) PROVIDER-ORDER-METADATA-KEY #f))
+  (when original-ordered
+    ;; Hooks may add, remove, or reclassify tier records. Reconcile amended
+    ;; membership against the original protocol order.
+    (hash-set! provider-order-by-context
+               tc
+               (provider-ordered-messages original-ordered
+                                          (tiered-context-tier-a tc)
+                                          (tiered-context-tier-b tc)
+                                          (tiered-context-tier-c tc))))
+  tc)
 
 (define (tiered-context->payload tc max-tokens [metadata (hasheq)])
+  (define ordered (tiered-context-ordered tc))
   (context-assembly-payload (tiered-context-tier-a tc)
                             (tiered-context-tier-b tc)
                             (tiered-context-tier-c tc)
                             max-tokens
-                            metadata))
+                            (if ordered
+                                (hash-set metadata PROVIDER-ORDER-METADATA-KEY ordered)
+                                metadata)))
 
 ;; gsd-progress-message? : message? -> boolean?
 ;; Detects messages that should be pinned to tier-a (GSD progress indicators).
@@ -108,12 +181,13 @@
     [(pair? compaction-summaries)
      ;; Compaction already bounded this context. Preserve its protocol order
      ;; exactly: summary, verbatim kept window, then the new user prompt.
-     (define ordered (append messages ws-messages))
+     (define ordered (provider-ordered-messages messages messages '() ws-messages))
      (when trace-cb
        (trace-cb
         'partition
         (hasheq 'tier-a (length ordered) 'tier-b 0 'tier-c 0 'gsd-pinned 0 'compaction-ordered? #t)))
-     (tiered-context ordered '() '())]
+     (define unique-ordered (deduplicate/identity ordered))
+     (make-tiered-context/ordered unique-ordered '() '() unique-ordered)]
     [else
      (define-values (gsd-pinned regular) (partition gsd-progress-message? regular-msgs))
      (define-values (sys-protected unpinned-raw)
@@ -153,7 +227,10 @@
                          (length tier-c)
                          'gsd-pinned
                          (length gsd-pinned))))
-     (tiered-context tier-a tier-b tier-c)]))
+     (make-tiered-context/ordered tier-a
+                                  tier-b
+                                  tier-c
+                                  (provider-ordered-messages messages tier-a tier-b tier-c))]))
 
 ;; build-tiered-context-with-hooks : variant with hook dispatch
 (define (build-tiered-context-with-hooks messages
@@ -193,4 +270,22 @@
       (values base-context #f)))
 
 (define (tiered-context->message-list tc)
-  (append (tiered-context-tier-a tc) (tiered-context-tier-b tc) (tiered-context-tier-c tc)))
+  (or (tiered-context-ordered tc)
+      (append (tiered-context-tier-a tc) (tiered-context-tier-b tc) (tiered-context-tier-c tc))))
+
+;; Replace Tier A while preserving the base context's provider chronology.
+;; Newly injected state/system records are prepended once; retained records keep
+;; their original position from the base context.
+(define (tiered-context-with-tier-a tc new-tier-a)
+  (define base-ordered (tiered-context->message-list tc))
+  (define base-keys
+    (for/hash ([m (in-list base-ordered)])
+      (values (message-key m) #t)))
+  (define injected
+    (for/list ([m (in-list (deduplicate/messages new-tier-a))]
+               #:unless (hash-ref base-keys (message-key m) #f))
+      m))
+  (make-tiered-context/ordered new-tier-a
+                               (tiered-context-tier-b tc)
+                               (tiered-context-tier-c tc)
+                               (append injected base-ordered)))

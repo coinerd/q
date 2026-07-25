@@ -69,6 +69,14 @@
                         authoritative-presentation-digest
                         'approval-view
                         authoritative-view
+                        'approval-kind
+                        (hash-ref authoritative-view 'approval-kind "spawn")
+                        'tool-name
+                        (hash-ref authoritative-view 'tool-name "")
+                        'arguments-preview
+                        (hash-ref authoritative-view 'arguments-preview "")
+                        'arguments-digest
+                        (hash-ref authoritative-view 'arguments-digest "")
                         'capabilities
                         capabilities
                         'task-preview
@@ -128,6 +136,8 @@
        '())))
 
 (define (approval-request-overlay request queue seen-ids)
+  (define approval-kind (hash-ref request 'approval-kind "spawn"))
+  (define tool-approval? (equal? approval-kind "tool"))
   (define capabilities (hash-ref request 'capabilities '()))
   (define task-preview (hash-ref request 'task-preview ""))
   (define caps-str
@@ -145,13 +155,20 @@
           lines)))
   (define authoritative-view (hash-ref request 'approval-view (hasheq)))
   (define content
-    (append (list (plain-line "⚡ Subagent Approval Required")
-                  (plain-line (format "  Capabilities: ~a" caps-str)))
-            (for/list ([line (in-list preview-lines)]
-                       [index (in-naturals)])
-              (plain-line (format "  ~a: ~a" (if (zero? index) "Task" "    ") line)))
-            (approval-detail-lines authoritative-view)
-            (list (plain-line "") (plain-line "  [y] Approve   [n] Deny   [Esc] Cancel"))))
+    (if tool-approval?
+        (list (plain-line "⚡ Tool Approval Required")
+              (plain-line (format "  Tool: ~a" (hash-ref request 'tool-name "")))
+              (plain-line (format "  Arguments: ~a" (hash-ref request 'arguments-preview "")))
+              (plain-line (format "  Arguments digest: ~a" (hash-ref request 'arguments-digest "")))
+              (plain-line "")
+              (plain-line "  [y] Approve   [n] Deny   [Esc] Cancel"))
+        (append (list (plain-line "⚡ Subagent Approval Required")
+                      (plain-line (format "  Capabilities: ~a" caps-str)))
+                (for/list ([line (in-list preview-lines)]
+                           [index (in-naturals)])
+                  (plain-line (format "  ~a: ~a" (if (zero? index) "Task" "    ") line)))
+                (approval-detail-lines authoritative-view)
+                (list (plain-line "") (plain-line "  [y] Approve   [n] Deny   [Esc] Cancel")))))
   (overlay-state 'approval-prompt
                  content
                  ""
@@ -159,7 +176,15 @@
                  #f
                  #f
                  0
-                 (hasheq 'capabilities
+                 (hasheq 'approval-kind
+                         approval-kind
+                         'tool-name
+                         (hash-ref request 'tool-name "")
+                         'arguments-preview
+                         (hash-ref request 'arguments-preview "")
+                         'arguments-digest
+                         (hash-ref request 'arguments-digest "")
+                         'capabilities
                          capabilities
                          'task-preview
                          task-preview
@@ -266,8 +291,13 @@
 ;; Exports
 ;; ============================================================
 
+(define handle-tool-approval-requested handle-spawn-approval-requested)
+(define handle-tool-approval-terminal handle-spawn-approval-terminal)
+
 (provide handle-spawn-approval-requested
          handle-spawn-approval-terminal
+         handle-tool-approval-requested
+         handle-tool-approval-terminal
          approval-overlay-remove-request)
 
 ;; ============================================================
@@ -276,3 +306,5 @@
 
 (register-event-reducer! "mas.spawn-approval-requested" handle-spawn-approval-requested)
 (register-event-reducer! "mas.spawn-approval-terminal" handle-spawn-approval-terminal)
+(register-event-reducer! "tool.approval-requested" handle-tool-approval-requested)
+(register-event-reducer! "tool.approval-terminal" handle-tool-approval-terminal)

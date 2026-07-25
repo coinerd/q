@@ -170,7 +170,9 @@
     (define request
       (normalize-subagent-request cfg
                                   (child-safe-tools)
-                                  (current-session-capabilities)
+                                  (if exec-ctx
+                                      (exec-context-capabilities exec-ctx)
+                                      (current-session-capabilities))
                                   planned-safe-mode?))
     (define resolved-role-prompt (resolve-role-prompt (normalized-subagent-request-role request)))
     (define planned-blackboard-context (build-subagent-blackboard-context))
@@ -304,7 +306,9 @@
                                       resolved-model
                                       planned-safe-mode?
                                       (child-safe-tools)
-                                      (current-session-capabilities)
+                                      (if exec-ctx
+                                          (exec-context-capabilities exec-ctx)
+                                          (current-session-capabilities))
                                       (current-agent-pool-limit)
                                       planned-blackboard-context))
         (define spawn-count (length (batch-execution-plan-jobs plan)))
@@ -454,6 +458,7 @@
                               #:session-metadata (exec-context-session-metadata exec-ctx)
                               #:progress-callback (exec-context-progress-callback exec-ctx)
                               #:permission-config (exec-context-permission-config exec-ctx)
+                              #:capabilities (exec-context-capabilities exec-ctx)
                               #:browser-service (exec-context-browser-service exec-ctx))
            (make-exec-context #:cancellation-token batch-token)))
      (define threads

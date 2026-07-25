@@ -20,6 +20,7 @@
          "../extensions/hooks.rkt"
          "../extensions/api.rkt"
          "../tools/tool.rkt"
+         "../tools/scheduler-preflight.rkt"
          "../util/event/event-bus.rkt")
 
 ;; ============================================================
@@ -41,6 +42,42 @@
                       (lambda (args) (make-success-result "ok")))
   (check-not-false (lookup-tool reg "my_tool"))
   (check-equal? (tool-name (lookup-tool reg "my_tool")) "my_tool"))
+
+(test-case "ext-register-tool! stores an optional required capability"
+  (define reg (make-tool-registry))
+  (define ctx
+    (make-extension-ctx #:session-id "s-cap"
+                        #:session-dir "/tmp"
+                        #:event-bus (make-event-bus)
+                        #:extension-registry (make-extension-registry)
+                        #:tool-registry reg))
+  (ext-register-tool! ctx
+                      "network_tool"
+                      "Uses the network"
+                      (hasheq 'type "object")
+                      (lambda (_args) (make-success-result "ok"))
+                      #:required-capability 'network)
+  (check-equal? (tool-required-capability (lookup-tool reg "network_tool")) 'network))
+
+(test-case "restricted context blocks a dynamic tool with default-any capability"
+  (define reg (make-tool-registry))
+  (define ctx
+    (make-extension-ctx #:session-id "s-restricted"
+                        #:session-dir "/tmp"
+                        #:event-bus (make-event-bus)
+                        #:extension-registry (make-extension-registry)
+                        #:tool-registry reg))
+  (ext-register-tool! ctx
+                      "legacy_dynamic"
+                      "Legacy dynamic tool"
+                      (hasheq 'type "object")
+                      (lambda (_args) (make-success-result "ok")))
+  (define entries
+    (run-preflight (list (make-tool-call "tc-dyn" "legacy_dynamic" (hasheq)))
+                   reg
+                   #f
+                   (make-exec-context #:capabilities '(read-only))))
+  (check-equal? (preflight-entry-status (car entries)) 'blocked))
 
 (test-case "ext-register-tool! tool is executable"
   (define reg (make-tool-registry))

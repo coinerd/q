@@ -90,7 +90,7 @@
   (check-true (string-contains? msg "not found"))
   (check-true (string-contains? msg "Nearest match at line") msg)
   (check-true (string-contains? msg "Niemand stoert") msg)
-  (check-true (string-contains? msg "Re-read") msg)
+  (check-true (string-contains? msg "whitespace") msg)
   (delete-file tmp))
 
 (test-case "tool-edit: near-match picks closest of multiple candidates"
