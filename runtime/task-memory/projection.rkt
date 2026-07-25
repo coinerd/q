@@ -24,7 +24,8 @@
          racket/match
          "types.rkt")
 
-(provide active-task-checkpoint?
+(provide active-task-checkpoint
+         active-task-checkpoint?
          active-task-checkpoint-objective
          active-task-checkpoint-constraints
          active-task-checkpoint-current-phase
@@ -37,6 +38,16 @@
          active-task-checkpoint-next-action
          active-task-checkpoint-next-trigger
          active-task-checkpoint-event-count
+         blocker
+         blocker?
+         blocker-kind
+         blocker-message
+         blocker-source
+         work-evidence
+         work-evidence?
+         work-evidence-kind
+         work-evidence-ref
+         work-evidence-summary
          project-active-task-checkpoint
          extract-objective
          extract-owned-paths
@@ -46,14 +57,7 @@
          extract-gsd-wave
          extract-completed-work
          derive-next-action
-         blocker?
-         blocker-kind
-         blocker-message
-         blocker-source
-         work-evidence?
-         work-evidence-kind
-         work-evidence-ref
-         work-evidence-summary)
+         derive-next-trigger)
 
 ;; ============================================================
 ;; Result structs
