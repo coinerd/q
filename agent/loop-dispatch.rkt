@@ -30,7 +30,8 @@
          (only-in "loop-stream.rkt" handle-cancellation build-stream-result)
          (only-in "loop-phases.rkt" phase-msg-hook phase-stream)
          (only-in "state.rkt" current-loop-state-for-error-recovery)
-         (only-in "../util/loop-result.rkt" loop-result loop-result?))
+         (only-in "../util/loop-result.rkt" loop-result loop-result?)
+         (only-in "stream-runner.rkt" safe-hook-dispatch))
 
 (provide (contract-out [run-streaming-phase
                         (-> provider?
@@ -92,7 +93,7 @@
 
     ;; Phase 5: Message-start hook
     (define-values (msg-payload _fx5) (phase-msg-hook provider raw-messages session-id turn-id))
-    (define msg-start-result (and hook-dispatcher (hook-dispatcher 'message-start msg-payload)))
+    (define msg-start-result (safe-hook-dispatch hook-dispatcher 'message-start msg-payload))
 
     (define d-msg (decide-after-msg-hook msg-start-result))
     (match (turn-decision-tag d-msg)

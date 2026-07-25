@@ -33,7 +33,8 @@
          ;; Chunk limit parameter from stream-reducer module
          (only-in "stream-reducer.rkt" MAX-STREAM-CHUNKS))
 
-(provide (contract-out [stream-from-provider
+(provide safe-hook-dispatch
+         (contract-out [stream-from-provider
                         (-> provider? ; provider
                             model-request? ; req
                             (or/c event-bus? #f) ; bus
@@ -43,6 +44,22 @@
                             (or/c procedure? #f) ; hook-dispatcher
                             (or/c cancellation-token? #f) ; cancellation-token
                             hash?)]))
+
+;; ============================================================
+;; Safe hook dispatch (W1-execution: streaming hook isolation)
+;; ============================================================
+
+;; Dispatch a hook with exception isolation. Returns the hook result,
+;; or #f on exception. Prevents extension hook failures from crashing
+;; the stream or the caller.
+(define (safe-hook-dispatch hook-dispatcher hook-point payload #:bus [bus #f])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (when bus
+                                 (log-warning "safe-hook-dispatch: ~a hook failed: ~a"
+                                              hook-point
+                                              (exn-message e)))
+                               #f)])
+    (hook-dispatcher hook-point payload)))
 
 ;; ============================================================
 ;; stream-from-provider
@@ -161,15 +178,16 @@
             ;; Dispatch message-update hook for text delta
             (when hook-dispatcher
               (define update-result
-                (hook-dispatcher 'message-update
-                                 (hasheq 'session-id
-                                         session-id
-                                         'turn-id
-                                         turn-id
-                                         'delta-text
-                                         (stream-chunk-delta-text chunk)
-                                         'delta-tool-call
-                                         #f)))
+                (safe-hook-dispatch hook-dispatcher
+                                    'message-update
+                                    (hasheq 'session-id
+                                            session-id
+                                            'turn-id
+                                            turn-id
+                                            'delta-text
+                                            (stream-chunk-delta-text chunk)
+                                            'delta-tool-call
+                                            #f)))
               (match (classify-hook-result update-result)
                 [(list 'block _) (streaming-message-set-blocked! sm)]
                 [_ (void)])))
@@ -193,15 +211,16 @@
             ;; Dispatch message-update hook for tool-call delta
             (when hook-dispatcher
               (define update-result
-                (hook-dispatcher 'message-update
-                                 (hasheq 'session-id
-                                         session-id
-                                         'turn-id
-                                         turn-id
-                                         'delta-text
-                                         #f
-                                         'delta-tool-call
-                                         tc-delta)))
+                (safe-hook-dispatch hook-dispatcher
+                                    'message-update
+                                    (hasheq 'session-id
+                                            session-id
+                                            'turn-id
+                                            turn-id
+                                            'delta-text
+                                            #f
+                                            'delta-tool-call
+                                            tc-delta)))
               (match (classify-hook-result update-result)
                 [(list 'block _) (streaming-message-set-blocked! sm)]
                 [_ (void)])))
