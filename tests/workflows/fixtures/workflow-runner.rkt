@@ -26,6 +26,7 @@
                   tool-call-part?
                   tool-call-part-name)
          (only-in "../../../tools/tool.rkt" make-tool-registry)
+         (only-in "../../../tools/permission-gate.rkt" make-permissive-permission-config)
          (only-in "../../../extensions/api.rkt" make-extension-registry extension-registry?)
          (only-in "../../../extensions/loader.rkt" load-extension!)
          (only-in "../../../wiring/run-modes.rkt" load-extensions-from-dir!)
@@ -165,7 +166,8 @@
                         #:max-iterations max-iter
                         #:system-instructions effective-system-instrs
                         #:extension-registry effective-ext-reg
-                        #:register-default-tools? register-defaults?))
+                        #:register-default-tools? register-defaults?
+                        #:permission-config (make-permissive-permission-config)))
     (define rt2 (sdk:open-session rt))
     (define sid (hash-ref (sdk:session-info rt2) 'session-id))
     (define-values (rt3 result)
@@ -245,7 +247,8 @@
                         #:max-iterations max-iter
                         #:system-instructions skill-instrs
                         #:extension-registry effective-ext-reg
-                        #:register-default-tools? register-defaults?))
+                        #:register-default-tools? register-defaults?
+                        #:permission-config (make-permissive-permission-config)))
     (define rt2 (sdk:open-session rt))
     (define sid (hash-ref (sdk:session-info rt2) 'session-id))
 

@@ -106,22 +106,24 @@
 ;; ============================================================
 
 (define (check-session-tree-structure log-path)
-  (define entries (session-log-entries log-path))
+  (define all-entries
+    (if (file-exists? log-path)
+        (load-session-log log-path)
+        '()))
+  (define entries (filter (lambda (m) (not (eq? (message-kind m) 'session-info))) all-entries))
   (cond
     [(null? entries) #t]
     [else
+     ;; User messages may now descend from the session-info root. Keep that
+     ;; durable root in the ID set even though role-oriented assertions filter
+     ;; it from normal conversation entries.
      (define ids
-       (for/hash ([m (in-list entries)])
+       (for/hash ([m (in-list all-entries)])
          (values (message-id m) #t)))
-     (define first-parent (message-parent-id (first entries)))
-     (cond
-       [first-parent "first message should have #f parent"]
-       [else
-        (define orphan-parents
-          (for/list ([m (in-list (cdr entries))]
-                     #:when (and (message-parent-id m)
-                                 (not (hash-has-key? ids (message-parent-id m)))))
-            (message-parent-id m)))
-        (if (null? orphan-parents)
-            #t
-            (format "orphan parent IDs: ~a" orphan-parents))])]))
+     (define orphan-parents
+       (for/list ([m (in-list entries)]
+                  #:when (and (message-parent-id m) (not (hash-has-key? ids (message-parent-id m)))))
+         (message-parent-id m)))
+     (if (null? orphan-parents)
+         #t
+         (format "orphan parent IDs: ~a" orphan-parents))]))

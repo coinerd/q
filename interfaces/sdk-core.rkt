@@ -47,6 +47,7 @@
                   hook-result-payload)
          (only-in "../extensions/loader.rkt" discover-extensions load-extension!)
          (only-in "../agent/queue.rkt" enqueue-steering! enqueue-followup!)
+         (only-in "../tools/permission-gate.rkt" permission-config?)
          (only-in "../runtime/session-index.rkt"
                   navigate-to-entry!
                   navigate-next-leaf!
@@ -109,7 +110,8 @@
                                             #:cancellation-token (or/c cancellation-token? #f)
                                             #:register-default-tools? boolean?
                                             #:auto-load-extensions? boolean?
-                                            #:project-dir (or/c path-string? path? #f))
+                                            #:project-dir (or/c path-string? path? #f)
+                                            #:permission-config (or/c permission-config? #f))
                              runtime?)]
                        [open-session (->* (runtime?) ((or/c string? #f)) runtime?)]
                        [run-prompt!
@@ -182,7 +184,8 @@
                   system-instructions
                   token-budget-threshold
                   resource-loader
-                  session-manager))
+                  session-manager
+                  permission-config))
 
 (struct runtime (rt-config rt-session rt-cancellation-token) #:constructor-name make-runtime-internal)
 
@@ -215,7 +218,8 @@
                       #:session-manager [session-mgr #f]
                       #:register-default-tools? [register-default-tools? #t]
                       #:auto-load-extensions? [auto-load-extensions? #f]
-                      #:project-dir [project-dir #f])
+                      #:project-dir [project-dir #f]
+                      #:permission-config [permission-config #f])
   (when register-default-tools?
     (register-default-tools! tool-registry))
   (when (and auto-load-extensions? project-dir)
@@ -235,7 +239,8 @@
                                          system-instructions
                                          token-budget-threshold
                                          resource-loader
-                                         session-mgr)
+                                         session-mgr
+                                         permission-config)
                          #f
                          (or cancellation-token (make-cancellation-token))))
 
@@ -265,7 +270,9 @@
             'token-budget-threshold
             (runtime-config-token-budget-threshold cfg)
             'cancellation-token
-            (rt-token rt)))
+            (rt-token rt)
+            'permission-config
+            (runtime-config-permission-config cfg)))
   (define sess
     (if session-id
         (session:resume-agent-session session-id agent-cfg)
