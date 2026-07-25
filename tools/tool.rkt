@@ -51,6 +51,7 @@
          tool-prompt-snippet
          tool-prompt-guidelines
          tool-dangerous?
+         tool-mutates-filesystem?
          tool-execute
          tool-render-call
          tool-render-result
@@ -64,6 +65,7 @@
                                                #:render-result (or/c procedure? #f)
                                                #:prompt-guidelines (or/c string? #f)
                                                #:dangerous? boolean?
+                                               #:mutates-filesystem? boolean?
                                                #:timeout-seconds (or/c exact-nonnegative-integer? #f)
                                                #:required-capability symbol?
                                                #:externalizable? boolean?)
@@ -159,6 +161,7 @@
                    #:render-result [render-result #f]
                    #:prompt-guidelines [prompt-guidelines #f]
                    #:dangerous? [dangerous? #f]
+                   #:mutates-filesystem? [mutates-filesystem? #f]
                    #:timeout-seconds [timeout-seconds #f]
                    #:required-capability [required-capability 'any]
                    #:externalizable? [externalizable? #f])
@@ -189,6 +192,7 @@
         render-call
         render-result
         dangerous?
+        mutates-filesystem?
         timeout-seconds
         required-capability
         externalizable?))

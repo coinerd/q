@@ -13,6 +13,7 @@
                        [tool-prompt-snippet (-> tool? (or/c string? #f))]
                        [tool-prompt-guidelines (-> tool? (or/c string? #f))]
                        [tool-dangerous? (-> tool? boolean?)]
+                       [tool-mutates-filesystem? (-> tool? boolean?)]
                        [tool-render-call (-> tool? (or/c procedure? #f))]
                        [tool-render-result (-> tool? (or/c procedure? #f))]
                        [tool-timeout-seconds (-> tool? (or/c exact-nonnegative-integer? #f))]
@@ -31,6 +32,7 @@
               render-call
               render-result
               dangerous?
+              mutates-filesystem?
               timeout-seconds
               required-capability
               externalizable?)

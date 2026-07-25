@@ -34,6 +34,7 @@
          (only-in "tool-struct.rkt"
                   tool-execute
                   tool-dangerous?
+                  tool-mutates-filesystem?
                   tool-timeout-seconds
                   tool-externalizable?
                   tool-required-capability)
@@ -256,7 +257,8 @@
                                                (make-error-result (format "tool '~a' raised: ~a"
                                                                           tc-name
                                                                           (exn-message e))))])
-                    (define path-arg (and (tool-dangerous? t) (hash-ref final-args 'path #f)))
+                    (define path-arg
+                      (and (tool-mutates-filesystem? t) (hash-ref final-args 'path #f)))
                     (with-file-mutation-queue path-arg
                                               (lambda () ((tool-execute t) final-args exec-ctx))))]))
 
