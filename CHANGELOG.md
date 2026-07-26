@@ -1,3 +1,43 @@
+## 0.99.68
+
+Released: 2026-07-27
+
+### Overview
+
+LLM retry hardening with bounded jitter, working-set continuity, and telemetry. All
+retries now use full jitter (cap × random) for resilient backoff. Working-set
+preserved across task-state transitions (no aggressive resets). Task-state-aware
+context assembly enabled by default. Exploration loop detection raised to 6
+repeats with argument-awareness and cooldown. Outcome-capture trace emissions
+added to tool execution pipeline. Compact excludedIds format. Conflict-marker
+gate in release readiness check.
+
+### Features
+
+- Bounded retry jitter: `compute-retry-delay` uses full jitter (cap × random).
+- Retry-After header parsing: `parse-retry-after` supports seconds and HTTP dates.
+- Injectable random source: `current-random-source` parameter for deterministic testing.
+- Working-set preservation: only `any→idle` full-resets; all other transitions preserve entries.
+- Task-state-aware assembly: enabled by default (`current-task-state-aware-assembly?` → #t).
+- Exploration loop detection: `min-repeats` 3→6, argument-aware pair key, cooldown suppression.
+- Outcome-capture trace emissions: `"outcome.captured"` events after tool execution.
+- Compact excludedIds: structured summary (by-role + samples) instead of flat CSV.
+- Conflict-marker check: `lint-release-readiness.rkt` scans CHANGELOG/README for markers.
+
+### Bug Fixes
+
+- Working set no longer resets on related prompts (D1BG5R2T regression).
+- Cooldown added to exploration loop to prevent rapid re-firing.
+- CHANGELOG.md purge of stale merge conflict markers from v0.99.67 release.
+
+### Breaking / Behavior Changes
+
+- `detect-exploration-loop` now returns `"pair repeated N times (threshold: N)"`.
+- `compute-retry-delay` includes random jitter; tests must use bounds not exact values.
+- `current-task-state-aware-assembly?` default changed from #f to #t.
+- `current-ws-evolution-enabled?` default changed from #f to #t.
+- `current-task-state-aware-rollout-rate` default changed from 0.0 to 1.0.
+
 ## 0.99.67
 
 Released: 2026-07-25
@@ -68,9 +108,9 @@ checkpoint, identity, migration, and working-set modules.
 
 ### Operational / Release
 
-- Version bumped to 0.99.67 (util/version.rkt, info.rkt, README.md).
-- Milestone #853 closed.
-- Release tag v0.99.67 created.
+- Version bumped to 0.99.68 (util/version.rkt, info.rkt, README.md).
+- Milestone #854 closed.
+- Release tag v0.99.68 created.
 
 ## 0.99.66
 
