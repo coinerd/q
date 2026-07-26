@@ -74,6 +74,7 @@
 (define (set-task-state-handler args [exec-ctx #f])
   (define state-name (hash-ref args 'state #f))
   (define event-name (hash-ref args 'event #f))
+  (define force-reset (hash-ref args 'force-reset #f))
   ;; Convert strings to symbols for hasheq lookup (LLM sends strings)
   (define state-sym
     (if (string? state-name)
@@ -108,12 +109,19 @@
             (ev-pub "tool.set-task-state.completed"
                     (hasheq (quote target-state) state-name (quote event-name) event-name))))
         ;; Here we just package the request
-        (make-success-result
-         (list (hasheq 'type
-                       "text"
-                       'text
-                       (format "Task state transition requested: ~a via ~a" state-name event-name)))
-         (hasheq '_task-state-target state-name '_task-state-event event-name))])]))
+        (make-success-result (list (hasheq 'type
+                                           "text"
+                                           'text
+                                           (format "Task state transition requested: ~a via ~a~a"
+                                                   state-name
+                                                   event-name
+                                                   (if force-reset " (with working-set reset)" ""))))
+                             (hasheq '_task-state-target
+                                     state-name
+                                     '_task-state-event
+                                     event-name
+                                     '_task-state-force-reset
+                                     force-reset))])]))
 
 ;; --------------------------------------------------
 ;; Tool definition via define-tool macro
@@ -129,7 +137,9 @@
          "Target state: idle, exploration, planning, implementation, verification, debugging")
   (event
    "string"
-   "Transition event: begin-explore, begin-plan, begin-implement, begin-verify, begin-debug, task-complete, revisit, force-transition")]
+   "Transition event: begin-explore, begin-plan, begin-implement, begin-verify, begin-debug, task-complete, revisit, force-transition")
+  (force-reset "boolean"
+               "Optional: when true, resets the working-set before transitioning (default: false)")]
  set-task-state-handler)
 
 (provide (contract-out [set-task-state tool?]))
