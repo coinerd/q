@@ -83,7 +83,13 @@
          (only-in "../agent/event-structs/tool-events.rkt"
                   make-tool-execution-start-event
                   make-tool-execution-end-event
-                  make-tool-execution-update-event))
+                  make-tool-execution-update-event)
+         ;; P2: outcome classification for trace emissions
+         (only-in "../util/outcome/outcome-types.rkt"
+                  classify-tool-outcome
+                  typed-tool-outcome-kind
+                  typed-tool-outcome-status
+                  typed-tool-outcome-payload))
 
 (provide (contract-out [extract-tool-calls-from-messages (-> (listof message?) (listof tool-call?))]
                        [make-tool-result-messages
@@ -415,6 +421,24 @@
                                  assistant-msg-id
                                  tool-call-blocked?
                                  ext-reg))
+  ;; P2: Emit outcome-capture trace for classified tool outcomes
+  (unless tool-call-blocked?
+    (for ([tc (in-list tool-calls-to-run)]
+          [tr (in-list (scheduler-result-results sched-result))])
+      (define tool-outcome (classify-tool-outcome tc tr))
+      (when tool-outcome
+        (emit-session-event! bus
+                             session-id
+                             "outcome.captured"
+                             (hasheq 'tool-name
+                                     (tool-call-name tc)
+                                     'outcome-kind
+                                     (typed-tool-outcome-kind tool-outcome)
+                                     'status
+                                     (typed-tool-outcome-status tool-outcome)
+                                     'has-payload
+                                     (positive? (hash-count (typed-tool-outcome-payload
+                                                             tool-outcome))))))))
   ;; Append validated tool results to log
   (append-entries! log-path validated-msgs)
   ;; Return updated context for next iteration

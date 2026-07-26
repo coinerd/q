@@ -15,7 +15,11 @@
          racket/set
          (only-in racket/string string-join)
          ;; Message/content types
-         (only-in "../../util/message/message.rkt" message-id message-kind message-content)
+         (only-in "../../util/message/message.rkt"
+                  message-id
+                  message-kind
+                  message-content
+                  message-role)
          (only-in "../../util/content/content-parts.rkt"
                   text-part?
                   text-part-text
@@ -304,7 +308,28 @@
     (for/list ([m (in-list ctx-to-use)]
                #:unless (set-member? assembled-ids (message-id m)))
       (message-id m)))
-  (define excluded-ids-str (string-join excluded-id-list ","))
+  ;; P5: Compact excluded-ids summary instead of flat CSV
+  ;; Format: "count:by-role:N_USER,N_ASST,N_TOOL;samples:id1,id2,id3,...|idN-2,idN-1,idN"
+  (define role-counts
+    (let ([user-count 0]
+          [assistant-count 0]
+          [tool-count 0])
+      (for ([m (in-list ctx-to-use)]
+            #:unless (set-member? assembled-ids (message-id m)))
+        (case (message-role m)
+          [(user) (set! user-count (add1 user-count))]
+          [(assistant tool) (set! assistant-count (add1 assistant-count))]
+          [else (set! tool-count (add1 tool-count))]))
+      (format "~a,~a,~a" user-count assistant-count tool-count)))
+  (define excluded-ids-str
+    (let ([n (length excluded-id-list)])
+      (cond
+        [(zero? n) ""]
+        [(<= n 6) (format "~a:~a" role-counts (string-join excluded-id-list ","))]
+        [else
+         (define first-3 (take excluded-id-list 3))
+         (define last-3 (take-right excluded-id-list 3))
+         (format "~a:~a|~a" role-counts (string-join first-3 ",") (string-join last-3 ","))])))
   (define summary-len
     (for/sum ([m (in-list ctx-assembled)] #:when (eq? (message-kind m) 'compaction-summary))
              (for/sum ([p (in-list (message-content m))] #:when (text-part? p))
