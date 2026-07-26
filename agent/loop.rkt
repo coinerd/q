@@ -38,6 +38,7 @@
                   turn-event-msg-hook-block
                   turn-event-ctx-failed
                   next-turn-state
+                  transition-turn-state!
                   turn-state->symbol
                   current-turn-fsm-state)
          racket/string
@@ -180,8 +181,8 @@
     (define d-pre (decide-after-pre-hook pre-hook-result))
     (match (turn-decision-tag d-pre)
       ['blocked
-       ;; R-06/R-07: FSM: pre-hook -> blocked
-       (current-turn-fsm-state (next-turn-state turn-state-pre-hook turn-event-hook-block))
+       ;; v0.99.69 W2: Derive from-state from current-turn-fsm-state, not hardcoded literal
+       (transition-turn-state! turn-event-hook-block)
        (emit-typed-event! bus
                           (make-model-request-blocked-event #:session-id session-id
                                                             #:turn-id turn-id
