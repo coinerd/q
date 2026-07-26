@@ -8,6 +8,8 @@
 (require racket/contract
          racket/match
          racket/string
+         racket/random
+         racket/math
          "../llm/provider-errors.rkt")
 
 ;; Predicates
@@ -45,12 +47,13 @@
          default-base-delay-ms
          default-rate-limit-base-delay-ms
          default-max-delay-ms
-         ;; Struct for retry stats
+         ;; Struct for retry stat
          retry-stats
          retry-stats?
          retry-stats-attempts
          retry-stats-final-delay-ms
          retry-stats-succeeded?
+         retry-stats-selected-delay-ms
          ;; Struct for retry exhaustion (A3)
          retry-exhausted
          retry-exhausted?
@@ -59,6 +62,7 @@
          retry-exhausted-last-error-type
          retry-exhausted-total-delay-ms
          retry-exhausted-error-history
+         retry-exhausted-delays
          ;; Struct for retry policy (A21)
          retry-policy
          retry-policy?
@@ -66,7 +70,20 @@
          retry-policy-base-delay-ms
          retry-policy-rate-limit-base-delay-ms
          retry-policy-max-delay-ms
-         retry-policy-per-type-budgets)
+         retry-policy-per-type-budgets
+         ;; Jitter computation (W1)
+         (contract-out [compute-retry-delay
+                        (-> exact-nonnegative-integer?
+                            exact-nonnegative-integer?
+                            exact-nonnegative-integer?
+                            exact-nonnegative-integer?
+                            (or/c #f (-> any/c))
+                            exact-nonnegative-integer?)])
+         ;; Injectable random source (W1)
+         current-random-source
+         ;; Retry-after parsing (W1)
+         (contract-out [parse-retry-after
+                        (-> (or/c string? #f) (or/c exact-nonnegative-integer? #f))]))
 
 ;; ============================================================
 ;; Configuration
@@ -78,10 +95,69 @@
 (define default-max-delay-ms 60000)
 
 ;; ============================================================
+;; Injectable random source (W1)
+;; ============================================================
+
+;; Parameter for injecting a random source.
+;; Default: #f means use the system random source (random).
+;; For deterministic testing, set to a thunk that returns values between 0.0 and 1.0.
+(define current-random-source (make-parameter #f))
+
+;; Generate a random float in [0.0, 1.0) using the injected source or system random.
+(define (random-float)
+  (define src (current-random-source))
+  (if src
+      (src)
+      (random)))
+
+;; ============================================================
 ;; Structs
 ;; ============================================================
 
-(struct retry-stats (attempts final-delay-ms succeeded?) #:transparent)
+(struct retry-stats (attempts final-delay-ms succeeded? selected-delay-ms) #:transparent)
+
+;; ============================================================
+;; Delay computation with jitter (W1)
+;; ============================================================
+
+;; Parse a Retry-After header value. Returns milliseconds or #f.
+;; Accepts:
+;;   - Integer seconds (e.g., "30")
+;;   - Float seconds (e.g., "2.5")
+(define (parse-retry-after header-val)
+  (and header-val
+       (string? header-val)
+       (let ([trimmed (string-trim header-val)])
+         (and (> (string-length trimmed) 0)
+              (with-handlers ([exn:fail? (lambda (_) #f)])
+                (exact-floor (* (string->number trimmed) 1000)))))))
+
+;; Compute retry delay with full jitter.
+;;
+;; The exponential backoff is: base * 2^attempt, capped at max-delay-ms.
+;; Full jitter: random [0, capped-delay]
+;;
+;; Parameters:
+;;   attempt: 0-based attempt number
+;;   base-delay-ms: base delay in ms
+;;   max-delay-ms: maximum delay cap in ms
+;;   retry-after-ms: optional Retry-After value (0 means none)
+;;   random-fn: optional random function returning [0.0, 1.0); #f means use system random
+;;
+;; Returns: delay in ms, always within [0, max-delay-ms]
+(define (compute-retry-delay attempt base-delay-ms max-delay-ms [retry-after-ms 0] [random-fn #f])
+  (cond
+    ;; Retry-After header takes precedence (capped to max-delay)
+    [(and (positive? retry-after-ms) retry-after-ms) (min retry-after-ms max-delay-ms)]
+    [else
+     ;; Exponential backoff: base * 2^attempt, capped
+     (define exponential (min (* base-delay-ms (expt 2 attempt)) max-delay-ms))
+     ;; Full jitter: random [0, exponential]
+     (define r
+       (if random-fn
+           (random-fn)
+           (random)))
+     (exact-floor (* r exponential))]))
 
 ;; Retry policy struct — encapsulates retry configuration as a first-class value.
 ;; Can be composed, tested, and passed to with-retry-policy.
@@ -99,7 +175,9 @@
 
 ;; Raised when retries are exhausted. Wraps the original exception with metadata
 ;; so callers (agent-session, TUI) can distinguish exhaustion from first failure.
-(struct retry-exhausted exn:fail (original-exn attempts last-error-type total-delay-ms error-history)
+(struct retry-exhausted
+        exn:fail
+        (original-exn attempts last-error-type total-delay-ms error-history delays)
   #:transparent)
 
 ;; ============================================================
@@ -283,7 +361,8 @@
              [total-delay 0]
              [last-error-type #f]
              [type-attempts (hash)] ; hash of error-type -> count
-             [error-history '()]) ; list of error types encountered
+             [error-history '()] ; list of error types encountered
+             [delay-history '()]) ; list of actual delays used
     (with-handlers
         ([exn:fail?
           (lambda (exn)
@@ -297,10 +376,17 @@
               [#t
                ;; A1: Use longer backoff for rate-limit errors
                (define rl-base (if (eq? err-type 'rate-limit) rl-base-delay-ms base-delay-ms))
-               (define next-delay (min (* rl-base (expt 2 attempt)) max-delay-ms))
+               ;; W1: Compute exponential cap then apply jitter
+               (define retry-after-ms (parse-retry-after (exn-message exn)))
+               (define next-delay
+                 (compute-retry-delay attempt
+                                      rl-base
+                                      max-delay-ms
+                                      (or retry-after-ms 0)
+                                      (current-random-source)))
                ;; v0.13.2: No context reduction on retry — retries use same thunk.
                ;; Context management is a separate concern (v0.14.0 context manager).
-               ;; Call retry callback if provided (include error-type)
+               ;; Call retry callback if provided (include error-type and selected delay)
                (when on-retry
                  (on-retry (add1 attempt) max-retries next-delay (exn-message exn) err-type))
                (sleep (/ next-delay 1000.0))
@@ -309,10 +395,12 @@
                      (+ total-delay next-delay)
                      err-type
                      (hash-set type-attempts err-type (add1 current-type-count))
-                     (append error-history (list err-type)))]
+                     (append error-history (list err-type))
+                     (append delay-history (list next-delay)))]
               [_
                ;; A3: Wrap in retry-exhausted if we attempted retries
                (define final-history (append error-history (list err-type)))
+               (define final-delays delay-history)
                (if (> attempt 0)
                    (raise (retry-exhausted (format "~a (after ~a retries)" (exn-message exn) attempt)
                                            (current-continuation-marks)
@@ -320,6 +408,7 @@
                                            attempt
                                            last-error-type
                                            total-delay
-                                           final-history))
+                                           final-history
+                                           final-delays))
                    (raise exn))]))])
       (thunk))))
