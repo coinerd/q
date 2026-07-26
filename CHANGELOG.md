@@ -1,3 +1,56 @@
+## 0.99.67
+
+Released: 2026-07-25
+
+### Overview
+
+Memory-first context remediation: every provider request now receives a bounded,
+truthful, current active-task checkpoint reconstructed from durable typed
+evidence. Includes synchronous outcome capture, project-scoped semantic memory,
+hybrid recall, and a single context-selection authority.
+
+### Features
+
+- Context provenance: stable session/turn/request/assembly IDs traced through
+every assembly, selection, serialization, and provider adaptation stage.
+- Versioned task ledger: append-only replayable event log with deterministic
+idempotent reduction for objective/phase/verification/blocker state.
+- Typed outcome capture: edits, tests, Git operations, conclusions, and GSD
+transitions all produce structured evidence before the next decision.
+- Working-set continuity: related/cancelled/compacted sessions preserve active
+attention; explicit new tasks archive old state.
+- Bounded task checkpoint: objective, constraints, phase, GSD wave, owned
+paths, completed work, verification state, blockers, and next action are
+injected into every provider request.
+- Project identity: canonical root resolver with git/worktree/submodule/
+non-Git/Windows semantics; memory stays outside session logs and repo commits.
+- Hybrid recall: recency, relevance, validity, and project-scope scoring
+blends session and project memory; forgetting model expires/supersedes stale
+facts.
+- Context-selection authority: single decision point with retention profiles
+(compact/normal/full/auto) wrapping hybrid-recall, working-set, and
+checkpoint into one coherent context package.
+
+### Bug Fixes
+
+- Working set no longer resets on related prompts (was: 30→0 entries).
+- Duplicate user instructions now project exactly once.
+- Tool-call/result pairs remain atomic before budgeting.
+- Unknown shell mutations conservatively invalidate verification.
+- Conclusion token estimation matches provider token-budget units.
+- Legacy D9 regression: commit/push recall now works without lexical overlap.
+
+### Breaking / Behavior Changes
+
+- `build-tiered-context/state-aware` now requires session-config, project-dir,
+and task-state for full checkpoint injection.
+- `current-task-state-aware-assembly?` parameter defaults remain unchanged
+(false). Enable via config for behavioral change.
+- Legacy memory auto-promotion is disabled; migration tool quarantines
+ambiguous records.
+
+---
+
 ## 0.99.66
 
 Released: 2026-07-24
