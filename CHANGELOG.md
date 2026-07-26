@@ -1,3 +1,35 @@
+## 0.99.69
+
+Released: 2026-07-29
+
+### Overview
+
+Dead code cleanup and authoritative FSM. Removed dead export (`merge-usages`),
+documented production-unused turn-context struct. Added `cancelled` and
+`context-failed` states to turn FSM. Made FSM authoritative: every from-state
+derived from `current-turn-fsm-state` parameter via single `transition-turn-state!`
+API instead of hardcoded singletons. Removed tautological reducer guards.
+
+### Features
+
+- New FSM states: `cancelled` (distinct from complete) and `context-failed`.
+- New FSM transition: `build-context --ctx-failed--> context-failed`.
+- `transition-turn-state!` API: single authoritative transition combining
+  lookup + parameter update.
+- All from-states derived from `current-turn-fsm-state` (not hardcoded).
+
+### Bug Fixes
+
+- `stream-cancel` now maps to `cancelled` (not `complete`) — semantically correct.
+
+### Cleanup
+
+- Removed dead export `merge-usages` from `stream-reducer.rkt`.
+- Documented `turn-context` struct as production-unused (kept for test coverage).
+- Removed tautological `valid-turn-transition?` guards from turn-reducer.
+
+---
+
 ## 0.99.68
 
 Released: 2026-07-27
