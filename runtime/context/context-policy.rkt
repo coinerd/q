@@ -18,7 +18,10 @@
                   text-part-text
                   text-part?
                   tool-call-part
-                  tool-call-part?)
+                  tool-call-part?
+                  tool-result-part?
+                  tool-result-part-content)
+         (only-in "../../util/content/content-helpers.rkt" tool-result-content->string)
          (only-in "../../util/message/message.rkt"
                   message
                   message-content
@@ -63,14 +66,18 @@
 ;; ============================================================
 
 ;; Estimate token count for a single message struct.
-;; Extracts text from all text-parts in the message content.
-;; This is the canonical version (from context-builder, more complete).
+;; Extracts text from all text-parts AND tool-result-part content in the message.
+;; v0.99.68-hotfix-3 P6A: Include tool-result-part content for non-zero WS token counting.
 (define (estimate-message-tokens msg)
-  (define text-parts
-    (for/list ([part (in-list (message-content msg))]
-               #:when (text-part? part))
-      (text-part-text part)))
-  (estimate-text-tokens (string-join text-parts " ")))
+  (define text-tokens
+    (estimate-text-tokens (string-join (for/list ([part (in-list (message-content msg))]
+                                                  #:when (text-part? part))
+                                         (text-part-text part))
+                                       " ")))
+  (define tool-result-tokens
+    (for/sum ([part (in-list (message-content msg))] #:when (tool-result-part? part))
+             (estimate-text-tokens (tool-result-content->string (tool-result-part-content part)))))
+  (+ text-tokens tool-result-tokens))
 
 ;; ---------------------------------------------------------------------------
 ;; Memoized token estimation — v0.47.6 → v0.70.6 using token-estimate-cache.rkt
@@ -78,12 +85,21 @@
 
 ;; Cached version of estimate-message-tokens.
 ;; Delegates to util/token-estimate-cache.rkt for content-addressed memoization.
+;; v0.99.68-hotfix-3 P6A: Include tool-result content in cache key.
 (define (estimate-message-tokens-cached msg)
-  (cached-estimate-text-tokens estimate-text-tokens
-                               (string-join (for/list ([part (in-list (message-content msg))]
-                                                       #:when (text-part? part))
-                                              (text-part-text part))
-                                            " ")))
+  (define text-tokens
+    (cached-estimate-text-tokens estimate-text-tokens
+                                 (string-join (for/list ([part (in-list (message-content msg))]
+                                                         #:when (text-part? part))
+                                                (text-part-text part))
+                                              " ")))
+  (define tool-result-tokens
+    (for/sum ([part (in-list (message-content msg))] #:when (tool-result-part? part))
+             (define part-str (tool-result-content->string (tool-result-part-content part)))
+             (if (equal? part-str "")
+                 0
+                 (cached-estimate-text-tokens estimate-text-tokens part-str))))
+  (+ text-tokens tool-result-tokens))
 
 ;; Invalidate the token estimation cache.
 (define (invalidate-token-estimate-cache!)
