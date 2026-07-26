@@ -90,7 +90,7 @@
       ;; Phase 2: Transition exploration → planning
       (set! conclusions (make-conclusions 3))
       (define evolved-c (evolve-working-set-for-state ws task-exploration task-planning conclusions))
-      (check-equal? (working-set-entry-count ws) 0 "ws cleared exploration→planning")
+      (check-equal? (working-set-entry-count ws) 5 "ws preserved exploration→planning")
       (check-equal? (length evolved-c) 3 "3 conclusions returned")
 
       ;; Phase 3: Build state-aware context in planning state
@@ -104,7 +104,7 @@
 
       ;; Phase 4: planning → implementation
       (define impl-c (evolve-working-set-for-state ws task-planning task-implementation evolved-c))
-      (check-equal? (working-set-entry-count ws) 0 "ws still clear")
+      (check-equal? (working-set-entry-count ws) 5 "ws preserved through planning→impl")
 
       ;; Phase 5: implementation → idle
       (define idle-c (evolve-working-set-for-state ws task-implementation task-idle impl-c))
@@ -125,7 +125,7 @@
       (check-true (<= (working-set-entry-count ws) 3) "non-error files removed")
 
       (evolve-working-set-for-state ws task-debugging task-implementation conclusions)
-      (check-equal? (working-set-entry-count ws) 0 "ws cleared debugging→impl"))
+      (check-equal? (working-set-entry-count ws) 3 "ws preserved debugging→impl"))
 
     ;; Relevance level consistency
     (test-case "state relevance levels are internally consistent"
@@ -147,7 +147,7 @@
       (define before (working-set-token-count ws))
       (evolve-working-set-for-state ws task-exploration task-implementation (make-conclusions 3))
       (define after (working-set-token-count ws))
-      (check-true (< after before) (format "tokens reduced: ~a < ~a" after before)))
+      (check-true (>= after before) (format "tokens preserved: ~a >= ~a" after before)))
 
     ;; Conclusions persist through transitions
     (test-case "conclusions persist through multiple transitions"
