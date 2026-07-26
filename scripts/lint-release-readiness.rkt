@@ -26,6 +26,7 @@
          check-changelog-entry
          check-git-clean
          check-main-branch
+         check-conflict-markers
          check-gate-evidence
          validate-gate-evidence-entry
          required-gate-suites
@@ -193,7 +194,21 @@
      #f]))
 
 ;; ---------------------------------------------------------------------------
-;; Check 6: Gate evidence (required suites have recent passing results)
+;; Check 7: Conflict markers
+;; ---------------------------------------------------------------------------
+
+(define (check-conflict-markers)
+  (define files '("CHANGELOG.md" "README.md"))
+  (define has-markers
+    (for/or ([f (in-list files)])
+      (and (file-exists? f) (regexp-match? #rx"<<<<<<<|=======|>>>>>>>" (file->string f)))))
+  (cond
+    [(not has-markers)
+     (printf "  [PASS] no merge conflict markers in release files~n")
+     #t]
+    [else
+     (printf "  [FAIL] merge conflict markers found! Run: grep -n '<<<<<<<' CHANGELOG.md README.md~n")
+     #f]))
 ;; ---------------------------------------------------------------------------
 
 (define required-gate-suites '("fast" "tui" "arch" "workflows"))
@@ -305,7 +320,11 @@
   (printf "~n── Release Readiness Check (v~a) ~a──~n" ver context-label)
 
   (define base-results
-    (list (check-version-sync) (check-changelog-entry) (check-git-clean) (check-main-branch context)))
+    (list (check-version-sync)
+          (check-changelog-entry)
+          (check-git-clean)
+          (check-main-branch context)
+          (check-conflict-markers)))
 
   ;; Tag check: only in pre-tag context (not tag-publish, not dev)
   ;; tag-publish context: tag already exists by design

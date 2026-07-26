@@ -33,11 +33,7 @@ checkpoint into one coherent context package.
 
 ### Bug Fixes
 
-<<<<<<< Updated upstream
 - Working set no longer resets on related prompts (was: 30→0 entries).
-=======
-- Working set no longer resets on related prompts (was: 30 to 0 entries).
->>>>>>> Stashed changes
 - Duplicate user instructions now project exactly once.
 - Tool-call/result pairs remain atomic before budgeting.
 - Unknown shell mutations conservatively invalidate verification.
@@ -53,9 +49,8 @@ and task-state for full checkpoint injection.
 - Legacy memory auto-promotion is disabled; migration tool quarantines
 ambiguous records.
 
-<<<<<<< Updated upstream
 ---
-=======
+
 ### Migration Notes
 
 - Enable task-state-aware assembly in config to activate bounded checkpoint
@@ -76,7 +71,6 @@ checkpoint, identity, migration, and working-set modules.
 - Version bumped to 0.99.67 (util/version.rkt, info.rkt, README.md).
 - Milestone #853 closed.
 - Release tag v0.99.67 created.
->>>>>>> Stashed changes
 
 ## 0.99.66
 
