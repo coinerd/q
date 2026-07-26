@@ -203,9 +203,9 @@
 ;; Bounded prompt injection
 ;; ---------------------------------------------------------------------------
 
-;; Injection control: when #f (default), no prompt injection occurs.
-;; When a positive integer, that many tokens are budgeted for memory injection.
-(define current-memory-injection-budget (make-parameter #f))
+;; Injection control: when a positive integer, that many tokens are budgeted for memory injection.
+;; Default 500 tokens enables bounded injection when task-state-aware assembly is active.
+(define current-memory-injection-budget (make-parameter 500))
 
 ;; Maximum single entry length in characters (prevents one huge entry consuming budget)
 (define current-memory-max-entry-chars (make-parameter 200))
