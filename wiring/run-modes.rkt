@@ -49,6 +49,7 @@
                   resolve-permission-config)
          (only-in "extension-setup.rkt" make-wired-extension-registry load-extensions-from-dir!)
          (only-in "../runtime/session/session-config.rkt" apply-context-assembly-profile!)
+         (only-in "../runtime/context-assembly/config.rkt" current-task-state-aware-assembly?)
          (only-in "../runtime/context-assembly/memory-builder.rkt" current-memory-injection-budget)
          (only-in "../runtime/memory/auto-extraction.rkt"
                   current-auto-extraction-enabled
@@ -549,6 +550,9 @@
 ;; H3a (v0.97.13): pure extraction, no behavioral change.
 (define (wire-runtime-parameters! settings profile max-ctx-tokens)
   (apply-context-assembly-profile! profile max-ctx-tokens)
+  ;; Startup log: task-state-aware assembly status
+  (log-info "context-assembly: task-state-aware assembly ~a"
+            (if (current-task-state-aware-assembly?) "enabled" "disabled"))
   (wire-security-config! settings)
   (current-mid-session-bridge-enabled (and (memq profile '(self-healing full))
                                            (setting-ref settings 'mid-session-bridge-enabled #f)))
