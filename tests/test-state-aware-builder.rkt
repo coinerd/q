@@ -238,7 +238,7 @@
         (define test-item
           (memory-item "mem-1"
                        'semantic
-                       'session
+                       'project
                        "The project uses Racket"
                        (hasheq 'project-root
                                "/test"
@@ -298,7 +298,7 @@
       (define test-item
         (memory-item "mem-hf1"
                      'semantic
-                     'session
+                     'project
                      "HF1 test: this should NOT appear without session-config wire"
                      (hasheq 'project-root
                              "/test"
