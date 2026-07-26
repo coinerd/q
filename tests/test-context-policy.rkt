@@ -66,6 +66,68 @@
   (check-equal? via-msg direct))
 
 ;; ============================================================
+;; P6A: Tool-result part token estimation
+;; ============================================================
+
+(test-case "estimate-message-tokens: tool-result part returns > 0"
+  (define content "This is the content of a file that was read")
+  (define msg (make-tool-result-msg "tr1" "tc1" content #:parent-id "a1"))
+  (define tokens (estimate-message-tokens msg))
+  (check-true (positive? tokens)
+              (format "tool-result message with content should have > 0 tokens, got ~a" tokens)))
+
+(test-case "estimate-message-tokens: tool-result with empty content returns 0"
+  (define msg (make-tool-result-msg "tr2" "tc2" "" #:parent-id "a2"))
+  (define tokens (estimate-message-tokens msg))
+  (check-equal? tokens 0 "tool-result message with empty content should have 0 tokens"))
+
+(test-case "estimate-message-tokens: mixed text-part + tool-result-part"
+  (define text-content "User asked a question")
+  (define result-content "File contains important data")
+  (define text-msg (make-test-message "m4" 'user 'message text-content))
+  (define result-msg (make-tool-result-msg "tr3" "tc3" result-content #:parent-id "a3"))
+  (define text-tokens (estimate-message-tokens text-msg))
+  (define result-tokens (estimate-message-tokens result-msg))
+  (define combined-tokens (+ text-tokens result-tokens))
+  ;; Create message with both parts
+  (define mixed-msg
+    (message "m5"
+             #f
+             'assistant
+             'message
+             (list (make-text-part text-content) (make-tool-result-part "tc3" result-content #f))
+             (current-seconds)
+             (hasheq)))
+  (define mixed-tokens (estimate-message-tokens mixed-msg))
+  (check-equal? mixed-tokens
+                combined-tokens
+                (format "sum of individual tokens (~a + ~a = ~a) should equal mixed (~a)"
+                        text-tokens
+                        result-tokens
+                        combined-tokens
+                        mixed-tokens)))
+
+(test-case "estimate-message-tokens-cached: matches uncached for tool-result"
+  (define content "Some tool result content for caching test")
+  (define msg (make-tool-result-msg "tr4" "tc4" content #:parent-id "a4"))
+  (define uncached (estimate-message-tokens msg))
+  (define cached (estimate-message-tokens-cached msg))
+  (check-equal? cached uncached "cached version should match uncached for tool-result messages"))
+
+(test-case "estimate-message-tokens-cached: matches uncached for mixed content"
+  (define mixed-msg
+    (message "m6"
+             #f
+             'assistant
+             'message
+             (list (make-text-part "Some text") (make-tool-result-part "tc5" "some result" #f))
+             (current-seconds)
+             (hasheq)))
+  (define uncached (estimate-message-tokens mixed-msg))
+  (define cached (estimate-message-tokens-cached mixed-msg))
+  (check-equal? cached uncached "cached version should match uncached for mixed messages"))
+
+;; ============================================================
 ;; Predicates
 ;; ============================================================
 
