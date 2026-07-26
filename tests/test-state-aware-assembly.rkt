@@ -72,8 +72,8 @@
   (test-suite "state-aware-assembly"
 
     ;; ── Feature flag default ──
-    (test-case "feature flag defaults to #f"
-      (check-false (current-task-state-aware-assembly?)))
+    (test-case "W3: feature flag defaults to #t"
+      (check-true (current-task-state-aware-assembly?)))
 
     ;; ── No state = standard behavior ──
     (test-case "no task-state produces same message count as standard"

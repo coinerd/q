@@ -13,7 +13,7 @@
          compute-conclusion-budget)
 
 ;; Whether to enable state-aware assembly for the current task.
-(define current-task-state-aware-assembly? (make-parameter #f))
+(define current-task-state-aware-assembly? (make-parameter #t))
 
 ;; Whether to use graph-based conclusion selection.
 (define current-graph-conclusion-selection? (make-parameter #f))
@@ -33,4 +33,4 @@
             (inexact->exact (floor (* max-context-tokens CONCLUSION-BUDGET-FRACTION))))))
 
 ;; Whether to enable working-set evolution.
-(define current-ws-evolution-enabled? (make-parameter #f))
+(define current-ws-evolution-enabled? (make-parameter #t))
