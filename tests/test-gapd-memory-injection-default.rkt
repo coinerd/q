@@ -46,8 +46,8 @@
       (check-equal? (resolve-injection-budget #f 'self-healing 0) 0))
 
     ;; F8: current-memory-injection-budget parameter smoke test
-    (test-case "current-memory-injection-budget defaults to #f"
-      (check-equal? (current-memory-injection-budget) #f))
+    (test-case "current-memory-injection-budget defaults to 500"
+      (check-equal? (current-memory-injection-budget) 500))
 
     (test-case "current-memory-injection-budget can be set and read"
       (parameterize ([current-memory-injection-budget 6400])
@@ -56,6 +56,6 @@
     (test-case "current-memory-injection-budget resets after parameterize"
       (parameterize ([current-memory-injection-budget 9999])
         (check-equal? (current-memory-injection-budget) 9999))
-      (check-equal? (current-memory-injection-budget) #f))))
+      (check-equal? (current-memory-injection-budget) 500))))
 
 (run-tests suite)

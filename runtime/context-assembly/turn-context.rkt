@@ -77,7 +77,8 @@
          ;; WS evolution
          (only-in "../context-assembly/ws-evolution.rkt"
                   evolve-working-set-for-state/result
-                  evolution-result?)
+                  evolution-result?
+                  reset-working-set!)
          (only-in "../context-assembly/state-aware-builder.rkt" current-ws-evolution-enabled?)
          (only-in "../context-assembly/rollback-actions.rkt" current-loop-warning-count)
          ;; Auto-distillation
@@ -94,6 +95,7 @@
                   task-debugging))
 
 (provide current-last-task-fsm-state
+         current-pending-force-reset
          symbol->task-state
          assemble-context/pure
          prepare-turn-context-state
@@ -107,6 +109,12 @@
 ;; v0.79.2 GAP-2: Track last task FSM state for WS evolution old-state.
 ;; Set each turn from agent-session-task-fsm-state before it gets updated.
 (define current-last-task-fsm-state (make-parameter #f))
+
+;; R0: Pending force-reset flag — set by session-events subscriber when
+;; tool.set-task-state.completed event has force-reset: #t.
+;; Checked by prepare-turn-context-state to call reset-working-set!
+;; before WS evolution. Cleared after check to avoid stale flags.
+(define current-pending-force-reset (make-parameter #f))
 
 ;; Convert a raw state symbol to the canonical fsm-state? struct.
 ;; The runtime stores task-fsm-state as raw symbols, but downstream consumers
@@ -230,6 +238,12 @@
              conclusions
              (> (length augmented-conclusions) (length conclusions)))
     (guarded-set-task-conclusions! session augmented-conclusions))
+  ;; R0: Check pending force-reset flag — set by session-events subscriber
+  ;; when tool.set-task-state.completed event had force-reset: #t.
+  ;; When set, reset the working-set before WS evolution.
+  (when (and (current-pending-force-reset) ws-early)
+    (reset-working-set! ws-early)
+    (current-pending-force-reset #f))
   ;; v0.78.2 G2: WS evolution — evolve working set on state transition
   ;; MF1 (GAP-5): Guard at call site — skip when same state to avoid
   ;; unnecessary snapshot + evolve-working-set overhead.

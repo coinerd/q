@@ -107,7 +107,12 @@
           (define ev-pub (and exec-ctx (exec-context-event-publisher exec-ctx)))
           (when ev-pub
             (ev-pub "tool.set-task-state.completed"
-                    (hasheq (quote target-state) state-name (quote event-name) event-name))))
+                    (hasheq 'target-state
+                            state-name
+                            'event-name
+                            event-name
+                            'force-reset
+                            (if force-reset #t #f)))))
         ;; Here we just package the request
         (make-success-result (list (hasheq 'type
                                            "text"

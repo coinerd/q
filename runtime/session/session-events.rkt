@@ -56,6 +56,7 @@
          racket/set
          (only-in "../../util/ids.rkt" generate-id)
          (only-in "../context-assembly/session-walk.rkt" build-session-context)
+         (only-in "../context-assembly/turn-context.rkt" current-pending-force-reset)
          (only-in "../trace-logger.rkt" make-trace-logger start-trace-logger! stop-trace-logger!)
          "session-interruption.rkt"
          (only-in "../../util/event/event.rkt" make-event event-session-id event-turn-id))
@@ -456,29 +457,39 @@
                 #:filter (lambda (evt) (equal? (event-ev evt) "tool.record_conclusion.completed")))
 
     ;; v0.76.7 C3: Subscribe to tool.set-task-state.completed — explicit state transition
-    (subscribe!
-     bus
-     (lambda (evt)
-       (define payload (event-payload evt))
-       (define target (and (hash? payload) (hash-ref payload 'target-state #f)))
-       (when (and target (or (string? target) (symbol? target)))
-         (define target-sym
-           (if (string? target)
-               (string->symbol target)
-               target))
-         (define old-state (agent-session-task-fsm-state sess))
-         (guarded-set-task-fsm-state! sess target-sym)
-         ;; v0.97.5 GAP-F: Mid-session bridge on major forward transitions
-         (maybe-persist-mid-session! sess old-state target-sym)
-         ;; Persist task state change
-         (define log-path (session-log-path-for sess))
-         (when (file-exists? log-path)
-           (append-session-entry! sess (make-task-state-message target-sym)))
-         (emit-session-event! bus
-                              (agent-session-session-id sess)
-                              "task.state.transitioned"
-                              (hasheq 'state target-sym 'old-state old-state 'source "explicit"))))
-     #:filter (lambda (evt) (equal? (event-ev evt) "tool.set-task-state.completed")))
+    (subscribe! bus
+                (lambda (evt)
+                  (define payload (event-payload evt))
+                  (define target (and (hash? payload) (hash-ref payload 'target-state #f)))
+                  (define force-reset-val (and (hash? payload) (hash-ref payload 'force-reset #f)))
+                  ;; R0: Set pending force-reset flag for turn-context to consume
+                  (when force-reset-val
+                    (current-pending-force-reset #t))
+                  (when (and target (or (string? target) (symbol? target)))
+                    (define target-sym
+                      (if (string? target)
+                          (string->symbol target)
+                          target))
+                    (define old-state (agent-session-task-fsm-state sess))
+                    (guarded-set-task-fsm-state! sess target-sym)
+                    ;; v0.97.5 GAP-F: Mid-session bridge on major forward transitions
+                    (maybe-persist-mid-session! sess old-state target-sym)
+                    ;; Persist task state change
+                    (define log-path (session-log-path-for sess))
+                    (when (file-exists? log-path)
+                      (append-session-entry! sess (make-task-state-message target-sym)))
+                    (emit-session-event! bus
+                                         (agent-session-session-id sess)
+                                         "task.state.transitioned"
+                                         (hasheq 'state
+                                                 target-sym
+                                                 'old-state
+                                                 old-state
+                                                 'source
+                                                 "explicit"
+                                                 'force-reset
+                                                 (if force-reset-val #t #f)))))
+                #:filter (lambda (evt) (equal? (event-ev evt) "tool.set-task-state.completed")))
 
     ;; v0.77.1 W1.3: WS evolution flag exported for turn-orchestrator wiring
     ;; (subscriber deferred — working-set lives in turn scope, not session)
