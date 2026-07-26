@@ -19,12 +19,12 @@
 (define suite
   (test-suite "Exploration loop detection wiring"
 
-    (test-case "T5: detect repeating 2-tool pattern"
-      ;; read-grep-read-grep-read-grep = 3 repeats
-      (define tools '("read" "grep" "read" "grep" "read" "grep" "bash"))
+    (test-case "T5: detect repeating 2-tool pattern (12 entries)"
+      ;; read-grep repeated = 6 pair repeats with 12 entries
+      (define tools
+        '("read" "grep" "read" "grep" "read" "grep" "read" "grep" "read" "grep" "read" "grep" "bash"))
       (define result (detect-exploration-loop tools))
-      (check-true (string? result) "loop detected")
-      (check-true (string-contains? result "read") "mentions read"))
+      (check-true (string? result) "loop detected"))
 
     (test-case "T6: no warning for varied tool sequence"
       (define tools '("read" "bash" "edit" "write" "read" "bash"))
@@ -46,13 +46,15 @@
 
     (test-case "exploration loop event emission path via event bus"
       ;; Simulates what iteration.rkt does after detect-exploration-loop
+      (current-loop-cooldown-left 0) ; reset cooldown from prior tests
       (define bus (make-event-bus))
       (define events '())
       (subscribe! bus (lambda (evt) (set! events (cons evt events))))
-      ;; Build repeating 6-tool pattern (3 repeats of read-grep)
-      (define recent-tools '("read" "grep" "read" "grep" "read" "grep"))
+      ;; Build 12-tool pattern (6+ repeats of read-grep)
+      (define recent-tools
+        '("read" "grep" "read" "grep" "read" "grep" "read" "grep" "read" "grep" "read" "grep"))
       (define loop-warning (detect-exploration-loop recent-tools))
-      (check-true (string? loop-warning) "loop detected in 6-tool pattern")
+      (check-true (string? loop-warning) "loop detected in 12-tool pattern")
       ;; Emit event same way iteration.rkt does
       (when loop-warning
         (emit-session-event! bus
@@ -65,7 +67,7 @@
            (and (event? e) (string? (event-ev e)) (string-contains? (event-ev e) "exploration-loop")))
          events))
       (check-true (= (length loop-events) 1) "exactly one exploration-loop event")
-      (check-true (string-contains? loop-warning "read") "warning mentions read tool"))
+      (check-true (string-contains? loop-warning "pair repeated") "warning mentions pair count"))
 
     (test-case "no exploration loop event for varied tool sequence"
       (define bus (make-event-bus))

@@ -16,9 +16,7 @@
 
     (test-case "empty context returns zero estimated tokens"
       (define-values (estimated threshold max-toks)
-        (compute-mid-turn-estimate '()
-                                   (hasheq 'max-context-tokens 1000)
-                                   (lambda (msgs) 100)))
+        (compute-mid-turn-estimate '() (hasheq 'max-context-tokens 1000) (lambda (msgs) 100)))
       (check-equal? estimated 0)
       (check-equal? max-toks 1000)
       (check-equal? threshold (exact-floor (* 1000 9/10))))
@@ -29,21 +27,27 @@
       (check-equal? max-toks 128000))
 
     (test-case "estimate with messages returns sum"
-      (define msgs (list (make-message "1" #f (quote user) (quote text)
-                                        (list (hasheq 'type "text" 'text "hello world"))
-                                        0 (hasheq))))
+      (define msgs
+        (list (make-message "1"
+                            #f
+                            (quote user)
+                            (quote text)
+                            (list (hasheq 'type "text" 'text "hello world"))
+                            0
+                            (hasheq))))
       (define-values (estimated threshold max-toks)
         (compute-mid-turn-estimate msgs
                                    (hasheq 'max-context-tokens 4000)
                                    (lambda (msgs) (length msgs))))
-      (check-equal? estimated 1))
-    ))
+      (check-equal? estimated 1))))
 
 (define exploration-suite
   (test-suite "detect-exploration-loop"
 
-    (test-case "repeating 2-tool pattern is detected"
-      (define tools '("read" "grep" "read" "grep" "read" "grep"))
+    (test-case "repeating 2-tool pattern is detected (12 entries = 6+ repeats)"
+      (current-loop-cooldown-left 0) ; reset cooldown
+      (define tools
+        '("read" "grep" "read" "grep" "read" "grep" "read" "grep" "read" "grep" "read" "grep"))
       (define result (detect-exploration-loop tools))
       (check-not-false result)
       (check-true (string-contains? result "exploration loop detected")))
@@ -59,8 +63,7 @@
       (check-false (detect-exploration-loop '("read" "grep"))))
 
     (test-case "single tool repeated is not a pair loop"
-      (check-false (detect-exploration-loop '("read" "read" "read" "read"))))
-    ))
+      (check-false (detect-exploration-loop '("read" "read" "read" "read"))))))
 
 (define count-suite
   (test-suite "count-occurrences"
@@ -77,31 +80,27 @@
 
     (test-case "list of lists works as keys"
       (define h (count-occurrences '(("a" "b") ("c" "d") ("a" "b"))))
-      (check-equal? (hash-ref h '("a" "b")) 2))
-    ))
+      (check-equal? (hash-ref h '("a" "b")) 2))))
 
 (define overflow-suite
   (test-suite "call-with-overflow-recovery"
 
     (test-case "normal thunk returns result"
-      (define result (call-with-overflow-recovery
-                       (lambda () 42) '() "test-session"))
+      (define result (call-with-overflow-recovery (lambda () 42) '() "test-session"))
       (check-equal? result 42))
 
     (test-case "error thunk re-raises"
-      (check-exn exn:fail?
-        (lambda ()
-          (call-with-overflow-recovery
-            (lambda () (error "test-error"))
-            '() "test-session"))))
+      (check-exn
+       exn:fail?
+       (lambda () (call-with-overflow-recovery (lambda () (error "test-error")) '() "test-session"))))
 
     (test-case "emit-event callback not called for success"
       (define called? (box #f))
-      (call-with-overflow-recovery
-        (lambda () 'ok) '() "test-session"
-        #:emit-event (lambda (type data) (set-box! called? #t)))
-      (check-false (unbox called?)))
-    ))
+      (call-with-overflow-recovery (lambda () 'ok)
+                                   '()
+                                   "test-session"
+                                   #:emit-event (lambda (type data) (set-box! called? #t)))
+      (check-false (unbox called?)))))
 
 (define mid-turn-suite
   (test-suite "estimate-mid-turn-tokens"
@@ -111,16 +110,20 @@
       (check-true (exact-nonnegative-integer? result)))
 
     (test-case "with custom estimate-tokens"
-      (define msgs (list (make-message "1" #f (quote user) (quote text)
-                                        (list (hasheq 'type "text" 'text "test"))
-                                        0 (hasheq))))
-      (define result (estimate-mid-turn-tokens
-                       msgs
-                       "s1"
-                       (hasheq 'max-context-tokens 1000)
-                       #:estimate-tokens (lambda (msgs) 42)))
-      (check-equal? result 42))
-    ))
+      (define msgs
+        (list (make-message "1"
+                            #f
+                            (quote user)
+                            (quote text)
+                            (list (hasheq 'type "text" 'text "test"))
+                            0
+                            (hasheq))))
+      (define result
+        (estimate-mid-turn-tokens msgs
+                                  "s1"
+                                  (hasheq 'max-context-tokens 1000)
+                                  #:estimate-tokens (lambda (msgs) 42)))
+      (check-equal? result 42))))
 
 (run-tests estimate-suite 'verbose)
 (run-tests exploration-suite 'verbose)

@@ -19,7 +19,8 @@
          maybe-compact-mid-turn
          call-with-overflow-recovery
          detect-exploration-loop
-         count-occurrences)
+         count-occurrences
+         current-loop-cooldown-left)
 
 ;; ── Typed imports from untyped modules ──────────────────────────
 
@@ -201,35 +202,82 @@
     (thunk)))
 
 ;; ============================================================
-;; v0.28.21 W6: Exploration loop detection
+;; v0.28.21 W6 / v0.99.68 W4: Exploration loop detection
+;; W4: min-repeats 3→6, argument-aware detection, cooldown
 ;; ============================================================
 
-(: detect-exploration-loop (->* ((Listof String)) (Nonnegative-Integer) (U String #f)))
-(define (detect-exploration-loop recent-tool-names [min-repeats 3])
-  (define n (length recent-tool-names))
+;; Each entry can be either:
+;;   - A string (tool name only, backward compat)
+;;   - A (List String ...) where car is tool name, cadr is first argument
+;; Argument-aware detection uses (tool . first-arg) as the pair key
+;; to distinguish (read foo, read foo) from (read a, read b).
+
+(: tool-name-key (-> Any String))
+(define (tool-name-key entry)
   (cond
-    [(< n (* min-repeats 2)) #f]
+    [(string? entry) entry]
+    [(and (list? entry) (pair? entry) (string? (car entry))) (car entry)]
+    [else (format "~a" entry)]))
+
+(: tool-argument-key (-> Any (U String #f)))
+(define (tool-argument-key entry)
+  (cond
+    [(and (list? entry) (pair? entry) (pair? (cdr entry)) (string? (cadr entry))) (cadr entry)]
+    [(string? entry) #f]
+    [else #f]))
+
+(: make-pair-key (-> Any Any String))
+(define (make-pair-key a b)
+  (define a-name (tool-name-key a))
+  (define b-name (tool-name-key b))
+  (define a-arg (tool-argument-key a))
+  (define b-arg (tool-argument-key b))
+  (cond
+    ;; Full argument-aware key when both have arguments
+    [(and a-arg b-arg) (format "~a:~a -> ~a:~a" a-name a-arg b-name b-arg)]
+    ;; Fall back to tool-name-only when arguments unavailable
+    [else (format "~a -> ~a" a-name b-name)]))
+
+;; v0.99.68 W4: Cooldown parameter — after firing, suppress for N subsequent calls
+(define current-loop-cooldown-left (make-parameter 0))
+
+(: detect-exploration-loop (->* ((Listof Any)) (Nonnegative-Integer) (U String #f)))
+(define (detect-exploration-loop recent-tool-names [min-repeats 6])
+  ;; Check cooldown first
+  (define cooldown (current-loop-cooldown-left))
+  (cond
+    [(positive? cooldown)
+     (current-loop-cooldown-left (sub1 cooldown))
+     #f]
     [else
-     ;; Check for repeating 2-tool patterns in the last N tool calls
-     (define recent (take-at-most recent-tool-names (* min-repeats 4)))
-     (define pairs
-       (for/list :
-         (Listof (List String String))
-         ([i (in-range (sub1 (length recent)))])
-         (list (list-ref recent i) (list-ref recent (add1 i)))))
-     (define pair-counts (count-occurrences pairs))
-     ;; Find any pair repeated 3+ times
-     (define looping-pair
-       (for/or :
-         (U (List String String) #f)
-         ([pair : (List String String) (in-list pairs)])
-         (if (>= (hash-ref pair-counts pair (lambda () 0)) min-repeats) pair #f)))
+     (define n (length recent-tool-names))
      (cond
-       [looping-pair
-        (format "exploration loop detected: ~a repeated ~a times"
-                looping-pair
-                (hash-ref pair-counts looping-pair))]
-       [else #f])]))
+       [(< n (* min-repeats 2)) #f]
+       [else
+        (define recent (take-at-most recent-tool-names (* min-repeats 4)))
+        (define pair-keys
+          (for/list :
+            (Listof String)
+            ([i (in-range (sub1 (length recent)))])
+            (make-pair-key (list-ref recent i) (list-ref recent (add1 i)))))
+        (define pair-counts (count-occurrences pair-keys))
+        (define max-count
+          (for/fold ([best
+                      :
+                      Nonnegative-Integer
+                      0])
+                    ([c
+                      :
+                      Nonnegative-Integer
+                      (in-hash-values pair-counts)])
+            (max best c)))
+        (cond
+          [(>= max-count min-repeats)
+           (current-loop-cooldown-left min-repeats)
+           (format "exploration loop detected: pair repeated ~a times (threshold: ~a)"
+                   max-count
+                   min-repeats)]
+          [else #f])])]))
 
 ;; Helper: count occurrences in a list of items
 (: count-occurrences (-> (Listof Any) (Immutable-HashTable Any Nonnegative-Integer)))
