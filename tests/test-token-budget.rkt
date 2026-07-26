@@ -84,3 +84,96 @@
   (define estimated (estimate-context-tokens msgs-heuristic))
   (check-true (>= estimated 2))
   (check-true (<= estimated 10)))
+
+;; ============================================================
+;; 5. New W0: per-message overhead constants
+;; ============================================================
+
+(test-case "PER-MESSAGE-OVERHEAD-TOKENS is reasonable"
+  (check-true (>= PER-MESSAGE-OVERHEAD-TOKENS 2))
+  (check-true (<= PER-MESSAGE-OVERHEAD-TOKENS 10)))
+
+(test-case "TOOL-CALL-OVERHEAD-TOKENS is non-zero"
+  (check-true (>= TOOL-CALL-OVERHEAD-TOKENS 5)))
+
+(test-case "TOOL-RESULT-OVERHEAD-TOKENS is non-zero"
+  (check-true (>= TOOL-RESULT-OVERHEAD-TOKENS 5)))
+
+(test-case "IMAGE-OVERHEAD-TOKENS is non-zero"
+  (check-true (>= IMAGE-OVERHEAD-TOKENS 10)))
+
+;; ============================================================
+;; 6. estimate-message-overhead
+;; ============================================================
+
+(test-case "estimate-message-overhead returns default constant"
+  (check-equal? (estimate-message-overhead) PER-MESSAGE-OVERHEAD-TOKENS))
+
+(test-case "estimate-message-overhead accepts role keyword"
+  (check-true (> (estimate-message-overhead #:role "user") 0)))
+
+;; ============================================================
+;; 7. estimate-content-part-tokens
+;; ============================================================
+
+(test-case "text-part has zero non-text tokens"
+  (check-equal? (estimate-content-part-tokens (hash "type" "text" "text" "hello")) 0))
+
+(test-case "tool-call part has non-zero tokens"
+  (define tc (hash "type" "tool-call" "name" "read" "arguments" (hash "path" "/tmp/a-file.txt")))
+  (check-true (> (estimate-content-part-tokens tc) 0)))
+
+(test-case "tool-result part has non-zero tokens"
+  (define tr (hash "type" "tool-result" "content" "hello world" "isError" #f))
+  (check-true (> (estimate-content-part-tokens tr) 0)))
+
+(test-case "image part has non-zero tokens"
+  (define img (hash "type" "image" "mimeType" "image/png" "data" "abcdefghijklmnop"))
+  (check-true (> (estimate-content-part-tokens img) 0)))
+
+(test-case "empty image part has minimal tokens"
+  (define img (hash "type" "image" "mimeType" "image/png" "data" ""))
+  (check-true (> (estimate-content-part-tokens img) 0)))
+
+;; ============================================================
+;; 8. estimate-context-tokens with mixed content
+;; ============================================================
+
+(test-case "mixed content message has more tokens than text-only"
+  (define text-only (list (hash "role" "user" "content" (list (hash "type" "text" "text" "hello")))))
+  (define mixed
+    (list (hash "role"
+                "user"
+                "content"
+                (list (hash "type" "text" "text" "hello")
+                      (hash "type" "tool-call" "name" "read" "arguments" (hash "path" "/tmp/x"))))))
+  (check-true (> (estimate-context-tokens mixed) (estimate-context-tokens text-only))
+              "mixed message with tool-call costs more than text-only"))
+
+;; ============================================================
+;; 9. estimate-tool-definition-tokens
+;; ============================================================
+
+(test-case "estimate-tool-definition-tokens returns non-zero"
+  (check-true (> (estimate-tool-definition-tokens "read-file" "{\"type\":\"string\"}") 0)))
+
+;; ============================================================
+;; 10. estimate-non-text-tokens
+;; ============================================================
+
+(test-case "text-only message has 0 non-text tokens"
+  (define text-msg (hash "role" "user" "content" (list (hash "type" "text" "text" "hello"))))
+  (check-equal? (estimate-non-text-tokens text-msg) 0))
+
+(test-case "tool-call message has non-zero non-text tokens"
+  (define tool-msg
+    (hash "role"
+          "assistant"
+          "content"
+          (list (hash "type" "tool-call" "name" "read" "arguments" (hash "path" "/tmp/a-file.txt")))))
+  (check-true (> (estimate-non-text-tokens tool-msg) 0)))
+
+(test-case "tool-result message has non-zero non-text tokens"
+  (define result-msg
+    (hash "role" "tool" "content" (list (hash "type" "tool-result" "content" "done" "isError" #f))))
+  (check-true (> (estimate-non-text-tokens result-msg) 0)))
