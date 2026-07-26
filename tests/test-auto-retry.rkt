@@ -108,12 +108,15 @@
                                 #:per-type-budgets (hash 'timeout 3 'rate-limit 4 'provider-error 3)
                                 #:on-retry (lambda (attempt max-retries delay-ms error-msg error-type)
                                              (set-box! delays (cons delay-ms (unbox delays)))))))
-  ;; Delays should be: 10, 20, 40 (exponential with base 10ms)
+  ;; With jitter, delays are in [0, 10*2^attempt]
   (define sorted-delays (reverse (unbox delays)))
   (check-equal? (length sorted-delays) 3)
-  (check-equal? (first sorted-delays) 10)
-  (check-equal? (second sorted-delays) 20)
-  (check-equal? (third sorted-delays) 40))
+  (check-true (<= (first sorted-delays) 10) "attempt 0 cap = 10")
+  (check-true (>= (first sorted-delays) 0) "attempt 0 non-negative")
+  (check-true (<= (second sorted-delays) 20) "attempt 1 cap = 20")
+  (check-true (>= (second sorted-delays) 0) "attempt 1 non-negative")
+  (check-true (<= (third sorted-delays) 40) "attempt 2 cap = 40")
+  (check-true (>= (third sorted-delays) 0) "attempt 2 non-negative"))
 
 (test-case "with-auto-retry: delay capped at max-delay-ms"
   (define delays (box '()))
@@ -229,10 +232,12 @@
                 #:on-retry (lambda (attempt max-retries delay-ms error-msg error-type)
                              (set-box! delays (cons delay-ms (unbox delays)))))))
   (define sorted-delays (reverse (unbox delays)))
-  ;; Should use rate-limit base (50ms): 50, 100
+  ;; With jitter: cap = 50*2^0 = 50, cap = 50*2^1 = 100; delays in [0, cap]
   (check-equal? (length sorted-delays) 2)
-  (check-equal? (first sorted-delays) 50)
-  (check-equal? (second sorted-delays) 100))
+  (check-true (<= (first sorted-delays) 50) "rate-limit attempt 0 cap = 50")
+  (check-true (>= (first sorted-delays) 0) "rate-limit attempt 0 non-negative")
+  (check-true (<= (second sorted-delays) 100) "rate-limit attempt 1 cap = 100")
+  (check-true (>= (second sorted-delays) 0) "rate-limit attempt 1 non-negative"))
 
 (test-case "A1: non-rate-limit backoff uses normal base delay"
   (define delays (box '()))
@@ -246,10 +251,12 @@
                                 #:on-retry (lambda (attempt max-retries delay-ms error-msg error-type)
                                              (set-box! delays (cons delay-ms (unbox delays)))))))
   (define sorted-delays (reverse (unbox delays)))
-  ;; Should use normal base (10ms): 10, 20
+  ;; With jitter: cap = 10*2^0 = 10, cap = 10*2^1 = 20; delays in [0, cap]
   (check-equal? (length sorted-delays) 2)
-  (check-equal? (first sorted-delays) 10)
-  (check-equal? (second sorted-delays) 20))
+  (check-true (<= (first sorted-delays) 10) "non-rate-limit attempt 0 cap = 10")
+  (check-true (>= (first sorted-delays) 0) "non-rate-limit attempt 0 non-negative")
+  (check-true (<= (second sorted-delays) 20) "non-rate-limit attempt 1 cap = 20")
+  (check-true (>= (second sorted-delays) 0) "non-rate-limit attempt 1 non-negative"))
 
 (test-case "A1: rate-limit backoff capped at max-delay-ms"
   (define delays (box '()))
@@ -282,7 +289,8 @@
   (check-true (retry-exhausted? e))
   (check-equal? (retry-exhausted-attempts e) 2)
   (check-equal? (retry-exhausted-last-error-type e) 'provider-error)
-  (check-true (> (retry-exhausted-total-delay-ms e) 0)))
+  (check-true (>= (retry-exhausted-total-delay-ms e) 0))
+  (check-equal? (length (retry-exhausted-delays e)) 2))
 
 (test-case "A3: retry-exhausted has rate-limit type for 429"
   (define exn-result (box #f))
@@ -571,3 +579,102 @@
   (define exn
     (provider-error "internal server error" (current-continuation-marks) (hash) 'server-error 500))
   (check-not-false (retryable-error? exn)))
+
+;; ============================================================
+;; W1: Jitter, injectable random source, Retry-After
+;; ============================================================
+
+(test-case "W1: compute-retry-delay with deterministic jitter"
+  (define zero-fn (lambda () 0.0))
+  (define one-fn (lambda () 1.0))
+  (define half-fn (lambda () 0.5))
+  (check-equal? (compute-retry-delay 0 1000 10000 0 zero-fn) 0)
+  (check-equal? (compute-retry-delay 0 1000 10000 0 one-fn) 1000)
+  (check-equal? (compute-retry-delay 0 1000 10000 0 half-fn) 500)
+  ;; Retry-After takes precedence
+  (check-equal? (compute-retry-delay 0 1000 10000 5000 half-fn) 5000)
+  ;; Retry-After capped at max-delay
+  (check-equal? (compute-retry-delay 0 1000 2000 5000 half-fn) 2000)
+  ;; Exponential cap grows
+  (check-equal? (compute-retry-delay 1 1000 10000 0 one-fn) 2000)
+  (check-equal? (compute-retry-delay 2 1000 10000 0 one-fn) 4000)
+  ;; Capped at max-delay
+  (check-equal? (compute-retry-delay 10 1000 5000 0 one-fn) 5000))
+
+(test-case "W1: parse-retry-after"
+  (check-equal? (parse-retry-after "30") 30000)
+  (check-equal? (parse-retry-after "2.5") 2500)
+  (check-equal? (parse-retry-after #f) #f)
+  (check-equal? (parse-retry-after "") #f)
+  (check-false (parse-retry-after "not-a-number")))
+
+(test-case "W1: current-random-source parameter"
+  (define call-count (box 0))
+  (parameterize ([current-random-source (lambda ()
+                                          (set-box! call-count (add1 (unbox call-count)))
+                                          0.42)])
+    (check-equal? (compute-retry-delay 0 1000 10000 0 (current-random-source)) 420))
+  (check-equal? (unbox call-count) 1))
+
+(test-case "W1: retry-stats has selected-delay-ms field"
+  (define s (retry-stats 3 1000 #t 500))
+  (check-equal? (retry-stats-selected-delay-ms s) 500))
+
+(test-case "W1: retry-exhausted has delays field"
+  (define delays-list (list 100 200))
+  (define re
+    (retry-exhausted "test"
+                     (current-continuation-marks)
+                     (exn:fail "err" (current-continuation-marks))
+                     2
+                     "timeout"
+                     5000
+                     "(timeout timeout)"
+                     delays-list))
+  (check-equal? (retry-exhausted-delays re) delays-list))
+
+(test-case "W1: compute-retry-delay with #f random-fn uses system random"
+  (define delay (compute-retry-delay 0 1000 10000 0 #f))
+  (check-true (>= delay 0))
+  (check-true (<= delay 1000)))
+
+(test-case "W1: deterministic jitter distribution stays within bounds"
+  ;; With attempt=0, base=100, cap=100
+  ;; 1000 samples with deterministic source should all be in [0, 100]
+  (define count 1000)
+  (define delays
+    (for/list ([i (in-range count)])
+      (compute-retry-delay 0 100 60000 0 (lambda () (/ i count 1.0)))))
+  (for ([d (in-list delays)])
+    (check-true (<= d 100) (format "delay ~a <= 100" d))
+    (check-true (>= d 0) (format "delay ~a >= 0" d))))
+
+(test-case "W1: rate-limit retry uses jitter"
+  (define delays (box '()))
+  (check-exn exn:fail?
+             (lambda ()
+               (with-auto-retry
+                (lambda () (raise (exn:fail "HTTP 429 rate limit" (current-continuation-marks))))
+                #:max-retries 2
+                #:base-delay-ms 10
+                #:rate-limit-base-delay-ms 50
+                #:on-retry (lambda (attempt max-retries delay-ms error-msg error-type)
+                             (set-box! delays (cons delay-ms (unbox delays)))))))
+  (define sorted-delays (reverse (unbox delays)))
+  (check-equal? (length sorted-delays) 2)
+  ;; With jitter, each delay is in [0, 50*2^attempt]
+  (check-true (<= (first sorted-delays) 50))
+  (check-true (>= (first sorted-delays) 0))
+  (check-true (<= (second sorted-delays) 100))
+  (check-true (>= (second sorted-delays) 0)))
+
+(test-case "W1: non-retryable 4xx still not retried"
+  (define attempt (box 0))
+  (check-exn exn:fail?
+             (lambda ()
+               (with-auto-retry (lambda ()
+                                  (set-box! attempt (add1 (unbox attempt)))
+                                  (raise (exn:fail "invalid API key" (current-continuation-marks))))
+                                #:max-retries 3
+                                #:base-delay-ms 10)))
+  (check-equal? (unbox attempt) 1))
