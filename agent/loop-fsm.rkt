@@ -24,20 +24,28 @@
                   fsm-valid-transition?))
 
 ;; ── Machine definition ──
+;;
+;; v0.99.69 W1: Added cancelled, context-failed states.
+;; - stream --stream-cancel--> cancelled (no longer maps to complete)
+;; - build-context --context-failed--> context-failed
 
 (define-fsm-machine
  turn
- #:states (emit-start build-context pre-hook stream complete blocked)
- #:events (start context-built hook-pass hook-block stream-complete stream-cancel msg-hook-block)
+ #:states (emit-start build-context pre-hook stream complete blocked cancelled context-failed)
+ #:events
+ (start context-built hook-pass hook-block stream-complete stream-cancel msg-hook-block ctx-failed)
  #:transitions [(emit-start -> build-context) start]
  [(build-context -> pre-hook) context-built]
+ [(build-context -> context-failed) ctx-failed]
  [(pre-hook -> stream) hook-pass]
  [(pre-hook -> blocked) hook-block]
  [(stream -> complete) stream-complete]
  [(stream -> blocked) msg-hook-block]
- [(stream -> complete) stream-cancel]
+ [(stream -> cancelled) stream-cancel]
  [(complete -> complete) start]
- [(blocked -> blocked) start])
+ [(blocked -> blocked) start]
+ [(cancelled -> cancelled) start]
+ [(context-failed -> context-failed) start])
 
 ;; ── Backward-compatible exports ──
 
@@ -48,6 +56,8 @@
 (define turn-state-stream turn-stream)
 (define turn-state-complete turn-complete)
 (define turn-state-blocked turn-blocked)
+(define turn-state-cancelled turn-cancelled)
+(define turn-state-context-failed turn-context-failed)
 
 ;; Event singletons (old names: turn-event-<name>)
 (define turn-event-start turn-start)
@@ -57,6 +67,7 @@
 (define turn-event-stream-complete turn-stream-complete)
 (define turn-event-stream-cancel turn-stream-cancel)
 (define turn-event-msg-hook-block turn-msg-hook-block)
+(define turn-event-ctx-failed turn-ctx-failed)
 
 ;; State predicate: turn-state? now checks fsm-state? with turn state names
 ;; (this is what the macro generates — compatible with old struct predicate)
@@ -103,6 +114,8 @@
          turn-state-stream
          turn-state-complete
          turn-state-blocked
+         turn-state-cancelled
+         turn-state-context-failed
          ;; Event singletons (direct for match patterns)
          turn-event-start
          turn-event-context-built
@@ -111,6 +124,7 @@
          turn-event-stream-complete
          turn-event-stream-cancel
          turn-event-msg-hook-block
+         turn-event-ctx-failed
          ;; Parameters and tables
          current-turn-fsm-state
          TURN-TRANSITIONS

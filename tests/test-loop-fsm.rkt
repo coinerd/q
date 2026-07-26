@@ -21,8 +21,11 @@
                   turn-state-stream
                   turn-state-complete
                   turn-state-blocked
+                  turn-state-cancelled
+                  turn-state-context-failed
                   turn-event-start
                   turn-event-context-built
+                  turn-event-ctx-failed
                   turn-event-hook-pass
                   turn-event-hook-block
                   turn-event-stream-complete
@@ -64,9 +67,9 @@
       (define next (next-turn-state turn-state-stream turn-event-msg-hook-block))
       (check-equal? (turn-state->symbol next) 'blocked))
 
-    (test-case "loop-fsm: stream + stream-cancel -> complete"
+    (test-case "loop-fsm: stream + stream-cancel -> cancelled"
       (define next (next-turn-state turn-state-stream turn-event-stream-cancel))
-      (check-equal? (turn-state->symbol next) 'complete))
+      (check-equal? (turn-state->symbol next) 'cancelled))
 
     (test-case "complete + start -> complete (re-entry)"
       (define next (next-turn-state turn-state-complete turn-event-start))
@@ -75,6 +78,18 @@
     (test-case "blocked + start -> blocked (re-entry)"
       (define next (next-turn-state turn-state-blocked turn-event-start))
       (check-equal? (turn-state->symbol next) 'blocked))
+
+    (test-case "build-context + ctx-failed -> context-failed"
+      (define next (next-turn-state turn-state-build-context turn-event-ctx-failed))
+      (check-equal? (turn-state->symbol next) 'context-failed))
+
+    (test-case "cancelled + start -> cancelled (re-entry)"
+      (define next (next-turn-state turn-state-cancelled turn-event-start))
+      (check-equal? (turn-state->symbol next) 'cancelled))
+
+    (test-case "context-failed + start -> context-failed (re-entry)"
+      (define next (next-turn-state turn-state-context-failed turn-event-start))
+      (check-equal? (turn-state->symbol next) 'context-failed))
 
     ;; 3. Invalid transitions -> error
     (test-case "invalid transition emits error"
