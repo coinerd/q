@@ -28,6 +28,7 @@
 
 ;; Merge two usage hash tables by summing fields.
 ;; Stream chunks emit usage incrementally (prompt_tokens early, completion_tokens later).
+;; v0.99.69 W0: Internal only — removed from public provide (unused externally).
 (define (merge-usages u1 u2)
   (hasheq 'prompt_tokens
           (+ (hash-ref u1 'prompt_tokens 0) (hash-ref u2 'prompt_tokens 0))
@@ -35,8 +36,6 @@
           (+ (hash-ref u1 'completion_tokens 0) (hash-ref u2 'completion_tokens 0))
           'total_tokens
           (+ (hash-ref u1 'total_tokens 0) (hash-ref u2 'total_tokens 0))))
-
-(provide merge-usages)
 
 ;; ============================================================
 ;; accumulate-stream-chunks : pure helper (S11-F1)

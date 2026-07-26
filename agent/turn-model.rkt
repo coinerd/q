@@ -128,6 +128,9 @@
                                                      [budget-ctx hash?]
                                                      [extension-registry
                                                       (or/c extension-registry? #f)])))
+         ;; v0.99.69 W0: turn-context struct is unused by production code but kept exported
+         ;; because test files construct and access it directly. Consider refactoring tests
+         ;; to use a fixture if full removal is desired later.
          ;; Deferred: per-tag union contract would require dispatch-on-tag; any/c is pragmatic for now.
          (contract-out (struct turn-command ([tag turn-command-tag/c] [payload any/c])))
          (contract-out
