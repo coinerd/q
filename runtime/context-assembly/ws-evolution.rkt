@@ -38,7 +38,8 @@
          evolution-result-archived-entries
          evolution-result-evicted-conclusions
          evolve-working-set-for-state/result
-         ws-entry-matches-tags?)
+         ws-entry-matches-tags?
+         reset-working-set!)
 
 ;; v0.99.54 W4 R-5: Tag-based path classification for working-set evolution.
 ;; Uses basename-derived tags instead of raw substring matching to avoid
@@ -116,9 +117,9 @@
   (define new-name (state->name new-state))
 
   (cond
-    ;; exploration → planning or implementation: clear ws, return conclusions
+    ;; W2 (v0.99.68): Preserve working-set on natural progression transitions
+    ;; exploration → planning or implementation: preserve ws, return conclusions
     [(and (eq? old-name 'exploration) (or (eq? new-name 'planning) (eq? new-name 'implementation)))
-     (working-set-reset! ws)
      (filter task-conclusion? conclusions)]
 
     ;; v0.99.54 W4 R-5: Use path->tag for file classification instead of raw substring matching
@@ -131,14 +132,14 @@
                                            (memq (path->tag (ws-entry-path e)) tags-to-keep))))
      (filter task-conclusion? conclusions)]
 
-    ;; debugging → implementation: clear selective entries
+    ;; W2 (v0.99.68): Preserve working-set on natural progression
+    ;; debugging → implementation: preserve ws, return conclusions
     [(and (eq? old-name 'debugging) (eq? new-name 'implementation))
-     (working-set-reset! ws)
      (filter task-conclusion? conclusions)]
 
-    ;; GAP-B v0.97.8: planning → implementation: clear ws, return conclusions
+    ;; W2 (v0.99.68): Preserve working-set on natural progression transitions
+    ;; planning → implementation: preserve ws, return conclusions
     [(and (eq? old-name 'planning) (eq? new-name 'implementation))
-     (working-set-reset! ws)
      (filter task-conclusion? conclusions)]
 
     ;; GAP-B v0.97.8: planning → verification: keep spec/test files, return conclusions
@@ -186,8 +187,9 @@
                                       (and (string? (ws-entry-path e))
                                            (memq (path->tag (ws-entry-path e)) tags-to-keep))))
      (filter task-conclusion? conclusions)]
+    ;; W2 (v0.99.68): Preserve working-set on natural progression
+    ;; verification → implementation: preserve ws, return conclusions
     [(and (eq? old-name 'verification) (eq? new-name 'implementation))
-     (working-set-reset! ws)
      (filter task-conclusion? conclusions)]
 
     ;; any → idle: full reset
@@ -197,6 +199,11 @@
 
     ;; No evolution needed for other transitions
     [else (filter task-conclusion? conclusions)]))
+
+;; W2 (v0.99.68): Explicit reset — used by set-task-state tool when model
+;; requests ws-preserve?#f or otherwise signals a truly new task.
+(define (reset-working-set! ws)
+  (working-set-reset! ws))
 
 ;; ════════════════════════════════════════════════════════════════
 ;; v0.77.1 W1.1: Structured evolution result
