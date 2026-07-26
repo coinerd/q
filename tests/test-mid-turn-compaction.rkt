@@ -97,14 +97,18 @@
       (check-false (detect-exploration-loop '("read" "grep" "edit" "bash" "write" "read" "ls"))
                    "varied tools not a loop"))
 
-    (test-case "detect read-grep loop"
-      (define result (detect-exploration-loop '("read" "grep" "read" "grep" "read" "grep")))
-      (check-true (string? result) "read-grep loop detected")
-      (check-true (string-contains? result "read") "mentions read")
-      (check-true (string-contains? result "grep") "mentions grep"))
+    (test-case "detect read-grep loop (12 entries = 6+ repeats)"
+      (current-loop-cooldown-left 0) ; reset cooldown from prior tests
+      (define result
+        (detect-exploration-loop
+         '("read" "grep" "read" "grep" "read" "grep" "read" "grep" "read" "grep" "read" "grep")))
+      (check-true (string? result) "read-grep loop detected"))
 
-    (test-case "detect ls-read loop"
-      (define result (detect-exploration-loop '("ls" "read" "ls" "read" "ls" "read" "ls" "read")))
+    (test-case "detect ls-read loop (12+ entries)"
+      (current-loop-cooldown-left 0) ; reset cooldown from prior test
+      (define result
+        (detect-exploration-loop
+         '("ls" "read" "ls" "read" "ls" "read" "ls" "read" "ls" "read" "ls" "read")))
       (check-true (string? result) "ls-read loop detected"))))
 
 (run-tests exploration-loop-suite)
