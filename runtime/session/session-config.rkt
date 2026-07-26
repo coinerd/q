@@ -46,7 +46,7 @@
          (only-in "../memory/conclusion-bridge.rkt" current-conclusion-to-memory-bridge-enabled))
 
 ;; Global rollout rate for state-aware assembly (0.0 = none, 1.0 = all)
-(define current-task-state-aware-rollout-rate (make-parameter 0.0))
+(define current-task-state-aware-rollout-rate (make-parameter 1.0))
 
 ;; v0.77.7 W7.1: Graduated activation profile.
 ;; Profiles control which context assembly features are active:

@@ -45,8 +45,8 @@
 (define suite
   (test-suite "state-aware-builder"
 
-    (test-case "current-task-state-aware-assembly? defaults to #f"
-      (check-false (current-task-state-aware-assembly?)))
+    (test-case "W3: current-task-state-aware-assembly? defaults to #t"
+      (check-true (current-task-state-aware-assembly?)))
 
     (test-case "state-aware-builder: feature flag can be enabled"
       (parameterize ([current-task-state-aware-assembly? #t])
