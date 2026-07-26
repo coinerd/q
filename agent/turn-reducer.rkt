@@ -14,14 +14,7 @@
          racket/match
          "turn-model.rkt"
          (only-in "loop-messages.rkt" classify-hook-result)
-         (only-in "../util/hook-types.rkt" hook-result?)
-         (only-in "loop-fsm.rkt"
-                  turn-state-emit-start
-                  turn-state-build-context
-                  turn-state->symbol
-                  valid-turn-transition?
-                  turn-event-start
-                  turn-event-context-built))
+         (only-in "../util/hook-types.rkt" hook-result?))
 
 ;; ============================================================
 ;; Decision functions
@@ -29,15 +22,15 @@
 
 ;; After turn start -- always build context
 (define (decide-after-start ctx)
-  (if (valid-turn-transition? turn-state-emit-start turn-event-start)
-      (make-decision-build-context ctx)
-      (make-decision-blocked "invalid-start-transition")))
+  ;; v0.99.69 W2: Removed tautological valid-turn-transition? guard.
+  ;; next-turn-state in loop-fsm.rkt already errors on invalid transitions.
+  (make-decision-build-context ctx))
 
 ;; After context built -- always check pre-hook
 (define (decide-after-context ctx)
-  (if (valid-turn-transition? turn-state-build-context turn-event-context-built)
-      (make-decision-check-pre-hook ctx)
-      (make-decision-blocked "invalid-context-transition")))
+  ;; v0.99.69 W2: Removed tautological valid-turn-transition? guard.
+  ;; next-turn-state in loop-fsm.rkt already errors on invalid transitions.
+  (make-decision-check-pre-hook ctx))
 
 ;; After pre-hook classification
 (define (decide-after-pre-hook hook-result)
@@ -53,6 +46,7 @@
 
 ;; After stream completion
 (define (decide-after-stream sc)
+  ;; v0.99.69 W2: Trust FSM to validate transitions; derive state from current-turn-fsm-state.
   (if (stream-completion-cancelled? sc)
       (make-decision-cancelled (or (stream-completion-cancel-reason sc) "user"))
       (make-decision-complete sc)))

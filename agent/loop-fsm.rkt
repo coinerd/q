@@ -92,6 +92,15 @@
            (fsm-event-name event)))
   result)
 
+;; v0.99.69 W2: Single authoritative transition API
+;; Combines next-turn-state lookup with current-turn-fsm-state parameter update.
+;; Invalid transitions raise structured errors with diagnostic info.
+(define (transition-turn-state! event)
+  (define current-state (current-turn-fsm-state))
+  (define next-state (next-turn-state current-state event))
+  (current-turn-fsm-state next-state)
+  next-state)
+
 ;; Valid transition check (backward compat)
 (define (valid-turn-transition? state event)
   (turn-valid-transition? state event))
@@ -103,6 +112,7 @@
 (provide (contract-out [turn-state->symbol (-> fsm-state? symbol?)]
                        [turn-event->symbol (-> fsm-event? symbol?)]
                        [next-turn-state (-> fsm-state? fsm-event? fsm-state?)]
+                       [transition-turn-state! (-> fsm-event? fsm-state?)]
                        [valid-turn-transition? (-> fsm-state? fsm-event? boolean?)])
          ;; Predicates (direct for match compatibility)
          turn-state?

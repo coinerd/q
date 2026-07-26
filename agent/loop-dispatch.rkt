@@ -60,8 +60,8 @@
                              hook-dispatcher
                              cancellation-token)
   (parameterize ([current-turn-fsm-state (current-turn-fsm-state)])
-    ;; FSM: pre-hook -> stream
-    (current-turn-fsm-state (next-turn-state turn-state-pre-hook turn-event-hook-pass))
+    ;; v0.99.69 W2: Derive from-state from current-turn-fsm-state, not hardcoded literal
+    (transition-turn-state! turn-event-hook-pass)
 
     ;; DEBUG: validate raw-messages before sending
     (unless (valid-api-message-sequence? raw-messages)
@@ -98,7 +98,8 @@
     (define d-msg (decide-after-msg-hook msg-start-result))
     (match (turn-decision-tag d-msg)
       ['blocked
-       (current-turn-fsm-state (next-turn-state turn-state-stream turn-event-msg-hook-block))
+       ;; v0.99.69 W2: Derive from-state from current-turn-fsm-state
+       (transition-turn-state! turn-event-msg-hook-block)
        (emit-typed-event! bus
                           (make-message-blocked-event #:session-id session-id
                                                       #:turn-id turn-id
@@ -125,7 +126,8 @@
        (define d-stream (decide-after-stream sc))
        (match (turn-decision-tag d-stream)
          ['cancelled
-          (current-turn-fsm-state (next-turn-state turn-state-stream turn-event-stream-cancel))
+          ;; v0.99.69 W2: Derive from-state from current-turn-fsm-state
+          (transition-turn-state! turn-event-stream-cancel)
           (handle-cancellation bus session-id turn-id st #:hook-dispatcher hook-dispatcher)]
          [_
           (build-stream-result stream-data
