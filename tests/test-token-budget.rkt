@@ -120,7 +120,7 @@
   (check-equal? (estimate-content-part-tokens (hash "type" "text" "text" "hello")) 0))
 
 (test-case "tool-call part has non-zero tokens"
-  (define tc (hash "type" "tool-call" "name" "read" "arguments" (hash "path" "/test.txt")))
+  (define tc (hash "type" "tool-call" "name" "read" "arguments" (hash "path" "/tmp/a-file.txt")))
   (check-true (> (estimate-content-part-tokens tc) 0)))
 
 (test-case "tool-result part has non-zero tokens"
@@ -146,7 +146,7 @@
                 "user"
                 "content"
                 (list (hash "type" "text" "text" "hello")
-                      (hash "type" "tool-call" "name" "read" "arguments" (hash "path" "/x"))))))
+                      (hash "type" "tool-call" "name" "read" "arguments" (hash "path" "/tmp/x"))))))
   (check-true (> (estimate-context-tokens mixed) (estimate-context-tokens text-only))
               "mixed message with tool-call costs more than text-only"))
 
@@ -170,7 +170,7 @@
     (hash "role"
           "assistant"
           "content"
-          (list (hash "type" "tool-call" "name" "read" "arguments" (hash "path" "/x")))))
+          (list (hash "type" "tool-call" "name" "read" "arguments" (hash "path" "/tmp/a-file.txt")))))
   (check-true (> (estimate-non-text-tokens tool-msg) 0)))
 
 (test-case "tool-result message has non-zero non-text tokens"
