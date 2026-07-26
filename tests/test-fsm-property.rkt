@@ -18,10 +18,13 @@
                   turn-state-stream
                   turn-state-complete
                   turn-state-blocked
+                  turn-state-cancelled
+                  turn-state-context-failed
                   turn-state?
                   turn-state->symbol
                   turn-event-start
                   turn-event-context-built
+                  turn-event-ctx-failed
                   turn-event-hook-pass
                   turn-event-hook-block
                   turn-event-stream-complete
@@ -84,22 +87,35 @@
 
     (test-case "turn cancelled path"
       (define s1 (next-turn-state turn-state-stream turn-event-stream-cancel))
-      (check-equal? (turn-state->symbol s1) 'complete))
+      (check-equal? (turn-state->symbol s1) 'cancelled))
 
     (test-case "turn terminal states stay terminal"
       (check-equal? (turn-state->symbol (next-turn-state turn-state-complete turn-event-start))
                     'complete)
       (check-equal? (turn-state->symbol (next-turn-state turn-state-blocked turn-event-start))
-                    'blocked))
+                    'blocked)
+      (check-equal? (turn-state->symbol (next-turn-state turn-state-cancelled turn-event-start))
+                    'cancelled)
+      (check-equal? (turn-state->symbol (next-turn-state turn-state-context-failed turn-event-start))
+                    'context-failed))
 
     (test-case "turn invalid transitions raise errors"
       (check-exn exn:fail? (lambda () (next-turn-state turn-state-complete turn-event-hook-block)))
-      (check-exn exn:fail? (lambda () (next-turn-state turn-state-emit-start turn-event-hook-block))))
+      (check-exn exn:fail? (lambda () (next-turn-state turn-state-emit-start turn-event-hook-block)))
+      (check-exn exn:fail? (lambda () (next-turn-state turn-state-cancelled turn-event-hook-block)))
+      (check-exn exn:fail?
+                 (lambda () (next-turn-state turn-state-context-failed turn-event-stream-complete))))
 
     (test-case "valid-turn-transition? matches TURN-TRANSITIONS"
       (check-true (valid-turn-transition? turn-state-emit-start turn-event-start))
       (check-true (valid-turn-transition? turn-state-pre-hook turn-event-hook-pass))
-      (check-false (valid-turn-transition? turn-state-complete turn-event-hook-block)))
+      (check-true (valid-turn-transition? turn-state-build-context turn-event-ctx-failed))
+      (check-true (valid-turn-transition? turn-state-cancelled turn-event-start))
+      (check-true (valid-turn-transition? turn-state-context-failed turn-event-start))
+      (check-false (valid-turn-transition? turn-state-complete turn-event-hook-block))
+      (check-false (valid-turn-transition? turn-state-cancelled turn-event-stream-complete))
+      (check-false (valid-turn-transition? turn-state-cancelled turn-event-ctx-failed))
+      (check-false (valid-turn-transition? turn-state-context-failed turn-event-hook-pass)))
 
     ;; -- Iteration FSM (A9-02) --
 

@@ -27,6 +27,8 @@
                   turn-state-stream
                   turn-state-complete
                   turn-state-blocked
+                  turn-state-cancelled
+                  turn-state-context-failed
                   turn-event-start
                   turn-event-context-built
                   turn-event-hook-pass
@@ -34,6 +36,7 @@
                   turn-event-stream-complete
                   turn-event-stream-cancel
                   turn-event-msg-hook-block
+                  turn-event-ctx-failed
                   next-turn-state
                   turn-state->symbol
                   current-turn-fsm-state)
