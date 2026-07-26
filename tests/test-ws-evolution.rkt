@@ -47,23 +47,23 @@
 (define suite
   (test-suite "ws-evolution"
 
-    ;; ── exploration → planning: full reset, conclusions returned ──
+    ;; ── W2: Working-set preserved on natural progression ──
 
-    (test-case "exploration→planning clears working-set, returns conclusions"
+    (test-case "W2: exploration→planning preserves working-set, returns conclusions"
       (define ws (make-working-set))
       (populate-ws ws '("file1.rkt" "file2.rkt" "file3.rkt"))
       (check-equal? (working-set-entry-count ws) 3)
       (define result (evolve-working-set-for-state ws task-exploration task-planning conclusions))
-      (check-equal? (working-set-entry-count ws) 0 "ws should be cleared")
+      (check-equal? (working-set-entry-count ws) 3 "ws should be preserved")
       (check-equal? (length result) 2 "conclusions returned"))
 
-    ;; ── exploration → implementation: full reset ──
+    ;; ── W2: Working-set preserved on natural progression ──
 
-    (test-case "exploration→implementation clears working-set"
+    (test-case "W2: exploration→implementation preserves working-set"
       (define ws (make-working-set))
       (populate-ws ws '("a.rkt" "b.rkt" "c.rkt" "d.rkt" "e.rkt"))
       (evolve-working-set-for-state ws task-exploration task-implementation conclusions)
-      (check-equal? (working-set-entry-count ws) 0 "ws should be cleared"))
+      (check-equal? (working-set-entry-count ws) 5 "ws should be preserved"))
 
     ;; ── implementation → debugging: keep test/error/spec files ──
 
@@ -81,13 +81,13 @@
       (check-false (member "src/main.rkt" remaining-paths) "main.rkt should be removed")
       (check-false (member "src/util.rkt" remaining-paths) "util.rkt should be removed"))
 
-    ;; ── debugging → implementation: full reset ──
+    ;; ── W2: Working-set preserved on natural progression ──
 
-    (test-case "debugging→implementation clears working-set"
+    (test-case "W2: debugging→implementation preserves working-set"
       (define ws (make-working-set))
       (populate-ws ws '("tests/test-x.rkt" "src/error.rkt"))
       (evolve-working-set-for-state ws task-debugging task-implementation conclusions)
-      (check-equal? (working-set-entry-count ws) 0 "ws should be cleared"))
+      (check-equal? (working-set-entry-count ws) 2 "ws should be preserved"))
 
     ;; ── any → idle: full reset ──
 
@@ -137,14 +137,15 @@
 
     ;; v0.77.1 W1.1: evolution-result struct
 
-    (test-case "evolution-result exploration->planning archives all"
+    ;; W2: Working-set preserved on natural progression
+    (test-case "W2: evolution-result exploration->planning preserves entries"
       (define ws (make-working-set))
       (populate-ws ws '("file1.rkt" "file2.rkt" "file3.rkt"))
       (define result
         (evolve-working-set-for-state/result ws task-exploration task-planning conclusions))
       (check-true (evolution-result? result))
-      (check-equal? (length (evolution-result-kept-entries result)) 0)
-      (check-equal? (length (evolution-result-archived-entries result)) 3)
+      (check-equal? (length (evolution-result-kept-entries result)) 3 "all kept")
+      (check-equal? (length (evolution-result-archived-entries result)) 0 "nothing archived")
       (check-equal? (length (evolution-result-evicted-conclusions result)) 2))
 
     (test-case "evolution-result impl->debugging archives non-error files"
@@ -167,11 +168,12 @@
     ;; v0.97.8 W1: GAP-B WS transition regression tests
     ;; ============================================================
 
-    (test-case "GAP-B: planning→implementation clears working-set"
+    ;; W2: Working-set preserved on natural progression
+    (test-case "W2: planning→implementation preserves working-set"
       (define ws (make-working-set))
       (populate-ws ws '("plan.rkt" "notes.md" "spec.rkt"))
       (define result (evolve-working-set-for-state ws task-planning task-implementation conclusions))
-      (check-equal? (working-set-entry-count ws) 0 "ws should be cleared")
+      (check-equal? (working-set-entry-count ws) 3 "ws should be preserved")
       (check-equal? (length result) 2 "conclusions returned"))
 
     (test-case "GAP-B: planning→debugging keeps error/test/spec files"
@@ -185,15 +187,17 @@
       (check-false (member "plan.rkt" remaining) "plan.rkt removed")
       (check-false (member "docs.md" remaining) "docs.md removed"))
 
-    (test-case "GAP-B: verification→implementation clears working-set"
+    ;; W2: Working-set preserved on natural progression
+    (test-case "W2: verification→implementation preserves working-set"
       (define ws (make-working-set))
       (populate-ws ws '("tests/test-a.rkt" "spec.rkt" "validation.rkt"))
       (define result
         (evolve-working-set-for-state ws task-verification task-implementation conclusions))
-      (check-equal? (working-set-entry-count ws) 0 "ws should be cleared")
+      (check-equal? (working-set-entry-count ws) 3 "ws should be preserved")
       (check-equal? (length result) 2 "conclusions returned"))
 
-    (test-case "GAP-B: planning→implementation returns all valid conclusions"
+    ;; W2: Working-set preserved
+    (test-case "W2: planning→implementation returns all valid conclusions"
       (define ws (make-working-set))
       (populate-ws ws '("plan.rkt"))
       (define many-conclusions
@@ -209,7 +213,7 @@
       (define result
         (evolve-working-set-for-state ws task-planning task-implementation many-conclusions))
       (check-equal? (length result) 5 "all conclusions returned")
-      (check-equal? (working-set-entry-count ws) 0))
+      (check-equal? (working-set-entry-count ws) 1 "ws preserved"))
 
     (test-case "GAP-B: planning→verification result struct tracks archives"
       (define ws (make-working-set))
@@ -221,14 +225,15 @@
       (check-equal? (length (evolution-result-archived-entries result)) 2 "plan+main archived")
       (check-equal? (length (evolution-result-evicted-conclusions result)) 2))
 
-    (test-case "GAP-B: verification→implementation result struct tracks archives"
+    ;; W2: Working-set preserved on natural progression
+    (test-case "W2: verification→implementation result struct tracks preservation"
       (define ws (make-working-set))
       (populate-ws ws '("tests/test-a.rkt" "spec.rkt"))
       (define result
         (evolve-working-set-for-state/result ws task-verification task-implementation conclusions))
       (check-true (evolution-result? result))
-      (check-equal? (length (evolution-result-kept-entries result)) 0 "all cleared")
-      (check-equal? (length (evolution-result-archived-entries result)) 2 "both archived")
+      (check-equal? (length (evolution-result-kept-entries result)) 2 "all kept")
+      (check-equal? (length (evolution-result-archived-entries result)) 0 "nothing archived")
       (check-equal? (length (evolution-result-evicted-conclusions result)) 2))
 
     ;; LF5: planning→exploration falls to else (no WS mutation)
@@ -304,4 +309,54 @@
       (check-true (>= (working-set-entry-count ws) 2) "test/spec/validation kept")
       (check-true (< (working-set-entry-count ws) 4) "non-validation removed"))))
 
+;; ============================================================
+;; W2 (v0.99.68): Working-set preservation across natural progressions
+;; ============================================================
+
+(define w2-suite
+  (test-suite "W2: ws-preservation"
+
+    (test-case "W2: exploration→planning preserves 14 entries (D1BG5R2T regression)"
+      (define ws (make-working-set))
+      (populate-ws ws
+                   '("src/file-01.rkt" "src/file-02.rkt"
+                                       "src/file-03.rkt"
+                                       "src/file-04.rkt"
+                                       "src/file-05.rkt"
+                                       "src/file-06.rkt"
+                                       "src/file-07.rkt"
+                                       "src/file-08.rkt"
+                                       "src/file-09.rkt"
+                                       "src/file-10.rkt"
+                                       "src/file-11.rkt"
+                                       "src/file-12.rkt"
+                                       "src/file-13.rkt"
+                                       "src/file-14.rkt"))
+      (check-equal? (working-set-entry-count ws) 14)
+      (evolve-working-set-for-state ws task-exploration task-planning conclusions)
+      (check-equal? (working-set-entry-count ws) 14 "all 14 entries preserved"))
+
+    (test-case "W2: idle→still resets on explicit reset-working-set!"
+      (define ws (make-working-set))
+      (populate-ws ws '("file1.rkt" "file2.rkt"))
+      (evolve-working-set-for-state ws task-planning task-idle conclusions)
+      (check-equal? (working-set-entry-count ws) 0 "idle transition resets"))
+
+    (test-case "W2: selective cleanup still works on debugging transition"
+      (define ws (make-working-set))
+      (populate-ws ws '("src/main.rkt" "tests/test-foo.rkt" "src/error.rkt"))
+      (evolve-working-set-for-state ws task-implementation task-debugging conclusions)
+      (check-equal? (working-set-entry-count ws) 2 "error/test kept, main removed")
+      (define remaining (map ws-entry-path (working-set-entries ws)))
+      (check-not-false (member "tests/test-foo.rkt" remaining))
+      (check-not-false (member "src/error.rkt" remaining))
+      (check-false (member "src/main.rkt" remaining)))
+
+    (test-case "W2: no mutation for same-state transition"
+      (define ws (make-working-set))
+      (populate-ws ws '("a.rkt" "b.rkt"))
+      (evolve-working-set-for-state ws task-exploration task-exploration conclusions)
+      (check-equal? (working-set-entry-count ws) 2))))
+
 (run-tests suite)
+(run-tests w2-suite)
