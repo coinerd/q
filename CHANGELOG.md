@@ -38,6 +38,30 @@ gate in release readiness check.
 - `current-ws-evolution-enabled?` default changed from #f to #t.
 - `current-task-state-aware-rollout-rate` default changed from 0.0 to 1.0.
 
+### Migration Notes
+
+- Working-set is now preserved across task-state transitions (exploration→planning→implementation→verification→debugging). Only `any→idle` resets.
+- Exploration loop detection uses argument-aware pair keys with 6-repeat threshold.
+- Retry jitter is enabled by default; `compute-retry-delay` now includes full jitter (cap×random).
+- Outcome-capture trace events (`outcome.captured`, `outcome.reduced`, `outcome.promoted`) added to tool execution pipeline.
+- Release readiness lint now checks for unresolved merge conflict markers (`<<<<<<<`) in CHANGELOG.md and README.md.
+
+### Testing
+
+- Token estimation: 14 new tests for per-message overhead, tool-call/result/image estimation, tool-definition tokens.
+- Retry jitter: 20+ new tests for full jitter, `parse-retry-after`, injectable random source, non-degenerate distribution.
+- WS preservation: 8 new tests for every transition pair, verifying entries preserved for non-terminal transitions.
+- Loop detection: D1BG5R2T trace regression (≤10 warnings), argument-aware detection, cooldown.
+- State-aware assembly: FIX TARGET tests in test-state-aware-builder.rkt now pass; new default-on integration test.
+- Trace telemetry: outcome-capture events, compact excludedIds format, working-set token accounting.
+- Fast suite: 1069/1084 files pass, 14 pre-existing baseline failures (same as v0.99.67).
+
+### Operational / Release
+
+- Version bumped to 0.99.68 (util/version.rkt, info.rkt, README.md).
+- Milestone #854 closed.
+- Release tag v0.99.68 created.
+
 ## 0.99.67
 
 Released: 2026-07-25
@@ -88,8 +112,6 @@ and task-state for full checkpoint injection.
 (false). Enable via config for behavioral change.
 - Legacy memory auto-promotion is disabled; migration tool quarantines
 ambiguous records.
-
----
 
 ### Migration Notes
 
