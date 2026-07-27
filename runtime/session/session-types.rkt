@@ -10,6 +10,7 @@
                   lifecycle-state-compacting?
                   lifecycle-state-last-compaction-time
                   lifecycle-state-persisted?
+                  lifecycle-state-closed?
                   lifecycle-state-shutdown-requested?
                   lifecycle-state-force-shutdown?
                   lifecycle-state-prompt-running?
@@ -19,6 +20,7 @@
                   set-lifecycle-state-compacting?!
                   set-lifecycle-state-last-compaction-time!
                   set-lifecycle-state-persisted?!
+                  set-lifecycle-state-closed?!
                   set-lifecycle-state-shutdown-requested?!
                   set-lifecycle-state-force-shutdown?!
                   set-lifecycle-state-prompt-running?!
@@ -64,6 +66,7 @@
          agent-session-task-fsm-state
          agent-session-task-conclusions
          agent-session-recent-tool-calls
+         agent-session-closed?
          session-log-path
          session-index-path
          lifecycle-state?
@@ -241,6 +244,9 @@
 (define (agent-session-persisted? sess)
   (lifecycle-state-persisted? (agent-session-lifecycle sess)))
 
+(define (agent-session-closed? sess)
+  (lifecycle-state-closed? (agent-session-lifecycle sess)))
+
 (define (agent-session-shutdown-requested? sess)
   (lifecycle-state-shutdown-requested? (agent-session-lifecycle sess)))
 
@@ -282,7 +288,8 @@
            set-agent-session-prompt-running?!
            set-agent-session-task-fsm-state!
            set-agent-session-task-conclusions!
-           set-agent-session-recent-tool-calls!)
+           set-agent-session-recent-tool-calls!
+           set-agent-session-closed?!)
 
   (define (set-agent-session-compacting?! sess value)
     (set-lifecycle-state-compacting?! (agent-session-lifecycle sess) value))
@@ -292,6 +299,9 @@
 
   (define (set-agent-session-persisted?! sess value)
     (set-lifecycle-state-persisted?! (agent-session-lifecycle sess) value))
+
+  (define (set-agent-session-closed?! sess value)
+    (set-lifecycle-state-closed?! (agent-session-lifecycle sess) value))
 
   (define (set-agent-session-shutdown-requested?! sess value)
     (set-lifecycle-state-shutdown-requested?! (agent-session-lifecycle sess) value))
