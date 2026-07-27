@@ -14,6 +14,7 @@
          (only-in "../llm/model.rkt" model-request-settings model-request?)
          (only-in "../llm/provider.rkt" provider-name provider?)
          "effect-types.rkt"
+         (only-in "effect-executor.rkt" execute-effects! execute-effects/return)
          "loop-messages.rkt"
          "loop-stream.rkt"
          "loop-fsm.rkt"
@@ -24,14 +25,12 @@
                   make-turn-end-event)
          (only-in "turn-reducer.rkt" decide-after-msg-hook decide-after-stream)
          (only-in "turn-model.rkt" make-stream-completion turn-decision-tag)
-         (only-in "event-emitter.rkt" emit-typed-event!)
          (only-in "../util/cancellation.rkt" cancellation-token?)
          (only-in "event-bus.rkt" event-bus?)
          (only-in "loop-stream.rkt" handle-cancellation build-stream-result)
          (only-in "loop-phases.rkt" phase-msg-hook phase-stream)
          (only-in "state.rkt" current-loop-state-for-error-recovery)
-         (only-in "../util/loop-result.rkt" loop-result loop-result?)
-         (only-in "stream-runner.rkt" safe-hook-dispatch))
+         (only-in "../util/loop-result.rkt" loop-result loop-result?))
 
 (provide (contract-out [run-streaming-phase
                         (-> provider?
@@ -63,56 +62,61 @@
     ;; v0.99.69 W2: Derive from-state from current-turn-fsm-state, not hardcoded literal
     (transition-turn-state! turn-event-hook-pass)
 
-    ;; DEBUG: validate raw-messages before sending
-    (unless (valid-api-message-sequence? raw-messages)
-      (log-warning "INVALID message sequence detected! Dumping raw messages:")
-      (for ([rm (in-list raw-messages)]
-            [i (in-naturals)])
-        (log-warning "  msg[~a]: role=~a keys=~a" i (hash-ref rm 'role #f) (hash-keys rm)))
-      (log-warning "End of invalid sequence dump"))
+    ;; Build validation + DIAG + provider-request effect list
+    (define pre-stream-effects
+      (append
+       ;; DEBUG validation via effect:validate-messages
+       (list (effect:validate-messages raw-messages))
+       ;; DIAG logging via effect:log
+       (let ([n (length raw-messages)])
+         (if (> n 0)
+             (let* ([n3 (min 3 n)]
+                    [last-roles (for/list ([rm (in-list (take-right raw-messages n3))])
+                                  (hash-ref rm 'role #f))])
+               (list (effect:log
+                      'warning
+                      (format "DIAG: provider request: ~a messages, last roles: ~a" n last-roles)
+                      #f)))
+             '()))
+       ;; Provider-request event
+       (list (effect:emit-event 'provider-request
+                                (make-provider-request-event
+                                 #:session-id session-id
+                                 #:turn-id turn-id
+                                 #:timestamp (current-inexact-milliseconds)
+                                 #:model (hash-ref (model-request-settings req)
+                                                   'model
+                                                   (lambda () (format "~a" (provider-name provider))))
+                                 #:provider (format "~a" (provider-name provider)))))))
+    (execute-effects! pre-stream-effects #:bus bus #:state st)
 
-    ;; DIAG: Log last 3 message roles for provider compatibility debugging
-    ;; (qwen3 enable_thinking rejects assistant-last messages)
-    (let ([n (length raw-messages)])
-      (when (> n 0)
-        (define last-roles
-          (for/list ([rm (in-list (take-right raw-messages (min 3 n)))])
-            (hash-ref rm 'role #f)))
-        (log-warning "DIAG: provider request: ~a messages, last roles: ~a" n last-roles)))
-
-    (emit-typed-event! bus
-                       (make-provider-request-event
-                        #:session-id session-id
-                        #:turn-id turn-id
-                        #:timestamp (current-inexact-milliseconds)
-                        #:model (hash-ref (model-request-settings req)
-                                          'model
-                                          (lambda () (format "~a" (provider-name provider))))
-                        #:provider (format "~a" (provider-name provider)))
-                       #:state st)
-
-    ;; Phase 5: Message-start hook
-    (define-values (msg-payload _fx5) (phase-msg-hook provider raw-messages session-id turn-id))
-    (define msg-start-result (safe-hook-dispatch hook-dispatcher 'message-start msg-payload))
+    ;; Phase 5: Message-start hook — route through effects!
+    (define-values (msg-payload fx5) (phase-msg-hook provider raw-messages session-id turn-id))
+    (define msg-start-result
+      (execute-effects/return fx5 #:bus bus #:state st #:hook-dispatcher hook-dispatcher))
 
     (define d-msg (decide-after-msg-hook msg-start-result))
     (match (turn-decision-tag d-msg)
       ['blocked
-       ;; v0.99.69 W2: Derive from-state from current-turn-fsm-state
-       (transition-turn-state! turn-event-msg-hook-block)
-       (emit-typed-event! bus
-                          (make-message-blocked-event #:session-id session-id
+       ;; v0.99.70 W1: Route blocked branch through effects!
+       (execute-effects/return
+        (list (effect:update-fsm (current-turn-fsm-state) turn-event-msg-hook-block)
+              (effect:emit-event 'message-blocked
+                                 (make-message-blocked-event #:session-id session-id
+                                                             #:turn-id turn-id
+                                                             #:timestamp
+                                                             (current-inexact-milliseconds)
+                                                             #:hook "message-start"
+                                                             #:reason "blocked"))
+              (effect:emit-event 'turn-end
+                                 (make-turn-end-event #:session-id session-id
                                                       #:turn-id turn-id
                                                       #:timestamp (current-inexact-milliseconds)
-                                                      #:hook "message-start"
-                                                      #:reason "blocked"))
-       (emit-typed-event! bus
-                          (make-turn-end-event #:session-id session-id
-                                               #:turn-id turn-id
-                                               #:timestamp (current-inexact-milliseconds)
-                                               #:reason "hook-blocked"
-                                               #:duration-ms 0))
-       (loop-result raw-messages 'hook-blocked (hasheq 'hook 'message-start))]
+                                                      #:reason "hook-blocked"
+                                                      #:duration-ms 0))
+              (effect:build-result raw-messages 'hook-blocked (hasheq 'hook 'message-start)))
+        #:bus bus
+        #:state st)]
       [_
        ;; Phase 6: Stream from provider
        (define-values (stream-data _fx6)
