@@ -22,7 +22,9 @@
          (only-in "../util/loop-result.rkt" loop-result)
          (only-in "loop-stream.rkt" stream-from-provider handle-cancellation build-stream-result)
          (only-in "stream-runner.rkt" safe-hook-dispatch)
-         (only-in "loop-messages.rkt" valid-api-message-sequence?))
+         (only-in "loop-messages.rkt" valid-api-message-sequence?)
+         (only-in "turn-model.rkt" make-stream-completion turn-decision-tag)
+         (only-in "turn-reducer.rkt" decide-after-stream))
 
 (provide (contract-out
           [execute-effects!
@@ -93,14 +95,42 @@
        (unless (valid-api-message-sequence? (effect:validate-messages-messages eff))
          (log-warning "INVALID message sequence detected"))]
       [(? effect:stream?)
-       (stream-from-provider (effect:stream-provider eff)
-                             (effect:stream-request eff)
-                             (effect:stream-bus eff)
-                             (effect:stream-session-id eff)
-                             (effect:stream-turn-id eff)
-                             (effect:stream-state eff)
-                             (effect:stream-hook-dispatcher eff)
-                             (effect:stream-cancellation-token eff))]
+       ;; Run the full streaming pipeline: stream → decide → handle/build-result
+       (define stream-data
+         (stream-from-provider (effect:stream-provider eff)
+                               (effect:stream-request eff)
+                               (effect:stream-bus eff)
+                               (effect:stream-session-id eff)
+                               (effect:stream-turn-id eff)
+                               (effect:stream-state eff)
+                               (effect:stream-hook-dispatcher eff)
+                               (effect:stream-cancellation-token eff)))
+       (define stream-sc
+         (make-stream-completion #:cancelled? (hash-ref stream-data 'cancelled? #f)
+                                 #:cancel-reason (hash-ref stream-data 'cancel-reason #f)
+                                 #:text (hash-ref stream-data 'text "")
+                                 #:tool-calls (hash-ref stream-data 'tool-calls '())))
+       (define stream-decision (decide-after-stream stream-sc))
+       (define stream-result
+         (match (turn-decision-tag stream-decision)
+           ['cancelled
+            (transition-turn-state! turn-event-stream-cancel)
+            (handle-cancellation (effect:stream-bus eff)
+                                 (effect:stream-session-id eff)
+                                 (effect:stream-turn-id eff)
+                                 (effect:stream-state eff)
+                                 #:hook-dispatcher (effect:stream-hook-dispatcher eff))]
+           [_
+            (build-stream-result stream-data
+                                 (effect:stream-raw-messages eff)
+                                 (effect:stream-bus eff)
+                                 (effect:stream-session-id eff)
+                                 (effect:stream-turn-id eff)
+                                 (effect:stream-state eff)
+                                 (effect:stream-tools eff)
+                                 (effect:stream-provider eff)
+                                 (effect:stream-hook-dispatcher eff))]))
+       (set-box! result-box stream-result)]
       [(? effect:none?) (void)]
       [else (void)]))
   (unbox result-box))

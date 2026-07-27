@@ -41,7 +41,7 @@
          (only-in "../llm/token-budget.rkt" estimate-context-tokens)
          (only-in "../util/tool/tool-types.rkt" tool?)
          (only-in "event-bus.rkt" event-bus?)
-         (only-in "loop-stream.rkt" stream-from-provider handle-cancellation build-stream-result)
+         (only-in "loop-stream.rkt" handle-cancellation build-stream-result)
          (only-in "../util/cancellation.rkt" cancellation-token?)
          (only-in "../util/message/message.rkt" message?)
          "../util/loop-result.rkt")
@@ -78,7 +78,7 @@
                             loop-state?
                             (or/c procedure? #f)
                             (or/c cancellation-token? #f)
-                            (values hash? (listof effect?)))]))
+                            (values (or/c hash? #f) (listof effect?)))]))
 
 ;; ---------------------------------------------------------------------------
 ;; Phase 1: Emit turn-started event
@@ -185,9 +185,18 @@
 
 ;; Returns (values stream-result (listof effect?))
 ;; stream-result is a hasheq with keys: cancelled?, cancel-reason, text, tool-calls
+;; Effect is a single effect:stream descriptor describing the entire streaming operation
 (define (phase-stream provider req bus session-id turn-id st hook-dispatcher cancellation-token)
-  (define stream-data
-    (stream-from-provider provider req bus session-id turn-id st hook-dispatcher cancellation-token))
-  (values stream-data '()))
+  (values #f ; stream-result determined at execution time
+          (list (effect:stream provider
+                               req
+                               bus
+                               session-id
+                               turn-id
+                               st
+                               (loop-state-messages st)
+                               #f ; tools — not available in phase-stream
+                               hook-dispatcher
+                               cancellation-token))))
 
 ;; ---------------------------------------------------------------------------

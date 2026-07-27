@@ -34,6 +34,8 @@
                                                  [session-id string?]
                                                  [turn-id string?]
                                                  [state any/c]
+                                                 [raw-messages (listof any/c)]
+                                                 [tools (or/c (listof hash?) #f)]
                                                  [hook-dispatcher (or/c procedure? #f)]
                                                  [cancellation-token (or/c any/c #f)])))
          (contract-out (struct effect:none ()))
@@ -73,9 +75,18 @@
 (struct effect:validate-messages effect-base (messages) #:transparent)
 
 ;; v0.99.70 W0: Stream from provider (immutable request descriptor)
+;; v0.99.70 W2: Added raw-messages and tools fields for build-stream-result
 (struct effect:stream
         effect-base
-        (provider request bus session-id turn-id state hook-dispatcher cancellation-token)
+        (provider request
+                  bus
+                  session-id
+                  turn-id
+                  state
+                  raw-messages
+                  tools
+                  hook-dispatcher
+                  cancellation-token)
   #:transparent)
 
 ;; No-op effect (identity)
