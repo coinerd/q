@@ -37,17 +37,28 @@
      #:with tool-name-str #`#,(symbol->string (syntax->datum #'name))
      #:with tool-id (datum->syntax stx (string->symbol (format "tool-~a" (syntax->datum #'name))))
      ;; Build property pairs at expansion time
-     #:with (prop-pair ...) (for/list ([pn (syntax->list #'(prop-name ...))]
-                                       [pt (syntax->list #'(prop-type ...))]
-                                       [pd (syntax->list #'(prop-desc ...))])
-                              #`(cons '#,(syntax->datum pn) (hasheq 'type #,pt 'description #,pd)))
+     #:with (prop-pair
+             ...) (for/list ([pn (syntax->list #'(prop-name ...))]
+                             [pt (syntax->list #'(prop-type ...))]
+                             [pd (syntax->list #'(prop-desc ...))])
+                    (define type-str (syntax->datum pt))
+                    (if (equal? type-str "array")
+                        #`(cons '#,(syntax->datum pn)
+                                (hasheq 'type #,pt 'description #,pd 'items (hasheq 'type "string")))
+                        #`(cons '#,(syntax->datum pn) (hasheq 'type #,pt 'description #,pd))))
      ;; Build optional property pairs (W-20)
-     #:with (opt-pair ...) (for/list ([on (syntax->list #'(opt-name ...))]
-                                      [ot (syntax->list #'(opt-type ...))]
-                                      [od (syntax->list #'(opt-desc ...))]
-                                      [odef (syntax->list #'(opt-default ...))])
-                             #`(cons '#,(syntax->datum on)
-                                     (hasheq 'type #,ot 'description #,od 'default #,odef)))
+     #:with
+     (opt-pair ...)
+     (for/list ([on (syntax->list #'(opt-name ...))]
+                [ot (syntax->list #'(opt-type ...))]
+                [od (syntax->list #'(opt-desc ...))]
+                [odef (syntax->list #'(opt-default ...))])
+       (define opt-type-str (syntax->datum ot))
+       (if (equal? opt-type-str "array")
+           #`
+           (cons '#,(syntax->datum on)
+                 (hasheq 'type #,ot 'description #,od 'default #,odef 'items (hasheq 'type "string")))
+           #`(cons '#,(syntax->datum on) (hasheq 'type #,ot 'description #,od 'default #,odef))))
 
      #'(begin
          (define tool-id handler)

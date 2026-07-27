@@ -65,11 +65,19 @@
     ;; ── make-tool with #:dangerous? ──
     (test-case "make-tool accepts #:dangerous? flag"
       (define t
-        (make-tool "test" "test tool" (hasheq 'type "object") (lambda (args) "ok") #:dangerous? #t))
+        (make-tool "test"
+                   "test tool"
+                   (hasheq 'type "object" 'properties (hasheq))
+                   (lambda (args) "ok")
+                   #:dangerous? #t))
       (check-true (tool-dangerous? t)))
 
     (test-case "make-tool defaults to not dangerous"
-      (define t (make-tool "safe" "safe tool" (hasheq 'type "object") (lambda (args) "ok")))
+      (define t
+        (make-tool "safe"
+                   "safe tool"
+                   (hasheq 'type "object" 'properties (hasheq))
+                   (lambda (args) "ok")))
       (check-false (tool-dangerous? t)))))
 
 (run-tests gate-suite 'verbose)

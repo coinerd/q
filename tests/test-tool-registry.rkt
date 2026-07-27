@@ -312,7 +312,8 @@
       (check-true (validate-tool-args nt (hasheq 'name "test"))))
 
     (test-case "validate-tool-args passes with empty schema"
-      (define empty-schema-tool (make-tool "empty" "desc" (hasheq) void))
+      (define empty-schema-tool
+        (make-tool "empty" "desc" (hasheq 'type "object" 'properties (hasheq)) void))
       (check-true (validate-tool-args empty-schema-tool (hasheq 'anything "goes"))))
 
     (test-case "validate-tool-args rejects non-hash arguments"

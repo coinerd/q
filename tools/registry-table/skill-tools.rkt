@@ -38,6 +38,8 @@
              'tags
              (hasheq 'type
                      "array"
+                     'items
+                     (hasheq 'type "string")
                      'description
                      "List of relevance tags (symbols) for state-aware filtering")))
     tool-save-conclusion
@@ -66,7 +68,12 @@
                      'description
                      "Category: fact, decision, pattern, error-cause, test-result (default: fact)")
              'tags
-             (hasheq 'type "array" 'description "List of relevance tags for state-aware filtering")))
+             (hasheq 'type
+                     "array"
+                     'items
+                     (hasheq 'type "string")
+                     'description
+                     "List of relevance tags for state-aware filtering")))
     tool-record_conclusion
     #f
     'memory-write)

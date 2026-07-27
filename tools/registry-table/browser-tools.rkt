@@ -138,7 +138,12 @@
                     'key
                     (hasheq 'type "string" 'description "Key name (e.g. Enter, Tab, Escape)")
                     'modifiers
-                    (hasheq 'type "array" 'description "Modifier keys (ctrl, alt, shift, meta)")))
+                    (hasheq 'type
+                            "array"
+                            'items
+                            (hasheq 'type "string")
+                            'description
+                            "Modifier keys (ctrl, alt, shift, meta)")))
     handle-browser-press
     "Pressing keys may trigger form submissions or page navigation."
     'browser)
