@@ -4,6 +4,10 @@
 ;; tools/tool-struct.rkt -- Tool struct definition
 ;; Extracted from tools/tool.rkt (v0.30.8 W0)
 ;; STABILITY: stable
+;;
+;; W0 (v0.99.72): Removed raw `tool` constructor from public exports.
+;; External modules must use make-tool from tools/tool.rkt.
+;; The constructor is available via (submod "tool-struct.rkt" internal).
 
 (provide (contract-out [tool? (-> any/c boolean?)]
                        [tool-name (-> tool? string?)]
@@ -18,10 +22,7 @@
                        [tool-render-result (-> tool? (or/c procedure? #f))]
                        [tool-timeout-seconds (-> tool? (or/c exact-nonnegative-integer? #f))]
                        [tool-required-capability (-> tool? symbol?)]
-                       [tool-externalizable? (-> tool? boolean?)])
-         ;; Raw struct constructor -- ONLY for use by tools/tool.rkt make-tool.
-         ;; All external construction MUST use make-tool from tools/tool.rkt.
-         tool)
+                       [tool-externalizable? (-> tool? boolean?)]))
 
 (struct tool
         (name description
@@ -37,3 +38,7 @@
               required-capability
               externalizable?)
   #:transparent)
+
+;; Internal submodule -- exports the raw tool constructor for make-tool only.
+(module+ internal
+  (provide tool))

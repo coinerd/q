@@ -39,6 +39,7 @@
          ;; H3 fix: capability validation
          (only-in "../util/capability.rkt" valid-capability?)
          ;; Submodule imports
+         (submod "tool-struct.rkt" internal)
          "tool-struct.rkt"
          "exec-context.rkt"
          "registry.rkt"
