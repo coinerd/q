@@ -22,7 +22,20 @@ Not yet released.
   Previously these were silently accepted. This only affects code that passes
   malformed schemas to `make-tool`.
 
+### Migration Notes
+
+None.
+
 ### Testing
+
+- New `test-arch-tool-constructor.rkt` — scans all `.rkt` files for
+  unauthorized imports of the raw `tool` constructor.
+- Architecture test, credential redaction, safe-mode, boundary, and security
+  suites all pass.
+
+### Operational / Release
+
+No operational changes.
 
 - New `test-arch-tool-constructor.rkt` — scans all `.rkt` files for
   unauthorized imports of the raw `tool` constructor.
