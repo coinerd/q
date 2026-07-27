@@ -315,6 +315,7 @@
     [(string=? trimmed "") #f]
     [(string-prefix? trimmed ":") #f]
     [(string-prefix? trimmed "data: ") (substring trimmed 6)]
+    [(string-prefix? trimmed "data:") (substring trimmed 5)]
     [else #f]))
 
 ;; sse-done? : string? -> boolean?
