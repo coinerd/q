@@ -1,3 +1,34 @@
+## 0.99.72
+
+Not yet released.
+
+### User-Visible Changes
+
+- **Tool schema validation at construction time**: `make-tool` now validates
+  tool schemas strictly at construction time. Malformed schemas (missing
+  `type`, missing `properties`, array without `items`, invalid required keys,
+  etc.) are rejected immediately with actionable error messages, rather than
+  surfacing at provider request serialization time.
+- **Raw tool constructor removed from public API**: The raw `tool` struct
+  constructor is no longer externally accessible. All tool creation must go
+  through `make-tool` or `define-tool`, which apply validated construction.
+- **`define-tool` macro enhanced**: Properties with `type="array"` now
+  automatically get `(items (hasheq 'type "string"))` added, eliminating a
+  common schema oversight.
+
+### Breaking / Behavior Changes
+
+- Schemas without `type="object"` or `properties` now fail at construction.
+  Previously these were silently accepted. This only affects code that passes
+  malformed schemas to `make-tool`.
+
+### Testing
+
+- New `test-arch-tool-constructor.rkt` — scans all `.rkt` files for
+  unauthorized imports of the raw `tool` constructor.
+- Architecture test, credential redaction, safe-mode, boundary, and security
+  suites all pass.
+
 ## 0.99.71
 
 Released: 2026-07-27
