@@ -23,11 +23,11 @@
                   make-provider-request-event
                   make-message-blocked-event
                   make-turn-end-event)
-         (only-in "turn-reducer.rkt" decide-after-msg-hook decide-after-stream)
-         (only-in "turn-model.rkt" make-stream-completion turn-decision-tag)
+         (only-in "turn-reducer.rkt" decide-after-msg-hook)
+         (only-in "turn-model.rkt" turn-decision-tag)
          (only-in "../util/cancellation.rkt" cancellation-token?)
          (only-in "event-bus.rkt" event-bus?)
-         (only-in "loop-stream.rkt" handle-cancellation build-stream-result)
+         (only-in "loop-stream.rkt")
          (only-in "loop-phases.rkt" phase-msg-hook phase-stream)
          (only-in "state.rkt" current-loop-state-for-error-recovery)
          (only-in "../util/loop-result.rkt" loop-result loop-result?))
@@ -118,28 +118,7 @@
         #:bus bus
         #:state st)]
       [_
-       ;; Phase 6: Stream from provider
-       (define-values (stream-data _fx6)
+       ;; Phase 6: Stream from provider — route through effect:stream!
+       (define-values (_stream-result fx6)
          (phase-stream provider req bus session-id turn-id st hook-dispatcher cancellation-token))
-
-       (define sc
-         (make-stream-completion #:cancelled? (hash-ref stream-data 'cancelled? #f)
-                                 #:cancel-reason (hash-ref stream-data 'cancel-reason #f)
-                                 #:text (hash-ref stream-data 'text "")
-                                 #:tool-calls (hash-ref stream-data 'tool-calls '())))
-       (define d-stream (decide-after-stream sc))
-       (match (turn-decision-tag d-stream)
-         ['cancelled
-          ;; v0.99.69 W2: Derive from-state from current-turn-fsm-state
-          (transition-turn-state! turn-event-stream-cancel)
-          (handle-cancellation bus session-id turn-id st #:hook-dispatcher hook-dispatcher)]
-         [_
-          (build-stream-result stream-data
-                               raw-messages
-                               bus
-                               session-id
-                               turn-id
-                               st
-                               tools
-                               provider
-                               hook-dispatcher)])])))
+       (execute-effects/return fx6 #:bus bus #:state st #:hook-dispatcher hook-dispatcher)])))

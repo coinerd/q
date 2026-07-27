@@ -87,7 +87,7 @@
     (test-case "effect:stream construction"
       (let ([mock-provider (list 'mock-provider)]
             [mock-req (list 'mock-request)])
-        (let ([e (effect:stream mock-provider mock-req #f "s1" "t1" "state" #f #f)])
+        (let ([e (effect:stream mock-provider mock-req #f "s1" "t1" "state" '("msg") #f #f #f)])
           (check-true (effect:stream? e))
           (check-true (effect? e))
           (check-equal? (effect:stream-provider e) mock-provider)
@@ -100,6 +100,6 @@
       (check-true (effect-base? (effect:cancel "t" "s" "u")))
       (check-true (effect-base? (effect:log 'info "m" #f)))
       (check-true (effect-base? (effect:validate-messages '())))
-      (check-true (effect-base? (effect:stream 'p 'r #f "s" "t" "st" #f #f))))))
+      (check-true (effect-base? (effect:stream 'p 'r #f "s" "t" "st" '() #f #f #f))))))
 
 (run-tests effect-types-tests)
