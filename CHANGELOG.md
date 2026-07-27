@@ -6,7 +6,7 @@ Released: 2026-07-27
 
 Effect-System Completion — all 6 turn phases now describe side effects declaratively through effect descriptors, with a single executor as the point where effects become side effects.
 
-### Breaking
+### Breaking / Behavior Changes
 
 None — all observable behavior preserved.
 
