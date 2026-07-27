@@ -28,6 +28,20 @@ None.
 
 None.
 
+### Migration Notes
+
+None. All changes are internal to the effect system — no configuration or API changes required.
+
+### Testing
+
+- 13 tests for effect type constructors and predicates
+- All loop-events tests pass (5/5)
+- stream-loop-w1 tests pass (8/8)
+
+### Operational / Release
+
+No operational changes.
+
 ### Tech Debt
 
 - `build-stream-result` and `handle-cancellation` still contain direct I/O that could be further decomposed into fine-grained effect descriptors.
