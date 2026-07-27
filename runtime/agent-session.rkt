@@ -530,46 +530,97 @@
   (agent-session-active? sess))
 
 (define (close-session! sess)
-  ;; F8: Browser service cleanup
-  (when (current-browser-service)
-    (current-browser-service #f))
+  (define sid (agent-session-session-id sess))
+  ;; Guard: only execute cleanup once per session.
+  (when (agent-session-closed? sess)
+    (log-warning "session-lifecycle: close-session! called on already-closed session ~a" sid)
+    (void))
+  ;; Mark closed atomically so concurrent callers see the guard.
+  (guarded-set-closed! sess #t)
+  ;; ── Cleanup steps ──
+  ;; Each step is wrapped to prevent one failure from suppressing subsequent steps.
+  ;; Logging provides session and operation context for diagnosis.
+
+  ;; Step 1: Browser service cleanup (F8)
+  (with-handlers ([exn:fail?
+                   (lambda (e)
+                     (log-warning
+                      "session-lifecycle: cleanup step 1 (browser-service) failed for ~a: ~a"
+                      sid
+                      (exn-message e)))])
+    (when (current-browser-service)
+      (current-browser-service #f)))
+
+  ;; Step 2: Session persistence + event emission (only for active sessions)
   (when (session-active? sess)
-    (ensure-persisted! sess)
-    (emit-typed-event! (agent-session-event-bus sess)
-                       (session-shutdown-event "session.closed"
-                                               (current-inexact-milliseconds)
-                                               (agent-session-session-id sess)
-                                               #f
-                                               "normal"))
-    (define session-duration (- (now-seconds) (agent-session-start-time sess)))
-    (define shutdown-payload (session-end-payload (agent-session-session-id sess) session-duration))
-    (define-values (_shutdown-payload _shutdown-res)
-      (maybe-dispatch-hooks (agent-session-extension-registry sess)
-                            'session-shutdown
-                            shutdown-payload))
-    ;; LF2 (GAP-10): Persist high-value conclusions to memory on session end
-    (persist-high-value-conclusions! (agent-session-task-conclusions sess)
-                                     #:backend (current-memory-backend)
-                                     #:session-id (agent-session-session-id sess))
-    (guarded-set-active! sess #f))
-  ;; v0.99.14 W1: Stop blackboard subscriber on session teardown.
-  ;; Prevents event bus subscription leak when blackboard is default-on.
-  ;; Idempotent: safe no-op when no subscription is active.
-  (with-handlers ([exn:fail? (lambda (_) (void))])
+    (with-handlers ([exn:fail? (lambda (e)
+                                 (log-warning
+                                  "session-lifecycle: cleanup step 2a (persist) failed for ~a: ~a"
+                                  sid
+                                  (exn-message e)))])
+      (ensure-persisted! sess))
+    (with-handlers ([exn:fail? (lambda (e)
+                                 (log-warning
+                                  "session-lifecycle: cleanup step 2b (emit-closed) failed for ~a: ~a"
+                                  sid
+                                  (exn-message e)))])
+      (emit-typed-event!
+       (agent-session-event-bus sess)
+       (session-shutdown-event "session.closed" (current-inexact-milliseconds) sid #f "normal"))
+      (let ([session-duration (- (now-seconds) (agent-session-start-time sess))])
+        (define shutdown-payload (session-end-payload sid session-duration))
+        (void (maybe-dispatch-hooks (agent-session-extension-registry sess)
+                                    'session-shutdown
+                                    shutdown-payload))))
+    (with-handlers ([exn:fail?
+                     (lambda (e)
+                       (log-warning
+                        "session-lifecycle: cleanup step 2c (persist-conclusions) failed for ~a: ~a"
+                        sid
+                        (exn-message e)))])
+      (persist-high-value-conclusions! (agent-session-task-conclusions sess)
+                                       #:backend (current-memory-backend)
+                                       #:session-id sid))
+    ;; Mark session inactive
+    (with-handlers ([exn:fail?
+                     (lambda (e)
+                       (log-warning
+                        "session-lifecycle: cleanup step 2d (set-inactive) failed for ~a: ~a"
+                        sid
+                        (exn-message e)))])
+      (guarded-set-active! sess #f)))
+
+  ;; Step 3: Stop blackboard subscriber (idempotent)
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-warning
+                                "session-lifecycle: cleanup step 3 (blackboard) failed for ~a: ~a"
+                                sid
+                                (exn-message e)))])
     (stop-blackboard-subscriber!))
-  ;; v0.99.18 W4 (F-HS-07): Clear hot-swap state on session teardown.
-  ;; Prevents stale session-active flag from blocking version switches
-  ;; and resets the runtime gate for clean next-session startup.
-  ;; The wiring layer re-enables hot-swap at the next session start.
-  (set-session-active! #f)
-  (set-hot-swap-enabled! #f)
-  ;; v0.99.20 W3 (§3.4): Stop auto-reload watcher on session teardown.
-  ;; Idempotent: safe no-op when watcher was never started.
-  (with-handlers ([exn:fail? (lambda (_) (void))])
+
+  ;; Step 4: Clear hot-swap state (idempotent)
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-warning
+                                "session-lifecycle: cleanup step 4 (hot-swap) failed for ~a: ~a"
+                                sid
+                                (exn-message e)))])
+    (set-session-active! #f)
+    (set-hot-swap-enabled! #f))
+
+  ;; Step 5: Stop auto-reload watcher (idempotent)
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-warning
+                                "session-lifecycle: cleanup step 5 (watcher) failed for ~a: ~a"
+                                sid
+                                (exn-message e)))])
     (stop-registry-watcher!))
-  ;; W3 (#8767): Release the no-follow root capability on session teardown
-  ;; so the held root descriptor (fd) does not leak across sessions.
-  (with-handlers ([exn:fail? (lambda (_) (void))])
+
+  ;; Step 6: Release repository capability (idempotent)
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-warning
+                                "session-lifecycle: cleanup step 6 (repository) failed for ~a: ~a"
+                                sid
+                                (exn-message e)))])
     (define repo (agent-session-repository sess))
     (when repo
       (close-session-repository! repo))))

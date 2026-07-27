@@ -82,6 +82,7 @@
                        [guarded-set-task-fsm-state! (-> agent-session? (or/c symbol? #f) void?)]
                        [guarded-set-task-conclusions! (-> agent-session? list? void?)]
                        [guarded-set-recent-tool-calls! (-> agent-session? list? void?)]
+                       [guarded-set-closed! (-> agent-session? boolean? void?)]
                        [guarded-set-working-set-evolved! (-> agent-session? evolution-result? void?)]
                        [valid-session-phase? (-> symbol? boolean?)]
                        [session-phase (-> agent-session? symbol?)])
@@ -133,6 +134,13 @@
 ;; Guard active? — idempotent
 (define (guarded-set-active! sess value)
   (set-agent-session-active?! sess value))
+
+;; Guard closed? — only allows #f→#t transition (once-closed semantics)
+;; Prevents a session from being un-closed after it has been closed.
+(define (guarded-set-closed! sess value)
+  (define current (agent-session-closed? sess))
+  (when (and (not current) value)
+    (set-agent-session-closed?! sess value)))
 
 ;; Guard model-name — type-safe wrapper
 (define (guarded-set-model-name! sess value)

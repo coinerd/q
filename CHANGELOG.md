@@ -1,3 +1,32 @@
+## 0.99.71
+
+Released: 2026-07-27
+
+### User-Visible Changes
+
+- **Session cleanup hardened**: `close-session!` is now idempotent with an atomic
+  `closed?` guard. Concurrent or sequential double-close is safe and executes
+  cleanup at most once.
+- **Observable cleanup failures**: All cleanup steps now log warnings with session
+  ID and operation context. One cleanup failure no longer suppresses remaining steps.
+
+### Breaking / Behavior Changes
+
+None — all observable behavior preserved.
+
+### Migration Notes
+
+None.
+
+### Testing
+
+- New `test-session-cleanup.rkt` with sequential double-close, concurrent
+  double-close, guard transition, and logging verification tests.
+
+### Operational / Release
+
+No operational changes.
+
 ## 0.99.70
 
 Released: 2026-07-27

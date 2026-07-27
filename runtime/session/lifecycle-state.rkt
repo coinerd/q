@@ -4,7 +4,9 @@
 ;; STABILITY: stable
 
 (provide (struct-out lifecycle-state)
-         make-lifecycle-state)
+         make-lifecycle-state
+         lifecycle-state-closed?
+         set-lifecycle-state-closed?!)
 
 ;; Lifecycle state: mutable flags that track session lifecycle.
 ;; Extracted from agent-session (24 fields → 15 fields + this struct).
@@ -12,17 +14,18 @@
 ;; should access these fields directly.
 
 (struct lifecycle-state
-        ([compacting? #:mutable]          ; boolean — guard against recursive compaction
-         [last-compaction-time #:mutable]  ; integer or #f — timestamp of last compaction
-         [persisted? #:mutable]            ; boolean — #f until directory + first write
-         [shutdown-requested? #:mutable]   ; boolean — graceful shutdown flag
-         [force-shutdown? #:mutable]       ; boolean — force immediate shutdown
-         [prompt-running? #:mutable]       ; boolean — is a prompt currently executing?
-         [task-fsm-state #:mutable]        ; symbol or #f — current task FSM state
-         [task-conclusions #:mutable]      ; (listof task-conclusion?) — agent task conclusions
-         [recent-tool-calls #:mutable])    ; (listof symbol?) — recent tool call history
+        ([compacting? #:mutable] ; boolean — guard against recursive compaction
+         [last-compaction-time #:mutable] ; integer or #f — timestamp of last compaction
+         [persisted? #:mutable] ; boolean — #f until directory + first write
+         [shutdown-requested? #:mutable] ; boolean — graceful shutdown flag
+         [force-shutdown? #:mutable] ; boolean — force immediate shutdown
+         [prompt-running? #:mutable] ; boolean — is a prompt currently executing?
+         [task-fsm-state #:mutable] ; symbol or #f — current task FSM state
+         [task-conclusions #:mutable] ; (listof task-conclusion?) — agent task conclusions
+         [recent-tool-calls #:mutable] ; (listof symbol?) — recent tool call history
+         [closed? #:mutable]) ; boolean — guard against repeated close
   #:transparent)
 
 ;; Constructor: create a lifecycle-state with safe defaults.
 (define (make-lifecycle-state)
-  (lifecycle-state #f #f #f #f #f #f 'idle '() '()))
+  (lifecycle-state #f #f #f #f #f #f 'idle '() '() #f))
