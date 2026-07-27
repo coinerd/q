@@ -1,3 +1,39 @@
+## 0.99.70
+
+Released: 2026-07-27
+
+### Overview
+
+Effect-System Completion — all 6 turn phases now describe side effects declaratively through effect descriptors, with a single executor as the point where effects become side effects.
+
+### Breaking
+
+None — all observable behavior preserved.
+
+### Features
+
+- **Effect descriptors (5 new types)**: `effect:build-result`, `effect:cancel`, `effect:log`, `effect:validate-messages`, `effect:stream` — cover every direct side effect in the turn loop.
+- **Effect executor with return value**: `execute-effects/return` captures hook dispatch results and build-result loop-results.
+- **Phase 3 effects preserved**: Model request phase effects no longer discarded.
+- **Hook isolation through executor**: Pre-hook and msg-hook dispatch routed through execute-effects/return.
+- **Streaming as an effect**: `phase-stream` returns `effect:stream` descriptor; full streaming pipeline runs in executor.
+- **No direct I/O in loop.rkt**: All emit-typed-event!, safe-hook-dispatch, transition-turn-state! calls removed from orchestrator.
+- **No direct I/O in loop-dispatch.rkt**: Validation, DIAG, provider-request event, msg-hook, and blocked branch all through effects.
+
+### Deprecations
+
+None.
+
+### Fixes
+
+None.
+
+### Tech Debt
+
+- `build-stream-result` and `handle-cancellation` still contain direct I/O that could be further decomposed into fine-grained effect descriptors.
+
+---
+
 ## 0.99.69
 
 Released: 2026-07-29
