@@ -184,6 +184,8 @@
     (raise-arguments-error 'make-tool
                            (format "tool '~a' handler does not accept 1 or 2 args (args [exec-ctx])"
                                    name)))
+  ;; W1 (v0.99.72): Construction-time schema validation
+  (validate-tool-schema-strict schema name)
   (tool name
         description
         schema

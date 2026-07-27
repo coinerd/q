@@ -226,7 +226,7 @@
                                                         'flag
                                                         (hasheq 'type "boolean")))))
                         'items
-                        (hasheq 'type "array")
+                        (hasheq 'type "array" 'items (hasheq 'type "string"))
                         'name
                         (hasheq 'type "string"))
                 'required

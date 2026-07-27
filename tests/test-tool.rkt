@@ -15,11 +15,12 @@
 ;; ============================================================
 
 (test-case "make-tool creates a valid tool"
-  (define t (make-tool "test" "A test tool" (hasheq 'type "object") (λ (args) 'ok)))
+  (define t
+    (make-tool "test" "A test tool" (hasheq 'type "object" 'properties (hasheq)) (λ (args) 'ok)))
   (check-pred tool? t)
   (check-equal? (tool-name t) "test")
   (check-equal? (tool-description t) "A test tool")
-  (check-equal? (tool-schema t) (hasheq 'type "object")))
+  (check-equal? (tool-schema t) (hasheq 'type "object" 'properties (hasheq))))
 
 (test-case "make-tool rejects bad name"
   (check-exn exn:fail? (λ () (make-tool 123 "desc" (hasheq) (λ (_) 'ok)))))
@@ -35,7 +36,10 @@
 
 (test-case "tool execute can be called"
   (define t
-    (make-tool "add" "addition" (hasheq) (λ (args) (+ (hash-ref args 'a) (hash-ref args 'b)))))
+    (make-tool "add"
+               "addition"
+               (hasheq 'type "object" 'properties (hasheq))
+               (λ (args) (+ (hash-ref args 'a) (hash-ref args 'b)))))
   (check-equal? ((tool-execute t) (hasheq 'a 3 'b 4)) 7))
 
 ;; ============================================================
@@ -120,15 +124,18 @@
 
 (test-case "register-tool! and lookup-tool"
   (define reg (make-tool-registry))
-  (define t (make-tool "read" "Read a file" (hasheq) (λ (_) 'ok)))
+  (define t (make-tool "read" "Read a file" (hasheq 'type "object" 'properties (hasheq)) (λ (_) 'ok)))
   (register-tool! reg t)
   (check-equal? (lookup-tool reg "read") t)
   (check-false (lookup-tool reg "write")))
 
 (test-case "register-tool! overwrites on re-registration (idempotent)"
   (define reg (make-tool-registry))
-  (register-tool! reg (make-tool "x" "first" (hasheq) (λ (_) 'ok)))
-  (register-tool! reg (make-tool "x" "second" (hasheq) (λ (_) 'replaced)))
+  (register-tool! reg
+                  (make-tool "x" "first" (hasheq 'type "object" 'properties (hasheq)) (λ (_) 'ok)))
+  (register-tool!
+   reg
+   (make-tool "x" "second" (hasheq 'type "object" 'properties (hasheq)) (λ (_) 'replaced)))
   ;; Last registration wins
   (define t (lookup-tool reg "x"))
   (check-not-false t)
@@ -140,15 +147,16 @@
 
 (test-case "unregister-tool! removes a tool"
   (define reg (make-tool-registry))
-  (register-tool! reg (make-tool "rm-me" "desc" (hasheq) (λ (_) 'ok)))
+  (register-tool! reg
+                  (make-tool "rm-me" "desc" (hasheq 'type "object" 'properties (hasheq)) (λ (_) 'ok)))
   (check-not-false (lookup-tool reg "rm-me"))
   (unregister-tool! reg "rm-me")
   (check-false (lookup-tool reg "rm-me")))
 
 (test-case "tool-names returns all registered names"
   (define reg (make-tool-registry))
-  (register-tool! reg (make-tool "a" "a" (hasheq) (λ (_) 'ok)))
-  (register-tool! reg (make-tool "b" "b" (hasheq) (λ (_) 'ok)))
+  (register-tool! reg (make-tool "a" "a" (hasheq 'type "object" 'properties (hasheq)) (λ (_) 'ok)))
+  (register-tool! reg (make-tool "b" "b" (hasheq 'type "object" 'properties (hasheq)) (λ (_) 'ok)))
   (check equal? (sort (tool-names reg) string<?) '("a" "b")))
 
 ;; ============================================================
@@ -170,7 +178,7 @@
     (make-tool
      "echo"
      "echo"
-     (hasheq 'type "object" 'required '(name) 'properties (hasheq 'name (hasheq 'type "string")))
+     (hasheq 'type "object" 'required '("name") 'properties (hasheq 'name (hasheq 'type "string")))
      (λ (_) 'ok)))
   (check-true (validate-tool-args t (hasheq 'name "hello"))))
 
@@ -179,7 +187,7 @@
     (make-tool
      "echo"
      "echo"
-     (hasheq 'type "object" 'required '(name) 'properties (hasheq 'name (hasheq 'type "string")))
+     (hasheq 'type "object" 'required '("name") 'properties (hasheq 'name (hasheq 'type "string")))
      (λ (_) 'ok)))
   (check-exn exn:fail? (λ () (validate-tool-args t (hasheq)))))
 
@@ -192,7 +200,7 @@
   (check-exn exn:fail? (λ () (validate-tool-args t (hasheq 'count "not-int")))))
 
 (test-case "validate-tool-args rejects non-hash args"
-  (define t (make-tool "echo" "echo" (hasheq) (λ (_) 'ok)))
+  (define t (make-tool "echo" "echo" (hasheq 'type "object" 'properties (hasheq)) (λ (_) 'ok)))
   (check-exn exn:fail? (λ () (validate-tool-args t "not-a-hash"))))
 
 ;; ============================================================
