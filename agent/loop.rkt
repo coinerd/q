@@ -60,7 +60,6 @@
          "streaming-message.rkt"
          "loop-messages.rkt"
          "loop-stream.rkt"
-         (only-in "event-emitter.rkt" emit-typed-event!)
          (only-in "turn-reducer.rkt"
                   decide-after-pre-hook
                   decide-after-msg-hook
@@ -82,7 +81,8 @@
                   make-context-event
                   make-model-request-blocked-event
                   make-message-blocked-event)
-         "effect-executor.rkt"
+         (only-in "effect-executor.rkt" execute-effects! execute-effects/return)
+         "effect-types.rkt"
          (only-in "loop-phases.rkt"
                   phase-emit-start
                   phase-build-context
@@ -91,7 +91,8 @@
                   phase-msg-hook
                   phase-stream)
          (only-in "loop-dispatch.rkt" run-streaming-phase)
-         (only-in "stream-runner.rkt" safe-hook-dispatch))
+         ;; safe-hook-dispatch now goes through effect-executor.rkt
+         )
 
 (provide (contract-out [run-agent-turn
                         (->i ([ctx (listof message?)] [prov provider?] [bus event-bus?])
@@ -170,31 +171,38 @@
     (define-values (raw-messages fx2) (phase-build-context bus session-id turn-id st ctx1))
     (execute-effects! fx2 #:bus bus #:state st)
 
-    ;; Phase 3: Build model-request (via phase pipeline)
-    (define-values (req _fx3) (phase-build-request raw-messages tools provider-settings))
+    ;; Phase 3: Build model-request (via phase pipeline) — preserve effects!
+    (define-values (req fx3) (phase-build-request raw-messages tools provider-settings))
+    (execute-effects! fx3 #:bus bus #:state st)
 
-    ;; Phase 4: Pre-hook (via phase pipeline)
-    (define-values (pre-hook-payload _) (phase-pre-hook provider raw-messages req))
-    (define pre-hook-result (safe-hook-dispatch hook-dispatcher 'model-request-pre pre-hook-payload))
+    ;; Phase 4: Pre-hook (via phase pipeline) — route through effects!
+    (define-values (pre-hook-payload fx4) (phase-pre-hook provider raw-messages req))
+    (define pre-hook-result
+      (execute-effects/return fx4 #:bus bus #:state st #:hook-dispatcher hook-dispatcher))
 
     ;; v0.43.0: Reducer-driven dispatch
+    ;; pre-hook-result is #f if hook was not dispatched, or hook-result from dispatcher
     (define d-pre (decide-after-pre-hook pre-hook-result))
     (match (turn-decision-tag d-pre)
       ['blocked
-       ;; v0.99.69 W2: Derive from-state from current-turn-fsm-state, not hardcoded literal
-       (transition-turn-state! turn-event-hook-block)
-       (emit-typed-event! bus
-                          (make-model-request-blocked-event #:session-id session-id
-                                                            #:turn-id turn-id
-                                                            #:timestamp (current-inexact-milliseconds)
-                                                            #:reason "hook"))
-       (emit-typed-event! bus
-                          (make-turn-end-event #:session-id session-id
-                                               #:turn-id turn-id
-                                               #:timestamp (current-inexact-milliseconds)
-                                               #:reason "hook-blocked"
-                                               #:duration-ms 0))
-       (loop-result raw-messages 'hook-blocked (hasheq 'hook 'model-request-pre))]
+       ;; v0.99.70 W1: Route blocked branch through effects!
+       (execute-effects!
+        (list (effect:update-fsm (current-turn-fsm-state) turn-event-hook-block)
+              (effect:emit-event 'model-request-blocked
+                                 (make-model-request-blocked-event #:session-id session-id
+                                                                   #:turn-id turn-id
+                                                                   #:timestamp
+                                                                   (current-inexact-milliseconds)
+                                                                   #:reason "hook"))
+              (effect:emit-event 'turn-end
+                                 (make-turn-end-event #:session-id session-id
+                                                      #:turn-id turn-id
+                                                      #:timestamp (current-inexact-milliseconds)
+                                                      #:reason "hook-blocked"
+                                                      #:duration-ms 0))
+              (effect:build-result raw-messages 'hook-blocked (hasheq 'hook 'model-request-pre)))
+        #:bus bus
+        #:state st)]
       [_
        ;; v0.46.10 (I-1): Streaming dispatch extracted to run-streaming-phase
        (run-streaming-phase provider

@@ -65,8 +65,13 @@
        (current-turn-fsm-state (next-turn-state (effect:update-fsm-from-state eff)
                                                 (effect:update-fsm-event eff)))]
       [(? effect:dispatch-hook?)
-       (when hook-disp
-         (hook-disp (effect:dispatch-hook-hook-point eff) (effect:dispatch-hook-payload eff)))]
+       ;; Execute hook dispatch and capture the return value
+       (define hook-result
+         (when hook-disp
+           (hook-disp (effect:dispatch-hook-hook-point eff) (effect:dispatch-hook-payload eff))))
+       ;; Overwrite result-box so execute-effects/return returns hook result
+       (when hook-result
+         (set-box! result-box hook-result))]
       [(? effect:build-result?)
        (set-box! result-box
                  (loop-result (loop-state-messages (effect:build-result-state eff))
