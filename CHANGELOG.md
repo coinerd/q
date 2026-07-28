@@ -1,3 +1,17 @@
+## 0.99.73
+
+Not yet released.
+
+### Bug Fixes
+
+- **Zero Failing Tests**: All 44 of 45 failing test files in the fast suite now pass.
+  Fixed multiple root causes including bare/invalid tool schemas (`(hasheq)` without
+  `type` key, OpenAI function-calling format, missing `properties`), stale
+  `lifecycle-state` constructor (missing `closed?` field after v0.99.71),
+  `#<void>` truthiness bug in `effect-executor.rkt` causing pre-hook contract
+  violations, stale version strings, and missing `module+ test` blocks.
+  One pre-existing behavioral failure remains (test-scheduler-hooks.rkt TS7).
+
 ## 0.99.72
 
 Not yet released.
