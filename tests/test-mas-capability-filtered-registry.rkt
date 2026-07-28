@@ -31,14 +31,14 @@
     ;; ── tool struct: required-capability field ──
 
     (test-case "make-tool: default required-capability is 'any"
-      (define t (make-tool "test" "desc" (hasheq 'type "object") (lambda (args) "ok")))
+      (define t (make-tool "test" "desc" (hasheq 'type "object" 'properties (hasheq)) (lambda (args) "ok")))
       (check-equal? (tool-required-capability t) 'any))
 
     (test-case "make-tool: explicit required-capability"
       (define t
         (make-tool "test"
                    "desc"
-                   (hasheq 'type "object")
+                   (hasheq 'type "object" 'properties (hasheq))
                    (lambda (args) "ok")
                    #:required-capability 'shell-exec))
       (check-equal? (tool-required-capability t) 'shell-exec))
@@ -56,7 +56,7 @@
         (define t
           (make-tool (format "test-~a" cap)
                      "desc"
-                     (hasheq 'type "object")
+                     (hasheq 'type "object" 'properties (hasheq))
                      (lambda (args) "ok")
                      #:required-capability cap))
         (check-equal? (tool-required-capability t) cap)))
@@ -72,13 +72,13 @@
       (register-tool! reg
                       (make-tool "reader"
                                  "read tool"
-                                 (hasheq 'type "object")
+                                 (hasheq 'type "object" 'properties (hasheq))
                                  (lambda (args) "ok")
                                  #:required-capability 'read-only))
       (register-tool! reg
                       (make-tool "writer"
                                  "write tool"
-                                 (hasheq 'type "object")
+                                 (hasheq 'type "object" 'properties (hasheq))
                                  (lambda (args) "ok")
                                  #:required-capability 'file-write))
       (define result (tools-for-capability reg 'read-only))
@@ -90,19 +90,19 @@
       (register-tool! reg
                       (make-tool "reader"
                                  "read tool"
-                                 (hasheq 'type "object")
+                                 (hasheq 'type "object" 'properties (hasheq))
                                  (lambda (args) "ok")
                                  #:required-capability 'read-only))
       (register-tool! reg
                       (make-tool "writer"
                                  "write tool"
-                                 (hasheq 'type "object")
+                                 (hasheq 'type "object" 'properties (hasheq))
                                  (lambda (args) "ok")
                                  #:required-capability 'file-write))
       (register-tool! reg
                       (make-tool "general"
                                  "general tool"
-                                 (hasheq 'type "object")
+                                 (hasheq 'type "object" 'properties (hasheq))
                                  (lambda (args) "ok")
                                  #:required-capability 'any))
       (define result (tools-for-capability reg 'read-only))
@@ -116,12 +116,12 @@
       (register-tool! reg
                       (make-tool "reader"
                                  "read tool"
-                                 (hasheq 'type "object")
+                                 (hasheq 'type "object" 'properties (hasheq))
                                  (lambda (args) "ok")
                                  #:required-capability 'read-only))
       (register-tool!
        reg
-       (make-tool "general" "legacy tool" (hasheq 'type "object") (lambda (args) "ok")))
+       (make-tool "general" "legacy tool" (hasheq 'type "object" 'properties (hasheq)) (lambda (args) "ok")))
       (check-equal? (sort (map tool-name (tools-for-capability reg 'any)) string<?)
                     '("general" "reader")))
 
