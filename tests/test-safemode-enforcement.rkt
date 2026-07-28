@@ -42,16 +42,20 @@
   (make-tool
    name
    (format "dummy ~a tool" name)
-   (hasheq 'type "object" 'properties (hasheq 'path (hasheq 'type "string")) 'required '(path))
+   (hasheq 'type "object" 'properties (hasheq 'path (hasheq 'type "string")) 'required '("path"))
    exec-fn))
 
 ;; A dummy bash tool that always succeeds
 (define bash-tool
-  (make-tool
-   "bash"
-   "run shell commands"
-   (hasheq 'type "object" 'properties (hasheq 'command (hasheq 'type "string")) 'required '(command))
-   (lambda (args ctx) (make-success-result (list "ok") (hasheq)))))
+  (make-tool "bash"
+             "run shell commands"
+             (hasheq 'type
+                     "object"
+                     'properties
+                     (hasheq 'command (hasheq 'type "string"))
+                     'required
+                     '("command"))
+             (lambda (args ctx) (make-success-result (list "ok") (hasheq)))))
 
 ;; A dummy edit tool that always succeeds
 (define edit-dummy-tool
@@ -67,7 +71,7 @@
                              'new-text
                              (hasheq 'type "string"))
                      'required
-                     '(path old-text new-text))
+                     '("path" "old-text" "new-text"))
              (lambda (args ctx) (make-success-result (list "edited") (hasheq)))))
 
 ;; A dummy read tool that always succeeds
@@ -75,7 +79,7 @@
   (make-tool
    "read"
    "read files"
-   (hasheq 'type "object" 'properties (hasheq 'path (hasheq 'type "string")) 'required '(path))
+   (hasheq 'type "object" 'properties (hasheq 'path (hasheq 'type "string")) 'required '("path"))
    (lambda (args ctx) (make-success-result (list "read") (hasheq)))))
 
 ;; Build a registry with standard builtins for scheduler tests

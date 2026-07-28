@@ -57,6 +57,20 @@
   (check-equal? f 1)
   (check-equal? t 4))
 
+(test-case "parse-raco-output: compact raco failure summary"
+  (define output #"17 66 /tmp/project/tests/test-example.rkt\n")
+  (define-values (p f t) (parse-raco-output output))
+  (check-equal? p 49)
+  (check-equal? f 17)
+  (check-equal? t 66))
+
+(test-case "parse-raco-output: compact summaries sum across modules"
+  (define output #"2 10 /tmp/test-a.rkt\n1 5 /tmp/test-b.rkt\n")
+  (define-values (p f t) (parse-raco-output output))
+  (check-equal? p 12)
+  (check-equal? f 3)
+  (check-equal? t 15))
+
 ;; ═══════════════════════════════════════════════════════════════
 ;; §2: classify-test-result — category coverage
 ;; ═══════════════════════════════════════════════════════════════

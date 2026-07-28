@@ -5,7 +5,7 @@
 
 ;; W5 (#8508): CI verification evidence tests.
 ;; Verifies the CI remediation is effective by checking:
-;; - F1-F4 regression targets compile (the core fix)
+;; - F1-F4 remediation contracts and current reproducers remain intact
 ;; - Package setup tooling is available
 ;; - CI workflow has the diagnostic naming from W3
 ;; This test serves as living documentation of the CI remediation state.
@@ -22,7 +22,7 @@
                "..")))
 
 ;; ---------------------------------------------------------------------------
-;; F1-F4 remediation verification (core CI fix)
+;; F1-F4 remediation verification
 ;; ---------------------------------------------------------------------------
 
 (define-test-suite
@@ -36,14 +36,16 @@
      (file->string (build-path project-root "scripts" "sdk-gsd-integration-test.rkt")))
    (check-true (string-contains? f2-content "only-in")
                "F2 fix must be present: only-in used to resolve import conflict"))
- (test-case "F3 fix: test-gsd-go-replanning.rkt uses current-gsd-mode"
-   (define f3-content (file->string (build-path project-root "scripts" "test-gsd-go-replanning.rkt")))
+ (test-case "F3 fix: replanning reproducer uses current-gsd-mode"
+   (define f3-content
+     (file->string (build-path project-root "tests" "reproducers" "reproduce-gsd-go-replanning.rkt")))
    (check-true (string-contains? f3-content "current-gsd-mode")
                "F3 fix must be present: current-gsd-mode API used")
    (check-false (regexp-match? #rx"[( ]gsd-mode[) ]" f3-content)
                 "F3: stale gsd-mode reference must be removed"))
- (test-case "F4 fix: test-gsd-sdk-live.rkt does not import cancellation.rkt directly"
-   (define f4-content (file->string (build-path project-root "scripts" "test-gsd-sdk-live.rkt")))
+ (test-case "F4 fix: live SDK reproducer does not import cancellation.rkt directly"
+   (define f4-content
+     (file->string (build-path project-root "tests" "reproducers" "reproduce-gsd-sdk-live.rkt")))
    (check-false (string-contains? f4-content "util/cancellation.rkt")
                 "F4 fix must be present: no direct cancellation.rkt import")))
 

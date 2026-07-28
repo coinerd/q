@@ -7,6 +7,7 @@
 
 (require rackunit
          rackunit/text-ui
+         (only-in "../interfaces/cli.rkt" [q-version cli-q-version])
          "../util/version.rkt")
 
 (define version-suite
@@ -15,8 +16,8 @@
     (test-case "version: q-version is a string"
       (check-true (string? q-version)))
 
-    (test-case "q-version is current release version"
-      (check-equal? q-version "0.99.72"))
+    (test-case "CLI uses the canonical q-version"
+      (check-equal? cli-q-version q-version))
 
     (test-case "q-version matches semver pattern"
       (check-true (regexp-match? #rx"^[0-9]+\\.[0-9]+\\.[0-9]+" q-version)))

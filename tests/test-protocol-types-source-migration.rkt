@@ -14,11 +14,11 @@
          racket/file
          racket/list
          racket/path
+         racket/runtime-path
          racket/string
          (only-in "../util/event/event-classes.rkt" make-stream-text-event stream-text-event?))
 
-(define project-root
-  (simplify-path (build-path (or (current-load-relative-directory) (current-directory)) "..")))
+(define-runtime-path project-root "..")
 
 (define (path-string path)
   (path->string (simplify-path path)))

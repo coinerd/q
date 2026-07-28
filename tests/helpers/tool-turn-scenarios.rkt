@@ -49,10 +49,7 @@
   "Create a minimal tool that returns a fixed result or calls handler."
   (make-tool name
              (format "Mock ~a tool" name)
-             (hash 'type
-                   "function"
-                   'function
-                   (hash 'name name 'parameters (hash 'type "object" 'properties (hash))))
+             (hash 'type "object" 'properties (hash))
              (or handler (lambda (args ctx) (make-tool-result (format "~a result" name) (hash) #f)))))
 
 (define (make-mock-tool-registry tools)

@@ -114,7 +114,7 @@
                                                       #:timestamp (current-inexact-milliseconds)
                                                       #:reason "hook-blocked"
                                                       #:duration-ms 0))
-              (effect:build-result raw-messages 'hook-blocked (hasheq 'hook 'message-start)))
+              (effect:build-result st 'hook-blocked (hasheq 'hook 'message-start)))
         #:bus bus
         #:state st)]
       [_

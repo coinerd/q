@@ -47,7 +47,7 @@
   (make-tool
    "read"
    "read files"
-   (hasheq 'type "object" 'properties (hasheq 'path (hasheq 'type "string")) 'required '(path))
+   (hasheq 'type "object" 'properties (hasheq 'path (hasheq 'type "string")) 'required '("path"))
    (lambda (args ctx) (make-success-result (list "read-content") (hasheq)))))
 
 (define edit-dummy-tool
@@ -63,7 +63,7 @@
                              'new-text
                              (hasheq 'type "string"))
                      'required
-                     '(path old-text new-text))
+                     '("path" "old-text" "new-text"))
              (lambda (args ctx) (make-success-result (list "edited") (hasheq)))))
 
 (define (make-read-response path)

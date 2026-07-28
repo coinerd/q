@@ -14,8 +14,8 @@
          ;; From main.rkt (still exported)
          (only-in "../main.rkt"
                   register-default-tools!
-                  build-provider
-                  build-runtime-from-cli
+                  [build-provider build-provider/raw]
+                  [build-runtime-from-cli build-runtime-from-cli/raw]
                   mode-for-config)
          ;; Tool registry — was re-exported via all-from-out
          (only-in "../tools/tool.rkt"
@@ -39,14 +39,14 @@
                   cli-config-tools
                   cli-config-no-tools?)
          ;; Settings — was re-exported via all-from-out
-         (only-in "../runtime/settings.rkt" load-settings)
+         (only-in "../runtime/settings.rkt" load-settings make-minimal-settings)
          ;; Event bus — was re-exported via all-from-out
          (only-in "../util/event/event-bus.rkt" event-bus?)
          ;; Session config
          "../runtime/session/session-config.rkt"
          ;; Extensions
          (only-in "../extensions/api.rkt" extension-registry? list-extensions)
-         (only-in "helpers/temp-fs.rkt" with-temp-dir))
+         (only-in "helpers/test-sandbox.rkt" with-test-sandbox))
 
 (define (capture-output thunk)
   (with-output-to-string thunk))
@@ -64,6 +64,17 @@
 (define (cleanup-temp-dir dir)
   (when (and dir (directory-exists? dir))
     (delete-directory/files dir #:must-exist? #f)))
+
+;; Keep entry-point integration tests independent of the invoking CWD and
+;; developer-level ~/.q configuration, resources, extensions, and credentials.
+(define (build-provider config settings)
+  (with-test-sandbox (lambda (_) (build-provider/raw config settings))))
+
+(define (build-runtime-from-cli cfg)
+  (with-test-sandbox (lambda (_) (build-runtime-from-cli/raw cfg))))
+
+(define (load-project-only-settings project-dir)
+  (load-settings project-dir #:home-dir (build-path project-dir ".isolated-test-home")))
 
 ;; ============================================================
 ;; register-default-tools!
@@ -104,14 +115,11 @@
   (check-true (dict-has-key? rt 'event-bus))
   (check-true (dict-has-key? rt 'max-iterations)))
 
-(test-case "provider is valid when config exists (may be real or mock depending on config)"
+(test-case "provider is mock when no config exists"
   (define cfg (parse-cli-args #()))
   (define rt (build-runtime-from-cli cfg))
   (check-true (provider? (dict-ref rt 'provider)))
-  ;; Provider name depends on whether ~/.q/config.json exists and has valid config
-  ;; Could be "mock" (no config) or "openai-compatible" (config with credentials or local provider)
-  (check-true (not (false? (member (provider-name (dict-ref rt 'provider))
-                                   '("mock" "openai-compatible"))))))
+  (check-equal? (provider-name (dict-ref rt 'provider)) "mock"))
 
 (test-case "tool-registry has built-in tools (>= 13)"
   (define cfg (parse-cli-args #()))
@@ -195,17 +203,15 @@
 ;; build-provider
 ;; ============================================================
 
-(test-case "build-provider: returns valid provider when no config"
-  (define p (build-provider (hasheq) (load-settings)))
+(test-case "build-provider: returns mock provider when no config"
+  (define p (build-provider (hasheq) (make-minimal-settings)))
   (check-pred provider? p)
-  ;; Provider depends on whether ~/.q/config.json exists
-  (check-true (not (false? (member (provider-name p) '("mock" "openai-compatible"))))))
+  (check-equal? (provider-name p) "mock"))
 
-(test-case "build-provider: returns valid provider with empty hash config"
-  (define p (build-provider (make-hash) (load-settings)))
+(test-case "build-provider: returns mock provider with empty hash config"
+  (define p (build-provider (make-hash) (make-minimal-settings)))
   (check-pred provider? p)
-  ;; Provider depends on whether ~/.q/config.json exists
-  (check-true (not (false? (member (provider-name p) '("mock" "openai-compatible"))))))
+  (check-equal? (provider-name p) "mock"))
 
 (test-case "build-provider: falls back to mock when no config exists anywhere"
   (define tmp-dir (make-temp-project-dir))
@@ -224,7 +230,7 @@
   (dynamic-wind (lambda () (void))
                 (lambda ()
                   (define config (make-hash (list (cons 'project-dir tmp-dir))))
-                  (define settings (load-settings tmp-dir))
+                  (define settings (load-project-only-settings tmp-dir))
                   (define p (build-provider config settings))
                   (check-pred provider? p)
                   (check-equal? (provider-name p) "mock"))
@@ -244,7 +250,7 @@
                 (lambda ()
                   (define config
                     (make-hash (list (cons 'project-dir tmp-dir) (cons 'model "nonexistent-model"))))
-                  (define settings (load-settings tmp-dir))
+                  (define settings (load-project-only-settings tmp-dir))
                   (define p (build-provider config settings))
                   (check-pred provider? p)
                   (check-equal? (provider-name p) "mock"))
@@ -264,7 +270,7 @@
                 (lambda ()
                   (define config
                     (make-hash (list (cons 'project-dir tmp-dir) (cons 'model "gpt-4o"))))
-                  (define settings (load-settings tmp-dir))
+                  (define settings (load-project-only-settings tmp-dir))
                   (define p (build-provider config settings))
                   (check-pred provider? p)
                   (check-equal? (provider-name p) "mock"))
@@ -280,8 +286,8 @@
                                                            '("gpt-4o")
                                                            'api-key-env
                                                            "Q_TEST_PROVIDER_BUILD_KEY")))))
-  (putenv "Q_TEST_PROVIDER_BUILD_KEY" "sk-test-key-12345")
   (define orig-val (getenv "Q_TEST_PROVIDER_BUILD_KEY"))
+  (putenv "Q_TEST_PROVIDER_BUILD_KEY" "sk-test-key-12345")
   (dynamic-wind
    (lambda () (void))
    (lambda ()
@@ -311,12 +317,12 @@
                                                            "gpt-4o"
                                                            'api-key-env
                                                            "Q_TEST_DEFAULT_MODEL_KEY")))))
-  (putenv "Q_TEST_DEFAULT_MODEL_KEY" "sk-test-key-default")
   (define orig-val (getenv "Q_TEST_DEFAULT_MODEL_KEY"))
+  (putenv "Q_TEST_DEFAULT_MODEL_KEY" "sk-test-key-default")
   (dynamic-wind (lambda () (void))
                 (lambda ()
                   (define config (make-hash (list (cons 'project-dir tmp-dir))))
-                  (define settings (load-settings tmp-dir))
+                  (define settings (load-project-only-settings tmp-dir))
                   (define p (build-provider config settings))
                   (check-pred provider? p)
                   (check-equal? (provider-name p) "openai-compatible"))
@@ -336,8 +342,8 @@
                                                            '("claude-3")
                                                            'api-key-env
                                                            "Q_TEST_PROJECT_DIR_KEY")))))
-  (putenv "Q_TEST_PROJECT_DIR_KEY" "sk-test-project-dir")
   (define orig-val (getenv "Q_TEST_PROJECT_DIR_KEY"))
+  (putenv "Q_TEST_PROJECT_DIR_KEY" "sk-test-project-dir")
   (dynamic-wind
    (lambda () (void))
    (lambda ()
@@ -444,14 +450,11 @@
   (check-true (dict-has-key? rt 'model-name) "runtime config should have model-name key")
   (check-equal? (dict-ref rt 'model-name) "gpt-4o" "model-name should match --model flag"))
 
-(test-case "build-runtime-from-cli: model-name resolves from config when --model not given"
+(test-case "build-runtime-from-cli: model-name is #f without config or --model"
   (define cfg (parse-cli-args #()))
   (define rt (build-runtime-from-cli cfg))
   (check-true (dict-has-key? rt 'model-name))
-  ;; When no --model flag, model-name is resolved from config default-model
-  ;; (may be a string like "glm-5.1" or #f if no config/default found)
-  (check-true (or (string? (dict-ref rt 'model-name)) (eq? (dict-ref rt 'model-name) #f))
-              "model-name should be resolved from config or #f"))
+  (check-false (dict-ref rt 'model-name)))
 
 ;; ============================================================
 ;; mode-for-config: --tui
@@ -550,14 +553,12 @@
                   (check-equal? (length (list-extensions ext-reg)) 0))
                 (lambda () (cleanup-temp-dir tmp-dir))))
 
-(test-case "build-runtime-from-cli: extension registry always present"
+(test-case "build-runtime-from-cli: extension registry is empty without config"
   (define cfg (parse-cli-args #()))
   (define rt (build-runtime-from-cli cfg))
   (check-true (dict-has-key? rt 'extension-registry))
   (define ext-reg (dict-ref rt 'extension-registry))
-  ;; Registry exists; count depends on project-local .q/extensions/ and
-  ;; global ~/.q/extensions/ — not guaranteed to be 0.
-  (check-true (list? (list-extensions ext-reg)) "extension-registry should be a list"))
+  (check-equal? (list-extensions ext-reg) '()))
 
 ;; ============================================================
 ;; build-runtime-from-cli: integration with real config
@@ -573,6 +574,7 @@
                                                            '("gpt-4o")
                                                            'api-key-env
                                                            "Q_TEST_INTEGRATION_BUILD_KEY")))))
+  (define orig-val (getenv "Q_TEST_INTEGRATION_BUILD_KEY"))
   (putenv "Q_TEST_INTEGRATION_BUILD_KEY" "sk-test-integration-key")
   (dynamic-wind
    (lambda () (void))
@@ -589,7 +591,7 @@
      (check-true (dict-has-key? rt 'system-instructions)))
    (lambda ()
      (cleanup-temp-dir tmp-dir)
-     (putenv "Q_TEST_INTEGRATION_BUILD_KEY" ""))))
+     (putenv "Q_TEST_INTEGRATION_BUILD_KEY" (or orig-val "")))))
 
 (test-case "build-runtime-from-cli: integration with --no-tools and real config"
   (define tmp-dir
@@ -601,6 +603,7 @@
                                                            '("gpt-4o")
                                                            'api-key-env
                                                            "Q_TEST_NO_TOOLS_KEY")))))
+  (define orig-val (getenv "Q_TEST_NO_TOOLS_KEY"))
   (putenv "Q_TEST_NO_TOOLS_KEY" "sk-test-no-tools")
   (dynamic-wind
    (lambda () (void))
@@ -614,7 +617,7 @@
      (check-equal? (length (list-tools reg)) 0 "no tools should be registered with --no-tools"))
    (lambda ()
      (cleanup-temp-dir tmp-dir)
-     (putenv "Q_TEST_NO_TOOLS_KEY" ""))))
+     (putenv "Q_TEST_NO_TOOLS_KEY" (or orig-val "")))))
 
 ;; ============================================================
 ;; build-runtime-from-cli: --tool filters registered tools
@@ -821,6 +824,7 @@
                                                                'api-key-env
                                                                "Q_TEST_CONFIG_PATH_KEY")))
                                        out)))
+  (define orig-val (getenv "Q_TEST_CONFIG_PATH_KEY"))
   (putenv "Q_TEST_CONFIG_PATH_KEY" "sk-test-config-path")
   (dynamic-wind (lambda () (void))
                 (lambda ()
@@ -838,7 +842,7 @@
                   (check-equal? (provider-name p) "openai-compatible"))
                 (lambda ()
                   (cleanup-temp-dir tmp-dir)
-                  (putenv "Q_TEST_CONFIG_PATH_KEY" ""))))
+                  (putenv "Q_TEST_CONFIG_PATH_KEY" (or orig-val "")))))
 
 ;; ============================================================
 ;; build-provider: local providers without API keys (BUG-02 fix)
@@ -908,13 +912,13 @@
                                                            'api-key-env
                                                            "Q_TEST_CLOUD_NO_KEY")))))
   ;; Ensure env var is NOT set
-  (putenv "Q_TEST_CLOUD_NO_KEY" "")
   (define orig-val (getenv "Q_TEST_CLOUD_NO_KEY"))
+  (putenv "Q_TEST_CLOUD_NO_KEY" "")
   (dynamic-wind (lambda () (void))
                 (lambda ()
                   (define config
                     (make-hash (list (cons 'project-dir tmp-dir) (cons 'model "gpt-4o"))))
-                  (define settings (load-settings tmp-dir))
+                  (define settings (load-project-only-settings tmp-dir))
                   (define p (build-provider config settings))
                   ;; Should fall back to mock provider for cloud without API key
                   (check-pred provider? p)

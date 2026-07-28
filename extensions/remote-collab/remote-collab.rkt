@@ -159,7 +159,7 @@
             'timeout
             (hasheq 'type "integer" 'description "Wait timeout seconds (default: 60)")
             'ssh_options
-            (hasheq 'type "array" 'description "Extra SSH options")))
+            (hasheq 'type "array" 'description "Extra SSH options" 'items (hasheq 'type "string"))))
    handle-remote-q)
   (hook-pass ctx))
 

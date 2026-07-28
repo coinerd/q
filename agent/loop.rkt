@@ -186,7 +186,8 @@
     (match (turn-decision-tag d-pre)
       ['blocked
        ;; v0.99.70 W1: Route blocked branch through effects!
-       (execute-effects!
+       ;; Use execute-effects/return to capture the build-result from the effect list.
+       (execute-effects/return
         (list (effect:update-fsm (current-turn-fsm-state) turn-event-hook-block)
               (effect:emit-event 'model-request-blocked
                                  (make-model-request-blocked-event #:session-id session-id
@@ -200,7 +201,7 @@
                                                       #:timestamp (current-inexact-milliseconds)
                                                       #:reason "hook-blocked"
                                                       #:duration-ms 0))
-              (effect:build-result raw-messages 'hook-blocked (hasheq 'hook 'model-request-pre)))
+              (effect:build-result st 'hook-blocked (hasheq 'hook 'model-request-pre)))
         #:bus bus
         #:state st)]
       [_

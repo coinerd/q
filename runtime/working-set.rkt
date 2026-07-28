@@ -127,7 +127,8 @@
   (define existing (working-set-entries ws))
   (define filtered (filter keep-pred? existing))
   (set-working-set-entries! ws filtered)
-  (working-set-enforce-budget! ws))
+  (working-set-enforce-budget! ws)
+  (void))
 
 ;; ────────────────────────────────────────────────────────────
 ;; Tool call processing

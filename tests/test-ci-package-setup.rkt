@@ -82,11 +82,13 @@
    (define modules (find-package-visible-modules project-root))
    (check-true (ormap (lambda (m) (string-contains? m "generate-certificates")) modules)
                "cli/generate-certificates.rkt should be package-visible"))
- (test-case "includes scripts that previously failed compile"
+ (test-case "includes the package-visible GSD integration script"
    (define modules (find-package-visible-modules project-root))
-   (check-true (ormap (lambda (m) (string-contains? m "sdk-gsd-integration-test")) modules))
-   (check-true (ormap (lambda (m) (string-contains? m "test-gsd-go-replanning")) modules))
-   (check-true (ormap (lambda (m) (string-contains? m "test-gsd-sdk-live")) modules)))
+   (check-true (ormap (lambda (m) (string-contains? m "sdk-gsd-integration-test")) modules)))
+ (test-case "excludes GSD reproducers under tests"
+   (define modules (find-package-visible-modules project-root))
+   (check-false (ormap (lambda (m) (string-contains? m "reproduce-gsd-go-replanning")) modules))
+   (check-false (ormap (lambda (m) (string-contains? m "reproduce-gsd-sdk-live")) modules)))
  (test-case "returns sorted list"
    (define modules (find-package-visible-modules project-root))
    (check-equal? modules (sort modules string<?))))

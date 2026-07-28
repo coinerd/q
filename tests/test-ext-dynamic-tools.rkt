@@ -54,7 +54,7 @@
   (ext-register-tool! ctx
                       "network_tool"
                       "Uses the network"
-                      (hasheq 'type "object")
+                      (hasheq 'type "object" 'properties (hasheq))
                       (lambda (_args) (make-success-result "ok"))
                       #:required-capability 'network)
   (check-equal? (tool-required-capability (lookup-tool reg "network_tool")) 'network))
@@ -70,7 +70,7 @@
   (ext-register-tool! ctx
                       "legacy_dynamic"
                       "Legacy dynamic tool"
-                      (hasheq 'type "object")
+                      (hasheq 'type "object" 'properties (hasheq))
                       (lambda (_args) (make-success-result "ok")))
   (define entries
     (run-preflight (list (make-tool-call "tc-dyn" "legacy_dynamic" (hasheq)))
@@ -115,7 +115,7 @@
                (ext-register-tool! ctx
                                    "bad_tool"
                                    "desc"
-                                   (hasheq 'type "object")
+                                   (hasheq 'type "object" 'properties (hasheq))
                                    (lambda (args) (make-success-result "x"))))))
 
 (test-case "ext-register-tool! overwrites on duplicate name (idempotent)"
@@ -129,13 +129,13 @@
   (ext-register-tool! ctx
                       "dup"
                       "first"
-                      (hasheq 'type "object")
+                      (hasheq 'type "object" 'properties (hasheq))
                       (lambda (args) (make-success-result "1")))
   ;; Re-registration succeeds (last wins)
   (ext-register-tool! ctx
                       "dup"
                       "second"
-                      (hasheq 'type "object")
+                      (hasheq 'type "object" 'properties (hasheq))
                       (lambda (args) (make-success-result "2")))
   (check-not-false (lookup-tool reg "dup")))
 
@@ -154,7 +154,7 @@
   (ext-register-tool! ctx
                       "temp"
                       "Temporary"
-                      (hasheq 'type "object")
+                      (hasheq 'type "object" 'properties (hasheq))
                       (lambda (args) (make-success-result "temp")))
   (check-not-false (lookup-tool reg "temp"))
   (ext-unregister-tool! ctx "temp")
@@ -183,12 +183,12 @@
   (ext-register-tool! ctx
                       "tool_a"
                       "A"
-                      (hasheq 'type "object")
+                      (hasheq 'type "object" 'properties (hasheq))
                       (lambda (args) (make-success-result "a")))
   (ext-register-tool! ctx
                       "tool_b"
                       "B"
-                      (hasheq 'type "object")
+                      (hasheq 'type "object" 'properties (hasheq))
                       (lambda (args) (make-success-result "b")))
   (define names (ext-list-dynamic-tools ctx))
   (check-equal? (length names) 2)
@@ -242,7 +242,7 @@
   (ext-register-tool! ctx
                       "guided_tool"
                       "A tool with guidelines"
-                      (hasheq 'type "object")
+                      (hasheq 'type "object" 'properties (hasheq))
                       (lambda (args) (make-success-result "ok"))
                       #:prompt-guidelines "Always call this tool before responding.")
   (define t (lookup-tool reg "guided_tool"))
@@ -260,7 +260,7 @@
   (ext-register-tool! ctx
                       "no_guide"
                       "No guidelines"
-                      (hasheq 'type "object")
+                      (hasheq 'type "object" 'properties (hasheq))
                       (lambda (args) (make-success-result "ok")))
   (define t (lookup-tool reg "no_guide"))
   (check-not-false t)
@@ -277,7 +277,7 @@
   (ext-register-tool! ctx
                       "js_guide"
                       "Tool with guideline in jsexpr"
-                      (hasheq 'type "object")
+                      (hasheq 'type "object" 'properties (hasheq))
                       (lambda (args) (make-success-result "ok"))
                       #:prompt-guidelines "Use this tool for search.")
   (define tools (list-tools-jsexpr reg))
@@ -300,12 +300,12 @@
   (ext-register-tool! ctx
                       "tool_alpha"
                       "Alpha"
-                      (hasheq 'type "object")
+                      (hasheq 'type "object" 'properties (hasheq))
                       (lambda (args) (make-success-result "a")))
   (ext-register-tool! ctx
                       "tool_beta"
                       "Beta"
-                      (hasheq 'type "object")
+                      (hasheq 'type "object" 'properties (hasheq))
                       (lambda (args) (make-success-result "b")))
   ;; Both visible initially
   (check-equal? (length (list-tools-jsexpr reg)) 2)
