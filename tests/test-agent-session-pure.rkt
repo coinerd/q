@@ -26,8 +26,8 @@
 
     ;; -- slice-entries-up-to: no parent-id returns all --
     (test-case "slice-entries-up-to with #f returns all entries"
-      (define entries (list (test-msg "m1" 'message 'user "hi")
-                            (test-msg "m2" 'message 'assistant "hello")))
+      (define entries
+        (list (test-msg "m1" 'message 'user "hi") (test-msg "m2" 'message 'assistant "hello")))
       (check-equal? (slice-entries-up-to entries #f) entries))
 
     ;; -- slice-entries-up-to: parent-id found, truncates correctly --
@@ -63,13 +63,13 @@
 
     ;; -- make-session-struct: with optional fields --
     (test-case "make-session-struct respects optional fields"
-      (define sess (make-session-struct
-                    #:id "sid-2"
-                    #:dir "/tmp/test2"
-                    #:model-name "gpt-4"
-                    #:system-instructions '("Be helpful")
-                    #:active? #f
-                    #:lifecycle (lifecycle-state #f #f #t #f #f #f #f '() '())))
+      (define sess
+        (make-session-struct #:id "sid-2"
+                             #:dir "/tmp/test2"
+                             #:model-name "gpt-4"
+                             #:system-instructions '("Be helpful")
+                             #:active? #f
+                             #:lifecycle (lifecycle-state #f #f #t #f #f #f #f '() '() #f)))
       (check-equal? (agent-session-model-name sess) "gpt-4")
       (check-equal? (agent-session-system-instructions sess) '("Be helpful"))
       (check-false (agent-session-active? sess))

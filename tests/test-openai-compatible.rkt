@@ -409,6 +409,17 @@
 ;; Run all tests (updated to include new suites)
 ;; ============================================================
 
+(module+ test
+  (require rackunit/text-ui)
+  (run-tests error-formatting-tests)
+  (run-tests api-key-validation-tests)
+  (run-tests response-size-limit-tests)
+  (run-tests rate-limit-guidance-tests)
+  (run-tests sse-timeout-scaling-tests)
+  (run-tests content-key-fix-tests)
+  (run-tests array-items-fix-tests)
+  (run-tests stream-parameter-tests))
+
 (module+ main
   (run-tests error-formatting-tests)
   (run-tests api-key-validation-tests)

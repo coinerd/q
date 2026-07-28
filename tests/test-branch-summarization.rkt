@@ -152,7 +152,8 @@
   (define-values (idx tmpdir) (make-test-index (list m1 m2)))
   (dynamic-wind void
                 (lambda ()
-                  (define summary (branch-with-summary! idx "child" "Summary of child branch"))
+                  (define-values (_new-idx summary)
+                    (branch-with-summary! idx "child" "Summary of child branch"))
                   (check-true (message? summary))
                   (check-equal? (message-kind summary) 'branch-summary)
                   (check-equal? (message-parent-id summary) "child"))
@@ -164,7 +165,8 @@
   (define-values (idx tmpdir) (make-test-index (list m1)))
   (dynamic-wind void
                 (lambda ()
-                  (define summary (branch-with-summary! idx "root" "Custom summary text"))
+                  (define-values (_new-idx summary)
+                    (branch-with-summary! idx "root" "Custom summary text"))
                   (define content-text
                     (string-join (for/list ([part (message-content summary)])
                                    (if (text-part? part)
@@ -188,8 +190,8 @@
   (define-values (idx tmpdir) (make-test-index (list m1 m2)))
   (dynamic-wind void
                 (lambda ()
-                  (branch-with-summary! idx "root" "Summary")
-                  (define active (active-leaf idx))
+                  (define-values (new-idx _summary) (branch-with-summary! idx "root" "Summary"))
+                  (define active (active-leaf new-idx))
                   (check-not-false active)
                   (check-equal? (message-kind active) 'branch-summary))
                 (lambda () (cleanup! tmpdir))))
@@ -199,7 +201,9 @@
     (make-message "root" #f 'user 'message (list (make-text-part "root")) (current-seconds) (hasheq)))
   (define-values (idx tmpdir) (make-test-index (list m1)))
   (dynamic-wind void
-                (lambda () (check-false (branch-with-summary! idx "nonexistent" "Summary")))
+                (lambda ()
+                  (define-values (_new-idx result) (branch-with-summary! idx "nonexistent" "Summary"))
+                  (check-false result))
                 (lambda () (cleanup! tmpdir))))
 
 (test-case "branch-with-summary! adds summary child to target entry"
@@ -216,9 +220,9 @@
   (define-values (idx tmpdir) (make-test-index (list m1 m2)))
   (dynamic-wind void
                 (lambda ()
-                  (define summary (branch-with-summary! idx "root" "Summary"))
+                  (define-values (new-idx summary) (branch-with-summary! idx "root" "Summary"))
                   ;; root should now have 2 children: child + summary
-                  (define kids (children-of idx "root"))
+                  (define kids (children-of new-idx "root"))
                   (check-equal? (length kids) 2)
                   (define kid-ids (map message-id kids))
                   (check-not-false (member "child" kid-ids))
@@ -241,10 +245,10 @@
   (define-values (idx tmpdir) (make-test-index (list m1 m2 m3)))
   (dynamic-wind void
                 (lambda ()
-                  (define summary (branch-with-summary! idx "a" "Summary of a"))
+                  (define-values (new-idx summary) (branch-with-summary! idx "a" "Summary of a"))
                   (check-equal? (message-parent-id summary) "a")
                   ;; Verify the summary is a child of 'a'
-                  (define a-children (children-of idx "a"))
+                  (define a-children (children-of new-idx "a"))
                   (check-equal? (length a-children) 2) ; b + summary
                   )
                 (lambda () (cleanup! tmpdir))))

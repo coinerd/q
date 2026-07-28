@@ -16,18 +16,35 @@
 ;; ============================================================
 
 (test-case "make-tool rejects 0-arity handler (no args)"
-  (check-exn exn:fail? (lambda () (make-tool "bad-tool" "desc" (hasheq) (lambda () "no args")))))
+  (check-exn exn:fail?
+             (lambda ()
+               (make-tool "bad-tool"
+                          "desc"
+                          (hasheq 'type "object" 'properties (hasheq) 'required (list))
+                          (lambda () "no args")))))
 
 (test-case "make-tool accepts 1-arity handler (legacy compat)"
-  (define t (make-tool "legacy-tool" "desc" (hasheq) (lambda (args) "one arg")))
+  (define t
+    (make-tool "legacy-tool"
+               "desc"
+               (hasheq 'type "object" 'properties (hasheq) 'required (list))
+               (lambda (args) "one arg")))
   (check-true (tool? t)))
 
 (test-case "make-tool accepts 2-arity handler"
-  (define t (make-tool "good-tool" "desc" (hasheq) (lambda (args ctx) "two args")))
+  (define t
+    (make-tool "good-tool"
+               "desc"
+               (hasheq 'type "object" 'properties (hasheq) 'required (list))
+               (lambda (args ctx) "two args")))
   (check-true (tool? t)))
 
 (test-case "make-tool accepts 3+ arity handler (variadic compat)"
-  (define t (make-tool "flex-tool" "desc" (hasheq) (lambda (args ctx . rest) "rest args")))
+  (define t
+    (make-tool "flex-tool"
+               "desc"
+               (hasheq 'type "object" 'properties (hasheq) 'required (list))
+               (lambda (args ctx . rest) "rest args")))
   (check-true (tool? t)))
 
 ;; ============================================================

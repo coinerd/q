@@ -9,7 +9,7 @@
 (require rackunit
          rackunit/text-ui
          (combine-in "../extensions/gsd-planning/command-normalization.rkt"
-                 (only-in "../util/command-helpers.rkt" extract-cmd-args)))
+                     (only-in "../util/command-helpers.rkt" extract-cmd-args)))
 
 (define cmd-norm-tests
   (test-suite "GSD Command Normalization"
@@ -68,6 +68,10 @@
 
     (test-case "json-artifact?: file.json"
       (check-true (json-artifact? "file.json")))))
+
+(module+ test
+  (require rackunit/text-ui)
+  (run-tests cmd-norm-tests))
 
 (module+ main
   (run-tests cmd-norm-tests))

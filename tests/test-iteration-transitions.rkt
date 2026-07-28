@@ -63,12 +63,15 @@
 (define (make-read-tool)
   (make-tool "read"
              "Read a file"
-             (hasheq)
+             (hasheq 'type "object" 'properties (hasheq) 'required (list))
              (lambda (args ctx) (make-success-result "mock file content"))))
 
 ;; Make a bash tool
 (define (make-bash-tool)
-  (make-tool "bash" "Run bash" (hasheq) (lambda (args ctx) (make-success-result "bash output"))))
+  (make-tool "bash"
+             "Run bash"
+             (hasheq 'type "object" 'properties (hasheq) 'required (list))
+             (lambda (args ctx) (make-success-result "bash output"))))
 
 ;; Provider responses for tool-call-then-text pattern
 (define (tool-call-then-text-responses tool-name tool-args)
@@ -312,6 +315,10 @@
       (check-equal? (length followup-events) 0 "follow-up injection not yet implemented")
       (check-equal? (hash-ref (queue-status queue) 'followup) 2 "follow-ups remain in queue")
       (cleanup-temp-log!))))
+
+(module+ test
+  (require rackunit/text-ui)
+  (run-tests iteration-transition-tests))
 
 (module+ main
   (run-tests iteration-transition-tests))

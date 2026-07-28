@@ -94,5 +94,9 @@
       (check-true (for/or ([e (in-list transcript)])
                     (string-contains? (transcript-entry-text e) "active turn"))))))
 
+(module+ test
+  (require rackunit/text-ui)
+  (run-tests compact-tests))
+
 (module+ main
   (run-tests compact-tests))

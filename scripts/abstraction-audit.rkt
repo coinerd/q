@@ -2,6 +2,19 @@
 
 ;; scripts/abstraction-audit.rkt — Lightweight abstraction fitness scanner (coordinator)
 ;;
+;; DESIGN FACT: Each signal encodes a single structural property (coupling, size,
+;; collision, boundary) derived from a homogeneous scan over the same module set.
+;; Signal aggregation is never re-scored; raw values are preserved in JSON output.
+;;
+;; DESIGN FACT (W2 audit): Historical W2 audit tracked signal provenance for all 4
+;; signal origins (coupling, size, collision, boundary) across the codebase.
+;; DESIGN FACT (W5 mutation): W5 mutation analysis added per-module mutability scoring
+;; to the signal set, surfaced in JSON output alongside coupling/size/collision/boundary.
+;; DESIGN FACT (W1 scorecard P5): W1 scorecard P5 introduced the --strict exit-code mode
+;; used by CI lint gates to fail on threshold violations.
+;; DESIGN FACT (W6 adapter): W6 adapter boundary audit ensured the scanner correctly
+;; handles module paths across adapter layers (llm/, runtime/, interfaces/).
+;;
 ;; Refactored: analysis logic in abstraction-analysis.rkt,
 ;; report formatting in abstraction-report.rkt.
 ;; This module coordinates and provides the CLI interface.

@@ -54,7 +54,7 @@
 (define (make-echo-tool #:name [name "echo"])
   (make-tool name
              "Echo tool"
-             (hasheq)
+             (hasheq 'type "object" 'properties (hasheq) 'required (list))
              (lambda (args ctx) (make-success-result (format "echo: ~a" args)))))
 
 ;; Create a tool that records execution in a box
@@ -118,7 +118,10 @@
     (test-case "TS2: tool-call-pre hook amends arguments"
       (define exec-log (box '()))
       (define reg (make-tool-registry))
-      (register-tool! reg (make-recording-tool exec-log))
+      (register-tool! reg
+                      (make-recording-tool
+                       exec-log
+                       #:schema (hasheq 'type "object" 'properties (hasheq) 'required (list))))
       (define tc (make-tool-call "tc-2" "rec" (hasheq 'original #t)))
       (define dispatcher
         (make-hook-dispatcher 'tool-call-pre
@@ -142,7 +145,10 @@
     (test-case "TS3: tool-call-pre hook amend with non-hash payload is rejected"
       (define exec-log (box '()))
       (define reg (make-tool-registry))
-      (register-tool! reg (make-recording-tool exec-log))
+      (register-tool! reg
+                      (make-recording-tool
+                       exec-log
+                       #:schema (hasheq 'type "object" 'properties (hasheq) 'required (list))))
       (define tc (make-tool-call "tc-3" "rec" (hasheq 'original #t)))
       (define dispatcher
         (make-hook-dispatcher 'tool-call-pre
@@ -329,7 +335,7 @@
        reg
        (make-tool "write"
                   "Write file"
-                  (hasheq)
+                  (hasheq 'type "object" 'properties (hasheq) 'required (list))
                   (lambda (args ctx)
                     ;; Track concurrency
                     (call-with-semaphore counter-sema
@@ -381,6 +387,10 @@
       (check-equal? (scheduler-batch-stats-errors metadata)
                     1
                     "metadata counts 1 error from preflight exception"))))
+
+(module+ test
+  (require rackunit/text-ui)
+  (run-tests scheduler-hook-tests))
 
 (module+ main
   (run-tests scheduler-hook-tests))
