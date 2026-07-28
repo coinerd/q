@@ -314,7 +314,7 @@
              'properties
              (hasheq 'message (hasheq 'type "string"))
              'required
-             '(message))
+             '("message"))
      (lambda (args ctx)
        (define a (parse-tool-args args))
        (make-success-result
