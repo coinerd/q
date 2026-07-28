@@ -83,9 +83,11 @@
                                 (list (hasheq 'type "text" 'text (number->string sum)))))))
 
   ;; fail tool — always throws an exception
-  (register-tool!
-   reg
-   (make-tool "fail" "Always fails" (hasheq) (lambda (args ctx) (error 'fail "deliberate failure"))))
+  (register-tool! reg
+                  (make-tool "fail"
+                             "Always fails"
+                             (hasheq 'type "object" 'properties (hasheq) 'required '())
+                             (lambda (args ctx) (error 'fail "deliberate failure"))))
 
   ;; slow-echo tool — sleeps then echoes (for parallel order testing)
   (register-tool!
@@ -521,7 +523,7 @@
   (register-tool! reg
                   (make-tool "thread-recorder"
                              "Records threads for testing"
-                             (hasheq 'type 'object 'properties (hasheq) 'required '())
+                             (hasheq 'type "object" 'properties (hasheq) 'required '())
                              (lambda (args exec-ctx)
                                (set-box! threads-seen (cons (current-thread) (unbox threads-seen)))
                                (sleep 0.05) ; small delay to force contention
@@ -596,14 +598,14 @@
   (register-tool! registry
                   (make-tool "cancel-first"
                              "cancel"
-                             (hasheq)
+                             (hasheq 'type "object" 'properties (hasheq) 'required '())
                              (lambda (_args _ctx)
                                (cancel-token! token)
                                (make-success-result (list (hasheq 'type "text" 'text "cancelled"))))))
   (register-tool! registry
                   (make-tool "must-not-run"
                              "blocked after cancellation"
-                             (hasheq)
+                             (hasheq 'type "object" 'properties (hasheq) 'required '())
                              (lambda (_args _ctx)
                                (set-box! second-runs (add1 (unbox second-runs)))
                                (make-success-result (list (hasheq 'type "text" 'text "unsafe"))))))

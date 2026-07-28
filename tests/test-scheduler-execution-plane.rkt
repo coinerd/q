@@ -44,7 +44,7 @@
 (define (make-local-bash-tool)
   (make-tool "bash"
              "Local bash tool for testing"
-             (hasheq 'type "function" 'function (hasheq 'name "bash" 'parameters (hasheq)))
+             (hasheq 'type "object" 'properties (hasheq))
              (lambda (args [ctx #f])
                (set-box! call-counter (add1 (unbox call-counter)))
                (make-success-result "executed locally"))
@@ -55,7 +55,7 @@
 (define (make-non-dangerous-tool)
   (make-tool "read"
              "Read-only tool"
-             (hasheq 'type "function" 'function (hasheq 'name "read" 'parameters (hasheq)))
+             (hasheq 'type "object" 'properties (hasheq))
              (lambda (args [ctx #f]) (make-success-result "read ok"))
              #:dangerous? #f
              #:required-capability 'read-only
@@ -64,7 +64,7 @@
 (define (make-non-externalizable-tool)
   (make-tool "special"
              "Tool with closures, not externalizable"
-             (hasheq 'type "function" 'function (hasheq 'name "special" 'parameters (hasheq)))
+             (hasheq 'type "object" 'properties (hasheq))
              (lambda (args [ctx #f]) (make-success-result "executed locally (special)"))
              #:dangerous? #t
              #:required-capability 'shell-exec
@@ -126,17 +126,14 @@
 
     (test-case "make-tool defaults externalizable? to #f (M2)"
       (define t
-        (make-tool "test"
-                   "desc"
-                   (hasheq 'type "function" 'function (hasheq 'name "test"))
-                   (lambda args (void))))
+        (make-tool "test" "desc" (hasheq 'type "object" 'properties (hasheq)) (lambda args (void))))
       (check-false (tool-externalizable? t)))
 
     (test-case "make-tool with #:externalizable? #f"
       (define t
         (make-tool "test"
                    "desc"
-                   (hasheq 'type "function" 'function (hasheq 'name "test"))
+                   (hasheq 'type "object" 'properties (hasheq))
                    (lambda args (void))
                    #:externalizable? #f))
       (check-false (tool-externalizable? t)))
