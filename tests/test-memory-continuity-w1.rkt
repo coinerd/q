@@ -166,7 +166,7 @@
 ;; ══════════════════════════════════════════════════════════════════
 
 (test-case "W4.1: ws-entry->text extracts formatted text"
-  (define entry (ws-entry "/tmp/test.rkt" "msg-001" 150 (current-seconds)))
+  (define entry (ws-entry "/tmp/test.rkt" "msg-001" 150 (current-seconds) 'kept))
   (define text (ws-entry->text entry))
   (check-true (string? text))
   (check-true (string-contains? text "/tmp/test.rkt"))
@@ -174,7 +174,7 @@
 
 (test-case "W4.2: ws-entry->text includes timestamp"
   (define ts 1700000000)
-  (define entry (ws-entry "/path/file.rkt" "msg-002" 200 ts))
+  (define entry (ws-entry "/path/file.rkt" "msg-002" 200 ts 'kept))
   (define text (ws-entry->text entry))
   (check-true (string-contains? text (number->string ts))))
 
@@ -186,7 +186,7 @@
     (check-equal? (current-loop-warning-count) 0)))
 
 (test-case "W4.4: ws-entry? predicate works"
-  (define entry (ws-entry "/a.rkt" "m1" 10 1000))
+  (define entry (ws-entry "/a.rkt" "m1" 10 1000 'kept))
   (check-true (ws-entry? entry))
   (check-false (ws-entry? "not an entry")))
 

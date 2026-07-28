@@ -155,8 +155,8 @@
   (define archived-entries (box '()))
   ;; Create an evolution result with archived entries
   (define ws (make-working-set #:max-entries 10 #:max-tokens 1000))
-  (define e1 (ws-entry "file1.rkt" "m1" 100 1000))
-  (define e2 (ws-entry "file2.rkt" "m2" 200 2000))
+  (define e1 (ws-entry "file1.rkt" "m1" 100 1000 'kept))
+  (define e2 (ws-entry "file2.rkt" "m2" 200 2000 'kept))
   (define result (evolution-result '() (list e1 e2) '()))
   (parameterize ([current-archive-entry-fn
                   (lambda (e) (set-box! archived-entries (cons e (unbox archived-entries))))])
