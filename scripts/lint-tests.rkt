@@ -136,7 +136,10 @@
 ;;; --- checks per file ---
 
 (define hardcoded-path-allowlist
-  '("test-gsd-policy.rkt" "test-tool-bash-security.rkt" "test-subprocess.rkt"))
+  '("test-gsd-policy.rkt" "test-tool-bash-security.rkt"
+                          "test-subprocess.rkt"
+                          "test-operational-checkpoint.rkt"
+                          "test-operational-checkpoint-injection.rkt"))
 
 (define (hardcoded-path-allowed? filepath)
   (for/or ([a (in-list hardcoded-path-allowlist)])
