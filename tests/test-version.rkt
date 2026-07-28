@@ -15,8 +15,8 @@
     (test-case "version: q-version is a string"
       (check-true (string? q-version)))
 
-    (test-case "q-version is 0.99.66 for v0.99.66 release"
-      (check-equal? q-version "0.99.66"))
+    (test-case "q-version is current release version"
+      (check-equal? q-version "0.99.72"))
 
     (test-case "q-version matches semver pattern"
       (check-true (regexp-match? #rx"^[0-9]+\\.[0-9]+\\.[0-9]+" q-version)))

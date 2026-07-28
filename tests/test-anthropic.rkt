@@ -676,9 +676,10 @@
      'role
      "assistant"
      'content
-     (list
-      (hash 'type "text" 'text "Sure, let me run that.")
-      (hash 'type "tool-call" 'id "call_xyz" 'name "bash" 'arguments (hash 'command "echo hi")))))
+     (list (hash 'type "text" 'text "Sure, let me run that.")
+           (hash 'type "tool-call" 'id "call_xyz" 'name "bash" 'arguments (hash 'command "echo hi"))))
+    ;; Include a tool_result so the tool_use block is not stripped as orphaned
+    (hash 'role "tool" 'tool_call_id "call_xyz" 'content "Done!"))
    #f
    (hash 'model "claude-sonnet-4-20250514")))
 

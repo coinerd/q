@@ -264,6 +264,11 @@
         .
         "Composition root — turn orchestration wires context assembly, LLM, tools, memory; high complexity score 25051")
        (owner . "runtime"))
+      ("runtime/tool-coordinator.rkt"
+       (risk
+        .
+        "Tool execution coordinator with parallel dispatch, timeout, error classification, and retry; high complexity score 21408")
+       (owner . "runtime"))
       ("llm/stream.rkt"
        (risk
         .
