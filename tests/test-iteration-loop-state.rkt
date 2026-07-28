@@ -25,10 +25,23 @@
       (check-equal? (loop-counters-recent-tool-names c) '())
       (check-equal? (loop-counters-explore-count c) 0)
       (check-equal? (loop-counters-implement-count c) 0)
-      (check-equal? (loop-counters-stall-retry-count c) 0))
+      (check-equal? (loop-counters-stall-retry-count c) 0)
+      (check-equal? (loop-counters-recent-error-classes c) '())
+      (check-false (loop-counters-last-corrected-error-class c)))
 
     (test-case "loop-counters accessor round-trip"
-      (define c (loop-counters 5 3 '("a" "b") 2 1 '("read" "write") 4 7 6))
+      (define c
+        (loop-counters 5
+                       3
+                       '("a" "b")
+                       2
+                       1
+                       '("read" "write")
+                       4
+                       7
+                       6
+                       '("file-not-found")
+                       "file-not-found"))
       (check-equal? (loop-counters-iteration c) 5)
       (check-equal? (loop-counters-consecutive-tool-count c) 3)
       (check-equal? (loop-counters-seen-paths c) '("a" "b"))
@@ -37,7 +50,9 @@
       (check-equal? (loop-counters-recent-tool-names c) '("read" "write"))
       (check-equal? (loop-counters-explore-count c) 4)
       (check-equal? (loop-counters-implement-count c) 7)
-      (check-equal? (loop-counters-stall-retry-count c) 6))
+      (check-equal? (loop-counters-stall-retry-count c) 6)
+      (check-equal? (loop-counters-recent-error-classes c) '("file-not-found"))
+      (check-equal? (loop-counters-last-corrected-error-class c) "file-not-found"))
 
     (test-case "loop-infra accessor round-trip"
       (define infra (loop-infra '(ctx) #f #f (make-event-bus) "sid-1" "/tmp/log" #f))
@@ -50,7 +65,7 @@
       (check-false (loop-infra-token infra)))
 
     (test-case "loop-counters is transparent"
-      (define c (loop-counters 1 2 '() 0 0 '() 0 0 0))
+      (define c (loop-counters 1 2 '() 0 0 '() 0 0 0 '() #f))
       (check-true (loop-counters? c))
       (check-false (loop-counters? 42)))
 
@@ -70,7 +85,6 @@
       (define infra2 (struct-copy loop-infra infra [session-id "sid-2"]))
       (check-equal? (loop-infra-session-id infra2) "sid-2")
       (check-equal? (loop-infra-ctx infra2) '(ctx)))))
-
 
 (module+ main
   (run-tests suite))

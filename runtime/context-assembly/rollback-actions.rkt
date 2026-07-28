@@ -193,6 +193,9 @@
       [(eq? sym 'exploration-loop)
        (make-force-distill-action msg (hasheq 'trigger 'exploration-loop))]
       [(eq? sym 'stuck-detected) (make-expand-context-action msg (hasheq 'trigger 'stuck))]
+      [(eq? sym 'stuck-path) (make-expand-context-action msg (hasheq 'trigger 'stuck-path))]
+      [(memq sym '(missing-tool access-denied command-failure timeout generic-error))
+       (make-force-distill-action msg (hasheq 'trigger sym))]
       [(eq? sym 'task-amnesia-detected)
        ;; Repeated tool calls indicate amnesia — escalate to distill if threshold reached
        (if (>= (current-loop-warning-count) escalation-threshold)

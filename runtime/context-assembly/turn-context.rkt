@@ -50,6 +50,7 @@
                   checkpoint-set-repo-root
                   checkpoint-set-planning-root
                   checkpoint-set-planning-authority
+                  checkpoint-set-error
                   supercedes-generic-planning?
                   inject-checkpoint-message)
          (only-in "../context-assembly/serialization.rkt"
@@ -96,7 +97,9 @@
                   evolution-result?
                   reset-working-set!)
          (only-in "../context-assembly/state-aware-builder.rkt" current-ws-evolution-enabled?)
-         (only-in "../context-assembly/rollback-actions.rkt" current-loop-warning-count)
+         (only-in "../context-assembly/rollback-actions.rkt"
+                  current-loop-warning-count
+                  tool-error-class->string)
          ;; Auto-distillation
          (only-in "../context-assembly/auto-distillation.rkt"
                   auto-distill
@@ -237,6 +240,56 @@
              (set! latest-repo discovered))]))))
   (values latest-authority latest-repo))
 
+(define (recent-tool-result-classes messages)
+  (define outcomes
+    (for/list ([m (in-list messages)]
+               #:when (and (eq? (message-role m) 'tool)
+                           (ormap tool-result-part? (message-content m))))
+      (define error-part
+        (findf (lambda (part) (and (tool-result-part? part) (tool-result-part-is-error? part)))
+               (message-content m)))
+      (if error-part
+          (tool-error-class->string (format "~a" (tool-result-part-content error-part)))
+          "success")))
+  (take-right outcomes (min 8 (length outcomes))))
+
+(define (checkpoint-error-episode outcomes)
+  ;; Mirror the correction state machine: before a threshold crossing, count
+  ;; equivalent errors within the bounded window; after crossing, a later
+  ;; success/different class starts a fresh episode.
+  (let loop ([remaining outcomes]
+             [history '()]
+             [corrected #f])
+    (cond
+      [(null? remaining) (values history corrected)]
+      [else
+       (define item (car remaining))
+       (define recovered? (and corrected (not (string=? item corrected))))
+       (define base-history
+         (if recovered?
+             '()
+             history))
+       (define base-corrected (if recovered? #f corrected))
+       (define combined (append base-history (list item)))
+       (define next-history (take-right combined (min 8 (length combined))))
+       (define crosses?
+         (and (not base-corrected)
+              (not (string=? item "success"))
+              (>= (count (lambda (seen) (string=? seen item)) next-history) 3)))
+       (loop (cdr remaining) next-history (if crosses? item base-corrected))])))
+
+(define (checkpoint-with-recent-errors checkpoint messages)
+  (define outcomes (recent-tool-result-classes messages))
+  (define-values (episode _corrected) (checkpoint-error-episode outcomes))
+  (cond
+    [(null? episode) checkpoint]
+    [(string=? (last episode) "success") checkpoint]
+    [else
+     (define latest (last episode))
+     (define equivalent-count (count (lambda (item) (string=? item latest)) episode))
+     (for/fold ([cp checkpoint]) ([_i (in-range equivalent-count)])
+       (checkpoint-set-error cp latest))]))
+
 (define (fresh-operational-checkpoint config messages)
   (define fallback-repo (path-value->string (config-repo-root config)))
   (define fallback-planning (path-value->string (config-planning-root config)))
@@ -255,9 +308,11 @@
     (if planning-root
         (checkpoint-set-planning-root with-repo planning-root)
         with-repo))
-  (if authority
-      (checkpoint-set-planning-authority with-planning authority)
-      with-planning))
+  (define with-authority
+    (if authority
+        (checkpoint-set-planning-authority with-planning authority)
+        with-planning))
+  (checkpoint-with-recent-errors with-authority messages))
 
 ;; Pure context assembly: no side effects, no session mutation.
 ;; Returns (values assembled-messages hook-result tiered-context).

@@ -35,7 +35,7 @@
                             #:recent-tool-names [rtn '()]
                             #:intent-retry-count [irc 0]
                             #:stall-retry-count [src 0])
-  (loop-counters iter tc sp irc cec rtn ec ic src))
+  (loop-counters iter tc sp irc cec rtn ec ic src '() #f))
 
 (define (make-assistant-msg text)
   (make-message "test-id"

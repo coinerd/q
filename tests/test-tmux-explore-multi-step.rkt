@@ -8,6 +8,7 @@
          racket/string
          racket/list
          racket/hash
+         racket/file
          "../scripts/tmux-tui-explore.rkt"
          "../scripts/tmux-explore/verifiers.rkt"
          "../scripts/tmux-explore/evidence.rkt"
@@ -130,15 +131,24 @@
 
 ;; Test 8: Evidence manifest includes step count and per-step digests
 (test-case "evidence manifest includes step count and per-step digests"
-  (define manifest
-    (build-evidence-manifest #:tag "memory"
-                             #:status 'pass
-                             #:classification 'pass
-                             #:repo-sha "a"
-                             #:version "0.99.52"
-                             #:output-dir "/tmp"
-                             #:scenario-count 1
-                             #:step-count 3
-                             #:step-digests (list "abc" "def" "ghi")))
-  (check-equal? (hash-ref manifest 'step-count) 3)
-  (check-equal? (hash-ref manifest 'step-digests) (list "abc" "def" "ghi")))
+  ;; Hash only an isolated fixture. Using the shared /tmp root made this fast
+  ;; test traverse every concurrent test artifact and exceed the 120s gate.
+  (define fixture (make-temporary-file "q-evidence-manifest-~a" 'directory))
+  (dynamic-wind void
+                (lambda ()
+                  (call-with-output-file (build-path fixture "evidence.txt")
+                                         #:exists 'truncate/replace
+                                         (lambda (out) (display "fixture" out)))
+                  (define manifest
+                    (build-evidence-manifest #:tag "memory"
+                                             #:status 'pass
+                                             #:classification 'pass
+                                             #:repo-sha "a"
+                                             #:version "0.99.52"
+                                             #:output-dir fixture
+                                             #:scenario-count 1
+                                             #:step-count 3
+                                             #:step-digests (list "abc" "def" "ghi")))
+                  (check-equal? (hash-ref manifest 'step-count) 3)
+                  (check-equal? (hash-ref manifest 'step-digests) (list "abc" "def" "ghi")))
+                (lambda () (delete-directory/files fixture))))
