@@ -22,7 +22,7 @@
                      (define t
                        (make-tool "timed"
                                   "desc"
-                                  (hasheq)
+                                  (hasheq 'type "object" 'properties (hasheq) 'required (list))
                                   (lambda (args ctx)
                                     (set! args-received args)
                                     (make-success-result "ok"))
@@ -37,7 +37,7 @@
                      (define t
                        (make-tool "timed"
                                   "desc"
-                                  (hasheq)
+                                  (hasheq 'type "object" 'properties (hasheq) 'required (list))
                                   (lambda (args ctx)
                                     (set! args-received args)
                                     (make-success-result "ok"))
@@ -52,7 +52,7 @@
                      (define t
                        (make-tool "plain"
                                   "desc"
-                                  (hasheq)
+                                  (hasheq 'type "object" 'properties (hasheq) 'required (list))
                                   (lambda (args ctx)
                                     (set! args-received args)
                                     (make-success-result "ok"))))

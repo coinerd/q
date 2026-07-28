@@ -18,7 +18,7 @@
 (define (make-echo-tool name)
   (make-tool name
              "echo tool"
-             (hasheq)
+             (hasheq 'type "object" 'properties (hasheq) 'required (list))
              (lambda (args ctx) (make-tool-result (hash-ref args 'out "") (hasheq) #f))))
 
 (define parallel-tests
@@ -30,7 +30,7 @@
        reg
        (make-tool "slow-echo"
                   "slow echo"
-                  (hasheq)
+                  (hasheq 'type "object" 'properties (hasheq) 'required (list))
                   (lambda (args ctx)
                     (sleep 0.05)
                     (make-tool-result (format "slow: ~a" (hash-ref args 'msg "hi")) (hasheq) #f))))
@@ -38,7 +38,7 @@
        reg
        (make-tool "fast-echo"
                   "fast echo"
-                  (hasheq)
+                  (hasheq 'type "object" 'properties (hasheq) 'required (list))
                   (lambda (args ctx)
                     (make-tool-result (format "fast: ~a" (hash-ref args 'msg "hi")) (hasheq) #f))))
 

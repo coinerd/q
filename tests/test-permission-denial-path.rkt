@@ -16,7 +16,7 @@
   (register-tool! reg
                   (make-tool name
                              "Test tool"
-                             (hasheq 'type "object")
+                             (hasheq 'type "object" 'properties (hasheq) 'required (list))
                              (lambda (a ctx) (make-success-result "ok"))
                              #:dangerous?
                              (or (equal? name "bash") (equal? name "write") (equal? name "edit"))))

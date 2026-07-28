@@ -109,7 +109,7 @@
   (define t
     (make-tool "my-tool"
                "A test tool"
-               (hasheq)
+               (hasheq 'type "object" 'properties (hasheq) 'required (list))
                (lambda (args) "ok")
                #:render-call render-call
                #:render-result render-result))
@@ -118,7 +118,11 @@
   (check-true (procedure? (tool-render-result t))))
 
 (test-case "make-tool: defaults render-call/render-result to #f"
-  (define t (make-tool "basic" "Basic tool" (hasheq) (lambda (args) "ok")))
+  (define t
+    (make-tool "basic"
+               "Basic tool"
+               (hasheq 'type "object" 'properties (hasheq) 'required (list))
+               (lambda (args) "ok")))
   (check-false (tool-render-call t))
   (check-false (tool-render-result t)))
 

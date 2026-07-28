@@ -39,5 +39,9 @@
       (check-equal? (context-result-total-tokens cr) 0)
       (check-false (context-result-over-budget? cr)))))
 
+(module+ test
+  (require rackunit/text-ui)
+  (run-tests budget-tests))
+
 (module+ main
   (run-tests budget-tests))

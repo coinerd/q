@@ -47,9 +47,11 @@
       (make-success-result (list (hasheq 'type "text" 'text (hash-ref args 'msg)))))))
 
   ;; fail tool — always throws an exception
-  (register-tool!
-   reg
-   (make-tool "fail" "Always fails" (hasheq) (lambda (args ctx) (error 'fail "deliberate failure"))))
+  (register-tool! reg
+                  (make-tool "fail"
+                             "Always fails"
+                             (hasheq 'type "object" 'properties (hasheq) 'required (list))
+                             (lambda (args ctx) (error 'fail "deliberate failure"))))
 
   ;; break-tool — throws exn:break when 'should-break is true
   (register-tool!

@@ -264,7 +264,11 @@
 
 (test-case "Empty-schema tool serializes for all providers"
   (define reg (make-tool-registry))
-  (register-tool! reg (make-tool "noop" "A no-op tool" (hasheq) dummy-execute))
+  (register-tool! reg
+                  (make-tool "noop"
+                             "A no-op tool"
+                             (hasheq 'type "object" 'properties (hasheq) 'required (list))
+                             dummy-execute))
   (define tools (list-tools-jsexpr reg))
   (define settings (hash 'model "test-model"))
   (define req (make-model-request messages tools settings))

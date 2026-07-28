@@ -15,7 +15,7 @@
 (define (make-test-tool name)
   (make-tool name
              (string-append "Test tool " name)
-             (hasheq 'type "function" 'function (hasheq 'name name 'parameters (hasheq)))
+             (hasheq 'type "object" 'properties (hasheq) 'required (list))
              (lambda args (void))
              #:required-capability 'any
              #:externalizable? #t))
