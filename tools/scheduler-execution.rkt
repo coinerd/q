@@ -224,7 +224,7 @@
                                   (if (path? wd)
                                       (path->string wd)
                                       wd))])
-             (if wd-string
+             (if (and wd-string (not (hash-has-key? with-timeout 'working-directory)))
                  (hash-set with-timeout 'working-directory wd-string)
                  with-timeout))))
 
