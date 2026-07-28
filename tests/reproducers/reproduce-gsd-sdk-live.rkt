@@ -3,6 +3,7 @@
 
 ;; @speed slow
 ;; @suite gsd
+;; @requires provider-key network
 ;; tests/reproducers/test-gsd-sdk-live.rkt — Live GSD planning test via SDK
 ;;
 ;; Exercises the q:plan → q:go workflow against the real LLM provider
@@ -10,6 +11,10 @@
 ;;
 ;; Updated for v0.20.5: uses q:plan / q:go convenience API instead of
 ;; manual hook dispatch.
+
+(unless (equal? (getenv "Q_LIVE_GSD_SDK_TESTS") "1")
+  (printf "SKIPPED_BY_PROFILE: live GSD SDK reproducer requires Q_LIVE_GSD_SDK_TESTS=1~n")
+  (exit 5))
 
 (require racket/port
          racket/string
@@ -19,6 +24,10 @@
          "../../runtime/provider/provider-factory.rkt"
          "../../extensions/loader.rkt"
          "../../extensions/gsd-planning.rkt"
+         (only-in "../../extensions/gsd/runtime-state-types.rkt"
+                  gsd-runtime-state-mode
+                  gsd-runtime-state-total-waves
+                  gsd-runtime-state-completed-waves)
          "../../util/event/event-bus.rkt"
          (only-in "../../util/event/event.rkt" event-ev event-payload)
          "../../tools/tool.rkt"
@@ -84,7 +93,7 @@
 (displayln "")
 (displayln "=== After q:plan ===")
 (define snap1 (gsd-snapshot))
-(displayln (format "  mode: ~a" (hash-ref snap1 'mode)))
+(displayln (format "  mode: ~a" (gsd-runtime-state-mode snap1)))
 (displayln (format "  PLAN.md exists: ~a" (file-exists? plan-path)))
 (when (file-exists? plan-path)
   (define txt (file->string plan-path))
@@ -110,9 +119,9 @@
 (displayln "")
 (displayln "=== After q:go ===")
 (define snap2 (gsd-snapshot))
-(displayln (format "  mode: ~a" (hash-ref snap2 'mode)))
-(displayln (format "  total-waves: ~a" (hash-ref snap2 'total-waves)))
-(displayln (format "  completed-waves: ~a" (set-count (hash-ref snap2 'completed-waves))))
+(displayln (format "  mode: ~a" (gsd-runtime-state-mode snap2)))
+(displayln (format "  total-waves: ~a" (gsd-runtime-state-total-waves snap2)))
+(displayln (format "  completed-waves: ~a" (set-count (gsd-runtime-state-completed-waves snap2))))
 (displayln "")
 
 ;; ============================================================

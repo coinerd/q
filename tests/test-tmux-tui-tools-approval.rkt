@@ -2,6 +2,7 @@
 
 ;; @speed slow
 ;; @suite tui-tmux
+;; @requires terminal
 ;; @boundary e2e
 
 ;; tests/test-tmux-tui-tools-approval.rkt — W8: tools, approval, no-tools guardrails
@@ -23,8 +24,8 @@
 ;; ============================================================
 
 (unless (should-run-tmux-tests?)
-  (printf "SKIP: tmux tools/approval tests require Q_TMUX_TUI_TESTS=1 and tmux~n")
-  (exit 0))
+  (printf "SKIPPED_BY_PROFILE: tmux tools/approval tests require Q_TMUX_TUI_TESTS=1 and tmux~n")
+  (exit 5))
 
 (printf "Running tmux tools/approval tests...~n")
 

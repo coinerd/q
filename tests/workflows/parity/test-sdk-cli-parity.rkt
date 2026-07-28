@@ -91,7 +91,7 @@
                                          'properties
                                          (hasheq 'message (hasheq 'type "string"))
                                          'required
-                                         '(message))
+                                         '("message"))
                                  (lambda (args ctx)
                                    (make-success-result (format "Echo: ~a"
                                                                 (hash-ref args 'message ""))))))

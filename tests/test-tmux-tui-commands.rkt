@@ -2,6 +2,7 @@
 
 ;; @speed slow
 ;; @suite tui-tmux
+;; @requires terminal
 ;; @boundary e2e
 
 ;; tests/test-tmux-tui-commands.rkt — W4: slash-command usability and recovery
@@ -26,8 +27,8 @@
 ;; ============================================================
 
 (unless (should-run-tmux-tests?)
-  (printf "SKIP: tmux command tests require Q_TMUX_TUI_TESTS=1 and tmux~n")
-  (exit 0))
+  (printf "SKIPPED_BY_PROFILE: tmux command tests require Q_TMUX_TUI_TESTS=1 and tmux~n")
+  (exit 5))
 
 (printf "Running tmux slash-command tests...~n")
 

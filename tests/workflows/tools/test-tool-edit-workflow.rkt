@@ -42,7 +42,7 @@
                    'new-text
                    (hasheq 'type "string"))
            'required
-           '(path old-text new-text))
+           '("path" "old-text" "new-text"))
    (lambda (args ctx)
      (define path (hash-ref args 'path))
      (define old-text (hash-ref args 'old-text))

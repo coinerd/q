@@ -42,11 +42,15 @@
       [else (make-success-result (list (hasheq 'type "text" 'text (format "[mock] ~a" cmd))))])))
 
 (define (make-mock-bash-tool)
-  (make-tool
-   "bash"
-   "Run a bash command"
-   (hasheq 'type "object" 'properties (hasheq 'command (hasheq 'type "string")) 'required '(command))
-   (make-mock-bash-handler)))
+  (make-tool "bash"
+             "Run a bash command"
+             (hasheq 'type
+                     "object"
+                     'properties
+                     (hasheq 'command (hasheq 'type "string"))
+                     'required
+                     '("command"))
+             (make-mock-bash-handler)))
 
 ;; ============================================================
 ;; Test suite
@@ -131,7 +135,7 @@
                                          'properties
                                          (hasheq 'command (hasheq 'type "string"))
                                          'required
-                                         '(command))
+                                         '("command"))
                                  (lambda (args ctx)
                                    (when (and ctx (exec-context? ctx))
                                      (define settings (exec-context-runtime-settings ctx))

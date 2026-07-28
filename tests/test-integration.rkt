@@ -482,14 +482,14 @@
   (check-equal? (loop-result-termination-reason result) 'max-iterations-exceeded)
   (cleanup-dir dir))
 
-(test-case "integ: interrupt! sets cancellation token"
+(test-case "integ: idle interrupt! does not poison cancellation token"
   (define dir (make-temp-dir))
   (define prov (make-simple-mock-provider "before-interrupt"))
   (define tok (make-cancellation-token))
   (define rt (make-test-runtime prov #:session-dir dir #:cancellation-token tok))
   (define rt2 (sdk:open-session rt))
   (sdk:interrupt! rt2)
-  (check-pred cancellation-token-cancelled? tok)
+  (check-false (cancellation-token-cancelled? tok))
   (cleanup-dir dir))
 
 (test-case "integ: run-prompt! without session returns no-active-session"

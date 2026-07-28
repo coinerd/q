@@ -62,7 +62,7 @@
                 'properties
                 (hasheq 'path (hasheq 'type "string") 'content (hasheq 'type "string"))
                 'required
-                '(path content))
+                '("path" "content"))
         (lambda (args ctx)
           (define path (hash-ref args 'path))
           (define content (hash-ref args 'content))
@@ -84,7 +84,7 @@
                                          'properties
                                          (hasheq 'command (hasheq 'type "string"))
                                          'required
-                                         '(command))
+                                         '("command"))
                                  (lambda (args ctx)
                                    (define cmd (hash-ref args 'command "echo noop"))
                                    (make-success-result (format "$ ~a\n1 test passed\n" cmd)))))
@@ -158,7 +158,7 @@
                           'properties
                           (hasheq 'path (hasheq 'type "string") 'content (hasheq 'type "string"))
                           'required
-                          '(path content))
+                          '("path" "content"))
                   (lambda (args ctx)
                     (define path (hash-ref args 'path ""))
                     (if (string-prefix? path "/forbidden")

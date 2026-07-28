@@ -43,7 +43,8 @@
           [try-load-extension (-> path-string? (or/c any/c extension-load-error?))]
           [get-extension-name-from-path (-> path-string? string?)]
           [reload-extensions! (-> extension-registry? (listof path-string?) (listof string?))]
-          [discover-extension-files (-> (listof path-string?) (listof path-string?))]))
+          [discover-extension-files
+           (-> (listof path-string?) (listof (cons/c string? path-string?)))]))
 
 ;; ============================================================
 ;; extension-load-error struct
