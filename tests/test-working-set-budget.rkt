@@ -78,9 +78,9 @@
 
     (test-case "ws-entry->text includes budget-action"
       (define now 1000)
-      (define entry (ws-entry "/test.rkt" "msg-1" 150 now 'kept))
+      (define entry (ws-entry "test.rkt" "msg-1" 150 now 'kept))
       (define text (ws-entry->text entry))
-      (check-true (string-contains? text "/test.rkt"))
+      (check-true (string-contains? text "test.rkt"))
       (check-true (string-contains? text "150"))
       (check-true (string-contains? text "kept")))
 
@@ -96,8 +96,8 @@
 
     (test-case "re-reading same path supersedes old entry"
       (define ws (make-working-set))
-      (working-set-add! ws "/same.rkt" "msg-1" 100)
-      (working-set-add! ws "/same.rkt" "msg-2" 200)
+      (working-set-add! ws "same.rkt" "msg-1" 100)
+      (working-set-add! ws "same.rkt" "msg-2" 200)
       (check-equal? (working-set-entry-count ws) 1)
       (check-equal? (ws-entry-token-estimate (car (working-set-entries ws))) 200)
       (check-equal? (ws-entry-budget-action (car (working-set-entries ws))) 'kept))))
