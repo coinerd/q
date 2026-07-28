@@ -135,6 +135,8 @@
           [config-model-name (-> session-config? (or/c #f string?))]
           [config-session-dir (-> session-config? (or/c #f path-string?))]
           [config-project-dir (-> session-config? (or/c #f path-string?))]
+          [config-repo-root (-> session-config? (or/c #f path-string?))]
+          [config-planning-root (-> session-config? (or/c #f path-string?))]
           [config-home-dir (-> session-config? (or/c #f path-string?))]
           [config-config-path (-> session-config? (or/c #f path-string?))]
           [config-system-instructions (-> session-config? list?)]
@@ -216,6 +218,12 @@
   (hash-ref (session-config-data c) 'session-dir #f))
 (define (config-project-dir c)
   (hash-ref (session-config-data c) 'project-dir #f))
+(define (config-repo-root c)
+  (or (hash-ref (session-config-data c) 'repo-root #f) (config-project-dir c)))
+(define (config-planning-root c)
+  (or (hash-ref (session-config-data c) 'planning-root #f)
+      (let ([project-dir (config-project-dir c)])
+        (and project-dir (build-path project-dir ".planning")))))
 (define (config-home-dir c)
   (hash-ref (session-config-data c) 'home-dir #f))
 (define (config-config-path c)
@@ -297,6 +305,8 @@
                model-name
                session-dir
                project-dir
+               repo-root
+               planning-root
                home-dir
                config-path
                system-instructions

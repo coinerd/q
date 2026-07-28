@@ -149,6 +149,23 @@
 
 ;; ── Smart accessor defaults ─────────────────────────────────────
 
+(test-case "config repo/planning roots prefer explicit values"
+  (define c
+    (hash->session-config (hasheq 'project-dir
+                                  "/workspace"
+                                  'repo-root
+                                  "/workspace/repo"
+                                  'planning-root
+                                  "/workspace/.planning")))
+  (check-equal? (config-repo-root c) "/workspace/repo")
+  (check-equal? (config-planning-root c) "/workspace/.planning"))
+
+(test-case "config repo/planning roots fall back from project-dir"
+  (define c (hash->session-config (hasheq 'project-dir "/workspace")))
+  (check-equal? (config-repo-root c) "/workspace")
+  (check-equal? (simplify-path (config-planning-root c))
+                (simplify-path (build-path "/workspace" ".planning"))))
+
 (test-case "config-system-instructions defaults to ()"
   (define c (hash->session-config (hasheq)))
   (check-equal? (config-system-instructions c) '()))

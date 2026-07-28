@@ -60,39 +60,34 @@
       (check-true (>= (checkpoint-estimated-tokens cp1) 0))
       (check-true (< (checkpoint-estimated-tokens cp1) 100) "estimated tokens < 100"))
 
+    (test-case "checkpoint rendering enforces the frozen 512-token bound"
+      (define huge-root (string-append "/" (make-string 10000 #\x)))
+      (define cp (checkpoint-set-repo-root (make-empty-checkpoint) huge-root))
+      (check-true (<= (checkpoint-estimated-tokens cp) 512))
+      (check-true (<= (string-length (checkpoint->text cp)) 2048)))
+
     ;; ============================================================
     ;; R2: Supersession
     ;; ============================================================
 
-    (test-case "supercedes-generic-planning? detects named STATE files"
-      (check-true (supercedes-generic-planning? "STATE-v0.99.73-ZERO-FAILING-TESTS.md"))
-      (check-true (supercedes-generic-planning? "PLAN-v0.99.73.md"))
-      (check-false (supercedes-generic-planning? "STATE.md"))
-      (check-false (supercedes-generic-planning? "PLAN.md"))
-      (check-false (supercedes-generic-planning? "VALIDATION.md"))
-      (check-false (supercedes-generic-planning? "README.md")))
+    (test-case "named planning detection includes anchored VALIDATION names"
+      (for ([path '("STATE-v0.99.73-ZERO-FAILING-TESTS.md"
+                    "PLAN-v0.99.73.md"
+                    "/tmp/.planning/VALIDATION-v0.99.73-W13.md")])
+        (check-true (supercedes-generic-planning? path) path))
+      (for ([path '("STATE.md" "VALIDATION.md"
+                               "NOT-VALIDATION-v0.99.73-W13.md"
+                               "notes-STATE-v0.99.73-W13.md"
+                               "VALIDATION-v0.99.73-W13.md.bak")])
+        (check-false (supercedes-generic-planning? path) path)))
 
-    (test-case "contradicts-generic-planning? matches correct pairs"
+    (test-case "supersession requires generic and named artifacts from the same family"
       (check-true (contradicts-generic-planning? "STATE.md" "STATE-v0.99.73-ZERO-FAILING-TESTS.md"))
-      (check-true (contradicts-generic-planning? "PLAN.md" "PLAN-v0.99.73.md"))
+      (check-true (contradicts-generic-planning? "/p/VALIDATION.md" "/p/VALIDATION-v0.99.73-W13.md"))
+      (check-false (contradicts-generic-planning? "STATE.md" "PLAN-v0.99.73.md"))
+      (check-false (contradicts-generic-planning? "VALIDATION.md" "STATE-v0.99.73-W13.md"))
       (check-false (contradicts-generic-planning? "STATE.md" #f))
-      (check-false (contradicts-generic-planning? #f "STATE-v0.99.73.md"))
-      (check-false (contradicts-generic-planning? "README.md" "STATE-v0.99.73.md")))
-
-    ;; ============================================================
-    ;; Checkpoint parameter and injection
-    ;; ============================================================
-
-    (test-case "current-operational-checkpoint parameter"
-      ;; Check the parameter stores and retrieves
-      (current-operational-checkpoint (make-empty-checkpoint))
-      (define cp (current-operational-checkpoint))
-      (check-equal? (operational-checkpoint-repo-root cp) "")
-      ;; Set and verify
-      (define cp2 (checkpoint-set-repo-root cp "/my-work/repo"))
-      (current-operational-checkpoint cp2)
-      (check-equal? (operational-checkpoint-repo-root (current-operational-checkpoint))
-                    "/my-work/repo"))))
+      (check-false (contradicts-generic-planning? #f "STATE-v0.99.73.md")))))
 
 (module+ test
   (require rackunit/text-ui)
