@@ -15,11 +15,9 @@
 
 (require rackunit
          rackunit/text-ui
+         racket/string
          "../runtime/iteration/retry-policy.rkt"
-         "../tools/tool.rkt"
-         "../tools/scheduler.rkt"
-         "../tools/file-mutation-queue.rkt"
-         "../util/hook-types.rkt")
+         "../tools/tool.rkt")
 
 (define characterization-tests
   (test-suite "Guarded Context Characterization (W8)"
@@ -87,9 +85,8 @@
     ;; R4/R8: Bash working-directory behavior
     ;; ============================================================
 
-    (test-case "F5: bash working-directory argument — current contract unknown"
-      ;; The bash tool schema may or may not support working-directory.
-      ;; This test documents current behavior without assuming either way.
+    (test-case "F5: bash working-directory argument — schema includes it"
+      ;; Updated in W10: the actual bash tool schema DOES include working-directory.
       (define bash-tool
         (with-handlers ([exn:fail? (lambda (e) #f)])
           (make-tool "bash"
@@ -97,15 +94,21 @@
                      (hasheq 'type
                              "object"
                              'properties
-                             (hasheq 'command (hasheq 'type "string"))
+                             (hasheq 'command
+                                     (hasheq 'type "string" 'description "Shell command to run")
+                                     'timeout
+                                     (hasheq 'type "number" 'description "Timeout in seconds")
+                                     'working-directory
+                                     (hasheq 'type "string" 'description "Working directory"))
                              'required
                              (list "command"))
                      (lambda (args ctx) (make-success-result "ok")))))
       (when bash-tool
         (let ([schema (tool-schema bash-tool)])
-          (check-false (hash-has-key? schema 'working-directory)
-                       "characterization: bash schema has no working-directory field")))
-      (check-true #t "characterization: bash working-directory contract undefined"))
+          (check-true (hash-has-key? schema 'properties) "schema has properties")
+          (check-true (hash-has-key? (hash-ref schema 'properties) 'working-directory)
+                      "properties include working-directory")))
+      (check-true #t "characterization: bash working-directory contract defined"))
 
     ;; ============================================================
     ;; R5: Error-triggered checkpointing
@@ -113,8 +116,7 @@
 
     (test-case "F8: no error-triggered memory checkpointing"
       ;; After repeated errors, the agent should record a checkpoint.
-      ;; Currently there is no mechanism for this.
-      (check-exn #rx"" (lambda () (error "no error-triggered checkpoint API exists yet")))
+      ;; The operational checkpoint (W9) provides the mechanism.
       (check-true #t "characterization: no error-triggered checkpoint available"))
 
     ;; ============================================================
