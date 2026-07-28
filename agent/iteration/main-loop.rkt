@@ -41,12 +41,17 @@
                   iteration-decision-payload/c
                   reason-payload/c)
          (only-in "../../runtime/turn-orchestrator.rkt" run-provider-turn build-assembled-context)
-         (only-in "../../runtime/working-set.rkt" working-set? make-working-set)
+         (only-in "../../runtime/working-set.rkt"
+                  working-set?
+                  make-working-set
+                  compute-working-set-budget)
          (only-in "../../util/cancellation.rkt" cancellation-token?)
          (only-in "../../runtime/session/session-types.rkt" agent-session?)
          (only-in "../../runtime/session/session-config.rkt"
                   session-config?
                   hash->session-config
+                  config-token-budget-threshold
+                  config-max-context-tokens
                   resolve-max-iterations-hard)
          (only-in "../../llm/provider.rkt" provider?)
          (only-in "../../runtime/layer-adapters.rkt" tool-registry? extension-registry?)
@@ -105,13 +110,13 @@
                                                 string?
                                                 exact-nonnegative-integer?)
                              (#:cancellation-token (or/c cancellation-token? #f)
-                              #:config session-config?
-                              #:queue (or/c queue? #f)
-                              #:injected-box (or/c box? #f)
-                              #:shutdown-check (or/c procedure? #f)
-                              #:force-shutdown-check (or/c procedure? #f)
-                              #:working-set (or/c working-set? #f)
-                              #:session (or/c agent-session? #f))
+                                                   #:config session-config?
+                                                   #:queue (or/c queue? #f)
+                                                   #:injected-box (or/c box? #f)
+                                                   #:shutdown-check (or/c procedure? #f)
+                                                   #:force-shutdown-check (or/c procedure? #f)
+                                                   #:working-set (or/c working-set? #f)
+                                                   #:session (or/c agent-session? #f))
                              loop-result?)]
                        [run-iteration-loop/v2 (-> loop-config? loop-result?)]))
 
@@ -144,7 +149,10 @@
         [sess (loop-config-session cfg)])
     (define config config-raw)
     (define max-iterations-hard (resolve-max-iterations-hard config max-iterations))
-    (define ws (or initial-ws (make-working-set)))
+    (define context-budget
+      (or (config-token-budget-threshold config) (config-max-context-tokens config)))
+    (define ws
+      (or initial-ws (make-working-set #:max-tokens (compute-working-set-budget context-budget))))
     (define agent-start-payload
       (hasheq 'session-id
               session-id

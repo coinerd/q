@@ -47,6 +47,7 @@
                   make-tool-call
                   tool-call-id
                   tool-call-name
+                  tool-call-arguments
                   tool-result-content)
          (only-in "../util/content/content-parts.rkt"
                   tool-call-part-id
@@ -105,7 +106,19 @@
                               (or/c cancellation-token? #f) ; token
                               session-config?) ; config
                              (#:permission-config (or/c permission-config? #f))
-                             (listof message?))]))
+                             (listof message?))]
+                       [handle-tool-calls-pending/outcome
+                        (->* ((listof message?) list?
+                                                (or/c extension-registry? #f)
+                                                (or/c tool-registry? #f)
+                                                event-bus?
+                                                string?
+                                                (or/c path-string? path?)
+                                                (or/c cancellation-token? #f)
+                                                session-config?)
+                             (#:permission-config (or/c permission-config? #f))
+                             tool-batch-outcome?)]))
+(provide (struct-out tool-batch-outcome))
 ;; Pure helpers (W2 #4192)
 (provide classify-tool-results
          build-blocked-tool-results
@@ -169,6 +182,12 @@
 ;; Exported functions
 ;; ============================================================
 
+;; The structured result keeps the complete next-iteration context separate
+;; from just the calls/results produced by this batch.  This prevents callers
+;; from mistaking historical tool messages in the context for current results.
+(struct tool-batch-outcome (updated-context effective-current-calls current-result-messages)
+  #:transparent)
+
 ;; v0.31.5 W1: Pure function for tool-call actions
 (struct tool-call-actions (calls-to-run blocked? final-calls))
 
@@ -200,20 +219,41 @@
                     (tool-call-part-name part)
                     (ensure-hash-args (tool-call-part-arguments part)))))
 
+;; True for read results whose contents are durable planning artifacts.
+;; planning-read addresses .planning indirectly by artifact name, while the
+;; ordinary read tool must name a path within a .planning directory.
+(define (planning-read-call? tc)
+  (define name (tool-call-name tc))
+  (define args (tool-call-arguments tc))
+  (define raw-path (and (hash? args) (or (hash-ref args 'path #f) (hash-ref args "path" #f))))
+  (define path-text
+    (cond
+      [(path? raw-path) (path->string raw-path)]
+      [(string? raw-path) raw-path]
+      [else #f]))
+  (or (equal? name "planning-read")
+      (and (equal? name "read")
+           path-text
+           (regexp-match? #px"(^|[/\\\\])\\.planning([/\\\\]|$)" path-text))))
+
 ;; Create tool-result messages from scheduler results.
 (define (make-tool-result-messages tool-calls results parent-msg-id)
   (for/list ([tc (in-list tool-calls)]
              [tr (in-list results)])
     (define msg-id (generate-id))
+    (define error? (tool-result-is-error? tr))
+    (define base-meta (hasheq 'toolCallId (tool-call-id tc) 'isError error?))
+    (define meta
+      (if (and (not error?) (planning-read-call? tc))
+          (hash-set* base-meta 'gsd-pin #t 'gsd-pin-reason "successful planning artifact read")
+          base-meta))
     (make-message msg-id
                   parent-msg-id
                   'tool
                   'tool-result
-                  (list (make-tool-result-part (tool-call-id tc)
-                                               (tool-result-content tr)
-                                               (tool-result-is-error? tr)))
+                  (list (make-tool-result-part (tool-call-id tc) (tool-result-content tr) error?))
                   (now-seconds)
-                  (hasheq 'toolCallId (tool-call-id tc) 'isError (tool-result-is-error? tr)))))
+                  meta)))
 
 ;; Handle tool-calls-pending: extract calls, run through scheduler, emit events,
 ;; and return updated context for the next loop iteration.
@@ -262,9 +302,13 @@
     (cond
       [(not reg) (scheduler-result '() (hasheq))]
       [else
+       ;; The coordinator already dispatched the batch-level 'tool-call hook in
+       ;; preparation. Suppress the scheduler's per-call duplicate while still
+       ;; forwarding execution lifecycle hooks.
        (let ([hook-dispatcher-fn (and ext-reg
                                       (lambda (hook-point payload)
-                                        (dispatch-hooks hook-point payload ext-reg)))])
+                                        (and (not (eq? hook-point 'tool-call))
+                                             (dispatch-hooks hook-point payload ext-reg))))])
          (run-tool-batch tool-calls-to-run
                          reg
                          #:hook-dispatcher hook-dispatcher-fn
@@ -377,16 +421,16 @@
   (filter message? tool-result-msgs-amended))
 
 ;; Orchestrator: ties the three phases together.
-(define (handle-tool-calls-pending new-msgs
-                                   ctx-with-steering
-                                   ext-reg
-                                   reg
-                                   bus
-                                   session-id
-                                   log-path
-                                   token
-                                   config-raw
-                                   #:permission-config [perm-cfg #f])
+(define (handle-tool-calls-pending/outcome new-msgs
+                                           ctx-with-steering
+                                           ext-reg
+                                           reg
+                                           bus
+                                           session-id
+                                           log-path
+                                           token
+                                           config-raw
+                                           #:permission-config [perm-cfg #f])
   (define config
     (if (session-config? config-raw)
         config-raw
@@ -439,8 +483,38 @@
                                      'has-payload
                                      (positive? (hash-count (typed-tool-outcome-payload
                                                              tool-outcome))))))))
-  ;; Append validated tool results to log
+  ;; Append validated tool results to log.  Persistence remains owned here;
+  ;; the compatibility wrapper below only projects the outcome value.
   (append-entries! log-path validated-msgs)
-  ;; Return updated context for next iteration
-  (append ctx-with-steering new-msgs validated-msgs))
+  (define effective-current-calls
+    (if tool-call-blocked?
+        (tool-call-actions-final-calls actions)
+        tool-calls-to-run))
+  (tool-batch-outcome (append ctx-with-steering new-msgs validated-msgs)
+                      effective-current-calls
+                      validated-msgs))
+
+;; Backward-compatible API: preserve the historical list return value without
+;; executing, persisting, or emitting anything a second time.
+(define (handle-tool-calls-pending new-msgs
+                                   ctx-with-steering
+                                   ext-reg
+                                   reg
+                                   bus
+                                   session-id
+                                   log-path
+                                   token
+                                   config-raw
+                                   #:permission-config [perm-cfg #f])
+  (tool-batch-outcome-updated-context (handle-tool-calls-pending/outcome new-msgs
+                                                                         ctx-with-steering
+                                                                         ext-reg
+                                                                         reg
+                                                                         bus
+                                                                         session-id
+                                                                         log-path
+                                                                         token
+                                                                         config-raw
+                                                                         #:permission-config
+                                                                         perm-cfg)))
 ;; v0.31.5 W1: placeholder for pure function extraction

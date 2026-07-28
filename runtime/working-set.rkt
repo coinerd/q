@@ -16,7 +16,17 @@
 
 (require racket/contract
          racket/list
-         (only-in "../util/error/errors.rkt" raise-session-error))
+         (only-in "../util/error/errors.rkt" raise-session-error)
+         (only-in "../util/tool/tool-types.rkt"
+                  tool-call?
+                  tool-call-id
+                  tool-call-name
+                  tool-call-arguments)
+         (only-in "../util/message/message.rkt" message? message-content message-meta-safe)
+         (only-in "../util/content/content-parts.rkt"
+                  tool-result-part?
+                  tool-result-part-tool-call-id
+                  tool-result-part-is-error?))
 
 ;; ────────────────────────────────────────────────────────────
 ;; Data structures
@@ -46,6 +56,9 @@
 ;; ────────────────────────────────────────────────────────────
 ;; Constructor
 ;; ────────────────────────────────────────────────────────────
+
+(define (compute-working-set-budget context-budget)
+  (min 8192 (quotient (* context-budget 3) 10)))
 
 (define (make-working-set #:max-entries [max-entries 20] #:max-tokens [max-tokens 8192])
   (working-set '() max-entries max-tokens))
@@ -134,35 +147,97 @@
 ;; Tool call processing
 ;; ────────────────────────────────────────────────────────────
 
-;; Process a batch of tool calls and their result messages.
-;; Each tool-call is a hash with 'name and 'arguments keys.
-;; Each result-msg is a message struct (or any value with extractable id).
-;; msg-id-fn: function to extract message-id from a result-msg
-;; token-fn: function to estimate tokens from a result-msg
-;; Returns ws (for convenience)
-(define (working-set-update! ws tool-calls result-msgs msg-id-fn token-fn)
+;; Process a batch of tool calls and their result messages. Calls may be
+;; canonical tool-call structs or legacy hashes. Protocol-aware batches are
+;; joined by tool-call ID, so scheduler completion order cannot associate a
+;; read result with the wrong path.
+(define (hash-ref/keys h keys [default #f])
+  (or (for/or ([key (in-list keys)])
+        (hash-ref h key #f))
+      default))
+
+(define (call-fields tc)
+  (cond
+    [(tool-call? tc) (values (tool-call-id tc) (tool-call-name tc) (tool-call-arguments tc))]
+    [(hash? tc)
+     (values (hash-ref/keys tc '(id tool-call-id toolCallId "id" "tool-call-id" "toolCallId"))
+             (hash-ref/keys tc '(name "name") "")
+             (hash-ref/keys tc '(arguments "arguments") (hasheq)))]
+    [else (values #f "" (hasheq))]))
+
+;; Return a result's protocol correlation ID and error status. Plain legacy
+;; messages deliberately return no ID and are eligible for positional pairing.
+(define (result-protocol-fields rm)
+  (cond
+    [(message? rm)
+     (define part
+       (for/or ([p (in-list (message-content rm))]
+                #:when (tool-result-part? p))
+         p))
+     (define meta (message-meta-safe rm))
+     (define protocol-id
+       (or (and part (tool-result-part-tool-call-id part))
+           (hash-ref/keys meta '(toolCallId tool-call-id "toolCallId" "tool-call-id"))))
+     (define error?
+       (or (and part (tool-result-part-is-error? part))
+           (hash-ref/keys meta '(isError is-error? "isError" "is-error?") #f)))
+     (values protocol-id (and error? #t))]
+    [else (values #f #f)]))
+
+(define (working-set-update!/actions ws tool-calls result-msgs msg-id-fn token-fn)
+  (define actions '())
+  (define result-by-call-id
+    (for/fold ([by-id (hash)]) ([rm (in-list result-msgs)])
+      (define-values (result-id _error?) (result-protocol-fields rm))
+      (if result-id
+          (hash-set by-id result-id rm)
+          by-id)))
+  ;; Hash-only legacy callers predate call IDs. Preserve their positional API;
+  ;; once any call carries an ID, only ID-less results receive that fallback.
+  (define protocol-call-ids?
+    (for/or ([tc (in-list tool-calls)])
+      (define-values (call-id _name _args) (call-fields tc))
+      call-id))
   (for ([tc (in-list tool-calls)]
-        [rm (in-list result-msgs)])
-    (define name
-      (if (hash? tc)
-          (hash-ref tc 'name "")
-          ""))
-    (define args
-      (if (hash? tc)
-          (hash-ref tc 'arguments (hasheq))
-          (hasheq)))
+        [index (in-naturals)])
+    (define-values (call-id name args) (call-fields tc))
     (define path
       (if (hash? args)
-          (hash-ref args 'path "")
+          (hash-ref/keys args '(path "path") "")
           ""))
+    (define positional-rm (and (< index (length result-msgs)) (list-ref result-msgs index)))
+    (define-values (positional-id _positional-error?)
+      (if positional-rm
+          (result-protocol-fields positional-rm)
+          (values #f #f)))
+    (define rm
+      (or (and call-id (hash-ref result-by-call-id call-id #f))
+          (and positional-rm (or (not protocol-call-ids?) (not positional-id)) positional-rm)))
+    (define-values (_result-id result-error?)
+      (if rm
+          (result-protocol-fields rm)
+          (values #f #f)))
     (cond
-      [(equal? name "read") (working-set-add! ws path (msg-id-fn rm) (token-fn rm))]
-      [(or (equal? name "edit") (equal? name "write"))
+      ;; Failed reads neither add nor supersede an existing successful entry.
+      [(and (equal? name "read") rm (not result-error?))
+       (set! actions (append actions (working-set-add! ws path (msg-id-fn rm) (token-fn rm))))]
+      [(and rm (not result-error?) (or (equal? name "edit") (equal? name "write")))
        (when (and (string? path) (positive? (string-length path)))
          (working-set-remove! ws path))]
-      ;; bash and other tools: no change
+      ;; bash, failed/unmatched mutations, and other tools: no change
       [else (void)]))
+  actions)
+
+(define (working-set-update! ws tool-calls result-msgs msg-id-fn token-fn)
+  (working-set-update!/actions ws tool-calls result-msgs msg-id-fn token-fn)
   ws)
+
+;; Tighten active state to the frozen provider-bound context share.
+(define (working-set-enforce-context-share! ws assembled-context-tokens)
+  (set-working-set-max-tokens! ws
+                               (min (working-set-max-tokens ws)
+                                    (compute-working-set-budget assembled-context-tokens)))
+  (working-set-enforce-budget! ws))
 
 ;; ────────────────────────────────────────────────────────────
 ;; Message resolution
@@ -261,6 +336,7 @@
 
 (provide (contract-out
           [working-set? (-> any/c boolean?)]
+          [compute-working-set-budget (-> exact-nonnegative-integer? exact-nonnegative-integer?)]
           [make-working-set
            (->* ()
                 (#:max-entries exact-nonnegative-integer? #:max-tokens exact-nonnegative-integer?)
@@ -274,6 +350,10 @@
           [working-set-token-count (-> working-set? exact-nonnegative-integer?)]
           [working-set-reset! (-> working-set? void?)]
           [working-set-update! (-> working-set? list? list? procedure? procedure? working-set?)]
+          [working-set-update!/actions
+           (-> working-set? list? list? procedure? procedure? (listof ws-entry?))]
+          [working-set-enforce-context-share!
+           (-> working-set? exact-nonnegative-integer? (listof ws-entry?))]
           [working-set-resolve-messages (-> working-set? list? procedure? list?)]
           [ws-entry
            (-> string? any/c exact-nonnegative-integer? exact-nonnegative-integer? symbol? ws-entry?)]

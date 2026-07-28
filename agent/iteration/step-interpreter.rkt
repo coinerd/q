@@ -37,16 +37,18 @@
                   loop-counters-iteration
                   loop-counters-consecutive-tool-count
                   loop-counters-recent-tool-names)
-         (only-in "../../util/message/message.rkt" message? message-role message-id message-content)
+         (only-in "../../util/message/message.rkt" message? message-id message-content)
          (only-in "../../util/content/content-parts.rkt"
                   tool-result-part?
                   tool-result-part-tool-call-id
                   tool-result-part-content)
-         (only-in "../../util/tool/tool-types.rkt" tool-call-name tool-call-arguments tool-call-id)
+         (only-in "../../util/tool/tool-types.rkt" tool-call-name tool-call-id)
          (only-in "../../runtime/layer-adapters.rkt" permission-config?)
          (only-in "../../runtime/tool-coordinator.rkt"
-                  handle-tool-calls-pending
-                  extract-tool-calls-from-messages)
+                  handle-tool-calls-pending/outcome
+                  tool-batch-outcome-updated-context
+                  tool-batch-outcome-effective-current-calls
+                  tool-batch-outcome-current-result-messages)
          (only-in "../../runtime/runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
          (only-in "../../runtime/iteration/effect-executor.rkt"
                   step-effect:append-entries
@@ -68,8 +70,10 @@
          (only-in "../../runtime/session/session-store.rkt" append-entries!)
          (only-in "../../runtime/session/session-config.rkt" config-max-context-tokens)
          (only-in "../../runtime/working-set.rkt"
-                  working-set-update!
+                  working-set-update!/actions
                   ws-entry-path
+                  ws-entry-token-estimate
+                  ws-entry-budget-action
                   working-set-entries
                   working-set-entry-count
                   working-set-token-count)
@@ -133,21 +137,21 @@
 ;; ============================================================
 
 (define (execute-pending-tool-calls new-msgs infra config ws)
-  (define updated-ctx
-    (handle-tool-calls-pending new-msgs
-                               (loop-infra-ctx infra)
-                               (loop-infra-ext-reg infra)
-                               (loop-infra-reg infra)
-                               (loop-infra-bus infra)
-                               (loop-infra-session-id infra)
-                               (loop-infra-log-path infra)
-                               (loop-infra-token infra)
-                               config))
-  (define current-tool-calls (extract-tool-calls-from-messages new-msgs))
-  (define tool-result-msgs (filter (lambda (m) (eq? (message-role m) 'tool)) updated-ctx))
-  (define current-tool-calls-hashes
-    (for/list ([tc (in-list current-tool-calls)])
-      (hasheq 'name (tool-call-name tc) 'arguments (tool-call-arguments tc))))
+  (define outcome
+    (handle-tool-calls-pending/outcome new-msgs
+                                       (loop-infra-ctx infra)
+                                       (loop-infra-ext-reg infra)
+                                       (loop-infra-reg infra)
+                                       (loop-infra-bus infra)
+                                       (loop-infra-session-id infra)
+                                       (loop-infra-log-path infra)
+                                       (loop-infra-token infra)
+                                       config))
+  (define updated-ctx (tool-batch-outcome-updated-context outcome))
+  ;; Only this batch's effective calls and results may feed ephemeral state.
+  ;; updated-ctx intentionally also contains history for the next model turn.
+  (define current-tool-calls (tool-batch-outcome-effective-current-calls outcome))
+  (define tool-result-msgs (tool-batch-outcome-current-result-messages outcome))
   (define read-spiral-paths
     (for/list ([tc (in-list current-tool-calls)]
                #:when (equal? (tool-call-name tc) "read"))
@@ -159,11 +163,12 @@
                          (loop-infra-session-id infra)
                          "working-set.read-spiral-detected"
                          (hasheq 'paths valid-spiral-paths 'count (length valid-spiral-paths))))
-  (working-set-update! ws
-                       current-tool-calls-hashes
-                       tool-result-msgs
-                       message-id
-                       estimate-message-tokens)
+  (define budget-actions
+    (working-set-update!/actions ws
+                                 current-tool-calls
+                                 tool-result-msgs
+                                 message-id
+                                 estimate-message-tokens))
   (emit-session-event! (loop-infra-bus infra)
                        (loop-infra-session-id infra)
                        "working-set.update"
@@ -172,7 +177,15 @@
                                'token-count
                                (working-set-token-count ws)
                                'paths
-                               (map ws-entry-path (working-set-entries ws))))
+                               (map ws-entry-path (working-set-entries ws))
+                               'budget-actions
+                               (for/list ([entry (in-list budget-actions)])
+                                 (hasheq 'path
+                                         (ws-entry-path entry)
+                                         'action
+                                         (ws-entry-budget-action entry)
+                                         'tokens
+                                         (ws-entry-token-estimate entry)))))
   ;; v0.96.13 W3: Post-tool reflection — emit event if large results detected
   (when (current-reflection-prompt-enabled)
     (define large-results
