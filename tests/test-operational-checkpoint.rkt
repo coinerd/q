@@ -28,14 +28,14 @@
 
     (test-case "checkpoint->text produces compact output"
       (define cp (make-empty-checkpoint))
-      (define cp2 (checkpoint-set-repo-root cp "/home/user/q"))
-      (define cp3 (checkpoint-set-planning-root cp2 "/home/user/.planning"))
+      (define cp2 (checkpoint-set-repo-root cp "/fake/repo/q"))
+      (define cp3 (checkpoint-set-planning-root cp2 "/fake/repo/.planning"))
       (define cp4 (checkpoint-set-milestone cp3 "v0.99.73"))
       (define cp5 (checkpoint-set-wave cp4 "W9"))
       (define cp6 (checkpoint-set-dirty-files cp5 '("README.md")))
       (define text (checkpoint->text cp6))
-      (check-true (string-contains? text "/home/user/q") "contains repo root")
-      (check-true (string-contains? text "/home/user/.planning") "contains planning root")
+      (check-true (string-contains? text "/fake/repo/q") "contains repo root")
+      (check-true (string-contains? text "/fake/repo/.planning") "contains planning root")
       (check-true (string-contains? text "v0.99.73") "contains milestone")
       (check-true (string-contains? text "W9") "contains wave")
       ;; Should be compact (~200-400 chars)
@@ -50,7 +50,7 @@
       (define cp2 (checkpoint-set-error cp1 "file-not-found"))
       (check-equal? (operational-checkpoint-last-error cp2) "file-not-found")
       (check-equal? (operational-checkpoint-error-count cp2) 2)
-      (define cp3 (checkpoint-set-repo-root cp2 "/correct/path"))
+      (define cp3 (checkpoint-set-repo-root cp2 "/fixed/path"))
       (check-false (operational-checkpoint-last-error cp3) "repo-root reset clears error")
       (check-equal? (operational-checkpoint-error-count cp3) 0))
 
@@ -89,9 +89,10 @@
       (define cp (current-operational-checkpoint))
       (check-equal? (operational-checkpoint-repo-root cp) "")
       ;; Set and verify
-      (define cp2 (checkpoint-set-repo-root cp "/my/repo"))
+      (define cp2 (checkpoint-set-repo-root cp "/my-work/repo"))
       (current-operational-checkpoint cp2)
-      (check-equal? (operational-checkpoint-repo-root (current-operational-checkpoint)) "/my/repo"))))
+      (check-equal? (operational-checkpoint-repo-root (current-operational-checkpoint))
+                    "/my-work/repo"))))
 
 (module+ test
   (require rackunit/text-ui)

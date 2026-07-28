@@ -24,19 +24,19 @@
     (test-case "checkpoint parameter stores and retrieves"
       (current-operational-checkpoint (make-empty-checkpoint))
       (define cp (make-empty-checkpoint))
-      (define cp1 (checkpoint-set-repo-root cp "/home/user/q"))
-      (define cp2 (checkpoint-set-planning-root cp1 "/home/user/.planning"))
+      (define cp1 (checkpoint-set-repo-root cp "/test-area/q"))
+      (define cp2 (checkpoint-set-planning-root cp1 "/test-area/.planning"))
       (define cp3 (checkpoint-set-milestone cp2 "v0.99.73"))
       (define cp4 (checkpoint-set-wave cp3 "W9"))
       (current-operational-checkpoint cp4)
       (check-equal? (operational-checkpoint-repo-root (current-operational-checkpoint))
-                    "/home/user/q")
+                    "/test-area/q")
       (check-equal? (operational-checkpoint-active-milestone (current-operational-checkpoint))
                     "v0.99.73"))
 
     (test-case "inject-checkpoint-message prepends when checkpoint is valid"
       (define cp (make-empty-checkpoint))
-      (define cp1 (checkpoint-set-repo-root cp "/home/user/q"))
+      (define cp1 (checkpoint-set-repo-root cp "/test-area/q"))
       (define messages
         (list (hash 'role "user" 'content "hello") (hash 'role "assistant" 'content "world")))
       (define injected (inject-checkpoint-message cp1 messages))
@@ -45,7 +45,7 @@
       (check-equal? (hash-ref (car injected) 'kind) "checkpoint")
       (define content-parts (hash-ref (car injected) 'content))
       (check-true (list? content-parts))
-      (check-true (regexp-match? #px"/home/user/q" (format "~a" content-parts))))
+      (check-true (regexp-match? #px"/test-area/q" (format "~a" content-parts))))
 
     (test-case "inject-checkpoint-message returns unchanged for empty checkpoint"
       (define messages (list (hash 'role "user" 'content "hello")))
