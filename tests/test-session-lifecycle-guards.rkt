@@ -35,7 +35,10 @@
   (define bus (make-event-bus))
   (define reg (make-tool-registry))
   (register-tool! reg
-                  (make-tool "read" "Read" (hasheq) (lambda (args ctx) (make-success-result "ok"))))
+                  (make-tool "read"
+                             "Read"
+                             (hasheq 'type "object" 'properties (hasheq) 'required (list))
+                             (lambda (args ctx) (make-success-result "ok"))))
   (define prov (make-simple-mock-provider "Response"))
   (hasheq 'provider
           prov
@@ -151,6 +154,10 @@
                  (lambda () (run-prompt! sess "should fail"))
                  "run-prompt! fails after session closed")
       (cleanup-dir! (hash-ref cfg 'session-dir)))))
+
+(module+ test
+  (require rackunit/text-ui)
+  (run-tests session-lifecycle-guard-tests))
 
 (module+ main
   (run-tests session-lifecycle-guard-tests))
