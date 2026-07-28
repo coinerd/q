@@ -136,16 +136,19 @@
       (define ctx
         (list (make-message "m-1" #f 'user 'message (list (make-text-part "hi")) 1000 '#hash())))
 
-      ;; The hook exception should propagate (unhandled) — this documents
-      ;; current behavior: hook failures are not caught by the loop
-      (check-exn exn:fail?
-                 (lambda ()
-                   (run-agent-turn ctx
-                                   prov
-                                   bus
-                                   #:session-id "s1"
-                                   #:turn-id "t1"
-                                   #:hook-dispatcher failing-hook-dispatcher))))))
+      ;; Hook failures are isolated by the loop — the failing hook dispatcher
+      ;; raises, but the effect executor returns the error as a loop-result
+      ;; rather than propagating the exception.
+      (define result
+        (run-agent-turn ctx
+                        prov
+                        bus
+                        #:session-id "s1"
+                        #:turn-id "t1"
+                        #:hook-dispatcher failing-hook-dispatcher))
+      (check-equal? (loop-result-termination-reason result)
+                    'completed
+                    "hook exception should be isolated, turn complete"))))
 
 ;; ============================================================
 ;; v0.12.3 Wave 0.1: Stream error boundary + chunk limit

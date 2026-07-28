@@ -67,16 +67,23 @@
        (current-turn-fsm-state (next-turn-state (effect:update-fsm-from-state eff)
                                                 (effect:update-fsm-event eff)))]
       [(? effect:dispatch-hook?)
-       ;; Execute hook dispatch and capture the return value
-       (define hook-result
-         (when hook-disp
-           (hook-disp (effect:dispatch-hook-hook-point eff) (effect:dispatch-hook-payload eff))))
-       ;; Overwrite result-box so execute-effects/return returns hook result
-       (when hook-result
-         (set-box! result-box hook-result))]
+       ;; Execute hook dispatch and capture the return value.
+       ;; Only set the box when hook-disp is present and returns a value.
+       ;; Note: (void) is truthy in Racket, so we must explicitly guard with hook-disp.
+       (when hook-disp
+         (define hook-result
+           (hook-disp (effect:dispatch-hook-hook-point eff) (effect:dispatch-hook-payload eff)))
+         (when hook-result
+           (set-box! result-box hook-result)))]
       [(? effect:build-result?)
+       (define bs (effect:build-result-state eff))
+       (define messages
+         (cond
+           [(loop-state? bs) (loop-state-messages bs)]
+           [(list? bs) bs]
+           [else '()]))
        (set-box! result-box
-                 (loop-result (loop-state-messages (effect:build-result-state eff))
+                 (loop-result messages
                               (effect:build-result-result-type eff)
                               (or (effect:build-result-metadata eff) (hasheq))))]
       [(? effect:cancel?)
