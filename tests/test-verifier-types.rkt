@@ -20,7 +20,7 @@
       (check-equal? VERIFIER-VERDICTS '(approve reject escalate)))
 
     (test-case "VERIFIER-RISK-LEVELS has correct values"
-      (check-equal? VERIFIER-RISK-LEVELS '(low medium high)))
+      (check-equal? VERIFIER-RISK-LEVELS '(low medium high critical)))
 
     ;; ── Predicates ──
 
@@ -37,10 +37,10 @@
     (test-case "verifier-risk-level? accepts valid levels"
       (check-true (verifier-risk-level? 'low))
       (check-true (verifier-risk-level? 'medium))
-      (check-true (verifier-risk-level? 'high)))
+      (check-true (verifier-risk-level? 'high))
+      (check-true (verifier-risk-level? 'critical)))
 
     (test-case "verifier-risk-level? rejects invalid values"
-      (check-false (verifier-risk-level? 'critical))
       (check-false (verifier-risk-level? "high"))
       (check-false (verifier-risk-level? #f)))
 
@@ -134,7 +134,7 @@
                 'reason
                 "x"
                 'risk_level
-                "critical"
+                "invalid"
                 'requires_human
                 #f
                 'artifact_refs
@@ -257,6 +257,6 @@
       (check-exn exn:fail:contract? (lambda () (make-approve-decision 123))))
 
     (test-case "make-approve-decision rejects invalid risk-level"
-      (check-exn exn:fail:contract? (lambda () (make-approve-decision "x" #:risk-level 'critical))))))
+      (check-exn exn:fail:contract? (lambda () (make-approve-decision "x" #:risk-level 'invalid))))))
 
 (run-tests suite)
