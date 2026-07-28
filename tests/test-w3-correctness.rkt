@@ -25,14 +25,18 @@
 
     ;; ── M2: externalizable? defaults to #f ──
     (test-case "M2: make-tool defaults externalizable? to #f"
-      (define t (make-tool "test" "desc" (hasheq) (lambda (args) (make-success-result "ok"))))
+      (define t
+        (make-tool "test"
+                   "desc"
+                   (hasheq 'type "object" 'properties (hasheq))
+                   (lambda (args) (make-success-result "ok"))))
       (check-false (tool-externalizable? t)))
 
     (test-case "M2: make-tool with #:externalizable? #t works"
       (define t
         (make-tool "bash"
                    "desc"
-                   (hasheq)
+                   (hasheq 'type "object" 'properties (hasheq))
                    (lambda (args) (make-success-result "ok"))
                    #:externalizable? #t))
       (check-true (tool-externalizable? t)))

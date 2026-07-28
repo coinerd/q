@@ -31,29 +31,36 @@
   (define t
     (make-tool "test-write"
                "test tool"
-               (hasheq 'path string?)
+               (hasheq 'type "object" 'properties (hasheq 'path (hasheq 'type "string")))
                (lambda (args ctx) (list "ok"))
                #:mutates-filesystem? #t))
   (check-true (tool-mutates-filesystem? t)))
 
 (test-case "make-tool defaults mutates-filesystem? to #f"
   (define t
-    (make-tool "test-read" "test tool" (hasheq 'path string?) (lambda (args ctx) (list "ok"))))
+    (make-tool "test-read"
+               "test tool"
+               (hasheq 'type "object" 'properties (hasheq 'path (hasheq 'type "string")))
+               (lambda (args ctx) (list "ok"))))
   (check-false (tool-mutates-filesystem? t)))
 
 (test-case "file-mutation tools classified as mutating"
   (define write-tool
     (make-tool "write"
                "write files"
-               (hasheq)
+               (hasheq 'type "object" 'properties (hasheq))
                (lambda (args ctx) (list "ok"))
                #:mutates-filesystem? #t))
   (define edit-tool
-    (make-tool "edit" "edit files" (hasheq) (lambda (args ctx) (list "ok")) #:mutates-filesystem? #t))
+    (make-tool "edit"
+               "edit files"
+               (hasheq 'type "object" 'properties (hasheq))
+               (lambda (args ctx) (list "ok"))
+               #:mutates-filesystem? #t))
   (define delete-lines-tool
     (make-tool "delete-lines"
                "delete lines"
-               (hasheq)
+               (hasheq 'type "object" 'properties (hasheq))
                (lambda (args ctx) (list "ok"))
                #:mutates-filesystem? #t))
   (check-true (tool-mutates-filesystem? write-tool) "write mutates filesystem")
@@ -62,7 +69,11 @@
 
 (test-case "non-mutation tools are not classified as mutating"
   (for ([name '("read" "bash" "grep" "find" "ls" "spawn-subagent" "firecrawl")])
-    (define t (make-tool name (format "~a tool" name) (hasheq) (lambda (args ctx) (list "ok"))))
+    (define t
+      (make-tool name
+                 (format "~a tool" name)
+                 (hasheq 'type "object" 'properties (hasheq))
+                 (lambda (args ctx) (list "ok"))))
     (check-false (tool-mutates-filesystem? t)
                  (format "~a should not be classified as filesystem mutating" name))))
 
@@ -101,7 +112,7 @@
   (define tool
     (make-tool "write"
                "test write"
-               (hasheq 'path string?)
+               (hasheq 'type "object" 'properties (hasheq 'path (hasheq 'type "string")))
                (lambda (args ctx)
                  (define p (hash-ref args 'path))
                  (define val (with-input-from-file p (lambda () (string->number (port->string)))))

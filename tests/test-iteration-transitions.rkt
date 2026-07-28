@@ -63,12 +63,15 @@
 (define (make-read-tool)
   (make-tool "read"
              "Read a file"
-             (hasheq)
+             (hasheq 'type "object" 'properties (hasheq))
              (lambda (args ctx) (make-success-result "mock file content"))))
 
 ;; Make a bash tool
 (define (make-bash-tool)
-  (make-tool "bash" "Run bash" (hasheq) (lambda (args ctx) (make-success-result "bash output"))))
+  (make-tool "bash"
+             "Run bash"
+             (hasheq 'type "object" 'properties (hasheq))
+             (lambda (args ctx) (make-success-result "bash output"))))
 
 ;; Provider responses for tool-call-then-text pattern
 (define (tool-call-then-text-responses tool-name tool-args)

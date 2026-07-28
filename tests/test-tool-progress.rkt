@@ -61,7 +61,7 @@
       (register-tool! reg
                       (make-tool "progress-tool"
                                  "reports progress"
-                                 (hasheq)
+                                 (hasheq 'type "object" 'properties (hasheq))
                                  (lambda (args exec-ctx)
                                    (emit-progress! exec-ctx 25 "starting")
                                    (emit-progress! exec-ctx 75 "almost done")
@@ -85,14 +85,14 @@
       (register-tool! reg
                       (make-tool "tool-a"
                                  "tool a"
-                                 (hasheq)
+                                 (hasheq 'type "object" 'properties (hasheq))
                                  (lambda (args exec-ctx)
                                    (emit-progress! exec-ctx 50 "tool-a half")
                                    (make-tool-result "a-done" (hasheq) #f))))
       (register-tool! reg
                       (make-tool "tool-b"
                                  "tool b"
-                                 (hasheq)
+                                 (hasheq 'type "object" 'properties (hasheq))
                                  (lambda (args exec-ctx)
                                    (emit-progress! exec-ctx 100 "tool-b done")
                                    (make-tool-result "b-done" (hasheq) #f))))
