@@ -229,6 +229,50 @@
              (make-warn-action w)))]
       [else (make-warn-action (if (pair? w) msg w))])))
 
+;; ── Error-Class Detection (W11, R3/R5) ──
+;; v0.99.73 W11: Classify tool error output into signal classes for
+;; semantic loop detection. Maps common error patterns to symbols.
+
+(define (tool-error-class->string error-output)
+  ;; Extract a high-level error class from tool output text
+  (define lower (string-downcase (or error-output "")))
+  (cond
+    [(regexp-match? #rx"not a git repository" lower) "git-not-found"]
+    [(regexp-match? #rx"no such file or directory" lower) "file-not-found"]
+    [(regexp-match? #rx"command not found" lower) "command-not-found"]
+    [(regexp-match? #rx"permission denied" lower) "permission-denied"]
+    [(regexp-match? #rx"exit code|exit status" lower) "non-zero-exit"]
+    [(regexp-match? #rx"timeout" lower) "timeout"]
+    [(regexp-match? #rx"not found" lower) "not-found"]
+    [else "generic-error"]))
+
+(define (error-class->signal error-class)
+  ;; Map an error-class string to a warning signal symbol
+  (case (string->symbol error-class)
+    [(git-not-found file-not-found not-found) 'stuck-path]
+    [(command-not-found) 'missing-tool]
+    [(permission-denied) 'access-denied]
+    [(non-zero-exit) 'command-failure]
+    [(timeout) 'timeout]
+    [else 'generic-error]))
+
+;; Track error class history across turns
+(define current-error-class-history (make-parameter '()))
+
+;; Detect repeated error class: returns the (signal error-class) pair
+;; if the same error class appears >= min-repeats times consecutively.
+(define (detect-repeated-error-class history [min-repeats 3])
+  (define latest (and (pair? history) (caar history)))
+  (if latest
+      (let ([count (for/fold ([n 0]) ([entry (in-list history)])
+                     (if (equal? (car entry) latest)
+                         (add1 n)
+                         n))])
+        (if (>= count min-repeats)
+            (list latest (format "error ~a repeated ~a times" latest count))
+            #f))
+      #f))
+
 ;; ── Exports ──
 
 ;; W3 v0.99.36: Explicit exports replace struct-out for rollback-action and
@@ -264,4 +308,9 @@
           [select-highest-priority-action (-> (listof rollback-action?) (or/c rollback-action? #f))]
           [maybe-execute-action (-> (or/c rollback-action? #f) (or/c symbol? #f))]
           [warnings->actions
-           (-> (listof (or/c string? (list/c symbol? string?))) (listof rollback-action?))]))
+           (-> (listof (or/c string? (list/c symbol? string?))) (listof rollback-action?))]
+          [error-class->signal (-> string? symbol?)]
+          [current-error-class-history (parameter/c (listof (list/c symbol? string?)))]
+          [detect-repeated-error-class
+           (-> (listof (list/c symbol? string?)) (or/c #f (list/c symbol? string?)))]
+          [tool-error-class->string (-> string? string?)]))
