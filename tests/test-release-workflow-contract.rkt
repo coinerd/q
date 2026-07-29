@@ -250,6 +250,11 @@
   (check-true (string-contains? content "32718281aafd378fca511b4294d3c5668134673c"))
   (check-true (string-contains? content "361518742")))
 
+(test-case "release-repair.yml validates the frozen release target commit"
+  (define content (read-release-repair-yml))
+  (check-true (string-contains? content "REPAIR_TARGET: 32718281aafd378fca511b4294d3c5668134673c")
+              "repair target must equal GitHub release 361518742 target_commitish, not the tag name"))
+
 (test-case "release-repair.yml binds apply to approved bytes and expiry"
   (define content (read-release-repair-yml))
   (define apply-job (bounded-section content "  apply:"))
