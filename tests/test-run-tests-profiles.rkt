@@ -104,6 +104,22 @@
          (check-equal? (hash-ref (hash-ref js 'summary) 'files_skipped_by_profile) 1)
          (define fjs (car (hash-ref js 'files)))
          (check-equal? (hash-ref fjs 'category) "SKIPPED_BY_PROFILE"))
-       (lambda () (delete-dir/safe dir))))))
+       (lambda () (delete-dir/safe dir))))
+
+    (test-case "executed profile skip renders S rather than F"
+      (define-values (file dir)
+        (write-temp-test
+         "test-runtime-skip.rkt"
+         (string-append "#lang racket/base\n"
+                        "(displayln \"skipped_by_profile: unavailable test capability\")\n"
+                        "(exit 5)\n")))
+      (dynamic-wind void
+                    (lambda ()
+                      (define-values (code stdout stderr)
+                        (run/capture (format "racket scripts/run-tests.rkt ~a" file)))
+                      (check-equal? code 0 stderr)
+                      (check-true (regexp-match? #rx"(^|\n)S\n" stdout))
+                      (check-false (regexp-match? #rx"(^|\n)F\n" stdout)))
+                    (lambda () (delete-dir/safe dir))))))
 
 (run-tests suite)

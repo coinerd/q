@@ -54,14 +54,10 @@
   (define cap (make-synchronized-capture))
   (define N 50)
   (define writer
-    (thread
-     (lambda ()
-       (for ([i (in-range N)])
-         (sync-capture-put! cap i)))))
-  (define reader
-    (thread
-     (lambda ()
-       (sync-capture-wait cap N #:timeout-ms 3000))))
+    (thread (lambda ()
+              (for ([i (in-range N)])
+                (sync-capture-put! cap i)))))
+  (define reader (thread (lambda () (sync-capture-wait cap N #:timeout 3000))))
   (thread-wait writer)
   (thread-wait reader)
   (check-equal? (sync-capture-count cap) N))
