@@ -19,7 +19,7 @@
                "..")))
 
 ;; ---------------------------------------------------------------------------
-;; F1-F4 compile fix verification (all 4 modules)
+;; F1-F4 remediation artifact verification
 ;; ---------------------------------------------------------------------------
 
 (define-test-suite
@@ -30,11 +30,13 @@
  (test-case "F2: sdk-gsd-integration-test.rkt uses only-in"
    (define content (file->string (build-path project-root "scripts" "sdk-gsd-integration-test.rkt")))
    (check-true (string-contains? content "only-in") "F2 fix present"))
- (test-case "F3: test-gsd-go-replanning.rkt uses current-gsd-mode"
-   (define content (file->string (build-path project-root "scripts" "test-gsd-go-replanning.rkt")))
+ (test-case "F3: replanning reproducer uses current-gsd-mode"
+   (define content
+     (file->string (build-path project-root "tests" "reproducers" "reproduce-gsd-go-replanning.rkt")))
    (check-true (string-contains? content "current-gsd-mode") "F3 fix present"))
- (test-case "F4: test-gsd-sdk-live.rkt has no direct cancellation import"
-   (define content (file->string (build-path project-root "scripts" "test-gsd-sdk-live.rkt")))
+ (test-case "F4: live SDK reproducer has no direct cancellation import"
+   (define content
+     (file->string (build-path project-root "tests" "reproducers" "reproduce-gsd-sdk-live.rkt")))
    (check-false (string-contains? content "util/cancellation.rkt") "F4 fix present")))
 
 ;; ---------------------------------------------------------------------------

@@ -11,9 +11,10 @@
 
 (require racket/format
          racket/list
+         racket/path
          racket/promise
          racket/set
-         (only-in racket/string string-join)
+         (only-in racket/string string-join string-trim)
          ;; Message/content types
          (only-in "../../util/message/message.rkt"
                   message-id
@@ -23,7 +24,12 @@
          (only-in "../../util/content/content-parts.rkt"
                   text-part?
                   text-part-text
+                  tool-call-part?
+                  tool-call-part-id
+                  tool-call-part-name
+                  tool-call-part-arguments
                   tool-result-part?
+                  tool-result-part-tool-call-id
                   tool-result-part-content
                   tool-result-part-is-error?)
          ;; Event emission
@@ -38,6 +44,15 @@
                   tiered-context-tier-a
                   tiered-context-tier-b
                   tiered-context-tier-c)
+         (only-in "../context-assembly/context-floor.rkt" tiered-context-with-tier-a)
+         (only-in "../context-assembly/operational-checkpoint.rkt"
+                  make-empty-checkpoint
+                  checkpoint-set-repo-root
+                  checkpoint-set-planning-root
+                  checkpoint-set-planning-authority
+                  checkpoint-set-error
+                  supercedes-generic-planning?
+                  inject-checkpoint-message)
          (only-in "../context-assembly/serialization.rkt"
                   gsd-progress-message?
                   build-tiered-context/state-aware
@@ -56,6 +71,8 @@
                   config-task-state-aware?
                   config-context-assembly-profile
                   config-project-dir
+                  config-repo-root
+                  config-planning-root
                   apply-context-assembly-profile!
                   context-assembly-options?
                   context-assembly-options-task-state-aware?
@@ -80,7 +97,9 @@
                   evolution-result?
                   reset-working-set!)
          (only-in "../context-assembly/state-aware-builder.rkt" current-ws-evolution-enabled?)
-         (only-in "../context-assembly/rollback-actions.rkt" current-loop-warning-count)
+         (only-in "../context-assembly/rollback-actions.rkt"
+                  current-loop-warning-count
+                  tool-error-class->string)
          ;; Auto-distillation
          (only-in "../context-assembly/auto-distillation.rkt"
                   auto-distill
@@ -133,6 +152,168 @@
 ;; Pure context assembly
 ;; ============================================================
 
+(define OP-CHECKPOINT-ID "op-checkpoint")
+
+(define (without-operational-checkpoint messages)
+  (filter (lambda (m) (not (equal? (message-id m) OP-CHECKPOINT-ID))) messages))
+
+(define (path-value->string value)
+  (cond
+    [(path? value) (path->string value)]
+    [(string? value) value]
+    [else #f]))
+
+(define (argument-ref arguments key)
+  (and (hash? arguments)
+       (or (hash-ref arguments key #f) (hash-ref arguments (symbol->string key) #f))))
+
+(define (tool-call-artifact-path part planning-root)
+  (define name (tool-call-part-name part))
+  (define arguments (tool-call-part-arguments part))
+  (cond
+    [(equal? name "read") (path-value->string (argument-ref arguments 'path))]
+    [(equal? name "planning-read")
+     (define artifact (path-value->string (argument-ref arguments 'artifact)))
+     (define base-dir (path-value->string (argument-ref arguments 'base_dir)))
+     (define effective-planning-root
+       (if base-dir
+           (path->string (build-path base-dir ".planning"))
+           planning-root))
+     (and artifact
+          (if (or (not effective-planning-root) (absolute-path? (string->path artifact)))
+              artifact
+              (path->string (build-path effective-planning-root artifact))))]
+    [else #f]))
+
+(define (result-content->string content)
+  (cond
+    [(string? content) content]
+    [(hash? content)
+     (define text (or (hash-ref content 'text #f) (hash-ref content "text" #f)))
+     (if text
+         (result-content->string text)
+         "")]
+    [(list? content) (string-join (map result-content->string content) "\n")]
+    [else ""]))
+
+(define (absolute-result-path content)
+  (define candidate (string-trim (result-content->string content)))
+  (and (not (string=? candidate ""))
+       (not (regexp-match? #px"[\r\n]" candidate))
+       (absolute-path? (string->path candidate))
+       candidate))
+
+;; Return the most recent canonical coordinates proven by successful,
+;; correlated tool results. Failed or merely requested calls confer no
+;; authority.
+(define (successful-coordinate-discoveries messages planning-root)
+  (define pending (make-hash))
+  (define latest-authority #f)
+  (define latest-repo #f)
+  (for ([m (in-list messages)])
+    (when (eq? (message-role m) 'assistant)
+      (for ([part (in-list (message-content m))]
+            #:when (tool-call-part? part))
+        (define id (tool-call-part-id part))
+        (define path (tool-call-artifact-path part planning-root))
+        (define command (argument-ref (tool-call-part-arguments part) 'command))
+        (cond
+          [(and id path (supercedes-generic-planning? path))
+           (hash-set! pending id (cons 'planning path))]
+          [(and
+            id
+            (equal? (tool-call-part-name part) "bash")
+            (string? command)
+            (regexp-match?
+             #px"(?:^|[[:space:]])git(?:[[:space:]].*)?rev-parse[[:space:]]+--show-toplevel(?:[[:space:]]|$)"
+             command))
+           (hash-set! pending id (cons 'repo #t))])))
+    (for ([part (in-list (message-content m))]
+          #:when (and (tool-result-part? part) (not (tool-result-part-is-error? part))))
+      (define discovery (hash-ref pending (tool-result-part-tool-call-id part) #f))
+      (when discovery
+        (case (car discovery)
+          [(planning) (set! latest-authority (cdr discovery))]
+          [(repo)
+           (define discovered (absolute-result-path (tool-result-part-content part)))
+           (when discovered
+             (set! latest-repo discovered))]))))
+  (values latest-authority latest-repo))
+
+(define (recent-tool-result-classes messages)
+  (define outcomes
+    (for/list ([m (in-list messages)]
+               #:when (and (eq? (message-role m) 'tool)
+                           (ormap tool-result-part? (message-content m))))
+      (define error-part
+        (findf (lambda (part) (and (tool-result-part? part) (tool-result-part-is-error? part)))
+               (message-content m)))
+      (if error-part
+          (tool-error-class->string (format "~a" (tool-result-part-content error-part)))
+          "success")))
+  (take-right outcomes (min 8 (length outcomes))))
+
+(define (checkpoint-error-episode outcomes)
+  ;; Mirror the correction state machine: before a threshold crossing, count
+  ;; equivalent errors within the bounded window; after crossing, a later
+  ;; success/different class starts a fresh episode.
+  (let loop ([remaining outcomes]
+             [history '()]
+             [corrected #f])
+    (cond
+      [(null? remaining) (values history corrected)]
+      [else
+       (define item (car remaining))
+       (define recovered? (and corrected (not (string=? item corrected))))
+       (define base-history
+         (if recovered?
+             '()
+             history))
+       (define base-corrected (if recovered? #f corrected))
+       (define combined (append base-history (list item)))
+       (define next-history (take-right combined (min 8 (length combined))))
+       (define crosses?
+         (and (not base-corrected)
+              (not (string=? item "success"))
+              (>= (count (lambda (seen) (string=? seen item)) next-history) 3)))
+       (loop (cdr remaining) next-history (if crosses? item base-corrected))])))
+
+(define (checkpoint-with-recent-errors checkpoint messages)
+  (define outcomes (recent-tool-result-classes messages))
+  (define-values (episode _corrected) (checkpoint-error-episode outcomes))
+  (cond
+    [(null? episode) checkpoint]
+    [(string=? (last episode) "success") checkpoint]
+    [else
+     (define latest (last episode))
+     (define equivalent-count (count (lambda (item) (string=? item latest)) episode))
+     (for/fold ([cp checkpoint]) ([_i (in-range equivalent-count)])
+       (checkpoint-set-error cp latest))]))
+
+(define (fresh-operational-checkpoint config messages)
+  (define fallback-repo (path-value->string (config-repo-root config)))
+  (define fallback-planning (path-value->string (config-planning-root config)))
+  (define-values (authority discovered-repo)
+    (successful-coordinate-discoveries messages fallback-planning))
+  (define discovered-planning
+    (and authority
+         (let ([parent (path-only (string->path authority))]) (and parent (path->string parent)))))
+  (define repo-root (or discovered-repo fallback-repo))
+  (define planning-root (or discovered-planning fallback-planning))
+  (define with-repo
+    (if repo-root
+        (checkpoint-set-repo-root (make-empty-checkpoint) repo-root)
+        (make-empty-checkpoint)))
+  (define with-planning
+    (if planning-root
+        (checkpoint-set-planning-root with-repo planning-root)
+        with-repo))
+  (define with-authority
+    (if authority
+        (checkpoint-set-planning-authority with-planning authority)
+        with-planning))
+  (checkpoint-with-recent-errors with-authority messages))
+
 ;; Pure context assembly: no side effects, no session mutation.
 ;; Returns (values assembled-messages hook-result tiered-context).
 (define (assemble-context/pure ctx-to-use
@@ -144,6 +325,9 @@
                                #:ca-options [ca-options #f]
                                #:recent-tool-calls [recent-tool-calls '()])
   (define config config-raw)
+  ;; An assembled checkpoint may be passed back as history by compatibility
+  ;; callers. It is ephemeral: discard it before every fresh assembly.
+  (define history (without-operational-checkpoint ctx-to-use))
   (define tier-b-count (config-tier-b-count config))
   (define tier-c-count (config-tier-c-count config))
   (define max-tokens (config-max-tokens config))
@@ -151,7 +335,7 @@
   (define ws-messages-promise
     (delay
       (if ws
-          (working-set-resolve-messages ws ctx-to-use message-id)
+          (working-set-resolve-messages ws history message-id)
           '())))
   (define ws-messages (force ws-messages-promise))
   (define state-aware-enabled
@@ -164,7 +348,7 @@
       [(and state-aware-enabled task-state)
        (define project-dir (config-project-dir config))
        (define sa-tc
-         (build-tiered-context/state-aware ctx-to-use
+         (build-tiered-context/state-aware history
                                            #:tier-b-count tier-b-count
                                            #:tier-c-count tier-c-count
                                            #:working-set-messages ws-messages
@@ -177,13 +361,19 @@
        (values sa-tc #f)]
       ;; Standard assembly path
       [else
-       (build-tiered-context-with-hooks ctx-to-use
+       (build-tiered-context-with-hooks history
                                         #:hook-dispatcher hook-dispatcher
                                         #:tier-b-count tier-b-count
                                         #:tier-c-count tier-c-count
                                         #:max-tokens max-tokens
                                         #:working-set-messages ws-messages)]))
-  (values (tiered-context->message-list tc) hook-result tc))
+  ;; Use the tiered-context constructor helper rather than prepending only to
+  ;; the provider list. This keeps Tier A telemetry and provider ordering in
+  ;; agreement.
+  (define checkpoint (fresh-operational-checkpoint config history))
+  (define final-tc
+    (tiered-context-with-tier-a tc (inject-checkpoint-message checkpoint (tiered-context-tier-a tc))))
+  (values (tiered-context->message-list final-tc) hook-result final-tc))
 
 ;; v0.97.6 F3: Extracted from prepare-turn-context-state for testability.
 ;; Converts a content part (text-part or tool-result-part) to a plain string.

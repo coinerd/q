@@ -55,9 +55,8 @@
                "Must reference the F1 module")))
 
 ;; ---------------------------------------------------------------------------
-;; F1-F4 regression targets compile (structural check via file existence
-;; and module parseability — full compile is tested in
-;; test-ci-package-compile-boundary.rkt)
+;; F1-F4 regression artifacts remain discoverable. F1-F2 are package-visible;
+;; the retired F3-F4 scripts now live as test reproducers.
 ;; ---------------------------------------------------------------------------
 
 (define-test-suite
@@ -68,12 +67,14 @@
  (test-case "F2: scripts/sdk-gsd-integration-test.rkt exists"
    (check-true (file-exists? (build-path project-root "scripts" "sdk-gsd-integration-test.rkt"))
                "F2 target module must exist"))
- (test-case "F3: scripts/test-gsd-go-replanning.rkt exists"
-   (check-true (file-exists? (build-path project-root "scripts" "test-gsd-go-replanning.rkt"))
-               "F3 target module must exist"))
- (test-case "F4: scripts/test-gsd-sdk-live.rkt exists"
-   (check-true (file-exists? (build-path project-root "scripts" "test-gsd-sdk-live.rkt"))
-               "F4 target module must exist"))
+ (test-case "F3: replanning reproducer exists"
+   (check-true
+    (file-exists? (build-path project-root "tests" "reproducers" "reproduce-gsd-go-replanning.rkt"))
+    "F3 reproducer must exist"))
+ (test-case "F4: live SDK reproducer exists"
+   (check-true
+    (file-exists? (build-path project-root "tests" "reproducers" "reproduce-gsd-sdk-live.rkt"))
+    "F4 reproducer must exist"))
  (test-case "F1 fix verification: generate-certificates.rkt requires racket/string"
    (define f1-content (file->string (build-path project-root "cli" "generate-certificates.rkt")))
    (check-true (string-contains? f1-content "racket/string") "F1 fix: must require racket/string")))

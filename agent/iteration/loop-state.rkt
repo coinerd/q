@@ -13,8 +13,8 @@
 ;; Opaque types (EventBus, ToolRegistry, ExtRegistry, CancellationToken)
 ;; are defined via #:opaque to avoid any-wrap/c issues with TR boundaries.
 
-(provide ;; loop-infra
-         loop-infra
+;; loop-infra
+(provide loop-infra
          loop-infra?
          loop-infra-ctx
          loop-infra-ext-reg
@@ -35,6 +35,8 @@
          loop-counters-explore-count
          loop-counters-implement-count
          loop-counters-stall-retry-count
+         loop-counters-recent-error-classes
+         loop-counters-last-corrected-error-class
          ;; iteration-snapshot
          iteration-snapshot
          iteration-snapshot?
@@ -91,7 +93,9 @@
          [recent-tool-names : (Listof Any)]
          [explore-count : Nonnegative-Integer]
          [implement-count : Nonnegative-Integer]
-         [stall-retry-count : Nonnegative-Integer])
+         [stall-retry-count : Nonnegative-Integer]
+         [recent-error-classes : (Listof String)]
+         [last-corrected-error-class : (U String #f)])
   #:transparent)
 
 ;; Constructor helper: create initial counters from defaults.
@@ -99,7 +103,7 @@
 (define (make-initial-counters)
   :
   loop-counters
-  (loop-counters 0 0 '() 0 0 '() 0 0 0))
+  (loop-counters 0 0 '() 0 0 '() 0 0 0 '() #f))
 
 ;; v0.37.4 (FA-04): Bundle loop-evolving parameters into a single struct
 ;; to avoid threading 6+ positional parameters through interpret-step.

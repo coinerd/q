@@ -21,9 +21,18 @@
 (define (make-user-msg text)
   (make-message (generate-id) #f 'user 'user (list (make-text-part text)) (current-seconds) (hasheq)))
 
-;; Helper: create a tool result message
+;; Helpers: create real protocol tool result messages.
 (define (make-tool-msg id text)
   (make-message id #f 'tool 'tool (list (make-text-part text)) (current-seconds) (hasheq)))
+
+(define (make-tool-result-msg id call-id text [error? #f])
+  (make-message id
+                #f
+                'tool
+                'tool-result
+                (list (make-tool-result-part call-id text error?))
+                (current-seconds)
+                (hasheq 'toolCallId call-id 'isError error?)))
 
 ;; Helper: estimate tokens from a message (same logic as in iteration.rkt)
 (define (estimate-msg-tokens m)
@@ -74,7 +83,15 @@
       (define mock-prov
         (make-mock-provider
          (make-model-response (list (hasheq 'type "text" 'text "done")) (hash) "mock" #f)))
-      (define result (run-iteration-loop ctx mock-prov bus #f #f (format "/tmp/test-~a-ws.log" (random 1000000)) "test-session" 10))
+      (define result
+        (run-iteration-loop ctx
+                            mock-prov
+                            bus
+                            #f
+                            #f
+                            (format "/tmp/test-~a-ws.log" (random 1000000))
+                            "test-session"
+                            10))
       (check-pred loop-result? result)
       (check-equal? (loop-result-termination-reason result) 'completed))
 
@@ -105,6 +122,62 @@
                            estimate-msg-tokens)
       (check-equal? (working-set-entry-count ws) 0))
 
+    (test-case "failed read result never enters the working set"
+      (define ws (make-working-set))
+      (working-set-update!
+       ws
+       (list (make-tool-call "read-failed" "read" (hasheq 'path "/tmp/failed.rkt")))
+       (list (make-tool-result-msg "result-failed" "read-failed" "not found" #t))
+       message-id
+       (lambda (_m) 10))
+      (check-equal? (working-set-entries ws) '()))
+
+    (test-case "mixed read results correlate by tool-call ID rather than list position"
+      (define ws (make-working-set))
+      (define calls
+        (list (make-tool-call "failed-call" "read" (hasheq 'path "/tmp/failed.rkt"))
+              (make-tool-call "successful-call" "read" (hasheq 'path "/tmp/success.rkt"))))
+      ;; Deliberately reverse result order: correlation must use the protocol ID.
+      (define results
+        (list (make-tool-result-msg "successful-result" "successful-call" "ok")
+              (make-tool-result-msg "failed-result" "failed-call" "no" #t)))
+      (working-set-update! ws calls results message-id (lambda (_m) 10))
+      (check-equal? (map ws-entry-path (working-set-entries ws)) '("/tmp/success.rkt"))
+      (check-equal? (map ws-entry-message-id (working-set-entries ws)) '("successful-result")))
+
+    (test-case "old successful read survives a failed reread"
+      (define ws (make-working-set))
+      (working-set-update! ws
+                           (list (make-tool-call "read-ok" "read" (hasheq 'path "/tmp/stable.rkt")))
+                           (list (make-tool-result-msg "old-success" "read-ok" "contents"))
+                           message-id
+                           (lambda (_m) 10))
+      (working-set-update!
+       ws
+       (list (make-tool-call "read-again" "read" (hasheq 'path "/tmp/stable.rkt")))
+       (list (make-tool-result-msg "new-failure" "read-again" "denied" #t))
+       message-id
+       (lambda (_m) 10))
+      (check-equal? (working-set-entry-count ws) 1)
+      (check-equal? (ws-entry-message-id (first (working-set-entries ws))) "old-success"))
+
+    (test-case "failed edit and write preserve a successful working-set entry"
+      (for ([name (in-list '("edit" "write"))])
+        (define ws (make-working-set))
+        (working-set-update! ws
+                             (list (make-tool-call "read-ok" "read" (hasheq 'path "/tmp/stable.rkt")))
+                             (list (make-tool-result-msg "read-result" "read-ok" "contents"))
+                             message-id
+                             (lambda (_m) 10))
+        (define call-id (format "~a-failed" name))
+        (working-set-update!
+         ws
+         (list (make-tool-call call-id name (hasheq 'path "/tmp/stable.rkt")))
+         (list (make-tool-result-msg (format "~a-result" name) call-id "blocked" #t))
+         message-id
+         (lambda (_m) 10))
+        (check-equal? (working-set-entry-count ws) 1 name)))
+
     ;; ── T05: config hash contains working set ──
     (test-case "T05: config hash contains working set after hash-set"
       (define ws (make-working-set))
@@ -112,6 +185,9 @@
       (define config-with-ws (hash-set config 'working-set ws))
       (check-true (hash-has-key? config-with-ws 'working-set))
       (check-eq? (hash-ref config-with-ws 'working-set) ws))))
+
+(module+ test
+  (run-tests iteration-ws-tests))
 
 (module+ main
   (run-tests iteration-ws-tests))

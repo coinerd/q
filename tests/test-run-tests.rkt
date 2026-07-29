@@ -315,18 +315,23 @@
   (check-not-false (member "tests/test-version.rkt" files)))
 
 (test-case "run-tests CLI works from repo root with q-prefixed test path"
-  (define repo-root (simplify-path (build-path (path-only runner-path) ".." "..")))
+  (define q-root (simplify-path (build-path (path-only runner-path) "..")))
+  (define repo-root (make-temporary-file "run-tests-repo-root-~a" 'directory))
+  (define linked-q-root (build-path repo-root "q"))
   (define racket-bin (find-executable-path "racket"))
-  (define exit-code
-    (parameterize ([current-directory repo-root])
-      (system*/exit-code racket-bin
-                         (build-path repo-root "q" "scripts" "run-tests.rkt")
-                         "q/tests/test-version.rkt"
-                         "--jobs"
-                         "1"
-                         "--timeout"
-                         "30")))
-  (check-equal? exit-code 0))
+  (dynamic-wind (lambda () (make-file-or-directory-link q-root linked-q-root))
+                (lambda ()
+                  (define exit-code
+                    (parameterize ([current-directory repo-root])
+                      (system*/exit-code racket-bin
+                                         (build-path linked-q-root "scripts" "run-tests.rkt")
+                                         "q/tests/test-version.rkt"
+                                         "--jobs"
+                                         "1"
+                                         "--timeout"
+                                         "30")))
+                  (check-equal? exit-code 0))
+                (lambda () (delete-directory/files repo-root #:must-exist? #f))))
 
 (test-case "run-tests CLI works from q root with tests-prefixed path"
   (define q-root (simplify-path (build-path (path-only runner-path) "..")))
@@ -612,14 +617,13 @@
 
 (test-case "collect-test-files: arch suite returns only arch files"
   (define collect (runner-ref 'collect-test-files))
+  (define arch-file? (runner-ref 'arch-file?))
   (define arch-files (collect 'arch))
   (check-true (> (length arch-files) 0))
+  (check-not-false (member "tests/test-model-bridge.rkt" arch-files)
+                   "arch suite includes files selected by @suite arch metadata")
   (for ([f (in-list arch-files)])
-    (check-not-false (or (string-contains? f "arch-")
-                         (string-contains? f "boundary")
-                         (string-contains? f "fitness")
-                         (string-contains? f "hotspot"))
-                     (format "arch suite included non-arch file: ~a" f))))
+    (check-not-false (arch-file? f) (format "arch suite included non-arch file: ~a" f))))
 
 (test-case "collect-test-files: runtime suite non-empty"
   (define collect (runner-ref 'collect-test-files))

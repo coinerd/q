@@ -68,6 +68,16 @@
                          0)))))
      (values passed failed (+ passed failed))]
     [else
+     ;; `raco test` emits `<failed> <total> <path>` when a module has
+     ;; failures but no explicit RackUnit summary. Parse these lines before
+     ;; the generic legacy formats so failed assertions are never reported as
+     ;; zero parsed tests.
+     (define compact-matches
+       (filter values
+               (for/list ([line (in-list lines)])
+                 (regexp-match #px"^([0-9]+) ([0-9]+) .+\\.(?:rkt|rktl|scrbl)$" line))))
+     (define compact-failed (for/sum ([m (in-list compact-matches)]) (string->number (cadr m))))
+     (define compact-total (for/sum ([m (in-list compact-matches)]) (string->number (caddr m))))
      (define passed
        (for/fold ([n 0]) ([line (in-list lines)])
          (define m (regexp-match #rx"([0-9]+) tests? passed" line))
@@ -81,6 +91,8 @@
              (string->number (cadr m))
              n)))
      (cond
+       [(pair? compact-matches)
+        (values (- compact-total compact-failed) compact-failed compact-total)]
        [(> (+ passed failed) 0) (values passed failed (+ passed failed))]
        [else
         (define result-successes (length (regexp-match* #rx"#<test-success>" output)))

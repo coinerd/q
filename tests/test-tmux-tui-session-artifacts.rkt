@@ -2,6 +2,7 @@
 
 ;; @speed slow
 ;; @suite tui-tmux
+;; @requires terminal
 ;; @boundary e2e
 
 ;; tests/test-tmux-tui-session-artifacts.rkt — W3: prompt-response and session artifacts
@@ -27,8 +28,8 @@
 ;; ============================================================
 
 (unless (should-run-tmux-tests?)
-  (printf "SKIP: tmux artifact tests require Q_TMUX_TUI_TESTS=1 and tmux~n")
-  (exit 0))
+  (printf "SKIPPED_BY_PROFILE: tmux artifact tests require Q_TMUX_TUI_TESTS=1 and tmux~n")
+  (exit 5))
 
 (printf "Running tmux session artifact tests...~n")
 

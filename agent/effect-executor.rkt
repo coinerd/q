@@ -68,13 +68,13 @@
                                                 (effect:update-fsm-event eff)))]
       [(? effect:dispatch-hook?)
        ;; Execute hook dispatch and capture the return value.
-       ;; Only set the box when hook-disp is present and returns a value.
-       ;; Note: (void) is truthy in Racket, so we must explicitly guard with hook-disp.
-       (when hook-disp
-         (define hook-result
-           (hook-disp (effect:dispatch-hook-hook-point eff) (effect:dispatch-hook-payload eff)))
-         (when hook-result
-           (set-box! result-box hook-result)))]
+       ;; Use `and`, not `(when hook-disp ...)`: `when` returns truthy #<void>
+       ;; when the guard is false, which caused a v0.99.70 false-positive result.
+       (define hook-result
+         (and hook-disp
+              (hook-disp (effect:dispatch-hook-hook-point eff) (effect:dispatch-hook-payload eff))))
+       (when hook-result
+         (set-box! result-box hook-result))]
       [(? effect:build-result?)
        (define bs (effect:build-result-state eff))
        (define messages

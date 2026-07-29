@@ -111,13 +111,13 @@
 ;; 5. Max entries and max tokens configuration
 ;; ============================================================
 
-(test-case "default max-entries is 30"
+(test-case "default max-entries is 20"
   (define ws (make-ws-context))
-  (check-equal? (ws 'max-entries) 30))
+  (check-equal? (ws 'max-entries) 20))
 
-(test-case "default max-tokens is 15000"
+(test-case "default max-tokens is 8192"
   (define ws (make-ws-context))
-  (check-equal? (ws 'max-tokens) 15000))
+  (check-equal? (ws 'max-tokens) 8192))
 
 (test-case "custom max-entries and max-tokens"
   (define ws (make-ws-context #:max-entries 10 #:max-tokens 5000))

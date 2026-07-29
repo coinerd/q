@@ -13,6 +13,7 @@
 ;;   - hash-ref works directly on session-config
 
 (require rackunit
+         racket/file
          racket/dict
          racket/hash
          "../runtime/session/session-config.rkt"
@@ -148,6 +149,29 @@
   (check-equal? (dict-ref c2 'a) 999))
 
 ;; ── Smart accessor defaults ─────────────────────────────────────
+
+(test-case "config repo/planning roots prefer explicit values"
+  (define root (make-temporary-file "q-session-config-roots-~a" 'directory))
+  (dynamic-wind void
+                (lambda ()
+                  (define repo-root (build-path root "repo"))
+                  (define planning-root (build-path root ".planning"))
+                  (define c
+                    (hash->session-config
+                     (hasheq 'project-dir root 'repo-root repo-root 'planning-root planning-root)))
+                  (check-equal? (config-repo-root c) repo-root)
+                  (check-equal? (config-planning-root c) planning-root))
+                (lambda () (delete-directory/files root))))
+
+(test-case "config repo/planning roots fall back from project-dir"
+  (define root (make-temporary-file "q-session-config-fallback-~a" 'directory))
+  (dynamic-wind void
+                (lambda ()
+                  (define c (hash->session-config (hasheq 'project-dir root)))
+                  (check-equal? (config-repo-root c) root)
+                  (check-equal? (simplify-path (config-planning-root c))
+                                (simplify-path (build-path root ".planning"))))
+                (lambda () (delete-directory/files root))))
 
 (test-case "config-system-instructions defaults to ()"
   (define c (hash->session-config (hasheq)))

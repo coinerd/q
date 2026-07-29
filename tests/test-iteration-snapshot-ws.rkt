@@ -26,7 +26,7 @@
   ;; Construct a minimal session-config for the config field
   (define cfg (hash->session-config (hasheq)))
   ;; Construct a minimal loop-counters
-  (define ctrs (loop-counters 0 0 '() 0 0 '() 0 0 0))
+  (define ctrs (loop-counters 0 0 '() 0 0 '() 0 0 0 '() #f))
   (check-pred loop-counters? ctrs)
 
   ;; Construct iteration-snapshot with ws=#f
@@ -37,7 +37,7 @@
 
 (test-case "T-03: iteration-snapshot round-trips through TR boundary"
   (define cfg (hash->session-config (hasheq 'max-iterations 5)))
-  (define ctrs (loop-counters 1 2 '() 3 4 '() 5 6 7))
+  (define ctrs (loop-counters 1 2 '() 3 4 '() 5 6 7 '("timeout") "timeout"))
   (define snap (iteration-snapshot ctrs #f cfg #f 5 50))
   ;; Access all fields to exercise the TR boundary
   (check-pred loop-counters? (iteration-snapshot-counters snap))

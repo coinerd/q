@@ -45,16 +45,16 @@
       (define hook-log (box '()))
 
       (define reg (make-tool-registry))
-      (register-tool! reg
-                      (make-tool "read"
-                                 "Read file"
-                                 (hasheq)
-                                 (lambda (args ctx)
-                                   (set-box! hook-log
-                                             (cons (list 'tool-execute
-                                                         (hash-ref args 'path "unknown"))
-                                                   (unbox hook-log)))
-                                   (make-success-result "file content here"))))
+      (register-tool!
+       reg
+       (make-tool
+        "read"
+        "Read file"
+        (hasheq 'type "object" 'properties (hasheq 'path (hasheq 'type "string")) 'required '("path"))
+        (lambda (args ctx)
+          (set-box! hook-log
+                    (cons (list 'tool-execute (hash-ref args 'path "unknown")) (unbox hook-log)))
+          (make-success-result "file content here"))))
 
       (define wr
         (run-workflow prov
@@ -96,12 +96,13 @@
                                       (text-response "I understand the command was blocked"))))
 
       (define reg (make-tool-registry))
-      (register-tool! reg
-                      (make-tool "dangerous"
-                                 "Dangerous tool"
-                                 (hasheq)
-                                 (lambda (args ctx)
-                                   (make-error-result "Command blocked by safety policy"))))
+      (register-tool!
+       reg
+       (make-tool
+        "dangerous"
+        "Dangerous tool"
+        (hasheq 'type "object" 'properties (hasheq 'cmd (hasheq 'type "string")) 'required '("cmd"))
+        (lambda (args ctx) (make-error-result "Command blocked by safety policy"))))
 
       (define wr (run-workflow prov "Run dangerous command" #:tools reg))
 
@@ -135,14 +136,14 @@
       (register-tool! reg
                       (make-tool "step1"
                                  "Step 1"
-                                 (hasheq)
+                                 (hasheq 'type "object" 'properties (hasheq))
                                  (lambda (args ctx)
                                    (set-box! step-box (cons 1 (unbox step-box)))
                                    (make-success-result "step1 done"))))
       (register-tool! reg
                       (make-tool "step2"
                                  "Step 2"
-                                 (hasheq)
+                                 (hasheq 'type "object" 'properties (hasheq))
                                  (lambda (args ctx)
                                    (set-box! step-box (cons 2 (unbox step-box)))
                                    (make-success-result "step2 done"))))

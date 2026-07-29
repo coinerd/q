@@ -51,7 +51,7 @@
                          'properties
                          (hasheq 'path (hasheq 'type "string" 'description "File path"))
                          'required
-                         '(path)))
+                         '("path")))
              (lambda (args ctx) (make-success-result "ok"))
              #:required-capability cap
              #:dangerous? dangerous?))
@@ -116,7 +116,7 @@
 
 (test-case "audit-sv-valid-schema"
   (define schema
-    (hasheq 'type "object" 'properties (hasheq 'x (hasheq 'type "string")) 'required '(x)))
+    (hasheq 'type "object" 'properties (hasheq 'x (hasheq 'type "string")) 'required '("x")))
   (check-true (validate-tool-schema schema)))
 
 (test-case "audit-sv-invalid-no-type"
@@ -170,7 +170,7 @@
                        'properties
                        (hasheq 'path (hasheq 'type "string") 'verbose (hasheq 'type "boolean"))
                        'required
-                       '(path))
+                       '("path"))
                void))
   (define hint (format-tool-schema-hint t))
   (check-true (string? hint))
@@ -187,7 +187,7 @@
                        'properties
                        (hasheq 'a (hasheq 'type "string") 'b (hasheq 'type "integer"))
                        'required
-                       '(a b))
+                       '("a" "b"))
                void))
   (define hint (format-tool-schema-hint t))
   (check-false (string-contains? hint "?") "No optional params → no ? marks"))

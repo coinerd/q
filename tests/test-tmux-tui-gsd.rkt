@@ -2,6 +2,7 @@
 
 ;; @speed slow
 ;; @suite tui-tmux
+;; @requires terminal
 ;; @boundary e2e
 
 ;; tests/test-tmux-tui-gsd.rkt — W7: GSD planning real-life scenarios
@@ -24,8 +25,8 @@
 ;; ============================================================
 
 (unless (should-run-tmux-tests?)
-  (printf "SKIP: tmux GSD tests require Q_TMUX_TUI_TESTS=1 and tmux~n")
-  (exit 0))
+  (printf "SKIPPED_BY_PROFILE: tmux GSD tests require Q_TMUX_TUI_TESTS=1 and tmux~n")
+  (exit 5))
 
 (printf "Running tmux GSD planning tests...~n")
 

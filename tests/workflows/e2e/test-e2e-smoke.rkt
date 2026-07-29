@@ -76,7 +76,7 @@
        (make-tool
         "list"
         "List files in a directory"
-        (hasheq 'type "object" 'properties (hasheq 'dir (hasheq 'type "string")) 'required '(dir))
+        (hasheq 'type "object" 'properties (hasheq 'dir (hasheq 'type "string")) 'required '("dir"))
         (lambda (args ctx)
           (make-success-result (list (hasheq 'type "text" 'text "file1.rkt\nfile2.rkt"))))))
 

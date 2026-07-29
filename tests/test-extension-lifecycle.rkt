@@ -11,6 +11,7 @@
 ;; #1148: Resource discovery hook
 
 (require rackunit
+         racket/file
          "../extensions/loader.rkt"
          "../extensions/api.rkt"
          "../runtime/session/session-store.rkt"
@@ -32,6 +33,20 @@
 
 (test-case "discover-extension-files returns empty for non-existent directory"
   (check-equal? (discover-extension-files '("/tmp/no-such-dir-q-test-1146")) '()))
+
+(test-case "discover-extension-files returns named path pairs"
+  (define dir (make-temporary-file "q-extension-discovery-~a" 'directory))
+  (dynamic-wind void
+                (lambda ()
+                  (define extension-path (build-path dir "sample.rkt"))
+                  (call-with-output-file extension-path
+                                         #:exists 'truncate/replace
+                                         (lambda (out) (display "#lang racket/base\n" out)))
+                  (define discovered (discover-extension-files (list dir)))
+                  (check-equal? (length discovered) 1)
+                  (check-equal? (caar discovered) "sample")
+                  (check-equal? (cdar discovered) extension-path))
+                (lambda () (delete-directory/files dir))))
 
 (test-case "reload-extensions! with non-existent dir returns empty"
   (define reg (make-extension-registry))

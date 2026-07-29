@@ -113,7 +113,36 @@
   (check-pairing result "large-budget")
   (check-equal? (length result) (length all-msgs)))
 
-;; Test 4: TH-11 — system-instruction preserved under budget pressure
+;; Test 4: GSD pinning must preserve provider protocol pairs.
+(test-case "GSD-pinned tool result retains its assistant parent beyond recent window"
+  (define parent
+    (make-assistant-with-tool-call "gsd-read" "planning-read" (hasheq 'artifact "STATE")))
+  (define result
+    (make-message "gsd-result"
+                  (message-id parent)
+                  'tool
+                  'tool-result
+                  (list (make-tool-result-part "gsd-read" "state contents" #f))
+                  (current-seconds)
+                  (hasheq 'toolCallId
+                          "gsd-read"
+                          'isError
+                          #f
+                          'gsd-pin
+                          #t
+                          'gsd-pin-reason
+                          "successful planning artifact read")))
+  (define later
+    (for/list ([i (in-range 110)])
+      (make-text-msg 'assistant (format "later-~a" i))))
+  (define assembled
+    (tiered-context->message-list
+     (build-tiered-context (append (list parent result) later) #:tier-b-count 20 #:tier-c-count 4)))
+  (check-not-false (member (message-id parent) (map message-id assembled)))
+  (check-not-false (member "gsd-result" (map message-id assembled)))
+  (check-pairing assembled "gsd-pinned"))
+
+;; Test 5: TH-11 — system-instruction preserved under budget pressure
 (test-case "system-instruction preserved under 95% budget pressure"
   ;; Build a message list with system-instruction first, then many pairs
   ;; Set a tight budget (95% of token count)

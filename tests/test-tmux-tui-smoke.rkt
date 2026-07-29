@@ -2,6 +2,7 @@
 
 ;; @speed slow
 ;; @suite tui-tmux
+;; @requires terminal
 ;; @boundary e2e
 
 ;; tests/test-tmux-tui-smoke.rkt — P0 tmux smoke tests for q --tui
@@ -25,8 +26,8 @@
 ;; ============================================================
 
 (unless (should-run-tmux-tests?)
-  (printf "SKIP: tmux smoke tests require Q_TMUX_TUI_TESTS=1 and tmux~n")
-  (exit 0))
+  (printf "SKIPPED_BY_PROFILE: tmux smoke tests require Q_TMUX_TUI_TESTS=1 and tmux~n")
+  (exit 5))
 
 (printf "Running tmux smoke tests...~n")
 

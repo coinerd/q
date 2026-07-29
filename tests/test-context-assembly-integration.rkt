@@ -49,7 +49,8 @@
          (only-in "../runtime/context-assembly/state-aware-builder.rkt" current-ws-evolution-enabled?)
          (only-in "../runtime/session/session-config.rkt"
                   apply-context-assembly-profile!
-                  current-context-assembly-profile)
+                  current-context-assembly-profile
+                  current-task-state-aware-rollout-rate)
          (only-in "../runtime/working-set.rkt" make-working-set working-set-add! working-set-entries)
          (only-in "../runtime/agent-session.rkt" session-rollout-enabled?)
          (only-in "../util/message/protocol-types.rkt"
@@ -130,17 +131,17 @@
           (maybe-execute-action action))
         (check-true (unbox expanded?2))))
 
-    ;; M5: WS evolution produces valid conclusions
-    (test-case "WS evolution on state transition resets working set"
+    ;; M5: Natural state progression preserves the working set and conclusions
+    (test-case "WS evolution on natural state transition preserves working set"
       (define ws (make-working-set))
       (working-set-add! ws "src/main.rkt" 0 100)
       (working-set-add! ws "tests/test-main.rkt" 0 100)
       (check-equal? (length (working-set-entries ws)) 2)
-      ;; Exploration → planning should reset WS
+      ;; Exploration → planning preserves relevant context for the next phase.
       (define conclusions
         (list (task-conclusion "tc1" "plan: use X" 'decision 'planning '() 1000 '() '())))
       (define result (evolve-working-set-for-state ws task-exploration task-planning conclusions))
-      (check-equal? (length (working-set-entries ws)) 0)
+      (check-equal? (length (working-set-entries ws)) 2)
       (check-true (pair? result)))
 
     ;; M5: Auto-distill returns empty when no conclusions needed
@@ -298,12 +299,13 @@
 
     ;; v0.78.4 G4: Rollout gate — profile bypass enables assembly
     (test-case "rollout gate: profile bypass overrides rate=0"
-      (apply-context-assembly-profile! 'off)
-      (define result-off (session-rollout-enabled? "test-session-id"))
-      (check-false result-off)
-      (apply-context-assembly-profile! 'bounded)
-      (define result-bounded (session-rollout-enabled? "test-session-id"))
-      (check-true result-bounded)
-      (apply-context-assembly-profile! 'off))))
+      (parameterize ([current-task-state-aware-rollout-rate 0.0])
+        (apply-context-assembly-profile! 'off)
+        (define result-off (session-rollout-enabled? "test-session-id"))
+        (check-false result-off)
+        (apply-context-assembly-profile! 'bounded)
+        (define result-bounded (session-rollout-enabled? "test-session-id"))
+        (check-true result-bounded)
+        (apply-context-assembly-profile! 'off)))))
 
 (run-tests suite)

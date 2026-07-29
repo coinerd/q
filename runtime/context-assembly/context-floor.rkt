@@ -12,6 +12,7 @@
                   message
                   message?
                   message-id
+                  message-parent-id
                   message-kind
                   message-role
                   message-content
@@ -190,8 +191,18 @@
      (make-tiered-context/ordered unique-ordered '() '() unique-ordered)]
     [else
      (define-values (gsd-pinned regular) (partition gsd-progress-message? regular-msgs))
+     ;; A protected tool result is not a valid provider record by itself.
+     ;; Preserve assistant parents for both GSD-pinned and working-set results.
+     (define protected-tool-results (deduplicate/messages (append gsd-pinned ws-messages)))
+     (define protected-parent-ids
+       (for/list ([m (in-list protected-tool-results)]
+                  #:when (and (eq? (message-role m) 'tool) (message-parent-id m)))
+         (message-parent-id m)))
+     (define-values (protected-parents regular-without-protected-parents)
+       (partition (lambda (m) (member (message-id m) protected-parent-ids)) regular))
      (define-values (sys-protected unpinned-raw)
-       (partition (lambda (m) (eq? (message-kind m) 'system-instruction)) regular))
+       (partition (lambda (m) (eq? (message-kind m) 'system-instruction))
+                  regular-without-protected-parents))
      ;; UNIVERSAL PINNING: Pin ALL user messages to Tier A, not just the first.
      (define-values (pinned-user unpinned)
        (partition (lambda (m) (eq? (message-role m) 'user)) unpinned-raw))
@@ -216,7 +227,7 @@
        (if (> tier-b-size 0)
            (take-right remaining-after-c tier-b-size)
            '()))
-     (define tier-a (append sys-protected pinned-user gsd-pinned ws-messages))
+     (define tier-a (append sys-protected pinned-user protected-parents gsd-pinned ws-messages))
      (when trace-cb
        (trace-cb 'partition
                  (hasheq 'tier-a

@@ -53,6 +53,7 @@
                   build-tiered-context-with-hooks
                   tiered-context->message-list)
          (only-in "../working-set.rkt"
+                  compute-working-set-budget
                   make-working-set
                   working-set-reset!
                   working-set-resolve-messages)
@@ -319,10 +320,13 @@
   (define log-path (session-log-path-for sess))
   (define idx-path (session-index-path (agent-session-session-dir sess)))
   (define sid (agent-session-session-id sess))
-
-  ;; v0.26.0: Create working set for this prompt and attach to session config
-  (define ws (make-working-set))
+  ;; Create a context-relative working set and attach it to session config.
   (define base-cfg (session-provider-facet-config (session->provider-facet sess)))
+  (define context-budget
+    (or token-budget-threshold
+        (dict-ref base-cfg 'token-budget-threshold #f)
+        (dict-ref base-cfg 'max-context-tokens 128000)))
+  (define ws (make-working-set #:max-tokens (compute-working-set-budget context-budget)))
   (guarded-set-config!
    sess
    (dict-set (dict-set base-cfg 'working-set ws) 'session-index (agent-session-index sess)))

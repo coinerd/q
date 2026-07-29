@@ -17,6 +17,7 @@
                   working-set-token-count
                   working-set-add!
                   working-set-reset!
+                  working-set-selective-remove!
                   ws-entry-path)
          (only-in "../runtime/context-assembly/ws-evolution.rkt"
                   evolve-working-set-for-state
@@ -356,7 +357,15 @@
       (define ws (make-working-set))
       (populate-ws ws '("a.rkt" "b.rkt"))
       (evolve-working-set-for-state ws task-exploration task-exploration conclusions)
-      (check-equal? (working-set-entry-count ws) 2))))
+      (check-equal? (working-set-entry-count ws) 2))
+
+    (test-case "selective removal preserves void mutator contract"
+      (define ws (make-working-set #:max-entries 2))
+      (populate-ws ws '("keep.rkt" "drop.rkt"))
+      (check-true (void? (working-set-selective-remove!
+                          ws
+                          (lambda (entry) (equal? (ws-entry-path entry) "keep.rkt")))))
+      (check-equal? (map ws-entry-path (working-set-entries ws)) '("keep.rkt")))))
 
 (run-tests suite)
 (run-tests w2-suite)

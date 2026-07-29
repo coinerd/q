@@ -45,7 +45,7 @@
                             #:explore-count [ec 0]
                             #:implement-count [ic 0]
                             #:stall-retry-count [src 0])
-  (loop-counters iter tc sp irc cec rtn ec ic src))
+  (loop-counters iter tc sp irc cec rtn ec ic src '() #f))
 
 ;; ============================================================
 ;; compute-step-result tests

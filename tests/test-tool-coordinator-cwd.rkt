@@ -42,7 +42,10 @@
                      'required
                      '("command")
                      'properties
-                     (hasheq 'command (hasheq 'type "string" 'description "Shell command to run")))
+                     (hasheq 'command
+                             (hasheq 'type "string" 'description "Shell command to run")
+                             'working-directory
+                             (hasheq 'type "string" 'description "Explicit command directory")))
              tool-bash))
 
 (define coordinator-cwd-tests
@@ -70,6 +73,30 @@
          (check-true (string-contains? content "unique-marker-cwd.txt")
                      (format "Expected 'unique-marker-cwd.txt' in bash ls output, got: ~a"
                              content)))))
+
+    (test-case "explicit invocation cwd takes precedence over exec-context fallback"
+      (with-temp-dir
+       (lambda (outer)
+         (define inner (build-path outer "directory with spaces"))
+         (make-directory inner)
+         (call-with-output-file (build-path inner "cwd.sentinel")
+                                (lambda (out) (display "explicit-cwd-honored" out)))
+         (define reg (make-tool-registry))
+         (register-tool! reg (make-bash-tool))
+         (define ctx
+           (make-exec-context #:working-directory outer
+                              #:permission-config (make-permissive-permission-config)))
+         (define tc
+           (make-tool-call
+            "bash-explicit-cwd"
+            "bash"
+            (hasheq 'command "pwd && cat cwd.sentinel" 'working-directory (path->string inner))))
+         (define result (run-tool-batch (list tc) reg #:exec-context ctx))
+         (define tool-result (car (scheduler-result-results result)))
+         (define content (result-content-text tool-result))
+         (check-false (tool-result-is-error? tool-result) content)
+         (check-true (string-contains? content (path->string inner)) content)
+         (check-true (string-contains? content "explicit-cwd-honored") content))))
 
     (test-case "bash tool with current-directory succeeds"
       (define reg (make-tool-registry))

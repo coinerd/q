@@ -63,7 +63,12 @@
 (define (make-dangerous-bash-tool)
   (make-tool "bash"
              "Test bash tool"
-             (hasheq 'type "function" 'function (hasheq 'name "bash" 'parameters (hasheq)))
+             (hasheq 'type
+                     "object"
+                     'properties
+                     (hasheq 'command (hasheq 'type "string"))
+                     'required
+                     '("command"))
              (lambda (args [ctx #f])
                (set-box! call-counter (add1 (unbox call-counter)))
                (make-success-result (hash-ref args 'command "no command")))
@@ -74,7 +79,7 @@
 (define (make-safe-tool)
   (make-tool "echo"
              "Safe echo tool"
-             (hasheq 'type "function" 'function (hasheq 'name "echo" 'parameters (hasheq)))
+             (hasheq 'type "object" 'properties (hasheq))
              (lambda (args [ctx #f]) (make-success-result "echoed"))
              #:dangerous? #f
              #:required-capability 'read-only

@@ -15,7 +15,10 @@
 
 (require racket/contract
          racket/match
-         racket/string)
+         racket/path
+         racket/string
+         (only-in "../../util/content/content-parts.rkt" make-text-part)
+         (only-in "../../util/message/message.rkt" make-message message? message-id))
 
 ;; ────────────────────────────────────────────────────────────
 ;; Operational Checkpoint struct
@@ -31,6 +34,7 @@
          next-action ; (or/c string? #f): next intended action
          last-error ; (or/c string? #f): last error class, if any
          error-count ; nonnegative-integer: count of consecutive errors
+         planning-authority ; latest successfully-read named planning artifact
          )
   #:transparent)
 
@@ -39,45 +43,55 @@
 ;; ────────────────────────────────────────────────────────────
 
 (define (make-empty-checkpoint)
-  (operational-checkpoint "" "" #f #f '() #f #f #f 0))
+  (operational-checkpoint "" "" #f #f '() #f #f #f 0 #f))
 
 ;; ────────────────────────────────────────────────────────────
 ;; Compact text representation for context injection
 ;; ────────────────────────────────────────────────────────────
 
+(define MAX-CHECKPOINT-CHARS (* 512 4))
+
 (define (checkpoint->text cp)
   (define root (operational-checkpoint-repo-root cp))
-  (if (or (not root) (equal? root ""))
-      ""
-      (string-append
-       "═══ Operational Checkpoint ═══\n"
-       (format "repo-root:       ~a\n" root)
-       (format "planning-root:   ~a\n" (operational-checkpoint-planning-root cp))
-       (let ([ms (operational-checkpoint-active-milestone cp)])
-         (if ms
-             (format "milestone:       ~a\n" ms)
-             ""))
-       (let ([wv (operational-checkpoint-active-wave cp)])
-         (if wv
-             (format "wave:            ~a\n" wv)
-             ""))
-       (let ([dt (operational-checkpoint-dirty-tree-files cp)])
-         (if (pair? dt)
-             (format "dirty-files:     ~a\n" (string-join dt ", "))
-             ""))
-       (let ([la (operational-checkpoint-last-action cp)])
-         (if la
-             (format "last_action:     ~a\n" la)
-             ""))
-       (let ([na (operational-checkpoint-next-action cp)])
-         (if na
-             (format "next_action:     ~a\n" na)
-             ""))
-       (let ([le (operational-checkpoint-last-error cp)])
-         (if le
-             (format "last_error:      ~a (~a)\n" le (operational-checkpoint-error-count cp))
-             ""))
-       "═══════════════════════════════════════\n")))
+  (define raw
+    (if (or (not root) (equal? root ""))
+        ""
+        (string-append
+         "═══ Operational Checkpoint ═══\n"
+         (format "repo-root:       ~a\n" root)
+         (format "planning-root:   ~a\n" (operational-checkpoint-planning-root cp))
+         (let ([ms (operational-checkpoint-active-milestone cp)])
+           (if ms
+               (format "milestone:       ~a\n" ms)
+               ""))
+         (let ([wv (operational-checkpoint-active-wave cp)])
+           (if wv
+               (format "wave:            ~a\n" wv)
+               ""))
+         (let ([dt (operational-checkpoint-dirty-tree-files cp)])
+           (if (pair? dt)
+               (format "dirty-files:     ~a\n" (string-join dt ", "))
+               ""))
+         (let ([la (operational-checkpoint-last-action cp)])
+           (if la
+               (format "last_action:     ~a\n" la)
+               ""))
+         (let ([na (operational-checkpoint-next-action cp)])
+           (if na
+               (format "next_action:     ~a\n" na)
+               ""))
+         (let ([le (operational-checkpoint-last-error cp)])
+           (if le
+               (format "last_error:      ~a (~a)\n" le (operational-checkpoint-error-count cp))
+               ""))
+         (let ([authority (operational-checkpoint-planning-authority cp)])
+           (if authority
+               (format "planning-authority: ~a\n" authority)
+               ""))
+         "═══════════════════════════════════════\n")))
+  (if (> (string-length raw) MAX-CHECKPOINT-CHARS)
+      (substring raw 0 MAX-CHECKPOINT-CHARS)
+      raw))
 
 ;; ────────────────────────────────────────────────────────────
 ;; Checkpoint mutators (functional update)
@@ -113,32 +127,42 @@
 (define (checkpoint-set-dirty-files cp files)
   (struct-copy operational-checkpoint cp [dirty-tree-files files]))
 
+(define (checkpoint-set-planning-authority cp path)
+  (struct-copy operational-checkpoint cp [planning-authority path]))
+
 ;; ────────────────────────────────────────────────────────────
 ;; Token estimation (conservative upper bound)
 ;; ────────────────────────────────────────────────────────────
 
 (define (checkpoint-estimated-tokens cp)
-  ;; ~4 chars/token for ASCII, maximum ~1,000 chars
-  (let ([text (checkpoint->text cp)]) (quotient (string-length text) 4)))
+  ;; Conservative ceiling at ~4 characters/token.
+  (let ([text (checkpoint->text cp)]) (quotient (+ (string-length text) 3) 4)))
 
 ;; ────────────────────────────────────────────────────────────
 ;; Supersession logic
 ;; ────────────────────────────────────────────────────────────
 
-;; When a named milestone STATE file is read, any generic STATE.md
-;; conclusion becomes stale. This function detects the contradiction.
-(define (supercedes-generic-planning? path-name)
-  ;; Is this a named milestone STATE file like "STATE-v0.99.73-ZERO-FAILING-TESTS.md"?
+;; Named planning artifacts supersede only the generic artifact in the same
+;; family. Recognition is deliberately anchored to the basename so paths such
+;; as notes-STATE-v1.2.3.md and backup suffixes cannot gain authority.
+(define named-planning-rx #px"^(PLAN|STATE|VALIDATION)-v[0-9]+\\.[0-9]+\\.[0-9]+.*\\.md$")
+(define generic-planning-rx #px"^(PLAN|STATE|VALIDATION)\\.md$")
+
+(define (path-basename path-name)
   (and (string? path-name)
-       (or (regexp-match? #px"STATE-v[0-9]+\\.[0-9]+\\.[0-9]+" path-name)
-           (regexp-match? #px"PLAN-v[0-9]+\\.[0-9]+\\.[0-9]+" path-name))))
+       (let ([name (file-name-from-path (string->path path-name))]) (and name (path->string name)))))
+
+(define (planning-family path-name rx)
+  (define basename (path-basename path-name))
+  (and basename (let ([match (regexp-match rx basename)]) (and match (cadr match)))))
+
+(define (supercedes-generic-planning? path-name)
+  (and (planning-family path-name named-planning-rx) #t))
 
 (define (contradicts-generic-planning? generic-path named-path)
-  ;; Does named-path contradict the generic planning artifact at generic-path?
-  (and generic-path
-       named-path
-       (regexp-match? #px"(STATE|PLAN|VALIDATION)\\.md$" generic-path)
-       (supercedes-generic-planning? named-path)))
+  (define generic-family (planning-family generic-path generic-planning-rx))
+  (define named-family (planning-family named-path named-planning-rx))
+  (and generic-family named-family (string=? generic-family named-family)))
 
 ;; ────────────────────────────────────────────────────────────
 ;; Checkpoint parameter (current session checkpoint)
@@ -150,24 +174,30 @@
 ;; Inject the checkpoint into a context message list
 ;; ────────────────────────────────────────────────────────────
 
+(define CHECKPOINT-ID "op-checkpoint")
+
+(define (checkpoint-message? item)
+  (and (message? item) (equal? (message-id item) CHECKPOINT-ID)))
+
 (define (inject-checkpoint-message cp messages)
-  ;; Prepend checkpoint as a system-originated message at the front
+  ;; Checkpoints are ephemeral assembly records, never history. Remove a prior
+  ;; copy first so repeated assembly remains idempotent.
+  (define cleaned (filter (lambda (item) (not (checkpoint-message? item))) messages))
   (if (and cp
            (operational-checkpoint-repo-root cp)
            (not (equal? (operational-checkpoint-repo-root cp) "")))
       (let ([text (checkpoint->text cp)])
         (if (string=? text "")
-            messages
-            (cons (hash 'role
-                        "system"
-                        'content
-                        (list (hash 'type "text" 'text text))
-                        'kind
-                        "checkpoint"
-                        'id
-                        "op-checkpoint")
-                  messages)))
-      messages))
+            cleaned
+            (cons (make-message CHECKPOINT-ID
+                                #f
+                                'system
+                                'checkpoint
+                                (list (make-text-part text))
+                                (current-seconds)
+                                (hasheq 'ephemeral #t 'source 'operational-checkpoint))
+                  cleaned)))
+      cleaned))
 
 (provide operational-checkpoint
          operational-checkpoint-repo-root
@@ -179,6 +209,7 @@
          operational-checkpoint-next-action
          operational-checkpoint-last-error
          operational-checkpoint-error-count
+         operational-checkpoint-planning-authority
          make-empty-checkpoint
          checkpoint->text
          checkpoint-set-repo-root
@@ -190,6 +221,7 @@
          checkpoint-set-error
          checkpoint-clear-error
          checkpoint-set-dirty-files
+         checkpoint-set-planning-authority
          checkpoint-estimated-tokens
          supercedes-generic-planning?
          contradicts-generic-planning?

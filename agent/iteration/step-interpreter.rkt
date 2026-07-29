@@ -36,17 +36,28 @@
                   loop-counters
                   loop-counters-iteration
                   loop-counters-consecutive-tool-count
-                  loop-counters-recent-tool-names)
-         (only-in "../../util/message/message.rkt" message? message-role message-id message-content)
+                  loop-counters-recent-tool-names
+                  loop-counters-recent-error-classes
+                  loop-counters-last-corrected-error-class)
+         (only-in "../../util/message/message.rkt"
+                  make-message
+                  message?
+                  message-id
+                  message-content
+                  message-meta-safe)
          (only-in "../../util/content/content-parts.rkt"
+                  make-text-part
                   tool-result-part?
                   tool-result-part-tool-call-id
-                  tool-result-part-content)
-         (only-in "../../util/tool/tool-types.rkt" tool-call-name tool-call-arguments tool-call-id)
+                  tool-result-part-content
+                  tool-result-part-is-error?)
+         (only-in "../../util/tool/tool-types.rkt" tool-call-name tool-call-id)
          (only-in "../../runtime/layer-adapters.rkt" permission-config?)
          (only-in "../../runtime/tool-coordinator.rkt"
-                  handle-tool-calls-pending
-                  extract-tool-calls-from-messages)
+                  handle-tool-calls-pending/outcome
+                  tool-batch-outcome-updated-context
+                  tool-batch-outcome-effective-current-calls
+                  tool-batch-outcome-current-result-messages)
          (only-in "../../runtime/runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
          (only-in "../../runtime/iteration/effect-executor.rkt"
                   step-effect:append-entries
@@ -68,8 +79,10 @@
          (only-in "../../runtime/session/session-store.rkt" append-entries!)
          (only-in "../../runtime/session/session-config.rkt" config-max-context-tokens)
          (only-in "../../runtime/working-set.rkt"
-                  working-set-update!
+                  working-set-update!/actions
                   ws-entry-path
+                  ws-entry-token-estimate
+                  ws-entry-budget-action
                   working-set-entries
                   working-set-entry-count
                   working-set-token-count)
@@ -80,7 +93,14 @@
                   estimate-mid-turn-tokens
                   maybe-compact-mid-turn
                   detect-exploration-loop)
-         (only-in "../../runtime/context-assembly/rollback-actions.rkt" increment-loop-warning-count!)
+         (only-in "../../runtime/context-assembly/rollback-actions.rkt"
+                  increment-loop-warning-count!
+                  tool-error-class->string
+                  error-class->signal
+                  warnings->actions
+                  select-highest-priority-action
+                  maybe-execute-action
+                  rollback-action-type)
          (only-in "../../runtime/context-assembly/state-aware-builder.rkt" current-reflection-event)
          (only-in "../../runtime/memory/auto-extraction.rkt"
                   maybe-auto-extract-tool-results!
@@ -132,22 +152,32 @@
 ;; execute-pending-tool-calls
 ;; ============================================================
 
-(define (execute-pending-tool-calls new-msgs infra config ws)
-  (define updated-ctx
-    (handle-tool-calls-pending new-msgs
-                               (loop-infra-ctx infra)
-                               (loop-infra-ext-reg infra)
-                               (loop-infra-reg infra)
-                               (loop-infra-bus infra)
-                               (loop-infra-session-id infra)
-                               (loop-infra-log-path infra)
-                               (loop-infra-token infra)
-                               config))
-  (define current-tool-calls (extract-tool-calls-from-messages new-msgs))
-  (define tool-result-msgs (filter (lambda (m) (eq? (message-role m) 'tool)) updated-ctx))
-  (define current-tool-calls-hashes
-    (for/list ([tc (in-list current-tool-calls)])
-      (hasheq 'name (tool-call-name tc) 'arguments (tool-call-arguments tc))))
+(define (execute-pending-tool-calls/observed new-msgs infra config ws)
+  (define outcome
+    (handle-tool-calls-pending/outcome new-msgs
+                                       (loop-infra-ctx infra)
+                                       (loop-infra-ext-reg infra)
+                                       (loop-infra-reg infra)
+                                       (loop-infra-bus infra)
+                                       (loop-infra-session-id infra)
+                                       (loop-infra-log-path infra)
+                                       (loop-infra-token infra)
+                                       config))
+  (define updated-ctx (tool-batch-outcome-updated-context outcome))
+  ;; Only this batch's effective calls and results may feed ephemeral state.
+  ;; updated-ctx intentionally also contains history for the next model turn.
+  (define current-tool-calls (tool-batch-outcome-effective-current-calls outcome))
+  (define tool-result-msgs (tool-batch-outcome-current-result-messages outcome))
+  ;; One observation per tool result keeps the frozen eight-result window
+  ;; truthful: successful results occupy a slot rather than disappearing.
+  (define result-classes
+    (for/list ([m (in-list tool-result-msgs)])
+      (define error-part
+        (findf (lambda (part) (and (tool-result-part? part) (tool-result-part-is-error? part)))
+               (message-content m)))
+      (if error-part
+          (tool-error-class->string (format "~a" (tool-result-part-content error-part)))
+          "success")))
   (define read-spiral-paths
     (for/list ([tc (in-list current-tool-calls)]
                #:when (equal? (tool-call-name tc) "read"))
@@ -159,11 +189,12 @@
                          (loop-infra-session-id infra)
                          "working-set.read-spiral-detected"
                          (hasheq 'paths valid-spiral-paths 'count (length valid-spiral-paths))))
-  (working-set-update! ws
-                       current-tool-calls-hashes
-                       tool-result-msgs
-                       message-id
-                       estimate-message-tokens)
+  (define budget-actions
+    (working-set-update!/actions ws
+                                 current-tool-calls
+                                 tool-result-msgs
+                                 message-id
+                                 estimate-message-tokens))
   (emit-session-event! (loop-infra-bus infra)
                        (loop-infra-session-id infra)
                        "working-set.update"
@@ -172,7 +203,15 @@
                                'token-count
                                (working-set-token-count ws)
                                'paths
-                               (map ws-entry-path (working-set-entries ws))))
+                               (map ws-entry-path (working-set-entries ws))
+                               'budget-actions
+                               (for/list ([entry (in-list budget-actions)])
+                                 (hasheq 'path
+                                         (ws-entry-path entry)
+                                         'action
+                                         (ws-entry-budget-action entry)
+                                         'tokens
+                                         (ws-entry-token-estimate entry)))))
   ;; v0.96.13 W3: Post-tool reflection — emit event if large results detected
   (when (current-reflection-prompt-enabled)
     (define large-results
@@ -222,7 +261,133 @@
     (maybe-auto-extract-tool-results! extractable-msgs
                                       #:session-id (loop-infra-session-id infra)
                                       #:project-root (loop-infra-log-path infra)))
+  (values updated-ctx result-classes))
+
+(define (execute-pending-tool-calls new-msgs infra config ws)
+  (define-values (updated-ctx _result-classes)
+    (execute-pending-tool-calls/observed new-msgs infra config ws))
   updated-ctx)
+
+(define MAX-RECENT-ERROR-CLASSES 8)
+(define ERROR-CORRECTION-THRESHOLD 3)
+(define SUCCESS-RESULT-CLASS "success")
+
+(define (bounded-result-history prior current)
+  (define combined (append prior current))
+  (take-right combined (min MAX-RECENT-ERROR-CLASSES (length combined))))
+
+(define (process-result-classes prior-history prior-corrected current)
+  ;; Process a parallel batch in scheduler result order. A threshold crossing
+  ;; may emit at most one action for the turn; a later success/different class
+  ;; still closes that episode before the next provider request.
+  (let loop ([remaining current]
+             [history prior-history]
+             [corrected prior-corrected]
+             [crossing #f])
+    (cond
+      [(null? remaining) (values history corrected crossing)]
+      [else
+       (define item (car remaining))
+       (define recovered? (and corrected (not (string=? item corrected))))
+       (define base-history
+         (if recovered?
+             '()
+             history))
+       (define base-corrected (if recovered? #f corrected))
+       (define next-history (bounded-result-history base-history (list item)))
+       (define crosses?
+         (and (not crossing)
+              (not base-corrected)
+              (not (string=? item SUCCESS-RESULT-CLASS))
+              (>= (count (lambda (seen) (string=? seen item)) next-history)
+                  ERROR-CORRECTION-THRESHOLD)))
+       (loop (cdr remaining)
+             next-history
+             (if crosses? item base-corrected)
+             (if crosses? item crossing))])))
+
+(define (remove-error-corrections ctx)
+  (filter (lambda (m) (not (and (message? m) (hash-ref (message-meta-safe m) 'error-correction #f))))
+          ctx))
+
+(define (inject-error-correction ctx error-class signal iteration)
+  (append
+   ctx
+   (list (make-message
+          (format "error-correction-~a-~a" iteration error-class)
+          #f
+          'system
+          'system-instruction
+          (list (make-text-part
+                 (format (string-append
+                          "Corrective checkpoint: error class ~a repeated at least ~a times "
+                          "within the last ~a tool results. Signal: ~a. Do not repeat the "
+                          "equivalent call. Re-establish the canonical repository/path/tool "
+                          "coordinate, choose a materially different action, and continue only "
+                          "after that corrective check.")
+                         error-class
+                         ERROR-CORRECTION-THRESHOLD
+                         MAX-RECENT-ERROR-CLASSES
+                         signal)))
+          (current-seconds)
+          (hasheq 'ephemeral
+                  #t
+                  'gsd-pin
+                  #t
+                  'error-correction
+                  #t
+                  'error-class
+                  error-class
+                  'signal
+                  signal)))))
+
+(define (apply-error-correction updated-ctx result-classes counters emit)
+  (define event-history
+    (bounded-result-history (loop-counters-recent-error-classes counters) result-classes))
+  (define-values (history corrected crossing)
+    (process-result-classes (loop-counters-recent-error-classes counters)
+                            (loop-counters-last-corrected-error-class counters)
+                            result-classes))
+  (define next-counters
+    (struct-copy loop-counters
+                 counters
+                 [recent-error-classes history]
+                 [last-corrected-error-class corrected]))
+  ;; Keep at most one ephemeral correction and remove it immediately when a
+  ;; later result in the same batch demonstrates recovery/different behavior.
+  (define cleaned-ctx (remove-error-corrections updated-ctx))
+  (define reconciled-ctx
+    (if corrected
+        (inject-error-correction cleaned-ctx
+                                 corrected
+                                 (error-class->signal corrected)
+                                 (loop-counters-iteration counters))
+        cleaned-ctx))
+  (if crossing
+      (let* ([signal (error-class->signal crossing)]
+             [reason (format "error ~a repeated ~a times within ~a tool results"
+                             crossing
+                             ERROR-CORRECTION-THRESHOLD
+                             (length event-history))]
+             [action (select-highest-priority-action (warnings->actions (list (list signal
+                                                                                    reason))))])
+        (maybe-execute-action action)
+        (increment-loop-warning-count!)
+        (emit "iteration.error-correction"
+              (hasheq 'error-class
+                      crossing
+                      'signal
+                      signal
+                      'history
+                      event-history
+                      'corrective-calls
+                      1
+                      'max-corrective-calls
+                      1
+                      'action
+                      (and action (rollback-action-type action))))
+        (values reconciled-ctx next-counters))
+      (values reconciled-ctx next-counters)))
 
 ;; ============================================================
 ;; handle-stop-action
@@ -307,7 +472,13 @@
                    max-iterations-hard
                    'remaining
                    (- max-iterations-hard (add1 (loop-counters-iteration counters)))))
-     (define updated-ctx (execute-pending-tool-calls new-msgs infra config ws))
+     (define-values (raw-updated-ctx result-classes)
+       (execute-pending-tool-calls/observed new-msgs infra config ws))
+     (define-values (updated-ctx corrected-counters)
+       (apply-error-correction raw-updated-ctx
+                               result-classes
+                               (step-result-new-counters step-res)
+                               emit))
      (define budget-config (hasheq 'max-context-tokens (config-max-context-tokens config)))
      (define ctx-after-budget
        (if sess
@@ -323,20 +494,24 @@
                                        budget-config
                                        #:emit-event emit)
              updated-ctx)))
-     (directive-recurse ctx-after-budget (make-next-counters counters) ws)]
+     (directive-recurse ctx-after-budget (make-next-counters corrected-counters) ws)]
     ['continue
      ;; fire-and-forget effect for entry persistence
      (run-step-effects! (list (step-effect:append-entries new-msgs)) infra)
-     (define updated-ctx (execute-pending-tool-calls new-msgs infra config ws))
+     (define-values (raw-updated-ctx result-classes)
+       (execute-pending-tool-calls/observed new-msgs infra config ws))
      (define new-counters (step-result-new-counters step-res))
+     (define-values (updated-ctx corrected-counters)
+       (apply-error-correction raw-updated-ctx result-classes new-counters emit))
      (define loop-warning
-       (detect-exploration-loop (filter string? (loop-counters-recent-tool-names new-counters))))
+       (detect-exploration-loop (filter string?
+                                        (loop-counters-recent-tool-names corrected-counters))))
      (when loop-warning
        (emit "iteration.exploration-loop"
              (hasheq 'pattern
                      loop-warning
                      'recent-tools
-                     (loop-counters-recent-tool-names new-counters)
+                     (loop-counters-recent-tool-names corrected-counters)
                      'iteration
                      (loop-counters-iteration counters)))
        ;; v0.96.14 F2: Feed exploration loop into rollback pipeline
@@ -345,7 +520,7 @@
      ;; Reuse make-next-counters for consistent counter increment
      (directive-recurse updated-ctx
                         (struct-copy loop-counters
-                                     new-counters
-                                     [iteration (add1 (loop-counters-iteration new-counters))]
+                                     corrected-counters
+                                     [iteration (add1 (loop-counters-iteration corrected-counters))]
                                      [stall-retry-count 0])
                         ws)]))

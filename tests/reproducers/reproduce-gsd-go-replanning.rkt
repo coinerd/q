@@ -7,18 +7,17 @@
 ;;
 ;; Reproduce the bug where /go execution falls back into planning mode.
 
-(require racket/port
+(require rackunit
+         racket/port
+         racket/file
          racket/string
          racket/list
+         racket/runtime-path
          "../../llm/provider.rkt"
          "../../util/event/event-bus.rkt"
          (only-in "../../tools/tool.rkt" make-tool-registry tool-registry?)
          (only-in "../../tools/registry-defaults.rkt" register-default-tools!)
-         (only-in "../../extensions/gsd/session-state.rkt"
-                  current-gsd-mode
-                  current-gsd-state
-                  set-gsd-state!
-                  current-gsd-ctx)
+         (only-in "../../extensions/gsd/session-state.rkt" current-gsd-mode current-gsd-ctx)
          (only-in "../../extensions/gsd/state-machine.rkt"
                   gsm-ctx-current
                   gsm-ctx-reset!
@@ -26,11 +25,11 @@
                   gsm-ctx-transition!)
          (only-in "../../extensions/gsd/core.rkt" reset-all-gsd-state!)
          (only-in "../../extensions/api.rkt" make-extension-registry extension-registry?)
-         (only-in "../../extensions/loader.rkt" load-extension! discover-extension-files)
+         (only-in "../../extensions/loader.rkt" load-extension!)
          (only-in "../../extensions/hooks.rkt" dispatch-hooks hook-result? hook-result-payload)
          (only-in "../../util/hook-types.rkt" hook-result-action))
 
-(define ext-dir (build-path (find-system-path 'home-dir) "src/q-agent/q/extensions"))
+(define-runtime-path gsd-extension-path "../../extensions/gsd-planning.rkt")
 
 (define (setup)
   (reset-all-gsd-state!)
@@ -38,12 +37,12 @@
   (define reg (make-tool-registry))
   (register-default-tools! reg)
   (define ext-reg (make-extension-registry))
-  (for ([ext-path (discover-extension-files (list ext-dir))])
-    (load-extension! ext-reg (cdr ext-path) #:event-bus bus))
+  (load-extension! ext-reg gsd-extension-path #:event-bus bus)
   (values bus reg ext-reg))
 
 (define (write-test-plan content)
-  (define plan-dir (build-path (find-system-path 'home-dir) "src/q-agent/q/.planning"))
+  (define plan-dir (build-path (current-directory) ".planning"))
+  (make-directory* plan-dir)
   (call-with-output-file (build-path plan-dir "PLAN.md")
                          (lambda (out) (display content out))
                          #:exists 'replace))
@@ -61,52 +60,58 @@
   (define-values (bus reg ext-reg) (setup))
 
   (write-test-plan
-   (string-append
-    "# Plan: Test\n\n"
-    "## Wave 1: Fix foo\n- old-text: def overview_page\n- new-text: def new_page\n\n"
-    "## Wave 2: Fix bar\n- old-text: def timeline_page\n- new-text: def new_timeline\n"))
+   (string-append "# Plan: Test\n\n"
+                  "## Wave 0: Fix foo\n- File: foo.rkt\n- Verify: raco test foo.rkt\n\n"
+                  "## Wave 1: Fix bar\n- File: bar.rkt\n- Verify: raco test bar.rkt\n"))
 
   (define payload (hasheq 'command "/go" 'input "/go"))
   (define result (dispatch-hooks 'execute-command payload ext-reg))
 
   (define p (hook-result-payload result))
-  (define submit-text (and (hash? p) (hash-ref p 'submit #f)))
+  (define execution-text (and (hash? p) (hash-ref p 'new-session #f)))
   (define display-text (and (hash? p) (hash-ref p 'text #f)))
   (printf "Display text: ~a\n" display-text)
-  (printf "Submit text length: ~a chars\n"
-          (if submit-text
-              (string-length submit-text)
+  (printf "Execution text length: ~a chars\n"
+          (if execution-text
+              (string-length execution-text)
               0))
-  (when submit-text
-    (printf "Submit text first 600 chars:\n~a\n...\n"
-            (substring submit-text 0 (min 600 (string-length submit-text))))
-    (printf "Contains 'EXECUTE the plan': ~a\n" (string-contains? submit-text "EXECUTE the plan"))
-    (printf "Contains 'do NOT explore': ~a\n" (string-contains? submit-text "do NOT explore"))
-    (printf "Contains 'Do NOT run read-only tools': ~a\n"
-            (string-contains? submit-text "Do NOT run read-only tools"))
-    (printf "Contains plan waves: ~a\n" (string-contains? submit-text "Wave 1: Fix foo"))))
+  (check-true (string? execution-text))
+  (check-true (string-contains? execution-text "EXECUTE the plan"))
+  (check-true (string-contains? execution-text "do NOT explore"))
+  (check-true (string-contains? execution-text "Read each target file BEFORE editing it"))
+  (when execution-text
+    (printf "Execution text first 600 chars:\n~a\n...\n"
+            (substring execution-text 0 (min 600 (string-length execution-text))))
+    (printf "Contains 'EXECUTE the plan': ~a\n" (string-contains? execution-text "EXECUTE the plan"))
+    (printf "Contains 'do NOT explore': ~a\n" (string-contains? execution-text "do NOT explore"))
+    (printf "Requires reading target files: ~a\n"
+            (string-contains? execution-text "Read each target file BEFORE editing it"))
+    (printf "Contains plan waves: ~a\n" (string-contains? execution-text "Wave 0: Fix foo"))))
 
 (define (test-mode-transitions)
   (displayln "\n=== Test 2: GSD mode transitions ===")
   (define-values (bus reg ext-reg) (setup))
 
+  (define ctx (current-gsd-ctx))
   (printf "Initial mode: ~a\n" (current-gsd-mode))
-  (set-gsd-state! 'planning)
-  (printf "After set planning: ~a\n" (current-gsd-mode))
-  (set-gsd-state! 'plan-written)
-  (printf "After set plan-written: ~a\n" (current-gsd-mode))
-  (set-gsd-state! 'executing)
-  (printf "After set executing: ~a\n" (current-gsd-mode)))
+  (gsm-ctx-transition-to! ctx 'exploring)
+  (printf "After transition to exploring: ~a\n" (current-gsd-mode))
+  (gsm-ctx-transition-to! ctx 'plan-written)
+  (printf "After transition to plan-written: ~a\n" (current-gsd-mode))
+  (gsm-ctx-transition-to! ctx 'executing)
+  (printf "After transition to executing: ~a\n" (current-gsd-mode))
+  (check-equal? (current-gsd-mode) 'executing))
 
 (define (test-tool-blocking)
   (displayln "\n=== Test 3: Tool blocking during executing ===")
   (define-values (bus reg ext-reg) (setup))
-  (set-gsd-state! 'executing)
+  (gsm-ctx-transition-to! (current-gsd-ctx) 'executing)
 
   ;; planning-write should be blocked
   (define pw-payload
     (hasheq 'tool-name "planning-write" 'tool-arguments (hash 'artifact "PLAN" 'content "# New")))
   (define pw-result (dispatch-hooks 'tool-call-pre pw-payload ext-reg))
+  (check-true (blocked? pw-result))
   (printf "planning-write: action=~a ~a\n"
           (result-action pw-result)
           (if (blocked? pw-result)
@@ -117,6 +122,7 @@
   (define write-payload
     (hasheq 'tool-name "write" 'tool-arguments (hash 'path "/tmp/test.txt" 'content "hello")))
   (define write-result (dispatch-hooks 'tool-call-pre write-payload ext-reg))
+  (check-false (blocked? write-result))
   (printf "write /tmp/test.txt: action=~a ~a\n"
           (result-action write-result)
           (if (blocked? write-result)
@@ -157,7 +163,7 @@
 (define (test-write-bypass-plan)
   (displayln "\n=== Test 4: Can agent bypass planning-write guard via write tool? ===")
   (define-values (bus reg ext-reg) (setup))
-  (set-gsd-state! 'executing)
+  (gsm-ctx-transition-to! (current-gsd-ctx) 'executing)
 
   ;; Agent uses write tool to overwrite PLAN.md
   (define plan-path (build-path (current-directory) ".planning" "PLAN.md"))
@@ -167,16 +173,33 @@
             'tool-arguments
             (hash 'path plan-path 'content "# New plan via write!")))
   (define write-result (dispatch-hooks 'tool-call-pre write-payload ext-reg))
+  (check-true (blocked? write-result))
+  (define windows-write-result
+    (dispatch-hooks 'tool-call-pre
+                    (hasheq 'tool-name
+                            "write"
+                            'tool-arguments
+                            (hash 'path "C:\\repo\\.planning\\PLAN.md" 'content "# bypass"))
+                    ext-reg))
+  (check-true (blocked? windows-write-result))
   (printf "write PLAN.md during executing: action=~a ~a\n"
           (result-action write-result)
           (if (blocked? write-result)
               "BLOCKED (good)"
               "ALLOWED — BUG: agent can rewrite PLAN.md via write tool!")))
 
-;; Run all tests
-(test-go-prompt)
-(test-mode-transitions)
-(test-tool-blocking)
-(test-write-bypass-plan)
-
-(displayln "\n=== All tests complete ===")
+;; Run all tests in an isolated project directory.
+(define test-project-dir (make-temporary-file "q-gsd-replanning-~a" 'directory))
+(dynamic-wind void
+              (lambda ()
+                (parameterize ([current-directory test-project-dir])
+                  (test-case "go prompt is execution-oriented"
+                    (test-go-prompt))
+                  (test-case "gsd mode transitions reach executing"
+                    (test-mode-transitions))
+                  (test-case "executing mode blocks planning-write only"
+                    (test-tool-blocking))
+                  (test-case "generic write cannot bypass planning artifact guard"
+                    (test-write-bypass-plan))
+                  (displayln "\n=== All tests complete ===")))
+              (lambda () (delete-directory/files test-project-dir)))

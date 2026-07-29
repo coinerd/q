@@ -15,6 +15,27 @@
   (test-suite "Working Set Budget (W12 R6/R7)"
 
     ;; ============================================================
+    ;; Context-relative default cap
+    ;; ============================================================
+
+    (test-case "working-set budget is 30 percent of context capped at 8192"
+      (check-equal? (compute-working-set-budget 1) 0)
+      (check-equal? (compute-working-set-budget 100) 30)
+      ;; Cap boundary: floor(27306 * .30) = 8191; next token reaches the cap.
+      (check-equal? (compute-working-set-budget 27306) 8191)
+      (check-equal? (compute-working-set-budget 27307) 8192)
+      (check-equal? (compute-working-set-budget 128000) 8192))
+
+    (test-case "provider-bound context share evicts to at most 30 percent"
+      (define ws (make-working-set #:max-tokens 8192))
+      (for ([i (in-range 5)])
+        (working-set-add! ws (format "/tmp/~a.rkt" i) (format "m~a" i) 100))
+      (define actions (working-set-enforce-context-share! ws 1000))
+      (check-equal? (working-set-token-count ws) 300)
+      (check-equal? (length actions) 2)
+      (check-true (andmap (lambda (entry) (eq? (ws-entry-budget-action entry) 'evicted)) actions)))
+
+    ;; ============================================================
     ;; R6: Default budget enforcement
     ;; ============================================================
 

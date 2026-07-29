@@ -47,7 +47,7 @@
        (make-tool
         "read"
         "Read a file"
-        (hasheq 'type "object" 'properties (hasheq 'path (hasheq 'type "string")) 'required '(path))
+        (hasheq 'type "object" 'properties (hasheq 'path (hasheq 'type "string")) 'required '("path"))
         (lambda (args ctx)
           (make-success-result (list (hasheq 'type "text" 'text "(displayln \"hello\")"))))))
 
@@ -119,7 +119,7 @@
        (make-tool
         "read"
         "Read a file"
-        (hasheq 'type "object" 'properties (hasheq 'path (hasheq 'type "string")) 'required '(path))
+        (hasheq 'type "object" 'properties (hasheq 'path (hasheq 'type "string")) 'required '("path"))
         (lambda (args ctx)
           (define path (hash-ref args 'path ""))
           (if (string=? path "")
