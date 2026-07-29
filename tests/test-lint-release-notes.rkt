@@ -249,6 +249,70 @@
                 "Features + Bug Fixes (without User-Visible Changes) is acceptable"))
 
 ;; ===========================================================================
+;; v0.99.75 W3: exact release-entry parsing
+;; ===========================================================================
+
+(test-case "release truth rejects former cwd and count terminology"
+  (define base
+    (string-append "### User-Visible Changes\n"
+                   "### Breaking / Behavior Changes\n"
+                   "### Migration Notes\n"
+                   "### Testing\n"
+                   "### Operational / Release\n"))
+  (check-not-false (member "False cwd contract: 'working directory is always canonical'"
+                           (validate-release-notes
+                            (string-append base "working directory is always canonical\n"))))
+  (check-not-false (member "Unreconciled test-count terminology"
+                           (validate-release-notes
+                            (string-append base "All 45 of 45 failing test files pass.\n")))))
+
+(test-case "release truth requires TS7 and ledger for defined count populations"
+  (define base
+    (string-append
+     "### User-Visible Changes\nchange\n"
+     "### Breaking / Behavior Changes\nnone\n"
+     "### Migration Notes\nnone\n"
+     "### Testing\nauthoritative 53-file baseline; release-tracked 45-file set; 44 passing.\n"
+     "### Operational / Release\n"))
+  (check-not-false (member "Unreconciled test-count terminology" (validate-release-notes base)))
+  (check-not-false (member "Unreconciled test-count terminology"
+                           (validate-release-notes
+                            (string-append "### User-Visible Changes\nchange\n"
+                                           "### Breaking / Behavior Changes\nnone\n"
+                                           "### Migration Notes\nnone\n"
+                                           "### Testing\nB53, T45, and P44.\n"
+                                           "### Operational / Release\n"))))
+  (check-not-false (member "Unreconciled test-count terminology"
+                           (validate-release-notes
+                            (string-append base
+                                           "See docs/reports/v0.99.75-W0-EVIDENCE-FREEZE.md.\n"))))
+  (check-not-false (member "Unreconciled test-count terminology"
+                           (validate-release-notes (string-append base "remaining TS7.\n")))))
+
+(test-case "release truth accepts defined B53/T45/P44/TS7 terminology"
+  (define block
+    (string-append
+     "### User-Visible Changes\nexplicit invocation cwd takes precedence; execution-context cwd is the fallback; failures surface visibly.\n"
+     "### Breaking / Behavior Changes\nnone\n"
+     "### Migration Notes\nnone\n"
+     "### Testing\nauthoritative 53-file baseline; later release-tracked 45-file set; 44 passing; remaining TS7.\n"
+     "### Operational / Release\nSee docs/reports/v0.99.75-W0-EVIDENCE-FREEZE.md.\n"))
+  (check-equal? (validate-release-notes block) '()))
+
+(test-case "release-note extraction accepts canonical release metadata"
+  (define text (changelog "## v1.2.3 — 2026-07-29" "body" "## 1.2.2" "historical"))
+  (check-equal? (string-trim (extract-version-block text "1.2.3")) "body"))
+
+(test-case "release-note extraction rejects partial and duplicate targets"
+  (check-false (extract-version-block "## 1.2.30\nbody" "1.2.3"))
+  (check-false (extract-version-block "## 1.2.3\nfirst\n## v1.2.3 — 2026-07-29\nsecond" "1.2.3")))
+
+(test-case "historical release entries delimit the selected block"
+  (define text
+    (changelog "## 1.2.3 (Released 2026-07-29)" "current" "## v1.2.2 — Unreleased" "historical"))
+  (check-equal? (string-trim (extract-version-block text "1.2.3")) "current"))
+
+;; ===========================================================================
 ;; Summary
 ;; ===========================================================================
 

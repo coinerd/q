@@ -30,7 +30,8 @@
          check-gate-evidence
          validate-gate-evidence-entry
          required-gate-suites
-         parse-argv)
+         parse-argv
+         validate-changelog-release)
 
 (require racket/file
          racket/string
@@ -96,23 +97,40 @@
 ;; Check 3: CHANGELOG entry
 ;; ---------------------------------------------------------------------------
 
-(define (check-changelog-entry)
+(define (validate-changelog-release content ver context tag-exists?)
+  (define lines (string-split content "\n"))
+  (define heading-rx #px"^## v?([0-9]+\\.[0-9]+\\.[0-9]+)(?:\\s|$)")
+  (define target-indexes
+    (for/list ([line (in-list lines)]
+               [index (in-naturals)]
+               #:when (let ([m (regexp-match heading-rx (string-trim line))])
+                        (and m (string=? (cadr m) ver))))
+      index))
+  (and (= (length target-indexes) 1)
+       (let* ([block (takef (drop lines (add1 (car target-indexes)))
+                            (lambda (line) (not (regexp-match? heading-rx (string-trim line)))))]
+              [released? (for/or ([line (in-list block)])
+                           (regexp-match? #px"^Released [0-9]{4}-[0-9]{2}-[0-9]{2}\\.$"
+                                          (string-trim line)))]
+              [unreleased? (for/or ([line (in-list block)])
+                             (member (string-downcase (string-trim line))
+                                     '("not yet released." "unreleased." "unreleased")))])
+         (and (or released? unreleased?)
+              (not (and (or tag-exists? (eq? context 'tag-publish)) unreleased?))))))
+
+(define (check-changelog-entry [context #f] [tag-exists? #f])
   (define ver (get-canonical-version))
   (cond
     [(not (file-exists? "CHANGELOG.md"))
      (printf "  [FAIL] CHANGELOG.md not found~n")
      #f]
+    [(validate-changelog-release (file->string "CHANGELOG.md") ver context tag-exists?)
+     (printf "  [PASS] CHANGELOG has one valid release entry for ~a~n" ver)
+     #t]
     [else
-     (define content (file->string "CHANGELOG.md"))
-     (define bare-pattern (regexp (format "## ~a" (regexp-quote ver))))
-     (define v-prefix-pattern (regexp (format "## v~a" (regexp-quote ver))))
-     (cond
-       [(or (regexp-match? bare-pattern content) (regexp-match? v-prefix-pattern content))
-        (printf "  [PASS] CHANGELOG has entry for ~a~n" ver)
-        #t]
-       [else
-        (printf "  [FAIL] CHANGELOG missing entry for ~a~n" ver)
-        #f])]))
+     (printf "  [FAIL] CHANGELOG entry for ~a is missing, duplicate, or has invalid release status~n"
+             ver)
+     #f]))
 
 ;; ---------------------------------------------------------------------------
 ;; Check 4: Git clean (no uncommitted changes)
@@ -201,7 +219,9 @@
   (define files '("CHANGELOG.md" "README.md"))
   (define has-markers
     (for/or ([f (in-list files)])
-      (and (file-exists? f) (regexp-match? #rx"<<<<<<<|=======|>>>>>>>" (file->string f)))))
+      (and (file-exists? f)
+           (for/or ([line (in-list (string-split (file->string f) "\n"))])
+             (regexp-match? #rx"^(<<<<<<<|=======|>>>>>>>)" line)))))
   (cond
     [(not has-markers)
      (printf "  [PASS] no merge conflict markers in release files~n")
@@ -321,7 +341,7 @@
 
   (define base-results
     (list (check-version-sync)
-          (check-changelog-entry)
+          (check-changelog-entry context (eq? context 'tag-publish))
           (check-git-clean)
           (check-main-branch context)
           (check-conflict-markers)))

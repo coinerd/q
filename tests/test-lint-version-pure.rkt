@@ -26,57 +26,75 @@
 ;; Pure function tests (no I/O)
 ;; ---------------------------------------------------------------------------
 
-(define-test-suite lint-version-pure-tests
-                   ;; --- check-info-content ---
-                   (test-case "check-info-content: matching version returns no errors"
-                     (define check (lv-ref 'check-info-content))
-                     (define content "(define version \"1.0.0\")")
-                     (check-equal? (check content "1.0.0") '()))
-                   (test-case "check-info-content: mismatched version returns error"
-                     (define check (lv-ref 'check-info-content))
-                     (define content "(define version \"0.9.0\")")
-                     (define errors (check content "1.0.0"))
-                     (check-equal? (length errors) 1))
-                   (test-case "check-info-content: unparseable content returns error"
-                     (define check (lv-ref 'check-info-content))
-                     (define content "(define something-else \"1.0.0\")")
-                     (define errors (check content "1.0.0"))
-                     (check-equal? (length errors) 1))
-                   ;; --- check-readme-content ---
-                   (test-case "check-readme-content: matching badge and verify"
-                     (define check (lv-ref 'check-readme-content))
-                     (define content "badge/version-1.0.0 and q version 1.0.0")
-                     (check-equal? (check content "1.0.0") '()))
-                   (test-case "check-readme-content: mismatched badge"
-                     (define check (lv-ref 'check-readme-content))
-                     (define content "badge/version-0.9.0 and q version 1.0.0")
-                     (define errors (check content "1.0.0"))
-                     (check-equal? (length errors) 1)
-                     (check-equal? (first (first errors)) 'README.md))
-                   (test-case "check-readme-content: mismatched verify snippet"
-                     (define check (lv-ref 'check-readme-content))
-                     (define content "badge/version-1.0.0 and q version 0.9.0")
-                     (define errors (check content "1.0.0"))
-                     (check-equal? (length errors) 1))
-                   (test-case "check-readme-content: no version strings in content"
-                     (define check (lv-ref 'check-readme-content))
-                     (define content "# Just a readme with no versions")
-                     (check-equal? (check content "1.0.0") '()))
-                   ;; --- check-changelog-content ---
-                   (test-case "check-changelog-content: sufficient versions → no errors"
-                     (define check (lv-ref 'check-changelog-content))
-                     ;; Generate 50 version headers
-                     (define content
-                       (string-join (for/list ([i (in-range 1 51)])
-                                      (format "## v0.~a.0" i))
-                                    "\n"))
-                     (check-equal? (check content) '()))
-                   (test-case "check-changelog-content: too few versions → error"
-                     (define check (lv-ref 'check-changelog-content))
-                     (define content "## v1.0.0\n## v1.0.1\n## v1.0.2")
-                     (define errors (check content))
-                     (check-equal? (length errors) 1)
-                     (check-equal? (first (first errors)) 'CHANGELOG.md)))
+(define-test-suite
+ lint-version-pure-tests
+ ;; --- check-info-content ---
+ (test-case "check-info-content: matching version returns no errors"
+   (define check (lv-ref 'check-info-content))
+   (define content "(define version \"1.0.0\")")
+   (check-equal? (check content "1.0.0") '()))
+ (test-case "check-info-content: mismatched version returns error"
+   (define check (lv-ref 'check-info-content))
+   (define content "(define version \"0.9.0\")")
+   (define errors (check content "1.0.0"))
+   (check-equal? (length errors) 1))
+ (test-case "check-info-content: unparseable content returns error"
+   (define check (lv-ref 'check-info-content))
+   (define content "(define something-else \"1.0.0\")")
+   (define errors (check content "1.0.0"))
+   (check-equal? (length errors) 1))
+ ;; --- check-readme-content ---
+ (test-case "check-readme-content: matching badge and verify"
+   (define check (lv-ref 'check-readme-content))
+   (define content "badge/version-1.0.0 and q version 1.0.0")
+   (check-equal? (check content "1.0.0") '()))
+ (test-case "check-readme-content: mismatched badge"
+   (define check (lv-ref 'check-readme-content))
+   (define content "badge/version-0.9.0 and q version 1.0.0")
+   (define errors (check content "1.0.0"))
+   (check-equal? (length errors) 1)
+   (check-equal? (first (first errors)) 'README.md))
+ (test-case "check-readme-content: mismatched verify snippet"
+   (define check (lv-ref 'check-readme-content))
+   (define content "badge/version-1.0.0 and q version 0.9.0")
+   (define errors (check content "1.0.0"))
+   (check-equal? (length errors) 1))
+ (test-case "check-readme-content: no version strings in content"
+   (define check (lv-ref 'check-readme-content))
+   (define content "# Just a readme with no versions")
+   (check-equal? (check content "1.0.0") '()))
+ ;; --- check-changelog-content ---
+ (test-case "check-changelog-content: sufficient versions → no errors"
+   (define check (lv-ref 'check-changelog-content))
+   ;; Generate 50 version headers
+   (define content
+     (string-join (for/list ([i (in-range 1 51)])
+                    (format "## v0.~a.0" i))
+                  "\n"))
+   (check-equal? (check content) '()))
+ (test-case "check-changelog-content: too few versions → error"
+   (define check (lv-ref 'check-changelog-content))
+   (define content "## v1.0.0\n## v1.0.1\n## v1.0.2")
+   (define errors (check content))
+   (check-equal? (length errors) 1)
+   (check-equal? (first (first errors)) 'CHANGELOG.md))
+ (test-case "check-changelog-content: duplicate release entries fail"
+   (define check (lv-ref 'check-changelog-content))
+   (define content
+     (string-join (append (for/list ([i (in-range 1 50)])
+                            (format "## v0.~a.0" i))
+                          '("## 1.2.3" "## v1.2.3 — 2026-07-29"))
+                  "\n"))
+   (define errors (check content))
+   (check-true (ormap (lambda (e) (regexp-match? #rx"duplicate release entries" (third e))) errors)))
+ (test-case "check-changelog-content: canonical dated and unreleased headings count"
+   (define check (lv-ref 'check-changelog-content))
+   (define content
+     (string-join (append '("## v1.2.3 — 2026-07-29" "## 1.2.2 — Unreleased")
+                          (for/list ([i (in-range 1 49)])
+                            (format "## 0.~a.0" i)))
+                  "\n"))
+   (check-equal? (check content) '())))
 
 ;; ---------------------------------------------------------------------------
 ;; I/O wrapper tests with mock file system
