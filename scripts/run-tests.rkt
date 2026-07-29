@@ -370,6 +370,7 @@
                   (define result (run-single-file f #:timeout (or timeout 120000) #:mode mode))
                   (define exit-code (test-file-result-exit-code result))
                   (cond
+                    [(eq? (classify-test-result result) 'SKIPPED_BY_PROFILE) (display "S")]
                     [(= exit-code 0) (display ".")]
                     [(= exit-code 2) (display "T")]
                     [else (display "F")])
