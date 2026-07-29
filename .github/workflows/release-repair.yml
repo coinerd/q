@@ -141,7 +141,7 @@ jobs:
           TAG: ${{ inputs.tag }}
           TAG_OBJECT: ${{ inputs['tag-object'] }}
           VERSION: ${{ steps.identity.outputs.version }}
-          Q_RELEASE_DATE: '2026-07-26'
+          Q_RELEASE_DATE: '2026-07-29'
           Q_RELEASE_WORKFLOW_RUN_ID: ${{ inputs.mode == 'apply' && inputs['approved-run-id'] || github.run_id }}
           Q_RELEASE_WORKFLOW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ inputs.mode == 'apply' && inputs['approved-run-id'] || github.run_id }}
           Q_RELEASE_WORKFLOW_SOURCE_SHA: ${{ github.workflow_sha }}
@@ -275,7 +275,7 @@ jobs:
           VERSION: ${{ needs.diagnose.outputs.version }}
           EXPECTED_TAR: ${{ inputs['expected-tarball-sha256'] }}
           EXPECTED_MANIFEST: ${{ inputs['expected-manifest-sha256'] }}
-          Q_RELEASE_DATE: '2026-07-26'
+          Q_RELEASE_DATE: '2026-07-29'
           Q_RELEASE_WORKFLOW_RUN_ID: ${{ inputs['approved-run-id'] }}
           Q_RELEASE_WORKFLOW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ inputs['approved-run-id'] }}
           Q_RELEASE_WORKFLOW_SOURCE_SHA: ${{ github.workflow_sha }}
@@ -312,7 +312,8 @@ jobs:
           EXPECTED_TAR: ${{ inputs['expected-tarball-sha256'] }}
           EXPECTED_MANIFEST: ${{ inputs['expected-manifest-sha256'] }}
           EXPIRES: ${{ inputs['approval-expires-utc'] }}
-          Q_RELEASE_DATE: '2026-07-26'
+          APPROVED_RUN: ${{ inputs['approved-run-id'] }}
+          Q_RELEASE_DATE: '2026-07-29'
           Q_RELEASE_WORKFLOW_RUN_ID: ${{ inputs.mode == 'apply' && inputs['approved-run-id'] || github.run_id }}
           Q_RELEASE_WORKFLOW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ inputs.mode == 'apply' && inputs['approved-run-id'] || github.run_id }}
           Q_RELEASE_WORKFLOW_SOURCE_SHA: ${{ github.workflow_sha }}
@@ -337,6 +338,12 @@ jobs:
           IFS=, read -ra planned <<< "$PLAN"
           for asset in "${planned[@]}"; do
             test "$(date -u +%s)" -le "$(date -u -d "$EXPIRES" +%s)"
+            test "$(sha256sum "/tmp/apply/q-$VERSION.tar.gz" | cut -d' ' -f1)" = "$EXPECTED_TAR"
+            test "$(sha256sum /tmp/apply/release-manifest.json | cut -d' ' -f1)" = "$EXPECTED_MANIFEST"
+            approved=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$APPROVED_RUN")
+            test "$(jq -r .conclusion <<<"$approved")" = success
+            test "$(jq -r .path <<<"$approved")" = '.github/workflows/release-repair.yml'
+            test "${{ github.workflow_sha }}" = "$Q_RELEASE_WORKFLOW_SOURCE_SHA"
             test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq .object.sha)" = "$TAG_OBJECT"
             test "$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$TAG_OBJECT" --jq .object.sha)" = "$PEELED"
             release=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID")

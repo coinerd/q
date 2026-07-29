@@ -255,6 +255,22 @@
   (check-true (string-contains? content "REPAIR_TARGET: 32718281aafd378fca511b4294d3c5668134673c")
               "repair target must equal GitHub release 361518742 target_commitish, not the tag name"))
 
+(test-case "release-repair.yml uses the truthful frozen release date"
+  (define content (read-release-repair-yml))
+  (check-equal? (length (regexp-match* #rx"Q_RELEASE_DATE: '2026-07-29'" content)) 3)
+  (check-false (string-contains? content "Q_RELEASE_DATE: '2026-07-26'")))
+
+(test-case "release-repair.yml revalidates approved bytes immediately inside each mutation iteration"
+  (define content (read-release-repair-yml))
+  (define mutation-loop
+    (bounded-section content
+                     "          for asset in \"${planned[@]}\"; do"
+                     "            upload_url="))
+  (check-true (string-contains? mutation-loop "sha256sum \"/tmp/apply/q-$VERSION.tar.gz\""))
+  (check-true (string-contains? mutation-loop "sha256sum /tmp/apply/release-manifest.json"))
+  (check-true (string-contains? mutation-loop "actions/runs/$APPROVED_RUN"))
+  (check-true (string-contains? mutation-loop "github.workflow_sha")))
+
 (test-case "release-repair.yml binds apply to approved bytes and expiry"
   (define content (read-release-repair-yml))
   (define apply-job (bounded-section content "  apply:"))
