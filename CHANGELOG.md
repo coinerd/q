@@ -1,16 +1,33 @@
-## 0.99.73
+## 0.99.74
 
 Not yet released.
 
+### User-Visible Changes
+
+- **Guarded-context self-improvement (R1-R8)**: All eight recommendations from the
+  guarded-context audit are now production-wired and live-verified.
+  - R1/R2: Operational checkpoint with planning-supersession detection
+  - R3/R5: Semantic error-class loop detection for bounded correction
+  - R4/R8: Bash cwd contract enforced — working directory is always canonical
+  - R6/R7: Working-set budgeting with budget-action telemetry (kept/summarized/evicted/superseded)
+
 ### Bug Fixes
 
-- **Zero Failing Tests**: All 44 of 45 failing test files in the fast suite now pass.
+- **Zero Failing Tests**: All 45 of 45 failing test files in the fast suite now pass.
   Fixed multiple root causes including bare/invalid tool schemas (`(hasheq)` without
   `type` key, OpenAI function-calling format, missing `properties`), stale
   `lifecycle-state` constructor (missing `closed?` field after v0.99.71),
   `#<void>` truthiness bug in `effect-executor.rkt` causing pre-hook contract
   violations, stale version strings, and missing `module+ test` blocks.
-  One pre-existing behavioral failure remains (test-scheduler-hooks.rkt TS7).
+
+## 0.99.73
+
+Released 2025-06-15.
+
+### Bug Fixes
+
+- **Zero Failing Tests**: All 44 of 45 failing test files in the fast suite now pass.
+  (Final behavioral fix for TS7 in test-scheduler-hooks.rkt completed in v0.99.74.)
 
 ## 0.99.72
 
