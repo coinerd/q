@@ -10,10 +10,13 @@ runs:
   steps:
     - name: Clean stale compiled bytecode
       shell: bash
-      run: find . -name '*.zo' -delete -o -name 'compiled' -type d -exec rm -rf {} + 2>/dev/null; true
+      run: |
+        set -euo pipefail
+        find . -type f -name '*.zo' -delete
+        find . -depth -type d -name compiled -exec rm -rf {} +
 
     - name: Cache Racket packages
-      uses: actions/cache@v5
+      uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25
       with:
         path: |
           ~/.racket
@@ -23,7 +26,7 @@ runs:
           racket-${{ runner.os }}-${{ inputs.racket-version }}-
 
     - name: Install Racket
-      uses: Bogdanp/setup-racket@v1.15
+      uses: Bogdanp/setup-racket@2466913449df77df2bad149d1f2fc4e1ea4795dd
       with:
         version: ${{ inputs.racket-version }}
 
@@ -43,7 +46,8 @@ runs:
         racket --version
         echo ""
         echo "raco version:"
-        raco --version || true
+        raco help > /tmp/raco-help.txt
+        head -n 1 /tmp/raco-help.txt
         echo ""
         echo "Working directory: $PWD"
         echo "PLTUSERHOME: ${PLTUSERHOME:-<not set>}"

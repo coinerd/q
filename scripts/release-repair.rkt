@@ -1,20 +1,19 @@
 #!/usr/bin/env racket
 #lang racket/base
 
-;; scripts/release-repair.rkt — Diagnostic-only release check.
+;; scripts/release-repair.rkt — Read-only release preflight component.
 ;;
-;; W9 (#8773): Existing-tag repair is diagnostic only.
-;; For existing releases: no mutation is allowed.
-;; For unpublished tags: user is directed to push the tag for normal pipeline.
+;; This CLI never mutates GitHub. The separately protected apply job in
+;; release-repair.yml may upload independently approved bytes after revalidation.
 ;;
 ;; Modes:
 ;;   dry-run — verify readiness, no publication (always used)
 ;;
 ;; Safety:
-;;   - Always dry-run (diagnostic only)
+;;   - This CLI is always read-only; workflow apply is a separate boundary
 ;;   - Refuses if tag version ≠ canonical version
 ;;   - Refuses if CHANGELOG entry missing
-;;   - Never mutates git tags or releases
+;;   - Never mutates git tags, releases, or assets
 ;;   - Never claims historical gates passed unless rerun
 ;;
 ;; Exit codes:
@@ -72,24 +71,28 @@
 ;; Parse command-line arguments.
 ;; Returns (values tag mode) or #f on error.
 (define (parse-repair-args args)
-  (define tag #f)
-  (define mode "dry-run")
-  (let loop ([rest args])
+  (define (fail message)
+    (displayln (string-append "ERROR: " message))
+    (displayln "Usage: release-repair.rkt --tag vX.Y.Z [--mode dry-run]")
+    #f)
+  (let loop ([rest args]
+             [tag #f]
+             [mode "dry-run"])
     (match rest
+      ['()
+       (if tag
+           (values tag mode)
+           (fail "--tag is required"))]
       [(list "--tag" t more ...)
-       (set! tag t)
-       (loop more)]
-      [(list "--help" _ ...)
-       (displayln "Usage: release-repair.rkt --tag vX.Y.Z [--mode dry-run]")
-       #f]
-      [(list) (void)]
-      [_ (loop (cdr rest))]))
-  (if tag
-      (values tag mode)
-      (begin
-        (displayln "ERROR: --tag is required")
-        (displayln "Usage: release-repair.rkt --tag vX.Y.Z [--mode dry-run]")
-        #f)))
+       (if (or tag (string-prefix? t "--"))
+           (fail "--tag must occur once with a value")
+           (loop more t mode))]
+      [(list "--mode" m more ...)
+       (if (equal? m "dry-run")
+           (loop more tag m)
+           (fail "only --mode dry-run is accepted by this diagnostic"))]
+      [(list "--help" _ ...) (fail "help requested")]
+      [(list flag _ ...) (fail (format "unknown or incomplete argument: ~a" flag))])))
 
 ;; Build the list of check descriptors for diagnostic repair.
 ;; Each check is (cons name thunk) where thunk returns (cons 'pass/'fail message).
@@ -145,10 +148,12 @@
 
 (define (main)
   (define argv (vector->list (current-command-line-arguments)))
-  (define parsed (parse-repair-args argv))
-  (when (not parsed)
+  ;; Capture a variable-value parser result without triggering an arity error.
+  (define parsed (call-with-values (lambda () (parse-repair-args argv)) list))
+  (unless (= (length parsed) 2)
     (exit 1))
-  (define-values (tag mode) (values (car parsed) (cadr parsed)))
+  (define tag (car parsed))
+  (define mode (cadr parsed))
 
   (displayln "=== Release Repair (Diagnostic) ===")
   (printf "Tag:  ~a~n" tag)

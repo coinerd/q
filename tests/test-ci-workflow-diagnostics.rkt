@@ -52,9 +52,10 @@
                    (test-case "prints racket version"
                      (check-true (string-contains? action-content "racket --version")
                                  "Must print racket version for diagnostics"))
-                   (test-case "prints raco version"
-                     (check-true (string-contains? action-content "raco --version")
-                                 "Must print raco version for diagnostics"))
+                   (test-case "prints raco toolchain diagnostics without suppressing failure"
+                     (check-true (string-contains? action-content "raco help")
+                                 "Must invoke raco successfully for diagnostics")
+                     (check-false (string-contains? action-content "raco --version || true")))
                    (test-case "prints package state before install/update"
                      (check-true (string-contains? action-content "Package state:")
                                  "Must print package state (installed or not)"))

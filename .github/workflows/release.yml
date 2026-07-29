@@ -9,14 +9,16 @@ on:
       - 'v*'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   # ── Pre-publication gates (runs before any build) ──
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-racket
 
       - name: Sync README status block
@@ -31,22 +33,27 @@ jobs:
       - name: Run tests (fast suite)
         id: fast-tests
         run: |
-          racket scripts/run-tests.rkt --suite fast --timeout 300 --record-gate-evidence 2>&1 | tee test-output.log || (echo "[warn] fast suite had 1 timeout, continuing" && exit 0)
+          set -o pipefail
+          racket scripts/run-tests.rkt --suite fast --timeout 300 --record-gate-evidence 2>&1 | tee test-output.log
 
       - name: Record gate evidence (arch)
         run: |
-          racket scripts/run-tests.rkt --suite arch --record-gate-evidence 2>&1 | tee -a test-output.log || (echo "[warn] arch suite had failures, continuing" && exit 0)
+          set -o pipefail
+          racket scripts/run-tests.rkt --suite arch --record-gate-evidence 2>&1 | tee -a test-output.log
 
       - name: Record gate evidence (workflows)
         run: |
-          racket scripts/run-tests.rkt --suite workflows --jobs 4 --timeout 90 --record-gate-evidence 2>&1 | tee -a test-output.log || (echo "[warn] workflows suite had failures, continuing" && exit 0)
+          set -o pipefail
+          racket scripts/run-tests.rkt --suite workflows --jobs 4 --timeout 90 --record-gate-evidence 2>&1 | tee -a test-output.log
 
       - name: Record gate evidence (tui)
         run: |
-          racket scripts/run-tests.rkt --suite tui --jobs 4 --timeout 60 --record-gate-evidence 2>&1 | tee -a test-output.log || (echo "[warn] tui suite had failures, continuing" && exit 0)
+          set -o pipefail
+          racket scripts/run-tests.rkt --suite tui --jobs 4 --timeout 60 --record-gate-evidence 2>&1 | tee -a test-output.log
 
       - name: Strict release readiness
         run: |
+          set -o pipefail
           racket scripts/lint-release-readiness.rkt --strict --context tag-publish 2>&1 | tee release-readiness.log
           echo "## Release Readiness" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
@@ -63,7 +70,7 @@ jobs:
 
       - name: Upload test log
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: test-output-release
           path: |
@@ -80,7 +87,9 @@ jobs:
       tag: ${{ steps.version.outputs.TAG }}
       checkout-ref: ${{ steps.checkout.outputs.CHECKOUT_REF }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-racket
 
       - name: Extract version from tag
@@ -124,9 +133,11 @@ jobs:
   # ── Build once, smoke, draft, verify, publish, verify ──
   release-core:
     needs: prepare
+    permissions:
+      contents: write
+      actions: read
     uses: ./.github/workflows/release-core.yml
     with:
       version: ${{ needs.prepare.outputs.version }}
       tag: ${{ needs.prepare.outputs.tag }}
       checkout-ref: ${{ needs.prepare.outputs.checkout-ref }}
-    secrets: inherit

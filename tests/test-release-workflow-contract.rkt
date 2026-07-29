@@ -9,19 +9,20 @@
 ;; They check:
 ;; - release.yml triggers the build-once pipeline through release-core.yml
 ;; - release-core.yml builds→smokes→drafts→verifies→publishes→verifies
-;; - release-repair.yml is diagnostic-only
+;; - release-repair.yml defaults to dry-run and gates an explicit apply path
 
 (require rackunit
          racket/file
          racket/string
          racket/port
-         racket/list)
+         racket/list
+         racket/runtime-path)
 
 ;; ── Path helpers ──
 
-(define release-yml-path (build-path ".." ".github" "workflows" "release.yml"))
-(define release-core-yml-path (build-path ".." ".github" "workflows" "release-core.yml"))
-(define release-repair-yml-path (build-path ".." ".github" "workflows" "release-repair.yml"))
+(define-runtime-path release-yml-path "../.github/workflows/release.yml")
+(define-runtime-path release-core-yml-path "../.github/workflows/release-core.yml")
+(define-runtime-path release-repair-yml-path "../.github/workflows/release-repair.yml")
 
 (define (read-release-yml)
   (file->string release-yml-path))
@@ -29,6 +30,21 @@
   (file->string release-core-yml-path))
 (define (read-release-repair-yml)
   (file->string release-repair-yml-path))
+
+(define (bounded-section content start-marker [end-marker #f])
+  (define start-match (regexp-match-positions (regexp (regexp-quote start-marker)) content))
+  (if (not (pair? start-match))
+      ""
+      (let* ([start (caar start-match)]
+             [end-match
+              (and end-marker
+                   (regexp-match-positions (regexp (regexp-quote end-marker)) content start))]
+             [end (if end-marker
+                      (if (pair? end-match)
+                          (caar end-match)
+                          (string-length content))
+                      (string-length content))])
+        (substring content start end))))
 
 ;; ============================================================
 ;; release.yml — orchestrator (uses release-core.yml)
@@ -92,9 +108,9 @@
   (check-true (string-contains? content "Version context diagnostics")
               "must have version context diagnostics step"))
 
-(test-case "release.yml passes secrets to release-core"
+(test-case "release.yml does not delegate unrelated caller secrets"
   (define content (read-release-yml))
-  (check-true (string-contains? content "secrets: inherit") "must pass secrets to release-core"))
+  (check-false (string-contains? content "secrets: inherit")))
 
 (test-case "release.yml uses setup-racket composite action"
   (define content (read-release-yml))
@@ -165,8 +181,9 @@
 (test-case "release-core.yml builds tarball with internal artifact upload"
   (define content (read-release-core-yml))
   (check-true (string-contains? content "Build tarball") "must have Build tarball step")
-  (check-true (string-contains? content "actions/upload-artifact@v7")
-              "must upload internal build artifact"))
+  (check-regexp-match #px"actions/upload-artifact@[0-9a-f]{40}"
+                      content
+                      "artifact action must be pinned to an immutable commit"))
 
 (test-case "release-core.yml has smoke with release-smoke suite"
   (define content (read-release-core-yml))
@@ -176,21 +193,27 @@
   (define content (read-release-core-yml))
   (check-true (string-contains? content "--draft") "must create draft (not public) release"))
 
-(test-case "release-core.yml verifies draft assets before publish"
+(test-case "release-core.yml verifies exact draft release before publish"
   (define content (read-release-core-yml))
-  (check-true (string-contains? content "Verifying draft release assets") "must verify draft assets"))
+  (define draft-job (bounded-section content "  verify-draft:" "  publish:"))
+  (check-true (string-contains? draft-job "needs.draft.outputs.release-id"))
+  (check-true (string-contains? draft-job "scripts/verify-release-bundle.rkt")))
 
-(test-case "release-core.yml verifies public assets after publish"
+(test-case "release-core.yml verifies exact public release after publish"
   (define content (read-release-core-yml))
-  (check-true (string-contains? content "Verifying public release assets")
-              "must verify public assets"))
+  (define public-job (bounded-section content "  verify-public:"))
+  (check-true (string-contains? public-job "needs.publish.outputs.release-id"))
+  (check-true (string-contains? public-job "scripts/verify-release-bundle.rkt")))
 
-(test-case "release-core.yml publishes with gh release edit --draft=false"
+(test-case "release-core.yml publishes exact verified release ID"
   (define content (read-release-core-yml))
-  (check-true (string-contains? content "--draft=false") "publish must flip draft=false"))
+  (define publish-job (bounded-section content "  publish:" "  verify-public:"))
+  (check-true (string-contains? publish-job "needs.verify-draft.outputs.release-id"))
+  (check-true (string-contains? publish-job "--method PATCH"))
+  (check-true (string-contains? publish-job "draft=false")))
 
 ;; ============================================================
-;; release-repair.yml — diagnostic-only for existing tags
+;; release-repair.yml — guarded repair for existing immutable tags
 ;; ============================================================
 
 (test-case "release-repair.yml is workflow_dispatch only"
@@ -198,45 +221,52 @@
   (check-true (string-contains? content "workflow_dispatch:") "must be workflow_dispatch only")
   (check-false (string-contains? content "push:") "must NOT have push trigger"))
 
-(test-case "release-repair.yml has only dry-run mode"
+(test-case "release-repair.yml dispatch defaults to dry-run and offers explicit apply"
   (define content (read-release-repair-yml))
-  (check-true (string-contains? content "dry-run") "must have dry-run mode")
-  ;; Check that it does NOT have softprops/action-gh-release (no actual publishing)
+  (define mode-input (bounded-section content "      mode:" "permissions:"))
+  (check-true (string-contains? mode-input "default: dry-run"))
+  (check-true (string-contains? mode-input "- dry-run"))
+  (check-true (string-contains? mode-input "- apply"))
   (check-false (string-contains? content "softprops/action-gh-release")
-               "must NOT use softprops/action-gh-release")
-  ;; Check that it does NOT have publish or repair-assets as mode options
-  (check-false (string-contains? content "  options:\n          - publish")
-               "must NOT have publish mode option")
-  (check-false (string-contains? content "  options:\n          - repair-assets")
-               "must NOT have repair-assets mode option"))
+               "repair must use guarded first-party API logic"))
 
-(test-case "release-repair.yml has contents: read permission"
+(test-case "release-repair.yml scopes write permission to guarded apply job"
   (define content (read-release-repair-yml))
-  (check-true (string-contains? content "contents: read") "must have read-only permission")
-  (check-false (string-contains? content "contents: write") "must NOT have write permission"))
+  (define pre-jobs (bounded-section content "permissions:" "jobs:"))
+  (define diagnose-job (bounded-section content "  diagnose:" "  apply:"))
+  (define apply-job (bounded-section content "  apply:"))
+  (check-true (string-contains? pre-jobs "contents: read"))
+  (check-false (string-contains? diagnose-job "contents: write"))
+  (check-true (string-contains? apply-job "contents: write"))
+  (check-true (string-contains? apply-job "environment:")))
 
 (test-case "release-repair.yml has diagnose job"
   (define content (read-release-repair-yml))
   (check-true (string-contains? content "  diagnose:") "must have 'diagnose:' job"))
 
-(test-case "release-repair.yml checks if tag is unpublished"
+(test-case "release-repair.yml fixes immutable v0.99.74 identity"
   (define content (read-release-repair-yml))
-  (check-true (string-contains? content "IS_UNPUBLISHED") "must check if tag has a release"))
+  (check-true (string-contains? content "de0ce7391b4ae23818534b31431f00465241302e"))
+  (check-true (string-contains? content "32718281aafd378fca511b4294d3c5668134673c"))
+  (check-true (string-contains? content "361518742")))
 
-(test-case "release-repair.yml routes unpublished tags to normal pipeline"
+(test-case "release-repair.yml binds apply to approved bytes and expiry"
   (define content (read-release-repair-yml))
-  (check-true (string-contains? content "unpublished-tag-detected")
-              "must detect and describe unpublished tag path"))
+  (define apply-job (bounded-section content "  apply:"))
+  (check-true (string-contains? apply-job "EXPECTED_TAR"))
+  (check-true (string-contains? apply-job "EXPECTED_MANIFEST"))
+  (check-true (string-contains? apply-job "EXPIRES"))
+  (check-true (string-contains? apply-job "INCOMPLETE")))
 
-(test-case "release-repair.yml never creates or modifies releases"
+(test-case "release-repair.yml avoids unreviewed third-party release mutation"
   (define content (read-release-repair-yml))
   (check-false (string-contains? content "softprops/action-gh-release")
-               "must NOT use softprops/action-gh-release (no release mutation)"))
+               "guarded repair must use reviewed first-party mutation logic"))
 
-(test-case "release-repair.yml has release diagnostics step"
+(test-case "release-repair.yml uses trusted manifest and bundle tooling"
   (define content (read-release-repair-yml))
-  (check-true (string-contains? content "release-repair.rkt")
-              "must reference release-repair.rkt script"))
+  (check-true (string-contains? content "tooling/scripts/gen-release-manifest.rkt"))
+  (check-true (string-contains? content "tooling/scripts/verify-release-bundle.rkt")))
 
 (test-case "release-repair.yml is valid YAML"
   (check-true (file-exists? release-repair-yml-path) "release-repair.yml must exist")
