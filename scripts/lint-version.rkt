@@ -160,20 +160,25 @@
               (list (list 'README.md 0 verify-v canonical))
               '())))
 
-;; Pure: check CHANGELOG content for version header count integrity.
+;; Pure: check CHANGELOG content for release-entry count and uniqueness.
 (define (check-changelog-content content)
-  (define lines (string-split content "\n"))
   (define versions
-    (for/list ([line (in-list lines)])
-      (define m (regexp-match #rx"^## v([0-9]+\\.[0-9]+\\.[0-9]+)" line))
-      (and m (cadr m))))
-  (define unique (remove-duplicates (filter (lambda (x) x) versions)))
-  (if (< (length unique) MIN-UNIQUE-VERSIONS)
-      (list (list 'CHANGELOG.md
-                  0
-                  (format "~a unique versions (< ~a)" (length unique) MIN-UNIQUE-VERSIONS)
-                  (format ">= ~a unique versions" MIN-UNIQUE-VERSIONS)))
-      '()))
+    (filter values
+            (for/list ([line (in-list (string-split content "\n"))])
+              (define m (regexp-match #px"^## v?([0-9]+\\.[0-9]+\\.[0-9]+)(?:\\s|$)" line))
+              (and m (cadr m)))))
+  (define distinct-versions (remove-duplicates versions))
+  (append
+   (if (< (length distinct-versions) MIN-UNIQUE-VERSIONS)
+       (list
+        (list 'CHANGELOG.md
+              0
+              (format "~a distinct versions (< ~a)" (length distinct-versions) MIN-UNIQUE-VERSIONS)
+              (format ">= ~a distinct versions" MIN-UNIQUE-VERSIONS)))
+       '())
+   (if (= (length versions) (length distinct-versions))
+       '()
+       (list (list 'CHANGELOG.md 0 "duplicate release entries" "one release entry per version")))))
 
 ;; ---------------------------------------------------------------------------
 ;; I/O wrappers (use parameters from lint-version-io.rkt)

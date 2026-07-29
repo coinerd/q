@@ -1,33 +1,58 @@
 ## 0.99.74
 
-Not yet released.
+Released 2026-07-29.
 
 ### User-Visible Changes
 
 - **Guarded-context self-improvement (R1-R8)**: All eight recommendations from the
-  guarded-context audit are now production-wired and live-verified.
-  - R1/R2: Operational checkpoint with planning-supersession detection
-  - R3/R5: Semantic error-class loop detection for bounded correction
-  - R4/R8: Bash cwd contract enforced — working directory is always canonical
-  - R6/R7: Working-set budgeting with budget-action telemetry (kept/summarized/evicted/superseded)
+  guarded-context audit are production-wired and live-verified.
+  - R1/R2: Operational checkpoint with planning-supersession detection.
+  - R3/R5: Semantic error-class loop detection for bounded correction.
+  - R4/R8: An explicit supported invocation cwd takes precedence; execution-context
+    cwd is the fallback when no explicit cwd is supplied, and chdir failures surface visibly.
+  - R6/R7: Working-set budgeting with budget-action telemetry
+    (kept/summarized/evicted/superseded).
 
 ### Bug Fixes
 
-- **Zero Failing Tests**: All 45 of 45 failing test files in the fast suite now pass.
-  Fixed multiple root causes including bare/invalid tool schemas (`(hasheq)` without
-  `type` key, OpenAI function-calling format, missing `properties`), stale
-  `lifecycle-state` constructor (missing `closed?` field after v0.99.71),
-  `#<void>` truthiness bug in `effect-executor.rkt` causing pre-hook contract
-  violations, stale version strings, and missing `module+ test` blocks.
+- **Fast-suite remediation tracking**: v0.99.74 completed TS7
+  (`test-scheduler-hooks.rkt`) and therefore the later release-tracked 45-file set's
+  claimed 45/45 result. This is not a reconciled 53/53 claim: retained evidence does not map
+  the authoritative 53-file v0.99.72 baseline to that later 45-file set. See
+  [the v0.99.75 W0 evidence freeze](docs/reports/v0.99.75-W0-EVIDENCE-FREEZE.md).
+- Fixed invalid tool schemas, stale lifecycle constructors, effect-executor truthiness,
+  stale version strings, and missing test submodules.
+
+### Breaking / Behavior Changes
+
+- No intentional compatibility break. Bash cwd failure behavior is now explicit and fail-visible.
+
+### Migration Notes
+
+- Callers that provide a cwd retain precedence; callers that omit it inherit execution context.
+
+### Testing
+
+- Fast, broad/full, release-smoke, and deterministic guarded-context evidence passed at the
+  frozen v0.99.74 audit points described in the W0 evidence freeze.
+
+### Operational / Release
+
+- The public GitHub release was created on 2026-07-29. Its missing asset integrity is being
+  repaired later under the separately reviewed v0.99.75 workflow; this entry does not claim
+  that repair has already occurred.
 
 ## 0.99.73
 
-Released 2025-06-15.
+Released before v0.99.74; the exact public-release date is not established by retained evidence.
 
 ### Bug Fixes
 
-- **Zero Failing Tests**: All 44 of 45 failing test files in the fast suite now pass.
-  (Final behavioral fix for TS7 in test-scheduler-hooks.rkt completed in v0.99.74.)
+- **Fast-suite remediation tracking**: v0.99.73 claimed 44 passing files from a later
+  release-tracked 45-file set, leaving TS7 (`test-scheduler-hooks.rkt`) as the claimed
+  remainder. The authoritative v0.99.72 baseline contained 53 failed files; no surviving
+  row-level evidence maps that baseline to the later set. See
+  [the v0.99.75 W0 evidence freeze](docs/reports/v0.99.75-W0-EVIDENCE-FREEZE.md).
 
 ## 0.99.72
 

@@ -43,6 +43,11 @@
     (define result (check))
     (check-true (or result (not result)) "check-changelog-entry returns a boolean")))
 
+(test-case "conflict-marker check ignores documentation mentions"
+  (define project-dir (simplify-path (build-path script-path 'up 'up)))
+  (parameterize ([current-directory project-dir])
+    (check-true ((dynamic-require script-path 'check-conflict-markers)))))
+
 (test-case "check-gate-evidence: fails when no .gate-evidence directory"
   (when (file-exists? "util/version.rkt")
     (define check (dynamic-require script-path 'check-gate-evidence))
@@ -198,6 +203,37 @@
     (check-equal? context 'tag-publish)
     ;; Also verify gate evidence is still checked in tag-publish context
     (check-true (member context '(tag-publish)) "context is tag-publish")))
+
+;; ============================================================
+;; v0.99.75 W3: release-status truth
+;; ============================================================
+
+(define validate-changelog-release (dynamic-require script-path 'validate-changelog-release))
+
+(test-case "released/tagged target rejects unreleased marker"
+  (check-false
+   (validate-changelog-release "## 1.2.3\n\nNot yet released.\n" "1.2.3" 'tag-publish #t)))
+
+(test-case "released/tagged target accepts canonical release date"
+  (check-true
+   (validate-changelog-release "## 1.2.3\n\nReleased 2026-07-29.\n" "1.2.3" 'tag-publish #t)))
+
+(test-case "release status rejects partial duplicate and malformed target entries"
+  (check-false
+   (validate-changelog-release "## 1.2.30\nReleased 2026-07-29.\n" "1.2.3" 'tag-publish #t))
+  (check-false (validate-changelog-release
+                "## 1.2.3\nReleased 2026-07-29.\n## v1.2.3\nReleased 2026-07-29.\n"
+                "1.2.3"
+                'tag-publish
+                #t))
+  (check-false (validate-changelog-release "## 1.2.3\nReleased someday.\n" "1.2.3" 'tag-publish #t)))
+
+(test-case "historical release entries do not interfere with target status"
+  (check-true (validate-changelog-release
+               "## 1.2.3\nReleased 2026-07-29.\n## 1.2.2\nNot yet released.\n"
+               "1.2.3"
+               'tag-publish
+               #t)))
 
 ;; ============================================================
 ;; W2 (#8519): release.yml uses tag-publish context

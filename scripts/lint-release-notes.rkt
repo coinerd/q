@@ -32,36 +32,23 @@
 ;; Parsing helpers
 ;; ---------------------------------------------------------------------------
 
-;; Extract the version block for `ver` from the full changelog text.
-;; A version block starts with a heading like "## 0.4.0" and ends just
-;; before the next "## " heading (or EOF).
+;; Extract exactly one version block. Canonical release metadata may follow
+;; the version, but partial and duplicate version headings fail closed.
 (define (extract-version-block text ver)
   (define lines (string-split text "\n"))
-  (define target (string-append "## " ver))
-  (define target-alt (string-append "## v" ver)) ; allow "v0.4.0" too
-  (let loop ([lst lines]
-             [in-block? #f]
-             [acc '()])
-    (cond
-      [(null? lst)
-       (if in-block?
-           (string-join (reverse acc) "\n")
-           #f)]
-      [else
-       (define line (car lst))
-       (define next-heading?
-         (and (string-prefix? (string-trim line) "## ")
-              (not (string-prefix? (string-trim line) "### "))))
-       (cond
-         [(and (not in-block?) next-heading?)
-          (define trimmed (string-trim line))
-          (if (or (string=? trimmed target) (string=? trimmed target-alt))
-              (loop (cdr lst) #t '())
-              (loop (cdr lst) #f '()))]
-         ;; hit the next version heading — stop
-         [(and in-block? next-heading?) (string-join (reverse acc) "\n")]
-         [in-block? (loop (cdr lst) #t (cons line acc))]
-         [else (loop (cdr lst) #f '())])])))
+  (define heading-rx #px"^## v?([0-9]+\\.[0-9]+\\.[0-9]+)(?:\\s|$)")
+  (define target-indexes
+    (for/list ([line (in-list lines)]
+               [index (in-naturals)]
+               #:when (let ([m (regexp-match heading-rx (string-trim line))])
+                        (and m (string=? (cadr m) ver))))
+      index))
+  (and (= (length target-indexes) 1)
+       (let* ([start (add1 (car target-indexes))]
+              [tail (drop lines start)]
+              [block-lines
+               (takef tail (lambda (line) (not (regexp-match? heading-rx (string-trim line)))))])
+         (string-join block-lines "\n"))))
 
 ;; Collect all ### headings present in a block (normalized to lowercase,
 ;; stripped of trailing whitespace).
@@ -89,6 +76,22 @@
   (for ([section (in-list mandatory-solo-sections)])
     (unless (has? section)
       (set! errors (cons (format "Missing required section: ~a" section) errors))))
+
+  ;; Reject the exact false wording that escaped earlier release checks. If a
+  ;; release discusses the disputed counts, require their distinct populations
+  ;; and retained evidence to be named rather than presenting one denominator.
+  (when (regexp-match? #px"(?i:working directory is always canonical)" block)
+    (set! errors (cons "False cwd contract: 'working directory is always canonical'" errors)))
+  (define discusses-disputed-counts?
+    (regexp-match?
+     #px"(?i:(?:B53|T45|P44|(?:44|45|53)(?:[- ]file|\\s+passing|\\s+of\\s+(?:44|45|53)|/(?:44|45|53))))"
+     block))
+  (when (and discusses-disputed-counts?
+             (not (and (regexp-match? #px"(?i:authoritative.*53[- ]file)" block)
+                       (regexp-match? #px"(?i:release-tracked.*45[- ]file)" block)
+                       (regexp-match? #px"(?i:TS7)" block)
+                       (regexp-match? #px"v0\\.99\\.75-W0-EVIDENCE-FREEZE\\.md" block))))
+    (set! errors (cons "Unreconciled test-count terminology" errors)))
 
   (reverse errors))
 
