@@ -11,7 +11,11 @@
 (require rackunit
          racket/file
          racket/port
-         racket/string)
+         racket/string
+         racket/runtime-path)
+
+(define-runtime-path generator-script-path "../scripts/gen-release-manifest.rkt")
+(define-runtime-path milestone-script-path "../scripts/milestone-gate.rkt")
 
 ;; --- Manifest traceability field tests ---
 
@@ -59,17 +63,13 @@
   (define manifest-json "{\"tag\": \"v0.99.41\", \"traceability\": {\"tag_name\": \"v0.99.41\"}}")
   (check-true (string-contains? manifest-json "v0.99.41")))
 
-;; gen-release-manifest.rkt generates traceability fields.
-(test-case "gen-release-manifest.rkt includes traceability in output"
-  (define output
-    (with-output-to-string (lambda ()
-                             (system "racket scripts/gen-release-manifest.rkt 2>/dev/null"))))
-  (when (string-contains? output "traceability")
-    (check-true (string-contains? output "traceability"))))
+;; Executable generation is covered by test-release-build-manifest-integration.rkt.
+(test-case "gen-release-manifest.rkt exports traceability parser"
+  (check-pred procedure? (dynamic-require generator-script-path 'parse-manifest-json)))
 
 ;; --- Milestone gate traceability check ---
 
-(define script-path "../scripts/milestone-gate.rkt")
+(define script-path milestone-script-path)
 
 (test-case "milestone-gate.rkt exports traceability check"
   (check-not-exn (lambda () (dynamic-require script-path 'check-release-traceability))))
@@ -83,7 +83,7 @@
 ;; W4 (#8566): Manifest parse/validate/render boundary
 ;; ============================================================
 
-(define manifest-script-path "../scripts/gen-release-manifest.rkt")
+(define manifest-script-path generator-script-path)
 
 ;; Require struct types directly for constructor tests
 (require (only-in "../scripts/gen-release-manifest.rkt"
@@ -369,14 +369,15 @@
 
 ;; --- commits-match? predicate ---
 
-(test-case "commits-match?: exact match"
-  (check-true (commits-match? "abc1234" "abc1234")))
+(test-case "commits-match?: exact full-SHA match"
+  (check-true (commits-match? full-sha full-sha)))
 
-(test-case "commits-match?: prefix match (tag longer)"
-  (check-true (commits-match? "abc1234" "abc123456789")))
+(test-case "commits-match?: rejects short exact values"
+  (check-false (commits-match? "abc1234" "abc1234")))
 
-(test-case "commits-match?: prefix match (commit longer)"
-  (check-true (commits-match? "abc123456789" "abc1234")))
+(test-case "commits-match?: rejects prefix matches"
+  (check-false (commits-match? "abc1234" full-sha))
+  (check-false (commits-match? full-sha "abc1234")))
 
 (test-case "commits-match?: different commits"
   (check-false (commits-match? "abc1234" "def5678")))
@@ -451,8 +452,8 @@
   (define m (build-manifest ri))
   (check-equal? (manifest-commit m) "unknown"))
 
-(test-case "build-manifest: commit-matches-tag? true when SHAs match"
-  (define ri (release-inputs "1.0.0" "abc123" "d" "n" 0 "s" "abc123" #f))
+(test-case "build-manifest: commit-matches-tag? true when full SHAs match"
+  (define ri (release-inputs "1.0.0" full-sha "d" "n" 0 "s" full-sha #f))
   (define m (build-manifest ri))
   (define tr (manifest-traceability m))
   (check-true (manifest-trace-commit-matches-tag? tr)))

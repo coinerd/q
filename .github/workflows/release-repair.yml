@@ -1,137 +1,376 @@
 name: Release Repair
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 on:
   workflow_dispatch:
     inputs:
-      tag:
-        description: 'Existing tag to inspect, e.g. v0.99.40'
-        required: true
-        type: string
       mode:
-        description: 'Diagnostic mode (dry-run only for existing tags)'
+        description: Build and verify only, or apply independently approved bytes
         required: true
         type: choice
         options:
           - dry-run
+          - apply
         default: dry-run
+      tag:
+        description: Immutable release tag
+        required: true
+        type: string
+      tag-object:
+        description: Expected annotated tag-object SHA
+        required: true
+        type: string
+      peeled:
+        description: Expected peeled commit SHA
+        required: true
+        type: string
+      release-id:
+        description: Expected GitHub release database ID
+        required: true
+        type: string
+      assets:
+        description: Exact missing assets to add, comma-separated
+        required: false
+        default: 'q-0.99.74.tar.gz,release-manifest.json'
+        type: string
+      expected-tarball-sha256:
+        description: Independently approved dry-run tarball digest (required for apply)
+        required: false
+        default: ''
+        type: string
+      expected-manifest-sha256:
+        description: Independently approved dry-run manifest digest (required for apply)
+        required: false
+        default: ''
+        type: string
+      approved-run-id:
+        description: Originating independently reviewed dry-run ID (required for apply)
+        required: false
+        default: ''
+        type: string
+      approval-expires-utc:
+        description: Independent approval expiry, ISO-8601 UTC (required for apply)
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
+
+concurrency:
+  group: release-repair-${{ github.repository }}-${{ inputs.tag }}-${{ inputs.release-id }}
+  cancel-in-progress: false
+
+env:
+  REPAIR_TAG: v0.99.74
+  REPAIR_TAG_OBJECT: de0ce7391b4ae23818534b31431f00465241302e
+  REPAIR_PEELED: 32718281aafd378fca511b4294d3c5668134673c
+  REPAIR_RELEASE_ID: '361518742'
+  REPAIR_TARGET: v0.99.74
 
 jobs:
   diagnose:
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.version.outputs.VERSION }}
-      result: ${{ steps.result.outputs.RESULT }}
-      is-unpublished: ${{ steps.check.outputs.IS_UNPUBLISHED }}
+      version: ${{ steps.identity.outputs.version }}
+      plan: ${{ steps.identity.outputs.plan }}
+      tarball-sha256: ${{ steps.build.outputs.tarball_sha256 }}
+      manifest-sha256: ${{ steps.build.outputs.manifest_sha256 }}
     steps:
-      - name: Checkout exact tag
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.inputs.tag }}
-
-      - uses: ./.github/actions/setup-racket
-
-      - name: Extract version from tag
-        id: version
-        run: |
-          TAG="${{ github.event.inputs.tag }}"
-          VERSION="${TAG#v}"
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "TAG=$TAG" >> $GITHUB_OUTPUT
-          echo "Tag: $TAG, Version: $VERSION"
-
-      - name: Verify version consistency
-        run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          CANONICAL=$(racket -e '(require "util/version.rkt") (display q-version)')
-          echo "Tag version: $VERSION"
-          echo "Canonical:   $CANONICAL"
-          if [ "$VERSION" != "$CANONICAL" ]; then
-            echo "ERROR: Tag/version mismatch — refusing to proceed"
-            exit 1
-          fi
-          echo "Version match OK"
-
-      - name: Check if tag has a release
-        id: check
+      - name: Verify canonical invocation and immutable remote identity
+        id: identity
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          TAG_OBJECT: ${{ inputs['tag-object'] }}
+          PEELED: ${{ inputs.peeled }}
+          RELEASE_ID: ${{ inputs['release-id'] }}
+          ASSETS: ${{ inputs.assets }}
         run: |
-          TAG="${{ github.event.inputs.tag }}"
-          echo "Checking release status for ${TAG}..."
-          HTTP_STATUS=$(curl -sf -o /dev/null -w "%{http_code}" \
-            -H "Authorization: token $GH_TOKEN" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/tags/${TAG}" 2>/dev/null || echo "not-found")
-          if [ "$HTTP_STATUS" = "200" ]; then
-            echo "IS_UNPUBLISHED=false" >> $GITHUB_OUTPUT
-            echo "Release exists for tag ${TAG}"
-          else
-            echo "IS_UNPUBLISHED=true" >> $GITHUB_OUTPUT
-            echo "No release found for tag ${TAG} (unpublished)"
-          fi
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'coinerd/q'
+          test "$GITHUB_REF" = "refs/heads/${{ github.event.repository.default_branch }}"
+          test "${{ github.workflow_ref }}" = "$GITHUB_REPOSITORY/.github/workflows/release-repair.yml@refs/heads/${{ github.event.repository.default_branch }}"
+          test "$TAG" = "$REPAIR_TAG"
+          test "$TAG_OBJECT" = "$REPAIR_TAG_OBJECT"
+          test "$PEELED" = "$REPAIR_PEELED"
+          test "$RELEASE_ID" = "$REPAIR_RELEASE_ID"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq .object.sha)" = "$TAG_OBJECT"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$TAG_OBJECT" --jq .object.sha)" = "$PEELED"
+          release=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID")
+          test "$(jq -r .tag_name <<<"$release")" = "$TAG"
+          test "$(jq -r .target_commitish <<<"$release")" = "$REPAIR_TARGET"
+          test "$(jq -r .draft <<<"$release")" = false
+          test "$(jq -r .prerelease <<<"$release")" = false
+          names=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets" --paginate --jq '.[].name')
+          version=${TAG#v}; echo "version=$version" >> "$GITHUB_OUTPUT"
+          IFS=, read -ra requested <<< "$ASSETS"; missing=()
+          for asset in "${requested[@]}"; do
+            case "$asset" in "q-$version.tar.gz"|release-manifest.json) ;; *) echo "unsupported asset: $asset"; exit 1;; esac
+            if grep -Fxq "$asset" <<<"$names"; then
+              echo "$asset already exists; apply is exact no-op only after digest verification"
+            else
+              missing+=("$asset")
+            fi
+          done
+          plan=$(IFS=,; echo "${missing[*]}"); echo "plan=$plan" >> "$GITHUB_OUTPUT"
 
-      - name: Run diagnostics
-        id: diagnostics
-        run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          TAG="${{ github.event.inputs.tag }}"
-          echo "Running release diagnostics for $TAG"
-          racket scripts/release-repair.rkt --tag "$TAG" --mode dry-run
-
-      - name: Build tarball (for unpublished tags — will route to release-core)
-        if: steps.check.outputs.IS_UNPUBLISHED == 'true'
-        run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          mkdir -p /tmp/release
-          cp -r . /tmp/release/q/
-          cd /tmp/release
-          tar czf "q-${VERSION}.tar.gz" \
-            --exclude='.git' \
-            --exclude='compiled' \
-            --exclude='*.zo' \
-            q/
-          ls -la "q-${VERSION}.tar.gz"
-
-      - name: Upload build artifact (for unpublished tags)
-        uses: actions/upload-artifact@v7
-        if: steps.check.outputs.IS_UNPUBLISHED == 'true'
+      - name: Checkout independently trusted tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          name: q-unpublished-build-${{ steps.version.outputs.VERSION }}
-          path: /tmp/release/
-          retention-days: 7
+          ref: ${{ github.workflow_sha }}
+          path: tooling
+          persist-credentials: false
 
-      - name: Provide guidance for unpublished tag
-        if: steps.check.outputs.IS_UNPUBLISHED == 'true'
-        run: |
-          echo "## Unpublished Tag Detected" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Tag ${{ github.event.inputs.tag }} has no release. It needs normal publication:" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "1. Push the tag to trigger the normal release pipeline: $(gh run list --workflow release.yml -L 1)" >> $GITHUB_STEP_SUMMARY || true
-          echo "2. The build-once pre-publication pipeline will smoke, draft, verify, publish." >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
+      - name: Checkout full immutable release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.peeled }}
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Set result
-        id: result
+      - name: Install pinned Racket toolchain
+        uses: Bogdanp/setup-racket@2466913449df77df2bad149d1f2fc4e1ea4795dd
+        with:
+          version: '8.10'
+
+      - name: Build deterministic candidate twice and validate archive
+        id: build
+        env:
+          PEELED: ${{ inputs.peeled }}
+          TAG: ${{ inputs.tag }}
+          TAG_OBJECT: ${{ inputs['tag-object'] }}
+          VERSION: ${{ steps.identity.outputs.version }}
+          Q_RELEASE_DATE: '2026-07-26'
+          Q_RELEASE_WORKFLOW_RUN_ID: ${{ inputs.mode == 'apply' && inputs['approved-run-id'] || github.run_id }}
+          Q_RELEASE_WORKFLOW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ inputs.mode == 'apply' && inputs['approved-run-id'] || github.run_id }}
+          Q_RELEASE_WORKFLOW_SOURCE_SHA: ${{ github.workflow_sha }}
+          Q_RELEASE_TOOLING_SHA: ${{ github.workflow_sha }}
         run: |
-          IS_UNPUBLISHED="${{ steps.check.outputs.IS_UNPUBLISHED }}"
-          if [ "$IS_UNPUBLISHED" = "true" ]; then
-            echo "RESULT=unpublished-tag-detected" >> $GITHUB_OUTPUT
-          else
-            echo "RESULT=dry-run-complete" >> $GITHUB_OUTPUT
-          fi
-          echo "## Release Repair (Diagnostic)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Tag: ${{ github.event.inputs.tag }}" >> $GITHUB_STEP_SUMMARY
-          echo "Mode: dry-run" >> $GITHUB_STEP_SUMMARY
-          if [ "$IS_UNPUBLISHED" = "true" ]; then
-            echo "Status: -> unpublishing-tag-→-release-core-pipeline" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "Status: Existing release — no mutation performed." >> $GITHUB_STEP_SUMMARY
-            echo "For a new patch release, create a new tag and push it." >> $GITHUB_STEP_SUMMARY
-          fi
+          set -euo pipefail
+          build() {
+            n=$1; mkdir -p "/tmp/repair-$n"
+            git -C source archive --format=tar --prefix=q/ "$PEELED" > "/tmp/repair-$n/source.tar"
+            names=$(tar -tf "/tmp/repair-$n/source.tar")
+            test -n "$names"
+            ! grep -Eq '(^/|(^|/)\.\.(/|$)|^[A-Za-z]:)' <<<"$names"
+            test "$(sort <<<"$names" | uniq -d | wc -l)" -eq 0
+            test "$(wc -l <<<"$names")" -le 100000
+            ! tar -tvf "/tmp/repair-$n/source.tar" | grep -Eq '^[bcpPs]'
+            ! tar -tvf "/tmp/repair-$n/source.tar" | grep -Eq ' -> (\.\./|/)| link to (\.\./|/)'
+            gzip -n -c "/tmp/repair-$n/source.tar" > "/tmp/repair-$n/q-$VERSION.tar.gz"
+            racket tooling/scripts/gen-release-manifest.rkt \
+              --version "$VERSION" --tag "$TAG" --commit "$PEELED" \
+              --tag-commit "$PEELED" --tag-object "$TAG_OBJECT" \
+              "/tmp/repair-$n/q-$VERSION.tar.gz" > "/tmp/repair-$n/release-manifest.json"
+            racket tooling/scripts/verify-release-bundle.rkt \
+              --version "$VERSION" --tag "$TAG" --commit "$PEELED" --tag-object "$TAG_OBJECT" \
+              "/tmp/repair-$n/q-$VERSION.tar.gz" "/tmp/repair-$n/release-manifest.json"
+          }
+          build 1; build 2
+          cmp /tmp/repair-1/q-$VERSION.tar.gz /tmp/repair-2/q-$VERSION.tar.gz
+          cmp /tmp/repair-1/release-manifest.json /tmp/repair-2/release-manifest.json
+          tar_sha=$(sha256sum /tmp/repair-1/q-$VERSION.tar.gz | cut -d' ' -f1)
+          manifest_sha=$(sha256sum /tmp/repair-1/release-manifest.json | cut -d' ' -f1)
+          echo "tarball_sha256=$tar_sha" >> "$GITHUB_OUTPUT"
+          echo "manifest_sha256=$manifest_sha" >> "$GITHUB_OUTPUT"
+          echo "Candidate tarball SHA-256: $tar_sha"
+          echo "Candidate manifest SHA-256: $manifest_sha"
+
+      - name: Verify every pre-existing requested asset against candidate bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ inputs['release-id'] }}
+          ASSETS: ${{ inputs.assets }}
+          VERSION: ${{ steps.identity.outputs.version }}
+          EXPECTED_TAR: ${{ steps.build.outputs.tarball_sha256 }}
+          EXPECTED_MANIFEST: ${{ steps.build.outputs.manifest_sha256 }}
+        run: |
+          set -euo pipefail
+          release=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID")
+          test "$(jq -r .tag_name <<<"$release")" = "$REPAIR_TAG"
+          test "$(jq -r .target_commitish <<<"$release")" = "$REPAIR_TARGET"
+          test "$(jq -r .draft <<<"$release")" = false
+          test "$(jq -r .prerelease <<<"$release")" = false
+          IFS=, read -ra requested <<< "$ASSETS"
+          for asset in "${requested[@]}"; do
+            asset_id=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets" --paginate \
+              --jq ".[] | select(.name==\"$asset\") | .id")
+            test -z "$asset_id" && continue
+            gh api "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" \
+              -H 'Accept: application/octet-stream' > "/tmp/existing-$asset"
+            expected=$EXPECTED_MANIFEST; test "$asset" = "q-$VERSION.tar.gz" && expected=$EXPECTED_TAR
+            test "$(sha256sum "/tmp/existing-$asset" | cut -d' ' -f1)" = "$expected" || {
+              echo "existing asset conflicts with candidate bytes: $asset"; exit 1;
+            }
+          done
+
+  apply:
+    needs: diagnose
+    if: inputs.mode == 'apply' && needs.diagnose.outputs.plan != ''
+    runs-on: ubuntu-latest
+    environment: release-repair
+    permissions:
+      contents: write
+    steps:
+      - name: Revalidate authorization, trust, identity, and approved bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          TAG_OBJECT: ${{ inputs['tag-object'] }}
+          PEELED: ${{ inputs.peeled }}
+          RELEASE_ID: ${{ inputs['release-id'] }}
+          EXPECTED_TAR: ${{ inputs['expected-tarball-sha256'] }}
+          EXPECTED_MANIFEST: ${{ inputs['expected-manifest-sha256'] }}
+          EXPIRES: ${{ inputs['approval-expires-utc'] }}
+          APPROVED_RUN: ${{ inputs['approved-run-id'] }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'coinerd/q'
+          test "$GITHUB_REF" = "refs/heads/${{ github.event.repository.default_branch }}"
+          test "${{ github.workflow_ref }}" = "$GITHUB_REPOSITORY/.github/workflows/release-repair.yml@refs/heads/${{ github.event.repository.default_branch }}"
+          test "$TAG" = "$REPAIR_TAG" && test "$TAG_OBJECT" = "$REPAIR_TAG_OBJECT"
+          test "$PEELED" = "$REPAIR_PEELED" && test "$RELEASE_ID" = "$REPAIR_RELEASE_ID"
+          [[ "$EXPECTED_TAR" =~ ^[0-9a-f]{64}$ && "$EXPECTED_MANIFEST" =~ ^[0-9a-f]{64}$ ]]
+          test -n "$EXPIRES"; test "$(date -u +%s)" -le "$(date -u -d "$EXPIRES" +%s)"
+          [[ "$APPROVED_RUN" =~ ^[0-9]+$ ]]
+          approved=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$APPROVED_RUN")
+          test "$(jq -r .conclusion <<<"$approved")" = success
+          test "$(jq -r .path <<<"$approved")" = '.github/workflows/release-repair.yml'
+          test "$EXPECTED_TAR" = "${{ needs.diagnose.outputs.tarball-sha256 }}"
+          test "$EXPECTED_MANIFEST" = "${{ needs.diagnose.outputs.manifest-sha256 }}"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq .object.sha)" = "$TAG_OBJECT"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$TAG_OBJECT" --jq .object.sha)" = "$PEELED"
+          release=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID")
+          test "$(jq -r .tag_name <<<"$release")" = "$TAG"
+          test "$(jq -r .target_commitish <<<"$release")" = "$REPAIR_TARGET"
+          test "$(jq -r .draft <<<"$release")" = false
+          test "$(jq -r .prerelease <<<"$release")" = false
+
+      - name: Checkout trusted tooling for identical rebuild
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: tooling
+          persist-credentials: false
+
+      - name: Checkout full immutable release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.peeled }}
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install pinned Racket toolchain
+        uses: Bogdanp/setup-racket@2466913449df77df2bad149d1f2fc4e1ea4795dd
+        with:
+          version: '8.10'
+
+      - name: Smoke exact approved candidate without write credentials
+        env:
+          TAG: ${{ inputs.tag }}
+          TAG_OBJECT: ${{ inputs['tag-object'] }}
+          PEELED: ${{ inputs.peeled }}
+          VERSION: ${{ needs.diagnose.outputs.version }}
+          EXPECTED_TAR: ${{ inputs['expected-tarball-sha256'] }}
+          EXPECTED_MANIFEST: ${{ inputs['expected-manifest-sha256'] }}
+          Q_RELEASE_DATE: '2026-07-26'
+          Q_RELEASE_WORKFLOW_RUN_ID: ${{ inputs['approved-run-id'] }}
+          Q_RELEASE_WORKFLOW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ inputs['approved-run-id'] }}
+          Q_RELEASE_WORKFLOW_SOURCE_SHA: ${{ github.workflow_sha }}
+          Q_RELEASE_TOOLING_SHA: ${{ github.workflow_sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/smoke/extracted
+          git -C source archive --format=tar --prefix=q/ "$PEELED" > /tmp/smoke/source.tar
+          gzip -n -c /tmp/smoke/source.tar > "/tmp/smoke/q-$VERSION.tar.gz"
+          racket tooling/scripts/gen-release-manifest.rkt \
+            --version "$VERSION" --tag "$TAG" --commit "$PEELED" \
+            --tag-commit "$PEELED" --tag-object "$TAG_OBJECT" \
+            "/tmp/smoke/q-$VERSION.tar.gz" > /tmp/smoke/release-manifest.json
+          test "$(sha256sum "/tmp/smoke/q-$VERSION.tar.gz" | cut -d' ' -f1)" = "$EXPECTED_TAR"
+          test "$(sha256sum /tmp/smoke/release-manifest.json | cut -d' ' -f1)" = "$EXPECTED_MANIFEST"
+          racket tooling/scripts/verify-release-bundle.rkt \
+            --version "$VERSION" --tag "$TAG" --commit "$PEELED" --tag-object "$TAG_OBJECT" \
+            "/tmp/smoke/q-$VERSION.tar.gz" /tmp/smoke/release-manifest.json
+          tar --no-same-owner --no-same-permissions -xzf "/tmp/smoke/q-$VERSION.tar.gz" -C /tmp/smoke/extracted
+          cd /tmp/smoke/extracted/q
+          test "$(racket main.rkt --version)" = "q version $VERSION"
+          racket scripts/run-tests.rkt --suite release-smoke --profile local --mode subprocess --sequential
+
+      - name: Rebuild approved bytes and upload without replacement
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          TAG_OBJECT: ${{ inputs['tag-object'] }}
+          PEELED: ${{ inputs.peeled }}
+          RELEASE_ID: ${{ inputs['release-id'] }}
+          VERSION: ${{ needs.diagnose.outputs.version }}
+          PLAN: ${{ needs.diagnose.outputs.plan }}
+          REQUESTED_ASSETS: ${{ inputs.assets }}
+          EXPECTED_TAR: ${{ inputs['expected-tarball-sha256'] }}
+          EXPECTED_MANIFEST: ${{ inputs['expected-manifest-sha256'] }}
+          EXPIRES: ${{ inputs['approval-expires-utc'] }}
+          Q_RELEASE_DATE: '2026-07-26'
+          Q_RELEASE_WORKFLOW_RUN_ID: ${{ inputs.mode == 'apply' && inputs['approved-run-id'] || github.run_id }}
+          Q_RELEASE_WORKFLOW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ inputs.mode == 'apply' && inputs['approved-run-id'] || github.run_id }}
+          Q_RELEASE_WORKFLOW_SOURCE_SHA: ${{ github.workflow_sha }}
+          Q_RELEASE_TOOLING_SHA: ${{ github.workflow_sha }}
+        run: |
+          set -euo pipefail
+          mutated=false
+          complete=false
+          trap 'if $mutated && ! $complete; then echo "INCOMPLETE: approved uploads are preserved; independent recovery review required" >> "$GITHUB_STEP_SUMMARY"; fi' EXIT
+          mkdir -p /tmp/apply
+          git -C source archive --format=tar --prefix=q/ "$PEELED" > /tmp/apply/source.tar
+          gzip -n -c /tmp/apply/source.tar > "/tmp/apply/q-$VERSION.tar.gz"
+          racket tooling/scripts/gen-release-manifest.rkt \
+            --version "$VERSION" --tag "$TAG" --commit "$PEELED" \
+            --tag-commit "$PEELED" --tag-object "$TAG_OBJECT" \
+            "/tmp/apply/q-$VERSION.tar.gz" > /tmp/apply/release-manifest.json
+          test "$(sha256sum "/tmp/apply/q-$VERSION.tar.gz" | cut -d' ' -f1)" = "$EXPECTED_TAR"
+          test "$(sha256sum /tmp/apply/release-manifest.json | cut -d' ' -f1)" = "$EXPECTED_MANIFEST"
+          racket tooling/scripts/verify-release-bundle.rkt \
+            --version "$VERSION" --tag "$TAG" --commit "$PEELED" --tag-object "$TAG_OBJECT" \
+            "/tmp/apply/q-$VERSION.tar.gz" /tmp/apply/release-manifest.json
+          IFS=, read -ra planned <<< "$PLAN"
+          for asset in "${planned[@]}"; do
+            test "$(date -u +%s)" -le "$(date -u -d "$EXPIRES" +%s)"
+            test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq .object.sha)" = "$TAG_OBJECT"
+            test "$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$TAG_OBJECT" --jq .object.sha)" = "$PEELED"
+            release=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID")
+            test "$(jq -r .tag_name <<<"$release")" = "$TAG"
+            test "$(jq -r .target_commitish <<<"$release")" = "$REPAIR_TARGET"
+            test "$(jq -r .draft <<<"$release")" = false
+            test "$(jq -r .prerelease <<<"$release")" = false
+            existing=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets" --paginate \
+              --jq ".[] | select(.name==\"$asset\") | .id")
+            test -z "$existing" || { echo "conflicting/raced asset $asset; abort"; exit 1; }
+            upload_url=$(jq -r '.upload_url | sub("\\{\\?name,label\\}$"; "")' <<<"$release")
+            mutated=true
+            curl --fail-with-body --silent --show-error --request POST \
+              -H "Authorization: Bearer $GH_TOKEN" -H 'Content-Type: application/octet-stream' \
+              --data-binary "@/tmp/apply/$asset" "$upload_url?name=$asset" >/dev/null
+            asset_id=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets" --paginate \
+              --jq ".[] | select(.name==\"$asset\") | .id")
+            test -n "$asset_id"
+            gh api "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" -H 'Accept: application/octet-stream' > "/tmp/downloaded-$asset"
+            expected=$EXPECTED_MANIFEST; test "$asset" = "q-$VERSION.tar.gz" && expected=$EXPECTED_TAR
+            test "$(sha256sum "/tmp/downloaded-$asset" | cut -d' ' -f1)" = "$expected"
+          done
+          release=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID")
+          test "$(jq -r .tag_name <<<"$release")" = "$TAG"
+          test "$(jq -r .target_commitish <<<"$release")" = "$REPAIR_TARGET"
+          IFS=, read -ra requested <<< "$REQUESTED_ASSETS"
+          for asset in "${requested[@]}"; do
+            ids=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets" --paginate \
+              --jq ".[] | select(.name==\"$asset\") | .id")
+            test "$(wc -w <<<"$ids")" -eq 1
+            gh api "repos/$GITHUB_REPOSITORY/releases/assets/$ids" \
+              -H 'Accept: application/octet-stream' > "/tmp/final-$asset"
+            expected=$EXPECTED_MANIFEST; test "$asset" = "q-$VERSION.tar.gz" && expected=$EXPECTED_TAR
+            test "$(sha256sum "/tmp/final-$asset" | cut -d' ' -f1)" = "$expected"
+          done
+          complete=true
+          echo 'COMPLETE: all requested assets match independently approved bytes' >> "$GITHUB_STEP_SUMMARY"

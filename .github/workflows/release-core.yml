@@ -27,12 +27,23 @@ on:
         description: 'Git ref to checkout and build from'
         required: true
         type: string
+    outputs:
+      version:
+        description: 'Built release version'
+        value: ${{ jobs.build.outputs.version }}
+      tag:
+        description: 'Built release tag'
+        value: ${{ jobs.build.outputs.tag }}
+      tarball-name:
+        description: 'Built tarball filename'
+        value: ${{ jobs.build.outputs.tarball-name }}
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 permissions:
-  contents: write
+  contents: read
+  actions: read
 
 jobs:
   build:
@@ -41,11 +52,16 @@ jobs:
       version: ${{ steps.version.outputs.VERSION }}
       tag: ${{ steps.version.outputs.TAG }}
       tarball-name: ${{ steps.build.outputs.TARBALL_NAME }}
-      tarball-artifact-name: q-tarball-${{ inputs.version }}
+      commit: ${{ steps.version.outputs.COMMIT }}
+      tag-object: ${{ steps.version.outputs.TAG_OBJECT }}
+      tarball-path: ${{ steps.build.outputs.TARBALL_PATH }}
+      tarball-artifact-name: q-release-build-${{ inputs.version }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ inputs.checkout-ref }}
+          fetch-depth: 0
+          persist-credentials: false
 
       - uses: ./.github/actions/setup-racket
 
@@ -54,6 +70,8 @@ jobs:
         run: |
           echo "VERSION=${{ inputs.version }}" >> $GITHUB_OUTPUT
           echo "TAG=${{ inputs.tag }}" >> $GITHUB_OUTPUT
+          echo "COMMIT=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+          echo "TAG_OBJECT=$(git rev-parse '${{ inputs.tag }}')" >> $GITHUB_OUTPUT
 
       - name: Build tarball
         id: build
@@ -74,11 +92,20 @@ jobs:
           echo "TARBALL_PATH=/tmp/release/${TARBALL_NAME}" >> $GITHUB_OUTPUT
 
       - name: Generate release manifest
+        env:
+          TARBALL_PATH: ${{ steps.build.outputs.TARBALL_PATH }}
         run: |
           VERSION="${{ inputs.version }}"
           TAG="${{ inputs.tag }}"
+          test -s "${TARBALL_PATH}"
           cd /tmp/release/q
-          racket scripts/gen-release-manifest.rkt /tmp/release/"${TARBALL_NAME}" > /tmp/release/release-manifest.json
+          racket scripts/gen-release-manifest.rkt "${TARBALL_PATH}" > /tmp/release/release-manifest.json
+          test -s /tmp/release/release-manifest.json
+          COMMIT=$(git rev-parse HEAD)
+          TAG_OBJECT=$(git rev-parse "$TAG")
+          racket scripts/verify-release-bundle.rkt \
+            --version "$VERSION" --tag "$TAG" --commit "$COMMIT" --tag-object "$TAG_OBJECT" \
+            "${TARBALL_PATH}" /tmp/release/release-manifest.json
           cat /tmp/release/release-manifest.json
 
       - name: Generate release notes
@@ -89,7 +116,7 @@ jobs:
           cat /tmp/release/release-notes.md
 
       - name: Upload internal build artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: q-release-build-${{ inputs.version }}
           path: |
@@ -104,36 +131,70 @@ jobs:
     env:
       RACKET_VERSION: '8.12'
     steps:
+      - name: Checkout trusted verifier tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: tooling
+          persist-credentials: false
+
       - name: Download build artifact
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
         with:
           name: q-release-build-${{ inputs.version }}
           path: /tmp/release
 
-      - name: Install Racket
-        run: |
-          curl -L https://download.racket-lang.org/installers/${{ env.RACKET_VERSION }}/racket-${{ env.RACKET_VERSION }}-x86_64-linux-cs.sh -o /tmp/racket.sh
-          echo "2" | sudo sh /tmp/racket.sh --in-place --create-links /usr/local
+      - name: Install pinned Racket toolchain
+        uses: Bogdanp/setup-racket@2466913449df77df2bad149d1f2fc4e1ea4795dd
+        with:
+          version: ${{ env.RACKET_VERSION }}
 
-      - name: Extract and install
+      - name: Verify internal bundle before extraction
         run: |
+          racket tooling/scripts/verify-release-bundle.rkt \
+            --version "${{ inputs.version }}" --tag "${{ inputs.tag }}" \
+            --commit "${{ needs.build.outputs.commit }}" \
+            --tag-object "${{ needs.build.outputs.tag-object }}" \
+            "/tmp/release/q-${{ inputs.version }}.tar.gz" /tmp/release/release-manifest.json
+
+      - name: Validate archive, extract, and install
+        run: |
+          set -euo pipefail
           VERSION="${{ inputs.version }}"
           cd /tmp/release
-          tar xzf "q-${VERSION}.tar.gz"
+          names=$(tar -tzf "q-${VERSION}.tar.gz")
+          test -n "$names"
+          ! grep -Eq '(^/|(^|/)\.\.(/|$)|^[A-Za-z]:)' <<<"$names"
+          test "$(sort <<<"$names" | uniq -d | wc -l)" -eq 0
+          test "$(wc -l <<<"$names")" -le 100000
+          ! tar -tvzf "q-${VERSION}.tar.gz" | grep -Eq '^[bcpPs]'
+          ! tar -tvzf "q-${VERSION}.tar.gz" | grep -Eq ' -> (\.\./|/)| link to (\.\./|/)'
+          mkdir -p /tmp/release/extracted
+          tar --no-same-owner --no-same-permissions -xzf "q-${VERSION}.tar.gz" -C /tmp/release/extracted
+          root=$(realpath /tmp/release/extracted)
+          while IFS= read -r link; do
+            resolved=$(realpath -m "$link")
+            case "$resolved" in "$root"/*) ;; *) echo "escaping extracted link: $link"; exit 1;; esac
+          done < <(find /tmp/release/extracted -type l)
+          test -z "$(find /tmp/release/extracted \( -type b -o -type c -o -type p -o -type s \) -print -quit)"
+          cd /tmp/release/extracted
+          test -d q
+          test "$(find . -mindepth 1 -maxdepth 1 | wc -l)" -eq 1
           cd q
           raco pkg install --auto --batch
 
       - name: Verify q --version
         run: |
           VERSION="${{ inputs.version }}"
-          cd /tmp/release/q
+          cd /tmp/release/extracted/q
           OUTPUT=$(racket main.rkt --version)
           echo "$OUTPUT"
           echo "$OUTPUT" | grep -q "version ${VERSION}"
 
       - name: Run release-smoke test suite
         run: |
-          cd /tmp/release/q
+          set -o pipefail
+          cd /tmp/release/extracted/q
           echo "Running release-smoke suite (deterministic, artifact-focused)"
           STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
             --suite release-smoke \
@@ -143,20 +204,23 @@ jobs:
 
       - name: Upload smoke log on failure
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: smoke-output-log-${{ inputs.version }}
-          path: /tmp/release/q/smoke-output.log
+          path: /tmp/release/extracted/q/smoke-output.log
           retention-days: 30
 
   draft:
     needs: smoke
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
     outputs:
       release-id: ${{ steps.draft.outputs.RELEASE_ID }}
     steps:
       - name: Download build artifact
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
         with:
           name: q-release-build-${{ inputs.version }}
           path: /tmp/release
@@ -176,16 +240,25 @@ jobs:
             --draft \
             --repo ${{ github.repository }}
           # Get the newly created release ID
-          RELEASE_ID=$(gh release view "$TAG" --repo ${{ github.repository }} --json id -q '.id')
+          RELEASE_ID=$(gh api "repos/${{ github.repository }}/releases/tags/$TAG" --jq .id)
           echo "RELEASE_ID=${RELEASE_ID}" >> $GITHUB_OUTPUT
           echo "Created draft release: ${RELEASE_ID}"
 
   verify-draft:
     needs: draft
     runs-on: ubuntu-latest
+    outputs:
+      release-id: ${{ needs.draft.outputs.release-id }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.checkout-ref }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-racket
+
       - name: Download build artifact
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
         with:
           name: q-release-build-${{ inputs.version }}
           path: /tmp/release
@@ -196,60 +269,68 @@ jobs:
         run: |
           VERSION="${{ inputs.version }}"
           TAG="${{ inputs.tag }}"
-          echo "Verifying draft release assets for ${TAG}..."
+          RELEASE_ID="${{ needs.draft.outputs.release-id }}"
+          release=$(gh api "repos/${{ github.repository }}/releases/$RELEASE_ID")
+          test "$(jq -r .tag_name <<<"$release")" = "$TAG"
+          test "$(jq -r .draft <<<"$release")" = true
+          echo "Verifying draft release $RELEASE_ID assets for ${TAG}..."
 
-          # Wait for release to propagate via gh CLI
+          # Wait for this exact release ID and resolve exact asset IDs.
+          RELEASE_FOUND=false
           for i in $(seq 1 30); do
-            if gh release view "$TAG" --repo ${{ github.repository }} --json assets &>/dev/null 2>&1; then
-              echo "Release found (attempt $i)"
-              break
+            if release=$(gh api "repos/${{ github.repository }}/releases/$RELEASE_ID" 2>/dev/null); then
+              test "$(jq -r .tag_name <<<"$release")" = "$TAG"
+              test "$(jq -r .draft <<<"$release")" = true
+              RELEASE_FOUND=true; break
             fi
-            echo "Waiting for release (attempt $i)..."
             sleep 5
           done
+          [ "$RELEASE_FOUND" = true ] || { echo "ERROR: exact draft release unavailable"; exit 1; }
 
-          # Download and verify tarball
           mkdir -p /tmp/verify
           TARBALL="q-${VERSION}.tar.gz"
-          gh release download "$TAG" --repo ${{ github.repository }} \
-            -p "$TARBALL" -D /tmp/verify --clobber 2>&1 || {
-            echo "ERROR: Could not download ${TARBALL} from draft release"
-            exit 1
-          }
-          echo "Tarball asset downloaded"
-
-          # Download and verify manifest
-          gh release download "$TAG" --repo ${{ github.repository }} \
-            -p "release-manifest.json" -D /tmp/verify --clobber 2>&1 || {
-            echo "ERROR: Could not download release-manifest.json from draft release"
-            exit 1
-          }
-          echo "Manifest asset downloaded"
+          TARBALL_ID=$(jq -r --arg n "$TARBALL" '.assets[] | select(.name==$n) | .id' <<<"$release")
+          MANIFEST_ID=$(jq -r '.assets[] | select(.name=="release-manifest.json") | .id' <<<"$release")
+          test -n "$TARBALL_ID" && test -n "$MANIFEST_ID"
+          gh api "repos/${{ github.repository }}/releases/assets/$TARBALL_ID" \
+            -H 'Accept: application/octet-stream' > "/tmp/verify/$TARBALL"
+          gh api "repos/${{ github.repository }}/releases/assets/$MANIFEST_ID" \
+            -H 'Accept: application/octet-stream' > /tmp/verify/release-manifest.json
 
           # Compare against locally-built artifact
           LOCAL_MANIFEST="/tmp/release/release-manifest.json"
-          if [ -f "$LOCAL_MANIFEST" ]; then
-            if [ "$(sha256sum /tmp/verify/release-manifest.json | awk '{print $1}')" != \
-                 "$(sha256sum $LOCAL_MANIFEST | awk '{print $1}')" ]; then
-              echo "ERROR: Release manifest SHA256 differs from internal artifact"
-              exit 1
-            fi
-            echo "release-manifest.json SHA256 matches internal artifact"
-
-            # Compare tarball SHA256
-            if [ "$(sha256sum /tmp/verify/${TARBALL} | awk '{print $1}')" != \
-                 "$(sha256sum /tmp/release/${TARBALL} | awk '{print $1}')" ]; then
-              echo "ERROR: Tarball SHA256 differs from internal artifact"
-              exit 1
-            fi
-            echo "Tarball SHA256 matches internal artifact"
-          fi
-
+          test -s "$LOCAL_MANIFEST"
+          test -s "/tmp/release/${TARBALL}"
+          test -s /tmp/verify/release-manifest.json
+          test -s "/tmp/verify/${TARBALL}"
+          cmp --silent /tmp/verify/release-manifest.json "$LOCAL_MANIFEST" || {
+            echo "ERROR: Release manifest differs from internal artifact"; exit 1;
+          }
+          cmp --silent "/tmp/verify/${TARBALL}" "/tmp/release/${TARBALL}" || {
+            echo "ERROR: Tarball differs from internal artifact"; exit 1;
+          }
+          release=$(gh api "repos/${{ github.repository }}/releases/$RELEASE_ID")
+          test "$(jq -r .tag_name <<<"$release")" = "$TAG"
+          test "$(jq -r .draft <<<"$release")" = true
           echo "All draft assets verified successfully."
+
+      - name: Semantically verify draft release bundle from trusted checkout
+        run: |
+          COMMIT=$(git rev-parse HEAD)
+          TAG_OBJECT=$(git rev-parse "${{ inputs.tag }}")
+          racket scripts/verify-release-bundle.rkt \
+            --version "${{ inputs.version }}" --tag "${{ inputs.tag }}" \
+            --commit "$COMMIT" --tag-object "$TAG_OBJECT" \
+            "/tmp/verify/q-${{ inputs.version }}.tar.gz" \
+            /tmp/verify/release-manifest.json
 
   publish:
     needs: verify-draft
     runs-on: ubuntu-latest
+    outputs:
+      release-id: ${{ needs.verify-draft.outputs.release-id }}
+    permissions:
+      contents: write
     steps:
       - name: Publish draft release
         env:
@@ -257,16 +338,27 @@ jobs:
         run: |
           VERSION="${{ inputs.version }}"
           TAG="${{ inputs.tag }}"
-          echo "Publishing release ${TAG}..."
-          gh release edit "$TAG" --draft=false --repo ${{ github.repository }}
+          RELEASE_ID="${{ needs.verify-draft.outputs.release-id }}"
+          release=$(gh api "repos/${{ github.repository }}/releases/$RELEASE_ID")
+          test "$(jq -r .tag_name <<<"$release")" = "$TAG"
+          test "$(jq -r .draft <<<"$release")" = true
+          echo "Publishing exact release ${RELEASE_ID} (${TAG})..."
+          gh api --method PATCH "repos/${{ github.repository }}/releases/$RELEASE_ID" -F draft=false >/dev/null
           echo "Release published: ${TAG}"
 
   verify-public:
     needs: publish
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.checkout-ref }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-racket
+
       - name: Download build artifact
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
         with:
           name: q-release-build-${{ inputs.version }}
           path: /tmp/release
@@ -277,19 +369,25 @@ jobs:
         run: |
           VERSION="${{ inputs.version }}"
           TAG="${{ inputs.tag }}"
-          echo "Verifying public release assets for ${TAG}..."
+          RELEASE_ID="${{ needs.publish.outputs.release-id }}"
+          echo "Verifying public release $RELEASE_ID assets for ${TAG}..."
 
-          # Fetch public release by tag
+          # Fetch public release by tag, failing closed after bounded retries.
+          RELEASE_DATA=""
           for i in $(seq 1 15); do
-            RELEASE_DATA=$(curl -sf -H "Authorization: token $GH_TOKEN" \
-              "https://api.github.com/repos/${{ github.repository }}/releases/tags/${TAG}")
-            if [ -n "$RELEASE_DATA" ]; then
+            if RELEASE_DATA=$(curl -fsS -H "Authorization: token $GH_TOKEN" \
+              "https://api.github.com/repos/${{ github.repository }}/releases/${RELEASE_ID}"); then
+              test -n "$RELEASE_DATA"
               echo "Public release found (attempt $i)"
               break
             fi
+            RELEASE_DATA=""
             echo "Waiting for public release (attempt $i)..."
             sleep 5
           done
+          test -n "$RELEASE_DATA" || { echo "ERROR: public release did not become available"; exit 1; }
+          test "$(jq -r .tag_name <<<"$RELEASE_DATA")" = "$TAG"
+          test "$(jq -r .draft <<<"$RELEASE_DATA")" = false
 
           # Verify tarball
           TARBALL="q-${VERSION}.tar.gz"
@@ -314,20 +412,24 @@ jobs:
 
           # Verify against internal artifact
           LOCAL_MANIFEST="/tmp/release/release-manifest.json"
-          if [ -f "$LOCAL_MANIFEST" ]; then
-            if [ "$(sha256sum /tmp/public-verify-release-manifest.json | awk '{print $1}')" != \
-                 "$(sha256sum $LOCAL_MANIFEST | awk '{print $1}')" ]; then
-              echo "ERROR: Public manifest SHA256 differs from internal artifact"
-              exit 1
-            fi
-            echo "Public release-manifest.json SHA256 matches internal artifact"
-
-            if [ "$(sha256sum /tmp/public-verify-${TARBALL} | awk '{print $1}')" != \
-                 "$(sha256sum /tmp/release/${TARBALL} | awk '{print $1}')" ]; then
-              echo "ERROR: Public tarball SHA256 differs from internal artifact"
-              exit 1
-            fi
-            echo "Public tarball SHA256 matches internal artifact"
-          fi
-
+          test -s "$LOCAL_MANIFEST"
+          test -s "/tmp/release/${TARBALL}"
+          test -s /tmp/public-verify-release-manifest.json
+          test -s "/tmp/public-verify-${TARBALL}"
+          cmp --silent /tmp/public-verify-release-manifest.json "$LOCAL_MANIFEST" || {
+            echo "ERROR: Public manifest differs from internal artifact"; exit 1;
+          }
+          cmp --silent "/tmp/public-verify-${TARBALL}" "/tmp/release/${TARBALL}" || {
+            echo "ERROR: Public tarball differs from internal artifact"; exit 1;
+          }
           echo "All public assets verified successfully."
+
+      - name: Semantically verify public release bundle from trusted checkout
+        run: |
+          COMMIT=$(git rev-parse HEAD)
+          TAG_OBJECT=$(git rev-parse "${{ inputs.tag }}")
+          racket scripts/verify-release-bundle.rkt \
+            --version "${{ inputs.version }}" --tag "${{ inputs.tag }}" \
+            --commit "$COMMIT" --tag-object "$TAG_OBJECT" \
+            "/tmp/public-verify-q-${{ inputs.version }}.tar.gz" \
+            /tmp/public-verify-release-manifest.json

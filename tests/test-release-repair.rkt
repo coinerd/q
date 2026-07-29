@@ -75,11 +75,8 @@
   (define-values (tag mode) (parse-repair-args '("--tag" "v0.99.40")))
   (check-equal? mode "dry-run"))
 
-(test-case "mode — non-dry-run in args is ignored by parser (always dry-run)"
-  ;; The parser now returns dry-run regardless of --mode (simplified for diagnostic-only)
-  (define-values (tag mode) (parse-repair-args '("--tag" "v0.99.40" "--mode" "publish")))
-  (check-equal? tag "v0.99.40")
-  (check-equal? mode "dry-run"))
+(test-case "mode — unsupported mutation mode is rejected fail-closed"
+  (check-false (parse-repair-args '("--tag" "v0.99.40" "--mode" "publish"))))
 
 (test-case "mode — explicit dry-run args"
   (define-values (tag mode) (parse-repair-args '("--tag" "v0.99.40" "--mode" "dry-run")))

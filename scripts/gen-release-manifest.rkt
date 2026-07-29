@@ -14,7 +14,10 @@
          racket/string
          racket/system
          racket/path
+         racket/match
          json
+         openssl
+         (only-in file/sha1 bytes->hex-string)
          (only-in "version-surface.rkt" read-canonical-version!))
 
 ;; Provide W4 parse/validate/render boundary + W5 pure-core/effect-shell
@@ -90,11 +93,20 @@
             (or traceability (manifest-trace tag-name "unknown" #f commit #f))))
 
 ;; ---------------------------------------------------------------------------
-;; Serialization: manifest → jsexpr (pure — no I/O)
-;; ---------------------------------------------------------------------------
+(define (default-provenance m)
+  (hasheq 'workflow_run_id
+          "local"
+          'workflow_run_url
+          "local"
+          'workflow_source_sha
+          (manifest-commit m)
+          'generator_tooling_sha
+          (manifest-commit m)))
 
-(define (manifest->jsexpr m)
-  (hasheq 'version
+(define (manifest->jsexpr m #:provenance [provenance (default-provenance m)])
+  (hasheq 'schema_version
+          1
+          'version
           (manifest-version m)
           'tag
           (manifest-tag m)
@@ -124,12 +136,12 @@
           'compatibility
           (hasheq 'min-racket (manifest-compatibility-min-racket m))
           'verification
-          (manifest-verification m)))
+          (manifest-verification m)
+          'provenance
+          provenance))
 
-(define (manifest->json-string m)
-  (jsexpr->string (manifest->jsexpr m)))
-
-;; ---------------------------------------------------------------------------
+(define (manifest->json-string m #:provenance [provenance (default-provenance m)])
+  (jsexpr->string (manifest->jsexpr m #:provenance provenance)))
 ;; Parsing: jsexpr → manifest (pure — no I/O)
 ;; ---------------------------------------------------------------------------
 
@@ -195,7 +207,11 @@
                 errors)))
   (unless (string? (manifest-date m))
     (set! errors (cons "date must be a string" errors)))
-  ;; Assets
+  ;; A release manifest binds exactly one immutable asset.
+  (unless (= (length (manifest-assets m)) 1)
+    (set! errors
+          (cons (format "assets must contain exactly one entry, got: ~a" (length (manifest-assets m)))
+                errors)))
   (for ([a (in-list (manifest-assets m))]
         [i (in-naturals)])
     (unless (string? (manifest-asset-name a))
@@ -220,6 +236,14 @@
   (when (manifest-trace? tr)
     (define tag-sha (manifest-trace-tag-commit-sha tr))
     (define commit-sha (manifest-trace-manifest-commit-sha tr))
+    (unless (equal? (manifest-tag m) (format "v~a" (manifest-version m)))
+      (set! errors (cons "tag must equal vVERSION" errors)))
+    (unless (equal? (manifest-trace-tag-name tr) (manifest-tag m))
+      (set! errors (cons "traceability tag_name must equal manifest tag" errors)))
+    (unless (equal? commit-sha (manifest-commit m))
+      (set! errors (cons "traceability manifest_commit_sha must equal manifest commit" errors)))
+    (when (and (manifest-trace-commit-matches-tag? tr) (not (commits-match? commit-sha tag-sha)))
+      (set! errors (cons "commit_matches_tag requires identical full SHAs" errors)))
     (unless (or (manifest-trace-commit-matches-tag? tr)
                 (equal? tag-sha "unknown")
                 (equal? commit-sha "unknown")
@@ -305,15 +329,13 @@
         (version commit date tarball-name tarball-size tarball-sha256 tag-commit-sha tag-object-sha)
   #:transparent)
 
-;; Pure: determine if two commit SHAs match (exact, prefix, or both unknown).
+;; Pure: release evidence must use identical full commit SHAs.
 (define (commits-match? commit tag-commit-sha)
-  (and commit
-       tag-commit-sha
-       (not (equal? commit "unknown"))
-       (not (equal? tag-commit-sha "unknown"))
-       (or (string=? commit tag-commit-sha)
-           (string-prefix? tag-commit-sha commit)
-           (string-prefix? commit tag-commit-sha))))
+  (and (string? commit)
+       (string? tag-commit-sha)
+       (regexp-match? full-sha-rx commit)
+       (regexp-match? full-sha-rx tag-commit-sha)
+       (string=? commit tag-commit-sha)))
 
 ;; Pure: build a manifest from raw release inputs.
 ;; No I/O — takes a release-inputs struct, produces a manifest struct.
@@ -349,15 +371,7 @@
 ;; ---------------------------------------------------------------------------
 
 (define (file-sha256 path)
-  (define out
-    (with-output-to-string (lambda ()
-                             (system (format "sha256sum ~a 2>/dev/null || shasum -a 256 ~a"
-                                             (path->string path)
-                                             (path->string path))))))
-  (define parts (string-split out))
-  (if (pair? parts)
-      (car parts)
-      "unknown"))
+  (call-with-input-file path (lambda (in) (bytes->hex-string (sha256-bytes in))) #:mode 'binary))
 
 ;; ---------------------------------------------------------------------------
 ;; File size
@@ -418,28 +432,125 @@
 ;; Main
 ;; ---------------------------------------------------------------------------
 
-(define (main)
-  (define args (vector->list (current-command-line-arguments)))
+(define cli-usage
+  "Usage: gen-release-manifest.rkt [--version V --tag TAG --commit SHA --tag-commit SHA --tag-object SHA] q-V.tar.gz")
 
-  ;; Read version (W8: migrated to read-canonical-version!)
-  (define version (read-canonical-version!))
+(define (fail! message)
+  (eprintf "gen-release-manifest: ~a\n~a\n" message cli-usage)
+  (exit 2))
 
-  ;; Get git commit
-  (define commit
-    (let ([out (with-output-to-string (lambda () (system "git rev-parse --short HEAD 2>/dev/null")))])
-      (string-trim out)))
+(define (full-sha? value)
+  (and (string? value) (regexp-match? full-sha-rx value)))
 
-  ;; Get date
+(define (regular-nonempty-tarball! raw-path version)
+  (define path (string->path raw-path))
+  (define kind (file-or-directory-type path #f))
+  (unless (eq? kind 'file)
+    (fail! (if kind
+               (format "tarball is not a regular file: ~a" raw-path)
+               (format "tarball does not exist: ~a" raw-path))))
+  (when (zero? (file-size path))
+    (fail! (format "tarball is empty: ~a" raw-path)))
+  (define expected (format "q-~a.tar.gz" version))
+  (unless (string=? (path->string (file-name-from-path path)) expected)
+    (fail! (format "tarball must be named exactly ~a" expected)))
+  path)
+
+(define (git-tag-type! tag)
+  (define output (open-output-string))
+  (define error-output (open-output-string))
+  (define status
+    (parameterize ([current-output-port output]
+                   [current-error-port error-output])
+      (system*/exit-code (find-executable-path "git") "cat-file" "-t" tag)))
+  (define type (string-trim (get-output-string output)))
+  (unless (and (zero? status) (string=? type "tag"))
+    (fail! (format "~a must name an annotated tag object" tag)))
+  type)
+
+(define (git-output! command description)
+  (define out (string-trim (with-output-to-string (lambda () (system command)))))
+  (unless (full-sha? out)
+    (fail! (format "could not obtain full ~a SHA" description)))
+  out)
+
+(define (produce! version tag commit tag-commit tag-object raw-path)
+  (unless (regexp-match? semver-rx version)
+    (fail! "--version must be X.Y.Z"))
+  (unless (string=? tag (format "v~a" version))
+    (fail! (format "--tag must equal v~a" version)))
+  (for ([value (in-list (list commit tag-commit tag-object))]
+        [label (in-list '(commit tag-commit tag-object))])
+    (unless (full-sha? value)
+      (fail! (format "--~a must be a full 40-character SHA" label))))
+  (unless (commits-match? commit tag-commit)
+    (fail! "--commit and --tag-commit must match exactly"))
+  (define path (regular-nonempty-tarball! raw-path version))
   (define date
-    (let ([out (with-output-to-string (lambda () (system "date -u +%Y-%m-%d")))]) (string-trim out)))
+    (or (getenv "Q_RELEASE_DATE")
+        (string-trim (with-output-to-string (lambda () (system "date -u +%Y-%m-%d"))))))
+  (define inputs
+    (release-inputs version
+                    commit
+                    date
+                    (path->string (file-name-from-path path))
+                    (file-size-bytes path)
+                    (file-sha256 path)
+                    tag-commit
+                    tag-object))
+  (define workflow-source
+    (or (getenv "Q_RELEASE_WORKFLOW_SOURCE_SHA")
+        (getenv "GITHUB_WORKFLOW_SHA")
+        (getenv "GITHUB_SHA")
+        commit))
+  (define run-id (or (getenv "Q_RELEASE_WORKFLOW_RUN_ID") (getenv "GITHUB_RUN_ID") "local"))
+  (define run-url
+    (or (getenv "Q_RELEASE_WORKFLOW_RUN_URL")
+        (and (getenv "GITHUB_SERVER_URL")
+             (getenv "GITHUB_REPOSITORY")
+             (not (string=? run-id "local"))
+             (format "~a/~a/actions/runs/~a"
+                     (getenv "GITHUB_SERVER_URL")
+                     (getenv "GITHUB_REPOSITORY")
+                     run-id))
+        "local"))
+  (define provenance
+    (hasheq 'workflow_run_id
+            run-id
+            'workflow_run_url
+            run-url
+            'workflow_source_sha
+            workflow-source
+            'generator_tooling_sha
+            (or (getenv "Q_RELEASE_TOOLING_SHA") workflow-source)))
+  (displayln (manifest->json-string (build-manifest inputs) #:provenance provenance)))
 
-  ;; Tarball path (optional)
-  (define tarball-path
-    (if (pair? args)
-        (let ([p (string->path (car args))]) (if (file-exists? p) p #f))
-        #f))
-
-  (emit-manifest version commit date tarball-path))
+(define (main)
+  (match (vector->list (current-command-line-arguments))
+    [(list "--version"
+           version
+           "--tag"
+           tag
+           "--commit"
+           commit
+           "--tag-commit"
+           tag-commit
+           "--tag-object"
+           tag-object
+           path)
+     (produce! version tag commit tag-commit tag-object path)]
+    [(list path)
+     (define version (read-canonical-version!))
+     (regular-nonempty-tarball! path version)
+     (define tag (format "v~a" version))
+     (git-tag-type! tag)
+     (produce! version
+               tag
+               (git-output! "git rev-parse HEAD 2>/dev/null" "HEAD")
+               (git-output! (format "git rev-list -n 1 ~a 2>/dev/null" tag) "tag commit")
+               (git-output! (format "git rev-parse ~a 2>/dev/null" tag) "tag object")
+               path)]
+    [_ (fail! "invalid arguments")]))
 
 (module+ main
   (main))
