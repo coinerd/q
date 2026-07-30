@@ -20,10 +20,13 @@
 
 ;; ── Path helpers ──
 
+(define-runtime-path ci-yml-path "../.github/workflows/ci.yml")
 (define-runtime-path release-yml-path "../.github/workflows/release.yml")
 (define-runtime-path release-core-yml-path "../.github/workflows/release-core.yml")
 (define-runtime-path release-repair-yml-path "../.github/workflows/release-repair.yml")
 
+(define (read-ci-yml)
+  (file->string ci-yml-path))
 (define (read-release-yml)
   (file->string release-yml-path))
 (define (read-release-core-yml)
@@ -178,9 +181,15 @@
   ;; verify-public needs publish
   (check-true (string-contains? content "needs: publish") "verify-public needs publish"))
 
-(test-case "release-core.yml builds tarball with internal artifact upload"
+(test-case "release-core.yml builds deterministic tarball with internal artifact upload"
   (define content (read-release-core-yml))
-  (check-true (string-contains? content "Build tarball") "must have Build tarball step")
+  (define build-step
+    (bounded-section content "      - name: Build tarball" "      - name: Generate release manifest"))
+  (check-true (string-contains? build-step "Build tarball") "must have Build tarball step")
+  (check-true (string-contains? build-step "--sort=name") "tar entries must have canonical order")
+  (check-true (string-contains? build-step "--mtime=@${SOURCE_DATE_EPOCH}")
+              "tar entry timestamps must be canonical")
+  (check-true (string-contains? build-step "gzip -n") "gzip header must omit variable metadata")
   (check-regexp-match #px"actions/upload-artifact@[0-9a-f]{40}"
                       content
                       "artifact action must be pinned to an immutable commit"))
@@ -205,12 +214,27 @@
   (check-true (string-contains? public-job "needs.publish.outputs.release-id"))
   (check-true (string-contains? public-job "scripts/verify-release-bundle.rkt")))
 
-(test-case "release-core.yml publishes exact verified release ID"
+(test-case "release-core.yml publishes exact verified release ID only after protected approval"
   (define content (read-release-core-yml))
   (define publish-job (bounded-section content "  publish:" "  verify-public:"))
   (check-true (string-contains? publish-job "needs.verify-draft.outputs.release-id"))
+  (check-true (string-contains? publish-job "environment: release-repair")
+              "public mutation must wait for protected reviewer approval")
   (check-true (string-contains? publish-job "--method PATCH"))
   (check-true (string-contains? publish-job "draft=false")))
+
+;; ============================================================
+;; ci.yml — immutable v0.99.74 regression dry-run
+;; ============================================================
+
+(test-case "CI release dry-run builds the frozen v0.99.74 asset with truthful date"
+  (define content (read-ci-yml))
+  (define dry-run-job (bounded-section content "  release-dry-run:" "  #"))
+  (check-true (string-contains? dry-run-job "VERSION=0.99.74")
+              "frozen repair regression must not depend on the current q version")
+  (check-false (string-contains? dry-run-job "test \"$VERSION\" = 0.99.74"))
+  (check-true (string-contains? dry-run-job "Q_RELEASE_DATE: '2026-07-29'"))
+  (check-false (string-contains? dry-run-job "Q_RELEASE_DATE: '2026-07-26'")))
 
 ;; ============================================================
 ;; release-repair.yml — guarded repair for existing immutable tags
