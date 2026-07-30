@@ -20,10 +20,13 @@
 
 ;; ── Path helpers ──
 
+(define-runtime-path ci-yml-path "../.github/workflows/ci.yml")
 (define-runtime-path release-yml-path "../.github/workflows/release.yml")
 (define-runtime-path release-core-yml-path "../.github/workflows/release-core.yml")
 (define-runtime-path release-repair-yml-path "../.github/workflows/release-repair.yml")
 
+(define (read-ci-yml)
+  (file->string ci-yml-path))
 (define (read-release-yml)
   (file->string release-yml-path))
 (define (read-release-core-yml)
@@ -219,6 +222,19 @@
               "public mutation must wait for protected reviewer approval")
   (check-true (string-contains? publish-job "--method PATCH"))
   (check-true (string-contains? publish-job "draft=false")))
+
+;; ============================================================
+;; ci.yml — immutable v0.99.74 regression dry-run
+;; ============================================================
+
+(test-case "CI release dry-run builds the frozen v0.99.74 asset with truthful date"
+  (define content (read-ci-yml))
+  (define dry-run-job (bounded-section content "  release-dry-run:" "  #"))
+  (check-true (string-contains? dry-run-job "VERSION=0.99.74")
+              "frozen repair regression must not depend on the current q version")
+  (check-false (string-contains? dry-run-job "test \"$VERSION\" = 0.99.74"))
+  (check-true (string-contains? dry-run-job "Q_RELEASE_DATE: '2026-07-29'"))
+  (check-false (string-contains? dry-run-job "Q_RELEASE_DATE: '2026-07-26'")))
 
 ;; ============================================================
 ;; release-repair.yml — guarded repair for existing immutable tags

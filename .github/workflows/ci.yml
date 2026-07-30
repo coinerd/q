@@ -270,8 +270,7 @@ jobs:
 
       - name: Build tarball (dry-run)
         run: |
-          VERSION=$(racket -e '(require "util/version.rkt") (display q-version)')
-          test "$VERSION" = 0.99.74
+          VERSION=0.99.74
           TAG_OBJECT=de0ce7391b4ae23818534b31431f00465241302e
           PEELED=32718281aafd378fca511b4294d3c5668134673c
           git fetch --force origin refs/tags/v0.99.74:refs/tags/v0.99.74
@@ -282,7 +281,7 @@ jobs:
 
       - name: Verify manifest generation
         env:
-          Q_RELEASE_DATE: '2026-07-26'
+          Q_RELEASE_DATE: '2026-07-29'
           Q_RELEASE_WORKFLOW_RUN_ID: ci-release-dry-run
           Q_RELEASE_WORKFLOW_RUN_URL: https://github.com/coinerd/q/actions/workflows/ci.yml
           Q_RELEASE_WORKFLOW_SOURCE_SHA: ${{ github.workflow_sha }}
