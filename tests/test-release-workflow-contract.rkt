@@ -216,7 +216,8 @@
 
 (test-case "release-core.yml creates draft release (not public directly)"
   (define content (read-release-core-yml))
-  (check-true (string-contains? content "--draft") "must create draft (not public) release"))
+  (check-true (string-contains? content "-F draft=true")
+              "must create draft (not public) release via API"))
 
 (test-case "release-core.yml verifies exact draft release before publish"
   (define content (read-release-core-yml))
