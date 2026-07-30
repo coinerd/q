@@ -21,12 +21,6 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-racket
 
-      - name: Sync README status block
-        run: racket scripts/sync-readme-status.rkt --sync
-
-      - name: Sync README metrics markers
-        run: racket scripts/metrics.rkt --sync-readme
-
       - name: Version consistency check
         run: racket scripts/lint-version.rkt
 
