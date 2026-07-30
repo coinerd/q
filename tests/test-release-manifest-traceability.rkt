@@ -122,20 +122,21 @@
 
 (define full-sha "abcdef0123456789abcdef0123456789abcdef01")
 (define other-sha "fedcba9876543210fedcba9876543210fedcba98")
+(define full-asset-sha (make-string 64 #\a))
 (define short-sha "abc1234")
 
 (define (valid-manifest-fixture)
   (make-manifest #:version "0.99.42"
                  #:commit full-sha
                  #:date "2026-06-22"
-                 #:assets (list (manifest-asset "q-0.99.42.tar.gz" 12345 "n/a"))
+                 #:assets (list (manifest-asset "q-0.99.42.tar.gz" 12345 full-asset-sha))
                  #:traceability (manifest-trace "v0.99.42" full-sha #f full-sha #t)))
 
 (define (mismatched-commit-fixture)
   (make-manifest #:version "0.99.42"
                  #:commit other-sha
                  #:date "2026-06-22"
-                 #:assets (list (manifest-asset "q-0.99.42.tar.gz" 12345 "n/a"))
+                 #:assets (list (manifest-asset "q-0.99.42.tar.gz" 12345 full-asset-sha))
                  #:traceability (manifest-trace "v0.99.42" full-sha #f other-sha #f)))
 
 ;; --- Struct construction and accessors ---
@@ -286,23 +287,22 @@
   (define mv (validate-manifest m))
   (check-false (manifest-valid? mv)))
 
-(test-case "validate-manifest: sha256 'n/a' is allowed"
-  (define m
-    (make-manifest #:version "1.0.0"
-                   #:commit full-sha
-                   #:date "d"
-                   #:assets (list (manifest-asset "q.tar.gz" 100 "n/a"))))
-  (define mv (validate-manifest m))
-  (check-true (manifest-valid? mv)))
+(test-case "validate-manifest: placeholder sha256 values fail closed"
+  (for ([placeholder (in-list '("n/a" "unknown"))])
+    (define m
+      (make-manifest #:version "1.0.0"
+                     #:commit full-sha
+                     #:date "d"
+                     #:assets (list (manifest-asset "q.tar.gz" 100 placeholder))))
+    (check-false (manifest-valid? (validate-manifest m)))))
 
-(test-case "validate-manifest: sha256 'unknown' is allowed"
+(test-case "validate-manifest: zero-size release asset fails closed"
   (define m
     (make-manifest #:version "1.0.0"
                    #:commit full-sha
                    #:date "d"
-                   #:assets (list (manifest-asset "q.tar.gz" 100 "unknown"))))
-  (define mv (validate-manifest m))
-  (check-true (manifest-valid? mv)))
+                   #:assets (list (manifest-asset "q.tar.gz" 0 full-asset-sha))))
+  (check-false (manifest-valid? (validate-manifest m))))
 
 (test-case "validate-manifest: commit mismatch fails"
   (define mv (validate-manifest (mismatched-commit-fixture)))
@@ -489,7 +489,14 @@
 
 (test-case "build-manifest: result passes validation"
   (define ri
-    (release-inputs "0.99.42" full-sha "2026-06-22" "q-0.99.42.tar.gz" 12345 "n/a" full-sha #f))
+    (release-inputs "0.99.42"
+                    full-sha
+                    "2026-06-22"
+                    "q-0.99.42.tar.gz"
+                    12345
+                    full-asset-sha
+                    full-sha
+                    #f))
   (define m (build-manifest ri))
   (define mv (validate-manifest m))
   (check-true (manifest-valid? mv)))

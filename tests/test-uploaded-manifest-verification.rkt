@@ -18,26 +18,27 @@
 (define tag-object-sha "0123456789abcdef0123456789abcdef01234567")
 
 (define valid-manifest-json
-  (string-append "{\"version\":\"0.99.51\","
-                 "\"tag\":\"v0.99.51\","
-                 "\"commit\":\""
-                 full-sha
-                 "\","
-                 "\"date\":\"2026-07-20\","
-                 "\"traceability\":{\"tag_name\":\"v0.99.51\","
-                 "\"tag_commit_sha\":\""
-                 full-sha
-                 "\","
-                 "\"tag_object_sha\":\""
-                 tag-object-sha
-                 "\","
-                 "\"manifest_commit_sha\":\""
-                 full-sha
-                 "\","
-                 "\"commit_matches_tag\":true},"
-                 "\"assets\":[{\"name\":\"q-0.99.51.tar.gz\",\"size\":1000,\"sha256\":\"n/a\"}],"
-                 "\"compatibility\":{\"min-racket\":\"8.10\"},"
-                 "\"verification\":\"racket main.rkt --version\"}"))
+  (string-append
+   "{\"version\":\"0.99.51\","
+   "\"tag\":\"v0.99.51\","
+   "\"commit\":\""
+   full-sha
+   "\","
+   "\"date\":\"2026-07-20\","
+   "\"traceability\":{\"tag_name\":\"v0.99.51\","
+   "\"tag_commit_sha\":\""
+   full-sha
+   "\","
+   "\"tag_object_sha\":\""
+   tag-object-sha
+   "\","
+   "\"manifest_commit_sha\":\""
+   full-sha
+   "\","
+   "\"commit_matches_tag\":true},"
+   "\"assets\":[{\"name\":\"q-0.99.51.tar.gz\",\"size\":1000,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}],"
+   "\"compatibility\":{\"min-racket\":\"8.10\"},"
+   "\"verification\":\"racket main.rkt --version\"}"))
 
 (test-case "verify-uploaded-manifest: accepts valid manifest"
   (define result (verify valid-manifest-json "0.99.51" "v0.99.51" "q-0.99.51.tar.gz"))

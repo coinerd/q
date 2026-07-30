@@ -186,7 +186,7 @@
 ;; ---------------------------------------------------------------------------
 
 (define semver-rx #px"^[0-9]+\\.[0-9]+\\.[0-9]+$")
-(define sha256-rx #px"^[0-9a-fA-F]{64}$")
+(define sha256-rx #px"^[0-9a-f]{64}$")
 (define full-sha-rx #px"^[0-9a-f]{40}$")
 
 (define (validate-manifest m)
@@ -216,13 +216,12 @@
         [i (in-naturals)])
     (unless (string? (manifest-asset-name a))
       (set! errors (cons (format "asset[~a]: name missing" i) errors)))
-    (unless (and (integer? (manifest-asset-size a)) (>= (manifest-asset-size a) 0))
-      (set! errors (cons (format "asset[~a]: size must be non-negative integer" i) errors)))
-    (unless (or (equal? (manifest-asset-sha256 a) "n/a")
-                (equal? (manifest-asset-sha256 a) "unknown")
-                (regexp-match? sha256-rx (manifest-asset-sha256 a)))
+    (unless (and (integer? (manifest-asset-size a)) (> (manifest-asset-size a) 0))
+      (set! errors (cons (format "asset[~a]: size must be a positive integer" i) errors)))
+    (unless (and (string? (manifest-asset-sha256 a))
+                 (regexp-match? sha256-rx (manifest-asset-sha256 a)))
       (set! errors
-            (cons (format "asset[~a]: sha256 must be 64 hex chars or 'n/a', got: ~a"
+            (cons (format "asset[~a]: sha256 must be 64 lowercase hex chars, got: ~a"
                           i
                           (manifest-asset-sha256 a))
                   errors))))
