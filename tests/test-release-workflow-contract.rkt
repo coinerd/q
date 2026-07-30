@@ -125,6 +125,22 @@
   (check-true (string-contains? content "lint-release-readiness.rkt --strict")
               "must have strict release readiness check"))
 
+(test-case "release.yml does not dirty tree before strict readiness (tag-publish)"
+  ;; A tagged commit is frozen; syncing README/metrics in CI is both
+  ;; pointless (changes cannot be committed back) and harmful (it dirties
+  ;; the clean checkout that --strict --context tag-publish requires).
+  (define content (read-release-yml))
+  (define test-job (bounded-section content "  test:" "  prepare:"))
+  (define readiness-pos (regexp-match-positions #rx"Strict release readiness" test-job))
+  (check-true (pair? readiness-pos) "test job must have strict readiness step")
+  (define readiness-start (caar readiness-pos))
+  ;; No sync-readme-status or metrics --sync-readme steps before readiness
+  (define before-readiness (substring test-job 0 readiness-start))
+  (check-false (string-contains? before-readiness "sync-readme-status.rkt --sync")
+               "README sync must not dirty tree before strict readiness")
+  (check-false (string-contains? before-readiness "metrics.rkt --sync-readme")
+               "metrics sync must not dirty tree before strict readiness"))
+
 (test-case "release.yml is valid YAML"
   (check-true (file-exists? release-yml-path) "release.yml must exist")
   (define content (read-release-yml))
