@@ -1,3 +1,49 @@
+## 0.99.75
+
+Released 2026-07-30.
+
+### User-Visible Changes
+
+- **Release integrity and truthful closure:** Repaired and publicly verified the immutable
+  v0.99.74 release assets without moving its annotated tag or peeled commit. Release
+  automation now binds exact tarball paths, full commit/tag identity, semantic manifests,
+  independently approved bytes, and fail-closed publication checks.
+- **Truthful test reporting:** Full-profile exclusions render as `S` (`SKIPPED_BY_PROFILE`),
+  never as false failures; genuine failures continue to render as `F`.
+
+### Bug Fixes
+
+- Fixed release-repair target validation for annotated releases whose API target is the
+  peeled commit rather than the tag name.
+- Corrected canonical manifest release dates and added immediate authorization, digest,
+  run, workflow, identity, and conflict revalidation before every asset upload.
+- Fixed the TUI event-pipeline concurrency test to use the supported `#:timeout` keyword.
+
+### Breaking / Behavior Changes
+
+- No intentional API compatibility break. Release publication now refuses stale approval,
+  identity drift, conflicting assets, unsafe archives, or unverified bytes.
+
+### Migration Notes
+
+- No user migration is required. Release operators must use exact immutable identities and
+  independently approved artifact digests.
+
+### Testing
+
+- Reconstructed the v0.99.73/W14 evidence boundary without fabricating lost contemporaneous
+  proof, then passed clean unit-fast, sequential/parallel fast, and broad/full gates.
+- Public v0.99.74 exact-ID downloads passed semantic bundle verification, fresh extraction,
+  version checks, and release-smoke after corrected-manifest recovery.
+
+### Operational / Release
+
+- v0.99.74 release ID `361518742`, annotated tag object
+  `de0ce7391b4ae23818534b31431f00465241302e`, and peeled commit
+  `32718281aafd378fca511b4294d3c5668134673c` remained immutable throughout repair.
+- Historical evidence gaps are explicitly disclosed rather than reconstructed as
+  contemporaneous acceptance.
+
 ## 0.99.74
 
 Released 2026-07-29.
@@ -38,9 +84,10 @@ Released 2026-07-29.
 
 ### Operational / Release
 
-- The public GitHub release was created on 2026-07-29. Its missing asset integrity is being
-  repaired later under the separately reviewed v0.99.75 workflow; this entry does not claim
-  that repair has already occurred.
+- The public GitHub release was created on 2026-07-29. Its initially missing assets were
+  repaired later under the separately reviewed v0.99.75 workflow. The corrected final
+  manifest retains the canonical 2026-07-29 release date; this historical entry does not
+  claim the repair was contemporaneous with publication.
 
 ## 0.99.73
 
