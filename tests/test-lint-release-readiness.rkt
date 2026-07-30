@@ -82,6 +82,15 @@
     (unless had-dir
       (delete-directory/files evid-dir))))
 
+(test-case "check-git-clean ignores untracked files (#9086)"
+  ;; CI creates log artifacts (test-output.log, release-readiness.log) that
+  ;; are untracked. These are not 'uncommitted changes' to tracked release
+  ;; files and must not fail the clean-tree check. The implementation uses
+  ;; --untracked-files=no so only tracked-file modifications count.
+  (define source (file->string script-path))
+  (check-true (string-contains? source "--untracked-files=no")
+              "check-git-clean must use --untracked-files=no to ignore CI artifacts"))
+
 (test-case "dev mode does not check tag uniqueness"
   ;; In dev mode (no --strict), check-tag-unique should not be called
   ;; This test verifies the exported function works

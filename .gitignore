@@ -65,6 +65,10 @@ docs/COMPETITOR-ANALYSIS.md
 docs/audits/
 .gate-evidence/
 
+# CI log artifacts
+test-output.log
+release-readiness.log
+
 # Python bytecode caches
 __pycache__/
 *.py[cod]

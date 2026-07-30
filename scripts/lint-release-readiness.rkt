@@ -137,7 +137,12 @@
 ;; ---------------------------------------------------------------------------
 
 (define (check-git-clean)
-  (define status (string-trim (with-output-to-string (lambda () (system "git status --porcelain")))))
+  ;; Use --untracked-files=no so CI-generated artifacts (e.g. test-output.log,
+  ;; release-readiness.log, .gate-evidence/) do not fail the clean-tree check.
+  ;; Only modifications to tracked files are meaningful for release readiness.
+  (define status
+    (string-trim (with-output-to-string (lambda ()
+                                          (system "git status --porcelain --untracked-files=no")))))
   (cond
     [(equal? status "")
      (printf "  [PASS] git working tree clean~n")
