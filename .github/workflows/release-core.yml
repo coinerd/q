@@ -235,17 +235,31 @@ jobs:
         run: |
           VERSION="${{ inputs.version }}"
           TAG="${{ inputs.tag }}"
-          # Create draft release with assets
-          gh release create "$TAG" \
-            /tmp/release/q-${VERSION}.tar.gz \
-            /tmp/release/release-manifest.json \
-            --notes-file /tmp/release/release-notes.md \
-            --draft \
-            --repo ${{ github.repository }}
-          # Get the newly created release ID
-          RELEASE_ID=$(gh api "repos/${{ github.repository }}/releases/tags/$TAG" --jq .id)
+          COMMIT="${{ inputs.checkout-ref }}"
+          # Create draft release via API to capture ID directly.
+          # gh release create --draft uses an untagged-* placeholder, so
+          # releases/tags/$TAG lookup returns 404 for drafts.
+          RELEASE_NOTES=$(cat /tmp/release/release-notes.md)
+          RELEASE_ID=$(gh api repos/${{ github.repository }}/releases \
+            --method POST \
+            -f tag_name="$TAG" \
+            -f target_commitish="$COMMIT" \
+            -f name="q v${VERSION}" \
+            --raw-field body="$RELEASE_NOTES" \
+            -F draft=true \
+            --jq .id)
           echo "RELEASE_ID=${RELEASE_ID}" >> $GITHUB_OUTPUT
           echo "Created draft release: ${RELEASE_ID}"
+          # Upload assets via API
+          TARBALL="q-${VERSION}.tar.gz"
+          gh api --method POST \
+            "https://uploads.github.com/repos/${{ github.repository }}/releases/${RELEASE_ID}/assets?name=${TARBALL}" \
+            -H 'Content-Type: application/gzip' \
+            --input "/tmp/release/${TARBALL}"
+          gh api --method POST \
+            "https://uploads.github.com/repos/${{ github.repository }}/releases/${RELEASE_ID}/assets?name=release-manifest.json" \
+            -H 'Content-Type: application/json' \
+            --input /tmp/release/release-manifest.json
 
   verify-draft:
     needs: draft
