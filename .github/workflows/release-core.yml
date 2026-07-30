@@ -264,6 +264,9 @@ jobs:
   verify-draft:
     needs: draft
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
     outputs:
       release-id: ${{ needs.draft.outputs.release-id }}
     steps:
