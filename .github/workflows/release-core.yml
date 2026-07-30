@@ -82,11 +82,14 @@ jobs:
           cd /tmp/release
           # tarball name: q-VERSION.tar.gz
           TARBALL_NAME="q-${VERSION}.tar.gz"
-          tar czf "${TARBALL_NAME}" \
+          SOURCE_DATE_EPOCH=$(git -C q show -s --format=%ct HEAD)
+          tar --sort=name \
+            --mtime=@${SOURCE_DATE_EPOCH} \
+            --owner=0 --group=0 --numeric-owner \
             --exclude='.git' \
             --exclude='compiled' \
             --exclude='*.zo' \
-            q/
+            -cf - q/ | gzip -n > "${TARBALL_NAME}"
           ls -la "${TARBALL_NAME}"
           echo "TARBALL_NAME=${TARBALL_NAME}" >> $GITHUB_OUTPUT
           echo "TARBALL_PATH=/tmp/release/${TARBALL_NAME}" >> $GITHUB_OUTPUT

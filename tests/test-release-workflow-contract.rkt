@@ -178,9 +178,15 @@
   ;; verify-public needs publish
   (check-true (string-contains? content "needs: publish") "verify-public needs publish"))
 
-(test-case "release-core.yml builds tarball with internal artifact upload"
+(test-case "release-core.yml builds deterministic tarball with internal artifact upload"
   (define content (read-release-core-yml))
-  (check-true (string-contains? content "Build tarball") "must have Build tarball step")
+  (define build-step
+    (bounded-section content "      - name: Build tarball" "      - name: Generate release manifest"))
+  (check-true (string-contains? build-step "Build tarball") "must have Build tarball step")
+  (check-true (string-contains? build-step "--sort=name") "tar entries must have canonical order")
+  (check-true (string-contains? build-step "--mtime=@${SOURCE_DATE_EPOCH}")
+              "tar entry timestamps must be canonical")
+  (check-true (string-contains? build-step "gzip -n") "gzip header must omit variable metadata")
   (check-regexp-match #px"actions/upload-artifact@[0-9a-f]{40}"
                       content
                       "artifact action must be pinned to an immutable commit"))
