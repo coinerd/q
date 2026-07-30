@@ -383,6 +383,9 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 
 
+
+**v0.99.75** — User-Visible Changes
+
 **v0.99.74** — User-Visible Changes
 
 **v0.99.73** — Bug Fixes
