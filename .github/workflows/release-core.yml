@@ -335,20 +335,67 @@ jobs:
       release-id: ${{ needs.verify-draft.outputs.release-id }}
     permissions:
       contents: write
+      actions: read
     steps:
-      - name: Publish draft release
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.checkout-ref }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-racket
+      - name: Download verified build artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: q-release-build-${{ inputs.version }}
+          path: /tmp/release
+
+      - name: Publish exact draft and verify transactionally
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           VERSION="${{ inputs.version }}"
           TAG="${{ inputs.tag }}"
+          EXPECTED_COMMIT="${{ inputs.checkout-ref }}"
           RELEASE_ID="${{ needs.verify-draft.outputs.release-id }}"
+          TARBALL="q-${VERSION}.tar.gz"
+
+          tag_ref=$(gh api "repos/${{ github.repository }}/git/ref/tags/${TAG}")
+          test "$(jq -r .object.type <<<"$tag_ref")" = tag
+          TAG_OBJECT=$(jq -r .object.sha <<<"$tag_ref")
+          tag_data=$(gh api "repos/${{ github.repository }}/git/tags/${TAG_OBJECT}")
+          test "$(jq -r .object.type <<<"$tag_data")" = commit
+          test "$(jq -r .object.sha <<<"$tag_data")" = "$EXPECTED_COMMIT"
+
           release=$(gh api "repos/${{ github.repository }}/releases/$RELEASE_ID")
           test "$(jq -r .tag_name <<<"$release")" = "$TAG"
+          test "$(jq -r .target_commitish <<<"$release")" = "$EXPECTED_COMMIT"
           test "$(jq -r .draft <<<"$release")" = true
-          echo "Publishing exact release ${RELEASE_ID} (${TAG})..."
+
+          rollback_to_draft() {
+            echo "Immediate public verification failed; restoring release ${RELEASE_ID} to draft" >&2
+            gh api --method PATCH "repos/${{ github.repository }}/releases/$RELEASE_ID" -F draft=true >/dev/null
+          }
+          trap rollback_to_draft ERR
+
           gh api --method PATCH "repos/${{ github.repository }}/releases/$RELEASE_ID" -F draft=false >/dev/null
-          echo "Release published: ${TAG}"
+          public=$(gh api "repos/${{ github.repository }}/releases/$RELEASE_ID")
+          test "$(jq -r .draft <<<"$public")" = false
+          test "$(jq -r .tag_name <<<"$public")" = "$TAG"
+          test "$(jq -r .target_commitish <<<"$public")" = "$EXPECTED_COMMIT"
+          TARBALL_ID=$(jq -r --arg n "$TARBALL" '.assets[] | select(.name==$n) | .id' <<<"$public")
+          MANIFEST_ID=$(jq -r '.assets[] | select(.name=="release-manifest.json") | .id' <<<"$public")
+          test -n "$TARBALL_ID" && test -n "$MANIFEST_ID"
+          mkdir -p /tmp/immediate-public
+          gh api "repos/${{ github.repository }}/releases/assets/$TARBALL_ID" -H 'Accept: application/octet-stream' > "/tmp/immediate-public/$TARBALL"
+          gh api "repos/${{ github.repository }}/releases/assets/$MANIFEST_ID" -H 'Accept: application/octet-stream' > /tmp/immediate-public/release-manifest.json
+          cmp --silent "/tmp/release/$TARBALL" "/tmp/immediate-public/$TARBALL"
+          cmp --silent /tmp/release/release-manifest.json /tmp/immediate-public/release-manifest.json
+          racket scripts/verify-release-bundle.rkt \
+            --version "$VERSION" --tag "$TAG" --commit "$EXPECTED_COMMIT" --tag-object "$TAG_OBJECT" \
+            "/tmp/immediate-public/$TARBALL" /tmp/immediate-public/release-manifest.json
+          trap - ERR
+          echo "Release published and immediately verified: ${TAG}"
 
   verify-public:
     needs: publish
