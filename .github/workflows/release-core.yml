@@ -482,8 +482,9 @@ jobs:
             exit 1
           fi
 
+          mkdir -p /tmp/public-verify
           curl -sfL -H "Authorization: token $GH_TOKEN" -H "Accept: application/octet-stream" \
-            -o "/tmp/public-verify-${TARBALL}" "$TARBALL_URL"
+            -o "/tmp/public-verify/${TARBALL}" "$TARBALL_URL"
 
           # Verify manifest
           MANIFEST_URL=$(echo "$RELEASE_DATA" | jq -r '.assets[] | select(.name=="release-manifest.json") | .url')
@@ -493,18 +494,18 @@ jobs:
           fi
 
           curl -sfL -H "Authorization: token $GH_TOKEN" -H "Accept: application/octet-stream" \
-            -o /tmp/public-verify-release-manifest.json "$MANIFEST_URL"
+            -o /tmp/public-verify/release-manifest.json "$MANIFEST_URL"
 
           # Verify against internal artifact
           LOCAL_MANIFEST="/tmp/release/release-manifest.json"
           test -s "$LOCAL_MANIFEST"
           test -s "/tmp/release/${TARBALL}"
-          test -s /tmp/public-verify-release-manifest.json
-          test -s "/tmp/public-verify-${TARBALL}"
-          cmp --silent /tmp/public-verify-release-manifest.json "$LOCAL_MANIFEST" || {
+          test -s /tmp/public-verify/release-manifest.json
+          test -s "/tmp/public-verify/${TARBALL}"
+          cmp --silent /tmp/public-verify/release-manifest.json "$LOCAL_MANIFEST" || {
             echo "ERROR: Public manifest differs from internal artifact"; exit 1;
           }
-          cmp --silent "/tmp/public-verify-${TARBALL}" "/tmp/release/${TARBALL}" || {
+          cmp --silent "/tmp/public-verify/${TARBALL}" "/tmp/release/${TARBALL}" || {
             echo "ERROR: Public tarball differs from internal artifact"; exit 1;
           }
           echo "All public assets verified successfully."
@@ -516,5 +517,5 @@ jobs:
           racket scripts/verify-release-bundle.rkt \
             --version "${{ inputs.version }}" --tag "${{ inputs.tag }}" \
             --commit "$COMMIT" --tag-object "$TAG_OBJECT" \
-            "/tmp/public-verify-q-${{ inputs.version }}.tar.gz" \
-            /tmp/public-verify-release-manifest.json
+            "/tmp/public-verify/q-${{ inputs.version }}.tar.gz" \
+            /tmp/public-verify/release-manifest.json
