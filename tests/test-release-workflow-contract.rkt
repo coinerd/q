@@ -211,10 +211,12 @@
   (check-true (string-contains? public-job "needs.publish.outputs.release-id"))
   (check-true (string-contains? public-job "scripts/verify-release-bundle.rkt")))
 
-(test-case "release-core.yml publishes exact verified release ID"
+(test-case "release-core.yml publishes exact verified release ID only after protected approval"
   (define content (read-release-core-yml))
   (define publish-job (bounded-section content "  publish:" "  verify-public:"))
   (check-true (string-contains? publish-job "needs.verify-draft.outputs.release-id"))
+  (check-true (string-contains? publish-job "environment: release-repair")
+              "public mutation must wait for protected reviewer approval")
   (check-true (string-contains? publish-job "--method PATCH"))
   (check-true (string-contains? publish-job "draft=false")))
 

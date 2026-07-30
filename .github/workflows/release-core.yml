@@ -330,6 +330,7 @@ jobs:
   publish:
     needs: verify-draft
     runs-on: ubuntu-latest
+    environment: release-repair
     outputs:
       release-id: ${{ needs.verify-draft.outputs.release-id }}
     permissions:
