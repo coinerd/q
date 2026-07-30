@@ -374,7 +374,18 @@ jobs:
 
           rollback_to_draft() {
             echo "Immediate public verification failed; restoring release ${RELEASE_ID} to draft" >&2
-            gh api --method PATCH "repos/${{ github.repository }}/releases/$RELEASE_ID" -F draft=true >/dev/null
+            for attempt in 1 2 3; do
+              if gh api --method PATCH "repos/${{ github.repository }}/releases/$RELEASE_ID" -F draft=true >/dev/null; then
+                restored=$(gh api "repos/${{ github.repository }}/releases/$RELEASE_ID")
+                if test "$(jq -r .draft <<<"$restored")" = true; then
+                  echo "Release ${RELEASE_ID} confirmed restored to draft" >&2
+                  return 0
+                fi
+              fi
+              sleep "$attempt"
+            done
+            echo "FATAL: release ${RELEASE_ID} could not be confirmed draft after rollback" >&2
+            return 1
           }
           trap rollback_to_draft ERR
 
@@ -383,6 +394,12 @@ jobs:
           test "$(jq -r .draft <<<"$public")" = false
           test "$(jq -r .tag_name <<<"$public")" = "$TAG"
           test "$(jq -r .target_commitish <<<"$public")" = "$EXPECTED_COMMIT"
+          post_tag_ref=$(gh api "repos/${{ github.repository }}/git/ref/tags/${TAG}")
+          test "$(jq -r .object.type <<<"$post_tag_ref")" = tag
+          test "$(jq -r .object.sha <<<"$post_tag_ref")" = "$TAG_OBJECT"
+          post_tag_data=$(gh api "repos/${{ github.repository }}/git/tags/${TAG_OBJECT}")
+          test "$(jq -r .object.type <<<"$post_tag_data")" = commit
+          test "$(jq -r .object.sha <<<"$post_tag_data")" = "$EXPECTED_COMMIT"
           TARBALL_ID=$(jq -r --arg n "$TARBALL" '.assets[] | select(.name==$n) | .id' <<<"$public")
           MANIFEST_ID=$(jq -r '.assets[] | select(.name=="release-manifest.json") | .id' <<<"$public")
           test -n "$TARBALL_ID" && test -n "$MANIFEST_ID"
