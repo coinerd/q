@@ -355,9 +355,13 @@
         #f))
   (define delta-text (if (string? delta-content) delta-content #f))
   ;; v0.28.19: Extract reasoning_content for thinking models (glm-5.1, DeepSeek-R1)
+  ;; DeepSeek emits "reasoning_content": null on chunks where no reasoning delta
+  ;; is present (first chunk, after reasoning completes). Coerce non-string
+  ;; values (including 'null) to #f for the (or/c string? #f) delta-thinking
+  ;; contract.
   (define delta-thinking
     (if delta
-        (hash-ref delta 'reasoning_content #f)
+        (let ([rt (hash-ref delta 'reasoning_content #f)]) (if (string? rt) rt #f))
         #f))
   (define delta-tool-call
     (if delta
