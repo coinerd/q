@@ -331,7 +331,12 @@
 ;; Normalize a single OpenAI-format streaming response object into a stream-chunk.
 (define (normalize-openai-chunk raw)
   (define choices (hash-ref raw 'choices '()))
-  (define usage (hash-ref raw 'usage #f))
+  ;; DeepSeek and some other OpenAI-compatible endpoints emit "usage": null on
+  ;; intermediate streaming chunks (only the final chunk carries a usage hash).
+  ;; q's strict JSON parser maps JSON null to the symbol 'null, which would
+  ;; violate the (or/c hash? #f) usage contract on make-stream-chunk. Coerce
+  ;; any non-hash usage value (including 'null) to #f.
+  (define usage (let ([u (hash-ref raw 'usage #f)]) (if (hash? u) u #f)))
   (define choice
     (if (null? choices)
         #f
