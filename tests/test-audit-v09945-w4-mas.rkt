@@ -328,9 +328,13 @@
 
 (test-case "audit-sh-hitl-approval-not-required"
   (check-false (requires-hitl-approval? '(read-only)))
-  (check-false (requires-hitl-approval? '(file-write)))
   (check-false (requires-hitl-approval? '()))
   (check-false (requires-hitl-approval? #f)))
+
+(test-case "audit-sh-hitl-approval-required-for-file-write (SEC-3)"
+  ;; SEC-3 (v0.99.76): file-write now requires HITL approval (previously only
+  ;; shell-exec/git-write did). This is the updated assertion after the fix.
+  (check-not-false (requires-hitl-approval? '(file-write))))
 
 (test-case "audit-sh-summary-max-chars"
   (check-equal? SUBAGENT-SUMMARY-MAX-CHARS 4000))

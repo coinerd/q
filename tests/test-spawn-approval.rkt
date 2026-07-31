@@ -64,8 +64,8 @@
     (test-case "requires-hitl-approval? #f for read-only only"
       (check-false (requires-hitl-approval? '(read-only))))
 
-    (test-case "requires-hitl-approval? #f for file-write only"
-      (check-false (requires-hitl-approval? '(file-write))))
+    (test-case "requires-hitl-approval? #t for file-write only (SEC-3)"
+      (check-not-false (requires-hitl-approval? '(file-write))))
 
     (test-case "requires-hitl-approval? #f for #f (no capabilities)"
       (check-false (requires-hitl-approval? #f)))
@@ -145,7 +145,7 @@
       (check-equal? (unbox sends) 0)
       (check-equal? (unbox timestamps) '()))
 
-    (test-case "omitted capabilities deny single spawn without interactive approval"
+    (test-case "omitted capabilities default to read-only and allow headless spawn (SEC-3)"
       (clear-approval-channel!)
       (define sends (box 0))
       (define timestamps (box '()))
@@ -153,9 +153,9 @@
         (parameterize ([current-spawn-timestamps timestamps])
           (run-subagent-with-config (make-cfg #:task "bounded defaults")
                                     (make-counting-context sends))))
-      (check-true (tool-result-is-error? result))
-      (check-equal? (unbox sends) 0)
-      (check-equal? (unbox timestamps) '()))
+      (check-false (tool-result-is-error? result))
+      (check-equal? (unbox sends) 1)
+      (check-equal? (length (unbox timestamps)) 1))
 
     (test-case "dangerous single spawn proceeds after digest-bound interactive approval"
       (define sends (box 0))

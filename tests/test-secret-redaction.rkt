@@ -64,6 +64,22 @@
       (check-true (contains-secret-leak? "secret=mysecretvalue123456"))
       (check-true (contains-secret-leak? "password=hunter2special")))
 
+    (test-case "GitHub token formats are flagged (SEC-5)"
+      (check-true (contains-secret-leak? "token=ghp_abcdefghijklmnopqrstuvwxyz123456"))
+      (check-true (contains-secret-leak? "token=gho_abcdefghijklmnopqrstuvwxyz123456"))
+      (check-true (contains-secret-leak? "token=ghu_abcdefghijklmnopqrstuvwxyz123456"))
+      (check-true (contains-secret-leak? "token=ghs_abcdefghijklmnopqrstuvwxyz123456"))
+      (check-true (contains-secret-leak? "token=ghr_abcdefghijklmnopqrstuvwxyz123456")))
+
+    (test-case "GitLab token format is flagged (SEC-5)"
+      (check-true (contains-secret-leak? "token=glpat-abcdefghijklmnopqrstuvwxyz123456")))
+
+    (test-case "Google API key format is flagged (SEC-5)"
+      (check-true (contains-secret-leak? "key=AIzaSyD-abcdefghijklmnopqrstuvwxyz1234567890")))
+
+    (test-case "AWS access key ID format is flagged (SEC-5)"
+      (check-true (contains-secret-leak? "key=AKIAIOSFODNN7EXAMPLE123456")))
+
     (test-case "real JSON and header assignments are flagged"
       (check-true (contains-secret-leak? "{\"api_key\":\"realkey1234567890abcdef\"}"))
       (check-true (contains-secret-leak? "{\"token\" : \"ghp_realtoken1234567890\"}"))
@@ -115,6 +131,34 @@
     (test-case "redact-secrets preserves credential header names"
       (define r (redact-secrets "x-api-key: realkey1234567890abcdef"))
       (check-equal? r "x-api-key: <REDACTED>"))
+
+    (test-case "redact-secrets redacts GitHub tokens (SEC-5)"
+      (for ([tok (in-list '("ghp_abcdefghijklmnopqrstuvwxyz123456"
+                            "gho_abcdefghijklmnopqrstuvwxyz123456"
+                            "ghu_abcdefghijklmnopqrstuvwxyz123456"
+                            "ghs_abcdefghijklmnopqrstuvwxyz123456"
+                            "ghr_abcdefghijklmnopqrstuvwxyz123456"))])
+        (define r (redact-secrets (format "token ~a" tok)))
+        (check-false (string-contains? r tok))
+        (check-true (string-contains? r "<REDACTED>"))))
+
+    (test-case "redact-secrets redacts GitLab tokens (SEC-5)"
+      (define tok "glpat-abcdefghijklmnopqrstuvwxyz123456")
+      (define r (redact-secrets (format "token ~a" tok)))
+      (check-false (string-contains? r tok))
+      (check-true (string-contains? r "<REDACTED>")))
+
+    (test-case "redact-secrets redacts Google API keys (SEC-5)"
+      (define tok "AIzaSyD-abcdefghijklmnopqrstuvwxyz1234567890")
+      (define r (redact-secrets (format "key ~a" tok)))
+      (check-false (string-contains? r tok))
+      (check-true (string-contains? r "<REDACTED>")))
+
+    (test-case "redact-secrets redacts AWS access key IDs (SEC-5)"
+      (define tok "AKIAIOSFODNN7EXAMPLE123456")
+      (define r (redact-secrets (format "key ~a" tok)))
+      (check-false (string-contains? r tok))
+      (check-true (string-contains? r "<REDACTED>")))
 
     (test-case "redact-secrets is idempotent"
       (define text "api_key=abcdef1234567890abcdef")

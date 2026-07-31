@@ -40,7 +40,13 @@
                  "aws[_-]?access[_-]?key[_-]?id|aws[_-]?secret[_-]?access[_-]?key|session[_-]?token|"
                  "azure[_-]?client[_-]?id|azure[_-]?client[_-]?secret|azure[_-]?tenant[_-]?id)"))
 
+;; v0.99.76 W0 (SEC-5): provider token redaction patterns
+;; GitHub PATs/PACK/OAuth/App/refresh, GitLab PATs, Google API keys, AWS access keys.
 (define rx-sk-key #px"\\bsk-[A-Za-z0-9_-]{20,}")
+(define rx-github-token #px"\\b(ghp_|gho_|ghu_|ghs_|ghr_)[A-Za-z0-9]{20,}")
+(define rx-gitlab-token #px"\\bglpat-[A-Za-z0-9_\\-]{20,}")
+(define rx-google-api-key #px"\\bAIza[A-Za-z0-9_\\-]{35,}")
+(define rx-aws-access-key #px"\\bAKIA[A-Za-z0-9]{16}")
 (define rx-bearer #px"(?i:bearer) +[A-Za-z0-9._-]{20,}")
 (define rx-authorization-bearer
   #px"(?i:(Authorization[ ]*:[ ]*Bearer[ ]+))(?!authentication(?:[ ]|$))([^ \n\r<]+)")
@@ -54,11 +60,15 @@
   (unless (string? text)
     (raise-argument-error 'redact-secrets "string?" text))
   (define step1 (regexp-replace* rx-sk-key text REDACTED-PLACEHOLDER))
-  (define step2 (regexp-replace* rx-authorization-bearer step1 "\\1<REDACTED>"))
-  (define step3 (regexp-replace* rx-bearer step2 "Bearer <REDACTED>"))
-  (define step4 (regexp-replace* rx-assign step3 "\\1<REDACTED>"))
-  (define step5 (regexp-replace* rx-json-assign step4 "\\1<REDACTED>"))
-  (regexp-replace* rx-header-assign step5 "\\1<REDACTED>"))
+  (define step2 (regexp-replace* rx-github-token step1 REDACTED-PLACEHOLDER))
+  (define step3 (regexp-replace* rx-gitlab-token step2 REDACTED-PLACEHOLDER))
+  (define step4 (regexp-replace* rx-google-api-key step3 REDACTED-PLACEHOLDER))
+  (define step5 (regexp-replace* rx-aws-access-key step4 REDACTED-PLACEHOLDER))
+  (define step6 (regexp-replace* rx-authorization-bearer step5 "\\1<REDACTED>"))
+  (define step7 (regexp-replace* rx-bearer step6 "Bearer <REDACTED>"))
+  (define step8 (regexp-replace* rx-assign step7 "\\1<REDACTED>"))
+  (define step9 (regexp-replace* rx-json-assign step8 "\\1<REDACTED>"))
+  (regexp-replace* rx-header-assign step9 "\\1<REDACTED>"))
 
 (define sensitive-key-names
   '("apikey" "xapikey"
@@ -143,7 +153,12 @@
       [(or (string? current) (number? current) (boolean? current)) current]
       [else (format "<unsupported:~a>" current)])))
 
+;; v0.99.76 W0 (SEC-5): leak detection must also cover the new token families.
 (define rx-sk-key-leak #px"\\bsk-[A-Za-z0-9_-]{20,}")
+(define rx-github-token-leak #px"\\b(ghp_|gho_|ghu_|ghs_|ghr_)[A-Za-z0-9]{20,}")
+(define rx-gitlab-token-leak #px"\\bglpat-[A-Za-z0-9_\\-]{20,}")
+(define rx-google-api-key-leak #px"\\bAIza[A-Za-z0-9_\\-]{35,}")
+(define rx-aws-access-key-leak #px"\\bAKIA[A-Za-z0-9]{16}")
 (define rx-bearer-leak #px"(?i:bearer) +[A-Za-z0-9._-]{20,}")
 (define rx-authorization-bearer-leak
   #px"(?i:Authorization[ ]*:[ ]*Bearer[ ]+)(?!authentication(?:[ ]|$))[^ \n\r<]+")
@@ -155,6 +170,10 @@
 
 (define leak-rx+label
   (list (cons rx-sk-key-leak "unredacted sk-prefix API key")
+        (cons rx-github-token-leak "unredacted GitHub token")
+        (cons rx-gitlab-token-leak "unredacted GitLab token")
+        (cons rx-google-api-key-leak "unredacted Google API key")
+        (cons rx-aws-access-key-leak "unredacted AWS access key")
         (cons rx-bearer-leak "unredacted Bearer token")
         (cons rx-authorization-bearer-leak "unredacted Authorization Bearer token")
         (cons rx-assign-leak "unredacted key=value assignment")

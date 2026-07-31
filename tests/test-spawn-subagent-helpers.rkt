@@ -24,6 +24,7 @@
                   sha256-digest
                   requires-hitl-approval?
                   bounded-delegated-capabilities
+                  DEFAULT-DELEGATED-CAPABILITIES
                   valid-plan-id?
                   extract-assistant-text
                   extract-text-summary
@@ -64,6 +65,8 @@
  (test-case "strict delegated capabilities reject unrestricted any wildcard"
    (check-exn exn:fail:contract? (lambda () (normalize-capabilities/strict '(any))))
    (check-exn exn:fail:contract? (lambda () (normalize-capabilities/strict "any"))))
+ (test-case "DEFAULT-DELEGATED-CAPABILITIES is read-only"
+   (check-equal? DEFAULT-DELEGATED-CAPABILITIES '(read-only)))
  (test-case "delegated capabilities are bounded by parent authority"
    (check-equal? (bounded-delegated-capabilities #f '(read-only)) '(read-only))
    (check-equal? (bounded-delegated-capabilities '(file-write) '(any)) '(file-write))
@@ -96,12 +99,14 @@
                      (check-true (and (requires-hitl-approval? '(shell-exec)) #t)))
                    (test-case "#t for git-write"
                      (check-true (and (requires-hitl-approval? '(git-write)) #t)))
+                   (test-case "#t for file-write"
+                     (check-true (requires-hitl-approval? '(file-write))))
                    (test-case "#t for mixed with shell-exec"
                      (check-true (and (requires-hitl-approval? '(read-only shell-exec)) #t)))
+                   (test-case "#t for mixed with file-write"
+                     (check-true (requires-hitl-approval? '(read-only file-write))))
                    (test-case "#f for read-only only"
                      (check-false (requires-hitl-approval? '(read-only))))
-                   (test-case "#f for file-write only"
-                     (check-false (requires-hitl-approval? '(file-write))))
                    (test-case "#f for #f"
                      (check-false (requires-hitl-approval? #f)))
                    (test-case "#f for empty list"
