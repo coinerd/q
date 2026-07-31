@@ -331,7 +331,12 @@
 ;; Normalize a single OpenAI-format streaming response object into a stream-chunk.
 (define (normalize-openai-chunk raw)
   (define choices (hash-ref raw 'choices '()))
-  (define usage (hash-ref raw 'usage #f))
+  ;; DeepSeek and some other OpenAI-compatible endpoints emit "usage": null on
+  ;; intermediate streaming chunks (only the final chunk carries a usage hash).
+  ;; q's strict JSON parser maps JSON null to the symbol 'null, which would
+  ;; violate the (or/c hash? #f) usage contract on make-stream-chunk. Coerce
+  ;; any non-hash usage value (including 'null) to #f.
+  (define usage (let ([u (hash-ref raw 'usage #f)]) (if (hash? u) u #f)))
   (define choice
     (if (null? choices)
         #f
@@ -350,9 +355,13 @@
         #f))
   (define delta-text (if (string? delta-content) delta-content #f))
   ;; v0.28.19: Extract reasoning_content for thinking models (glm-5.1, DeepSeek-R1)
+  ;; DeepSeek emits "reasoning_content": null on chunks where no reasoning delta
+  ;; is present (first chunk, after reasoning completes). Coerce non-string
+  ;; values (including 'null) to #f for the (or/c string? #f) delta-thinking
+  ;; contract.
   (define delta-thinking
     (if delta
-        (hash-ref delta 'reasoning_content #f)
+        (let ([rt (hash-ref delta 'reasoning_content #f)]) (if (string? rt) rt #f))
         #f))
   (define delta-tool-call
     (if delta
