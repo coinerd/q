@@ -28,7 +28,14 @@
                   edit-contract-result-status
                   edit-contract-result-content
                   edit-contract-result-occurrences
-                  edit-contract-result-replacements))
+                  edit-contract-result-replacements)
+         ;; SEC-1 (v0.99.76 W1): shared shell-safety predicates — same source of
+         ;; truth as the main tool-bash path (STATE D1: import, don't duplicate).
+         (only-in "../tools/builtins/bash-safety.rkt"
+                  destructive-command?
+                  high-risk-command?
+                  structured-destructive-command?
+                  structured-critical-command?))
 
 ;; ── Path Safety ─────────────────────────────────────────────────
 
@@ -126,7 +133,19 @@
      (make-error-response #f "bash: missing 'command' argument")]
     [(and cwd (not (path-allowed? cwd)))
      (make-error-response #f (format "bash: cwd not allowed: ~a" cwd))]
+    ;; SEC-1 (v0.99.76 W1): worker safety chain — regex blocklist first, then
+    ;; fail-closed structured classifier for obfuscated commands. Worker policy
+    ;; is BLOCK (stricter than main's warn): the worker has no approval channel.
+    [(destructive-command? command)
+     (make-error-response #f (format "bash: blocked destructive command: ~a" command))]
+    [(structured-critical-command? command)
+     (make-error-response #f (format "bash: blocked by structured risk classifier: ~a" command))]
     [else
+     (define safety-warning
+       (cond
+         [(or (high-risk-command? command) (structured-destructive-command? command))
+          (format "WARNING: High-risk command detected: ~a" command)]
+         [else #f]))
      (define result
        (run-subprocess "/bin/sh"
                        #:args (list "-c" command)
@@ -144,7 +163,9 @@
                               'stderr
                               (subprocess-result-stderr result)
                               'elapsed-ms
-                              (subprocess-result-elapsed-ms result))
+                              (subprocess-result-elapsed-ms result)
+                              'warning
+                              safety-warning)
                       "command timed out"
                       IPC-SCHEMA-VERSION)]
        [(eqv? exit-code 0)
@@ -156,7 +177,9 @@
                               'stderr
                               (subprocess-result-stderr result)
                               'elapsed-ms
-                              (subprocess-result-elapsed-ms result))
+                              (subprocess-result-elapsed-ms result)
+                              'warning
+                              safety-warning)
                       #f
                       IPC-SCHEMA-VERSION)]
        [else
@@ -168,7 +191,9 @@
                               'stderr
                               (subprocess-result-stderr result)
                               'elapsed-ms
-                              (subprocess-result-elapsed-ms result))
+                              (subprocess-result-elapsed-ms result)
+                              'warning
+                              safety-warning)
                       (format "command exited with code ~a" exit-code)
                       IPC-SCHEMA-VERSION)])]))
 
@@ -270,8 +295,20 @@
   (define cwd (hash-ref args 'cwd #f))
   (cond
     [(not command) (make-error-response #f "git: missing 'command' argument")]
+    ;; SEC-4 (v0.99.76 W0): cwd confinement — fail closed before safety eval.
     [(and cwd (not (path-allowed? cwd)))
      (make-error-response #f (format "git: cwd not allowed: ~a" cwd))]
+    ;; SEC-1 (v0.99.76 W1): block destructive git compositions — force push to
+    ;; shared branches, clean -fdx, reset --hard (data loss). Fail closed.
+    [(and (string=? command "push")
+          (member "--force" git-args)
+          (ormap (lambda (a) (and (string? a) (member a '("origin" "upstream")))) git-args))
+     (make-error-response #f "git: blocked: force push to shared branch")]
+    [(and (string=? command "clean")
+          (ormap (lambda (a) (and (string? a) (regexp-match? #rx"^-f" a))) git-args))
+     (make-error-response #f "git: blocked: destructive clean")]
+    [(and (string=? command "reset") (member "--hard" git-args))
+     (make-error-response #f "git: blocked: reset --hard")]
     [else
      (define args-list
        (cond
