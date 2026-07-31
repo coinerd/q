@@ -124,6 +124,8 @@
   (cond
     [(not (and command (string? command)))
      (make-error-response #f "bash: missing 'command' argument")]
+    [(and cwd (not (path-allowed? cwd)))
+     (make-error-response #f (format "bash: cwd not allowed: ~a" cwd))]
     [else
      (define result
        (run-subprocess "/bin/sh"
@@ -265,15 +267,22 @@
 (define (execute-git args)
   (define command (hash-ref args 'command #f))
   (define git-args (hash-ref args 'args '()))
+  (define cwd (hash-ref args 'cwd #f))
   (cond
     [(not command) (make-error-response #f "git: missing 'command' argument")]
+    [(and cwd (not (path-allowed? cwd)))
+     (make-error-response #f (format "git: cwd not allowed: ~a" cwd))]
     [else
      (define args-list
        (cond
          [(list? git-args) git-args]
          [(string? git-args) (list git-args)]
          [else '()]))
-     (define result (run-subprocess "git" #:args (cons command args-list) #:timeout 30))
+     (define result
+       (run-subprocess "git"
+                       #:args (cons command args-list)
+                       #:timeout 30
+                       #:directory (or cwd (current-directory))))
      (define exit-code (subprocess-result-exit-code result))
      (define timed-out? (subprocess-result-timed-out? result))
      (cond

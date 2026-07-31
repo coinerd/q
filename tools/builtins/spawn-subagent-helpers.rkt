@@ -32,6 +32,7 @@
          sha256-digest
          requires-hitl-approval?
          bounded-delegated-capabilities
+         DEFAULT-DELEGATED-CAPABILITIES
          valid-plan-id?
          extract-assistant-text
          extract-text-summary
@@ -109,7 +110,7 @@
   ;; by the caller, so an empty declaration can never become unrestricted.
   (remove-duplicates normalized eq?))
 
-(define DEFAULT-DELEGATED-CAPABILITIES '(read-only file-write shell-exec))
+(define DEFAULT-DELEGATED-CAPABILITIES '(read-only))
 
 (define (bounded-delegated-capabilities declared-caps parent-capabilities)
   (define parent-unrestricted? (and (list? parent-capabilities) (memq 'any parent-capabilities)))
@@ -196,12 +197,14 @@
 ;; ============================================================
 
 ;; Check if subagent capabilities require HITL approval.
-;; Returns #t when capabilities include shell-exec or git-write.
-;; Returns #f for #f, '(), or read-only/file-write-only capabilities.
+;; Returns #t when capabilities include shell-exec, git-write, or file-write.
+;; Returns #f for #f, '(), or read-only-only capabilities.
 (define (requires-hitl-approval? capabilities)
-  (and (list? capabilities)
-       (pair? capabilities)
-       (or (memq 'shell-exec capabilities) (memq 'git-write capabilities))))
+  (and
+   (list? capabilities)
+   (pair? capabilities)
+   (or (memq 'shell-exec capabilities) (memq 'git-write capabilities) (memq 'file-write capabilities))
+   #t))
 
 ;; ============================================================
 ;; Result text extraction

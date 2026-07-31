@@ -104,22 +104,19 @@
   (check-true (string-contains? (result-text result) "invalid capability"))
   (check-equal? events '()))
 
-(test-case "omitted capabilities deny batch headlessly with bounded defaults"
+(test-case "omitted capabilities default to read-only and allow batch headlessly (SEC-3)"
   (define-values (result events)
     (run/capture (hasheq 'jobs (list (hasheq 'task "ordinary"))) 'no-channel))
-  (check-true (tool-result-is-error? result))
-  (check-true (string-contains? (result-text result) "approval denied"))
-  (check-equal? (length events) 1)
-  (define planned-job (car (hash-ref (cdar events) 'jobs)))
-  (check-equal? (hash-ref planned-job 'effective-capabilities) '(read-only file-write shell-exec))
-  (check-equal? (hash-ref planned-job 'model-preview) "mock-model"))
-
-(test-case "explicit empty authority stays empty and needs no approval"
-  (define-values (result events)
-    (run/capture (hasheq 'jobs (list (hasheq 'task "no tools" 'capabilities '()))) #f))
   (check-false (tool-result-is-error? result) (result-text result))
   (check-equal? (approval-events events) '())
-  (check-equal? (length (terminal-events events)) 1))
+  (check-equal? (length (terminal-events events)) 1)
+  ;; Terminal events carry no 'jobs payload. Headless success above is the
+  ;; SEC-3 proof: omitted caps default to read-only, so no approval was needed.
+  (define-values (result2 events2)
+    (run/capture (hasheq 'jobs (list (hasheq 'task "no tools" 'capabilities '()))) #f))
+  (check-false (tool-result-is-error? result2) (result-text result2))
+  (check-equal? (approval-events events2) '())
+  (check-equal? (length (terminal-events events2)) 1))
 
 (test-case "delegated any wildcard is rejected before approval"
   (define-values (result events)

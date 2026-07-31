@@ -12,6 +12,19 @@
 | slow | ~5m | Long-running | `--suite slow` |
 | all | ~5m | Everything | `--suite all` |
 
+## Known Flaky Tests
+
+The following tests are known to fail in parallel/subprocess mode but pass
+in isolation. They are **pre-existing environment/harness bugs**, not
+product defects. A gate failure on one of these must be re-run in isolation
+before being treated as a real regression.
+
+| Test | Classification | Failure mode | Isolated result |
+|---|---|---|---|
+| `tests/test-interfaces-tui.rkt` | ENVIRONMENT_BUG/HARNESS_BUG | Exit 1, 0 passed / 0 failed (crash under parallel subprocess mode) | Exit 0 |
+| `tests/test-settings.rkt` | ENVIRONMENT_BUG/HARNESS_BUG | 1 assertion failure (parallel temp-file interference) | Exit 0 |
+| `tests/test-run-tests-ledger.rkt` | ENVIRONMENT_BUG/HARNESS_BUG | Internal ledger/temp-file contention with concurrent test-run-tests-* files | Exit 0 (3/3) |
+
 ## Metadata Tags
 
 Add these to the first 30 lines of test files:

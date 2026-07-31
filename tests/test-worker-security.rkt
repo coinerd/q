@@ -14,7 +14,7 @@
          rackunit/text-ui
          racket/file
          json
-         (only-in racket/string string-trim)
+         (only-in racket/string string-contains? string-trim)
          "../sandbox/ipc-protocol.rkt"
          "../sandbox/worker-tools.rkt"
          "../sandbox/worker-main.rkt")
@@ -147,6 +147,24 @@
       (check-equal? (ipc-response-status resp2) 'ok)
       ;; CWD should still be the original
       (check-equal? (current-directory) original-cwd))
+
+    ;; ── SEC-4 (v0.99.76 W0): Worker IPC cwd validation ──
+    ;; current-allowed-roots is set to (list allowed-dir) at module top;
+    ;; "/etc" is outside those roots and must be rejected.
+
+    (test-case "SEC-4: execute-bash rejects cwd outside allowed roots"
+      (define result (execute-bash (hasheq 'command "pwd" 'cwd "/etc")))
+      (check-equal? (ipc-response-status result) 'error)
+      (check-true (string-contains? (ipc-response-error-message result) "cwd not allowed")))
+
+    (test-case "SEC-4: execute-bash accepts cwd inside allowed roots"
+      (define result (execute-bash (hasheq 'command "pwd" 'cwd allowed-dir)))
+      (check-equal? (ipc-response-status result) 'ok))
+
+    (test-case "SEC-4: execute-git rejects cwd outside allowed roots"
+      (define result (execute-git (hasheq 'command "status" 'cwd "/etc")))
+      (check-equal? (ipc-response-status result) 'error)
+      (check-true (string-contains? (ipc-response-error-message result) "cwd not allowed")))
 
     ;; ── write tool security (uses path-allowed?) ──
 
