@@ -14,10 +14,11 @@
          rackunit/text-ui
          racket/file
          json
-         (only-in racket/string string-contains? string-trim)
+         (only-in racket/string string-contains? string-suffix? string-trim)
          "../sandbox/ipc-protocol.rkt"
          "../sandbox/worker-tools.rkt"
-         "../sandbox/worker-main.rkt")
+         "../sandbox/worker-main.rkt"
+         "../util/config-paths.rkt")
 
 ;; ── Test Helpers ────────────────────────────────────────────────
 
@@ -297,7 +298,102 @@
 
     (test-case "SEC-1: execute-git allows safe commands"
       (define result (execute-git (hasheq 'command "status" 'args '())))
-      (check-equal? (ipc-response-status result) 'ok))))
+      (check-equal? (ipc-response-status result) 'ok))
+
+    ;; ── SEC-7: Worker file safety (v0.99.76 W2) ──
+
+    (test-case "SEC-7: execute-write blocks content exceeding size limit"
+      (define large-content (make-string 1048577 #\x)) ; 1 MB + 1
+      (define target (build-path allowed-dir "sec7-large.txt"))
+      (define result (execute-write (hasheq 'path (path->string target) 'content large-content)))
+      (check-equal? (ipc-response-status result) 'error)
+      (check-true (string-contains? (ipc-response-error-message result) "exceeds")))
+
+    (test-case "SEC-7: execute-edit blocks oversized replacement (parity)"
+      ;; edit must enforce the same per-write limit as write/delete-lines.
+      (define target (build-path allowed-dir "sec7-edit-large.txt"))
+      (call-with-output-file target #:exists 'replace (lambda (p) (display "base" p)))
+      (parameterize ([current-worker-write-limit (* 1024 1024)])
+        (define oversized (make-string 1048577 #\z)) ; 1 MB + 1
+        (define result
+          (execute-edit (hasheq 'path (path->string target) 'old-text "base" 'new-text oversized)))
+        (check-equal? (ipc-response-status result) 'error)
+        (check-true (string-contains? (ipc-response-error-message result) "exceeds")
+                    (format "error should mention size limit: ~a"
+                            (ipc-response-error-message result))))
+      ;; Original file must be untouched (fail closed, no partial write)
+      (check-equal? (file->string target) "base"))
+
+    (test-case "SEC-7: execute-write tracks cumulative budget"
+      ;; Write 600 KB twice (over 1 MB cumulative) — both under per-write limit.
+      (define chunk (make-string (* 600 1024) #\y))
+      (define target-a (build-path allowed-dir "sec7-cum-a.txt"))
+      (define target-b (build-path allowed-dir "sec7-cum-b.txt"))
+      (parameterize ([current-worker-cumulative-limit (* 1024 1024)]
+                     [current-worker-write-limit (* 1024 1024)])
+        (define r1 (execute-write (hasheq 'path (path->string target-a) 'content chunk)))
+        (check-equal? (ipc-response-status r1) 'ok)
+        (define r2 (execute-write (hasheq 'path (path->string target-b) 'content chunk)))
+        (check-equal? (ipc-response-status r2) 'error)
+        (check-true (string-contains? (ipc-response-error-message r2) "cumulative"))))
+
+    (test-case "SEC-7: execute-edit creates backup"
+      (define target (build-path allowed-dir "sec7-edit.txt"))
+      (call-with-output-file target #:exists 'replace (lambda (p) (display "hello world" p)))
+      (define backup-dir (build-path (global-config-dir) "edit-backups"))
+      (when (directory-exists? backup-dir)
+        (delete-directory/files backup-dir))
+      (define result
+        (execute-edit (hasheq 'path (path->string target) 'old-text "hello" 'new-text "goodbye")))
+      (check-equal? (ipc-response-status result) 'ok)
+      (check-true (directory-exists? backup-dir) "backup dir should be created")
+      (define backups
+        (filter (lambda (f) (string-suffix? f "_sec7-edit.txt"))
+                (map path->string (directory-list backup-dir))))
+      (check-true (> (length backups) 0) "at least one backup file should exist")
+      ;; Backup must contain the ORIGINAL content (pre-edit)
+      (check-equal? (file->string (build-path backup-dir (car (sort backups string>?))))
+                    "hello world"))
+
+    (test-case "SEC-7: execute-edit detects concurrent modification"
+      (define target (build-path allowed-dir "sec7-concurrent.txt"))
+      (call-with-output-file target #:exists 'replace (lambda (p) (display "version one" p)))
+      (define inode-before (file-or-directory-identity target))
+      ;; Simulate concurrent modification: replace the file with a new inode
+      ;; between read and write by using the before-write hook.
+      (define hook-ran (box #f))
+      (parameterize ([current-worker-edit-before-write-hook
+                      (lambda (path new-content)
+                        (set-box! hook-ran #t)
+                        ;; Replace via rename-from-temp: guarantees a NEW inode
+                        ;; (delete+recreate may reuse the same inode on ext4).
+                        (define tmp (make-temporary-file "sec7-tamper-~a.txt"))
+                        (display-to-file "tampered" tmp #:exists 'truncate)
+                        (rename-file-or-directory tmp path #t))])
+        (define result
+          (execute-edit
+           (hasheq 'path (path->string target) 'old-text "version one" 'new-text "version two")))
+        (check-true (unbox hook-ran) "hook should have run")
+        (check-equal? (ipc-response-status result) 'error)
+        (check-true (string-contains? (ipc-response-error-message result) "concurrently")
+                    (format "error should mention concurrent modification: ~a"
+                            (ipc-response-error-message result))))
+      ;; File should still contain the tampered (newer) content
+      (check-equal? (file->string target) "tampered"))
+
+    (test-case "SEC-7: execute-delete-lines creates backup"
+      (define target (build-path allowed-dir "sec7-del.txt"))
+      (call-with-output-file target #:exists 'replace (lambda (p) (display "line1\nline2\nline3" p)))
+      (define backup-dir (build-path (global-config-dir) "edit-backups"))
+      (define result
+        (execute-delete-lines (hasheq 'path (path->string target) 'start-line 2 'end-line 2)))
+      (check-equal? (ipc-response-status result) 'ok)
+      (define backups
+        (filter (lambda (f) (string-suffix? f "_sec7-del.txt"))
+                (map path->string (directory-list backup-dir))))
+      (check-true (> (length backups) 0) "delete-lines should create a backup")
+      (check-equal? (file->string (build-path backup-dir (car (sort backups string>?))))
+                    "line1\nline2\nline3"))))
 
 ;; ── Run ─────────────────────────────────────────────────────────
 

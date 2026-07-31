@@ -17,11 +17,13 @@
          racket/match
          racket/port
          racket/string
-         (only-in racket/list take drop)
+         (only-in racket/list take drop last)
          json
          "ipc-protocol.rkt"
          "subprocess.rkt"
          "limits.rkt"
+         ;; SEC-7 (v0.99.76 W2): shared config-dir resolution for edit backups.
+         (only-in "../util/config-paths.rkt" global-config-dir)
          (only-in "../tools/builtins/edit-contract.rkt"
                   DEFAULT-MAX-OLD-TEXT-LEN
                   apply-edit-contract
@@ -118,6 +120,114 @@
                (string=? resolved-str root-dir)
                (string-prefix? resolved-str root-dir))))))
 
+;; ── SEC-7 (v0.99.76 W2): Worker file-op safety parity ───────────
+;; Mirrors main tool-write/tool-edit guards: per-write size limit,
+;; cumulative write budget, inode (identity) TOCTOU check, backups.
+
+(define current-worker-write-limit
+  ;; Per-write byte limit (default 1 MB, matches main tool-write)
+  (make-parameter (* 1024 1024)))
+
+(define current-worker-cumulative-limit
+  ;; Session cumulative write budget (default 50 MB, matches main tool-write)
+  (make-parameter (* 50 1024 1024)))
+
+;; Module-level cumulative bytes written this worker session.
+(define worker-cumulative-bytes (box 0))
+
+;; Hook invoked immediately before the atomic write in execute-edit /
+;; execute-delete-lines. Lets tests inject a concurrent modification
+;; (TOCTOU simulation) between read and write.
+(define current-worker-edit-before-write-hook (make-parameter (lambda (path new-content) (void))))
+
+(define (worker-write-limit-check content-str)
+  ;; Returns #f when the write is allowed, or an error message string.
+  (define bytes-written (string-length content-str))
+  (define per-write (current-worker-write-limit))
+  (define cumulative (current-worker-cumulative-limit))
+  (cond
+    [(> bytes-written per-write)
+     (format "write: content exceeds per-write limit (~a bytes > ~a bytes)" bytes-written per-write)]
+    [(> (+ bytes-written (unbox worker-cumulative-bytes)) cumulative)
+     (format "write: exceeds cumulative write budget (~a + ~a > ~a bytes)"
+             bytes-written
+             (unbox worker-cumulative-bytes)
+             cumulative)]
+    [else
+     (set-box! worker-cumulative-bytes (+ bytes-written (unbox worker-cumulative-bytes)))
+     #f]))
+
+;; ── Backup helpers (shared pattern with edit.rkt / delete-lines.rkt)
+(define MAX-BACKUPS-PER-FILE 10)
+
+(define (ensure-backup-dir)
+  (define dir (build-path (global-config-dir) "edit-backups"))
+  (unless (directory-exists? dir)
+    (make-directory* dir)
+    (file-or-directory-permissions dir #o700))
+  dir)
+
+(define (save-backup path-str content)
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-warning (format "worker/backup: ~a" (exn-message e)))
+                               #f)])
+    (define dir (ensure-backup-dir))
+    (define basename (file-name-from-path path-str))
+    (define source-key (number->string (equal-hash-code path-str) 16))
+    (define timestamp (number->string (abs (current-milliseconds))))
+    ;; Exclusive creation prevents concurrent edits from overwriting backups.
+    (define backup-path
+      (make-temporary-file (format "~a_~a_~a_~a" timestamp source-key "~a" basename) #:base-dir dir))
+    (display-to-file content backup-path #:exists 'truncate)
+    (prune-old-backups dir source-key basename)
+    (path->string backup-path)))
+
+(define (file-name-from-path p)
+  (define fname
+    (if (string? p)
+        p
+        (path->string p)))
+  (define parts (regexp-split #rx"/" fname))
+  (if (null? parts)
+      "unknown"
+      (last parts)))
+
+(define (prune-old-backups dir source-key basename)
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-warning (format "worker/prune: ~a" (exn-message e)))
+                               (void))])
+    (define marker (format "_~a_" source-key))
+    (define all (directory-list dir))
+    (define matching
+      (filter (lambda (f) (string-contains? (path->string f) marker))
+              (sort (map path->string all) string>?)))
+    (when (> (length matching) MAX-BACKUPS-PER-FILE)
+      (for ([f (in-list (drop matching MAX-BACKUPS-PER-FILE))])
+        (delete-file (build-path dir f))))))
+
+;; SEC-7 (D5): best-effort inode/identity snapshot — network filesystems may
+;; not support identity; never fail the operation on snapshot errors.
+(define (worker-file-identity p)
+  (with-handlers ([exn:fail? (lambda (e) #f)])
+    (file-or-directory-identity p)))
+
+(define (worker-identity-unchanged? before after)
+  (or (not before) (not after) (equal? before after)))
+
+(define (worker-check-then-write resolved new-content [identity-before #f])
+  ;; Returns #f on success, or an error message string (no write performed).
+  (define hook (current-worker-edit-before-write-hook))
+  (when hook
+    (hook resolved new-content))
+  ;; SEC-7 (D5): TOCTOU re-check AFTER the hook runs — the hook (or any
+  ;; concurrent writer) may have replaced the file since we read it.
+  (define identity-after (worker-file-identity resolved))
+  (if (worker-identity-unchanged? identity-before identity-after)
+      (begin
+        (call-with-atomic-output-file resolved (lambda (port) (display new-content port)))
+        #f)
+      "edit: file was modified concurrently"))
+
 ;; ── Tool Execution Functions ────────────────────────────────────
 
 ;; Each function accepts a hash and returns an ipc-response. execute-edit also
@@ -213,13 +323,18 @@
      (with-handlers ([exn:fail? (lambda (e)
                                   (make-error-response #f (format "write: ~a" (exn-message e))))])
        (define bytes-written (string-length content-str))
-       (call-with-atomic-output-file resolved (lambda (port) (display content-str port)))
-       (ipc-response #f
-                     'ok
-                     (format "wrote ~a bytes to ~a" bytes-written (path->string resolved))
-                     (hasheq 'path (path->string resolved) 'bytes-written bytes-written)
-                     #f
-                     IPC-SCHEMA-VERSION))]))
+       ;; SEC-7 (v0.99.76 W2): per-write + cumulative size limits (main parity)
+       (define limit-error (worker-write-limit-check content-str))
+       (if limit-error
+           (make-error-response #f limit-error)
+           (begin
+             (call-with-atomic-output-file resolved (lambda (port) (display content-str port)))
+             (ipc-response #f
+                           'ok
+                           (format "wrote ~a bytes to ~a" bytes-written (path->string resolved))
+                           (hasheq 'path (path->string resolved) 'bytes-written bytes-written)
+                           #f
+                           IPC-SCHEMA-VERSION))))]))
 
 (define (call-with-atomic-output-file path proc)
   ;; Write to temp then rename for atomicity
@@ -248,6 +363,8 @@
         (make-error-response #f (format "edit: file not found: ~a" path))]
        [else
         (define content (file->string resolved))
+        ;; SEC-7 (v0.99.76 W2): record inode before read for TOCTOU check
+        (define identity-before (worker-file-identity resolved))
         (define fuzzy-allowed? (or (hash-ref args 'fuzzy? #f) global-fuzzy-enabled?))
         (define edit-result
           (apply-edit-contract content
@@ -278,16 +395,29 @@
           [(line-count-mismatch) (make-error-response #f "edit: line count changed unexpectedly")]
           [(ok)
            (define new-content (edit-contract-result-content edit-result))
-           (call-with-atomic-output-file resolved (lambda (port) (display new-content port)))
-           (ipc-response #f
-                         'ok
-                         "edit applied"
-                         (hasheq 'path
-                                 (path->string resolved)
-                                 'replacements
-                                 (edit-contract-result-replacements edit-result))
-                         #f
-                         IPC-SCHEMA-VERSION)])])]))
+           ;; SEC-7 (v0.99.76 W2): backup original + TOCTOU identity re-check
+           (define identity-after (worker-file-identity resolved))
+           ;; SEC-7 (v0.99.76 W2): per-write size limit — fail closed before backup/write
+           (define limit-error (worker-write-limit-check new-content))
+           (if limit-error
+               (make-error-response #f limit-error)
+               (if (worker-identity-unchanged? identity-before identity-after)
+                   (let ([write-error
+                          (begin
+                            (save-backup resolved content)
+                            (worker-check-then-write resolved new-content identity-before))])
+                     (if write-error
+                         (make-error-response #f write-error)
+                         (ipc-response #f
+                                       'ok
+                                       "edit applied"
+                                       (hasheq 'path
+                                               (path->string resolved)
+                                               'replacements
+                                               (edit-contract-result-replacements edit-result))
+                                       #f
+                                       IPC-SCHEMA-VERSION)))
+                   (make-error-response #f "edit: file was modified concurrently")))])])]))
 
 (define (execute-git args)
   (define command (hash-ref args 'command #f))
@@ -369,6 +499,8 @@
         (make-error-response #f (format "delete-lines: file not found: ~a" path))]
        [else
         (define content (file->string resolved))
+        ;; SEC-7 (v0.99.76 W2): record inode before read for TOCTOU check
+        (define identity-before (worker-file-identity resolved))
         (define lines (string-split content "\n" #:trim? #f))
         (define total-lines (length lines))
         (cond
@@ -394,22 +526,30 @@
            (define new-lines (append before after))
            (define new-content (string-join new-lines "\n"))
            (define deleted-count (- end-line start-line -1))
-           (call-with-atomic-output-file resolved (lambda (port) (display new-content port)))
-           (ipc-response #f
-                         'ok
-                         (format "Deleted lines ~a-~a from ~a (~a lines removed)"
-                                 start-line
-                                 end-line
-                                 (path->string resolved)
-                                 deleted-count)
-                         (hasheq 'path
-                                 (path->string resolved)
-                                 'lines-deleted
-                                 deleted-count
-                                 'remaining-lines
-                                 (length new-lines))
-                         #f
-                         IPC-SCHEMA-VERSION)])])]))
+           ;; SEC-7 (v0.99.76 W2): size limit + backup + TOCTOU re-check (parity)
+           (define limit-error (worker-write-limit-check new-content))
+           (if limit-error
+               (make-error-response #f limit-error)
+               (let ([write-error (begin
+                                    (save-backup resolved content)
+                                    (worker-check-then-write resolved new-content identity-before))])
+                 (if write-error
+                     (make-error-response #f write-error)
+                     (ipc-response #f
+                                   'ok
+                                   (format "Deleted lines ~a-~a from ~a (~a lines removed)"
+                                           start-line
+                                           end-line
+                                           (path->string resolved)
+                                           deleted-count)
+                                   (hasheq 'path
+                                           (path->string resolved)
+                                           'lines-deleted
+                                           deleted-count
+                                           'remaining-lines
+                                           (length new-lines))
+                                   #f
+                                   IPC-SCHEMA-VERSION))))])])]))
 
 ;; ── Tool Registry ───────────────────────────────────────────────
 
@@ -510,6 +650,9 @@
          dispatch-tool
          current-allowed-roots
          path-allowed?
+         current-worker-write-limit
+         current-worker-cumulative-limit
+         current-worker-edit-before-write-hook
          execute-bash
          execute-write
          execute-edit
