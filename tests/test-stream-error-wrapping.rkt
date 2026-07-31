@@ -20,6 +20,7 @@
          "../util/event/event-access.rkt"
          "../llm/provider.rkt"
          "../llm/model.rkt"
+         (only-in "../llm/openai-compatible.rkt" openai-wrap-stream-error)
          (only-in "../agent/loop-stream.rkt" stream-from-provider))
 
 (define stream-error-suite
@@ -97,6 +98,29 @@
     ;; Test 9: check-provider-status! passes 2xx through
     (test-case "check-provider-status! passes 200 through"
       (check-equal? (check-provider-status! "Test" #"HTTP/1.1 200 OK" #"{}") (void)))
+    ;; ── openai-compatible stream-phase wrapping (v0.99.76 fix) ──
+
+    ;; Test: openai-wrap-stream-error converts a raw stream/network exn:fail into
+    ;; a provider-error with category 'network so the auto-retry layer treats the
+    ;; SSL/connection reset (e.g. "error reading from stream port ... errno=104")
+    ;; as retryable instead of leaking it to the prompt.
+    (test-case "openai-wrap-stream-error wraps raw exn:fail as network provider-error"
+      (with-handlers ([provider-error? (lambda (e)
+                                         (check-equal? (provider-error-category e) 'network)
+                                         (check-false (provider-error-status-code e))
+                                         (check-true (string-contains? (exn-message e)
+                                                                       "Stream read error")))])
+        (openai-wrap-stream-error
+         (exn:fail "error reading from stream port\n system error: connection reset; errno=104"
+                   (current-continuation-marks)))))
+
+    ;; Test: openai-wrap-stream-error passes through existing provider-error unchanged
+    (test-case "openai-wrap-stream-error passes through provider-error unchanged"
+      (with-handlers ([provider-error? (lambda (e)
+                                         (check-equal? (provider-error-category e) 'timeout)
+                                         (check-equal? (provider-error-status-code e) 408))])
+        (openai-wrap-stream-error
+         (provider-error "timeout during stream" (current-continuation-marks) (hash) 'timeout 408))))
 
     ;; ── v0.45.10 NF2: Partial message persistence tests ──
 

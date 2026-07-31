@@ -32,7 +32,8 @@
                        [openai-build-request-body (->* (model-request?) (#:stream? boolean?) hash?)]
                        [openai-parse-response (-> (or/c hash? #f) model-response?)])
          openai-normalize-message
-         openai-normalize-tool)
+         openai-normalize-tool
+         openai-wrap-stream-error)
 
 ;; ============================================================
 ;; OpenAI Config struct (T2-4)
@@ -219,6 +220,23 @@
                               (lambda (sl rb) (check-provider-status! "OpenAI" sl rb))))
 
 ;; ============================================================
+;; Stream-phase error wrapping
+;; ============================================================
+
+;; Wrap a stream-phase failure (e.g. an SSL/network read error on the SSE
+;; response port) into a structured provider-error with category 'network so the
+;; auto-retry layer classifies it as retryable. Existing provider-errors pass
+;; through untouched. Mirrors the setup-phase wrapping in openai-stream-request.
+(define (openai-wrap-stream-error e)
+  (if (provider-error? e)
+      (raise e)
+      (raise (provider-error (format "Stream read error: ~a" (exn-message e))
+                             (current-continuation-marks)
+                             (hash)
+                             'network
+                             #f))))
+
+;; ============================================================
 ;; Provider constructor
 ;; ============================================================
 
@@ -282,8 +300,8 @@
                                      (format "Network error contacting ~a: ~a" host (exn-message e))
                                      (current-continuation-marks)
                                      (hash)
-                                     #f
-                                     'network))))])
+                                     'network
+                                     #f))))])
         (call-with-request-timeout (lambda ()
                                      (define-values (sl rh rp)
                                        (if req-port
@@ -367,7 +385,7 @@
                                              (raise e))]
                                [exn:fail? (lambda (e)
                                             (cleanup-thunk)
-                                            (raise e))])
+                                            (openai-wrap-stream-error e))])
                  (let loop ()
                    (define chunk (gen))
                    (match chunk
