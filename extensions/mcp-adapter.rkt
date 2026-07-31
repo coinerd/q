@@ -39,17 +39,20 @@
          current-mcp-execute-fn
          current-mcp-event-sink)
 
-(provide (contract-out [handle-mcp-request (-> hash? tool-registry? procedure? hash?)]
-                       [handle-mcp-raw-input (-> string? tool-registry? procedure? hash?)]
-                       [run-mcp-stdio-server! (-> tool-registry? void?)]
-                       [mcp-notification? (-> any/c boolean?)]))
+(provide (contract-out
+          [handle-mcp-request
+           (->* (hash? tool-registry? procedure?) (#:approval-check (or/c procedure? #f)) hash?)]
+          [handle-mcp-raw-input (-> string? tool-registry? procedure? hash?)]
+          [run-mcp-stdio-server! (-> tool-registry? void?)]
+          [mcp-notification? (-> any/c boolean?)]))
 
 ;; ============================================================
 ;; Re-exports from extensions/mcp/tool-bridge.rkt
 ;; ============================================================
 
 (provide (contract-out [tool->mcp-jsexpr (-> tool? hash?)]
-                       [tools->mcp-list (-> tool-registry? (listof hash?))]))
+                       [tools->mcp-list
+                        (->* (tool-registry?) (#:capabilities (listof symbol?)) (listof hash?))]))
 
 ;; ============================================================
 ;; Re-exports from extensions/mcp/client.rkt

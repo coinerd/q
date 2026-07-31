@@ -25,7 +25,8 @@
                   tool-result->jsexpr
                   exec-context?)
          "../runtime/settings-query.rkt"
-         (only-in "../runtime/settings.rkt" q-settings))
+         (only-in "../runtime/settings.rkt" q-settings)
+         (only-in "../util/capability.rkt" current-session-capabilities))
 
 ;; ── Helpers ──
 
@@ -290,6 +291,45 @@
       (define resp (handle-mcp-request req reg exec-fn))
       (define err (hash-ref resp 'error #f))
       (check-false (hash-has-key? (or err (hasheq)) 'data)
-                   "error response must not include data/detail field"))))
+                   "error response must not include data/detail field"))
+
+    ;; ════════════════════════════════════════════════════════════
+    ;; SEC-2 (v0.99.76 W3): Explicit approval gate + capability filtering
+    ;; ════════════════════════════════════════════════════════════
+
+    (test-case "SEC-2: tools/call fails closed when approval required and no channel"
+      (define reg (make-test-registry))
+      (define exec-fn (lambda (name args) (hasheq 'content (list (hasheq 'type "text" 'text "ok")))))
+      (define req (json-roundtrip (build-mcp-tools-call 1 "echo" (hasheq 'text "hi"))))
+      (define resp (handle-mcp-request req reg exec-fn #:approval-check (lambda (n) #t)))
+      (define err (hash-ref resp 'error #f))
+      (check-not-false err "approval-required tool is blocked")
+      (check-equal? (hash-ref err 'code) -32001 "fails closed with -32001"))
+
+    (test-case "SEC-2: tools/call proceeds when no approval required"
+      (define reg (make-test-registry))
+      (define exec-fn (lambda (name args) (hasheq 'content (list (hasheq 'type "text" 'text "ok")))))
+      (define req (json-roundtrip (build-mcp-tools-call 1 "echo" (hasheq 'text "hi"))))
+      (define resp (handle-mcp-request req reg exec-fn #:approval-check (lambda (n) #f)))
+      (check-not-false (hash-ref resp 'result #f) "non-approval tool executes"))
+
+    (test-case "SEC-2: tools/list filters by session capability"
+      (define reg (make-tool-registry))
+      (register-tool! reg
+                      (make-tool "read-tool"
+                                 "Read only"
+                                 (hasheq 'type "object" 'properties (hasheq))
+                                 (lambda (a c) (make-success-result "ok"))
+                                 #:required-capability 'read-only))
+      (register-tool! reg
+                      (make-tool "write-tool"
+                                 "Write"
+                                 (hasheq 'type "object" 'properties (hasheq))
+                                 (lambda (a c) (make-success-result "ok"))
+                                 #:required-capability 'file-write))
+      (parameterize ([current-session-capabilities '(read-only)])
+        (define names (map (lambda (h) (hash-ref h 'name)) (tools->mcp-list reg)))
+        (check-not-false (member "read-tool" names) "read-only tool listed")
+        (check-false (member "write-tool" names) "file-write tool filtered out")))))
 
 (run-tests suite)
