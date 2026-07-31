@@ -1,3 +1,54 @@
+## 0.99.76
+
+Released 2026-07-31.
+
+### Security (Phase 1: Security Critical)
+
+- **Worker file-op safety parity (SEC-7):** The worker's `execute-write`, `execute-edit`,
+  and `execute-delete-lines` now enforce the same per-write size limit (1 MB), cumulative
+  session write budget (50 MB), inode/identity TOCTOU re-check, and backup creation as the
+  main `tool-write`/`tool-edit`.
+- **Worker shell safety (SEC-1):** Worker `execute-bash`/`execute-git` enforce the same
+  destructive-command blocklist, structured tokenizer classification, and fail-closed
+  execution policy as the main `tool-bash` (extracted to a shared `bash-safety.rkt`).
+- **MCP hardening (SEC-2):** MCP `tools/list` filters the tool registry by session
+  capability (no capability disclosure); `tools/call` fails closed when a tool requires
+  approval and no approval channel is available, and when the server is not configured.
+- **HITL approval includes file-write (SEC-3):** `requires-hitl-approval?` now includes
+  `file-write`; default delegated subagent capabilities narrowed to `(read-only)`.
+- **Worker IPC cwd confinement (SEC-4):** Worker `execute-bash`/`execute-git` validate
+  `cwd` against `current-allowed-roots` before subprocess execution.
+- **Credential redaction expansion (SEC-5):** GitHub (`ghp_`/`gho_`/`ghu_`/`ghs_`/`ghr_`),
+  GitLab (`glpat-`), Google (`AIza`), and AWS (`AKIA`) token formats are redacted.
+
+### Bug Fixes
+
+- Stream-phase SSL/network errors (e.g. connection reset, errno=104) are wrapped into
+  retryable provider-errors (category `network`) instead of leaking to the prompt; the
+  auto-retry layer now retries them.
+- Corrected an inverted provider-error constructor argument order in the OpenAI-compatible
+  stream setup path (category was `#f`; now correctly `network`).
+
+### Breaking / Behavior Changes
+
+- Default delegated subagent capabilities narrowed from `(read-only file-write shell-exec)`
+  to `(read-only)`: callers must explicitly grant `file-write`/`shell-exec` capabilities.
+  MCP `tools/list` now reports only tools authorized by the session capabilities.
+
+### Migration Notes
+
+- No data migration required. Subagent spawns that relied on default `file-write` or
+  `shell-exec` must declare those capabilities explicitly.
+
+### Testing
+
+- SEC-1..SEC-7 focused suites, MCP security-gate suite, stream error-wrapping suite,
+  fast gate (16204 tests), and broad/full gate all pass.
+
+### Operational / Release
+
+- v0.99.76 released via the standard tag-triggered Release workflow; public assets verified.
+
 ## 0.99.75
 
 Released 2026-07-30.
