@@ -19,7 +19,9 @@
                   tool?
                   tool-name
                   tool-description
-                  tool-schema))
+                  tool-schema
+                  tool-required-capability)
+         (only-in "../../util/capability.rkt" current-session-capabilities capability-authorized?))
 
 ;; ============================================================
 ;; MCP Server: Tool Serialization
@@ -32,8 +34,19 @@
   (hasheq 'name (tool-name t) 'description (tool-description t) 'inputSchema (tool-schema t)))
 
 ;; Serialize all active tools into MCP spec format.
-(define (tools->mcp-list registry)
-  (map tool->mcp-jsexpr (list-active-tools registry)))
+;; SEC-2 (v0.99.76 W3): filter by session capabilities — tools whose required
+;; capability is not granted are omitted (no capability information disclosure).
+(define (tools->mcp-list registry #:capabilities [capabilities (current-session-capabilities)])
+  (for/list ([t (in-list (list-active-tools registry))]
+             #:when (capability-authorized? (tool-required-capability t) capabilities))
+    (tool->mcp-jsexpr t)))
+
+;; SEC-2 (v0.99.76 W3): default (unconfigured) execute-fn. Used both as the
+;; current-mcp-execute-fn default and as the identity check in
+;; handle-tools-call-exec (a server wired to this function is NOT configured and
+;; must fail closed rather than return a fake success).
+(define (default-mcp-execute-fn name args)
+  (hasheq 'content (list (hasheq 'type "text" 'text "not implemented"))))
 
 ;; ============================================================
 ;; MCP Server: Tool-call telemetry
@@ -62,7 +75,7 @@
 
 ;; H3 (v0.99.10 W2): Handle tools/call request with full validation and error handling.
 ;; Extracted from handle-mcp-request to keep match clauses readable.
-(define (handle-tools-call req id registry execute-fn)
+(define (handle-tools-call req id registry execute-fn #:approval-check [approval-check #f])
   ;; H3: Validate params presence — return -32602 if missing.
   ;; F-02 (v0.99.11 W2): Validate params type and structure.
   (cond
@@ -105,11 +118,24 @@
                    id
                    'error
                    (hasheq 'code -32602 'message "Invalid params: 'arguments' must be an object"))]
-          [else (handle-tools-call-exec id tool-name-str tool-args registry execute-fn)])])]))
+          [else
+           (handle-tools-call-exec id
+                                   tool-name-str
+                                   tool-args
+                                   registry
+                                   execute-fn
+                                   #:approval-check approval-check)])])]))
 
 ;; Inner handler for tools/call once params are validated.
 ;; C1: check tool existence. H3: wrap exceptions. C2: convert tool-result.
-(define (handle-tools-call-exec id tool-name-str tool-args registry execute-fn)
+;; SEC-2 (v0.99.76 W3): explicit approval gate before execute-fn — fail closed
+;; when the tool requires approval and no approval channel is available.
+(define (handle-tools-call-exec id
+                                tool-name-str
+                                tool-args
+                                registry
+                                execute-fn
+                                #:approval-check [approval-check #f])
   (cond
     ;; C1 (v0.99.10 W1): Reject unknown tools with JSON-RPC error.
     [(not (lookup-tool registry tool-name-str))
@@ -124,6 +150,30 @@
                      (format "Unknown tool: ~a" tool-name-str)
                      'data
                      (hasheq 'tool-name tool-name-str)))]
+    ;; SEC-2: server wired to the default (unconfigured) execute-fn must fail
+    ;; closed — a "not implemented" text response is not execution.
+    [(eq? execute-fn default-mcp-execute-fn)
+     (emit-mcp-tool-called! tool-name-str #f #:error-code -32601)
+     (hasheq 'jsonrpc
+             "2.0"
+             'id
+             id
+             'error
+             (hasheq 'code -32601 'message "MCP execute-fn is not configured"))]
+    ;; SEC-2: explicit approval gate. When the caller supplies an approval-check
+    ;; predicate and it returns #t (approval required) with no interactive
+    ;; channel, block the call before it reaches execute-fn.
+    [(and (procedure? approval-check) (approval-check tool-name-str))
+     (emit-mcp-tool-called! tool-name-str #f #:error-code -32001)
+     (hasheq 'jsonrpc
+             "2.0"
+             'id
+             id
+             'error
+             (hasheq 'code
+                     -32001
+                     'message
+                     (format "Tool ~a requires approval which is unavailable" tool-name-str)))]
     [else
      ;; H3 (v0.99.10 W2): Wrap execute-fn exceptions into -32603 internal error.
      (define raw-result
@@ -161,10 +211,17 @@
 (provide current-mcp-event-sink
          safe-emit-mcp-event!
          emit-mcp-tool-called!
+         default-mcp-execute-fn
          (contract-out [tool->mcp-jsexpr (-> tool? hash?)]
-                       [tools->mcp-list (-> tool-registry? (listof hash?))]
-                       [handle-tools-call (-> hash? any/c tool-registry? procedure? hash?)]
+                       [tools->mcp-list
+                        (->* (tool-registry?) (#:capabilities (listof symbol?)) (listof hash?))]
+                       [handle-tools-call
+                        (->* (hash? any/c tool-registry? procedure?)
+                             (#:approval-check (or/c procedure? #f))
+                             hash?)]
                        [handle-tools-call-exec
-                        (-> any/c string? hash? tool-registry? procedure? hash?)]
+                        (->* (any/c string? hash? tool-registry? procedure?)
+                             (#:approval-check (or/c procedure? #f))
+                             hash?)]
                        [handle-tools-call-result (-> any/c string? any/c hash?)]
                        [raw-result-route (-> any/c symbol?)]))

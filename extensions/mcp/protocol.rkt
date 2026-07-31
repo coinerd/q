@@ -48,10 +48,9 @@
 
 ;; Parameter for tool execution injection.
 ;; The wiring layer sets this to the real tool execution function.
-;; Default returns a "not implemented" placeholder.
-(define current-mcp-execute-fn
-  (make-parameter (lambda (name args)
-                    (hasheq 'content (list (hasheq 'type "text" 'text "not implemented"))))))
+;; Default returns a "not implemented" placeholder (shared with tool-bridge so
+;; handle-tools-call-exec can detect an unconfigured server and fail closed).
+(define current-mcp-execute-fn (make-parameter default-mcp-execute-fn))
 
 ;; ============================================================
 ;; MCP Server: Message Handler
@@ -68,7 +67,7 @@
 ;; registry: tool-registry? — q's tool registry
 ;; execute-fn: procedure — tool execution function (tool-name args -> result)
 ;; Returns: jsexpr — response hash (empty hash for notifications)
-(define (handle-mcp-request req registry execute-fn)
+(define (handle-mcp-request req registry execute-fn #:approval-check [approval-check #f])
   (define method (hash-ref req 'method ""))
   ;; H3 (v0.99.10 W2): Notifications (requests without 'id) get no response.
   (cond
@@ -94,7 +93,7 @@
        ;; {name, description, inputSchema} instead of OpenAI shape.
        ["tools/list"
         (hasheq 'jsonrpc "2.0" 'id id 'result (hasheq 'tools (tools->mcp-list registry)))]
-       ["tools/call" (handle-tools-call req id registry execute-fn)]
+       ["tools/call" (handle-tools-call req id registry execute-fn #:approval-check approval-check)]
        ["notifications/initialized" (hasheq)]
        ["ping" (hasheq 'jsonrpc "2.0" 'id id 'result (hasheq))]
        [_ (hasheq 'jsonrpc "2.0" 'id id 'error (hasheq 'code -32601 'message "Method not found"))])]))
@@ -147,7 +146,9 @@
          emit-mcp-connected!
          emit-mcp-tool-called!)
 
-(provide (contract-out [handle-mcp-request (-> hash? tool-registry? procedure? hash?)]
-                       [handle-mcp-raw-input (-> string? tool-registry? procedure? hash?)]
-                       [run-mcp-stdio-server! (-> tool-registry? void?)]
-                       [mcp-notification? (-> any/c boolean?)]))
+(provide (contract-out
+          [handle-mcp-request
+           (->* (hash? tool-registry? procedure?) (#:approval-check (or/c procedure? #f)) hash?)]
+          [handle-mcp-raw-input (-> string? tool-registry? procedure? hash?)]
+          [run-mcp-stdio-server! (-> tool-registry? void?)]
+          [mcp-notification? (-> any/c boolean?)]))
