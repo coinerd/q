@@ -333,3 +333,16 @@ extended to 2026-10-01, but no resolution milestone was scheduled.
 | GAP-5 | HANDOFF.json must be current | Per-wave review/evidence (external planning is not parsed by close gate) |
 | GAP-6 | Temp dirs cleaned on success | `cleanup-tmux-env!` *(stable)* |
 | GAP-7 | Boundary debt must be tracked | Dedicated resolution milestone |
+
+---
+
+## 8. Gate Execution Pattern (F-20)
+
+Gates and long commands follow the **background-gate pattern**: run with
+`nohup racket ... > log 2>&1 &`, then poll the log for the `VERDICT:` line.
+Exit code 137 means SIGKILL (timeout/kill — check for surviving `T`-state
+processes before assuming OOM). After W1 (issue #9110) a foreground
+timeout returns a result and is safe, but background remains the sanctioned
+pattern for gates. Full operating details: [`docs/agent-harness-runbook.md`](agent-harness-runbook.md).
+Resumed sessions receive the rule via `.planning/RESUME-PROMPT-*.md`.
+
