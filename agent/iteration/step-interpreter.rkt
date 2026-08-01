@@ -533,19 +533,21 @@
           updated-ctx
           (append
            updated-ctx
-           (list
-            (make-message
-             (format "exploration-corrective-~a" (loop-counters-iteration counters))
-             #f
-             'user
-             'message
-             (list
-              (make-text-part
-               (format
-                "STEERING: You have called the same tools repeatedly (~a) without producing text or progress. Stop exploring and re-reading files. Produce a concrete implementation step now (an edit, a test run, a file write, or a clear statement of the blocker), or the loop will be terminated."
-                loop-warning)))
-             (current-seconds)
-             (hasheq 'source 'steering)))))))
+           (list (make-message
+                  (format "exploration-corrective-~a" (loop-counters-iteration counters))
+                  #f
+                  'user
+                  'message
+                  (list (make-text-part
+                         (format (string-append
+                                  "STEERING: You have called the same tools repeatedly (~a) without "
+                                  "producing text or progress. Stop exploring and re-reading files. "
+                                  "Produce a concrete implementation step now (an edit, a test run, "
+                                  "a file write, or a clear statement of the blocker), or the loop "
+                                  "will be terminated.")
+                                 loop-warning)))
+                  (current-seconds)
+                  (hasheq 'source 'steering)))))))
      ;; Reuse make-next-counters for consistent counter increment
      (directive-recurse updated-ctx
                         (struct-copy loop-counters
