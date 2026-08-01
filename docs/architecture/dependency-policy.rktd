@@ -225,6 +225,10 @@
        (risk
         . "Parallel test runner with subprocess orchestration, output parsing, and suite management")
        (owner . "tools"))
+      ("llm/openai-compatible.rkt"
+       (risk
+        . "OpenAI-compatible provider adapter: request building, SSE parsing, phase-aware timeouts, reasoning_content round-trip; grew with provider hardening (v0.99.78)")
+       (owner . "llm"))
       ("sandbox/subprocess.rkt"
        (risk
         . "Shell subprocess execution with resource limits, timeout handling, and output capture; security-sensitive boundary")

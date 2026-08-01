@@ -333,7 +333,8 @@
 
 (test-case "audit-settings-http-timeout-default"
   (define s (make-minimal-settings))
-  (check-equal? (http-request-timeout s) 300))
+  ;; v0.99.78: default raised 300->600 for reasoning-model prefill headroom
+  (check-equal? (http-request-timeout s) 600))
 
 (test-case "audit-settings-steering-defaults"
   (define s (make-minimal-settings))
