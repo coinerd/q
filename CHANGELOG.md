@@ -1,3 +1,65 @@
+## 0.99.77
+
+Released 2026-08-06.
+
+### Agent Harness Reliability (W0-W3)
+
+- **Tool-execution freeze fixed (F-18b):** The run-subprocess timeout path previously called
+  `(subprocess-kill sp)` with the wrong arity; the error was swallowed by `with-handlers` so
+  **no signal was delivered**, and SIGTERM was not delivered to SIGSTOP'd (T-state) children
+  anyway. A hung tool call froze the harness until an external wrapper SIGKILLed it (exit 137).
+  The timeout path now runs a two-phase kill: Phase 1 SIGTERM to the direct child **and** its
+  process group, a 2-second grace period, then Phase 2 SIGKILL to the direct child **and** its
+  process group. `#:process-group? #t` launches under `setsid` when available so the child
+  becomes its own group leader (PGID == PID); group kills run via `/bin/bash -c 'kill -SIG -- -PID'`
+  (dash rejects `-- -PGID`). Platforms without `setsid` (e.g. macOS) fall back to direct-child
+  kill. The W0 freeze reproducer (`tests/test-tool-call-freeze.rkt`) is now tagged `@speed fast`
+  and passes as a permanent regression test; contract tests SP9-SP12 added in
+  `tests/test-subprocess-edge-cases.rkt`.
+- **Parallel test isolation fixed (F-7):** The `test-run-tests-*` family (which spawns inner
+  `run-tests.rkt` subprocesses that clean stale bytecode and write temp ledgers) was running in
+  the parallel batch, racing on shared state and intermittently failing
+  `test-run-tests-ledger` under `--jobs 12`. `mutating-file?` in `scripts/run-tests/classify-filters.rkt`
+  now treats `@isolation subprocess` as mutating, serializing the family before parallel workers.
+  `test-run-tests-script.rkt` tagged `@isolation subprocess`; 3× consecutive `--jobs 12` family
+  runs green (20/20 each).
+- **Agent guidance docs:** New `docs/agent-harness-runbook.md` documents the background-gate
+  pattern (`nohup ... &` + poll for `VERDICT:`), exit-137 = SIGKILL interpretation (check for
+  surviving `T`-state processes before assuming OOM), post-W1 timeout behavior (foreground
+  timeout now returns a result but background remains sanctioned for gates), and the
+  resumed-session rule. `scripts/lint-doc-freshness.rkt` now covers the runbook;
+  `docs/gsd-process-governance.md` gained a Gate Execution Pattern section.
+
+### Bug Fixes
+
+- Tool-call freeze: timeout path now actually delivers SIGTERM→SIGKILL to the child and its
+  process group (previously the kill call errored silently and no signal was sent).
+- Shell compatibility: bash tool, worker tools, and goal checks run `/bin/bash -c` instead of
+  `/bin/sh -c` (fixes "Bad substitution" for `${PIPESTATUS[0]}`-style scripts).
+- Parallel test flake: `test-run-tests-*` subprocess-isolation family serialized before
+  parallel workers; `test-run-tests-ledger` no longer fails intermittently under `--jobs 12`.
+
+### Breaking / Behavior Changes
+
+- The run-subprocess timeout path kills the whole process group (when `setsid` is available),
+  not just the direct child. On platforms without `setsid` (macOS), only the direct child is
+  killed; grandchildren may survive and should be cleaned up manually.
+
+### Migration Notes
+
+- No migration required. The timeout behavior change is internal; external tool contracts are
+  unchanged.
+
+### Testing
+
+- W0-W3 focused suites (freeze reproducer, subprocess edge cases, run-tests isolation family),
+  full CI (lint, test 0/1/2, test-aggregate, test-platform incl. macOS, workflows, security,
+  smoke ubuntu+macos, release-dry-run) all green on every wave PR.
+
+### Operational / Release
+
+- v0.99.77 released via the standard tag-triggered Release workflow; public assets verified.
+
 ## 0.99.76
 
 Released 2026-07-31.
