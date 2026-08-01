@@ -398,7 +398,8 @@
                         #:tool-name (tool-call-name tc)
                         #:duration-ms duration-ms
                         #:result-summary result-summary
-                        #:result-error (and (tool-result-is-error? tr) (tool-result-error-text tr))))
+                        #:result-error (and (tool-result-is-error? tr) (tool-result-error-text tr))
+                        #:result (and (not (tool-result-is-error? tr)) (tool-result-content tr))))
     (emit-session-event! bus
                          session-id
                          "tool.execution.correlated-completed"
