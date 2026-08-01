@@ -262,6 +262,27 @@
 ;; Main subprocess runner
 ;; --------------------------------------------------
 
+;; W1-fix v0.99.77 (F-18b follow-up): Racket's subprocess event does not fire
+;; for setsid-launched children. When #:process-group? #t wraps the child in
+;; `setsid`, the child becomes a session/process-group leader and Racket's
+;; runtime event-delivery never signals the subprocess object — even after the
+;; child exits (the child lingers as a zombie and sync/timeout on the event
+;; always times out). subprocess-status, however, transitions reliably
+;; ('running → exit-code) for both launch modes. So the main wait and the
+;; post-SIGTERM grace wait poll subprocess-status instead of syncing on the
+;; event whenever we launched under setsid.
+;;
+;; Returns #t if the process exited within timeout-secs, #f on timeout.
+(define (wait-subprocess-status! sp timeout-secs)
+  (define deadline-ms (+ (current-inexact-milliseconds) (* timeout-secs 1000.0)))
+  (let loop ()
+    (cond
+      [(not (eq? (subprocess-status sp) 'running)) #t]
+      [(>= (current-inexact-milliseconds) deadline-ms) #f]
+      [else
+       (sleep 0.005)
+       (loop)])))
+
 (define (run-subprocess command
                         #:args [args '()]
                         #:limits [limits (default-exec-limits)]
@@ -350,7 +371,13 @@
 
     ;; Wait with timeout
     (define trace-id (next-subprocess-trace-id))
-    (define evt-result (sync/timeout effective-timeout sp))
+    ;; W1-fix: the subprocess event never fires for setsid children, so poll
+    ;; subprocess-status when we launched under setsid; sync on the event
+    ;; otherwise (direct launch, or macOS where setsid is absent).
+    (define evt-result
+      (if setsid-path
+          (wait-subprocess-status! sp effective-timeout)
+          (sync/timeout effective-timeout sp)))
 
     (cond
       ;; Timeout
@@ -379,8 +406,12 @@
                             child-pid
                             (subprocess-status sp))
        ;; Grace period: allow a clean exit from SIGTERM before escalating to
-       ;; SIGKILL (which cannot be caught/ignored).
-       (define grace-exit? (sync/timeout 2 sp))
+       ;; SIGKILL (which cannot be caught/ignored). Same poll-vs-event split as
+       ;; the main wait: the event never fires for setsid children.
+       (define grace-exit?
+         (if setsid-path
+             (wait-subprocess-status! sp 2)
+             (sync/timeout 2 sp)))
        (unless grace-exit?
          (log-subprocess-info "~a: SIGKILL after grace (pid ~a)" trace-id child-pid)
          ;; Phase 2 — SIGKILL. SIGTERM is NOT delivered to SIGSTOP'd
