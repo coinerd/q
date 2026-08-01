@@ -370,9 +370,15 @@
     ;; Reasoning models like GLM-5.2 emit reasoning_content chunks for 450+ seconds
     ;; before first content chunk. The initial timeout covers the reasoning phase;
     ;; once content chunks arrive, they must come within 60s each.
+    ;; v0.99.78 FIX: widen #:thinking-timeout to the model's request timeout.
+    ;; DeepSeek-v4-flash (and other reasoning models) can pause >60s between
+    ;; reasoning_content deltas while thinking; the previous default of 60s
+    ;; fired a spurious HTTP-read timeout mid-thinking, killing the turn after
+    ;; 2 retries (observed in the live /go run).
     (define gen
       (read-sse-chunks response-port
                        #:initial-timeout stream-timeout
+                       #:thinking-timeout stream-timeout
                        #:stream-timeout http-stream-timeout-default
                        #:max-total-timeout max-total-timeout))
     ;; v0.99.54 W3 L-2: Close response port on normal stream end or generator error.
