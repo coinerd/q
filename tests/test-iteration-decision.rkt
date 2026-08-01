@@ -118,7 +118,20 @@
       (parameterize ([current-max-consecutive-tool-calls 5])
         (define ctx (iteration-ctx 8 6 0 100 200))
         (define result (make-loop-result '() 'tool-calls-pending (hasheq)))
-        (check-equal? (decide-next-action ctx result) 'stop)))))
+        (check-equal? (decide-next-action ctx result) 'stop)))
+
+    (test-case "breaker suppressed once past soft budget (max-iterations semantics)"
+      ;; When the loop has already passed the soft iteration limit, the
+      ;; soft→hard escalation governs and max-iterations-exceeded must still
+      ;; surface — the breaker must not steal that outcome (regression for
+      ;; max-iterations=0/1 fixtures).
+      (parameterize ([current-max-consecutive-tool-calls 5])
+        (define result (make-loop-result '() 'tool-calls-pending (hasheq)))
+        (define ctx-past-soft (iteration-ctx 20 6 0 10 80)) ; next-iter=21 > max=10
+        (check-equal? (decide-next-action ctx-past-soft result) 'stop-soft-limit)
+        ;; still within soft budget -> breaker fires
+        (define ctx-within (iteration-ctx 8 6 0 100 200))
+        (check-equal? (decide-next-action ctx-within result) 'stop)))))
 
 (define compute-suite
   (test-suite "compute-step-result"

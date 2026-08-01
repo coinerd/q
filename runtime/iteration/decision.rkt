@@ -88,10 +88,15 @@
      (define next-iter (add1 (iteration-ctx-iteration ctx)))
      (define consecutive (iteration-ctx-consecutive-tool-count ctx))
      (cond
-       ;; v0.99.78 FIX: consecutive-tool circuit breaker — stop the loop before
-       ;; it burns max-iterations LLM calls on a read/explore circle.
-       [(>= consecutive (current-max-consecutive-tool-calls)) 'stop]
        [(>= next-iter (iteration-ctx-max-iterations-hard ctx)) 'stop-hard-limit]
+       ;; v0.99.78 FIX: consecutive-tool circuit breaker — stop the loop before
+       ;; it burns max-iterations LLM calls on a read/explore circle. Fires ONLY
+       ;; while within the soft iteration budget: once the loop has passed the
+       ;; soft limit, the soft→hard escalation governs and the loop reports
+       ;; max-iterations-exceeded (preserving max-iterations=0/1 test semantics).
+       [(and (<= next-iter (iteration-ctx-max-iterations ctx))
+             (>= consecutive (current-max-consecutive-tool-calls)))
+        'stop]
        [(>= next-iter (iteration-ctx-max-iterations ctx)) 'stop-soft-limit]
        [else 'continue])]
     [_ 'stop]))
@@ -109,8 +114,11 @@
          (eq? termination 'tool-calls-pending)
          (>= (iteration-ctx-consecutive-tool-count ctx) (current-max-consecutive-tool-calls))))
   (define metadata
-    (cond
-      [tool-loop-limit? (hasheq 'toolLoopLimit #t)]
-      [(eq? action 'stop-hard-limit) (hasheq 'maxIterationsReached #t)]
-      [else (hasheq)]))
+    (match action
+      ['stop
+       (if tool-loop-limit?
+           (hasheq 'toolLoopLimit #t)
+           (hasheq))]
+      ['stop-hard-limit (hasheq 'maxIterationsReached #t)]
+      [_ (hasheq)]))
   (step-result action termination new-counters metadata))
