@@ -9,6 +9,7 @@
 (require racket/contract
          racket/port
          racket/string
+         racket/system
          "limits.rkt"
          ;; SEC-16 (v0.22.0): consolidated shell-quote
          (only-in "../util/shell-quote.rkt" shell-quote)
@@ -50,7 +51,9 @@
                                      #:timeout (or/c number? #f)
                                      #:directory (or/c path-string? #f)
                                      #:environment any/c
-                                     #:encoding symbol?)
+                                     #:encoding symbol?
+                                     ;; W1 v0.99.77: process-group kill support
+                                     #:process-group? boolean?)
                              subprocess-result?)]
                        [kill-subprocess! (-> (or/c custodian? #f) void?)]
                        [sanitize-env (->* () (any/c) any/c)]
@@ -152,6 +155,16 @@
                           (loop 0)]
                          [else (void)])])))))))
   (values reader snapshot))
+
+;; W1 v0.99.77: Send a signal to a whole process group. The child must have
+;; been launched under `setsid` so its PID == its PGID (process-group
+;; leader). bash's `kill` builtin accepts `-- -PGID` (dash, `/bin/sh`, does
+;; not), so we invoke bash explicitly. This is what lets a timed-out tool
+;; call kill SIGSTOP'd grandchildren that hold inherited pipes open.
+(define (signal-process-group! pid signal)
+  (with-handlers
+      ([exn:fail? (lambda (e) (log-subprocess-warning "signal group ~a: ~a" signal (exn-message e)))])
+    (system (format "/bin/bash -c 'kill -~a -- -~a 2>/dev/null || true'" signal pid))))
 
 ;; --------------------------------------------------
 ;; Kill helper
@@ -255,7 +268,11 @@
                         #:timeout [timeout-secs #f]
                         #:directory [dir (current-directory)]
                         #:environment [env (sanitize-env)]
-                        #:encoding [encoding 'utf-8])
+                        #:encoding [encoding 'utf-8]
+                        ;; W1 v0.99.77: when #t (and `setsid` is available),
+                        ;; launch the child as a session/process-group leader so
+                        ;; the timeout path can SIGKILL the whole group.
+                        #:process-group? [process-group? #f])
   (define effective-timeout (or timeout-secs (exec-limits-timeout-seconds limits)))
   (define max-output (exec-limits-max-output-bytes limits))
 
@@ -279,16 +296,35 @@
           (path->string cmd-path)
           cmd-path))
 
+    ;; W1 v0.99.77: optional setsid wrapper. When process-group? is #t and
+    ;; setsid exists (Linux), the child becomes a session/process-group leader
+    ;; (PGID == child PID) so the timeout path can signal the whole group.
+    ;; On platforms without setsid (e.g. macOS), fall back to direct launch;
+    ;; the timeout path still sends SIGTERM then SIGKILL to the direct child.
+    (define setsid-path (and process-group? (find-executable-path "setsid")))
+
     (define-values (sp stdout-in stdin-out stderr-in)
       (parameterize ([current-custodian cust]
                      [current-directory dir]
                      [current-environment-variables env])
-        (if (null? args)
-            ;; No args: run command directly
-            (subprocess #f #f #f cmd-path)
-            ;; With args: pass as direct arg vector — avoids shell injection
-            ;; (previously used /bin/sh -c which was vulnerable to injection)
-            (apply subprocess #f #f #f cmd-path args))))
+        (cond
+          [setsid-path
+           ;; Wrap with setsid: setsid execs the command without forking when
+           ;; the caller is not a process-group leader (which is the case for
+           ;; a subprocess spawned by Racket), so the PID stays the same.
+           (apply subprocess
+                  #f
+                  #f
+                  #f
+                  setsid-path
+                  (if (null? args)
+                      (list cmd-string)
+                      (cons cmd-string args)))]
+          ;; No args: run command directly
+          [(null? args) (subprocess #f #f #f cmd-path)]
+          ;; With args: pass as direct arg vector — avoids shell injection
+          ;; (previously used /bin/sh -c which was vulnerable to injection)
+          [else (apply subprocess #f #f #f cmd-path args)])))
 
     ;; Close stdin immediately and start output drainers before waiting for the
     ;; child.  Waiting first can deadlock when child output fills the OS pipe.
@@ -320,23 +356,47 @@
       ;; Timeout
       [(not evt-result)
        (define child-pid (subprocess-pid sp))
-       (log-subprocess-info "~a: timeout after ~as (pid ~a, status ~s) — attempting kill"
+       (log-subprocess-info "~a: timeout after ~as (pid ~a, status ~s) — attempting SIGTERM"
                             trace-id
                             effective-timeout
                             child-pid
                             (subprocess-status sp))
-       ;; Kill the subprocess explicitly before shutting custodian.
-       ;; May fail if process already dead.
-       ;; W0 v0.99.77 instrumentation: log the kill attempt result.
+       ;; W1 v0.99.77: Phase 1 — SIGTERM.
+       ;; FIX (F-18b): previously called (subprocess-kill sp) with one argument
+       ;; (arity error, silently swallowed) so NO signal was delivered.
+       ;; Correct arity is (subprocess-kill subprocess kill?) where #f = SIGTERM
+       ;; and #t = SIGKILL. Send SIGTERM to the direct child and, when we
+       ;; launched under setsid, to the whole process group.
        (with-handlers ([exn:fail? (lambda (e)
-                                    (log-subprocess-warning "~a: subprocess-kill: ~a"
+                                    (log-subprocess-warning "~a: subprocess-kill TERM: ~a"
                                                             trace-id
                                                             (exn-message e)))])
-         (subprocess-kill sp))
-       (log-subprocess-info "~a: after kill: pid ~a status ~s"
+         (subprocess-kill sp #f))
+       (when setsid-path
+         (signal-process-group! child-pid "TERM"))
+       (log-subprocess-info "~a: after SIGTERM: pid ~a status ~s"
                             trace-id
                             child-pid
                             (subprocess-status sp))
+       ;; Grace period: allow a clean exit from SIGTERM before escalating to
+       ;; SIGKILL (which cannot be caught/ignored).
+       (define grace-exit? (sync/timeout 2 sp))
+       (unless grace-exit?
+         (log-subprocess-info "~a: SIGKILL after grace (pid ~a)" trace-id child-pid)
+         ;; Phase 2 — SIGKILL. SIGTERM is NOT delivered to SIGSTOP'd
+         ;; processes, but SIGKILL is; this kills stopped children and, via
+         ;; the process group, any grandchildren holding inherited pipes.
+         (with-handlers ([exn:fail? (lambda (e)
+                                      (log-subprocess-warning "~a: subprocess-kill KILL: ~a"
+                                                              trace-id
+                                                              (exn-message e)))])
+           (subprocess-kill sp #t))
+         (when setsid-path
+           (signal-process-group! child-pid "KILL"))
+         (log-subprocess-info "~a: after SIGKILL: pid ~a status ~s"
+                              trace-id
+                              child-pid
+                              (subprocess-status sp)))
        ;; Give reader threads a bounded chance to observe EOF and flush their
        ;; latest snapshots.  If they do not finish, snapshot still returns the
        ;; latest captured bytes.

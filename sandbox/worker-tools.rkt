@@ -257,8 +257,11 @@
           (format "WARNING: High-risk command detected: ~a" command)]
          [else #f]))
      (define result
-       (run-subprocess "/bin/sh"
+       (run-subprocess "/bin/bash"
                        #:args (list "-c" command)
+                       ;; W1 v0.99.77: process-group launch so a timed-out
+                       ;; worker bash call can SIGKILL the whole group.
+                       #:process-group? #t
                        #:timeout timeout-secs
                        #:directory (or cwd (current-directory))))
      (define exit-code (subprocess-result-exit-code result))

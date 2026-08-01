@@ -1,15 +1,14 @@
 #lang racket/base
 
 ;; @suite harness
-;; @speed slow
+;; @speed fast
 ;; @boundary integration
 ;;
-;; NOTE (W0): Classified as slow so the intentionally-red reproducer is
-;; excluded from the CI fast shards (fast gate stays green on the W0
-;; baseline). It still runs in the slow/broad suites and is run explicitly by
-;; the W0/W1 verification commands. After the W1 fix lands and the test
-;; passes, it is re-classified to fast as a permanent fast-gate regression
-;; test. IMPORTANT: the metadata parser takes the LAST speed tag in the first
+;; NOTE: This reproducer was tagged slow during W0 because it was
+;; intentionally red (documenting the F-18b leak). Since the W1 fix landed
+;; (SIGTERM then SIGKILL to the process group on timeout), it passes and is
+;; a permanent fast-gate regression test.
+;; IMPORTANT: the metadata parser takes the LAST speed tag in the first
 ;; 50 lines, so no other line in this header may mention a speed tag.
 
 ;; tests/test-tool-call-freeze.rkt — W0 reproducer for F-6/F-18 + F-18b
@@ -59,10 +58,14 @@
 (define (stopped-command)
   (format "kill -STOP $$; sleep 60 # ~a" marker))
 
-;; Run the real run-subprocess path (same as tool-bash: /bin/sh -c ...) with a
-;; short timeout. Returns the subprocess-result.
+;; Run the real run-subprocess path (same as tool-bash: bash -c ...) with a
+;; short timeout, in process-group mode so the W1 SIGTERM→SIGKILL escalation
+;; exercises the exact tool path. Returns the subprocess-result.
 (define (run-stopped-child #:timeout [timeout 3])
-  (run-subprocess "/bin/sh" #:args (list "-c" (stopped-command)) #:limits (fast-limits timeout)))
+  (run-subprocess "/bin/bash"
+                  #:args (list "-c" (stopped-command))
+                  #:process-group? #t
+                  #:limits (fast-limits timeout)))
 
 ;; Return the list of PIDs still running (any state) that match our marker.
 (define (matching-pids)
