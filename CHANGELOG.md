@@ -15,6 +15,30 @@ Released 2026-08-01.
 - Goal turn timeout defaults to five minutes and normal completion shuts down turn custodians.
 - Sandbox timeout assertions now reflect the designed SIGTERM grace and stream-drain budget while retaining a bounded hang detector.
 
+### Features
+
+- Added durable goal evaluation, state, and verification-evidence audit records with `/goal history` and `/goal evidence` inspection commands.
+
+### Bug Fixes
+
+- Prevented failed deterministic checks, empty simulated responses, worker exceptions, and stale evidence from being reported as successful goals.
+
+### Breaking / Behavior Changes
+
+- Goal commands now reject only genuinely active concurrent goals; terminal goal states can be replaced. Verification checks are authoritative and can make a goal fail.
+
+### Migration Notes
+
+- Existing sessions remain readable. New goal audit entries are appended to session JSONL logs; no manual migration is required.
+
+### Testing
+
+- Focused goal suites passed; fast, security, architecture, smoke, workflow, platform, release-dry-run, and CI lint checks passed on the release candidate.
+
+### Operational / Release
+
+- Release readiness was validated with the strict release dry-run, including version, changelog, release-notes, and manifest generation.
+
 ## 0.99.77
 
 Released 2026-08-06.
