@@ -286,8 +286,14 @@
         (define result
           (dynamic-wind (lambda () (void))
                         (lambda ()
-                          (run-subprocess "/bin/sh"
+                          ;; W1 v0.99.77: run under bash (not sh) for bash
+                          ;; compatibility (${PIPESTATUS[0]} etc. — dash
+                          ;; errors with "Bad substitution"), and enable
+                          ;; process-group launch so a timed-out tool call
+                          ;; can SIGKILL the whole group (F-18/F-18b).
+                          (run-subprocess "/bin/bash"
                                           #:args (list "-c" command)
+                                          #:process-group? #t
                                           #:limits (resolve-exec-limits timeout-arg settings)
                                           #:directory
                                           (or work-dir

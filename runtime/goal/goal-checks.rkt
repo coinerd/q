@@ -133,8 +133,11 @@
   (define label (goal-check-label check))
   (define start-ms (now-epoch-ms))
   (define result
-    (run-subprocess "/bin/sh"
+    (run-subprocess "/bin/bash"
                     #:args (list "-c" cmd)
+                    ;; W1 v0.99.77: process-group launch so a timed-out
+                    ;; goal check can SIGKILL the whole group.
+                    #:process-group? #t
                     #:timeout timeout
                     #:directory (or directory (current-directory))))
   (define elapsed (- (now-epoch-ms) start-ms))
