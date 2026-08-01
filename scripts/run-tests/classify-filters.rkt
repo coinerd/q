@@ -117,6 +117,16 @@
   (cond
     [(equal? meta-mutates "none") #f]
     [(equal? meta-isolation "process") #t]
+    ;; W2 v0.99.77 (F-7): the test-run-tests-* family tags itself
+    ;; @isolation subprocess because each member spawns inner
+    ;; `racket scripts/run-tests.rkt` subprocesses that clean stale
+    ;; compiled/ dirs repo-wide, write /tmp failure logs, and create temp
+    ;; ledger files. Running several members in the parallel batch lets the
+    ;; inner invocations race on that shared state (intermittent
+    ;; test-run-tests-ledger failures under --jobs 12). Serializing the
+    ;; family — treating subprocess isolation as mutating — runs them in
+    ;; the serial batch before any parallel workers start.
+    [(equal? meta-isolation "subprocess") #t]
     [else
      (let ([base (file-name-from-path f)])
        (for/or ([p (in-list mutating-patterns)])

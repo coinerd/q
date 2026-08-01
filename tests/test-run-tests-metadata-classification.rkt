@@ -145,6 +145,23 @@
   (check-true (mutating-file? (path->string f)))
   (cleanup-temp-test-file dir))
 
+(test-case "mutating-file?: @isolation subprocess forces mutating (F-7 family)"
+  ;; W2 v0.99.77 (F-7): the test-run-tests-* family tags themselves
+  ;; @isolation subprocess because each spawns inner `racket
+  ;; scripts/run-tests.rkt` subprocesses (clean-stale-bytecode! on the repo,
+  ;; /tmp failure-log writes, temp ledger files). Running several of those
+  ;; in the parallel batch lets the inner invocations race on the shared
+  ;; compiled/ cleanup and temp namespace, intermittently failing the
+  ;; ledger test under --jobs 12. Serializing the family (treating
+  ;; subprocess isolation as mutating) makes them run before any parallel
+  ;; workers start.
+  (clear-metadata-cache!)
+  (define dir (make-temporary-file "q-meta-test-~a" 'directory))
+  (define f (build-path dir "test-run-tests-whatever.rkt"))
+  (call-with-output-file f (lambda (out) (display "#lang racket\n;; @isolation subprocess\n" out)))
+  (check-true (mutating-file? (path->string f)))
+  (cleanup-temp-test-file dir))
+
 (test-case "get-file-metadata: all 6 tags together"
   (clear-metadata-cache!)
   (define-values (f dir)
