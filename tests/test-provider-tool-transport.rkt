@@ -20,7 +20,8 @@
                   make-provider-tool-result-message
                   provider-tool-call-type?
                   provider-tool-stop-reason?
-                  provider-completion-stop-reason?)
+                  provider-completion-stop-reason?
+                  messages->provider-hashes)
          "../tools/builtins/spawn-subagent.rkt"
          "../tools/tool.rkt"
          "../llm/provider.rkt"
@@ -140,6 +141,58 @@
   (check-true (provider-tool-stop-reason? 'tool_calls))
   (check-true (provider-completion-stop-reason? 'stop))
   (check-false (provider-completion-stop-reason? 'length)))
+
+(test-case "assistant reasoning_content echoed for thinking-mode providers (v0.99.78 Bug B)"
+  ;; DeepSeek thinking mode requires assistant reasoning_content to be passed
+  ;; back in subsequent requests (400: "The reasoning_content in the thinking
+  ;; mode must be passed back to the API"). The stream reducer stores the
+  ;; accumulated thinking in message meta under key 'thinking.
+  (define thinking-msg
+    (make-message "a-think"
+                  #f
+                  'assistant
+                  'message
+                  (list (make-text-part "hello"))
+                  0
+                  (hasheq 'thinking "deep thinking\nmore")))
+  (define wire (messages->provider-hashes (list thinking-msg)))
+  (check-equal? (length wire) 1)
+  (define h (car wire))
+  (check-equal? (hash-ref h 'role) "assistant")
+  (check-equal? (hash-ref h 'content) "hello")
+  (check-equal? (hash-ref h 'reasoning_content #f) "deep thinking\nmore")
+  ;; assistant with tool_calls + thinking: reasoning_content must also be echoed
+  (define thinking-tool-msg
+    (make-message "a-think2"
+                  #f
+                  'assistant
+                  'message
+                  (list (make-text-part "") (make-tool-call-part "c-think" "read" (hasheq 'path "x")))
+                  0
+                  (hasheq 'thinking "think")))
+  (define wire2 (messages->provider-hashes (list thinking-tool-msg)))
+  (define h2 (car wire2))
+  (check-equal? (hash-ref h2 'reasoning_content #f) "think")
+  (check-equal? (hash-ref (car (hash-ref h2 'tool_calls)) 'id) "c-think")
+  ;; no thinking in meta → no reasoning_content key at all
+  (define plain-msg (msg "a3" 'assistant (list (make-text-part "hi"))))
+  (define h3 (car (messages->provider-hashes (list plain-msg))))
+  (check-false (hash-has-key? h3 'reasoning_content))
+  ;; empty/non-string thinking → no reasoning_content key
+  (define empty-think
+    (make-message "a4" #f 'assistant 'message (list (make-text-part "x")) 0 (hasheq 'thinking "")))
+  (define h4 (car (messages->provider-hashes (list empty-think))))
+  (check-false (hash-has-key? h4 'reasoning_content))
+  (define null-think
+    (make-message "a5"
+                  #f
+                  'assistant
+                  'message
+                  (list (make-text-part "x"))
+                  0
+                  (hasheq 'thinking (json-null))))
+  (define h5 (car (messages->provider-hashes (list null-think))))
+  (check-false (hash-has-key? h5 'reasoning_content)))
 
 (test-case "subagent bridge delegates to canonical parent message transport"
   (check-equal? (messages->provider-hashes canonical-history) canonical-wire)

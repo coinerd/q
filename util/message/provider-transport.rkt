@@ -25,7 +25,7 @@
                   tool-result-part?
                   tool-result-part-tool-call-id
                   tool-result-part-content)
-         (only-in "message.rkt" message? message-role message-content)
+         (only-in "message.rkt" message? message-role message-content message-meta-safe)
          (only-in "../content/content-helpers.rkt" result-content->string))
 
 (provide (contract-out [make-provider-tool-call (-> (or/c string? #f) (or/c string? #f) any/c hash?)]
@@ -109,9 +109,23 @@
                                       (tool-call-part-name part)
                                       (tool-call-part-arguments part)))
            '()))
-     (list (if (null? calls)
-               (hasheq 'role "assistant" 'content text)
-               (make-provider-assistant-message text calls)))]
+     ;; v0.99.78 FIX (Bug B): DeepSeek thinking-mode providers require the
+     ;; assistant reasoning_content to be echoed in subsequent requests
+     ;; (400: "The reasoning_content in the thinking mode must be passed
+     ;; back to the API"). The accumulated thinking is stored in message meta
+     ;; (key 'thinking) by the stream reducer; round-trip it as
+     ;; reasoning_content for OpenAI-compatible providers. Anthropic/Gemini
+     ;; rebuild messages from known keys only, so the extra key is ignored.
+     (define reasoning
+       (let ([th (hash-ref (message-meta-safe msg) 'thinking #f)])
+         (if (and (string? th) (positive? (string-length th))) th #f)))
+     (define base
+       (if (null? calls)
+           (hasheq 'role "assistant" 'content text)
+           (make-provider-assistant-message text calls)))
+     (list (if reasoning
+               (hash-set base 'reasoning_content reasoning)
+               base))]
     [(eq? role 'tool)
      (if (list? parts)
          (for/list ([part (in-list parts)]
