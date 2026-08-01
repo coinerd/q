@@ -157,6 +157,7 @@
          tool-execution-end-event-duration-ms
          tool-execution-end-event-result-summary
          tool-execution-end-event-result-error
+         tool-execution-end-event-result
          make-tool-execution-end-event
          tool-execution-end-event-type
          tool-execution-end-event-fields

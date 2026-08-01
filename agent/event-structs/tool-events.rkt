@@ -29,6 +29,7 @@
 (define-typed-event tool-execution-end-event
                     "tool.execution.completed"
                     (tool-name duration-ms result-summary result-error)
+                    #:optional ([result #f])
                     #:defaults (duration-ms 0 result-error #f)
                     #:schema-version 1)
 

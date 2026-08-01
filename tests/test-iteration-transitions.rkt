@@ -29,6 +29,8 @@
                   tool-result-is-error?)
          (only-in "../extensions/hooks.rkt" dispatch-hooks)
          (only-in "../extensions/api.rkt" make-extension-registry register-extension! extension)
+         (only-in "../runtime/context-assembly/rollback-actions.rkt" current-loop-warning-count)
+         (only-in "../runtime/iteration/decision.rkt" current-max-consecutive-tool-calls)
          (only-in "../util/ids.rkt" generate-id)
          "helpers/mock-provider.rkt")
 
@@ -314,6 +316,44 @@
       (define followup-events (filter (lambda (e) (equal? (event-event e) "followup.injected")) evts))
       (check-equal? (length followup-events) 0 "follow-up injection not yet implemented")
       (check-equal? (hash-ref (queue-status queue) 'followup) 2 "follow-ups remain in queue")
+      (cleanup-temp-log!))
+
+    ;; ============================================================
+    ;; I7: exploration-loop escalation injects corrective steering (v0.99.78)
+    ;; ============================================================
+    (test-case "I7: exploration-loop escalation injects corrective steering"
+      (cleanup-temp-log!)
+      (current-loop-warning-count 0) ; reset global counter
+      (define bus (make-event-bus))
+      (define events (box '()))
+      (subscribe! bus (lambda (e) (set-box! events (cons e (unbox events)))))
+
+      (define prov (make-multi-mock-provider (always-tool-call-responses "read" (hasheq 'path "/a"))))
+      (define reg (make-tool-registry))
+      (register-tool! reg (make-read-tool))
+
+      (parameterize ([current-max-consecutive-tool-calls 10])
+        (define result
+          (run-iteration-loop (list (make-user-message "test"))
+                              prov
+                              bus
+                              reg
+                              #f
+                              temp-log-path
+                              "sess-i7"
+                              100))
+        (define evts (reverse (unbox events)))
+        (define exploration-events
+          (filter (lambda (e) (equal? (event-event e) "iteration.exploration-loop")) evts))
+        (define corrected-events
+          (filter (lambda (e) (equal? (event-event e) "iteration.exploration-loop.corrected")) evts))
+        (check-true (positive? (length exploration-events))
+                    "exploration-loop warning fired for circling model")
+        (check-true (positive? (length corrected-events))
+                    "exploration-loop escalation injected corrective steering")
+        ;; Same-path reads do not increment consecutive-tool-count, so the
+        ;; loop runs to max-iterations; the corrective steering is the fix.
+        (check-equal? (loop-result-termination-reason result) 'max-iterations-exceeded))
       (cleanup-temp-log!))))
 
 (module+ test

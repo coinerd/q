@@ -16,15 +16,18 @@
 
     (test-case "known-termination-reasons contains expected symbols"
       (define reasons (known-termination-reasons))
-      (for ([r '(completed cancelled tool-calls-pending error
-                 force-shutdown shutdown max-iterations-exceeded hook-blocked)])
-        (check-not-false (member r reasons)
-                         (format "expected ~a in known-termination-reasons" r))))
+      (for ([r '(completed cancelled
+                           tool-calls-pending
+                           error
+                           force-shutdown
+                           shutdown
+                           max-iterations-exceeded
+                           hook-blocked)])
+        (check-not-false (member r reasons) (format "expected ~a in known-termination-reasons" r))))
 
     (test-case "step-action? accepts known actions"
       (for ([a '(continue stop stop-hard-limit stop-soft-limit)])
-        (check-true (step-action? a)
-                    (format "step-action? should accept ~a" a))))
+        (check-true (step-action? a) (format "step-action? should accept ~a" a))))
 
     (test-case "step-action? rejects unknown actions"
       (check-false (step-action? 'unknown-action))
@@ -43,8 +46,7 @@
       (define sr (step-result 'continue #f (void) (hasheq)))
       (check-equal? (step-result-action sr) 'continue)
       (check-false (step-result-termination sr))
-      (check-equal? (step-result-metadata sr) (hasheq)))
-  ))
+      (check-equal? (step-result-metadata sr) (hasheq)))))
 
 (define decide-suite
   (test-suite "decide-next-action"
@@ -98,7 +100,38 @@
       (define ctx (iteration-ctx 0 0 0 10 20))
       (define result (make-loop-result '() 'unknown-reason (hasheq)))
       (check-equal? (decide-next-action ctx result) 'stop))
-  ))
+
+    ;; v0.99.78 FIX: consecutive-tool circuit breaker
+    (test-case "consecutive tools below threshold -> continue"
+      (parameterize ([current-max-consecutive-tool-calls 30])
+        (define ctx (iteration-ctx 5 10 0 100 200))
+        (define result (make-loop-result '() 'tool-calls-pending (hasheq)))
+        (check-equal? (decide-next-action ctx result) 'continue)))
+
+    (test-case "consecutive tools at threshold -> stop (circuit breaker)"
+      (parameterize ([current-max-consecutive-tool-calls 30])
+        (define ctx (iteration-ctx 40 30 0 100 200))
+        (define result (make-loop-result '() 'tool-calls-pending (hasheq)))
+        (check-equal? (decide-next-action ctx result) 'stop)))
+
+    (test-case "consecutive tools above threshold -> stop even under soft limit"
+      (parameterize ([current-max-consecutive-tool-calls 5])
+        (define ctx (iteration-ctx 8 6 0 100 200))
+        (define result (make-loop-result '() 'tool-calls-pending (hasheq)))
+        (check-equal? (decide-next-action ctx result) 'stop)))
+
+    (test-case "breaker suppressed once past soft budget (max-iterations semantics)"
+      ;; When the loop has already passed the soft iteration limit, the
+      ;; soft→hard escalation governs and max-iterations-exceeded must still
+      ;; surface — the breaker must not steal that outcome (regression for
+      ;; max-iterations=0/1 fixtures).
+      (parameterize ([current-max-consecutive-tool-calls 5])
+        (define result (make-loop-result '() 'tool-calls-pending (hasheq)))
+        (define ctx-past-soft (iteration-ctx 20 6 0 10 80)) ; next-iter=21 > max=10
+        (check-equal? (decide-next-action ctx-past-soft result) 'stop-soft-limit)
+        ;; still within soft budget -> breaker fires
+        (define ctx-within (iteration-ctx 8 6 0 100 200))
+        (check-equal? (decide-next-action ctx-within result) 'stop)))))
 
 (define compute-suite
   (test-suite "compute-step-result"
@@ -127,13 +160,22 @@
       (check-equal? (step-result-action sr) 'stop)
       (check-equal? (step-result-metadata sr) (hasheq)))
 
+    (test-case "circuit-breaker stop has toolLoopLimit metadata"
+      (parameterize ([current-max-consecutive-tool-calls 5])
+        (define ctx (iteration-ctx 8 5 0 100 200))
+        (define result (make-loop-result '() 'tool-calls-pending (hasheq)))
+        (define counters (make-initial-counters))
+        (define sr (compute-step-result ctx result counters))
+        (check-equal? (step-result-action sr) 'stop)
+        (check-equal? (step-result-termination sr) 'tool-calls-pending)
+        (check-true (hash-ref (step-result-metadata sr) 'toolLoopLimit #f))))
+
     (test-case "step-result has new-counters"
       (define ctx (iteration-ctx 0 0 0 10 20))
       (define result (make-loop-result '() 'completed (hasheq)))
       (define counters (make-initial-counters))
       (define sr (compute-step-result ctx result counters))
-      (check-not-false (step-result-new-counters sr)))
-  ))
+      (check-not-false (step-result-new-counters sr)))))
 
 (run-tests helper-suite 'verbose)
 (run-tests decide-suite 'verbose)

@@ -49,7 +49,26 @@
  (test-case "tool.execution.started round-trip"
    (check-round-trip "tool.execution.started" tool-execution-start-event '("bash" "tc-1")))
  (test-case "tool.execution.completed round-trip"
-   (check-round-trip "tool.execution.completed" tool-execution-end-event '("bash" 200 "ok" #f)))
+   (check-round-trip "tool.execution.completed" tool-execution-end-event '("bash" 200 "ok" #f #f)))
+ (test-case "tool.execution.completed carries result content (v0.99.78 display fix)"
+   (define evt
+     (make-tool-execution-end-event
+      #:session-id "session-1"
+      #:turn-id "turn-1"
+      #:timestamp 100
+      #:tool-name "set-task-state"
+      #:duration-ms 11
+      #:result-summary 'completed
+      #:result-error #f
+      #:result "Task state transition requested: implementation via begin-implement"))
+   (define payload (typed-event->jsexpr evt))
+   (check-equal? (hash-ref payload 'result #f)
+                 "Task state transition requested: implementation via begin-implement")
+   ;; round-trips through the bus payload shape
+   (define back (jsexpr->typed-event payload))
+   (check-equal? (typed-event-type back) "tool.execution.completed")
+   (check-equal? (tool-execution-end-event-result back)
+                 "Task state transition requested: implementation via begin-implement"))
  ;; Tool call/result
  (test-case "tool.called round-trip"
    (check-round-trip "tool.called" tool-call-event '("bash" (hasheq 'cmd "ls") "tc-1")))

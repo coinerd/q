@@ -58,7 +58,10 @@
          (only-in "../event-bus.rkt" event-bus?)
          (only-in "../../util/loop-result.rkt" loop-result?)
          (only-in "counters.rkt" check-cancellation)
-         (only-in "../../runtime/iteration/decision.rkt" iteration-ctx compute-step-result)
+         (only-in "../../runtime/iteration/decision.rkt"
+                  iteration-ctx
+                  compute-step-result
+                  step-result-metadata)
          (only-in "step-interpreter.rkt" interpret-step)
          (only-in "../../runtime/iteration/directive.rkt"
                   directive-recurse
@@ -258,6 +261,21 @@
                                     max-iterations-hard)
                      result
                      counters))
+                  ;; v0.99.78 FIX: surface the consecutive-tool circuit breaker
+                  ;; (tool-loop-limit) as a session event so the TUI/caller can
+                  ;; distinguish a circle-stop from a normal turn completion.
+                  (when (hash-ref (step-result-metadata step-res) 'toolLoopLimit #f)
+                    (emit-session-event!
+                     bus
+                     session-id
+                     "tool-loop.limit-reached"
+                     (hasheq
+                      'iteration
+                      (loop-counters-iteration counters)
+                      'consecutive-tools
+                      (loop-counters-consecutive-tool-count counters)
+                      'message
+                      "Consecutive tool-call limit reached; stopping to avoid an unbounded tool loop.")))
                   (define snapshot
                     (iteration-snapshot counters ws config sess max-iterations max-iterations-hard))
                   (define directive

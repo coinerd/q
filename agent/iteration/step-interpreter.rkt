@@ -95,6 +95,8 @@
                   detect-exploration-loop)
          (only-in "../../runtime/context-assembly/rollback-actions.rkt"
                   increment-loop-warning-count!
+                  current-loop-warning-count
+                  escalation-threshold
                   tool-error-class->string
                   error-class->signal
                   warnings->actions
@@ -516,7 +518,36 @@
                      (loop-counters-iteration counters)))
        ;; v0.96.14 F2: Feed exploration loop into rollback pipeline
        ;; by incrementing the warning counter (triggers escalation on next check)
-       (increment-loop-warning-count!))
+       (increment-loop-warning-count!)
+       ;; v0.99.78 FIX: exploration-loop escalation to corrective steering.
+       ;; The detector previously only warned — the model circled for dozens of
+       ;; tool-only turns (observed: 49 iterations re-reading the same goal-*.rkt
+       ;; files). Once the warning count reaches the escalation threshold, inject
+       ;; a steering message into the next iteration's context so the model
+       ;; receives explicit guidance instead of circling silently.
+       (when (>= (current-loop-warning-count) escalation-threshold)
+         (current-loop-warning-count 0)
+         (emit "iteration.exploration-loop.corrected"
+               (hasheq 'pattern loop-warning 'iteration (loop-counters-iteration counters)))
+         (set!
+          updated-ctx
+          (append
+           updated-ctx
+           (list (make-message
+                  (format "exploration-corrective-~a" (loop-counters-iteration counters))
+                  #f
+                  'user
+                  'message
+                  (list (make-text-part
+                         (format (string-append
+                                  "STEERING: You have called the same tools repeatedly (~a) without "
+                                  "producing text or progress. Stop exploring and re-reading files. "
+                                  "Produce a concrete implementation step now (an edit, a test run, "
+                                  "a file write, or a clear statement of the blocker), or the loop "
+                                  "will be terminated.")
+                                 loop-warning)))
+                  (current-seconds)
+                  (hasheq 'source 'steering)))))))
      ;; Reuse make-next-counters for consistent counter increment
      (directive-recurse updated-ctx
                         (struct-copy loop-counters

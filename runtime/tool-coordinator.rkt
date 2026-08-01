@@ -130,7 +130,8 @@
          tool-call-actions?
          tool-call-actions-calls-to-run
          tool-call-actions-blocked?
-         tool-call-actions-final-calls)
+         tool-call-actions-final-calls
+         find-malformed-tool-calls)
 
 ;; ============================================================
 ;; Tool runtime settings
@@ -210,14 +211,43 @@
       (tool-call-actions amended #f '())))
 
 ;; Extract tool-call structs from assistant messages.
+;; Returns the parsed args hash for a tool-call part, or #f when the arguments
+;; are malformed JSON. v0.99.78 Bug A: malformed model-emitted arguments must
+;; not raise here — callers turn them into visible error results so the model
+;; can retry with corrected JSON instead of killing the turn.
+(define (parse-tool-call-args raw)
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (ensure-hash-args raw)))
+
 (define (extract-tool-calls-from-messages messages)
   (for*/list ([msg (in-list messages)]
               #:when (eq? (message-role msg) 'assistant)
               [part (in-list (message-content msg))]
-              #:when (tool-call-part? part))
-    (make-tool-call (tool-call-part-id part)
-                    (tool-call-part-name part)
-                    (ensure-hash-args (tool-call-part-arguments part)))))
+              #:when (tool-call-part? part)
+              [parsed (in-value (parse-tool-call-args (tool-call-part-arguments part)))]
+              #:when parsed)
+    (make-tool-call (tool-call-part-id part) (tool-call-part-name part) parsed)))
+
+;; v0.99.78 Bug A: locate assistant tool-call parts whose arguments are not
+;; valid JSON. Returns (listof (hash 'id _ 'name _ 'raw _)) in message order.
+;; The turn must not die on these: the coordinator emits an error tool-result
+;; for each so the model sees the parse failure and can correct itself.
+(define (find-malformed-tool-calls messages)
+  (for*/list ([msg (in-list messages)]
+              #:when (eq? (message-role msg) 'assistant)
+              [part (in-list (message-content msg))]
+              #:when (tool-call-part? part)
+              [parsed (in-value (parse-tool-call-args (tool-call-part-arguments part)))]
+              #:when (not parsed))
+    (define raw (tool-call-part-arguments part))
+    (hasheq 'id
+            (tool-call-part-id part)
+            'name
+            (tool-call-part-name part)
+            'raw
+            (if (string? raw)
+                raw
+                (format "~a" raw)))))
 
 ;; True for read results whose contents are durable planning artifacts.
 ;; planning-read addresses .planning indirectly by artifact name, while the
@@ -368,7 +398,8 @@
                         #:tool-name (tool-call-name tc)
                         #:duration-ms duration-ms
                         #:result-summary result-summary
-                        #:result-error (and (tool-result-is-error? tr) (tool-result-error-text tr))))
+                        #:result-error (and (tool-result-is-error? tr) (tool-result-error-text tr))
+                        #:result (and (not (tool-result-is-error? tr)) (tool-result-content tr))))
     (emit-session-event! bus
                          session-id
                          "tool.execution.correlated-completed"
@@ -458,13 +489,40 @@
                                   batch-start-ms
                                   perm-cfg)))
   ;; Phase 3: Assembly
-  (define validated-msgs
+  (define malformed-calls (find-malformed-tool-calls new-msgs))
+  (define assembled-msgs
     (assemble-tool-results-phase tool-calls
                                  tool-calls-to-run
                                  sched-result
                                  assistant-msg-id
                                  tool-call-blocked?
                                  ext-reg))
+  ;; v0.99.78 Bug A: malformed tool-call arguments must not kill the turn.
+  ;; Append an error tool-result for each malformed call so the model sees the
+  ;; parse failure and can retry with corrected JSON. The malformed calls were
+  ;; excluded from extraction, so they never execute; the error result answers
+  ;; their tool_call_id, preventing orphaned tool_calls on the next request.
+  (define validated-msgs
+    (if (null? malformed-calls)
+        assembled-msgs
+        (append
+         assembled-msgs
+         (for/list ([m (in-list malformed-calls)])
+           (make-message
+            (generate-id)
+            assistant-msg-id
+            'tool
+            'tool-result
+            (list
+             (make-tool-result-part
+              (hash-ref m 'id)
+              (format
+               "Tool call '~a' rejected: arguments are not valid JSON (~a). Fix the arguments and retry."
+               (hash-ref m 'name)
+               (hash-ref m 'raw))
+              #t))
+            (now-seconds)
+            (hasheq 'toolCallId (hash-ref m 'id) 'isError #t))))))
   ;; P2: Emit outcome-capture trace for classified tool outcomes
   (unless tool-call-blocked?
     (for ([tc (in-list tool-calls-to-run)]

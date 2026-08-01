@@ -30,6 +30,13 @@
         (iteration consecutive-tool-count explore-count max-iterations max-iterations-hard)
   #:transparent)
 
+;; v0.99.78 FIX (tool-call circling): consecutive-tool circuit breaker.
+;; A model that emits only tool-calls (no text, no terminating condition) for
+;; many consecutive iterations is circling (observed: 262 consecutive tool-only
+;; turns in a GSD /go execution, burning LLM calls until max-iterations).
+;; Default 30 consecutive tool-only iterations before the loop stops.
+(define current-max-consecutive-tool-calls (make-parameter 30))
+
 (struct step-result
         (action ; symbol: 'continue | 'stop | 'stop-hard-limit | 'stop-soft-limit
          termination ; symbol?: termination reason (symbol for stop actions, #f for continue)
@@ -54,7 +61,8 @@
          decide-next-action
          compute-step-result
          known-termination-reasons
-         step-action?)
+         step-action?
+         current-max-consecutive-tool-calls)
 
 ;; ============================================================
 ;; Pure functions
@@ -78,8 +86,17 @@
     ['error 'stop]
     ['tool-calls-pending
      (define next-iter (add1 (iteration-ctx-iteration ctx)))
+     (define consecutive (iteration-ctx-consecutive-tool-count ctx))
      (cond
        [(>= next-iter (iteration-ctx-max-iterations-hard ctx)) 'stop-hard-limit]
+       ;; v0.99.78 FIX: consecutive-tool circuit breaker — stop the loop before
+       ;; it burns max-iterations LLM calls on a read/explore circle. Fires ONLY
+       ;; while within the soft iteration budget: once the loop has passed the
+       ;; soft limit, the soft→hard escalation governs and the loop reports
+       ;; max-iterations-exceeded (preserving max-iterations=0/1 test semantics).
+       [(and (<= next-iter (iteration-ctx-max-iterations ctx))
+             (>= consecutive (current-max-consecutive-tool-calls)))
+        'stop]
        [(>= next-iter (iteration-ctx-max-iterations ctx)) 'stop-soft-limit]
        [else 'continue])]
     [_ 'stop]))
@@ -90,8 +107,18 @@
   (define termination (loop-result-termination-reason result))
   (define new-msgs (loop-result-messages result))
   (define new-counters (compute-next-counters counters new-msgs))
+  ;; v0.99.78 FIX: mark circuit-breaker stops distinctly so callers/TUI can
+  ;; surface the reason instead of a bare stop with a tool-calls-pending reason.
+  (define tool-loop-limit?
+    (and (eq? action 'stop)
+         (eq? termination 'tool-calls-pending)
+         (>= (iteration-ctx-consecutive-tool-count ctx) (current-max-consecutive-tool-calls))))
   (define metadata
     (match action
+      ['stop
+       (if tool-loop-limit?
+           (hasheq 'toolLoopLimit #t)
+           (hasheq))]
       ['stop-hard-limit (hasheq 'maxIterationsReached #t)]
       [_ (hasheq)]))
   (step-result action termination new-counters metadata))

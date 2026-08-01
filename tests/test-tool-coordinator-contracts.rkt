@@ -19,11 +19,13 @@
                   tool-call-part?
                   make-tool-call-part
                   tool-call?
+                  tool-call-id
                   make-tool-result
                   tool-result?)
          (only-in "../runtime/tool-coordinator.rkt"
                   extract-tool-calls-from-messages
-                  make-tool-result-messages))
+                  make-tool-result-messages
+                  find-malformed-tool-calls))
 
 ;; ── extract-tool-calls-from-messages ──
 
@@ -79,6 +81,49 @@
                         (hasheq))))
   (define calls (extract-tool-calls-from-messages msgs))
   (check-equal? (length calls) 2))
+
+;; ── v0.99.78 Bug A: malformed tool-call arguments ──
+
+(test-case "malformed-args-do-not-raise-and-are-excluded"
+  ;; The exact malformed payload from the live KZQK7B52 session:
+  ;; {"path": "/home/user/src/q-agent/tests", "all?: false} — missing closing
+  ;; quote after all? and missing closing brace.
+  (define msgs
+    (list (make-message
+           "m6"
+           #f
+           'assistant
+           'text
+           (list (make-tool-call-part "tc-bad"
+                                      "ls"
+                                      "{\"path\": \"/home/user/src/q-agent/tests\", \"all?: false}"))
+           1000
+           (hasheq))))
+  ;; Must NOT raise; the malformed call is excluded from executable calls.
+  (check-equal? (extract-tool-calls-from-messages msgs) '())
+  (define malformed (find-malformed-tool-calls msgs))
+  (check-equal? (length malformed) 1)
+  (check-equal? (hash-ref (car malformed) 'id) "tc-bad")
+  (check-equal? (hash-ref (car malformed) 'name) "ls")
+  (check-equal? (hash-ref (car malformed) 'raw)
+                "{\"path\": \"/home/user/src/q-agent/tests\", \"all?: false}"))
+
+(test-case "mixed-valid-and-malformed-keeps-only-valid"
+  (define msgs
+    (list (make-message "m7"
+                        #f
+                        'assistant
+                        'text
+                        (list (make-tool-call-part "tc-ok" "read" (hasheq 'path "/a"))
+                              (make-tool-call-part "tc-bad2" "bash" "{not json}"))
+                        1000
+                        (hasheq))))
+  (define calls (extract-tool-calls-from-messages msgs))
+  (check-equal? (length calls) 1)
+  (check-equal? (tool-call-id (car calls)) "tc-ok")
+  (define malformed (find-malformed-tool-calls msgs))
+  (check-equal? (length malformed) 1)
+  (check-equal? (hash-ref (car malformed) 'id) "tc-bad2"))
 
 ;; ── make-tool-result-messages ──
 
