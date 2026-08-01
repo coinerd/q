@@ -16,6 +16,7 @@
          (except-in "goal-state.rkt" NO-PROGRESS-THRESHOLD)
          (only-in "goal-state.rkt"
                   NO-PROGRESS-THRESHOLD
+                  make-evaluation-result
                   evaluation-result?
                   evaluation-result-achieved?
                   evaluation-result-reason
@@ -35,6 +36,9 @@
          (only-in "../../util/time.rkt" now-epoch-ms)
          (only-in "../../util/loop-result.rkt" loop-result? loop-result-messages))
 
+;; v0.99.78: evaluator wall-clock timeout (overridable for tests)
+(define current-eval-timeout-secs (make-parameter 60))
+
 ;; ============================================================
 ;; Provides
 ;; ============================================================
@@ -43,6 +47,7 @@
          goal-run-simulated!
          goal-loop-step
          build-continuation-prompt
+         current-eval-timeout-secs
          collect-evaluations
          execute-checks-for-goal
          extract-transcript-from-result)
@@ -246,18 +251,43 @@
   ;; Evaluate the result
   ;; Extract transcript from loop-result for evaluation
   (define transcript (extract-transcript-from-result loop-result))
+  ;; v0.99.78 FIX: bound the evaluator LLM request with a wall-clock cap.
+  ;; The evaluator calls provider-send (non-streaming) which can stall on a
+  ;; held request (deepseek returns 200 but never sends the body). Without a
+  ;; bound the goal-loop froze for 600s+ per evaluation (observed live).
+  ;; Default 60s is generous for a small eval response; on timeout we record
+  ;; a not-achieved evaluation and continue the loop.
+  (define eval-timeout-secs (current-eval-timeout-secs))
+  (define eval-ch (make-channel))
+  (define eval-worker
+    (thread (lambda ()
+              (with-handlers ([exn:fail? (lambda (e) (channel-put eval-ch (cons 'error e)))])
+                (define result
+                  (if (eq? (goal-state-evaluator-mode goal-st) 'agent)
+                      (evaluate-with-agent goal-text
+                                           transcript
+                                           provider
+                                           evaluator-model
+                                           #:check-results check-results)
+                      (evaluate-transcript goal-text
+                                           transcript
+                                           provider
+                                           evaluator-model
+                                           #:check-results check-results)))
+                (channel-put eval-ch (cons 'ok result))))))
   (define eval-result
-    (if (eq? (goal-state-evaluator-mode goal-st) 'agent)
-        (evaluate-with-agent goal-text
-                             transcript
-                             provider
-                             evaluator-model
-                             #:check-results check-results)
-        (evaluate-transcript goal-text
-                             transcript
-                             provider
-                             evaluator-model
-                             #:check-results check-results)))
+    (match (sync/timeout eval-timeout-secs eval-ch)
+      [(cons 'ok r) r]
+      [(cons 'error e)
+       (make-evaluation-result #:achieved? #f
+                               #:reason (format "Evaluator error: ~a" (exn-message e))
+                               #:model-used evaluator-model)]
+      [#f
+       (kill-thread eval-worker)
+       (on-status (format "Goal turn ~a evaluator timed out after ~a s" turns eval-timeout-secs))
+       (make-evaluation-result #:achieved? #f
+                               #:reason (format "evaluator timeout after ~a s" eval-timeout-secs)
+                               #:model-used evaluator-model)]))
 
   ;; Emit goal.evaluated
   (on-event 'goal-evaluated
