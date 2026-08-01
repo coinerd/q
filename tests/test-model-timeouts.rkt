@@ -92,7 +92,9 @@
  (test-case "effective-request-timeout falls back to global"
    (define settings (make-minimal-settings))
    ;; Global default from http-request-timeout with minimal settings
-   (check-equal? (http-request-timeout settings) 300)))
+   ;; v0.99.78: raised from 300s so reasoning models (deepseek-v4-flash) with
+   ;; >5-min silent prefill pauses don't spuriously time out.
+   (check-equal? (http-request-timeout settings) 600)))
 
 ;; ============================================================
 ;; Integration: wiring extracts model timeouts from config

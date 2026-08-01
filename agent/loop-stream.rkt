@@ -120,7 +120,8 @@
                                    tool-call-parts
                                    effective-usage
                                    raw-messages
-                                   final-text-box)
+                                   final-text-box
+                                   final-thinking)
   (define final-text (unbox final-text-box))
   (define final-text-part (make-text-part final-text))
   (define final-content-parts (append (list final-text-part) tool-call-parts))
@@ -133,7 +134,15 @@
                   'message
                   final-content-parts
                   (now-seconds)
-                  (hasheq 'turnId turn-id 'model "streamed")))
+                  ;; v0.99.78 FIX (Bug B, part 2): include accumulated thinking in
+                  ;; message meta. build-final-stream-result is the REAL path that
+                  ;; creates the assistant message persisted to loop-state/session,
+                  ;; but it omitted 'thinking (streaming-message-finalize, which does
+                  ;; set it, is dead code — never called). Without this, provider-
+                  ;; transport's reasoning_content round-trip read #f and deepseek
+                  ;; never received reasoning_content (verified: request dump showed
+                  ;; reasoning_len=0 on every assistant message).
+                  (hasheq 'turnId turn-id 'model "streamed" 'thinking final-thinking)))
 
   ;; v0.95.17 W1: Post-turn auto-extraction (non-fatal, gated by parameter)
   ;; Must fire for both text-only and tool-call turns.
@@ -326,7 +335,8 @@
                                 tool-call-parts
                                 effective-usage
                                 raw-messages
-                                final-text-box)]
+                                final-text-box
+                                (hash-ref acc 'thinking ""))]
     [_
      (build-final-stream-result bus
                                 session-id
@@ -338,4 +348,5 @@
                                 tool-call-parts
                                 effective-usage
                                 raw-messages
-                                final-text-box)]))
+                                final-text-box
+                                (hash-ref acc 'thinking ""))]))

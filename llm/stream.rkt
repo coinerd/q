@@ -112,7 +112,12 @@
   (define ch (make-channel))
   (define th
     (thread (lambda ()
-              (with-handlers ([exn:fail? (lambda (e) (channel-put ch (cons 'exn e)))])
+              ;; v0.99.78 FIX: catch exn:break from kill-thread silently. Without
+              ;; this, a timeout while blocked in http-sendrecv (deepseek resets
+              ;; the connection after long thinking pauses) leaked a full Racket
+              ;; stack trace to stderr, corrupting the TUI status/prompt area.
+              (with-handlers ([exn:break? (lambda (e) (void))]
+                              [exn:fail? (lambda (e) (channel-put ch (cons 'exn e)))])
                 (channel-put ch (cons 'val (thunk)))))))
   (define result (sync/timeout timeout-secs ch))
   (match result

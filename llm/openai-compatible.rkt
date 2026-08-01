@@ -370,9 +370,19 @@
     ;; Reasoning models like GLM-5.2 emit reasoning_content chunks for 450+ seconds
     ;; before first content chunk. The initial timeout covers the reasoning phase;
     ;; once content chunks arrive, they must come within 60s each.
+    ;; v0.99.78 FIX (revised): Cap initial/thinking timeouts at held-request-detect-secs.
+    ;; Live /go evidence: deepseek-v4-flash healthy streams have mean chunk gap 0.015s,
+    ;; max gap 7s, zero gaps >30s (measured over a 5123-delta thinking turn). The
+    ;; earlier "widen to request timeout" (60s->600s) was WRONG: the "60s spurious
+    ;; timeout" it addressed was actually deepseek ACCEPTING a request (HTTP 200) but
+    ;; emitting zero chunks for minutes (server-side hold). Widening converted a 1-minute
+    ;; recovery into a 10-minute recovery. Capping at 120s: a held/stalled request is
+    ;; retried within 2 minutes, and the retry (fresh turn) streams instantly (observed).
+    (define held-request-detect-secs 120)
     (define gen
       (read-sse-chunks response-port
-                       #:initial-timeout stream-timeout
+                       #:initial-timeout (min stream-timeout held-request-detect-secs)
+                       #:thinking-timeout (min stream-timeout held-request-detect-secs)
                        #:stream-timeout http-stream-timeout-default
                        #:max-total-timeout max-total-timeout))
     ;; v0.99.54 W3 L-2: Close response port on normal stream end or generator error.

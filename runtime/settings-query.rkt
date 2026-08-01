@@ -131,9 +131,12 @@
 ;; ============================================================
 
 ;; Overall HTTP request timeout in seconds (covers connection + response reading).
-;; Defaults to 300 seconds (5 minutes).
+;; Defaults to 600 seconds (10 minutes).
+;; v0.99.78 FIX: raised from 300s — reasoning models (deepseek-v4-flash, GLM)
+;; can pause >5 min between thinking chunks; 300s fired spurious timeouts that
+;; killed /go turns after retries (observed live).
 (define (http-request-timeout settings)
-  (setting-ref settings 'http-request-timeout 300))
+  (setting-ref settings 'http-request-timeout 600))
 
 ;; ============================================================
 ;; Destructive command warning setting
