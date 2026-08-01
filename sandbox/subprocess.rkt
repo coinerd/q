@@ -40,6 +40,8 @@
          current-secret-scrub-denylist
          current-secret-scrub-allowlist
          current-secret-scrub-patterns
+         ;; W0 v0.99.77: per-execution trace id (instrumentation)
+         current-subprocess-trace-id
          ;; Contracted functions
          (contract-out [run-subprocess
                         (->* (string?)
@@ -193,6 +195,18 @@
 ;; When empty (default), the built-in secret-patterns from subprocess-helpers.rkt are used.
 (define current-secret-scrub-patterns (make-parameter '()))
 
+;; W0 v0.99.77: Per-execution trace id. Set by tool callers to correlate log
+;; lines with a single tool execution. Each run-subprocess call consumes the
+;; counter to produce a fresh id, optionally prefixed by the caller via
+;; current-subprocess-trace-id (a string prefix, default "sp").
+(define subprocess-trace-counter (make-parameter 0))
+(define current-subprocess-trace-id (make-parameter "sp"))
+
+(define (next-subprocess-trace-id)
+  (define n (subprocess-trace-counter))
+  (subprocess-trace-counter (add1 n))
+  (format "~a-~a" (current-subprocess-trace-id) n))
+
 (define (secret-env-var? name)
   (define name-str
     (if (bytes? name)
@@ -299,16 +313,30 @@
         (sync/timeout 0.25 reader)))
 
     ;; Wait with timeout
+    (define trace-id (next-subprocess-trace-id))
     (define evt-result (sync/timeout effective-timeout sp))
 
     (cond
       ;; Timeout
       [(not evt-result)
+       (define child-pid (subprocess-pid sp))
+       (log-subprocess-info "~a: timeout after ~as (pid ~a, status ~s) — attempting kill"
+                            trace-id
+                            effective-timeout
+                            child-pid
+                            (subprocess-status sp))
        ;; Kill the subprocess explicitly before shutting custodian.
        ;; May fail if process already dead.
+       ;; W0 v0.99.77 instrumentation: log the kill attempt result.
        (with-handlers ([exn:fail? (lambda (e)
-                                    (log-subprocess-warning "subprocess-kill: ~a" (exn-message e)))])
+                                    (log-subprocess-warning "~a: subprocess-kill: ~a"
+                                                            trace-id
+                                                            (exn-message e)))])
          (subprocess-kill sp))
+       (log-subprocess-info "~a: after kill: pid ~a status ~s"
+                            trace-id
+                            child-pid
+                            (subprocess-status sp))
        ;; Give reader threads a bounded chance to observe EOF and flush their
        ;; latest snapshots.  If they do not finish, snapshot still returns the
        ;; latest captured bytes.
@@ -317,6 +345,10 @@
        (define-values (partial-out partial-err partial-truncated?) (reader-results))
        (define end-ms (current-inexact-milliseconds))
        (custodian-shutdown-all cust)
+       (log-subprocess-info "~a: after custodian shutdown: pid ~a status ~s"
+                            trace-id
+                            child-pid
+                            (subprocess-status sp))
        (make-timeout-result partial-out
                             partial-err
                             effective-timeout
@@ -331,6 +363,10 @@
        (finish-reader! stderr-reader stderr-in "stderr")
        (define-values (out-str err-str output-truncated?) (reader-results))
        (define exit-code (subprocess-status sp))
+
+       ;; W0 v0.99.77 instrumentation: log nonzero exit (signal / wait-status).
+       (when (and (number? exit-code) (not (zero? exit-code)))
+         (log-subprocess-info "~a: exit ~a (pid ~a)" trace-id exit-code (subprocess-pid sp)))
 
        ;; Close ports; may already be closed by EOF/custodian shutdown.
        (with-handlers ([exn:fail? (lambda (e)
