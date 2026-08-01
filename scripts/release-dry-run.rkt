@@ -171,13 +171,34 @@
            (if (zero? exit-code)
                (dry-run-result "release-notes" #t "release notes generation succeeded")
                (dry-run-result "release-notes" #f "release notes generation failed"))))
-   ;; Check 5: Manifest generation
-   (cons "manifest"
-         (lambda ()
-           (define exit-code (run-subprocess "racket" (list "scripts/gen-release-manifest.rkt")))
-           (if (zero? exit-code)
-               (dry-run-result "manifest" #t "manifest generation succeeded")
-               (dry-run-result "manifest" #f "manifest generation failed"))))))
+   ;; Check 5: Manifest generation. Exercise the current strict CLI with a
+   ;; non-empty, correctly named temporary asset and explicit trace SHAs.
+   (cons
+    "manifest"
+    (lambda ()
+      (define v (or version (extract-canonical-version (file->string "util/version.rkt"))))
+      (define temp-dir (make-temporary-file "q-release-dry-run-~a" 'directory))
+      (define asset (build-path temp-dir (format "q-~a.tar.gz" v)))
+      (call-with-output-file asset #:exists 'truncate (lambda (out) (display "dry-run asset" out)))
+      (define sha (make-string 40 #\a))
+      (define exit-code
+        (run-subprocess "racket"
+                        (list "scripts/gen-release-manifest.rkt"
+                              "--version"
+                              v
+                              "--tag"
+                              (format "v~a" v)
+                              "--commit"
+                              sha
+                              "--tag-commit"
+                              sha
+                              "--tag-object"
+                              (make-string 40 #\b)
+                              (path->string asset))))
+      (delete-directory/files temp-dir)
+      (if (zero? exit-code)
+          (dry-run-result "manifest" #t "manifest generation succeeded")
+          (dry-run-result "manifest" #f "manifest generation failed"))))))
 
 ;; ---------------------------------------------------------------------------
 ;; I/O layer

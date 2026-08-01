@@ -115,8 +115,11 @@
    (define strict (exec-limits 1 1048576 536870912 10))
    (define result (run-subprocess "/bin/sh" #:args '("-c" "sleep 30") #:limits strict))
    (check-pred subprocess-result-timed-out? result)
-   ;; Elapsed should be roughly the timeout (1s = 1000ms), allow some slack
-   (check-true (< (subprocess-result-elapsed-ms result) 5000)))
+   ;; The kill path is 1s wait + 2s SIGTERM grace + 1s stdout drain + 1s stderr
+   ;; drain (v0.99.77 escalation design), so elapsed is ~5s for a 1s timeout.
+   ;; Bound generously (10x the 1s timeout) to catch a genuinely hung kill path
+   ;; without tripping on the designed escalation budget.
+   (check-true (< (subprocess-result-elapsed-ms result) 10000)))
  (test-case "run-subprocess: output is captured as string by default"
    (define result (run-subprocess "echo" #:args '("test123")))
    (check-true (string? (subprocess-result-stdout result))))

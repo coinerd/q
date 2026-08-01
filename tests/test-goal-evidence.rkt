@@ -35,9 +35,9 @@
 (let ()
   (define gs (make-goal-state #:goal-text "tests pass" #:max-turns 8))
   (define instrs (goal-system-instructions gs))
-  (check-equal? (length instrs) 2)
-  (check-true (string-contains? (cadr instrs) "tests pass"))
-  (check-true (string-contains? (cadr instrs) "turn 0/8")))
+  (check-equal? (length instrs) 3)
+  (check-not-false (string-contains? (caddr instrs) "tests pass"))
+  (check-not-false (string-contains? (caddr instrs) "turn 0/8")))
 
 ;; ============================================================
 ;; evidence-prompt-for-goal without evaluation
@@ -45,8 +45,8 @@
 
 (let ()
   (define prompt (evidence-prompt-for-goal "fix the bug" #f))
-  (check-true (string-contains? prompt "fix the bug"))
-  (check-true (string-contains? prompt "evidence")))
+  (check-not-false (string-contains? prompt "fix the bug"))
+  (check-not-false (string-contains? prompt "evidence")))
 
 ;; ============================================================
 ;; evidence-prompt-for-goal with evaluation
@@ -55,9 +55,9 @@
 (let ()
   (define eval (make-evaluation-result #:achieved? #f #:reason "still 2 test failures"))
   (define prompt (evidence-prompt-for-goal "tests pass" eval))
-  (check-true (string-contains? prompt "tests pass"))
-  (check-true (string-contains? prompt "still 2 test failures"))
-  (check-true (string-contains? prompt "evidence")))
+  (check-not-false (string-contains? prompt "tests pass"))
+  (check-not-false (string-contains? prompt "still 2 test failures"))
+  (check-not-false (string-contains? prompt "evidence")))
 
 ;; ============================================================
 ;; evidence-prompt-for-goal achieved includes evidence reminder
@@ -66,7 +66,7 @@
 (let ()
   (define eval (make-evaluation-result #:achieved? #t #:reason "all green"))
   (define prompt (evidence-prompt-for-goal "tests pass" eval))
-  (check-true (string-contains? prompt "tests pass")))
+  (check-not-false (string-contains? prompt "tests pass")))
 
 ;; ============================================================
 ;; consecutive-same-reason? — fewer than threshold → #f

@@ -1,3 +1,20 @@
+## 0.99.78
+
+Released 2026-08-01.
+
+### Goal Command Hardening
+
+- Goal turns and evaluator requests now have independent wall-clock bounds, with timeout and worker failures persisted and surfaced instead of freezing the autonomous loop.
+- Deterministic `--check` results are authoritative: failed checks prevent success, and evidence is persisted with repository provenance for stale/current inspection.
+- Goal snapshots, evaluator decisions, and verification evidence are stored in the session JSONL audit trail; `/goal history` and `/goal evidence` expose that trail.
+- TUI and GUI goal commands now propagate checks, use the active session log, support cancellation, reject only genuinely active concurrent goals, and retain updated session state across turns.
+- Empty simulated responses are rejected, duplicate evaluator accounting is removed, and the goal prompt includes the complete operating rules.
+
+### Reliability
+
+- Goal turn timeout defaults to five minutes and normal completion shuts down turn custodians.
+- Sandbox timeout assertions now reflect the designed SIGTERM grace and stream-drain budget while retaining a bounded hang detector.
+
 ## 0.99.77
 
 Released 2026-08-06.

@@ -77,16 +77,41 @@
     (check-false (gui-state-active-goal (unbox state-box))
                  "goal not set when feature flag disabled")))
 
-;; Feature flag enabled: /goal accepted and state updated
-(test-case "gui-goal-commands: block 7"
+;; GUI must not create a phantom goal without a live session.
+(test-case "gui-goal-commands: no session rejects goal"
   (let ()
     (define state-box (box (make-gui-state)))
     (define lock (make-semaphore 1))
-    (define notified #f)
-    (define (notify!)
-      (set! notified #t))
     (parameterize ([current-goal-loop-enabled? #t])
-      (define handler (make-slash-command-handler #f state-box lock notify!))
+      (define handler (make-slash-command-handler #f state-box lock))
       (handler "/goal \"make tests pass\""))
-    ;; Active goal should be set (even though thread will fail without session)
-    (check-not-false (gui-state-active-goal (unbox state-box)) "goal set when feature flag enabled")))
+    (check-false (gui-state-active-goal (unbox state-box)))))
+
+;; /goal clear must signal the background goal loop, not only clear display state.
+(test-case "gui-goal-commands: clear sets cancellation flag"
+  (let ()
+    (define state-box
+      (box (make-gui-state #:active-goal
+                           (hasheq 'goal-text "old" 'turns-used 0 'max-turns 8 'status 'active))))
+    (define lock (make-semaphore 1))
+    (define cancel-box (box #f))
+    (parameterize ([current-goal-loop-enabled? #t])
+      (define handler (make-slash-command-handler #f state-box lock #:goal-cancel-box cancel-box))
+      (handler "/goal clear"))
+    (check-true (unbox cancel-box))
+    (check-false (gui-state-active-goal (unbox state-box)))))
+
+;; A terminal recorded goal is not a live goal and must not block a new one.
+(test-case "gui-goal-commands: terminal goal does not guard concurrency"
+  (let ()
+    (define state-box
+      (box (make-gui-state #:active-goal
+                           (hasheq 'goal-text "old" 'turns-used 2 'max-turns 8 'status 'failed))))
+    (define lock (make-semaphore 1))
+    (parameterize ([current-goal-loop-enabled? #t])
+      (define handler (make-slash-command-handler #f state-box lock))
+      (handler "/goal \"new goal\""))
+    ;; No session, so the new goal is rejected without replacing state; the
+    ;; key assertion is that the response was not the active-goal rejection.
+    (define text (string-join (map gui-message-text (gui-state-messages (unbox state-box))) "\n"))
+    (check-false (string-contains? text "already active"))))

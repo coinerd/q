@@ -38,6 +38,29 @@ Checks run before each evaluation. Results are passed to the evaluator as determ
 - **`/goal clear`**: Cancels the active goal
 - **`/g`**: Short alias for `/goal`
 
+## Goal State & Audit Trail
+
+Every goal mutation is persisted to the session store as structured
+`goal.state` entries, and every evaluator decision is persisted as a
+`goal.evaluation` entry. Verification evidence carries provenance as
+`goal.evidence` entries. You can inspect the goal trail at any time —
+even while a goal is running — by grepping the session log:
+
+```sh
+# Latest goal snapshot (text, status, turns-used, max-turns, updated-at)
+grep '"kind":"goal.state"' <session-log>.jsonl | tail -1
+
+# Full evaluation trail (turn, achieved?, reason, model, token-cost)
+grep '"kind":"goal.evaluation"' <session-log>.jsonl
+
+# Verification evidence with provenance (base-sha, tree-hash, current/stale)
+grep '"kind":"goal.evidence"' <session-log>.jsonl
+```
+
+- **`/goal history`**: Renders the evaluation trail (turn, ok, reason, model, cost)
+- **`/goal evidence`**: Lists captured verification evidence with current/stale flags
+- **`/goal status`**: Renders the current interface state; use the session log for the durable audit trail
+
 ## How It Works
 
 1. **Goal State**: Each session tracks one active goal with status (`active`, `achieved`, `failed`, `cancelled`)
