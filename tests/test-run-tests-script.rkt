@@ -2,6 +2,7 @@
 
 ;; @speed slow
 ;; @suite default
+;; @isolation subprocess
 
 ;; BOUNDARY: integration
 
