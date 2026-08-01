@@ -58,7 +58,15 @@
 ;; ────────────────────────────────────────────────────────────
 
 (define (compute-working-set-budget context-budget)
-  (min 8192 (quotient (* context-budget 3) 10)))
+  ;; v0.99.78 FIX: working-set continuity. The old 8192-token cap was the
+  ;; binding constraint for large-context providers (e.g. deepseek-v4-flash
+  ;; 1M context → 30% = 300k, capped to 8k). A wave / /go implementation that
+  ;; reads more than ~6-8 source files evicted earlier reads from the
+  ;; Tier-A-protected working set; evicted results fell to the trimmable
+  ;; tier-b/c and the model re-read the same files in an endless cycle
+  ;; (observed: 262 consecutive tool-only turns). 30% of the context share
+  ;; still bounds it, so small-context providers are unaffected.
+  (min 24576 (quotient (* context-budget 3) 10)))
 
 (define (make-working-set #:max-entries [max-entries 20] #:max-tokens [max-tokens 8192])
   (working-set '() max-entries max-tokens))

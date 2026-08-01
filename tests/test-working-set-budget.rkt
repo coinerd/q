@@ -18,13 +18,16 @@
     ;; Context-relative default cap
     ;; ============================================================
 
-    (test-case "working-set budget is 30 percent of context capped at 8192"
+    (test-case "working-set budget is 30 percent of context capped at 24576"
       (check-equal? (compute-working-set-budget 1) 0)
       (check-equal? (compute-working-set-budget 100) 30)
-      ;; Cap boundary: floor(27306 * .30) = 8191; next token reaches the cap.
-      (check-equal? (compute-working-set-budget 27306) 8191)
-      (check-equal? (compute-working-set-budget 27307) 8192)
-      (check-equal? (compute-working-set-budget 128000) 8192))
+      ;; Cap boundary: floor(81919 * .30) = 24575; next token reaches the cap.
+      (check-equal? (compute-working-set-budget 81919) 24575)
+      (check-equal? (compute-working-set-budget 81920) 24576)
+      ;; v0.99.78: raised cap — large-context providers keep ~3x more reads
+      ;; in the Tier-A working set, preventing eviction-forced re-reads.
+      (check-equal? (compute-working-set-budget 128000) 24576)
+      (check-equal? (compute-working-set-budget 1000000) 24576))
 
     (test-case "provider-bound context share evicts to at most 30 percent"
       (define ws (make-working-set #:max-tokens 8192))
