@@ -142,7 +142,7 @@ jobs:
           persist-credentials: false
 
       - name: Download build artifact
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: q-release-build-${{ inputs.version }}
           path: /tmp/release
@@ -223,7 +223,7 @@ jobs:
       release-id: ${{ steps.draft.outputs.RELEASE_ID }}
     steps:
       - name: Download build artifact
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: q-release-build-${{ inputs.version }}
           path: /tmp/release
@@ -278,7 +278,7 @@ jobs:
       - uses: ./.github/actions/setup-racket
 
       - name: Download build artifact
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: q-release-build-${{ inputs.version }}
           path: /tmp/release
@@ -361,7 +361,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-racket
       - name: Download verified build artifact
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: q-release-build-${{ inputs.version }}
           path: /tmp/release
@@ -443,7 +443,7 @@ jobs:
       - uses: ./.github/actions/setup-racket
 
       - name: Download build artifact
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: q-release-build-${{ inputs.version }}
           path: /tmp/release
