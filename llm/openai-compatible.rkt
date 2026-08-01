@@ -10,7 +10,12 @@
 ;; SSE parsing delegates to llm/stream.rkt.
 
 (define-logger q-openai)
+
+;; v0.99.78 DIAGNOSTIC: enable per-request body/summary dumps to /tmp/q-req-*
+;; for diagnosing held-request stalls. Off by default (writes ~150KB/request).
+(define current-request-dump-enabled? (make-parameter #f))
 (require racket/contract
+         racket/file
          "timing.rkt"
          (only-in "model-defaults.rkt" OPENAI-DEFAULT-MODEL)
          racket/match
@@ -286,6 +291,45 @@
     (define body-bytes (jsexpr->bytes body))
     ;; HARD DEBUG: dump to file
     (define stream-model-name (and (hash? body) (hash-ref body 'model #f)))
+
+    ;; v0.99.78 DIAGNOSTIC (gated): dump per-request message summary to diagnose
+    ;; held requests (deepseek returns 200 but emits zero chunks for minutes).
+    ;; Off by default; enable via (current-request-dump-enabled? #t). The summary
+    ;; records role/content-len/reasoning-len/tool-call-count per message so
+    ;; stalled vs retry requests can be compared, plus the full body for replay.
+    (when (and (current-request-dump-enabled?) stream-model-name)
+      (with-handlers ([exn:fail? (lambda (_) (void))])
+        (call-with-output-file "/tmp/q-req-dump.jsonl"
+                               #:exists 'append
+                               (lambda (p)
+                                 (define msgs (hash-ref body 'messages '()))
+                                 (define summary
+                                   (for/list ([m (in-list msgs)])
+                                     (list (hash-ref m 'role "?")
+                                           (let ([c (hash-ref m 'content #f)])
+                                             (if (string? c)
+                                                 (string-length c)
+                                                 0))
+                                           (let ([r (hash-ref m 'reasoning_content #f)])
+                                             (if (string? r)
+                                                 (string-length r)
+                                                 0))
+                                           (let ([tc (hash-ref m 'tool_calls #f)])
+                                             (if tc
+                                                 (length tc)
+                                                 0)))))
+                                 (write (list (round (/ (current-inexact-milliseconds) 1000))
+                                              stream-model-name
+                                              (bytes-length body-bytes)
+                                              (length msgs)
+                                              summary)
+                                        p)
+                                 (newline p)))
+        (make-directory* "/tmp/q-req-full")
+        (call-with-output-file (format "/tmp/q-req-full/~a.json"
+                                       (round (/ (current-inexact-milliseconds) 1000)))
+                               #:exists 'replace
+                               (lambda (p) (write (bytes->string/utf-8 body-bytes) p)))))
 
     (define stream-timeout
       (if stream-model-name
