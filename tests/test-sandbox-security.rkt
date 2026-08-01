@@ -37,7 +37,7 @@
    (define result (tool-read (hasheq 'path "../../../../../../../../etc/no-such-file-q-test-xyz")))
    (check-pred tool-result? result)
    (check-true (tool-result-is-error? result)
-              "Path traversal to non-existent file should return error"))
+               "Path traversal to non-existent file should return error"))
  (test-case "read tool rejects relative parent path with offset"
    (define result (tool-read (hasheq 'path "../nonexistent-secret-file" 'offset 1)))
    (check-pred tool-result? result)
@@ -124,8 +124,10 @@
    (define result (run-subprocess "/bin/sh" #:args '("-c" "sleep 60") #:timeout 1))
    (check-pred subprocess-result-timed-out? result)
    (check-equal? (subprocess-result-exit-code result) -9)
-   ;; Should complete well within 5 seconds of the 1-second timeout
-   (check-true (< (subprocess-result-elapsed-ms result) 5000)))
+   ;; Kill path = 1s wait + 2s SIGTERM grace + 1s stdout drain + 1s stderr drain
+   ;; (v0.99.77 escalation design) ⇒ ~5s elapsed for a 1s timeout. Bound at 10x
+   ;; the 1s timeout to catch a hung kill path without tripping on the budget.
+   (check-true (< (subprocess-result-elapsed-ms result) 10000)))
  (test-case "subprocess timeout error message includes duration"
    (define result (run-subprocess "/bin/sh" #:args '("-c" "sleep 60") #:timeout 1))
    (check regexp-match? #rx"timed out" (subprocess-result-stderr result)))

@@ -13,9 +13,10 @@
          "../runtime/agent-session.rkt"
          "../extensions/hooks.rkt"
          "../tui/command-parse.rkt"
-         (only-in "../runtime/goal/goal-runner.rkt" goal-run!)
+         (only-in "../runtime/goal/goal-runner.rkt" goal-run! current-goal-session-log-path)
          (only-in "../tui/commands/goal-bridge.rkt" make-goal-event-bridge make-goal-run-prompt!)
          (only-in "../runtime/session/session-config.rkt" current-goal-loop-enabled?)
+         (only-in "../runtime/session/session-types.rkt" session-log-path-for)
          (only-in "../runtime/goal/goal-state.rkt" goal-state-turns-used goal-state-status)
          ;; GAP-CR (v0.98.8 W1): Dynamic command registry lookup
          (only-in "../ui-core/command-registry.rkt"
@@ -27,7 +28,8 @@
                   ui-command-gui?
                   canonical-commands
                   make-ui-command-registry)
-         "gui-types.rkt")
+         "gui-types.rkt"
+         "../runtime/goal/goal-checks.rkt")
 
 ;; GAP-CR (v0.98.8 W1): Cache command registry at module level instead of rebuilding per invocation.
 (define the-canonical-registry (make-ui-command-registry canonical-commands))
@@ -180,6 +182,7 @@
           (define goal-arg (string-trim (string-join args " ")))
           (cond
             [(string=? goal-arg "clear")
+             (set-box! goal-cancel-box #t)
              (call-with-semaphore gui-state-lock
                                   (lambda ()
                                     (set-box! state-box
@@ -191,14 +194,16 @@
              (define gs (unbox state-box))
              (define goal-info (gui-state-active-goal gs))
              (if goal-info
-                 (add-system-msg! (format "[goal] Active: ~a\nStatus: ~a | Turns: ~a/~a"
-                                          (hash-ref goal-info 'goal-text "?")
-                                          (hash-ref goal-info 'status 'active)
-                                          (hash-ref goal-info 'turns-used 0)
-                                          (hash-ref goal-info 'max-turns 8))
-                                  state-box
-                                  gui-state-lock
-                                  notify!)
+                 (add-system-msg!
+                  (format "[goal] ~a: ~a\nStatus: ~a | Turns: ~a/~a"
+                          (if (eq? (hash-ref goal-info 'status 'active) 'active) "Active" "Last")
+                          (hash-ref goal-info 'goal-text "?")
+                          (hash-ref goal-info 'status 'active)
+                          (hash-ref goal-info 'turns-used 0)
+                          (hash-ref goal-info 'max-turns 8))
+                  state-box
+                  gui-state-lock
+                  notify!)
                  (add-system-msg! "[goal] No active goal. Use /goal \"<description>\" to set one."
                                   state-box
                                   gui-state-lock
@@ -216,6 +221,24 @@
                    #t)
                  ;; Goal loop enabled — set up and spawn
                  (let ()
+                   (define current-info (gui-state-active-goal (unbox state-box)))
+                   (define live-goal?
+                     (and current-info (eq? (hash-ref current-info 'status 'active) 'active)))
+                   (cond
+                     [live-goal?
+                      (add-system-msg!
+                       "[goal] REJECTED — a goal is already active. Use /goal clear first."
+                       state-box
+                       gui-state-lock
+                       notify!)
+                      #t]
+                     [(not sess)
+                      (add-system-msg! "[goal] No active session. Start a session first."
+                                       state-box
+                                       gui-state-lock
+                                       notify!)
+                      #t]
+                     [else (void)])
                    ;; Strip surrounding quotes from goal text
                    (define clean-text
                      (let ([t goal-arg])
@@ -225,65 +248,82 @@
                                     (char=? (string-ref t (sub1 (string-length t))) #\')))
                            (substring t 1 (sub1 (string-length t)))
                            t)))
-                   ;; Set initial goal state
+                   (define-values (parsed-goal-text checks)
+                     (if (string-contains? clean-text "--check")
+                         (parse-goal-checks clean-text)
+                         (values clean-text '())))
+                   (define safety-reasons (validate-check-safety checks))
+                   (when (pair? safety-reasons)
+                     (add-system-msg! (format "[goal] REJECTED — unsafe check commands:\n~a"
+                                              (string-join safety-reasons "\n"))
+                                      state-box
+                                      gui-state-lock
+                                      notify!))
+                   (define eligible? (and (not live-goal?) sess (null? safety-reasons)))
+                   ;; Set initial goal state only after guards above
                    (define goal-info
-                     (hash 'goal-text clean-text 'turns-used 0 'max-turns 8 'status 'active))
-                   (call-with-semaphore
-                    gui-state-lock
-                    (lambda ()
-                      (set-box! state-box (gui-state-set-active-goal (unbox state-box) goal-info))
-                      (notify!)))
+                     (hash 'goal-text parsed-goal-text 'turns-used 0 'max-turns 8 'status 'active))
+                   (when eligible?
+                     (call-with-semaphore
+                      gui-state-lock
+                      (lambda ()
+                        (set-box! state-box (gui-state-set-active-goal (unbox state-box) goal-info))
+                        (notify!))))
                    ;; Get session resources (guard for no session)
                    (define provider (and sess (session-provider sess)))
                    (define bus (and sess (session-event-bus sess)))
                    (define sid (and sess (session-id sess)))
                    (define on-event (and bus sid (make-goal-event-bridge bus sid)))
                    (define run-prompt! (and sess (make-goal-run-prompt! sess)))
-                   (add-system-msg! (format "[goal] Autonomous loop started: ~a" clean-text)
-                                    state-box
-                                    gui-state-lock
-                                    notify!)
-                   ;; Spawn autonomous loop in background thread (only if session available)
-                   (when (and provider on-event run-prompt!)
-                     (thread (lambda ()
-                               (with-handlers ([exn:fail? (lambda (e)
-                                                            (on-event 'goal-failed
-                                                                      (hasheq 'goal-text
-                                                                              clean-text
-                                                                              'reason
-                                                                              (exn-message e)
-                                                                              'turns-used
-                                                                              0)))])
-                                 (define result
-                                   (goal-run! clean-text
-                                              provider
-                                              "default"
-                                              run-prompt!
-                                              #:max-turns 8
-                                              #:on-event on-event
-                                              #:on-status (lambda (msg) (void))
-                                              #:shutdown-check (lambda () (unbox goal-cancel-box))))
-                                 ;; Update display with final result (skip if cancelled)
-                                 (define was-cancelled (unbox goal-cancel-box))
-                                 (unless was-cancelled
-                                   (define final-info
-                                     (hash 'goal-text
-                                           clean-text
-                                           'turns-used
-                                           (goal-state-turns-used result)
-                                           'max-turns
-                                           8
-                                           'status
-                                           (goal-state-status result)))
-                                   (call-with-semaphore
-                                    gui-state-lock
-                                    (lambda ()
-                                      (set-box! state-box
-                                                (gui-state-set-active-goal (unbox state-box)
-                                                                           final-info))
-                                      (notify!))))
-                                 ;; Reset cancel box for next goal
-                                 (set-box! goal-cancel-box #f)))))
+                   (when eligible?
+                     (add-system-msg! (format "[goal] Autonomous loop started: ~a" parsed-goal-text)
+                                      state-box
+                                      gui-state-lock
+                                      notify!))
+                   ;; Spawn autonomous loop in background thread only after all guards.
+                   (when (and eligible? provider on-event run-prompt!)
+                     (thread
+                      (lambda ()
+                        (with-handlers ([exn:fail? (lambda (e)
+                                                     (on-event 'goal-failed
+                                                               (hasheq 'goal-text
+                                                                       clean-text
+                                                                       'reason
+                                                                       (exn-message e)
+                                                                       'turns-used
+                                                                       0)))])
+                          (define result
+                            (parameterize ([current-goal-session-log-path
+                                            (session-log-path-for sess)])
+                              (goal-run! parsed-goal-text
+                                         provider
+                                         "default"
+                                         run-prompt!
+                                         #:max-turns 8
+                                         #:checks checks
+                                         #:on-event on-event
+                                         #:on-status (lambda (msg) (void))
+                                         #:shutdown-check (lambda () (unbox goal-cancel-box)))))
+                          ;; Update display with final result (skip if cancelled)
+                          (define was-cancelled (unbox goal-cancel-box))
+                          (unless was-cancelled
+                            (define final-info
+                              (hash 'goal-text
+                                    clean-text
+                                    'turns-used
+                                    (goal-state-turns-used result)
+                                    'max-turns
+                                    8
+                                    'status
+                                    (goal-state-status result)))
+                            (call-with-semaphore
+                             gui-state-lock
+                             (lambda ()
+                               (set-box! state-box
+                                         (gui-state-set-active-goal (unbox state-box) final-info))
+                               (notify!))))
+                          ;; Reset cancel box for next goal
+                          (set-box! goal-cancel-box #f)))))
                    #t))])]
          [(interrupt)
           (add-system-msg! "Interrupt not yet supported in GUI mode."

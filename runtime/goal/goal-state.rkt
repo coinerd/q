@@ -55,6 +55,7 @@
          evaluator-mode?
          ;; Constants
          DEFAULT-GOAL-MAX-TURNS
+         DEFAULT-GOAL-TURN-TIMEOUT-SECS
          DEFAULT-EVALUATOR-MODE
          NO-PROGRESS-THRESHOLD
          ;; Helpers

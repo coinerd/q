@@ -57,6 +57,7 @@
          evaluator-mode?
          ;; Constants
          DEFAULT-GOAL-MAX-TURNS
+         DEFAULT-GOAL-TURN-TIMEOUT-SECS
          DEFAULT-EVALUATOR-MODE
          NO-PROGRESS-THRESHOLD
          ;; Helpers
@@ -69,6 +70,7 @@
 ;; --------------------------------------------------
 
 (define DEFAULT-GOAL-MAX-TURNS 8)
+(define DEFAULT-GOAL-TURN-TIMEOUT-SECS 300) ; W0 v0.99.78 (G-4): wall-clock cap per goal turn
 (define DEFAULT-EVALUATOR-MODE 'transcript)
 (define NO-PROGRESS-THRESHOLD 3)
 
@@ -220,5 +222,4 @@
 
 ;; I4 (v0.72.7): Moved from goal-runner.rkt to be alongside goal-state struct
 (define (goal-state-total-token-cost gs)
-  (for/sum ([er (in-list (goal-state-evaluations gs))])
-    (evaluation-result-token-cost er)))
+  (for/sum ([er (in-list (goal-state-evaluations gs))]) (evaluation-result-token-cost er)))

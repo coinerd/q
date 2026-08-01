@@ -82,10 +82,16 @@
                   handle-quit-command
                   handle-login-command)
          ;; Goal runner + bridge
-         (only-in "../runtime/goal/goal-runner.rkt" goal-run!)
-         (only-in "commands/goal-bridge.rkt" make-goal-event-bridge make-goal-run-prompt!)
+         (only-in "../runtime/goal/goal-runner.rkt" goal-run! current-goal-session-log-path)
+         (only-in "commands/goal-bridge.rkt"
+                  make-goal-event-bridge
+                  make-goal-run-prompt!
+                  render-goal-history)
          (only-in "commands/context.rkt" cmd-ctx-agent-session-box cmd-ctx-goal-cancel-box)
-         (only-in "context.rkt" atomic-state-update!))
+         (only-in "context.rkt" atomic-state-update!)
+         (only-in "commands/goal-bridge.rkt" render-goal-evidence)
+         (only-in "../runtime/session/session-types.rkt" session-log-path-for)
+         (only-in "../runtime/goal/goal-runner.rkt" current-repo-base-sha current-working-tree-hash))
 
 ;; Re-export all public APIs
 (provide cmd-ctx
@@ -343,52 +349,94 @@
      (define entry (make-system-entry "[goal] Active goal cancelled."))
      (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry cleared-state entry))
      'continue]
+    ;; /goal history — render persisted evaluator decision trail (W1, G-8)
+    [(string=? arg-text "history")
+     (define sess (unbox (cmd-ctx-agent-session-box cctx)))
+     (define log-path (and (agent-session? sess) (session-log-path-for sess)))
+     (define entry (make-system-entry (render-goal-history log-path)))
+     (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+     'continue]
+    ;; /goal evidence — render persisted verification evidence (W3, G-5)
+    [(string=? arg-text "evidence")
+     (define sess (unbox (cmd-ctx-agent-session-box cctx)))
+     (define log-path (and (agent-session? sess) (session-log-path-for sess)))
+     (define entry
+       (make-system-entry
+        (render-goal-evidence log-path (current-repo-base-sha) (current-working-tree-hash))))
+     (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+     'continue]
     ;; /goal status or /goal (no args) — show status
     [(or (string=? arg-text "") (string=? arg-text "status"))
      (define goal-info (ui-state-active-goal state))
      (define entry
        (if goal-info
-           (make-system-entry (format "[goal] Active: ~a\nStatus: ~a | Turns: ~a/~a"
-                                      (goal-display-info-goal-text goal-info)
-                                      (goal-display-info-status goal-info)
-                                      (goal-display-info-turns-used goal-info)
-                                      (goal-display-info-max-turns goal-info)))
+           (make-system-entry
+            (format "[goal] ~a: ~a\nStatus: ~a | Turns: ~a/~a"
+                    (if (eq? (goal-display-info-status goal-info) 'active) "Active" "Last")
+                    (goal-display-info-goal-text goal-info)
+                    (goal-display-info-status goal-info)
+                    (goal-display-info-turns-used goal-info)
+                    (goal-display-info-max-turns goal-info)))
            (make-system-entry "[goal] No active goal. Use /goal \"<description>\" to set one.")))
      (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
      'continue]
     ;; /goal "<description>" [--check 'cmd'] — set a goal with optional checks
     [else
-     ;; Concurrent goal guard — reject if goal already active
+     ;; Parse flags before stripping/quotes; clean-text must not reference an
+     ;; internal definition before it is initialized.
+     (define flag-parts (string-split arg-text))
+     (define (flag-value flag default)
+       (define idx (index-of flag-parts flag))
+       (cond
+         [(and idx
+               (< (add1 idx) (length flag-parts))
+               (string->number (list-ref flag-parts (add1 idx))))
+          =>
+          (lambda (n) (inexact->exact (floor n)))]
+         [else default]))
+     (define turns-n (flag-value "--turns" 8))
+     (define timeout-secs (flag-value "--turn-timeout-secs" 1800))
+     (define evaluator-mode
+       (let ([eval-idx (index-of flag-parts "--evaluator")])
+         (if (and eval-idx
+                  (< (add1 eval-idx) (length flag-parts))
+                  (equal? (list-ref flag-parts (add1 eval-idx)) "agent"))
+             'agent
+             'transcript)))
+     (define flag-stripped-text
+       (let loop ([toks flag-parts]
+                  [acc '()])
+         (cond
+           [(null? toks) (string-join (reverse acc) " ")]
+           [(member (car toks) '("--turns" "--turn-timeout-secs" "--evaluator"))
+            (loop (if (null? (cdr toks))
+                      '()
+                      (cddr toks))
+                  acc)]
+           [else (loop (cdr toks) (cons (car toks) acc))])))
+     (define clean-text
+       (let ([t flag-stripped-text])
+         (if (and (> (string-length t) 1)
+                  (or (char=? (string-ref t 0) #\") (char=? (string-ref t 0) #\'))
+                  (or (char=? (string-ref t (sub1 (string-length t))) #\")
+                      (char=? (string-ref t (sub1 (string-length t))) #\')))
+             (substring t 1 (sub1 (string-length t)))
+             t)))
+     ;; Check for --check arguments after flag parsing/stripping
+     (define-values (goal-text checks)
+       (if (string-contains? clean-text "--check")
+           (parse-goal-checks clean-text)
+           (values clean-text '())))
+     ;; Concurrent goal guard — reject only while the recorded goal is live.
+     (define active-info (ui-state-active-goal state))
+     (define goal-live? (and active-info (eq? (goal-display-info-status active-info) 'active)))
      (cond
-       [(ui-state-active-goal state)
+       [goal-live?
         (define entry
           (make-system-entry "[goal] REJECTED — a goal is already active. Use /goal clear first."))
         (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
         'continue]
        [else
-        ;; Check for --check arguments
-        (define-values (goal-text checks)
-          (if (string-contains? arg-text "--check")
-              (parse-goal-checks arg-text)
-              (values arg-text '())))
-        ;; Strip surrounding quotes from goal text if present
-        (define clean-text
-          (let ([t goal-text])
-            (if (and (> (string-length t) 1)
-                     (or (char=? (string-ref t 0) #\") (char=? (string-ref t 0) #\'))
-                     (or (char=? (string-ref t (sub1 (string-length t))) #\")
-                         (char=? (string-ref t (sub1 (string-length t))) #\')))
-                (substring t 1 (sub1 (string-length t)))
-                t)))
-        ;; Check for --evaluator flag (only next token after --evaluator)
-        (define evaluator-mode
-          (let ([parts (string-split arg-text)])
-            (define eval-idx (index-of parts "--evaluator"))
-            (if eval-idx
-                (let ([next-token (and (< (add1 eval-idx) (length parts))
-                                       (list-ref parts (add1 eval-idx)))])
-                  (if (equal? next-token "agent") 'agent 'transcript))
-                'transcript)))
         ;; Validate check safety
         (define safety-reasons (validate-check-safety checks))
         (cond
@@ -419,7 +467,7 @@
               'continue]
              [else
               ;; Set initial display state
-              (define goal-info (goal-display-info clean-text 0 8 'active))
+              (define goal-info (goal-display-info clean-text 0 turns-n 'active))
               (define init-state (struct-copy ui-state state [active-goal goal-info]))
               ;; Get session from cmd-ctx
               (define sess (unbox (cmd-ctx-agent-session-box cctx)))
@@ -453,21 +501,24 @@
                              'goal-failed
                              (hasheq 'goal-text clean-text 'reason (exn-message e) 'turns-used 0))
                             (displayln (format "goal loop failed: ~a" (exn-message e))))])
-                      (define result
-                        (goal-run! clean-text
-                                   provider
-                                   evaluator-model
-                                   run-prompt!
-                                   #:max-turns 8
-                                   #:evaluator-mode evaluator-mode
-                                   #:on-event on-event
-                                   #:on-status on-status
-                                   #:shutdown-check (lambda ()
-                                                      (or (and cancel-box (unbox cancel-box))
-                                                          (not (unbox shutdown-box))))))
-                      ;; Reset cancel-box for next goal (no state mutation — events handle display)
-                      (when cancel-box
-                        (set-box! cancel-box #f)))))
+                      (parameterize ([current-goal-session-log-path (session-log-path-for sess)])
+                        (define result
+                          (goal-run! clean-text
+                                     provider
+                                     evaluator-model
+                                     run-prompt!
+                                     #:max-turns turns-n
+                                     #:turn-timeout-secs timeout-secs
+                                     #:evaluator-mode evaluator-mode
+                                     #:checks checks
+                                     #:on-event on-event
+                                     #:on-status on-status
+                                     #:shutdown-check (lambda ()
+                                                        (or (and cancel-box (unbox cancel-box))
+                                                            (not (unbox shutdown-box))))))
+                        ;; Reset cancel-box for next goal (no state mutation — events handle display)
+                        (when cancel-box
+                          (set-box! cancel-box #f))))))
                  (define entry
                    (make-system-entry (format "[goal] Autonomous loop started: ~a~a~a"
                                               clean-text

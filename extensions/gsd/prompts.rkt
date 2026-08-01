@@ -134,9 +134,15 @@
   (string-append
    "# GSD Execution Phase\n\n"
    (format "Executing plan with ~a waves. Starting from wave ~a.\n\n" wave-count (or next-idx 0))
-   "Instructions:\n"
+   "CRITICAL — Wave-by-wave checkpointing:\n"
+   "- Complete ONE wave at a time: read → edit → verify → format → syntax-check\n"
+   "- IMMEDIATELY after finishing wave N, call /wave-done N to mark it complete\n"
+   "- This checkpoint persists your progress — if interrupted, /go resumes from the\n"
+   "  first incomplete wave, not from scratch\n"
+   "- Do NOT start wave N+1 until /wave-done N has been called\n"
+   "- Only after /wave-done succeeds, begin the next wave\n\n"
+   "Other instructions:\n"
    "- Follow the plan strictly — do not expand scope\n"
-   "- After completing each wave's tasks, use /wave-done N to update PLAN.md and STATE.md\n"
    "- If a wave fails, use `/skip <N>` to skip it and proceed\n"
    "- Use `/replan` if the plan needs fundamental changes\n"
    "- Run verify commands after each wave\n\n"

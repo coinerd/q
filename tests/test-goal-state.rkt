@@ -10,8 +10,12 @@
 (require racket/port
          racket/string
          rackunit
+         json
          "../runtime/goal/goal-state.rkt"
-         "../util/json/jsonl.rkt")
+         "../util/json/jsonl.rkt"
+         "../util/json/json-helpers.rkt"
+         "../util/message/message.rkt"
+         (only-in "../util/content/content-parts.rkt" text-part-text))
 
 ;; ============================================================
 ;; Helper
@@ -255,7 +259,8 @@
 ;; ============================================================
 
 (require racket/file
-         "../runtime/session/session-store.rkt")
+         "../runtime/session/session-store.rkt"
+         "../runtime/session/session-store-goal-task.rkt")
 
 (define test-goal-dir (make-temporary-file "goal-test-~a" 'directory))
 
@@ -362,3 +367,80 @@
     (define h (hasheq 'goal-text "old"))
     (define gs (hash->goal-state h))
     (check-equal? (goal-state-evaluations gs) '() "missing evaluations key → empty")))
+
+;; ============================================================
+;; W2: Goal State Visibility — per-session snapshot (G-9)
+;; ============================================================
+
+;; The snapshot file is JSON-safe, contains the auditable fields, and
+;; parses back via hash->goal-state — operator can grep the session
+;; store at any time for what goal is running and where it stands.
+(test-case "goal-state: W2 snapshot write/read"
+  (let ()
+    (define snap-dir (make-temporary-file "goal-snap-~a" 'directory))
+    (define snap-path (build-path snap-dir "goal-state.json"))
+    (define er (make-evaluation-result #:achieved? #f #:reason "still failing"))
+    (define gs
+      (make-goal-state #:goal-text "make tests pass"
+                       #:status 'active
+                       #:max-turns 8
+                       #:turns-used 2
+                       #:last-evaluation er))
+    (append-goal-state-snapshot! snap-path gs)
+    ;; File exists and is JSON-safe
+    (check-true (file-exists? snap-path) "snapshot file exists after set-goal!")
+    (define parsed
+      (hash->goal-state
+       (string->jsexpr (hash-ref (car (hash-ref (car (jsonl-read-all snap-path)) 'content)) 'text))))
+    (check-equal? (goal-state-goal-text parsed) "make tests pass")
+    (check-equal? (goal-state-status parsed) 'active)
+    (check-equal? (goal-state-turns-used parsed) 2)
+    (check-equal? (goal-state-max-turns parsed) 8)
+    (check-true (exact-integer? (goal-state-updated-at parsed)) "snapshot carries updated-at")
+    (check-false (evaluation-result-achieved? (goal-state-last-evaluation parsed))
+                 "snapshot carries last evaluation")
+    (delete-directory/files snap-dir)))
+
+;; The goal.state log entry carries the same fields and is greppable
+(test-case "goal-state: W2 structured goal.state entry"
+  (let ()
+    (define log-dir (make-temporary-file "goal-state-log-~a" 'directory))
+    (define log-path (build-path log-dir "session.jsonl"))
+    (write-session-version-header! log-path)
+    (define gs (make-goal-state #:goal-text "greppable" #:status 'active #:turns-used 1))
+    (append-goal-state-snapshot! log-path gs)
+    (define raw (file->string log-path))
+    (check-true (string-contains? raw "goal.state") "goal.state kind present in log")
+    (check-true (string-contains? raw "greppable") "goal-text greppable in log")
+    (define loaded (load-latest-goal-state log-path))
+    (check-equal? (goal-state-goal-text loaded) "greppable")
+    (check-equal? (goal-state-turns-used loaded) 1)
+    (delete-directory/files log-dir)))
+
+;; Legacy `goal-state` entries still load (pre-W2 logs remain readable)
+(test-case "goal-state: W2 legacy goal-state entry loads"
+  (let ()
+    (define log-dir (make-temporary-file "goal-state-legacy-~a" 'directory))
+    (define log-path (build-path log-dir "session.jsonl"))
+    (write-session-version-header! log-path)
+    (define gs (make-goal-state #:goal-text "legacy" #:status 'active #:turns-used 3))
+    (append-goal-state! log-path gs)
+    (define raw (file->string log-path))
+    (check-true (string-contains? raw "goal-state") "legacy goal-state kind present")
+    (define loaded (load-latest-goal-state log-path))
+    (check-equal? (goal-state-goal-text loaded) "legacy")
+    (check-equal? (goal-state-turns-used loaded) 3)
+    (delete-directory/files log-dir)))
+
+;; Evaluation trail is greppable too (kind goal.evaluation)
+(test-case "goal-state: W2 evaluation trail greppable"
+  (let ()
+    (define log-dir (make-temporary-file "goal-eval-log-~a" 'directory))
+    (define log-path (build-path log-dir "session.jsonl"))
+    (write-session-version-header! log-path)
+    (define er (make-evaluation-result #:achieved? #f #:reason "not yet"))
+    (append-evaluation-result! log-path er 1)
+    (define raw (file->string log-path))
+    (check-true (string-contains? raw "goal.evaluation") "goal.evaluation kind present")
+    (check-true (string-contains? raw "not yet") "reason greppable in log")
+    (delete-directory/files log-dir)))
