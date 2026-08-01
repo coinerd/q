@@ -9,7 +9,7 @@
          rackunit/text-ui
          racket/port)
 
-(define q-root (build-path (syntax-source #'here) ".." ".."))
+(define q-root (simplify-path (build-path (syntax-source #'here) ".." "..")))
 (define script-path (build-path q-root "scripts" "lint-doc-freshness.rkt"))
 
 (define freshness-suite
@@ -34,6 +34,33 @@
                       "Complete reference for all event types in Q 0.54.5."))
       (check-not-false m)
       (check-equal? (cadr m) "0.54.5"))
+
+    (test-case "agent-harness-runbook exists with version marker"
+      (define runbook (build-path q-root "docs" "agent-harness-runbook.md"))
+      (check-true (file-exists? runbook))
+      (define text (call-with-input-file runbook port->string))
+      (check-regexp-match #rx"verified-against:[ ]*[0-9]+\\.[0-9]+\\.[0-9]+" text))
+
+    (test-case "agent-harness-runbook documents background-gate pattern"
+      (define runbook (build-path q-root "docs" "agent-harness-runbook.md"))
+      (define text (call-with-input-file runbook port->string))
+      (check-regexp-match #rx"nohup" text)
+      (check-regexp-match #rx"MUST (Run|run) in the (Background|background)" text)
+      (check-regexp-match #rx"VERDICT:" text))
+
+    (test-case "agent-harness-runbook documents exit-137 interpretation"
+      (define runbook (build-path q-root "docs" "agent-harness-runbook.md"))
+      (define text (call-with-input-file runbook port->string))
+      (check-regexp-match #rx"137" text)
+      (check-regexp-match #rx"SIGKILL" text)
+      (check-regexp-match #rx"T`-state|SIGSTOP" text))
+
+    (test-case "agent-harness-runbook documents post-W1 timeout behavior"
+      (define runbook (build-path q-root "docs" "agent-harness-runbook.md"))
+      (define text (call-with-input-file runbook port->string))
+      (check-regexp-match #rx"SIGTERM" text)
+      (check-regexp-match #rx"SIGKILL" text)
+      (check-regexp-match #rx"foreground timeout now returns a result" text))
 
     (test-case "script runs and exits 0"
       (define-values (sp out in err)

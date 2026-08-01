@@ -17,27 +17,31 @@
     (and m (cadr m))))
 
 (define canonical-docs
-  '("docs/install.md"
-    "docs/getting-started/index.md"
-    "docs/extension-guide.md"
-    "docs/security-trust-model.md"
-    "docs/self-hosting.md"
-    "docs/style-guide.md"
-    "docs/trust-model.md"
-    "docs/workflow-testing.md"
-    "docs/architecture/overview.md"
-    "docs/event-taxonomy.md"))
+  '("docs/install.md" "docs/getting-started/index.md"
+                      "docs/extension-guide.md"
+                      "docs/security-trust-model.md"
+                      "docs/self-hosting.md"
+                      "docs/style-guide.md"
+                      "docs/trust-model.md"
+                      "docs/workflow-testing.md"
+                      "docs/architecture/overview.md"
+                      "docs/event-taxonomy.md"
+                      ;; v0.99.77 W3: agent harness runbook (background-gate pattern,
+                      ;; exit-137 interpretation, post-W1 timeout behavior).
+                      "docs/agent-harness-runbook.md"))
 
 (define (get-file-version path)
   (define text (file->string path))
   (define m1 (regexp-match #rx"verified-against:[ ]*([0-9]+\\.[0-9]+\\.[0-9]+)" text))
-  (cond [m1 (cadr m1)]
-        [else
-         (define m2 (regexp-match #rx"## Version[ \t]*\n+v?([0-9]+\\.[0-9]+\\.[0-9]+)" text))
-         (cond [m2 (cadr m2)]
-               [else
-                (define m3 (regexp-match #rx"[Qq] ([0-9]+\\.[0-9]+\\.[0-9]+)" text))
-                (and m3 (cadr m3))])]))
+  (cond
+    [m1 (cadr m1)]
+    [else
+     (define m2 (regexp-match #rx"## Version[ \t]*\n+v?([0-9]+\\.[0-9]+\\.[0-9]+)" text))
+     (cond
+       [m2 (cadr m2)]
+       [else
+        (define m3 (regexp-match #rx"[Qq] ([0-9]+\\.[0-9]+\\.[0-9]+)" text))
+        (and m3 (cadr m3))])]))
 
 (define (check-doc path)
   (cond
@@ -67,9 +71,7 @@
              [t (regexp-replace* #rx"(## Version[ \t]*\n+v?)[0-9]+\\.[0-9]+\\.[0-9]+"
                                  t
                                  (format "\\1~a" q-version))]
-             [t (regexp-replace* #rx"([Qq] )[0-9]+\\.[0-9]+\\.[0-9]+"
-                                 t
-                                 (format "\\1~a" q-version))])
+             [t (regexp-replace* #rx"([Qq] )[0-9]+\\.[0-9]+\\.[0-9]+" t (format "\\1~a" q-version))])
         t))
     (unless (equal? text new-text)
       (display-to-file new-text path #:exists 'truncate/replace)
