@@ -85,7 +85,7 @@
        'type
        "integer"
        'description
-       "Optional per-call override for the maximum old-text length (default 500, safe ceiling 2000). Use only for deliberate whole-form replacements; do not split a nested form into partial edits.")))
+       "Optional per-call override for max old-text length (default 500, ceiling 2000). Use for whole-form replacements only.")))
     tool-edit
     (string-append
      "IMPORTANT: old-text must match the file content exactly. Copy it verbatim from a prior "
