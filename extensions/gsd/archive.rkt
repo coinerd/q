@@ -185,12 +185,11 @@
   ;; Source 2: Normalize any mixed-case status markers in PLAN.md
   ;; (e.g., LLM wrote [Done] instead of [DONE])
   (normalize-plan-status-markers! base-dir)
-  ;; Source 3: If in executing mode with completed waves, auto-complete
-  ;; remaining [Inbox] waves. The LLM often completes all waves but
-  ;; forgets to call /wave-done for the last one or doesn't update PLAN.md.
-  ;; If at least one wave was completed via /wave-done and we're still in
-  ;; executing mode, the execution ran and remaining Inbox waves are done.
-  (auto-complete-inbox-waves! base-dir))
+  ;; v0.99.80 W1 (GC-5): Removed auto-complete-inbox-waves! heuristic.
+  ;; Wave completion must go through the verifier-first completion service
+  ;; (wave-completion.rkt). Doc existence, executing mode, or prior
+  ;; wave completion never implies completion.
+  (void))
 
 ;; Normalize mixed-case status markers in PLAN.md to canonical forms.
 ;; The LLM often writes [Done] instead of [DONE]. This rewrites
