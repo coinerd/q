@@ -388,7 +388,7 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 
 
-**v0.99.80** — Edit Tool Hardening
+**v0.99.80** — `/go` Wave Campaign Orchestration
 
 **v0.99.78** — Goal Command Hardening
 
