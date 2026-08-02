@@ -26,6 +26,8 @@
                       "docs/workflow-testing.md"
                       "docs/architecture/overview.md"
                       "docs/event-taxonomy.md"
+                      ;; v0.99.79 W2: safe Racket editing and recovery rules.
+                      "docs/editing-rules.md"
                       ;; v0.99.77 W3: agent harness runbook (background-gate pattern,
                       ;; exit-137 interpretation, post-W1 timeout behavior).
                       "docs/agent-harness-runbook.md"))
@@ -83,18 +85,22 @@
   (define results
     (for/list ([doc (in-list canonical-docs)])
       (check-doc doc)))
-  (define errors (length (filter (lambda (r) (eq? r 'stale)) results)))
-  (define missing (length (filter (lambda (r) (eq? r 'no-marker)) results)))
-  (when (and fix? (> (+ errors missing) 0))
+  (define stale (length (filter (lambda (r) (eq? r 'stale)) results)))
+  (define missing-markers (length (filter (lambda (r) (eq? r 'no-marker)) results)))
+  (define missing-files (length (filter (lambda (r) (eq? r 'missing)) results)))
+  (when (and fix? (> (+ stale missing-markers) 0))
     (printf "\nFixing stale/missing markers...\n")
     (for ([doc (in-list canonical-docs)])
       (fix-doc doc)))
   (cond
-    [(= (+ errors missing) 0)
+    [(= (+ stale missing-markers missing-files) 0)
      (printf "\nDoc freshness check PASSED\n")
      (exit 0)]
     [else
-     (printf "\nDoc freshness check FAILED: ~a stale, ~a missing markers\n" errors missing)
+     (printf "\nDoc freshness check FAILED: ~a stale, ~a missing markers, ~a missing files\n"
+             stale
+             missing-markers
+             missing-files)
      (exit 1)]))
 
 (main (vector->list (current-command-line-arguments)))

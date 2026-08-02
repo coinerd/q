@@ -307,7 +307,8 @@
                   (format
                    (string-append "old-text is too long (~a chars, max ~a). "
                                   "For a whole-form replacement, pass max-old-text-len explicitly "
-                                  "(up to ~a); do not split a nested form into partial edits.")
+                                  "(up to ~a), or use the structural edit tool; "
+                                  "do not split a nested form into partial edits.")
                    (string-length old-text)
                    max-old-text-len
                    SAFE-MAX-OLD-TEXT-LEN))]
