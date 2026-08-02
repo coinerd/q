@@ -12,7 +12,9 @@
                   [set-edit-limit! set-current-max-old-text-len!])
          (only-in "../../util/path/path-helpers.rkt" expand-home-path)
          (only-in "../../util/error/error-sanitizer.rkt" sanitize-error-message)
-         (only-in "../../util/racket-source-validation.rkt" validate-proposed-racket-source)
+         (only-in "../../util/racket-source-validation.rkt"
+                  validate-proposed-racket-source
+                  racket-edit-balance-warning)
          (only-in "builtin-helpers.rkt" require-safe-path! check-utf8-file? validate-utf8-bytes)
          "edit-contract.rkt"
          "atomic-file-replace.rkt"
@@ -21,12 +23,14 @@
 (define current-fuzzy-edit-enabled? (make-parameter #f))
 (define current-edit-before-replace-hook (make-parameter void))
 (define current-edit-before-final-replace-hook (make-parameter void))
+(define SAFE-MAX-OLD-TEXT-LEN 2000)
 
 (provide current-max-old-text-len
          set-current-max-old-text-len!
          current-fuzzy-edit-enabled?
          current-edit-before-replace-hook
          current-edit-before-final-replace-hook
+         SAFE-MAX-OLD-TEXT-LEN
          (contract-out [tool-edit (->* (hash?) ((or/c exec-context? #f)) tool-result?)]))
 
 ;; --------------------------------------------------
@@ -263,6 +267,11 @@
        [(require-safe-path! path "edit")
         =>
         (lambda (err) (make-error-result err))]
+       [(let ([provided (hash-ref args 'max-old-text-len #f)])
+          (and provided
+               (or (not (exact-positive-integer? provided)) (> provided SAFE-MAX-OLD-TEXT-LEN))))
+        (make-error-result (format "max-old-text-len must be an exact positive integer at most ~a"
+                                   SAFE-MAX-OLD-TEXT-LEN))]
        [(not (file-exists? path)) (make-error-result (format "File not found: ~a" path))]
        [(not identity-ok?)
         (make-error-result (format "Path identity mismatch for ~a: possible symlink swap" path))]
@@ -277,7 +286,11 @@
               (define initial-modify-seconds (file-or-directory-modify-seconds path))
               (define initial-size (file-size path))
               (define content (bytes->string/utf-8 initial-bytes))
-              (define max-old-text-len (current-max-old-text-len))
+              (define provided-limit (hash-ref args 'max-old-text-len #f))
+              (define max-old-text-len
+                (if provided-limit
+                    provided-limit
+                    (current-max-old-text-len)))
               (define global-fuzzy-enabled? (current-fuzzy-edit-enabled?))
               (define fuzzy-allowed? (or (hash-ref args 'fuzzy? #f) global-fuzzy-enabled?))
               (define edit-result
@@ -292,9 +305,12 @@
                 ['too-long
                  (make-error-result
                   (format
-                   "old-text is too long (~a chars, max ~a). Break your edit into smaller pieces."
+                   (string-append "old-text is too long (~a chars, max ~a). "
+                                  "For a whole-form replacement, pass max-old-text-len explicitly "
+                                  "(up to ~a); do not split a nested form into partial edits.")
                    (string-length old-text)
-                   max-old-text-len))]
+                   max-old-text-len
+                   SAFE-MAX-OLD-TEXT-LEN))]
                 ['not-found (make-error-result (make-not-found-error path old-text content))]
                 ['duplicate
                  (make-error-result
@@ -314,9 +330,12 @@
                                  "Re-read the file and try a smaller edit."))]
                 ['ok
                  (define new-content (edit-contract-result-content edit-result))
+                 (define balance-warning (racket-edit-balance-warning path old-text new-text))
                  (define parse-error (validate-proposed-racket-source path new-content))
                  (if parse-error
-                     (make-error-result parse-error)
+                     (make-error-result (if balance-warning
+                                            (string-append parse-error "\n" balance-warning)
+                                            parse-error))
                      (let ([backup-path (save-backup path content)])
                        (with-handlers ([exn:fail:filesystem?
                                         (lambda (e)
@@ -336,9 +355,13 @@
                             #:before-final-guard (current-edit-before-final-replace-hook)))
                          (if replaced?
                              (make-success-result
-                              (list (format "Edited ~a (replaced ~a occurrence)"
-                                            path
-                                            (edit-contract-result-replacements edit-result)))
+                              (list
+                               (let ([base (format "Edited ~a (replaced ~a occurrence)"
+                                                   path
+                                                   (edit-contract-result-replacements edit-result))])
+                                 (if balance-warning
+                                     (string-append base "\n" balance-warning)
+                                     base)))
                               (hasheq 'path
                                       path
                                       'replacements

@@ -14,7 +14,8 @@
 (provide racket-source-path?
          validate-proposed-racket-source
          current-racket-parse-timeout-ms
-         current-racket-parse-memory-limit-mb)
+         current-racket-parse-memory-limit-mb
+         racket-edit-balance-warning)
 
 (define current-racket-parse-timeout-ms (make-parameter 1000))
 (define current-racket-parse-memory-limit-mb (make-parameter 64))
@@ -88,6 +89,44 @@
       (define form (read-syntax path in))
       (unless (eof-object? form)
         (loop)))))
+
+;; --------------------------------------------------
+;; Balance guard: fast string-aware paren-depth heuristic.
+;; Returns #f when old-text and new-text have the same S-expression
+;; depth delta, or a warning string when the delta is nonzero for a
+;; Racket-family file. The W0 parse check is the authoritative backstop;
+;; this guard only provides routing guidance to prevent structural splits.
+;; --------------------------------------------------
+
+(define (count-paren-depth text)
+  (define in (open-input-string text))
+  (let loop ([depth 0])
+    (define-values (lexeme type _paren _start _end) (racket-lexer in))
+    (cond
+      [(eq? type 'eof) depth]
+      [(eq? type 'parenthesis)
+       (loop (+ depth
+                (for/fold ([delta 0]) ([ch (in-string lexeme)])
+                  (cond
+                    [(memv ch '(#\( #\[ #\{)) (add1 delta)]
+                    [(memv ch '(#\) #\] #\})) (sub1 delta)]
+                    [else delta]))))]
+      [else (loop depth)])))
+
+(define (racket-edit-balance-warning path old-text new-text)
+  (and (racket-source-path? path)
+       (let ([delta (- (count-paren-depth new-text) (count-paren-depth old-text))])
+         (and (not (zero? delta))
+              (format
+               (string-append
+                "Warning: this edit changes S-expression depth by ~a, "
+                "which is a structural-split risk. "
+                "For a whole-form replacement, replace the entire form in one edit "
+                "(pass max-old-text-len explicitly if needed) or use the structural edit tool; "
+                "do not split a nested form into partial edits.")
+               (if (positive? delta)
+                   (format "+~a" delta)
+                   (number->string delta)))))))
 
 ;; Returns #f when the complete proposed content is readable, otherwise an
 ;; actionable error string. Non-Racket paths intentionally bypass validation.
