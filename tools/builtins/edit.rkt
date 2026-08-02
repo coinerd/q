@@ -12,6 +12,7 @@
                   [set-edit-limit! set-current-max-old-text-len!])
          (only-in "../../util/path/path-helpers.rkt" expand-home-path)
          (only-in "../../util/error/error-sanitizer.rkt" sanitize-error-message)
+         (only-in "../../util/racket-source-validation.rkt" validate-proposed-racket-source)
          (only-in "builtin-helpers.rkt" require-safe-path! check-utf8-file? validate-utf8-bytes)
          "edit-contract.rkt"
          "atomic-file-replace.rkt"
@@ -312,40 +313,43 @@
                                  "The file may have been modified since your last read. "
                                  "Re-read the file and try a smaller edit."))]
                 ['ok
-                 (define backup-path (save-backup path content))
                  (define new-content (edit-contract-result-content edit-result))
-                 (with-handlers ([exn:fail:filesystem?
-                                  (lambda (e)
-                                    (make-error-result (sanitize-error-message
-                                                        (format "Write error: ~a"
-                                                                (exn-message e)))))])
-                   (define replaced?
-                     (atomic-replace-file-if-unchanged
-                      path
-                      initial-identity
-                      initial-bytes
-                      permission-bits
-                      initial-modify-seconds
-                      initial-size
-                      new-content
-                      #:before-guard (current-edit-before-replace-hook)
-                      #:before-final-guard (current-edit-before-final-replace-hook)))
-                   (if replaced?
-                       (make-success-result
-                        (list (format "Edited ~a (replaced ~a occurrence)"
+                 (define parse-error (validate-proposed-racket-source path new-content))
+                 (if parse-error
+                     (make-error-result parse-error)
+                     (let ([backup-path (save-backup path content)])
+                       (with-handlers ([exn:fail:filesystem?
+                                        (lambda (e)
+                                          (make-error-result (sanitize-error-message
+                                                              (format "Write error: ~a"
+                                                                      (exn-message e)))))])
+                         (define replaced?
+                           (atomic-replace-file-if-unchanged
+                            path
+                            initial-identity
+                            initial-bytes
+                            permission-bits
+                            initial-modify-seconds
+                            initial-size
+                            new-content
+                            #:before-guard (current-edit-before-replace-hook)
+                            #:before-final-guard (current-edit-before-final-replace-hook)))
+                         (if replaced?
+                             (make-success-result
+                              (list (format "Edited ~a (replaced ~a occurrence)"
+                                            path
+                                            (edit-contract-result-replacements edit-result)))
+                              (hasheq 'path
                                       path
-                                      (edit-contract-result-replacements edit-result)))
-                        (hasheq 'path
-                                path
-                                'replacements
-                                (edit-contract-result-replacements edit-result)
-                                'old-length
-                                (string-length old-text)
-                                'new-length
-                                (string-length new-text)
-                                'backup
-                                (or backup-path "")))
-                       (make-error-result
-                        (string-append
-                         "Edit aborted: the file changed since it was read. "
-                         "The newer file was left untouched, re-read and retry."))))])))])]))
+                                      'replacements
+                                      (edit-contract-result-replacements edit-result)
+                                      'old-length
+                                      (string-length old-text)
+                                      'new-length
+                                      (string-length new-text)
+                                      'backup
+                                      (or backup-path "")))
+                             (make-error-result
+                              (string-append
+                               "Edit aborted: the file changed since it was read. "
+                               "The newer file was left untouched, re-read and retry."))))))])))])]))
