@@ -92,6 +92,24 @@
          (define txt (error-text result))
          (check-true (string-contains? txt "appears 0 times"))
          (check-equal? (file->string p) "hello world\n"))
+       (lambda () (cleanup-path p))))
+
+    (test-case "not-found diagnostic compares nearest region instead of file start"
+      (define p
+        (make-temp-file
+         "#lang racket/base\n\n(define (foo x)\n  (let loop ([y x])\n    (displayln y)))\n"))
+      (dynamic-wind
+       void
+       (lambda ()
+         (define result
+           (call-edit (hasheq 'path p 'old-text "    (let loop ([y x])" 'new-text "replacement")))
+         (check-true (tool-result-is-error? result))
+         (define txt (error-text result))
+         (check-true (string-contains? txt "Nearest match at line 4"))
+         (check-true (string-contains? txt "First differing offset: 2 (U+28 vs U+20)"))
+         (check-true (string-contains? txt "Context around mismatch in file:  [U+20 U+20 U+28 U+6c"))
+         (check-true (string-contains? txt "file line has 2 leading spaces, old-text has 4"))
+         (check-false (string-contains? txt "Context around mismatch in file:  [U+23")))
        (lambda () (cleanup-path p))))))
 
 (module+ test
