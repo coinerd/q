@@ -24,6 +24,7 @@
          "limits.rkt"
          ;; SEC-7 (v0.99.76 W2): shared config-dir resolution for edit backups.
          (only-in "../util/config-paths.rkt" global-config-dir)
+         (only-in "../util/racket-source-validation.rkt" validate-proposed-racket-source)
          (only-in "../tools/builtins/edit-contract.rkt"
                   DEFAULT-MAX-OLD-TEXT-LEN
                   apply-edit-contract
@@ -400,10 +401,12 @@
            (define new-content (edit-contract-result-content edit-result))
            ;; SEC-7 (v0.99.76 W2): backup original + TOCTOU identity re-check
            (define identity-after (worker-file-identity resolved))
-           ;; SEC-7 (v0.99.76 W2): per-write size limit — fail closed before backup/write
+           ;; Parse and size validation both fail closed before backup/write.
+           ;; The shared parser keeps worker and in-process edit semantics equal.
+           (define validation-error (validate-proposed-racket-source resolved new-content))
            (define limit-error (worker-write-limit-check new-content))
-           (if limit-error
-               (make-error-response #f limit-error)
+           (if (or validation-error limit-error)
+               (make-error-response #f (or validation-error limit-error))
                (if (worker-identity-unchanged? identity-before identity-after)
                    (let ([write-error
                           (begin
