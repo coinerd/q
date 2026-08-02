@@ -170,6 +170,44 @@
                       (check-equal? (file->string path) "short"))
                     (lambda () (delete-directory/files dir))))
 
+    (test-case "explicit false max-old-text-len is rejected in both planes"
+      (define dir (make-temporary-file "q-edit-false-limit-~a" 'directory))
+      (define local-path (build-path dir "local.txt"))
+      (define worker-path (build-path dir "worker.txt"))
+      (define content "unchanged")
+      (dynamic-wind
+       void
+       (lambda ()
+         (display-to-file content local-path #:exists 'replace)
+         (display-to-file content worker-path #:exists 'replace)
+         (define local-result
+           (tool-edit (hasheq 'path
+                              (path->string local-path)
+                              'old-text
+                              content
+                              'new-text
+                              "changed"
+                              'max-old-text-len
+                              #f)))
+         (define worker-result
+           (parameterize ([current-allowed-roots (list dir)])
+             (dispatch-tool "edit"
+                            (hasheq 'path
+                                    (path->string worker-path)
+                                    'old-text
+                                    content
+                                    'new-text
+                                    "changed"
+                                    'max-old-text-len
+                                    #f))))
+         (check-true (tool-result-is-error? local-result))
+         (check-equal? (ipc-response-status worker-result) 'error)
+         (check-true (string-contains? (local-result-text local-result) "max-old-text-len"))
+         (check-true (string-contains? (ipc-response-error-message worker-result) "max-old-text-len"))
+         (check-equal? (file->string local-path) content)
+         (check-equal? (file->string worker-path) content))
+       (lambda () (delete-directory/files dir))))
+
     (test-case "worker too-long error routes to a whole-form structural edit"
       (define dir (make-temporary-file "q-edit-worker-too-long-~a" 'directory))
       (define path (build-path dir "worker.txt"))

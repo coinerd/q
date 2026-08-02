@@ -355,8 +355,10 @@
   (define path (hash-ref args 'path #f))
   (define old-text (hash-ref args 'old-text #f))
   (define new-text (hash-ref args 'new-text ""))
+  (define max-old-text-len-provided? (hash-has-key? args 'max-old-text-len))
   (define provided-max-old-text-len (hash-ref args 'max-old-text-len #f))
-  (define effective-max-old-text-len (or provided-max-old-text-len max-old-text-len))
+  (define effective-max-old-text-len
+    (if max-old-text-len-provided? provided-max-old-text-len max-old-text-len))
   (cond
     [(not path) (make-error-response #f "edit: missing 'path' argument")]
     [(not old-text) (make-error-response #f "edit: missing 'old-text' argument")]
