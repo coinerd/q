@@ -31,6 +31,7 @@ q/docs/
 ├── security.md        ← security model
 ├── security-mtls.md   ← mTLS security model for distributed execution
 ├── distributed-execution-guide.md ← remote executor deployment guide
+├── editing-rules.md   ← safe Racket editing and recovery runbook
 ├── style-guide.md     ← code style conventions
 ├── trust-model.md     ← trust boundaries
 ├── why-q.md           ← motivation and packaging roadmap
