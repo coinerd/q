@@ -1,3 +1,27 @@
+## 0.99.80
+
+Released 2026-08-02.
+
+### `/go` Wave Campaign Orchestration
+
+- Replaced all-waves-in-one-agent-run behavior with a durable campaign coordinator that selects one actionable wave, runs one focused prompt, verifies it, checkpoints it, and only then starts the next wave.
+
+### Features
+
+- Durable campaign state with immutable manifest identity: plan ID is SHA-256 of an immutable manifest. Status-only projection changes preserve plan identity; substantive edits pause the campaign as PLAN-CHANGED.
+- Initial migration truth: campaigns seed from durable PLAN.md/STATE.md sources only. Conflicting sources fail closed.
+- Canonical status mapping with exactly seven statuses (PENDING, IN-PROGRESS, VERIFYING, DONE, FAILED, INTERRUPTED, DEFERRED). FAILED never counts as successful completion; INTERRUPTED retries.
+- Verifier-first completion: no production path persists DONE before evidence is verified.
+- Durable completion outbox with event-ID deduplication: completion effects are idempotent across crash windows.
+- Single-wave campaign coordinator with process-safe OS advisory lease: one wave per prompt invocation, no recursive N+1 submission, duplicate process rejection.
+- `/go N` assertion-only semantics: the optional wave argument cannot bypass dependencies.
+
+### Bug Fixes
+
+- Removed unsafe auto-completion heuristics from `/done` archive path.
+- Fixed struct naming convention errors that prevented the campaign-state module from compiling.
+- Fixed STATE.md wave-table status parsing to trim whitespace from status fields.
+
 ## 0.99.79
 
 Released 2026-08-02.
