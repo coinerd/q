@@ -119,7 +119,21 @@
 
 (define (make-not-found-error path-str old-text content)
   (define-values (line-num line-text) (find-nearest-match content old-text))
-  (define-values (diff-offset content-char old-char) (first-differing-offset content old-text))
+  ;; Compare old-text against the nearest matching region, not the file start.
+  ;; Otherwise an indented snippet in a Racket file misleadingly differs from
+  ;; the leading `#lang` at offset zero.
+  (define old-lines (string-split old-text "\n" #:trim? #f))
+  (define comparison-lines
+    (if line-num
+        (let* ([content-lines (string-split content "\n" #:trim? #f)]
+               [region-start (sub1 line-num)]
+               [region-end (min (length content-lines) (+ region-start (length old-lines)))])
+          (for/list ([i (in-range region-start region-end)])
+            (list-ref content-lines i)))
+        (string-split content "\n" #:trim? #f)))
+  (define comparison-region (string-join comparison-lines "\n"))
+  (define-values (diff-offset content-char old-char)
+    (first-differing-offset comparison-region old-text))
   (define diff-detail
     (cond
       [(and diff-offset content-char old-char)
@@ -128,26 +142,30 @@
         diff-offset
         (escape-char content-char)
         (escape-char old-char)
-        (escaped-context content diff-offset)
+        (escaped-context comparison-region diff-offset)
         (escaped-context old-text diff-offset))]
       [diff-offset
-       (format "First differing offset: ~a (file has ~a chars, old-text has ~a chars)\n"
+       (format "First differing offset: ~a (nearest region has ~a chars, old-text has ~a chars)\n"
                diff-offset
-               (string-length content)
+               (string-length comparison-region)
                (string-length old-text))]
       [else ""]))
   (define ws-info
-    (let* ([c-lines (string-split content "\n" #:trim? #f)]
-           [o-lines (string-split old-text "\n" #:trim? #f)]
-           [diff-lines (for/list ([c (in-list c-lines)]
-                                  [o (in-list o-lines)]
-                                  #:when (and c o (not (equal? c o))))
-                         (define c-spaces (count-leading-spaces c))
-                         (define o-spaces (count-leading-spaces o))
-                         (format "  file has ~a leading spaces, old-text has ~a" c-spaces o-spaces))])
-      (if (pair? diff-lines)
-          (string-append "Whitespace differences:\n" (string-join diff-lines "\n"))
-          "")))
+    (if line-num
+        (let ([diff-lines
+               (for/list ([c (in-list comparison-lines)]
+                          [o (in-list old-lines)]
+                          #:when (not (equal? c o)))
+                 (define c-spaces (count-leading-spaces c))
+                 (define o-spaces (count-leading-spaces o))
+                 (format "  file line has ~a leading spaces, old-text has ~a" c-spaces o-spaces))])
+          (if (pair? diff-lines)
+              (string-append "Whitespace differences near line "
+                             (number->string line-num)
+                             ":\n"
+                             (string-join diff-lines "\n"))
+              ""))
+        ""))
   (define hint
     (match old-text
       [(? (lambda (s) (and (string? s) (regexp-match? #rx"^ +" s))))
