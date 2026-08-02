@@ -79,13 +79,20 @@
        'type
        "boolean"
        'description
-       "Enable whitespace-tolerant matching (default false). Ambiguous matches are rejected; boolean values only.")))
+       "Enable whitespace-tolerant matching (default false). Ambiguous matches are rejected; boolean values only.")
+      'max-old-text-len
+      (hasheq
+       'type
+       "integer"
+       'description
+       "Optional per-call override for the maximum old-text length (default 500, safe ceiling 2000). Use only for deliberate whole-form replacements; do not split a nested form into partial edits.")))
     tool-edit
     (string-append
      "IMPORTANT: old-text must match the file content exactly. Copy it verbatim from a prior "
      "read tool result. If edit fails, re-read the file first. "
      "Keep old-text short — ideally under 500 chars (~20 lines). "
-     "If you need to change a large block, split into multiple smaller edits. "
+     "If you need to replace a whole nested form, pass max-old-text-len explicitly (up to 2000) "
+     "and replace the entire form in one edit; do not split a nested form into partial edits. "
      "Set fuzzy? to boolean true only for whitespace drift; ambiguous fuzzy matches are rejected.")
     'file-write)
    ;; bash

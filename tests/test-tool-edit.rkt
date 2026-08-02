@@ -147,7 +147,7 @@
   (define msg (hash-ref (car (tool-result-content result)) 'text))
   (check-true (string-contains? msg "too long"))
   (check-true (string-contains? msg "500"))
-  (check-true (string-contains? msg "Break your edit"))
+  (check-true (string-contains? msg "max-old-text-len"))
   ;; File must not be modified
   (check-equal? (file->string tmp) (make-string 600 #\x))
   (delete-file tmp))
@@ -201,7 +201,9 @@
   (check-not-false t)
   (define guidelines (tool-prompt-guidelines t))
   ;; v0.19.10: guidelines should mention the 500-char limit
-  (check-true (string-contains? guidelines "500") "should mention 500-char limit"))
+  (check-true (string-contains? guidelines "500") "should mention 500-char limit")
+  ;; W1: guidelines should mention whole-form replacement
+  (check-true (string-contains? guidelines "whole") "should mention whole-form replacement"))
 
 (test-case "tool-edit: & in new-text is not expanded (was regexp-replace bug)"
   (define tmp (make-temporary-file "q-test-edit-~a.txt"))
