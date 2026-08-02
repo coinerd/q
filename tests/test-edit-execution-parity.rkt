@@ -21,7 +21,7 @@
                   ipc-response-content
                   ipc-response-details
                   ipc-response-error-message)
-         (only-in "../sandbox/worker-tools.rkt" current-allowed-roots execute-edit))
+         (only-in "../sandbox/worker-tools.rkt" current-allowed-roots dispatch-tool execute-edit))
 
 (define (local-result-text result)
   (define c (tool-result-content result))
@@ -147,6 +147,70 @@
                        #:expected-status 'ok
                        #:expected-content "short"
                        #:expected-replacements 1))
+
+    (test-case "worker dispatch honors max-old-text-len from public arguments"
+      (define dir (make-temporary-file "q-edit-worker-limit-~a" 'directory))
+      (define path (build-path dir "worker.txt"))
+      (define old-text (make-string 501 #\x))
+      (dynamic-wind void
+                    (lambda ()
+                      (display-to-file old-text path #:exists 'replace)
+                      (define result
+                        (parameterize ([current-allowed-roots (list dir)])
+                          (dispatch-tool "edit"
+                                         (hasheq 'path
+                                                 (path->string path)
+                                                 'old-text
+                                                 old-text
+                                                 'new-text
+                                                 "short"
+                                                 'max-old-text-len
+                                                 600))))
+                      (check-equal? (ipc-response-status result) 'ok)
+                      (check-equal? (file->string path) "short"))
+                    (lambda () (delete-directory/files dir))))
+
+    (test-case "worker too-long error routes to a whole-form structural edit"
+      (define dir (make-temporary-file "q-edit-worker-too-long-~a" 'directory))
+      (define path (build-path dir "worker.txt"))
+      (define content (make-string 600 #\x))
+      (dynamic-wind
+       void
+       (lambda ()
+         (display-to-file content path #:exists 'replace)
+         (define result
+           (parameterize ([current-allowed-roots (list dir)])
+             (dispatch-tool
+              "edit"
+              (hasheq 'path (path->string path) 'old-text (make-string 501 #\x) 'new-text "short"))))
+         (define message (ipc-response-error-message result))
+         (check-equal? (ipc-response-status result) 'error)
+         (check-true (string-contains? message "max-old-text-len"))
+         (check-true (string-contains? message "whole-form"))
+         (check-true (string-contains? message "structural edit tool"))
+         (check-equal? (file->string path) content))
+       (lambda () (delete-directory/files dir))))
+
+    (test-case "worker parse rejection includes lexer-aware balance guidance"
+      (define dir (make-temporary-file "q-edit-worker-balance-~a" 'directory))
+      (define path (build-path dir "worker.rkt"))
+      (define content "#lang racket/base\n(define (f)\n  1)\n")
+      (dynamic-wind
+       void
+       (lambda ()
+         (display-to-file content path #:exists 'replace)
+         (define result
+           (parameterize ([current-allowed-roots (list dir)])
+             (dispatch-tool
+              "edit"
+              (hasheq 'path (path->string path) 'old-text "  1" 'new-text "  (begin\n    1"))))
+         (define message (ipc-response-error-message result))
+         (check-equal? (ipc-response-status result) 'error)
+         (check-true (string-contains? message "changes S-expression depth"))
+         (check-true (string-contains? message "structural-split risk"))
+         (check-true (string-contains? message "whole-form replacement"))
+         (check-equal? (file->string path) content))
+       (lambda () (delete-directory/files dir))))
 
     (test-case "literal U+2014 survives matching and replacement"
       (run-parity-case "before — after"

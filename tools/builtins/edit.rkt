@@ -23,7 +23,6 @@
 (define current-fuzzy-edit-enabled? (make-parameter #f))
 (define current-edit-before-replace-hook (make-parameter void))
 (define current-edit-before-final-replace-hook (make-parameter void))
-(define SAFE-MAX-OLD-TEXT-LEN 2000)
 
 (provide current-max-old-text-len
          set-current-max-old-text-len!

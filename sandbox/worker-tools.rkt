@@ -24,9 +24,12 @@
          "limits.rkt"
          ;; SEC-7 (v0.99.76 W2): shared config-dir resolution for edit backups.
          (only-in "../util/config-paths.rkt" global-config-dir)
-         (only-in "../util/racket-source-validation.rkt" validate-proposed-racket-source)
+         (only-in "../util/racket-source-validation.rkt"
+                  validate-proposed-racket-source
+                  racket-edit-balance-warning)
          (only-in "../tools/builtins/edit-contract.rkt"
                   DEFAULT-MAX-OLD-TEXT-LEN
+                  SAFE-MAX-OLD-TEXT-LEN
                   apply-edit-contract
                   edit-contract-result-status
                   edit-contract-result-content
@@ -352,9 +355,17 @@
   (define path (hash-ref args 'path #f))
   (define old-text (hash-ref args 'old-text #f))
   (define new-text (hash-ref args 'new-text ""))
+  (define provided-max-old-text-len (hash-ref args 'max-old-text-len #f))
+  (define effective-max-old-text-len (or provided-max-old-text-len max-old-text-len))
   (cond
     [(not path) (make-error-response #f "edit: missing 'path' argument")]
     [(not old-text) (make-error-response #f "edit: missing 'old-text' argument")]
+    [(or (not (exact-positive-integer? effective-max-old-text-len))
+         (> effective-max-old-text-len SAFE-MAX-OLD-TEXT-LEN))
+     (make-error-response
+      #f
+      (format "edit: max-old-text-len must be an exact positive integer at most ~a"
+              SAFE-MAX-OLD-TEXT-LEN))]
     [(and (hash-has-key? args 'fuzzy?) (not (boolean? (hash-ref args 'fuzzy?))))
      (make-error-response #f "edit: fuzzy? must be a boolean (#t or #f)")]
     [(not (boolean? global-fuzzy-enabled?))
@@ -375,14 +386,19 @@
                                old-text
                                new-text
                                #:fuzzy? fuzzy-allowed?
-                               #:max-old-text-len max-old-text-len))
+                               #:max-old-text-len effective-max-old-text-len))
         (case (edit-contract-result-status edit-result)
           [(empty-old-text) (make-error-response #f "edit: old-text must not be empty")]
           [(too-long)
-           (make-error-response #f
-                                (format "edit: old-text is too long (~a chars, max ~a)"
-                                        (string-length old-text)
-                                        max-old-text-len))]
+           (make-error-response
+            #f
+            (format (string-append "edit: old-text is too long (~a chars, max ~a). "
+                                   "For a whole-form replacement, pass max-old-text-len explicitly "
+                                   "(up to ~a), or use the structural edit tool; "
+                                   "do not split a nested form into partial edits.")
+                    (string-length old-text)
+                    effective-max-old-text-len
+                    SAFE-MAX-OLD-TEXT-LEN))]
           [(not-found)
            (define detail (build-not-found-detail content old-text))
            (make-error-response #f (format "edit: old-text not found in file\n~a" detail))]
@@ -402,11 +418,18 @@
            ;; SEC-7 (v0.99.76 W2): backup original + TOCTOU identity re-check
            (define identity-after (worker-file-identity resolved))
            ;; Parse and size validation both fail closed before backup/write.
-           ;; The shared parser keeps worker and in-process edit semantics equal.
+           ;; The shared parser and balance guidance keep worker and in-process
+           ;; edit semantics equal.
+           (define balance-warning (racket-edit-balance-warning resolved old-text new-text))
            (define validation-error (validate-proposed-racket-source resolved new-content))
+           (define validation-message
+             (and validation-error
+                  (if balance-warning
+                      (string-append validation-error "\n" balance-warning)
+                      validation-error)))
            (define limit-error (worker-write-limit-check new-content))
-           (if (or validation-error limit-error)
-               (make-error-response #f (or validation-error limit-error))
+           (if (or validation-message limit-error)
+               (make-error-response #f (or validation-message limit-error))
                (if (worker-identity-unchanged? identity-before identity-after)
                    (let ([write-error
                           (begin
@@ -416,7 +439,9 @@
                          (make-error-response #f write-error)
                          (ipc-response #f
                                        'ok
-                                       "edit applied"
+                                       (if balance-warning
+                                           (string-append "edit applied\n" balance-warning)
+                                           "edit applied")
                                        (hasheq 'path
                                                (path->string resolved)
                                                'replacements
