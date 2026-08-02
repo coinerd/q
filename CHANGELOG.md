@@ -1,3 +1,41 @@
+## 0.99.79
+
+Released 2026-08-02.
+
+### Edit Tool Hardening
+
+- Hardened the text edit boundary, safe agent routing, and recovery workflow for Racket-family source files.
+
+### Features
+
+- Racket-family edits are validated with a sandboxed reader before any bytes are committed, rejecting unparseable output and unsafe reader directives while preserving the original file.
+- The edit contract accepts a deliberate per-call `max-old-text-len` override up to 2000 characters so agents can replace whole forms instead of splitting nested syntax.
+- A canonical safe-editing runbook documents whole-form and structural-tool routing, mandatory post-edit compilation, and explicit recovery from `HEAD`.
+
+### Bug Fixes
+
+- Prevented edits that leave `.rkt`, `.rktl`, or `.scrbl` files unparseable from being written.
+- Added lexer-aware structural-depth guidance that ignores delimiters inside strings and comments and routes depth-changing edits toward whole-form replacement.
+- Made document-freshness validation fail when a registered document is missing, preventing silent loss of the editing runbook.
+
+### Breaking / Behavior Changes
+
+- Invalid Racket-family edits now fail before write instead of leaving malformed source on disk. Oversized edits require an explicit bounded override; the default 500-character limit is unchanged.
+
+### Migration Notes
+
+- No data migration is required. Agents and integrations should treat parse-validation failures as non-mutating errors, then retry with a complete whole-form replacement or a structural edit tool.
+
+### Testing
+
+- Added permanent parse-validation, hostile-reader, execution-parity, structural-balance, limit-override, guidance-consistency, missing-document, and Git-recovery regression tests.
+- W0–W2 focused suites and each wave's fast gate passed. The release candidate is gated by broad, security, architecture, lint, and strict release-dry-run checks.
+
+### Operational / Release
+
+- Reader validation remains fast and pre-write; full `raco make` compilation remains mandatory agent workflow after successful Racket-family edits.
+- Release artifacts are generated and verified through the protected tag workflow with manifest and installed-tarball smoke checks.
+
 ## 0.99.78
 
 Released 2026-08-01.

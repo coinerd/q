@@ -7,6 +7,7 @@
          "edit-normalize.rkt")
 
 (define DEFAULT-MAX-OLD-TEXT-LEN 500)
+(define SAFE-MAX-OLD-TEXT-LEN 2000)
 (define MAX-LINE-DELTA-DIFFERENCE 2)
 
 (struct edit-contract-result (status content occurrences replacements fuzzy?) #:transparent)
@@ -20,7 +21,8 @@
                        [apply-edit-contract
                         (->* (string? string? string?)
                              (#:fuzzy? boolean? #:max-old-text-len exact-nonnegative-integer?)
-                             edit-contract-result?)]))
+                             edit-contract-result?)])
+         SAFE-MAX-OLD-TEXT-LEN)
 
 (define (string-index haystack needle [start 0])
   (define match (regexp-match-positions (regexp-quote needle) (substring haystack start)))

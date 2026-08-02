@@ -23,7 +23,6 @@
 (define current-fuzzy-edit-enabled? (make-parameter #f))
 (define current-edit-before-replace-hook (make-parameter void))
 (define current-edit-before-final-replace-hook (make-parameter void))
-(define SAFE-MAX-OLD-TEXT-LEN 2000)
 
 (provide current-max-old-text-len
          set-current-max-old-text-len!
@@ -267,8 +266,8 @@
        [(require-safe-path! path "edit")
         =>
         (lambda (err) (make-error-result err))]
-       [(let ([provided (hash-ref args 'max-old-text-len #f)])
-          (and provided
+       [(and (hash-has-key? args 'max-old-text-len)
+             (let ([provided (hash-ref args 'max-old-text-len)])
                (or (not (exact-positive-integer? provided)) (> provided SAFE-MAX-OLD-TEXT-LEN))))
         (make-error-result (format "max-old-text-len must be an exact positive integer at most ~a"
                                    SAFE-MAX-OLD-TEXT-LEN))]
