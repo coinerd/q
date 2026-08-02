@@ -29,20 +29,25 @@
                   canonical-commands
                   make-ui-command-registry)
          "gui-types.rkt"
-         "../runtime/goal/goal-checks.rkt")
+         "../runtime/goal/goal-checks.rkt"
+         (only-in "../extensions/gsd/go-orchestrator.rkt"
+                  execute-campaign-token!
+                  campaign-result-status)
+         (only-in "../runtime/session/session-types.rkt" agent-session-config))
 
 ;; GAP-CR (v0.98.8 W1): Cache command registry at module level instead of rebuilding per invocation.
 (define the-canonical-registry (make-ui-command-registry canonical-commands))
 
 ;; M-01 (v0.98.10 W0): Tighten sess from any/c to (or/c agent-session? #f).
-(provide (contract-out
-          [make-slash-command-handler
-           (->* ((or/c agent-session? #f) (box/c gui-state?) semaphore?)
-                (procedure? #:goal-cancel-box (box/c boolean?))
-                (-> string? boolean?))]
-          [add-system-msg! (->* (string? (box/c gui-state?) semaphore?) (procedure?) void?)]
-          [try-extension-dispatch
-           (-> (or/c agent-session? #f) (box/c gui-state?) semaphore? string? boolean?)]))
+(provide (contract-out [make-slash-command-handler
+                        (->* ((or/c agent-session? #f) (box/c gui-state?) semaphore?)
+                             (procedure? #:goal-cancel-box (box/c boolean?))
+                             (-> string? boolean?))]
+                       [add-system-msg!
+                        (->* (string? (box/c gui-state?) semaphore?) (procedure?) void?)]
+                       [try-extension-dispatch
+                        (-> (or/c agent-session? #f) (box/c gui-state?) semaphore? string? boolean?)])
+         make-gui-campaign-runner)
 
 ;; --------------------------------------------------
 ;; Helper: add a system message to the transcript
@@ -53,6 +58,10 @@
    (lambda ()
      (set-box! state-box (gui-state-add-message (unbox state-box) (make-gui-message "system" text)))
      (notify!))))
+
+(define (make-gui-campaign-runner initiating-session)
+  (define campaign-session (make-agent-session (agent-session-config initiating-session)))
+  (values campaign-session (lambda (prompt) (run-prompt! campaign-session prompt))))
 
 ;; --------------------------------------------------
 ;; Extension dispatch
@@ -73,6 +82,7 @@
   (cond
     [(and (hook-result? ext-result) (eq? (hook-result-action ext-result) 'amend))
      (define payload (hook-result-payload ext-result))
+     (define campaign-token (hash-ref payload 'campaign-token #f))
      (when (hash-ref payload 'text #f)
        (add-system-msg! (hash-ref payload 'text) state-box gui-state-lock))
      (when (hash-ref payload 'submit #f)
@@ -83,8 +93,26 @@
                                                                state-box
                                                                gui-state-lock))])
                    (run-prompt! sess (hash-ref payload 'submit))))))
-     ;; B1: Handle 'new-session from GSD /go (matches TUI execute-extension-command)
-     (when (hash-ref payload 'new-session #f)
+     ;; Campaign tokens take precedence over the legacy all-plan prompt.  The
+     ;; coordinator calls run-prompt! once per isolated wave and advances only
+     ;; after its verifier accepts the returned attempt.
+     (when campaign-token
+       (thread
+        (lambda ()
+          (with-handlers ([exn:fail? (lambda (e)
+                                       (add-system-msg! (format "[ERROR] /go campaign failed: ~a"
+                                                                (exn-message e))
+                                                        state-box
+                                                        gui-state-lock))])
+            (define-values (_campaign-session campaign-runner) (make-gui-campaign-runner sess))
+            (define result (execute-campaign-token! campaign-token campaign-runner))
+            (unless (eq? (campaign-result-status result) 'campaign-complete)
+              (add-system-msg! (format "[ERROR] /go campaign stopped: ~a"
+                                       (campaign-result-status result))
+                               state-box
+                               gui-state-lock))))))
+     ;; Legacy extension compatibility when no runtime campaign token exists.
+     (when (and (not campaign-token) (hash-ref payload 'new-session #f))
        (thread (lambda ()
                  (with-handlers ([exn:fail? (lambda (e)
                                               (add-system-msg! (format "[ERROR] /go failed: ~a"

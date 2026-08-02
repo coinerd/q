@@ -147,45 +147,41 @@
   ;; Wire GSD mode query callback — defaults to 'idle
   ;; Caller (main.rkt) sets current-gsd-mode-query to gsm-ctx-current (via current-gsd-mode-query) if GSD is loaded
 
+  ;; Create one dedicated execution session per campaign.  The returned runner
+  ;; is reused for every wave while the initiating interactive session remains
+  ;; separate.
+  (define (make-campaign-runner)
+    (define campaign-sess (make-agent-session rt-config))
+    (define campaign-sid (session-id campaign-sess))
+    (define campaign-dir (or (dict-ref rt-config 'session-dir #f) (dict-ref rt-config 'store-dir #f)))
+    (switch-session! #:old-session-id (session-id sess)
+                     #:old-bus bus
+                     #:old-extension-registry (dict-ref rt-config 'extension-registry #f)
+                     #:new-session-id campaign-sid
+                     #:new-session-dir campaign-dir
+                     #:new-bus bus
+                     #:new-extension-registry (dict-ref rt-config 'extension-registry #f)
+                     #:reason 'fork)
+    (set-box! (tui-ctx-agent-session-box ctx) campaign-sess)
+    (set-box! (tui-ctx-ui-state-box ctx)
+              (initial-ui-state #:session-id campaign-sid
+                                #:model-name (dict-ref rt-config 'model-name #f)))
+    (set-box! (tui-ctx-needs-redraw-box ctx) #t)
+    (lambda (prompt) (run-prompt! campaign-sess prompt)))
+
   (define ctx
-    (make-tui-ctx
-     #:event-bus bus
-     #:session-runner (lambda (prompt)
-                        (run-prompt! sess prompt)
-                        (void))
-     #:session-dir sess-dir
-     #:model-registry (dict-ref rt-config 'model-registry #f)
-     #:extension-registry (dict-ref rt-config 'extension-registry #f)
-     #:session-queue (agent-session-queue sess)
-     #:session-factory-runner
-     (lambda (prompt)
-       (with-handlers ([exn:fail?
-                        (lambda (e)
-                          (define err-msg (format "[ERROR] /go failed: ~a" (exn-message e)))
-                          (define entry
-                            (make-entry 'system err-msg (current-inexact-milliseconds) (hash)))
-                          (set-box! (tui-ctx-ui-state-box ctx)
-                                    (add-transcript-entry (unbox (tui-ctx-ui-state-box ctx)) entry))
-                          (set-box! (tui-ctx-needs-redraw-box ctx) #t))])
-         (define new-sess (make-agent-session rt-config))
-         (define new-sid (session-id new-sess))
-         (define new-dir (or (dict-ref rt-config 'session-dir #f) (dict-ref rt-config 'store-dir #f)))
-         (switch-session! #:old-session-id (session-id sess)
-                          #:old-bus bus
-                          #:old-extension-registry (dict-ref rt-config 'extension-registry #f)
-                          #:new-session-id new-sid
-                          #:new-session-dir new-dir
-                          #:new-bus bus
-                          #:new-extension-registry (dict-ref rt-config 'extension-registry #f)
-                          #:reason 'fork)
-         ;; Update agent-session-box with new session for goal-runner
-         (set-box! (tui-ctx-agent-session-box ctx) new-sess)
-         (set-box! (tui-ctx-ui-state-box ctx)
-                   (initial-ui-state #:session-id new-sid
-                                     #:model-name (dict-ref rt-config 'model-name #f)))
-         (set-box! (tui-ctx-needs-redraw-box ctx) #t)
-         (run-prompt! new-sess prompt)))
-     #:agent-session-box (box sess)))
+    (make-tui-ctx #:event-bus bus
+                  #:session-runner (lambda (prompt)
+                                     (run-prompt! sess prompt)
+                                     (void))
+                  #:session-dir sess-dir
+                  #:model-registry (dict-ref rt-config 'model-registry #f)
+                  #:extension-registry (dict-ref rt-config 'extension-registry #f)
+                  #:session-queue (agent-session-queue sess)
+                  #:session-factory-runner (case-lambda
+                                             [() (make-campaign-runner)]
+                                             [(prompt) ((make-campaign-runner) prompt)])
+                  #:agent-session-box (box sess)))
 
   ;; Scrollback path
   (define scrollback-path

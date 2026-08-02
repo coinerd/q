@@ -66,7 +66,9 @@
          (only-in "plan-context-builder.rkt" build-enriched-plan-ctx)
          (only-in "../../agent/verification/verifier-gate.rkt" execute-verification-gate)
          (only-in "../../agent/verification/verifier-core.rkt" current-verifier-enabled)
-         racket/file)
+         racket/file
+         "campaign-state.rkt"
+         "go-orchestrator.rkt")
 
 (provide (contract-out
           [register-gsd-commands (-> extension-ctx? hook-result?)]
@@ -362,29 +364,102 @@
 ;; /go command handler
 ;; ============================================================
 
+(define (requested-wave-index input-text)
+  (define parts (string-split (string-trim input-text)))
+  (define last-part (and (pair? parts) (list-ref parts (sub1 (length parts)))))
+  (and last-part (regexp-match? #rx"^[0-9]+$" last-part) (string->number last-part)))
+
+(define (state-for-wave state-text wave-idx)
+  ;; Only a canonical table row whose first cell is exactly WN may cross the
+  ;; isolation boundary. Free-form dependency lines are excluded.
+  (define current-row-rx (regexp (format "^\\| *W~a *\\|" wave-idx)))
+  (string-join (for/list ([line (in-list (string-split state-text "\n"))]
+                          #:when (regexp-match? current-row-rx line))
+                 line)
+               "\n"))
+
+(define (build-single-wave-prompt base-dir plan wave-idx)
+  (define wave (plan-wave-ref plan wave-idx))
+  (unless wave
+    (error 'build-single-wave-prompt "wave ~a is not present in the validated plan" wave-idx))
+  (define plan-content (read-planning-artifact base-dir "PLAN"))
+  (define entry
+    (for/first ([candidate (in-list (parse-plan-index plan-content))]
+                #:when (= (wave-index-entry-idx candidate) wave-idx))
+      candidate))
+  (define wave-doc (and entry (read-wave-doc base-dir wave-idx (wave-index-entry-slug entry))))
+  (define wave-details
+    (if wave-doc
+        (hash-ref wave-doc 'content "")
+        (string-append (format "Title: ~a\n" (gsd-wave-title wave))
+                       (if (string=? (gsd-wave-root-cause wave) "")
+                           ""
+                           (format "Root cause: ~a\n" (gsd-wave-root-cause wave)))
+                       (if (null? (gsd-wave-files wave))
+                           ""
+                           (format "Files: ~a\n" (string-join (gsd-wave-files wave) ", ")))
+                       (if (string=? (gsd-wave-verify wave) "")
+                           ""
+                           (format "Required verification: ~a\n" (gsd-wave-verify wave))))))
+  (define state-content (state-for-wave (or (read-planning-artifact base-dir "STATE") "") wave-idx))
+  (string-append
+   planning-implement-prompt
+   "# Runtime-Enforced Single-Wave Execution\n\n"
+   (format "Execute ONLY wave W~a in this session. Do not start or inspect later waves.\n" wave-idx)
+   "Return normally only after implementation and required verification complete.\n"
+   "Do not call /wave-done; the coordinator verifies and commits completion after this run returns.\n\n"
+   (format "## Wave W~a\n~a\n" wave-idx wave-details)
+   (if (string=? state-content "")
+       ""
+       (format "\n## Current State\n~a\n" state-content))))
+
+(define (load-or-migrate-campaign base-dir)
+  (define migrated (migrate-campaign! base-dir))
+  (or (load-campaign-record base-dir (campaign-plan-id migrated)) migrated))
+
+(define (prepare-go-campaign base-dir input-text plan validation)
+  (with-handlers ([exn:fail:campaign-migration?
+                   (lambda (e)
+                     (hook-amend (hasheq 'text
+                                         (format "Campaign migration failed closed: ~a"
+                                                 (exn-message e)))))])
+    (define rec (load-or-migrate-campaign base-dir))
+    (define next-wave (select-next-actionable-wave rec))
+    (define requested (requested-wave-index input-text))
+    (cond
+      [(not next-wave) (hook-amend (hasheq 'text "Campaign has no actionable waves."))]
+      [(and requested (not (assert-go-n rec requested)))
+       (hook-amend
+        (hasheq 'text
+                (format "/go ~a rejected: earliest actionable wave is W~a." requested next-wave)))]
+      [else
+       (match (launch-wave-executor validation plan base-dir)
+         [(list 'error msg) (hook-amend (hasheq 'text msg))]
+         [(list 'ok _ _)
+          (define gsd-ctx (current-gsd-ctx))
+          (define request
+            (make-campaign-request
+             base-dir
+             rec
+             (lambda (wave-idx)
+               (gsm-ctx-transition-to! gsd-ctx 'executing)
+               (build-single-wave-prompt base-dir plan wave-idx))
+             (lambda (wave-idx)
+               (gsm-ctx-transition-to! gsd-ctx 'verifying)
+               (eq? (execute-verification-gate gsd-ctx
+                                               (build-enriched-plan-ctx base-dir plan wave-idx))
+                    'approved))))
+          (hook-amend (hasheq 'campaign-token
+                              (register-campaign-request! request)
+                              'new-session
+                              (build-single-wave-prompt base-dir plan next-wave)
+                              'text
+                              (format "Executing campaign from W~a..." next-wave)))])])))
+
 (define (handle-go-command base-dir input-text)
-  (define validation-result (validate-plan-for-go base-dir))
-  (match validation-result
+  (match (validate-plan-for-go base-dir)
     [(list 'error msg) (hook-amend (hasheq 'text msg))]
-    [(list 'ok plan norm-result validation)
-     (define launch-result (launch-wave-executor validation plan base-dir))
-     (match launch-result
-       [(list 'error msg) (hook-amend (hasheq 'text msg))]
-       [(list 'ok executor _)
-        (define wave-arg
-          (let* ([trimmed (string-trim input-text)]
-                 [parts (string-split trimmed)])
-            (if (>= (length parts) 2)
-                (let ([maybe-num (string-trim (string-join (cdr parts) " "))])
-                  (if (and (> (string-length maybe-num) 0) (regexp-match? #rx"^[0-9]+$" maybe-num))
-                      (format "\nStart with wave ~a." maybe-num)
-                      ""))
-                "")))
-        (define plan-content (read-planning-artifact base-dir "PLAN"))
-        (define plan-from-index (load-plan-from-index base-dir))
-        (define-values (augmented-text display-text)
-          (build-go-prompt base-dir plan-content plan-from-index executor wave-arg plan))
-        (hook-amend (hasheq 'new-session augmented-text 'text display-text))])]))
+    [(list 'ok plan _ validation) (prepare-go-campaign base-dir input-text plan validation)]))
 
 ;; ============================================================
 ;; /gsd status handler

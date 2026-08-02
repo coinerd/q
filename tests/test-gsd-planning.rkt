@@ -35,7 +35,11 @@
          "../tools/tool-struct.rkt"
          "../util/event/event-bus.rkt"
          "../util/event/event.rkt"
-         (prefix-in events: "../extensions/gsd/events.rkt"))
+         (prefix-in events: "../extensions/gsd/events.rkt")
+         (only-in "../extensions/gsd/go-orchestrator.rkt"
+                  campaign-request?
+                  campaign-request-prompt-for-wave
+                  lookup-campaign-request))
 
 ;; ============================================================
 ;; Helpers
@@ -547,7 +551,7 @@
                      (check-false (hash-ref payload 'submit #f) "no submit without plan")
                      (check-true (string-contains? (hash-ref payload 'text) "No PLAN found"))))))
 
-(test-case "/go returns new-session payload with plan content"
+(test-case "/go returns a runtime campaign request with an isolated first-wave prompt"
   (with-gsd-cleanup
    (lambda ()
      (with-temp-dir
@@ -555,19 +559,38 @@
         (parameterize ([current-directory dir])
           (set-pinned-planning-dir! dir)
           (make-directory* (build-path dir ".planning"))
-          (call-with-output-file (build-path dir ".planning" "PLAN.md")
-                                 (lambda (out)
-                                   (display "# Plan\n## Wave 0: Fix bug\n- File: foo.rkt" out))
-                                 #:exists 'truncate)
+          (call-with-output-file
+           (build-path dir ".planning" "PLAN.md")
+           (lambda (out)
+             (display (string-append "# Plan\n- [Inbox] W0: Fix bug\n- [Inbox] W1: Future work\n"
+                                     "## Wave 0: Fix bug\n- File: foo.rkt\n"
+                                     "## Wave 1: Future work\n- File: future-only.rkt")
+                      out))
+           #:exists 'truncate)
+          (call-with-output-file
+           (build-path dir ".planning" "STATE.md")
+           (lambda (out)
+             (display (string-append "| W0 | Fix bug | PENDING |\n"
+                                     "| W1 | SECRET-LATER-INSTRUCTION | PENDING |\n"
+                                     "W0 depends on SECRET-CROSS-WAVE-W1")
+                      out))
+           #:exists 'truncate)
           (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
           (define result (handler (hasheq 'command "/go" 'input "/go")))
           (check-equal? (hook-result-action result) 'amend)
           (define payload (hook-result-payload result))
-          (define new-session-text (hash-ref payload 'new-session))
-          (check-true (string-contains? new-session-text "[gsd-planning]"))
-          (check-true (string-contains? new-session-text "IMPLEMENT NOW"))
-          (check-true (string-contains? new-session-text "Wave 0"))
-          (check-true (string-contains? (hash-ref payload 'text) "Implementing"))))))))
+          (define token (hash-ref payload 'campaign-token))
+          (check-true (string? token))
+          (define request (lookup-campaign-request token))
+          (check-true (campaign-request? request))
+          (define first-wave-text ((campaign-request-prompt-for-wave request) 0))
+          (check-true (string-contains? first-wave-text "[gsd-planning]"))
+          (check-true (string-contains? first-wave-text "IMPLEMENT NOW"))
+          (check-true (string-contains? first-wave-text "ONLY wave W0"))
+          (check-false (string-contains? first-wave-text "future-only.rkt"))
+          (check-false (string-contains? first-wave-text "SECRET-LATER-INSTRUCTION"))
+          (check-false (string-contains? first-wave-text "SECRET-CROSS-WAVE-W1"))
+          (check-true (string-contains? (hash-ref payload 'text) "Executing campaign"))))))))
 
 ;; ============================================================
 ;; W1 (#1867): /go anti-exploration tests
@@ -600,17 +623,17 @@
         (parameterize ([current-directory dir])
           (set-pinned-planning-dir! dir)
           (make-directory* (build-path dir ".planning"))
-          (call-with-output-file (build-path dir ".planning" "PLAN.md")
-                                 (lambda (out)
-                                   (display "# Plan\n## Wave 0: Fix\n- File: foo.rkt" out))
-                                 #:exists 'truncate)
+          (call-with-output-file
+           (build-path dir ".planning" "PLAN.md")
+           (lambda (out) (display "# Plan\n- [Inbox] W0: Fix\n## Wave 0: Fix\n- File: foo.rkt" out))
+           #:exists 'truncate)
           (call-with-output-file (build-path dir ".planning" "STATE.md")
-                                 (lambda (out) (display "W0: done" out))
+                                 (lambda (out) (display "| W0 | Fix | PENDING |" out))
                                  #:exists 'truncate)
           (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
           (define result (handler (hasheq 'command "/go" 'input "/go")))
           (define submit-text (hash-ref (hook-result-payload result) 'new-session))
-          (check-true (string-contains? submit-text "W0: done"))))))))
+          (check-true (string-contains? submit-text "| W0 | Fix | PENDING |"))))))))
 
 (test-case "/go N starts at specified wave"
   (with-gsd-cleanup
@@ -624,13 +647,17 @@
            (build-path dir ".planning" "PLAN.md")
            (lambda (out)
              (display
-              "# Plan\n## Wave 0: Fix\n- File: foo.rkt\n## Wave 1: Core\n- File: bar.rkt\n## Wave 2: Test\n- File: baz.rkt"
+              (string-append "# Plan\n- [Inbox] W0: Fix\n- [Inbox] W1: Core\n- [Inbox] W2: Test\n"
+                             "## Wave 0: Fix\n- File: foo.rkt\n## Wave 1: Core\n- File: bar.rkt\n"
+                             "## Wave 2: Test\n- File: baz.rkt")
               out))
            #:exists 'truncate)
           (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
           (define result (handler (hasheq 'command "/go" 'input "/go 2")))
-          (define submit-text (hash-ref (hook-result-payload result) 'new-session))
-          (check-true (string-contains? submit-text "wave 2"))))))))
+          (define payload (hook-result-payload result))
+          (check-false (hash-ref payload 'campaign-token #f))
+          (check-true (string-contains? (hash-ref payload 'text)
+                                        "earliest actionable wave is W0"))))))))
 
 (test-case "/go emits normalized pipeline events via events.rkt bus"
   (with-gsd-cleanup
@@ -643,8 +670,9 @@
           (call-with-output-file
            (build-path dir ".planning" "PLAN.md")
            (lambda (out)
-             (display "# Plan\n## Wave 0: Fix\n- File: foo.rkt\n## Wave 1: Polish\n- File: bar.rkt"
-                      out))
+             (display
+              "# Plan\n- [Inbox] W0: Fix\n- [Inbox] W1: Polish\n## Wave 0: Fix\n- File: foo.rkt\n## Wave 1: Polish\n- File: bar.rkt"
+              out))
            #:exists 'truncate)
           ;; Set up events.rkt event collector
           (define-values (collector get-events) (events:make-event-collector))
@@ -670,10 +698,10 @@
         (parameterize ([current-directory dir])
           (set-pinned-planning-dir! dir)
           (make-directory* (build-path dir ".planning"))
-          (call-with-output-file (build-path dir ".planning" "PLAN.md")
-                                 (lambda (out)
-                                   (display "# Plan\n## Wave 0: Fix\n- File: foo.rkt" out))
-                                 #:exists 'truncate)
+          (call-with-output-file
+           (build-path dir ".planning" "PLAN.md")
+           (lambda (out) (display "# Plan\n- [Inbox] W0: Fix\n## Wave 0: Fix\n- File: foo.rkt" out))
+           #:exists 'truncate)
           (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
           (define result (handler (hasheq 'command "/implement" 'input "/implement")))
           (check-equal? (hook-result-action result) 'amend)

@@ -38,34 +38,52 @@
 ;; Try to complete a wave. The verifier must approve before DONE is persisted.
 ;; On rejection, the wave is marked 'failed — DONE is never written.
 ;; On approval, DONE is persisted + outbox event appended atomically.
-(define (try-complete-wave! base-dir rec wave-idx #:verifier-approve? [approve? #t])
-  (define waves (campaign-record-waves rec))
+(define (try-complete-wave! base-dir
+                            rec
+                            wave-idx
+                            #:verifier-approve? approve?
+                            #:expected-attempt-id expected-attempt-id
+                            #:expected-fence-token expected-fence-token)
+  ;; Completion is a durable compare-and-set boundary. Never trust only the
+  ;; caller's in-memory record: reload the authoritative projection and require
+  ;; the exact VERIFYING attempt/fence that the verifier observed.
+  (define durable (load-campaign-record base-dir (campaign-plan-id rec)))
   (define wave
-    (for/first ([w waves]
+    (and durable
+         (for/first ([w (campaign-record-waves durable)]
+                     #:when (= (campaign-wave-index w) wave-idx))
+           w)))
+  (define attempt (and wave (campaign-wave-current-attempt wave)))
+  (define caller-wave
+    (for/first ([w (campaign-record-waves rec)]
                 #:when (= (campaign-wave-index w) wave-idx))
       w))
+  (define attempt-current?
+    (and attempt
+         (= (campaign-fence-token durable) expected-fence-token)
+         (= (campaign-attempt-fence-token attempt) expected-fence-token)
+         (equal? (campaign-attempt-id attempt) expected-attempt-id)))
   (cond
     [(not wave) (completion-result 'invalid-wave #f)]
     [(eq? (campaign-wave-status wave) 'done) (completion-result 'already-done #f)]
     [(eq? (campaign-wave-status wave) 'deferred) (completion-result 'already-done #f)]
+    [(not (eq? (campaign-wave-status wave) 'verifying)) (completion-result 'invalid-state #f)]
+    [(not attempt-current?) (completion-result 'stale-attempt #f)]
     [(not approve?)
-     ;; Verifier rejected — mark FAILED, do NOT persist DONE
      (set-campaign-wave-status! wave 'failed)
-     (persist-campaign! base-dir rec)
+     (persist-campaign! base-dir durable)
+     (when caller-wave
+       (set-campaign-wave-status! caller-wave 'failed))
      (completion-result 'failed #f)]
     [else
-     ;; Verifier approved — persist DONE + outbox event
      (set-campaign-wave-status! wave 'done)
-     (define attempt (campaign-wave-current-attempt wave))
      (define event-id
-       (and attempt (make-event-id (campaign-plan-id rec) wave-idx (campaign-attempt-id attempt))))
-     (when event-id
-       (append-completion-event! base-dir rec event-id))
-     (persist-campaign! base-dir rec)
+       (make-event-id (campaign-plan-id durable) wave-idx (campaign-attempt-id attempt)))
+     (append-completion-event! base-dir durable event-id)
+     (persist-campaign! base-dir durable)
+     (when caller-wave
+       (set-campaign-wave-status! caller-wave 'done))
      (completion-result 'done event-id)]))
-
-;; ============================================================
-;; /skip — commit DEFERRED durably (GC-11, D7)
 ;; ============================================================
 
 (define (skip-wave! base-dir rec wave-idx)

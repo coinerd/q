@@ -22,7 +22,11 @@
          "../extensions/gsd-planning.rkt"
          "../util/event/event-bus.rkt"
          "helpers/mock-provider.rkt"
-         "helpers/temp-fs.rkt")
+         "helpers/temp-fs.rkt"
+         (only-in "../extensions/gsd/go-orchestrator.rkt"
+                  campaign-result-status
+                  campaign-result-completed-waves
+                  campaign-result-message))
 
 ;; ============================================================
 ;; Helpers
@@ -30,9 +34,7 @@
 
 (define (make-gsd-runtime #:with-ext-reg? [with-ext? #f] #:with-session? [with-sess? #f])
   (define tmp (make-temporary-file "/tmp/sdk-gsd-test-~a" 'directory))
-  (define prov
-    (make-simple-mock-provider
-     (list (hasheq 'role "assistant" 'content (list (hasheq 'type "text" 'text "done"))))))
+  (define prov (make-simple-mock-provider "done" "done" "done"))
   (define ext-reg (and with-ext? (make-extension-registry)))
   (when with-ext?
     (register-extension! ext-reg the-extension))
@@ -97,10 +99,13 @@
   ;; First write a plan via planning-write (directly)
   (define plan-dir (build-path tmp ".planning"))
   (make-directory* plan-dir)
-  (call-with-output-file (build-path plan-dir "PLAN.md")
-                         (lambda (out)
-                           (display "## Wave 0: Test\n- File: q/test.rkt\n- Verify: raco test\n" out))
-                         #:exists 'truncate)
+  (call-with-output-file
+   (build-path plan-dir "PLAN.md")
+   (lambda (out)
+     (display
+      "# Plan: SDK\n- [Inbox] W0: Test\n## Wave 0: Test\n- File: q/test.rkt\n- Verify: raco test\n"
+      out))
+   #:exists 'truncate)
   ;; Pin the planning dir so the extension finds it
   (set-pinned-planning-dir! tmp)
   (define-values (rt2 result) (q:go rt))
@@ -119,18 +124,27 @@
   (check-not-equal? result 'no-active-session)
   (cleanup-gsd! tmp))
 
-(test-case "W2: q:go with session and plan runs prompt through provider"
+(test-case "q:go reuses one fresh SDK campaign session across waves"
   (reset-all-gsd-state!)
   (define-values (rt tmp) (make-gsd-runtime #:with-ext-reg? #t #:with-session? #t))
-  ;; Write a plan
+  (define initiating-id (hash-ref (session-info rt) 'session-id))
   (define plan-dir (build-path tmp ".planning"))
   (make-directory* plan-dir)
-  (call-with-output-file (build-path plan-dir "PLAN.md")
-                         (lambda (out)
-                           (display "## Wave 0: Test\n- File: q/test.rkt\n- Verify: raco test\n" out))
-                         #:exists 'truncate)
+  (call-with-output-file
+   (build-path plan-dir "PLAN.md")
+   (lambda (out)
+     (display (string-append "# Plan: SDK\n- [Inbox] W0: Test\n- [Inbox] W1: Test two\n"
+                             "## Wave 0: Test\n- File: q/test.rkt\n- Verify: raco test\n"
+                             "## Wave 1: Test two\n- File: q/test2.rkt\n- Verify: raco test\n")
+              out))
+   #:exists 'truncate)
   (set-pinned-planning-dir! tmp)
   (define-values (rt2 result) (q:go rt))
-  (check-not-equal? result 'no-extension-registry)
-  (check-not-equal? result 'no-active-session)
+  (check-eq? (campaign-result-status result)
+             'campaign-complete
+             (format "~a completed=~a"
+                     (campaign-result-message result)
+                     (campaign-result-completed-waves result)))
+  (check-equal? (campaign-result-completed-waves result) '(0 1))
+  (check-not-equal? (hash-ref (session-info rt2) 'session-id) initiating-id)
   (cleanup-gsd! tmp))

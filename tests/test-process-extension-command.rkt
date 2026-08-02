@@ -9,13 +9,19 @@
 
 (require rackunit
          "../tui/commands.rkt"
-         "../tui/state-types.rkt")
+         "../tui/state-types.rkt"
+         (only-in "../extensions/gsd/campaign-state.rkt" migrate-campaign!)
+         (only-in "../extensions/gsd/go-orchestrator.rkt"
+                  make-campaign-request
+                  register-campaign-request!)
+         (only-in "../util/loop-result.rkt" make-loop-result)
+         racket/file)
 
 ;; ============================================================
 ;; N-10: process-extension-command basic interface tests
 ;; ============================================================
 
-(define (make-test-cctx input-text)
+(define (make-test-cctx input-text #:factory [factory #f])
   (define state-box (box (initial-ui-state)))
   (define input-box (box input-text))
   (define redraw-box (box #f))
@@ -29,7 +35,7 @@
            (box #f) ;; session-runner
            input-box ;; input-text-box
            (box #f) ;; extension-registry-box (no extensions)
-           (box #f) ;; session-factory-runner
+           factory ;; session-factory-runner
            (box #f) ;; agent-session-box
            (box #f))) ;; goal-cancel-box
 
@@ -62,5 +68,42 @@
                              (unbox (cmd-ctx-state-box cctx))
                              (hasheq 'submit "plan the project" 'text "Planning: test task"))
   (define updated-transcript (ui-state-transcript (unbox (cmd-ctx-state-box cctx))))
-  (check > (length updated-transcript) (length initial-transcript)
+  (check >
+         (length updated-transcript)
+         (length initial-transcript)
          "submit with no runner should add error to transcript"))
+
+(test-case "campaign token uses one dedicated runner for isolated waves"
+  (define dir (make-temporary-file "tui-campaign-~a" 'directory))
+  (dynamic-wind
+   void
+   (lambda ()
+     (make-directory* (build-path dir ".planning" "waves"))
+     (call-with-output-file (build-path dir ".planning" "PLAN.md")
+                            (lambda (out)
+                              (display "# Plan: TUI\n- [Inbox] W0: One\n- [Inbox] W1: Two\n" out))
+                            #:exists 'truncate)
+     (define rec (migrate-campaign! dir))
+     (define request
+       (make-campaign-request dir rec (lambda (idx) (format "isolated-W~a" idx)) (lambda (_) #t)))
+     (define token (register-campaign-request! request))
+     (define prompt-channel (make-channel))
+     (define factory-count 0)
+     (define cctx
+       (make-test-cctx "/go"
+                       #:factory
+                       (case-lambda
+                         [()
+                          (set! factory-count (add1 factory-count))
+                          (lambda (prompt)
+                            (channel-put prompt-channel prompt)
+                            (values 'updated-session (make-loop-result '() 'completed (hasheq))))]
+                         [(prompt) (error 'test "legacy path must not run: ~a" prompt)])))
+     (execute-extension-command
+      cctx
+      (unbox (cmd-ctx-state-box cctx))
+      (hasheq 'campaign-token token 'new-session "legacy-all-plan" 'text "starting"))
+     (check-equal? (sync/timeout 2 prompt-channel) "isolated-W0")
+     (check-equal? (sync/timeout 2 prompt-channel) "isolated-W1")
+     (check-equal? factory-count 1))
+   (lambda () (delete-directory/files dir #:must-exist? #f))))
