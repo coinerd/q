@@ -20,7 +20,12 @@
                   gsd-wave-gate-counter
                   gsd-wave-gate-interval
                   gsd-wave-gate-blocked?
-                  gsd-wave-gate-increment!))
+                  gsd-wave-gate-increment!)
+         (only-in "campaign-state.rkt"
+                  campaign-record-waves
+                  campaign-wave-index
+                  campaign-wave-status
+                  campaign-wave-attempt-count))
 
 (provide wave-status
          wave-status?
@@ -31,6 +36,7 @@
          wave-status-timestamp
          make-wave-executor
          make-wave-executor-from-validated
+         make-wave-executor-from-campaign
          load-plan-from-index
          wave-start!
          wave-complete!
@@ -106,6 +112,22 @@
                 (gsd-normalized-wave-done-criteria w))))
   (define compat-plan (gsd-plan compat-waves #f '() '()))
   (wave-executor compat-plan initial-statuses))
+
+;; v0.99.80 W0: Constructor from durable campaign record (GC-2).
+;; Maps campaign-wave statuses to executor statuses for restart reconstruction.
+(define (make-wave-executor-from-campaign rec)
+  (define statuses
+    (for/list ([w (campaign-record-waves rec)])
+      (wave-status (campaign-wave-index w)
+                   (case (campaign-wave-status w)
+                     [(done) 'completed]
+                     [(deferred) 'skipped]
+                     [(failed) 'failed]
+                     [else 'pending])
+                   #f
+                   (campaign-wave-attempt-count w)
+                   (current-seconds))))
+  (wave-executor #f statuses))
 
 ;; ============================================================
 ;; Status transitions

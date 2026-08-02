@@ -399,38 +399,32 @@
                   (reset-gsm!)
                   (cleanup-tmp tmp))))
 
-(test-case "auto-complete-inbox-waves when in executing mode with partial completions"
+(test-case "v0.99.80 GC-5: no auto-complete in executing mode with partial completions"
   (reset-gsm!)
   (define tmp (make-tmp-planning-dir))
   (dynamic-wind
    void
    (lambda ()
-     ;; Simulate: /go ran, LLM completed all 3 waves but only called
-     ;; /wave-done for W0. W1/W2 still [Inbox] in PLAN.md.
      (write-plan!
       tmp
       #:status-lines
       "- [Done] W0: setup \u2192 waves/W0-setup.md\n- [Inbox] W1: impl \u2192 waves/W1-impl.md\n- [Inbox] W2: test \u2192 waves/W2-test.md\n")
-     ;; Set executing mode (must go through proper transition chain)
      (gsm-transition! 'exploring)
      (gsm-transition! 'plan-written)
      (gsm-transition! 'executing)
-     ;; Only W0 was marked complete via /wave-done
      (gsm-mark-wave-complete! 0)
-     ;; Sync should:
-     ;; 1. Write [DONE] for W0 (from completed set)
-     ;; 2. Normalize [Done] \u2192 [DONE] (already [DONE] after step 1)
-     ;; 3. Auto-complete [Inbox] W1, W2 (executing mode + completions exist)
+     ;; v0.99.80 W1 (GC-5): sync no longer auto-completes.
      (sync-executor-to-plan! tmp)
      (define plan-text (file->string (build-path tmp ".planning" "PLAN.md")))
      (check-true (string-contains? plan-text "[DONE] W0:"))
-     (check-true (string-contains? plan-text "[DONE] W1:"))
-     (check-true (string-contains? plan-text "[DONE] W2:"))
-     (check-true (all-waves-complete? tmp)))
+     (check-true (string-contains? plan-text "[Inbox] W1:")
+                 "GC-5: executing mode does not auto-complete W1")
+     (check-true (string-contains? plan-text "[Inbox] W2:")
+                 "GC-5: executing mode does not auto-complete W2")
+     (check-false (all-waves-complete? tmp) "GC-5: partial completion is not all-complete"))
    (lambda ()
      (reset-gsm!)
      (cleanup-tmp tmp))))
-
 (test-case "no auto-complete in idle mode"
   (reset-gsm!)
   (define tmp (make-tmp-planning-dir))
@@ -456,10 +450,8 @@
 
 ;; ── v0.45.20 regression: /done fails when LLM skipped /wave-done ──
 ;; BUG: auto-complete-inbox-waves! required at least one /wave-done completion.
-;; When LLM completed all waves but never called /wave-done, the guard
-;; (set-empty? completed) blocked auto-complete even though wave doc files
-;; proved execution happened. Fix: secondary guard checks wave docs exist.
-(test-case "auto-complete when LLM skipped /wave-done but wave docs exist"
+;; v0.99.80 GC-5 regression: doc existence never implies completion.
+(test-case "GC-5: no auto-complete when LLM skipped /wave-done but wave docs exist"
   (reset-gsm!)
   (define tmp (make-tmp-planning-dir))
   (dynamic-wind
@@ -478,13 +470,16 @@
      (gsm-set-wave-executor! 'fake-executor)
      ;; Do NOT call gsm-mark-wave-complete! for any wave
      ;; Do NOT transition to executing mode
-     ;; Sync should detect wave docs exist + executor → auto-complete
+     ;; v0.99.80 W1 (GC-5): doc existence + executor no longer auto-completes.
      (sync-executor-to-plan! tmp)
      (define plan-text (file->string (build-path tmp ".planning" "PLAN.md")))
-     (check-true (string-contains? plan-text "[DONE] W0:"))
-     (check-true (string-contains? plan-text "[DONE] W1:"))
-     (check-true (string-contains? plan-text "[DONE] W2:"))
-     (check-true (all-waves-complete? tmp)))
+     (check-true (string-contains? plan-text "[Inbox] W0:")
+                 "GC-5: doc existence does not auto-complete W0")
+     (check-true (string-contains? plan-text "[Inbox] W1:")
+                 "GC-5: doc existence does not auto-complete W1")
+     (check-true (string-contains? plan-text "[Inbox] W2:")
+                 "GC-5: doc existence does not auto-complete W2")
+     (check-false (all-waves-complete? tmp)))
    (lambda ()
      (reset-gsm!)
      (cleanup-tmp tmp))))
