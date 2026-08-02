@@ -91,7 +91,10 @@
          (only-in "context.rkt" atomic-state-update!)
          (only-in "commands/goal-bridge.rkt" render-goal-evidence)
          (only-in "../runtime/session/session-types.rkt" session-log-path-for)
-         (only-in "../runtime/goal/goal-runner.rkt" current-repo-base-sha current-working-tree-hash))
+         (only-in "../runtime/goal/goal-runner.rkt" current-repo-base-sha current-working-tree-hash)
+         (only-in "../extensions/gsd/go-orchestrator.rkt"
+                  execute-campaign-token!
+                  campaign-result-status))
 
 ;; Re-export all public APIs
 (provide cmd-ctx
@@ -135,12 +138,43 @@
        (dispatch-hooks 'execute-command (hasheq 'command cmd-name 'input input-text) ext-reg)))
 
 ;; Execute an extension command amendment payload
-;; Handles new-session, submit, and display-text actions
+;; Handles campaigns, new-session, submit, and display-text actions
+(define (append-campaign-message! cctx text)
+  (define entry (make-system-entry text))
+  (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) entry))
+  (set-box! (cmd-ctx-needs-redraw-box cctx) #t))
+
+(define (execute-campaign-command cctx campaign-token display-text)
+  (when display-text
+    (append-campaign-message! cctx display-text))
+  (define factory (cmd-ctx-session-factory-runner cctx))
+  (define runner
+    (cond
+      [(and factory (procedure-arity-includes? factory 0)) (factory)]
+      [factory factory]
+      [else (cmd-ctx-session-runner cctx)]))
+  (if runner
+      (thread (lambda ()
+                (with-handlers ([exn:fail? (lambda (e)
+                                             (append-campaign-message!
+                                              cctx
+                                              (format "[ERROR] /go campaign failed: ~a"
+                                                      (exn-message e))))])
+                  (define result (execute-campaign-token! campaign-token runner))
+                  (unless (eq? (campaign-result-status result) 'campaign-complete)
+                    (append-campaign-message! cctx
+                                              (format "[ERROR] /go campaign stopped: ~a"
+                                                      (campaign-result-status result)))))))
+      (append-campaign-message! cctx
+                                "[ERROR] No session runner or factory available for /go campaign.")))
+
 (define (execute-extension-command cctx state payload)
+  (define campaign-token (hash-ref payload 'campaign-token #f))
   (define new-session-text (hash-ref payload 'new-session #f))
   (define submit-text (hash-ref payload 'submit #f))
   (define display-text (hash-ref payload 'text #f))
   (cond
+    [campaign-token (execute-campaign-command cctx campaign-token display-text)]
     [new-session-text
      (when display-text
        (define entry (make-system-entry display-text))

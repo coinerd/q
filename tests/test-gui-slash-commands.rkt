@@ -14,7 +14,12 @@
          "../extensions/api.rkt"
          "../extensions/hooks.rkt"
          "../util/hook-types.rkt"
-         "../agent/queue.rkt")
+         "../agent/queue.rkt"
+         (only-in "../runtime/agent-session.rkt" make-agent-session session-id)
+         (only-in "../tools/tool.rkt" make-tool-registry)
+         (only-in "../util/event/event-bus.rkt" make-event-bus)
+         "helpers/mock-provider.rkt"
+         racket/file)
 
 (define test-add-system-msg
   (test-suite "add-system-msg!"
@@ -268,6 +273,34 @@
       (check-equal? (length msgs) 1)
       (check-true (string-contains? (gui-message-text (car msgs)) "cancelled")))))
 
+(define test-campaign-session
+  (test-suite "dedicated GUI campaign session"
+    (test-case "one fresh session-backed runner is reused across prompts"
+      (define dir (make-temporary-file "gui-campaign-~a" 'directory))
+      (dynamic-wind
+       void
+       (lambda ()
+         (define initiating
+           (make-agent-session (hasheq 'provider
+                                       (make-simple-mock-provider "first" "second")
+                                       'tool-registry
+                                       (make-tool-registry)
+                                       'event-bus
+                                       (make-event-bus)
+                                       'session-dir
+                                       (path->string dir)
+                                       'model-name
+                                       "test")))
+         (define-values (campaign-session campaign-runner) (make-gui-campaign-runner initiating))
+         (check-not-equal? (session-id campaign-session) (session-id initiating))
+         (define campaign-id (session-id campaign-session))
+         (define first-values (call-with-values (lambda () (campaign-runner "W0")) list))
+         (define second-values (call-with-values (lambda () (campaign-runner "W1")) list))
+         (check-equal? (length first-values) 2)
+         (check-equal? (length second-values) 2)
+         (check-equal? (session-id campaign-session) campaign-id))
+       (lambda () (delete-directory/files dir #:must-exist? #f))))))
+
 (run-tests (test-suite "gui-slash-commands"
              test-add-system-msg
              test-make-slash-command-handler
@@ -275,4 +308,5 @@
              test-extension-dispatch
              test-new-session-dispatch
              test-contract-rejection
-             test-session-less-commands))
+             test-session-less-commands
+             test-campaign-session))

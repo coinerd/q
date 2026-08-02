@@ -125,7 +125,10 @@
       (lambda (dir)
         (call-with-output-file
          (build-path dir ".planning" "PLAN.md")
-         (lambda (out) (display "## Wave 0: Test\n- File: q/test.rkt\n- Verify: raco test\n" out))
+         (lambda (out)
+           (display
+            "# Plan: Integration\n- [Inbox] W0: Test\n## Wave 0: Test\n- File: q/test.rkt\n- Verify: raco test\n"
+            out))
          #:exists 'truncate)
         (check-equal? (current-edit-limit) 500 "default should be 500")
         (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))

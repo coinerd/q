@@ -28,6 +28,9 @@
                   campaign-wave-status
                   campaign-wave-attempt-count
                   set-campaign-wave-status!
+                  set-campaign-cancellation!
+                  set-campaign-fence-token!
+                  make-campaign-cancellation
                   begin-attempt!
                   select-next-actionable-wave
                   persist-campaign!
@@ -41,7 +44,10 @@
                   campaign-result-completed-waves
                   acquire-lease
                   release-lease!
-                  campaign-lease?))
+                  campaign-lease?
+                  make-campaign-request
+                  execute-campaign-request!)
+         (only-in "../util/loop-result.rkt" make-loop-result))
 
 ;; ============================================================
 ;; Helpers
@@ -160,6 +166,18 @@
       (define lease3 (acquire-lease dir (campaign-plan-id rec)))
       (check-true (campaign-lease? lease3))
       (release-lease! lease3)
+      (cleanup-tmp dir))
+
+    (test-case "stale lock file does not block restart"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define lock-path
+        (build-path dir ".planning" "campaigns" (string-append (campaign-plan-id rec) ".lock")))
+      (make-directory* (path-only lock-path))
+      (call-with-output-file lock-path (lambda (out) (display "stale-owner" out)) #:exists 'truncate)
+      (define lease (acquire-lease dir (campaign-plan-id rec)))
+      (check-true (campaign-lease? lease))
+      (release-lease! lease)
       (cleanup-tmp dir))))
 
 (define go-n-suite
@@ -184,6 +202,138 @@
       (check-true (assert-go-n rec 1))
       (cleanup-tmp dir))))
 
+(define request-suite
+  (test-suite "live campaign request boundary"
+
+    (test-case "request runs isolated prompt for each wave"
+      (define dir (make-tmp-campaign-dir 2))
+      (define rec (load-or-migrate dir))
+      (define prompts '())
+      (define request
+        (make-campaign-request dir rec (lambda (idx) (format "ONLY-W~a" idx)) (lambda (_) #t)))
+      (define result
+        (execute-campaign-request! request
+                                   (lambda (prompt)
+                                     (set! prompts (append prompts (list prompt)))
+                                     (make-loop-result '() 'completed (hasheq)))))
+      (check-eq? (campaign-result-status result) 'campaign-complete)
+      (check-equal? prompts '("ONLY-W0" "ONLY-W1"))
+      (cleanup-tmp dir))
+
+    (test-case "tool-loop termination fails current wave and stops advancement"
+      (define dir (make-tmp-campaign-dir 2))
+      (define rec (load-or-migrate dir))
+      (define calls 0)
+      (define request
+        (make-campaign-request dir rec (lambda (idx) (format "W~a" idx)) (lambda (_) #t)))
+      (define result
+        (execute-campaign-request!
+         request
+         (lambda (_)
+           (set! calls (add1 calls))
+           (make-loop-result '() 'tool-calls-pending (hasheq 'toolLoopLimit #t)))))
+      (check-eq? (campaign-result-status result) 'wave-failed)
+      (check-equal? calls 1)
+      (check-eq? (wave-status* rec 0) 'failed)
+      (check-eq? (wave-status* rec 1) 'pending)
+      (cleanup-tmp dir))
+
+    (test-case "two-value production runner uses returned loop result"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define request (make-campaign-request dir rec (lambda (_) "W0") (lambda (_) #t)))
+      (define result
+        (execute-campaign-request!
+         request
+         (lambda (_) (values 'updated-session (make-loop-result '() 'completed (hasheq))))))
+      (check-eq? (campaign-result-status result) 'campaign-complete)
+      (cleanup-tmp dir))
+
+    (test-case "durable cancellation prevents the first runner call"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define calls 0)
+      (persist-campaign! dir rec)
+      (define newer (load-campaign-record dir (campaign-plan-id rec)))
+      (set-campaign-cancellation! newer (make-campaign-cancellation "stop" 1))
+      (persist-campaign! dir newer)
+      (define result
+        (run-campaign! dir
+                       rec
+                       #:runner (lambda (_)
+                                  (set! calls (add1 calls))
+                                  'ok)))
+      (check-eq? (campaign-result-status result) 'wave-cancelled)
+      (check-equal? calls 0)
+      (cleanup-tmp dir))
+
+    (test-case "request captured before newer DONE cannot rerun or overwrite it"
+      (define dir (make-tmp-campaign-dir 1))
+      (define stale (load-or-migrate dir))
+      (persist-campaign! dir stale)
+      (define newer (load-campaign-record dir (campaign-plan-id stale)))
+      (set-campaign-wave-status! (car (campaign-record-waves newer)) 'done)
+      (set-campaign-fence-token! newer 7)
+      (persist-campaign! dir newer)
+      (define calls 0)
+      (define result
+        (run-campaign! dir
+                       stale
+                       #:runner (lambda (_)
+                                  (set! calls (add1 calls))
+                                  'ok)))
+      (check-eq? (campaign-result-status result) 'campaign-complete)
+      (check-equal? calls 0)
+      (define durable (load-campaign-record dir (campaign-plan-id stale)))
+      (check-eq? (wave-status* durable 0) 'done)
+      (cleanup-tmp dir))
+
+    (test-case "stale verifier result cannot commit DONE"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define result
+        (run-campaign-wave dir
+                           rec
+                           0
+                           #:verifier (lambda (_)
+                                        (set-campaign-fence-token! rec 999)
+                                        (persist-campaign! dir rec)
+                                        #t)))
+      (check-eq? (campaign-result-status result) 'wave-cancelled)
+      (check-eq? (wave-status* rec 0) 'verifying "stale verifier must not write status")
+      (cleanup-tmp dir))
+
+    (test-case "cancellation during verification remains INTERRUPTED"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define result
+        (run-campaign-wave dir
+                           rec
+                           0
+                           #:verifier
+                           (lambda (_)
+                             (set-campaign-cancellation! rec (make-campaign-cancellation "stop" 2))
+                             (persist-campaign! dir rec)
+                             #t)))
+      (check-eq? (campaign-result-status result) 'wave-cancelled)
+      (check-eq? (wave-status* rec 0) 'interrupted)
+      (cleanup-tmp dir))
+
+    (test-case "verifier observes VERIFYING before approval"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define observed-status #f)
+      (define result
+        (run-campaign-wave dir
+                           rec
+                           0
+                           #:verifier (lambda (_)
+                                        (set! observed-status (wave-status* rec 0))
+                                        #t)))
+      (check-eq? observed-status 'verifying)
+      (check-eq? (campaign-result-status result) 'wave-done)
+      (cleanup-tmp dir))))
+
 ;; ============================================================
 ;; Runner
 ;; ============================================================
@@ -193,6 +343,7 @@
     single-wave-suite
     campaign-suite
     lease-suite
-    go-n-suite))
+    go-n-suite
+    request-suite))
 
 (void (run-tests all-tests))

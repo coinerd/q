@@ -32,7 +32,8 @@
          "../util/event/event-bus.rkt"
          ;; Core SDK types
          "sdk-core.rkt"
-         "../runtime/session/session-path.rkt")
+         "../runtime/session/session-path.rkt"
+         (only-in "../extensions/gsd/go-orchestrator.rkt" execute-campaign-token!))
 
 ;; Re-export core types for convenience
 ;; C1 v0.97.13: Explicit re-exports instead of struct-out (matches sdk-core.rkt).
@@ -248,9 +249,24 @@
     [(not (hook-result? cmd-result)) (values rt2 'unexpected-result)]
     [else
      (define payload (hook-result-payload cmd-result))
+     (define campaign-token (and (hash? payload) (hash-ref payload 'campaign-token #f)))
      (define submit-text
        (and (hash? payload) (or (hash-ref payload 'new-session #f) (hash-ref payload 'submit #f))))
      (cond
+       [campaign-token
+        (if (not (runtime-rt-session rt2))
+            (values rt2 (or submit-text campaign-token))
+            (let ([current-rt (box (open-session rt2))])
+              (define result
+                (execute-campaign-token! campaign-token
+                                         (lambda (prompt)
+                                           ;; One dedicated SDK campaign session is reused for every
+                                           ;; wave; the initiating session remains untouched.
+                                           (define-values (updated-rt run-result)
+                                             (run-prompt! (unbox current-rt) prompt))
+                                           (set-box! current-rt updated-rt)
+                                           run-result)))
+              (values (unbox current-rt) result)))]
        [(not submit-text) (values rt2 'no-plan-text)]
        [(not (runtime-rt-session rt2)) (values rt2 submit-text)]
        [else (run-prompt! rt2 submit-text)])]))

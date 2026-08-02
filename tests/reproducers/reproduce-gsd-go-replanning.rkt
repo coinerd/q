@@ -61,6 +61,7 @@
 
   (write-test-plan
    (string-append "# Plan: Test\n\n"
+                  "- [Inbox] W0: Fix foo\n- [Inbox] W1: Fix bar\n\n"
                   "## Wave 0: Fix foo\n- File: foo.rkt\n- Verify: raco test foo.rkt\n\n"
                   "## Wave 1: Fix bar\n- File: bar.rkt\n- Verify: raco test bar.rkt\n"))
 
