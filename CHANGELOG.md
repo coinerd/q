@@ -22,6 +22,28 @@ Released 2026-08-02.
 - Fixed struct naming convention errors that prevented the campaign-state module from compiling.
 - Fixed STATE.md wave-table status parsing to trim whitespace from status fields.
 
+### Breaking / Behavior Changes
+
+- `/done` no longer auto-completes Inbox/In-Progress waves based on executing mode, executor existence, or wave-document existence. Waves must be explicitly completed through the verifier-first completion service.
+- `/go` is no longer an all-waves-in-one-run operation. Each wave runs as an isolated execution unit with verification before advancement.
+
+### Migration Notes
+
+- No data migration is required. Existing campaigns continue to work with the legacy executor; the new coordinator modules are additive.
+- Code that relied on auto-completion heuristics in `/done` must explicitly complete waves through the completion service.
+
+### Testing
+
+- 39 new focused test cases across 3 new test files (campaign-state, wave-completion, go-orchestrator).
+- Updated 2 existing archive regression tests to reflect GC-5 auto-completion removal.
+- Fast gate: 1109 files, 16325 tests, 0 failures.
+
+### Operational / Release
+
+- Version bumped to 0.99.80; all version surfaces synced.
+- CHANGELOG, README status block, and release notes updated.
+- PR #9137 squash-merged; PR #9138 CHANGELOG fix merged.
+
 ## 0.99.79
 
 Released 2026-08-02.
