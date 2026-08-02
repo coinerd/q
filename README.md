@@ -295,7 +295,7 @@ q/
 | Metric | Value |
 |--------|-------|
 | Test files | 1251 |
-| Source modules | 776 |
+| Source modules | 779 |
 | Source lines | 132618 |
 | Test lines | 214491 |
 | Test assertions | 33791 |
