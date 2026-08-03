@@ -24,6 +24,10 @@
          ERROR-CLASSIFICATION-TABLE
          classify-error-from-table
          held-request?
+         minimal-output-stall?
+         stall-severity
+         default-stall-min-output-chars
+         default-stall-max-consecutive
          default-cumulative-ceiling-secs
          ;; Retry execution
          (contract-out
@@ -37,7 +41,9 @@
                                #:on-circuit-break (or/c procedure? #f)
                                #:per-type-budgets hash?
                                #:cumulative-ceiling-secs (or/c exact-positive-integer? #f)
-                               #:now-proc (or/c procedure? #f))
+                               #:now-proc (or/c procedure? #f)
+                               #:stall-min-output-chars exact-nonnegative-integer?
+                               #:stall-max-consecutive exact-nonnegative-integer?)
                 any/c)]
           [with-retry-policy (->* (retry-policy? procedure?) (#:on-retry (or/c procedure? #f)) any/c)]
           [make-default-retry-policy
@@ -357,6 +363,32 @@
        (eq? (exn:fail:network:timeout:stream-phase exn) 'initial)))
 
 ;; ============================================================
+;; v0.99.82 W1 NR-1: Mid-stream stall classification
+;; ============================================================
+
+;; Configuration defaults for progressive circuit breaker.
+(define default-stall-min-output-chars 100)
+(define default-stall-max-consecutive 2)
+
+;; A minimal-output stall: the stream received SOME data (so it's not a
+;; held request) but less than threshold characters before stalling. This
+;; indicates a sick provider that starts responding but cannot sustain
+;; output. Retrying is likely to produce the same minimal result.
+(define (minimal-output-stall? exn #:min-chars [threshold default-stall-min-output-chars])
+  (and (exn:fail:network:timeout:stream? exn)
+       (exn:fail:network:timeout:stream-received-any-data? exn)
+       (< (exn:fail:network:timeout:stream-output-chars exn) threshold)))
+
+;; Classify stall severity for diagnostics and circuit-breaker decisions.
+;; Returns: 'initial-hold (zero data), 'minimal-output (< threshold chars),
+;; or 'partial-output (substantial output, full retry budget).
+(define (stall-severity exn)
+  (cond
+    [(held-request? exn) 'initial-hold]
+    [(minimal-output-stall? exn) 'minimal-output]
+    [else 'partial-output]))
+
+;; ============================================================
 ;; Retry logic
 ;; ============================================================
 
@@ -390,7 +422,9 @@
          #:on-circuit-break [on-circuit-break #f]
          #:per-type-budgets [per-type-budgets (hash 'timeout 2 'rate-limit 4 'provider-error 2)]
          #:cumulative-ceiling-secs [ceiling-secs #f]
-         #:now-proc [now-proc #f])
+         #:now-proc [now-proc #f]
+         #:stall-min-output-chars [stall-min-chars default-stall-min-output-chars]
+         #:stall-max-consecutive [stall-max-consecutive default-stall-max-consecutive])
   (define now (or now-proc current-inexact-milliseconds))
   (define start-ms (now))
   (define ceiling-ms (and ceiling-secs (* ceiling-secs 1000)))
@@ -402,7 +436,8 @@
              [last-error-type #f]
              [type-attempts (hash)] ; hash of error-type -> count
              [error-history '()] ; list of error types encountered
-             [delay-history '()]) ; list of actual delays used
+             [delay-history '()] ; list of actual delays used
+             [consecutive-stalls 0]) ; v0.99.82 W1 NR-1: consecutive minimal-output stalls
     (with-handlers
         ([exn:fail?
           (lambda (exn)
@@ -414,10 +449,23 @@
             ;; non-retryable — the provider will likely hold again.
             (when (and on-circuit-break (held-request? exn))
               (on-circuit-break 'held-request exn))
+            ;; v0.99.82 W1 NR-1: Progressive circuit breaker for minimal-output stalls.
+            ;; Track consecutive minimal-output stalls. After N consecutive
+            ;; stalls (default 2), skip remaining retries — the provider is sick.
+            (define is-minimal-stall? (minimal-output-stall? exn #:min-chars stall-min-chars))
+            (define new-consecutive
+              (if is-minimal-stall?
+                  (add1 consecutive-stalls)
+                  0))
+            (define progressive-break?
+              (and is-minimal-stall? (>= new-consecutive stall-max-consecutive)))
+            (when (and on-circuit-break progressive-break?)
+              (on-circuit-break 'progressive-stall exn))
             ;; Can retry if: globally under max-retries AND per-type under budget
-            ;; AND NOT a held request (circuit breaker)
+            ;; AND NOT a held request AND NOT a progressive circuit break
             (match (and (retryable-error? exn)
                         (not (held-request? exn))
+                        (not progressive-break?)
                         (< attempt max-retries)
                         (< current-type-count type-budget))
               [#t
@@ -458,7 +506,8 @@
                      err-type
                      (hash-set type-attempts err-type (add1 current-type-count))
                      (append error-history (list err-type))
-                     (append delay-history (list next-delay)))]
+                     (append delay-history (list next-delay))
+                     new-consecutive)]
               [_
                ;; A3: Wrap in retry-exhausted if we attempted retries
                (define final-history (append error-history (list err-type)))

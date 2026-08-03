@@ -77,7 +77,8 @@
                                              (current-continuation-marks)
                                              #f ; received-heartbeats?
                                              #f ; received-any-data?
-                                             'initial)))
+                                             'initial
+                                             0))) ; output-chars
 
    (with-handlers ([exn:fail? (lambda (_) (void))])
      (call-with-provider-retry held-request-attempt
