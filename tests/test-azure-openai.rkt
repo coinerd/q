@@ -12,7 +12,8 @@
          rackunit/text-ui
          "../llm/azure-openai.rkt"
          "../llm/model.rkt"
-         "../llm/provider.rkt")
+         "../llm/provider.rkt"
+         "helpers/provider-stream-lifecycle.rkt")
 
 (define-test-suite
  azure-openai-tests
@@ -56,6 +57,17 @@
  (test-case "check-azure-status! raises on non-200"
    (check-exn exn:fail? (lambda () (check-azure-status! #"HTTP/1.1 401 Unauthorized" #"{}"))))
  (test-case "check-azure-status! passes on 200"
-   (check-not-exn (lambda () (check-azure-status! #"HTTP/1.1 200 OK" #"{}")))))
+   (check-not-exn (lambda () (check-azure-status! #"HTTP/1.1 200 OK" #"{}"))))
+ (test-case "Azure setup timeout closes request-custodian resources"
+   (check-stream-setup-timeout-closes-peer
+    (lambda (base-url)
+      (make-azure-openai-provider (hasheq 'api-key
+                                          "test-key"
+                                          'model
+                                          "timeout-model"
+                                          'base-url
+                                          base-url
+                                          'api-version
+                                          "2024-02-15-preview"))))))
 
 (run-tests azure-openai-tests)

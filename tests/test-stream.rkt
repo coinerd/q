@@ -7,6 +7,7 @@
 
 (require rackunit
          racket/string
+         racket/generator
          json
          "../llm/stream.rkt"
          "../llm/model.rkt"
@@ -253,11 +254,14 @@
   (check-equal? (read-line/timeout p #:timeout 1) "world")
   (check-equal? (read-line/timeout p #:timeout 1) eof))
 
-(test-case "read-line/timeout returns #f on empty port (timeout)"
-  ;; A pipe with no writer will block forever on read
+(test-case "read-line/timeout closes the input port on timeout"
+  ;; A pipe with an open writer but no data blocks forever on read.
   (define-values (in out) (make-pipe))
   (define result (read-line/timeout in #:timeout 0.001))
-  (check-false result))
+  (check-false result)
+  (check-true (port-closed? in))
+  (check-exn exn:fail? (lambda () (read-line in)))
+  (close-output-port out))
 
 (test-case "read-response-body/timeout reads full body"
   (define data (make-bytes 100 65)) ; 100 bytes of 'A'
@@ -290,14 +294,89 @@
 (test-case "http-read-timeout-default is a positive number"
   (check-true (and (number? http-read-timeout-default) (> http-read-timeout-default 0))))
 
-(test-case "call-with-request-timeout calls #:cleanup on timeout (#454)"
-  (define cleanup-called (box #f))
+(test-case "call-with-request-timeout cleans up before killing its worker (#454)"
+  (define worker (box #f))
+  (define worker-ready (make-semaphore 0))
+  (define cleanup-saw-running-worker? (box #f))
   (check-exn exn:fail:network:timeout?
              (lambda ()
-               (call-with-request-timeout (lambda () (sync/timeout 10 never-evt)) ; blocks forever
-                                          #:timeout 0.001
-                                          #:cleanup (lambda () (set-box! cleanup-called #t)))))
-  (check-true (unbox cleanup-called)))
+               (call-with-request-timeout
+                (lambda ()
+                  (set-box! worker (current-thread))
+                  (semaphore-post worker-ready)
+                  (sync never-evt))
+                #:timeout 0.001
+                #:cleanup (lambda ()
+                            ;; Cleanup runs before kill-thread, so it can deterministically
+                            ;; wait for the worker to publish its identity.
+                            (check-not-false (sync/timeout 1 worker-ready))
+                            (set-box! cleanup-saw-running-worker?
+                                      (thread-running? (unbox worker)))))))
+  (check-true (unbox cleanup-saw-running-worker?))
+  (check-true (thread-dead? (unbox worker))))
+
+(test-case "close-port-after-stream finalizes an abandoned generator"
+  (define-values (wrapped-ref in)
+    (let ()
+      (define-values (in out) (make-pipe))
+      (define source (generator () (yield 'chunk) (sync never-evt)))
+      (define wrapped (close-port-after-stream source in))
+      (check-equal? (wrapped) 'chunk)
+      (check-false (port-closed? in) "yielding a chunk must not close the live response port")
+      (close-output-port out)
+      (values (make-weak-box wrapped) in)))
+  (let loop ([attempt 0])
+    (collect-garbage)
+    (unless (or (port-closed? in) (= attempt 500))
+      (sleep 0.01)
+      (loop (add1 attempt))))
+  ;; A will keeps its key available while the action runs; collect once more
+  ;; after cleanup so the weak reference is cleared.
+  (collect-garbage)
+  (collect-garbage)
+  (check-false (weak-box-value wrapped-ref) "the abandoned generator should be collectable")
+  (check-true (port-closed? in) "collecting the abandoned generator must close its response port"))
+
+(test-case "a failing custom stream finalizer does not disable later cleanup"
+  (define faulty-cleanup-ran (make-semaphore 0))
+  (define faulty-ref
+    (let ()
+      (define source (generator () (yield 'chunk) (sync never-evt)))
+      (define wrapped
+        (close-port-after-stream source
+                                 (open-input-string "")
+                                 #:cleanup (lambda ()
+                                             (semaphore-post faulty-cleanup-ran)
+                                             (error 'test-finalizer "expected cleanup failure"))))
+      (check-equal? (wrapped) 'chunk)
+      (make-weak-box wrapped)))
+  (define faulty-ran?
+    (let loop ([attempt 0])
+      (collect-garbage)
+      (or (sync/timeout 0.02 faulty-cleanup-ran) (and (< attempt 250) (loop (add1 attempt))))))
+  (check-not-false faulty-ran? "the custom cleanup action should execute")
+  (collect-garbage)
+  (check-false (weak-box-value faulty-ref))
+
+  ;; Register a second abandonment after the first action raised. Its ordinary
+  ;; port cleanup proves the shared executor remained alive.
+  (define-values (survivor-ref survivor-in)
+    (let ()
+      (define-values (in out) (make-pipe))
+      (define source (generator () (yield 'chunk) (sync never-evt)))
+      (define wrapped (close-port-after-stream source in))
+      (check-equal? (wrapped) 'chunk)
+      (close-output-port out)
+      (values (make-weak-box wrapped) in)))
+  (let loop ([attempt 0])
+    (collect-garbage)
+    (unless (or (port-closed? survivor-in) (= attempt 250))
+      (sleep 0.02)
+      (loop (add1 attempt))))
+  (collect-garbage)
+  (check-false (weak-box-value survivor-ref))
+  (check-true (port-closed? survivor-in)
+              "later finalizers must run after an earlier cleanup exception"))
 
 (displayln "All stream incremental tests passed")
 

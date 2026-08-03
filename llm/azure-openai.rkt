@@ -116,42 +116,44 @@
     (string-append "/" (string-join (map (lambda (p) (path/param-path p)) (url-path uri)) "/")))
   (define headers (list (format "api-key: ~a" api-key) "Content-Type: application/json"))
   (define body-bytes (jsexpr->bytes body))
-  (define response-port-box (box #f))
+  (define request-custodian (make-custodian))
+  (define (cleanup-response!)
+    (custodian-shutdown-all request-custodian))
   (define stream-owns-port? (box #f))
   (log-stream-setup-timing "azure" _stream-t0)
   (dynamic-wind (lambda () (void))
                 (lambda ()
                   (call-with-request-timeout
-                   #:cleanup (lambda ()
-                               (define rp (unbox response-port-box))
-                               (when rp
-                                 (with-logged-error "port cleanup" (close-input-port rp))))
+                   #:cleanup cleanup-response!
                    (lambda ()
-                     (define-values (status-line response-headers response-port)
-                       (if url-port-val
-                           (http-sendrecv host
-                                          path-str
-                                          #:port url-port-val
-                                          #:ssl? ssl?
-                                          #:method "POST"
-                                          #:headers headers
-                                          #:data body-bytes)
-                           (http-sendrecv host
-                                          path-str
-                                          #:ssl? ssl?
-                                          #:method "POST"
-                                          #:headers headers
-                                          #:data body-bytes)))
-                     (set-box! response-port-box response-port)
-                     (check-azure-status! status-line #"")
-                     ;; v0.81.0 W1: Replaced inline SSE loop with shared stream-sse-events.
-                     ;; Bonus: now handles tool_calls deltas (was missing in inline version).
-                     (set-box! stream-owns-port? #t)
-                     (close-port-after-stream
-                      (stream-sse-events response-port
-                                         (lambda (parsed) (list (normalize-openai-chunk parsed))))
-                      response-port))))
+                     (parameterize ([current-custodian request-custodian])
+                       (define-values (status-line response-headers response-port)
+                         (if url-port-val
+                             (http-sendrecv host
+                                            path-str
+                                            #:port url-port-val
+                                            #:ssl? ssl?
+                                            #:method "POST"
+                                            #:headers headers
+                                            #:data body-bytes)
+                             (http-sendrecv host
+                                            path-str
+                                            #:ssl? ssl?
+                                            #:method "POST"
+                                            #:headers headers
+                                            #:data body-bytes)))
+                       (check-azure-status! status-line #"")
+                       ;; v0.81.0 W1: Replaced inline SSE loop with shared stream-sse-events.
+                       ;; Bonus: now handles tool_calls deltas (was missing in inline version).
+                       (define owned-stream
+                         (close-port-after-stream
+                          (stream-sse-events response-port
+                                             (lambda (parsed) (list (normalize-openai-chunk parsed))))
+                          response-port
+                          #:cleanup cleanup-response!))
+                       ;; Transfer only after finalizer registration succeeds.
+                       (set-box! stream-owns-port? #t)
+                       owned-stream))))
                 (lambda ()
-                  (define rp (unbox response-port-box))
-                  (when (and rp (not (unbox stream-owns-port?)))
-                    (with-logged-error "port cleanup" (close-input-port rp))))))
+                  (unless (unbox stream-owns-port?)
+                    (with-logged-error "request cleanup" (cleanup-response!))))))

@@ -15,7 +15,8 @@
          "../llm/provider.rkt"
          "../llm/stream.rkt"
          "../llm/gemini.rkt"
-         "../llm/http-helpers.rkt")
+         "../llm/http-helpers.rkt"
+         "helpers/provider-stream-lifecycle.rkt")
 
 ;; ============================================================
 ;; 1. gemini-build-request-body — basic structure
@@ -631,5 +632,10 @@
   (define content (model-response-content parsed))
   (check-equal? (length content) 1)
   (check-equal? (hash-ref (car content) 'text) "I cannot help with that."))
+
+(test-case "Gemini setup timeout closes request-custodian resources"
+  (check-stream-setup-timeout-closes-peer
+   (lambda (base-url)
+     (make-gemini-provider (hash 'api-key "test-key" 'base-url base-url 'model "timeout-model")))))
 
 (println "All Gemini provider tests passed!")

@@ -10,7 +10,8 @@
          "../llm/provider.rkt"
          "../llm/stream.rkt"
          "../llm/anthropic.rkt"
-         "../llm/http-helpers.rkt")
+         "../llm/http-helpers.rkt"
+         "helpers/provider-stream-lifecycle.rkt")
 
 ;; ============================================================
 ;; Test suite: llm/anthropic.rkt — Anthropic provider adapter
@@ -938,3 +939,8 @@
   (check-pred exn? exn)
   (define msg (exn-message exn))
   (check-true (string-contains? msg "rate limited") "429 error includes rate limited message"))
+
+(test-case "Anthropic setup timeout closes request-custodian resources"
+  (check-stream-setup-timeout-closes-peer
+   (lambda (base-url)
+     (make-anthropic-provider (hash 'api-key "test-key" 'base-url base-url 'model "timeout-model")))))

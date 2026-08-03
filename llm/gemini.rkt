@@ -477,29 +477,27 @@
     (define-values (host path-str port ssl?) (parse-provider-url url-str))
     (define headers (list "Content-Type: application/json" (format "x-goog-api-key: ~a" api-key)))
     (define body-bytes (jsexpr->bytes body))
-    (define response-port-box (box #f))
+    (define request-custodian (make-custodian))
+    (define (cleanup-response!)
+      (custodian-shutdown-all request-custodian))
     (define stream-owns-port? (box #f))
     (dynamic-wind
      (lambda () (void))
      (lambda ()
        ;; Wrap initial HTTP request in overall timeout (SEC-11)
        (define result-vec
-         (call-with-request-timeout #:cleanup (lambda ()
-                                                (define rp (unbox response-port-box))
-                                                (when rp
-                                                  (with-logged-error "port cleanup"
-                                                                     (close-input-port rp))))
+         (call-with-request-timeout #:cleanup cleanup-response!
                                     (lambda ()
-                                      (define-values (sl rh rp)
-                                        (http-sendrecv host
-                                                       path-str
-                                                       #:port port
-                                                       #:ssl? ssl?
-                                                       #:method #"POST"
-                                                       #:headers headers
-                                                       #:data body-bytes))
-                                      (set-box! response-port-box rp)
-                                      (vector sl rh rp))))
+                                      (parameterize ([current-custodian request-custodian])
+                                        (define-values (sl rh rp)
+                                          (http-sendrecv host
+                                                         path-str
+                                                         #:port port
+                                                         #:ssl? ssl?
+                                                         #:method #"POST"
+                                                         #:headers headers
+                                                         #:data body-bytes))
+                                        (vector sl rh rp)))))
        (define status-line (vector-ref result-vec 0))
        (define response-headers (vector-ref result-vec 1))
        (define response-port (vector-ref result-vec 2))
@@ -521,14 +519,17 @@
          ;; Incremental SSE parsing — generator yields chunks one at a time
          (define raw-port response-port)
          (log-stream-setup-timing "gemini" _stream-t0)
+         (define owned-stream
+           (close-port-after-stream
+            (stream-sse-events raw-port (lambda (parsed) (gemini-parse-single-event parsed)))
+            raw-port
+            #:cleanup cleanup-response!))
+         ;; Transfer only after finalizer registration succeeds.
          (set-box! stream-owns-port? #t)
-         (close-port-after-stream
-          (stream-sse-events raw-port (lambda (parsed) (gemini-parse-single-event parsed)))
-          raw-port)))
+         owned-stream))
      (lambda ()
-       (define rp (unbox response-port-box))
-       (when (and rp (not (unbox stream-owns-port?)))
-         (with-logged-error "port cleanup" (close-input-port rp))))))
+       (unless (unbox stream-owns-port?)
+         (with-logged-error "request cleanup" (cleanup-response!))))))
 
   (make-provider (lambda () "gemini")
                  (lambda () (hasheq 'streaming #t 'token-counting #f))

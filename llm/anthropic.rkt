@@ -508,60 +508,62 @@
                        (list "User-Agent: KimiCLI/1.5")
                        '())))
           (define body-bytes (jsexpr->bytes body))
-          (define response-port-box (box #f))
+          (define request-custodian (make-custodian))
+          (define (cleanup-response!)
+            (custodian-shutdown-all request-custodian))
           (define stream-owns-port? (box #f))
-          (dynamic-wind (lambda () (void))
-                        (lambda ()
-                          ;; Wrap initial HTTP request in overall timeout (SEC-11)
-                          (define result-vec
-                            (call-with-request-timeout
-                             #:cleanup (lambda ()
-                                         (define rp (unbox response-port-box))
-                                         (when rp
-                                           (with-logged-error "port cleanup" (close-input-port rp))))
-                             (lambda ()
-                               (define-values (sl rh rp)
-                                 (http-sendrecv host
-                                                path-str
-                                                #:port port
-                                                #:ssl? ssl?
-                                                #:method #"POST"
-                                                #:headers headers
-                                                #:data body-bytes))
-                               (set-box! response-port-box rp)
-                               (vector sl rh rp))))
-                          (define status-line (vector-ref result-vec 0))
-                          (define response-headers (vector-ref result-vec 1))
-                          (define response-port (vector-ref result-vec 2))
-                          ;; Check HTTP status before streaming
-                          (define status-code
-                            (let ([parts (regexp-match #rx"^HTTP/[^ ]+ ([0-9]+)"
-                                                       (bytes->string/utf-8 status-line))])
-                              (if parts
-                                  (string->number (cadr parts))
-                                  0)))
-                          (when (>= status-code 400)
-                            (define resp-body (read-response-body/timeout response-port))
-                            (check-provider-status! "Anthropic" status-line resp-body))
-                          ;; Incremental SSE parsing — generator yields chunks one at a time
-                          (define raw-port response-port)
-                          (define current-tool-id (box #f))
-                          (define current-tool-name (box #f))
-                          (define current-tool-index (box 0))
-                          (log-stream-setup-timing "anthropic" _stream-t0)
-                          (set-box! stream-owns-port? #t)
-                          (close-port-after-stream
-                           (stream-sse-events raw-port
-                                              (lambda (parsed)
-                                                (anthropic-parse-single-event parsed
-                                                                              current-tool-id
-                                                                              current-tool-name
-                                                                              current-tool-index)))
-                           raw-port))
-                        (lambda ()
-                          (define rp (unbox response-port-box))
-                          (when (and rp (not (unbox stream-owns-port?)))
-                            (with-logged-error "port cleanup" (close-input-port rp))))))))
+          (dynamic-wind
+           (lambda () (void))
+           (lambda ()
+             ;; Wrap initial HTTP request in overall timeout (SEC-11)
+             (define result-vec
+               (call-with-request-timeout #:cleanup cleanup-response!
+                                          (lambda ()
+                                            (parameterize ([current-custodian request-custodian])
+                                              (define-values (sl rh rp)
+                                                (http-sendrecv host
+                                                               path-str
+                                                               #:port port
+                                                               #:ssl? ssl?
+                                                               #:method #"POST"
+                                                               #:headers headers
+                                                               #:data body-bytes))
+                                              (vector sl rh rp)))))
+             (define status-line (vector-ref result-vec 0))
+             (define response-headers (vector-ref result-vec 1))
+             (define response-port (vector-ref result-vec 2))
+             ;; Check HTTP status before streaming
+             (define status-code
+               (let ([parts (regexp-match #rx"^HTTP/[^ ]+ ([0-9]+)"
+                                          (bytes->string/utf-8 status-line))])
+                 (if parts
+                     (string->number (cadr parts))
+                     0)))
+             (when (>= status-code 400)
+               (define resp-body (read-response-body/timeout response-port))
+               (check-provider-status! "Anthropic" status-line resp-body))
+             ;; Incremental SSE parsing — generator yields chunks one at a time
+             (define raw-port response-port)
+             (define current-tool-id (box #f))
+             (define current-tool-name (box #f))
+             (define current-tool-index (box 0))
+             (log-stream-setup-timing "anthropic" _stream-t0)
+             (define owned-stream
+               (close-port-after-stream
+                (stream-sse-events raw-port
+                                   (lambda (parsed)
+                                     (anthropic-parse-single-event parsed
+                                                                   current-tool-id
+                                                                   current-tool-name
+                                                                   current-tool-index)))
+                raw-port
+                #:cleanup cleanup-response!))
+             ;; Transfer only after finalizer registration succeeds.
+             (set-box! stream-owns-port? #t)
+             owned-stream)
+           (lambda ()
+             (unless (unbox stream-owns-port?)
+               (with-logged-error "request cleanup" (cleanup-response!))))))))
 
   (make-provider (lambda () (anthropic-provider-name config))
                  (lambda () (hasheq 'streaming #t 'token-counting #f))
