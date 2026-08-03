@@ -84,7 +84,7 @@
                   prepare-turn-context-state
                   emit-context-assembly-events!)
          (only-in "extension-setup.rkt" register-session-extensions!)
-         (only-in "provider-retry.rkt" call-with-provider-retry)
+         (only-in "provider-retry.rkt" call-with-provider-retry default-partial-recovery-min-chars)
          (only-in "provider-health.rkt"
                   make-provider-health
                   provider-health?
@@ -367,6 +367,26 @@
       (define tracker (hash-ref! session-health-trackers session-id make-provider-health))
       (values tracker window threshold)))
 
+  ;; v0.99.82 W3 NR-4: Resolve partial result recovery configuration.
+  ;; providers.<name>.partial-recovery (default #f) enables continuation injection.
+  ;; providers.<name>.partial-recovery-min-chars (default 200) sets the threshold.
+  (define-values (partial-recovery? partial-recovery-min-chars)
+    (let* ([settings (config-settings config)]
+           [model-name (config-model-name config)]
+           [enabled (and settings
+                         model-name
+                         (setting-ref* settings
+                                       `(providers ,(string->symbol model-name) partial-recovery)
+                                       #f))]
+           [min-chars (or (and settings
+                               model-name
+                               (setting-ref* settings
+                                             `(providers ,(string->symbol model-name)
+                                                         partial-recovery-min-chars)
+                                             #f))
+                          default-partial-recovery-min-chars)])
+      (values (and enabled #t) min-chars)))
+
   (call-with-provider-retry (lambda (retry-ctx retry-settings)
                               (run-agent-turn retry-ctx
                                               prov
@@ -384,4 +404,6 @@
                             retry-ceiling-secs
                             #:health-tracker health-tracker
                             #:health-window-secs health-window
-                            #:health-failure-threshold health-threshold))
+                            #:health-failure-threshold health-threshold
+                            #:partial-recovery partial-recovery?
+                            #:partial-recovery-min-chars partial-recovery-min-chars))

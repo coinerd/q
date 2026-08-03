@@ -93,6 +93,8 @@
                      ;; AF5 (RC2): Persist partial assistant message before re-raising.
                      (define partial-text (streaming-message-text sm))
                      (when (and partial-text (> (string-length partial-text) 0))
+                       ;; v0.99.82 W3 NR-4: Set partial text for retry layer.
+                       (current-partial-text partial-text)
                        (define partial-msg
                          (make-message (generate-id)
                                        #f

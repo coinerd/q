@@ -59,6 +59,42 @@ NOT block the first attempt — it only gates retries.
 A `provider.health-gate` telemetry event is emitted when the gate denies a retry,
 including the failure count, window, threshold, and decision.
 
+### Partial Result Recovery (NR-4)
+
+When a provider stall produces partial output before timing out, q preserves
+the partial text in the transcript **always**. Optionally, the partial text can
+be fed as continuation context for the retry attempt.
+
+#### Transcript Preservation (always on)
+
+When `stream-from-provider` catches a mid-stream error with accumulated text,
+the partial text is persisted as an assistant message with `'partial #t` in
+the loop state. This happens regardless of the `partial-recovery` setting.
+
+#### Continuation Injection (opt-in)
+
+Set `partial-recovery = #t` to prepend partial text as a continuation prompt
+on retry:
+
+```
+[Previous partial response (provider stalled):
+{partial text}
+]
+
+Continue from where you left off.
+```
+
+The `partial-recovery-min-chars` threshold (default 200) prevents using tiny
+fragments that wouldn't be useful for continuation.
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `providers.<name>.partial-recovery` | `#f` | Enable partial text continuation injection |
+| `providers.<name>.partial-recovery-min-chars` | 200 | Minimum partial text length to qualify for recovery |
+
+A `provider.partial-recovery` telemetry event is emitted when partial text is
+injected, including `partialChars` and `minChars`.
+
 ### Cumulative Ceiling (PN-7)
 
 Each retry attempt resets its own timeout clock. Without a cumulative bound,
