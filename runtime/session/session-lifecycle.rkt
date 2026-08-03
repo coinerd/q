@@ -459,6 +459,13 @@
           (if (and input-hook-res (eq? (hook-result-action input-hook-res) 'amend))
               (hash-ref (hook-result-payload input-hook-res) 'message user-message)
               user-message))
+        ;; NR-2 (v0.99.82): Persist last user prompt for /retry recovery.
+        ;; This catches ALL submission paths (TUI, goal-runner, SDK) because
+        ;; every prompt goes through run-prompt!.
+        (when (string? effective-input)
+          (guarded-set-config!
+           sess
+           (dict-set (agent-session-config sess) 'last-user-prompt effective-input)))
         (parameterize ([current-prompt-operation-session sess])
           (call-with-values
            (lambda ()

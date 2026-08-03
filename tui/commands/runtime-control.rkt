@@ -5,7 +5,8 @@
 ;;
 ;; Extracted from commands.rkt (W19) to thin the commands parent.
 
-(require racket/hash
+(require racket/dict
+         racket/hash
          racket/string
          racket/system
          "../state.rkt"
@@ -15,6 +16,7 @@
          "../../runtime/auth/oauth-callback.rkt"
          "../../runtime/auth/auth-store.rkt"
          (only-in "../../runtime/session/session-lifecycle.rkt" exn:fail:session:busy?)
+         (only-in "../../runtime/session/session-types.rkt" agent-session? agent-session-config)
          "context.rkt"
          (only-in "../../util/ids.rkt" generate-id))
 
@@ -95,7 +97,14 @@
 
 ;; Handle /retry — resubmit last prompt
 (define (handle-retry-command cctx state)
-  (define last-prompt (unbox (cmd-ctx-last-prompt-box cctx)))
+  ;; NR-2 (v0.99.82): Fall back to session config when TUI-local box is empty.
+  ;; This covers goal-runner, session-resume, and programmatic injection paths
+  ;; that bypass tui/message-dispatch.rkt's last-prompt-box.
+  (define box-prompt (unbox (cmd-ctx-last-prompt-box cctx)))
+  (define sess (unbox (cmd-ctx-agent-session-box cctx)))
+  (define session-prompt
+    (and sess (agent-session? sess) (dict-ref (agent-session-config sess) 'last-user-prompt #f)))
+  (define last-prompt (or box-prompt session-prompt))
   (cond
     [last-prompt
      (define entry

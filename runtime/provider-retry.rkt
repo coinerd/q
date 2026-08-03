@@ -24,14 +24,14 @@
   (define ctx-for-retry (box initial-context))
   (define settings-for-retry (box initial-settings))
 
-  (define (emit-retry-event! attempt max-retries error-msg error-type)
+  (define (emit-retry-event! attempt max-retries delay-ms error-msg error-type)
     (emit-typed-event! bus
                        (make-auto-retry-start-event #:session-id session-id
                                                     #:turn-id turn-id
                                                     #:timestamp (current-inexact-milliseconds)
                                                     #:attempt attempt
                                                     #:max-retries max-retries
-                                                    #:delay-ms 0
+                                                    #:delay-ms delay-ms
                                                     #:error error-msg
                                                     #:error-type error-type)))
 
@@ -69,9 +69,9 @@
                    #:max-retries 2
                    #:base-delay-ms 1000
                    #:cumulative-ceiling-secs ceiling-secs
-                   #:on-retry (lambda (attempt max-retries _delay-ms error-msg error-type)
-                                (emit-retry-event! attempt max-retries error-msg error-type)
+                   #:on-retry (lambda (attempt max-retries delay-ms error-msg error-type)
+                                (emit-retry-event! attempt max-retries delay-ms error-msg error-type)
                                 (maybe-adapt-request! attempt error-type))
                    #:on-circuit-break
                    (lambda (_ original-exn)
-                     (emit-retry-event! 0 0 (exn-message original-exn) 'circuit-breaker))))
+                     (emit-retry-event! 0 0 0 (exn-message original-exn) 'circuit-breaker))))
