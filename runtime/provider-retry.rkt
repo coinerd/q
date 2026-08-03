@@ -9,10 +9,15 @@
          (only-in "../llm/token-budget.rkt" estimate-context-tokens)
          (only-in "../util/event/event-bus.rkt" event-bus?)
          (only-in "adaptive-retry.rkt" adaptive-network-error-type? adapt-provider-request)
-         (only-in "auto-retry.rkt" with-auto-retry))
+         (only-in "auto-retry.rkt" with-auto-retry)
+         "provider-health.rkt")
 
 (provide (contract-out [call-with-provider-retry
-                        (-> procedure? list? hash? event-bus? string? string? real? any/c)]))
+                        (->* (procedure? list? hash? event-bus? string? string? real?)
+                             (#:health-tracker (or/c provider-health? #f)
+                                               #:health-window-secs exact-positive-integer?
+                                               #:health-failure-threshold exact-nonnegative-integer?)
+                             any/c)]))
 
 (define (call-with-provider-retry attempt-proc
                                   initial-context
@@ -20,7 +25,11 @@
                                   bus
                                   session-id
                                   turn-id
-                                  ceiling-secs)
+                                  ceiling-secs
+                                  #:health-tracker [health #f]
+                                  #:health-window-secs [health-window default-health-window-secs]
+                                  #:health-failure-threshold
+                                  [health-threshold default-health-failure-threshold])
   (define ctx-for-retry (box initial-context))
   (define settings-for-retry (box initial-settings))
 
@@ -65,13 +74,41 @@
                                    'floorReached
                                    (not adapted?)))))
 
-  (with-auto-retry (lambda () (attempt-proc (unbox ctx-for-retry) (unbox settings-for-retry)))
-                   #:max-retries 2
-                   #:base-delay-ms 1000
-                   #:cumulative-ceiling-secs ceiling-secs
-                   #:on-retry (lambda (attempt max-retries delay-ms error-msg error-type)
-                                (emit-retry-event! attempt max-retries delay-ms error-msg error-type)
-                                (maybe-adapt-request! attempt error-type))
-                   #:on-circuit-break
-                   (lambda (_ original-exn)
-                     (emit-retry-event! 0 0 0 (exn-message original-exn) 'circuit-breaker))))
+  (with-auto-retry
+   (lambda () (attempt-proc (unbox ctx-for-retry) (unbox settings-for-retry)))
+   #:max-retries 2
+   #:base-delay-ms 1000
+   #:cumulative-ceiling-secs ceiling-secs
+   #:on-retry (lambda (attempt max-retries delay-ms error-msg error-type)
+                (emit-retry-event! attempt max-retries delay-ms error-msg error-type)
+                (maybe-adapt-request! attempt error-type))
+   #:on-circuit-break (lambda (_ original-exn)
+                        (emit-retry-event! 0 0 0 (exn-message original-exn) 'circuit-breaker))
+   ;; v0.99.82 W2 NR-3: Provider health gate.
+   ;; Before each retry, record the failure and check health.
+   ;; If the provider is unhealthy (≥ threshold failures in window),
+   ;; deny the retry — the provider is consistently failing.
+   #:health-check-proc
+   (if health
+       (lambda (exn attempt)
+         (record-failure! health)
+         (define healthy?
+           (provider-healthy? health #:window-secs health-window #:threshold health-threshold))
+         (unless healthy?
+           (emit-session-event! bus
+                                session-id
+                                "provider.health-gate"
+                                (hasheq 'failures
+                                        (recent-failure-count health #:window-secs health-window)
+                                        'window-secs
+                                        health-window
+                                        'threshold
+                                        health-threshold
+                                        'decision
+                                        'unhealthy)))
+         healthy?)
+       #f)
+   ;; On success, record it to reset the failure window.
+   #:on-success (if health
+                    (lambda () (record-success! health))
+                    #f)))

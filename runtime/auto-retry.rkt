@@ -43,7 +43,9 @@
                                #:cumulative-ceiling-secs (or/c exact-positive-integer? #f)
                                #:now-proc (or/c procedure? #f)
                                #:stall-min-output-chars exact-nonnegative-integer?
-                               #:stall-max-consecutive exact-nonnegative-integer?)
+                               #:stall-max-consecutive exact-nonnegative-integer?
+                               #:health-check-proc (or/c procedure? #f)
+                               #:on-success (or/c procedure? #f))
                 any/c)]
           [with-retry-policy (->* (retry-policy? procedure?) (#:on-retry (or/c procedure? #f)) any/c)]
           [make-default-retry-policy
@@ -424,7 +426,9 @@
          #:cumulative-ceiling-secs [ceiling-secs #f]
          #:now-proc [now-proc #f]
          #:stall-min-output-chars [stall-min-chars default-stall-min-output-chars]
-         #:stall-max-consecutive [stall-max-consecutive default-stall-max-consecutive])
+         #:stall-max-consecutive [stall-max-consecutive default-stall-max-consecutive]
+         #:health-check-proc [health-check-proc #f]
+         #:on-success [on-success #f])
   (define now (or now-proc current-inexact-milliseconds))
   (define start-ms (now))
   (define ceiling-ms (and ceiling-secs (* ceiling-secs 1000)))
@@ -461,11 +465,15 @@
               (and is-minimal-stall? (>= new-consecutive stall-max-consecutive)))
             (when (and on-circuit-break progressive-break?)
               (on-circuit-break 'progressive-stall exn))
-            ;; Can retry if: globally under max-retries AND per-type under budget
-            ;; AND NOT a held request AND NOT a progressive circuit break
+            ;; v0.99.82 W2 NR-3: Health gate. If provided, health-check-proc is
+            ;; called before the retry decision. If it returns #f, the provider
+            ;; is unhealthy and retry is denied.
+            ;; Can retry if: retryable AND not held AND not progressive-break
+            ;; AND health-check passes AND under budget
             (match (and (retryable-error? exn)
                         (not (held-request? exn))
                         (not progressive-break?)
+                        (or (not health-check-proc) (health-check-proc exn attempt))
                         (< attempt max-retries)
                         (< current-type-count type-budget))
               [#t
@@ -522,4 +530,8 @@
                                            final-history
                                            final-delays))
                    (raise exn))]))])
-      (thunk))))
+      (define result (thunk))
+      ;; v0.99.82 W2 NR-3: Notify success hook for health tracking.
+      (when on-success
+        (on-success))
+      result)))
