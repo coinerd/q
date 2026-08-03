@@ -18,11 +18,46 @@ The circuit breaker inspects the `exn:fail:network:timeout:stream` metadata:
 | Condition | Classification | Retries? |
 |-----------|---------------|----------|
 | `received-any-data?=#f` AND `phase='initial` | `'held-request` | **No** — circuit breaker fires |
-| `received-any-data?=#t` (any data seen) | normal stall | **Yes** — full retry budget |
+| `received-any-data?=#t`, `<100 chars`, consecutive | `'minimal-output` | **No** — progressive breaker after 2 stalls |
+| `received-any-data?=#t` (substantial output) | normal stall | **Yes** — full retry budget |
 | `phase='thinking` or `'content` | mid-stream stall | **Yes** — full retry budget |
 
 An `auto-retry.start` telemetry event with `errorType: "circuit-breaker"` is emitted
 when the breaker fires.
+
+### Progressive Stall Circuit Breaker (NR-1)
+
+A provider that sends **some** data but fewer than `stall-min-output-chars`
+characters (default 100) before stalling is in a "minimal-output" state. This
+indicates a sick provider that starts responding but cannot sustain output.
+
+The progressive breaker tracks consecutive minimal-output stalls across retry
+attempts within the same turn. After `stall-max-consecutive` (default 2)
+consecutive stalls, remaining retries are skipped.
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `stall-min-output-chars` | 100 | Chars below which a stall is classified "minimal-output" |
+| `stall-max-consecutive` | 2 | Consecutive minimal-output stalls before circuit break |
+
+Non-stall errors (rate-limit, auth, etc.) reset the consecutive counter.
+
+### Provider Health Gate (NR-3)
+
+A sliding-window failure tracker records provider failures across turns within
+the same session. When the failure count exceeds a threshold within the window,
+retries are skipped and the turn fails fast with a clear diagnostic.
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `providers.<name>.health-window-secs` | 60 | Sliding window for failure counting |
+| `providers.<name>.health-failure-threshold` | 3 | Failures in window before provider marked unhealthy |
+
+A successful provider response resets the failure window. The health gate does
+NOT block the first attempt — it only gates retries.
+
+A `provider.health-gate` telemetry event is emitted when the gate denies a retry,
+including the failure count, window, threshold, and decision.
 
 ### Cumulative Ceiling (PN-7)
 

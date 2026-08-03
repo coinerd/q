@@ -84,7 +84,16 @@
                   prepare-turn-context-state
                   emit-context-assembly-events!)
          (only-in "extension-setup.rkt" register-session-extensions!)
-         (only-in "provider-retry.rkt" call-with-provider-retry))
+         (only-in "provider-retry.rkt" call-with-provider-retry)
+         (only-in "provider-health.rkt"
+                  make-provider-health
+                  provider-health?
+                  default-health-window-secs
+                  default-health-failure-threshold))
+
+;; v0.99.82 W2 NR-3: Per-session provider health trackers.
+;; Keyed by session-id; persists across turns within the same session.
+(define session-health-trackers (make-hash))
 
 (provide (contract-out
           [run-provider-turn
@@ -336,6 +345,28 @@
             (setting-ref* settings `(providers ,(string->symbol model-name) retry-ceiling-secs) #f))
        default-cumulative-ceiling-secs)))
 
+  ;; v0.99.82 W2 NR-3: Resolve provider health gate configuration and tracker.
+  ;; providers.<name>.health-window-secs and health-failure-threshold override defaults.
+  (define-values (health-tracker health-window health-threshold)
+    (let* ([settings (config-settings config)]
+           [model-name (config-model-name config)]
+           [window (or (and settings
+                            model-name
+                            (setting-ref* settings
+                                          `(providers ,(string->symbol model-name) health-window-secs)
+                                          #f))
+                       default-health-window-secs)]
+           [threshold (or (and settings
+                               model-name
+                               (setting-ref* settings
+                                             `(providers ,(string->symbol model-name)
+                                                         health-failure-threshold)
+                                             #f))
+                          default-health-failure-threshold)])
+      ;; Get or create per-session health tracker
+      (define tracker (hash-ref! session-health-trackers session-id make-provider-health))
+      (values tracker window threshold)))
+
   (call-with-provider-retry (lambda (retry-ctx retry-settings)
                               (run-agent-turn retry-ctx
                                               prov
@@ -350,4 +381,7 @@
                             bus
                             session-id
                             turn-id
-                            retry-ceiling-secs))
+                            retry-ceiling-secs
+                            #:health-tracker health-tracker
+                            #:health-window-secs health-window
+                            #:health-failure-threshold health-threshold))
