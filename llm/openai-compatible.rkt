@@ -227,14 +227,21 @@
 ;; response port) into a structured provider-error with category 'network so the
 ;; auto-retry layer classifies it as retryable. Existing provider-errors pass
 ;; through untouched. Mirrors the setup-phase wrapping in openai-stream-request.
+;;
+;; v0.99.81 W2: exn:fail:network:timeout:stream exceptions are preserved
+;; unchanged so the retry-layer circuit breaker can inspect the W1 liveness
+;; metadata (received-any-data?, phase). Wrapping them into a plain
+;; provider-error would destroy the classification signal.
 (define (openai-wrap-stream-error e)
-  (if (provider-error? e)
-      (raise e)
-      (raise (provider-error (format "Stream read error: ~a" (exn-message e))
-                             (current-continuation-marks)
-                             (hash)
-                             'network
-                             #f))))
+  (cond
+    [(provider-error? e) (raise e)]
+    [(exn:fail:network:timeout:stream? e) (raise e)]
+    [else
+     (raise (provider-error (format "Stream read error: ~a" (exn-message e))
+                            (current-continuation-marks)
+                            (hash)
+                            'network
+                            #f))]))
 
 ;; ============================================================
 ;; Provider constructor

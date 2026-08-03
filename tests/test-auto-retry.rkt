@@ -10,7 +10,9 @@
 (require rackunit
          rackunit/text-ui
          "../runtime/auto-retry.rkt"
-         "../llm/provider-errors.rkt")
+         "../llm/provider-errors.rkt"
+         "../llm/stream.rkt"
+         "../llm/openai-compatible.rkt")
 
 ;; ============================================================
 ;; retryable-error? predicate tests
@@ -678,3 +680,183 @@
                                 #:max-retries 3
                                 #:base-delay-ms 10)))
   (check-equal? (unbox attempt) 1))
+
+;; ============================================================
+;; W2: Circuit Breaker — held request (PN-4)
+;; ============================================================
+
+;; Helper: construct a held-request exception (zero chunks, initial phase)
+(define (held-request-exn)
+  (exn:fail:network:timeout:stream "Stream timeout (held request)"
+                                   (current-continuation-marks)
+                                   #f ; received-heartbeats?
+                                   #f ; received-any-data?
+                                   'initial))
+
+;; Helper: construct a mid-stream stall exception (data received, thinking phase)
+(define (mid-stream-stall-exn)
+  (exn:fail:network:timeout:stream "Stream timeout (mid-stream stall)"
+                                   (current-continuation-marks)
+                                   #t ; received-heartbeats?
+                                   #t ; received-any-data?
+                                   'thinking))
+
+(test-case "PN-4: held request (zero chunks, initial phase) triggers circuit breaker"
+  (define attempt (box 0))
+  (define retries (box 0))
+  (check-exn exn:fail?
+             (lambda ()
+               (with-auto-retry (lambda ()
+                                  (set-box! attempt (add1 (unbox attempt)))
+                                  (raise (held-request-exn)))
+                                #:max-retries 3
+                                #:base-delay-ms 10
+                                #:on-retry (lambda args (set-box! retries (add1 (unbox retries)))))))
+  ;; Circuit breaker should fire: only 1 attempt, zero retries
+  (check-equal? (unbox attempt) 1)
+  (check-equal? (unbox retries) 0))
+
+(test-case "PN-4: mid-stream stall (data received) keeps full retry budget"
+  (define attempt (box 0))
+  (define retries (box 0))
+  (check-exn exn:fail?
+             (lambda ()
+               (with-auto-retry (lambda ()
+                                  (set-box! attempt (add1 (unbox attempt)))
+                                  (raise (mid-stream-stall-exn)))
+                                #:max-retries 2
+                                #:base-delay-ms 10
+                                #:on-retry (lambda args (set-box! retries (add1 (unbox retries)))))))
+  ;; Mid-stream stall is NOT a held request — full retry budget applies
+  (check-equal? (unbox attempt) 3)
+  (check-equal? (unbox retries) 2))
+
+(test-case "PN-4: circuit breaker fires even with high max-retries"
+  (define attempt (box 0))
+  (with-handlers ([exn:fail? (lambda (_) (void))])
+    (with-auto-retry (lambda ()
+                       (set-box! attempt (add1 (unbox attempt)))
+                       (raise (held-request-exn)))
+                     #:max-retries 5
+                     #:base-delay-ms 10))
+  ;; Even with max-retries=5, a held request fails after 1 attempt
+  (check-equal? (unbox attempt) 1))
+
+(test-case "PN-4: circuit breaker callback receives held-request classification"
+  (define classifications (box '()))
+  (with-handlers ([exn:fail? (lambda (_) (void))])
+    (with-auto-retry
+     (lambda () (raise (held-request-exn)))
+     #:max-retries 3
+     #:base-delay-ms 10
+     #:on-circuit-break
+     (lambda (classification original-exn)
+       (set-box! classifications
+                 (cons (list classification
+                             (exn:fail:network:timeout:stream-phase original-exn)
+                             (exn:fail:network:timeout:stream-received-any-data? original-exn))
+                       (unbox classifications))))))
+  (check-equal? (length (unbox classifications)) 1)
+  (check-equal? (first (first (unbox classifications))) 'held-request))
+
+;; ============================================================
+;; W2: Cumulative Ceiling (PN-7)
+;; ============================================================
+
+(test-case "PN-7: cumulative ceiling aborts early before full retry budget"
+  ;; Simulate a provider that times out on every attempt.
+  ;; With fake clock advancing 200s per attempt and ceiling=300,
+  ;; the turn should fail after 2 attempts (0s + 200s = 200s ok,
+  ;; 200s + 200s = 400s > 300s → abort on 3rd attempt).
+  (define attempt (box 0))
+  (define fake-clock (box 0))
+  (define retries (box 0))
+  (check-exn retry-exhausted?
+             (lambda ()
+               (with-auto-retry (lambda ()
+                                  (set-box! attempt (add1 (unbox attempt)))
+                                  ;; Advance fake clock by 200s per attempt
+                                  (set-box! fake-clock (+ (unbox fake-clock) 200000))
+                                  (raise (exn:fail "connection timed out"
+                                                   (current-continuation-marks))))
+                                #:max-retries 5
+                                #:base-delay-ms 1
+                                #:cumulative-ceiling-secs 300
+                                #:now-proc (lambda () (unbox fake-clock))
+                                #:on-retry (lambda args (set-box! retries (add1 (unbox retries)))))))
+  ;; Attempt 1 at 200s: 200 < 300, retry
+  ;; Attempt 2 at 400s: 400 > 300, but we already started attempt 2.
+  ;; Cumulative check is BEFORE the next retry, so after attempt 2 fails,
+  ;; elapsed=400 > 300 → abort. Total attempts = 2.
+  (check-true (>= (unbox attempt) 2))
+  (check-true (< (unbox attempt) 6) (format "should abort early, got ~a attempts" (unbox attempt))))
+
+(test-case "PN-7: cumulative ceiling does not trigger when total stays under limit"
+  (define attempt (box 0))
+  (define fake-clock (box 0))
+  (define result
+    (with-auto-retry (lambda ()
+                       (set-box! attempt (add1 (unbox attempt)))
+                       (set-box! fake-clock (+ (unbox fake-clock) 5000))
+                       (if (= (unbox attempt) 1)
+                           (raise (exn:fail "HTTP 503 service unavailable"
+                                            (current-continuation-marks)))
+                           "success"))
+                     #:max-retries 3
+                     #:base-delay-ms 1
+                     #:cumulative-ceiling-secs 300
+                     #:now-proc (lambda () (unbox fake-clock))))
+  (check-equal? result "success")
+  (check-equal? (unbox attempt) 2))
+
+(test-case "PN-7: no cumulative ceiling when not specified (backward compat)"
+  (define attempt (box 0))
+  (define fake-clock (box (* 10 60 1000))) ; 10 minutes
+  (check-exn exn:fail?
+             (lambda ()
+               (with-auto-retry (lambda ()
+                                  (set-box! attempt (add1 (unbox attempt)))
+                                  (raise (exn:fail "connection timed out"
+                                                   (current-continuation-marks))))
+                                #:max-retries 1
+                                #:base-delay-ms 1
+                                #:now-proc (lambda () (unbox fake-clock)))))
+  ;; No ceiling specified → normal retry behavior (2 attempts: initial + 1 retry)
+  (check-equal? (unbox attempt) 2))
+
+;; ============================================================
+;; W2 PN-4: End-to-end circuit breaker through provider wrap path
+;; ============================================================
+
+;; The openai-wrap-stream-error function must preserve exn:fail:network:timeout:stream
+;; so the circuit breaker can classify held requests in production.
+(test-case "PN-4: openai-wrap-stream-error preserves stream timeout metadata"
+  (define stream-exn (held-request-exn))
+  (define result
+    (with-handlers ([exn? (lambda (e) e)])
+      (openai-wrap-stream-error stream-exn)))
+  (check-pred exn:fail:network:timeout:stream? result)
+  (when (exn:fail:network:timeout:stream? result)
+    (check-false (exn:fail:network:timeout:stream-received-any-data? result))
+    (check-equal? (exn:fail:network:timeout:stream-phase result) 'initial)))
+
+(test-case "PN-4: circuit breaker fires through provider wrap path"
+  (define attempt (box 0))
+  (check-exn exn:fail?
+             (lambda ()
+               (with-auto-retry (lambda ()
+                                  (set-box! attempt (add1 (unbox attempt)))
+                                  ;; Simulate production path: stream exception
+                                  ;; goes through openai-wrap-stream-error
+                                  (openai-wrap-stream-error (held-request-exn)))
+                                #:max-retries 3
+                                #:base-delay-ms 10)))
+  ;; Circuit breaker fires: only 1 attempt
+  (check-equal? (unbox attempt) 1))
+
+(test-case "PN-4: non-stream errors still get wrapped to provider-error"
+  (define result
+    (with-handlers ([exn? (lambda (e) e)])
+      (openai-wrap-stream-error (exn:fail "SSL read error" (current-continuation-marks)))))
+  (check-pred provider-error? result)
+  (check-equal? (provider-error-category result) 'network))
