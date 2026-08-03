@@ -691,15 +691,18 @@
                                    (current-continuation-marks)
                                    #f ; received-heartbeats?
                                    #f ; received-any-data?
-                                   'initial))
+                                   'initial
+                                   0)) ; output-chars
 
 ;; Helper: construct a mid-stream stall exception (data received, thinking phase)
+;; 500 chars = partial-output (above the NR-1 minimal threshold)
 (define (mid-stream-stall-exn)
   (exn:fail:network:timeout:stream "Stream timeout (mid-stream stall)"
                                    (current-continuation-marks)
                                    #t ; received-heartbeats?
                                    #t ; received-any-data?
-                                   'thinking))
+                                   'thinking
+                                   500)) ; output-chars
 
 (test-case "PN-4: held request (zero chunks, initial phase) triggers circuit breaker"
   (define attempt (box 0))
