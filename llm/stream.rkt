@@ -70,7 +70,12 @@
          current-model-timeouts
          ;; Exception struct
          exn:fail:network:timeout
-         exn:fail:network:timeout?)
+         exn:fail:network:timeout?
+         exn:fail:network:timeout:stream
+         exn:fail:network:timeout:stream?
+         exn:fail:network:timeout:stream-received-heartbeats?
+         exn:fail:network:timeout:stream-received-any-data?
+         exn:fail:network:timeout:stream-phase)
 
 ;; ============================================================
 ;; Timeout configuration
@@ -140,6 +145,32 @@
 
 ;; Exception type for network read timeouts.
 (struct exn:fail:network:timeout exn:fail () #:transparent)
+
+;; v0.99.81 W1: Stream-level timeout with liveness metadata.
+;; Subtype of exn:fail:network:timeout so existing handlers still match.
+;; Carries truthful evidence about what the peer sent before stalling:
+;;   - received-heartbeats?  : SSE comment lines (: ...) were seen
+;;   - received-any-data?    : at least one data: chunk was yielded
+;;   - phase                 : 'initial | 'thinking | 'content
+;; Used by W2 circuit-breaker to distinguish a dead peer from a slow one.
+(struct exn:fail:network:timeout:stream
+        exn:fail:network:timeout
+        (received-heartbeats? received-any-data? phase)
+  #:transparent)
+
+;; sse-comment-line? : string? -> boolean?
+;; Returns #t for SSE comment lines (starting with ':') used as heartbeats.
+(define (sse-comment-line? line)
+  (define trimmed (string-trim line))
+  (and (positive? (string-length trimmed)) (char=? (string-ref trimmed 0) #\:)))
+
+;; phase-from-state : boolean? boolean? -> (or/c 'initial 'thinking 'content)
+;; Derives the stream phase from accumulated liveness flags.
+(define (phase-from-state received-any-data? seen-content?)
+  (cond
+    [(not received-any-data?) 'initial]
+    [(not seen-content?) 'thinking]
+    [else 'content]))
 
 ;; ============================================================
 ;; Timeout-aware read helpers
@@ -421,18 +452,27 @@
              ;; v0.45.11: Consecutive empty/comment line counter.
              ;; Prevents infinite loops when server sends keep-alives indefinitely.
              (define max-consecutive-empty 100)
+             ;; v0.99.81 W1: Liveness metadata accumulated across the stream.
              (let loop ([first-read? #t]
                         [consecutive-empty 0]
-                        [seen-content? #f])
+                        [seen-content? #f]
+                        [received-heartbeats? #f]
+                        [received-any-data? #f])
                ;; v0.45.11: Wall-clock deadline — fires regardless of keep-alives
                (when (> (current-inexact-milliseconds) deadline)
-                 (raise (exn:fail:network:timeout
+                 (raise (exn:fail:network:timeout:stream
                          (format "Stream exceeded maximum total duration (~a seconds)" max-total-secs)
-                         (current-continuation-marks))))
+                         (current-continuation-marks)
+                         received-heartbeats?
+                         received-any-data?
+                         (phase-from-state received-any-data? seen-content?))))
                (when (>= consecutive-empty max-consecutive-empty)
-                 (raise (exn:fail:network:timeout (format "Stream exceeded ~a consecutive empty lines"
-                                                          max-consecutive-empty)
-                                                  (current-continuation-marks))))
+                 (raise (exn:fail:network:timeout:stream
+                         (format "Stream exceeded ~a consecutive empty lines" max-consecutive-empty)
+                         (current-continuation-marks)
+                         received-heartbeats?
+                         received-any-data?
+                         (phase-from-state received-any-data? seen-content?))))
                ;; v0.99.65 W0: Phase-aware timeout.
                ;; - First read: use initial-secs (full request timeout).
                ;; - After first read, no content yet (thinking phase): use thinking-secs.
@@ -445,12 +485,17 @@
                (define line (read-line/timeout port #:timeout timeout-secs))
                (cond
                  [(eq? line #f)
-                  ;; Timeout — raise clean error
-                  (raise (exn:fail:network:timeout
+                  ;; Timeout — raise with liveness metadata
+                  (raise (exn:fail:network:timeout:stream
                           (format "HTTP read timeout (~a seconds) waiting for SSE chunk" timeout-secs)
-                          (current-continuation-marks)))]
+                          (current-continuation-marks)
+                          received-heartbeats?
+                          received-any-data?
+                          (phase-from-state received-any-data? seen-content?)))]
                  [(eof-object? line) (yield #f)]
                  [else
+                  ;; v0.99.81 W1: Track heartbeat (comment) lines.
+                  (define is-heartbeat? (sse-comment-line? line))
                   (define parsed (parse-sse-line line))
                   (cond
                     [(eq? parsed 'done) (yield #f)]
@@ -464,8 +509,15 @@
                             (let ([txt (stream-chunk-delta-text chunk)])
                               (and (string? txt) (positive? (string-length txt))))))
                      (yield chunk)
-                     (loop #f 0 (or seen-content? has-content))]
-                    [else (loop #f (add1 consecutive-empty) seen-content?)])]))))
+                     (loop #f 0 (or seen-content? has-content) received-heartbeats? #t)]
+                    ;; Heartbeat/comment/empty lines increment the flood counter
+                    ;; unchanged; only the heartbeat flag is additionally tracked.
+                    [else
+                     (loop #f
+                           (add1 consecutive-empty)
+                           seen-content?
+                           (or received-heartbeats? is-heartbeat?)
+                           received-any-data?)])]))))
 
 ;; Own a response port for the lifetime of a lazy stream generator. The port
 ;; remains open across yields and closes on normal termination, read failure,
@@ -542,15 +594,23 @@
              (define max-consecutive-empty 100)
              (let loop ([first-read? #t]
                         [consecutive-empty 0]
-                        [seen-content? #f])
+                        [seen-content? #f]
+                        [received-heartbeats? #f]
+                        [received-any-data? #f])
                (when (> (current-inexact-milliseconds) deadline)
-                 (raise (exn:fail:network:timeout
+                 (raise (exn:fail:network:timeout:stream
                          (format "Stream exceeded maximum total duration (~a seconds)" max-total-secs)
-                         (current-continuation-marks))))
+                         (current-continuation-marks)
+                         received-heartbeats?
+                         received-any-data?
+                         (phase-from-state received-any-data? seen-content?))))
                (when (>= consecutive-empty max-consecutive-empty)
-                 (raise (exn:fail:network:timeout (format "Stream exceeded ~a consecutive empty lines"
-                                                          max-consecutive-empty)
-                                                  (current-continuation-marks))))
+                 (raise (exn:fail:network:timeout:stream
+                         (format "Stream exceeded ~a consecutive empty lines" max-consecutive-empty)
+                         (current-continuation-marks)
+                         received-heartbeats?
+                         received-any-data?
+                         (phase-from-state received-any-data? seen-content?))))
                ;; v0.99.65 W0: Phase-aware timeout (same as read-sse-chunks)
                (define timeout-secs
                  (cond
@@ -560,11 +620,15 @@
                (define line (read-line/timeout port #:timeout timeout-secs))
                (cond
                  [(eq? line #f)
-                  (raise (exn:fail:network:timeout
+                  (raise (exn:fail:network:timeout:stream
                           (format "HTTP read timeout (~a seconds) waiting for SSE chunk" timeout-secs)
-                          (current-continuation-marks)))]
+                          (current-continuation-marks)
+                          received-heartbeats?
+                          received-any-data?
+                          (phase-from-state received-any-data? seen-content?)))]
                  [(eof-object? line) (yield #f)]
                  [else
+                  (define is-heartbeat? (sse-comment-line? line))
                   (define parsed (parse-sse-line line))
                   (cond
                     [(eq? parsed 'done) (yield #f)]
@@ -576,7 +640,20 @@
                          (and (stream-chunk? ch)
                               (let ([txt (stream-chunk-delta-text ch)])
                                 (and (string? txt) (positive? (string-length txt)))))))
+                     ;; v0.99.81 W1: only set received-any-data? when a chunk is
+                     ;; actually yielded (pair? check), not when event->chunks
+                     ;; returns '() for ping/keepalive events.
+                     (define yielded-any? (pair? chunks))
                      (for ([ch (in-list chunks)])
                        (yield ch))
-                     (loop #f 0 (or seen-content? any-content))]
-                    [else (loop #f (add1 consecutive-empty) seen-content?)])]))))
+                     (loop #f
+                           0
+                           (or seen-content? any-content)
+                           received-heartbeats?
+                           (or received-any-data? yielded-any?))]
+                    [else
+                     (loop #f
+                           (add1 consecutive-empty)
+                           seen-content?
+                           (or received-heartbeats? is-heartbeat?)
+                           received-any-data?)])]))))
