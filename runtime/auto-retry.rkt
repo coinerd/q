@@ -10,7 +10,8 @@
          racket/string
          racket/random
          racket/math
-         "../llm/provider-errors.rkt")
+         "../llm/provider-errors.rkt"
+         "../llm/stream.rkt")
 
 ;; Predicates
 (provide retryable-error?
@@ -22,31 +23,37 @@
          ;; Error classification data table
          ERROR-CLASSIFICATION-TABLE
          classify-error-from-table
+         held-request?
+         default-cumulative-ceiling-secs
          ;; Retry execution
-         (contract-out [with-auto-retry
-                        (->* (procedure?)
-                             (#:max-retries exact-nonnegative-integer?
-                                            #:base-delay-ms exact-nonnegative-integer?
-                                            #:rate-limit-base-delay-ms exact-nonnegative-integer?
-                                            #:max-delay-ms exact-nonnegative-integer?
-                                            #:on-retry (or/c procedure? #f)
-                                            #:per-type-budgets hash?)
-                             any/c)]
-                       [with-retry-policy
-                        (->* (retry-policy? procedure?) (#:on-retry (or/c procedure? #f)) any/c)]
-                       [make-default-retry-policy
-                        (->* ()
-                             (#:max-retries exact-nonnegative-integer?
-                                            #:base-delay-ms exact-nonnegative-integer?
-                                            #:rate-limit-base-delay-ms exact-nonnegative-integer?
-                                            #:max-delay-ms exact-nonnegative-integer?
-                                            #:per-type-budgets hash?)
-                             retry-policy?)])
+         (contract-out
+          [with-auto-retry
+           (->* (procedure?)
+                (#:max-retries exact-nonnegative-integer?
+                               #:base-delay-ms exact-nonnegative-integer?
+                               #:rate-limit-base-delay-ms exact-nonnegative-integer?
+                               #:max-delay-ms exact-nonnegative-integer?
+                               #:on-retry (or/c procedure? #f)
+                               #:on-circuit-break (or/c procedure? #f)
+                               #:per-type-budgets hash?
+                               #:cumulative-ceiling-secs (or/c exact-positive-integer? #f)
+                               #:now-proc (or/c procedure? #f))
+                any/c)]
+          [with-retry-policy (->* (retry-policy? procedure?) (#:on-retry (or/c procedure? #f)) any/c)]
+          [make-default-retry-policy
+           (->* ()
+                (#:max-retries exact-nonnegative-integer?
+                               #:base-delay-ms exact-nonnegative-integer?
+                               #:rate-limit-base-delay-ms exact-nonnegative-integer?
+                               #:max-delay-ms exact-nonnegative-integer?
+                               #:per-type-budgets hash?)
+                retry-policy?)])
          ;; Configuration
          default-max-retries
          default-base-delay-ms
          default-rate-limit-base-delay-ms
          default-max-delay-ms
+         default-cumulative-ceiling-secs
          ;; Struct for retry stat
          retry-stats
          retry-stats?
@@ -93,6 +100,10 @@
 (define default-base-delay-ms 1000)
 (define default-rate-limit-base-delay-ms 10000)
 (define default-max-delay-ms 60000)
+
+;; v0.99.81 W2 PN-7: Default cumulative ceiling across retries (5 minutes).
+;; When #f, no cumulative wall-clock bound is enforced (backward compat).
+(define default-cumulative-ceiling-secs 300)
 
 ;; ============================================================
 ;; Injectable random source (W1)
@@ -329,6 +340,23 @@
      (or (classify-error-from-table msg-down) 'provider-error)]))
 
 ;; ============================================================
+;; W2 PN-4: Circuit Breaker — held request classification
+;; ============================================================
+
+;; A "held request" is one where the provider returned HTTP 200 with SSE
+;; headers but sent ZERO chunks before stalling. The stream timeout metadata
+;; records received-any-data?=#f and phase='initial. Retrying such a request
+;; is wasteful — the provider is likely to hold again. The circuit breaker
+;; classifies this as non-retryable.
+;;
+;; Mid-stream stalls (data received, or phase='thinking/'content) ARE
+;; retryable — the provider was alive and producing, just slow.
+(define (held-request? exn)
+  (and (exn:fail:network:timeout:stream? exn)
+       (not (exn:fail:network:timeout:stream-received-any-data? exn))
+       (eq? (exn:fail:network:timeout:stream-phase exn) 'initial)))
+
+;; ============================================================
 ;; Retry logic
 ;; ============================================================
 
@@ -346,6 +374,12 @@
 ;; Execute a thunk with automatic retry on retryable errors.
 ;; Returns the thunk result on success, or re-raises on non-retryable
 ;; error or after max-retries exhausted.
+;;
+;; v0.99.81 W2:
+;;   - Circuit breaker (PN-4): held-request timeouts (zero chunks, initial
+;;     phase) skip all retries.
+;;   - Cumulative ceiling (PN-7): wall-clock across retries bounded to
+;;     #:cumulative-ceiling-secs (default #f = no bound for backward compat).
 (define (with-auto-retry
          thunk
          #:max-retries [max-retries default-max-retries]
@@ -353,7 +387,13 @@
          #:rate-limit-base-delay-ms [rl-base-delay-ms default-rate-limit-base-delay-ms]
          #:max-delay-ms [max-delay-ms default-max-delay-ms]
          #:on-retry [on-retry #f]
-         #:per-type-budgets [per-type-budgets (hash 'timeout 2 'rate-limit 4 'provider-error 2)])
+         #:on-circuit-break [on-circuit-break #f]
+         #:per-type-budgets [per-type-budgets (hash 'timeout 2 'rate-limit 4 'provider-error 2)]
+         #:cumulative-ceiling-secs [ceiling-secs #f]
+         #:now-proc [now-proc #f])
+  (define now (or now-proc current-inexact-milliseconds))
+  (define start-ms (now))
+  (define ceiling-ms (and ceiling-secs (* ceiling-secs 1000)))
   ;; v0.14.2: Per-type retry budget. Each error type has its own budget.
   ;; Rate-limit retries don't consume timeout budget, etc.
   (let loop ([attempt 0]
@@ -369,11 +409,33 @@
             (define err-type (classify-error exn))
             (define current-type-count (hash-ref type-attempts err-type 0))
             (define type-budget (hash-ref per-type-budgets err-type max-retries))
+            ;; v0.99.81 W2 PN-4: Circuit breaker for held requests.
+            ;; A held request (zero chunks, initial phase) is classified as
+            ;; non-retryable — the provider will likely hold again.
+            (when (and on-circuit-break (held-request? exn))
+              (on-circuit-break 'held-request exn))
             ;; Can retry if: globally under max-retries AND per-type under budget
+            ;; AND NOT a held request (circuit breaker)
             (match (and (retryable-error? exn)
+                        (not (held-request? exn))
                         (< attempt max-retries)
                         (< current-type-count type-budget))
               [#t
+               ;; v0.99.81 W2 PN-7: Cumulative ceiling check.
+               ;; Before retrying, check if total wall-clock has exceeded ceiling.
+               (define elapsed (- (now) start-ms))
+               (when (and ceiling-ms (> elapsed ceiling-ms))
+                 (raise (retry-exhausted (format "~a (cumulative ceiling ~as exceeded after ~as)"
+                                                 (exn-message exn)
+                                                 ceiling-secs
+                                                 (/ elapsed 1000.0))
+                                         (current-continuation-marks)
+                                         exn
+                                         attempt
+                                         last-error-type
+                                         total-delay
+                                         (append error-history (list err-type))
+                                         delay-history)))
                ;; A1: Use longer backoff for rate-limit errors
                (define rl-base (if (eq? err-type 'rate-limit) rl-base-delay-ms base-delay-ms))
                ;; W1: Compute exponential cap then apply jitter

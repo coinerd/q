@@ -52,7 +52,7 @@
          (only-in "../runtime/settings.rkt" setting-ref setting-ref*)
          "../util/ids.rkt"
          (only-in "../util/hook-types.rkt" hook-result-action hook-result?)
-         (only-in "../runtime/auto-retry.rkt" with-auto-retry)
+         (only-in "../runtime/auto-retry.rkt" with-auto-retry default-cumulative-ceiling-secs)
          (only-in "provider/provider-factory.rkt" provider-is-mock?)
          (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
          "../agent/event-emitter.rkt"
@@ -324,7 +324,30 @@
                 provider-settings-raw))
           provider-settings-raw)))
 
+  ;; v0.99.81 W2 PN-7: Resolve cumulative retry ceiling from settings.
+  ;; providers.<name>.retry-ceiling-secs overrides the default (300s).
+  (define retry-ceiling-secs
+    (let* ([settings (config-settings config)]
+           [model-name (config-model-name config)])
+      (or
+       (and settings
+            model-name
+            (setting-ref* settings `(providers ,(string->symbol model-name) retry-ceiling-secs) #f))
+       default-cumulative-ceiling-secs)))
+
   (define ctx-for-retry (box ctx-final))
+
+  ;; v0.99.81 W2: Shared retry-event emitter for on-retry and on-circuit-break.
+  (define (emit-retry-event! attempt max-retries error-msg error-type)
+    (emit-typed-event! bus
+                       (make-auto-retry-start-event #:session-id session-id
+                                                    #:turn-id turn-id
+                                                    #:timestamp (current-inexact-milliseconds)
+                                                    #:attempt attempt
+                                                    #:max-retries max-retries
+                                                    #:delay-ms 0
+                                                    #:error error-msg
+                                                    #:error-type error-type)))
 
   (with-auto-retry (lambda ()
                      (run-agent-turn (unbox ctx-for-retry)
@@ -337,14 +360,9 @@
                                      #:provider-settings provider-settings))
                    #:max-retries 2
                    #:base-delay-ms 1000
+                   #:cumulative-ceiling-secs retry-ceiling-secs
                    #:on-retry (lambda (attempt max-retries delay-ms error-msg error-type)
-                                (emit-typed-event! bus
-                                                   (make-auto-retry-start-event
-                                                    #:session-id session-id
-                                                    #:turn-id turn-id
-                                                    #:timestamp (current-inexact-milliseconds)
-                                                    #:attempt attempt
-                                                    #:max-retries max-retries
-                                                    #:delay-ms delay-ms
-                                                    #:error error-msg
-                                                    #:error-type error-type)))))
+                                (emit-retry-event! attempt max-retries error-msg error-type))
+                   #:on-circuit-break
+                   (lambda (_ original-exn)
+                     (emit-retry-event! 0 0 (exn-message original-exn) 'circuit-breaker))))
