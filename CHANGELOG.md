@@ -1,3 +1,44 @@
+## 0.99.82
+
+Released 2026-08-03.
+
+### Features
+
+- Added a progressive circuit breaker for mid-stream stalls: providers that send fewer than 100 characters before stalling are tracked across retry attempts, and after two consecutive minimal-output stalls remaining retries are skipped, failing fast instead of wasting the full retry budget on a sick provider. The threshold is configurable via `stall-min-output-chars` and `stall-max-consecutive`.
+- Added a provider health gate with a sliding-window failure tracker: when a provider accumulates three or more failures within a 60-second window, retries are denied and the turn fails with a clear diagnostic. A successful response resets the failure window. Configurable via `providers.<name>.health-window-secs` and `providers.<name>.health-failure-threshold`.
+- Added opt-in partial result recovery: when `providers.<name>.partial-recovery` is enabled, partial output accumulated before a mid-stream timeout is prepended as a continuation prompt on retry, allowing the provider to resume from where it left off. A `partial-recovery-min-chars` threshold (default 200) prevents using tiny fragments. Partial text is always saved to the transcript regardless of this setting.
+
+### Bug Fixes
+
+- Fixed `/retry` to work reliably after session resume, goal-driven prompts, and all prompt submission paths by persisting `last-user-prompt` in session state rather than relying on TUI-local storage.
+- Fixed retry telemetry to report the actual backoff delay instead of a hardcoded zero, giving operators accurate visibility into retry timing.
+
+### Breaking / Behavior Changes
+
+- Mid-stream stalls with minimal output (<100 chars) on two consecutive attempts now skip remaining retries instead of retrying the full budget. This bounds sick-provider stall loops to roughly two stream timeouts rather than three.
+- Providers with three or more failures in a 60-second window now skip retries. This prevents futile retry storms against consistently failing providers.
+
+### Migration Notes
+
+- No data migration is required. All new settings are opt-in or have backward-compatible defaults.
+- `providers.<name>.partial-recovery` defaults to `#f` (off). Enable explicitly to inject partial text as continuation context.
+- `providers.<name>.health-window-secs` (default 60) and `providers.<name>.health-failure-threshold` (default 3) can be tuned per provider.
+- `stall-min-output-chars` (default 100) and `stall-max-consecutive` (default 2) control the progressive circuit breaker.
+
+### Testing
+
+- Added tests for mid-stream stall classification and progressive circuit breaker (7 cases).
+- Added tests for provider health gate sliding-window tracker (12 cases).
+- Added tests for partial result preservation and recovery (7 cases).
+- Added tests for `/retry` prompt persistence (NR-2) and telemetry delay correction (NR-5).
+- Final W3 fast gate: 1,116 files and 16,404 tests passed.
+- Broad gate running during release wave.
+
+### Operational / Release
+
+- Updated `docs/provider-retry.md` with progressive stall circuit breaker, provider health gate, and partial result recovery documentation.
+- Release validation uses fast, broad, security, architecture, and release-dry-run gates.
+
 ## 0.99.81
 
 Released 2026-08-03.
