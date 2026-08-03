@@ -291,9 +291,17 @@
       (if stream-model-name
           (effective-request-timeout-for stream-model-name)
           (current-http-request-timeout)))
+    ;; Own every resource created by http-sendrecv (including resources opened
+    ;; before a response port is returned) under a request-scoped custodian.
+    ;; Timeout cleanup shuts down that custodian before interrupting the worker;
+    ;; on success, ownership remains live until the stream cleanup thunk runs.
+    (define request-custodian (make-custodian))
+    (define (cleanup-response!)
+      (custodian-shutdown-all request-custodian))
     (define result-vec
       (with-handlers ([exn:fail?
                        (lambda (e)
+                         (cleanup-response!)
                          (if (provider-error? e)
                              (raise e)
                              (raise (provider-error
@@ -303,41 +311,46 @@
                                      'network
                                      #f))))])
         (call-with-request-timeout (lambda ()
-                                     (define-values (sl rh rp)
-                                       (if req-port
-                                           (http-sendrecv host
-                                                          path-str
-                                                          #:port req-port
-                                                          #:ssl? ssl?
-                                                          #:method "POST"
-                                                          #:headers headers
-                                                          #:data body-bytes)
-                                           (http-sendrecv host
-                                                          path-str
-                                                          #:ssl? ssl?
-                                                          #:method "POST"
-                                                          #:headers headers
-                                                          #:data body-bytes)))
-                                     (vector sl rh rp))
-                                   #:timeout stream-timeout)))
+                                     (parameterize ([current-custodian request-custodian])
+                                       (define-values (sl rh rp)
+                                         (if req-port
+                                             (http-sendrecv host
+                                                            path-str
+                                                            #:port req-port
+                                                            #:ssl? ssl?
+                                                            #:method "POST"
+                                                            #:headers headers
+                                                            #:data body-bytes)
+                                             (http-sendrecv host
+                                                            path-str
+                                                            #:ssl? ssl?
+                                                            #:method "POST"
+                                                            #:headers headers
+                                                            #:data body-bytes)))
+                                       (vector sl rh rp)))
+                                   #:timeout stream-timeout
+                                   #:cleanup cleanup-response!)))
     (define status-line (vector-ref result-vec 0))
     (define response-headers (vector-ref result-vec 1))
     (define response-port (vector-ref result-vec 2))
-    ;; Check HTTP status
-    (define status-str
-      (if (bytes? status-line)
-          (bytes->string/utf-8 status-line)
-          status-line))
-    (define status-code
-      (let ([m (regexp-match #rx"HTTP/[0-9.]+ ([0-9]+)" status-str)])
-        (if m
-            (string->number (cadr m))
-            0)))
-    (when (>= status-code 300)
-      (define err-body (read-response-body/timeout response-port))
-      (close-input-port response-port)
-      (check-provider-status! "OpenAI" status-line err-body))
-    (values response-port stream-timeout (lambda () (close-input-port response-port))))
+    ;; Any failure after acquisition but before ownership reaches the lazy
+    ;; generator must close the response port, including error-body timeouts.
+    (with-handlers ([exn? (lambda (e)
+                            (cleanup-response!)
+                            (raise e))])
+      (define status-str
+        (if (bytes? status-line)
+            (bytes->string/utf-8 status-line)
+            status-line))
+      (define status-code
+        (let ([m (regexp-match #rx"HTTP/[0-9.]+ ([0-9]+)" status-str)])
+          (if m
+              (string->number (cadr m))
+              0)))
+      (when (>= status-code 300)
+        (define err-body (read-response-body/timeout response-port))
+        (check-provider-status! "OpenAI" status-line err-body))
+      (values response-port stream-timeout cleanup-response!)))
 
   (define (stream req)
     (define _stream-t0 (current-inexact-milliseconds))
@@ -379,32 +392,45 @@
     ;; recovery into a 10-minute recovery. Capping at 120s: a held/stalled request is
     ;; retried within 2 minutes, and the retry (fresh turn) streams instantly (observed).
     (define held-request-detect-secs 120)
-    (define gen
-      (read-sse-chunks response-port
-                       #:initial-timeout (min stream-timeout held-request-detect-secs)
-                       #:thinking-timeout (min stream-timeout held-request-detect-secs)
-                       #:stream-timeout http-stream-timeout-default
-                       #:max-total-timeout max-total-timeout))
-    ;; v0.99.54 W3 L-2: Close response port on normal stream end or generator error.
-    ;; NOTE: Consumer-abandonment (abandoning the generator without reading to #f)
-    ;; will leak the port until GC. A thread+channel rewrite would fix this.
-    (log-stream-setup-timing "openai" _stream-t0)
-    (generator ()
-               (with-handlers ([exn:break? (lambda (e)
-                                             (cleanup-thunk)
-                                             (raise e))]
-                               [exn:fail? (lambda (e)
-                                            (cleanup-thunk)
-                                            (openai-wrap-stream-error e))])
-                 (let loop ()
-                   (define chunk (gen))
-                   (match chunk
-                     [#f
-                      (cleanup-thunk)
-                      (yield #f)]
-                     [_
-                      (yield chunk)
-                      (loop)])))))
+    (define stream-owns-resources? (box #f))
+    (dynamic-wind void
+                  (lambda ()
+                    (define gen
+                      (read-sse-chunks response-port
+                                       #:initial-timeout (min stream-timeout held-request-detect-secs)
+                                       #:thinking-timeout
+                                       (min stream-timeout held-request-detect-secs)
+                                       #:stream-timeout http-stream-timeout-default
+                                       #:max-total-timeout max-total-timeout))
+                    ;; Own the response port for the complete lifetime of the lazy generator.
+                    ;; close-port-after-stream preserves the port across yields and also closes
+                    ;; it when a consumer abandons and collects the returned generator.
+                    (log-stream-setup-timing "openai" _stream-t0)
+                    (define provider-gen
+                      (generator ()
+                                 (with-handlers ([exn:break? (lambda (e)
+                                                               (cleanup-thunk)
+                                                               (raise e))]
+                                                 [exn:fail? (lambda (e)
+                                                              (cleanup-thunk)
+                                                              (openai-wrap-stream-error e))])
+                                   (let loop ()
+                                     (define chunk (gen))
+                                     (match chunk
+                                       [#f
+                                        (cleanup-thunk)
+                                        (yield #f)]
+                                       [_
+                                        (yield chunk)
+                                        (loop)])))))
+                    (define owned-stream
+                      (close-port-after-stream provider-gen response-port #:cleanup cleanup-thunk))
+                    ;; Transfer only after finalizer registration succeeds.
+                    (set-box! stream-owns-resources? #t)
+                    owned-stream)
+                  (lambda ()
+                    (unless (unbox stream-owns-resources?)
+                      (cleanup-thunk)))))
 
   (make-provider (lambda () "openai-compatible")
                  (lambda () (hasheq 'streaming #t 'token-counting #f))

@@ -20,40 +20,40 @@
 
 ;; — SSE line-level helpers —
 ;; SSE parsing
-(provide (contract-out [parse-sse-lines (-> string? (listof hash?))]
-                       [parse-sse-line (-> string? (or/c hash? 'done #f))]
-                       [parse-sse-data-line (-> string? (or/c string? #f))]
-                       [sse-done? (-> string? boolean?)]
-                       ;; OpenAI chunk normalization
-                       [normalize-openai-chunks
-                        (-> (listof hash?) (listof (or/c stream-chunk? any/c)))]
-                       [normalize-openai-chunk (-> hash? (or/c stream-chunk? any/c))]
-                       [accumulate-tool-call-deltas (-> list? (listof hash?))]
-                       ;; Incremental SSE reading (generator yields stream-chunk? or #f)
-                       [read-sse-chunks
-                        (->* (input-port?)
-                             (#:initial-timeout positive?
-                                                #:stream-timeout positive?
-                                                #:thinking-timeout positive?
-                                                #:max-total-timeout positive?)
-                             generator?)]
-                       [stream-sse-events
-                        (->* (input-port? procedure?)
-                             (#:initial-timeout positive?
-                                                #:stream-timeout positive?
-                                                #:thinking-timeout positive?
-                                                #:max-total-timeout positive?)
-                             generator?)]
-                       [close-port-after-stream (-> generator? input-port? generator?)]
-                       ;; Response body reading
-                       [read-response-body (-> input-port? bytes?)]
-                       [read-response-body/timeout (->* (input-port?) (#:timeout positive?) bytes?)]
-                       ;; Timeout-aware line reading
-                       [read-line/timeout (->* (input-port?) (#:timeout positive?) any/c)]
-                       ;; Timeout helpers
-                       [effective-request-timeout-for (-> (or/c string? #f) positive?)]
-                       [call-with-request-timeout
-                        (->* (procedure?) (#:timeout positive? #:cleanup procedure?) any/c)])
+(provide (contract-out
+          [parse-sse-lines (-> string? (listof hash?))]
+          [parse-sse-line (-> string? (or/c hash? 'done #f))]
+          [parse-sse-data-line (-> string? (or/c string? #f))]
+          [sse-done? (-> string? boolean?)]
+          ;; OpenAI chunk normalization
+          [normalize-openai-chunks (-> (listof hash?) (listof (or/c stream-chunk? any/c)))]
+          [normalize-openai-chunk (-> hash? (or/c stream-chunk? any/c))]
+          [accumulate-tool-call-deltas (-> list? (listof hash?))]
+          ;; Incremental SSE reading (generator yields stream-chunk? or #f)
+          [read-sse-chunks
+           (->* (input-port?)
+                (#:initial-timeout positive?
+                                   #:stream-timeout positive?
+                                   #:thinking-timeout positive?
+                                   #:max-total-timeout positive?)
+                generator?)]
+          [stream-sse-events
+           (->* (input-port? procedure?)
+                (#:initial-timeout positive?
+                                   #:stream-timeout positive?
+                                   #:thinking-timeout positive?
+                                   #:max-total-timeout positive?)
+                generator?)]
+          [close-port-after-stream (->* (generator? input-port?) (#:cleanup procedure?) generator?)]
+          ;; Response body reading
+          [read-response-body (-> input-port? bytes?)]
+          [read-response-body/timeout (->* (input-port?) (#:timeout positive?) bytes?)]
+          ;; Timeout-aware line reading
+          [read-line/timeout (->* (input-port?) (#:timeout positive?) any/c)]
+          ;; Timeout helpers
+          [effective-request-timeout-for (-> (or/c string? #f) positive?)]
+          [call-with-request-timeout
+           (->* (procedure?) (#:timeout positive? #:cleanup procedure?) any/c)])
          ;; Struct and predicates (direct export for match compatibility)
          tool-call-accum
          tool-call-accum?
@@ -122,11 +122,13 @@
   (define result (sync/timeout timeout-secs ch))
   (match result
     [#f
-     (kill-thread th)
+     ;; Close the owned response resource before interrupting the worker. Killing
+     ;; first can race TLS teardown and leave the connection half-open.
      (with-handlers ([exn:fail? (lambda (e)
                                   (log-warning (format "llm/stream: cleanup error: ~a"
                                                        (exn-message e))))])
        (cleanup-thunk)) ; #454: close ports
+     (kill-thread th)
      (raise (exn:fail:network:timeout (format "HTTP request timeout (~a seconds)" timeout-secs)
                                       (current-continuation-marks)))]
     [_
@@ -144,11 +146,15 @@
 ;; ============================================================
 
 ;; read-line/timeout : input-port? [#:timeout seconds] -> (or/c string? eof?)
-;; Like read-line but with a timeout. Returns #f on timeout (caller should raise).
+;; Like read-line but with a timeout. A timed-out response is no longer usable,
+;; so close it before returning #f; callers must establish a new connection.
 (define (read-line/timeout port #:timeout [timeout-secs http-read-timeout-default])
   (define result (sync/timeout timeout-secs (read-line-evt port 'any)))
   (match result
-    [#f #f] ; timeout
+    [#f
+     (unless (port-closed? port)
+       (close-input-port port))
+     #f]
     [_ result])) ; string or eof
 
 ;; read-response-body/timeout : input-port? [#:timeout seconds] -> bytes?
@@ -462,28 +468,63 @@
                     [else (loop #f (add1 consecutive-empty) seen-content?)])]))))
 
 ;; Own a response port for the lifetime of a lazy stream generator. The port
-;; remains open while the generator is merely returned, then closes on normal
-;; termination, read failure, or cancellation while consuming.
-(define (close-port-after-stream source port)
+;; remains open across yields and closes on normal termination, read failure,
+;; cancellation, or collection after consumer abandonment.
+;;
+;; A dynamic-wind around `yield` is intentionally not used: a yield exits the
+;; dynamic extent and would run the after-thunk, closing the live port after the
+;; first chunk. A will associates cleanup with collection of the wrapper itself.
+(define stream-port-will-executor (make-will-executor))
+(void (thread (lambda ()
+                (let loop ()
+                  ;; A custom port can raise while closing. Isolate each action so one
+                  ;; faulty finalizer cannot permanently disable cleanup for later streams.
+                  (with-handlers ([exn? (lambda (e)
+                                          (log-warning (format "llm/stream: finalizer error: ~a"
+                                                               (exn-message e))))])
+                    (will-execute stream-port-will-executor))
+                  (loop)))))
+
+(define (close-port-after-stream source
+                                 port
+                                 #:cleanup [resource-cleanup
+                                            (lambda ()
+                                              (unless (port-closed? port)
+                                                (close-input-port port)))])
+  (define cleanup-lock (make-semaphore 1))
+  (define cleaned? (box #f))
   (define (cleanup!)
-    (unless (port-closed? port)
-      (close-input-port port)))
-  (generator ()
-             (with-handlers ([exn:break? (lambda (e)
-                                           (cleanup!)
-                                           (raise e))]
-                             [exn:fail? (lambda (e)
-                                          (cleanup!)
-                                          (raise e))])
-               (let loop ()
-                 (define chunk (source))
-                 (cond
-                   [chunk
-                    (yield chunk)
-                    (loop)]
-                   [else
-                    (cleanup!)
-                    (yield #f)])))))
+    (call-with-semaphore cleanup-lock
+                         (lambda ()
+                           (unless (unbox cleaned?)
+                             (set-box! cleaned? #t)
+                             (resource-cleanup)))))
+  (define wrapped
+    (generator ()
+               (with-handlers ([exn:break? (lambda (e)
+                                             (cleanup!)
+                                             (raise e))]
+                               [exn:fail? (lambda (e)
+                                            (cleanup!)
+                                            (raise e))])
+                 (let loop ()
+                   (define chunk (source))
+                   (cond
+                     [chunk
+                      (yield chunk)
+                      (loop)]
+                     [else
+                      (cleanup!)
+                      (yield #f)])))))
+  (will-register
+   stream-port-will-executor
+   wrapped
+   (lambda (_ignored)
+     (with-handlers ([exn? (lambda (e)
+                             (log-warning (format "llm/stream: finalizer cleanup error: ~a"
+                                                  (exn-message e))))])
+       (cleanup!))))
+  wrapped)
 
 ;; Provider-agnostic SSE event generator.
 ;; Takes a port and an event->chunks callback that converts parsed JSON events

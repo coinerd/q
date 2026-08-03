@@ -13,23 +13,29 @@ In the Azure OpenAI provider specifically, the `http-sendrecv` call opens three
 ports (input, output, response) that all need guaranteed cleanup.
 
 ## Decision
-Use `dynamic-wind` for guaranteed port cleanup in all streaming providers:
+Separate eager request setup from lazy generator ownership:
 
-1. **`call-with-request-timeout`** wraps the HTTP request with a deadline.
-2. **`dynamic-wind`** ensures the response port is always closed — even on
-   timeout, exception, or custodian shutdown.
-3. **Port cleanup in thunk** — The streaming generator reads from the port
-   inside the dynamic-wind body. The post-thunk closes the port.
+1. **`call-with-request-timeout`** wraps the HTTP request with a deadline and
+   runs resource cleanup before interrupting its worker.
+2. **`dynamic-wind` is limited to non-suspending acquisition/handoff code.** It
+   closes a response port if setup is interrupted before ownership transfers.
+3. **A will-backed generator owner** keeps the port open across yields and
+   closes it on normal completion, failure, cancellation, or garbage
+   collection after consumer abandonment.
 
-This pattern is applied consistently across all providers: OpenAI, Azure
-OpenAI, Anthropic, and Gemini.
+Do **not** wrap a generator body containing `yield` in a `dynamic-wind` whose
+after-thunk closes the port. A yield exits the dynamic extent, so that pattern
+closes a still-live response port after the first chunk.
 
 ## Consequences
-**Easier:** No port leaks regardless of failure mode. Timeout behavior is
-predictable. The pattern is the same across all providers.
+**Easier:** Timeout and abandonment paths have explicit ownership. A lazy
+stream remains usable across multiple yields while still receiving eventual
+cleanup if its consumer disappears.
 
-**Harder:** Slightly more nesting in the streaming code. Developers must
-remember to use `dynamic-wind` rather than simple `with-handlers`.
+**Harder:** Acquisition, ownership transfer, and generator finalization use
+different mechanisms. Finalizer actions must be exception-isolated so one
+faulty custom port cannot disable later cleanup.
 
-**Risks:** If the port is closed before the generator finishes reading, the
-generator must handle `read-string` errors gracefully.
+**Risks:** Will execution is asynchronous. Correctness must not depend on
+immediate finalization; explicit normal/error cleanup remains the primary
+path.

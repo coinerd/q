@@ -12,6 +12,7 @@
 (require rackunit
          rackunit/text-ui
          net/url
+         racket/tcp
          json
          "../llm/provider.rkt"
          "../llm/openai-compatible.rkt"
@@ -406,6 +407,115 @@
          (check-true (hash-has-key? v 'items) (format "array property ~a must have items" k)))))))
 
 ;; ============================================================
+;; W0: adapter-level response-port ownership
+;; ============================================================
+
+(define-test-suite
+ stream-port-ownership-tests
+ (test-case "OpenAI stream abandonment closes the peer connection"
+   (define listener (tcp-listen 0 4 #t "127.0.0.1"))
+   (define-values (_local-host local-port _remote-host _remote-port) (tcp-addresses listener #t))
+   (define peer-closed (make-channel))
+   (define server
+     (thread (lambda ()
+               (define-values (client-in client-out) (tcp-accept listener))
+               (read-line client-in 'any) ; request line
+               (define content-length
+                 (let loop ([length 0])
+                   (define line (read-line client-in 'any))
+                   (cond
+                     [(or (eof-object? line) (string=? line "")) length]
+                     [else
+                      (define m (regexp-match #px"(?i:^Content-Length: *([0-9]+))" line))
+                      (loop (if m
+                                (string->number (cadr m))
+                                length))])))
+               (when (positive? content-length)
+                 (read-bytes content-length client-in))
+               (display "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n\r\n" client-out)
+               (display "data: {\"id\":\"c1\",\"choices\":[{\"delta\":{\"content\":\"Hi\"}}]}\n\n"
+                        client-out)
+               (flush-output client-out)
+               ;; Drain any request framing bytes not represented by
+               ;; Content-Length, then signal only on actual client EOF.
+               (let loop ()
+                 (unless (eof-object? (read-byte client-in))
+                   (loop)))
+               (channel-put peer-closed #t)
+               (close-input-port client-in)
+               (close-output-port client-out))))
+   (define provider
+     (make-openai-compatible-provider (hash 'api-key
+                                            "test-key"
+                                            'base-url
+                                            (format "http://127.0.0.1:~a/v1" local-port)
+                                            'model
+                                            "test-model")))
+   (define gen-ref
+     (let ([gen (provider-stream provider (make-model-request '() '() (hash)))])
+       (check-equal? (stream-chunk-delta-text (gen)) "Hi")
+       (check-false (sync/timeout 0 peer-closed)
+                    "the connection must remain open across a yielded chunk")
+       (make-weak-box gen)))
+   (define peer-observed-close?
+     (let loop ([attempt 0])
+       (collect-garbage)
+       (define observed (sync/timeout 0.02 peer-closed))
+       (cond
+         [observed observed]
+         [(= attempt 250) #f]
+         [else (loop (add1 attempt))])))
+   (tcp-close listener)
+   (unless (thread-dead? server)
+     (kill-thread server))
+   (collect-garbage)
+   (check-false (weak-box-value gen-ref) "the abandoned adapter generator should be collectable")
+   (check-true peer-observed-close?
+               "the server peer must observe EOF after adapter generator abandonment"))
+ (test-case "OpenAI setup timeout closes request-custodian resources"
+   (define listener (tcp-listen 0 4 #t "127.0.0.1"))
+   (define-values (_local-host local-port _remote-host _remote-port) (tcp-addresses listener #t))
+   (define peer-closed (make-channel))
+   (define server
+     (thread (lambda ()
+               (define-values (client-in client-out) (tcp-accept listener))
+               (read-line client-in 'any)
+               (define content-length
+                 (let loop ([length 0])
+                   (define line (read-line client-in 'any))
+                   (cond
+                     [(or (eof-object? line) (string=? line "")) length]
+                     [else
+                      (define m (regexp-match #px"(?i:^Content-Length: *([0-9]+))" line))
+                      (loop (if m
+                                (string->number (cadr m))
+                                length))])))
+               (when (positive? content-length)
+                 (read-bytes content-length client-in))
+               ;; Never send a response: force the provider's setup deadline.
+               (let loop ()
+                 (unless (eof-object? (read-byte client-in))
+                   (loop)))
+               (channel-put peer-closed #t)
+               (close-input-port client-in)
+               (close-output-port client-out))))
+   (define provider
+     (make-openai-compatible-provider (hash 'api-key
+                                            "test-key"
+                                            'base-url
+                                            (format "http://127.0.0.1:~a/v1" local-port)
+                                            'model
+                                            "timeout-model")))
+   ;; Use a generous setup deadline so scheduler contention cannot make the
+   ;; timeout fire before the local server has accepted the request.
+   (parameterize ([current-model-timeouts (hash "timeout-model" 2)])
+     (check-exn exn:fail? (lambda () (provider-stream provider (make-model-request '() '() (hash))))))
+   (check-true (sync/timeout 5 peer-closed) "the server peer must observe EOF after setup timeout")
+   (tcp-close listener)
+   (unless (thread-dead? server)
+     (kill-thread server))))
+
+;; ============================================================
 ;; Run all tests (updated to include new suites)
 ;; ============================================================
 
@@ -418,7 +528,8 @@
   (run-tests sse-timeout-scaling-tests)
   (run-tests content-key-fix-tests)
   (run-tests array-items-fix-tests)
-  (run-tests stream-parameter-tests))
+  (run-tests stream-parameter-tests)
+  (run-tests stream-port-ownership-tests))
 
 (module+ main
   (run-tests error-formatting-tests)
@@ -428,7 +539,8 @@
   (run-tests sse-timeout-scaling-tests)
   (run-tests content-key-fix-tests)
   (run-tests array-items-fix-tests)
-  (run-tests stream-parameter-tests))
+  (run-tests stream-parameter-tests)
+  (run-tests stream-port-ownership-tests))
 
 ;; ============================================================
 ;; v0.99.65 W0: Stream parameter tests

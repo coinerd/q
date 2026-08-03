@@ -236,6 +236,10 @@
       ("tui/tui-render-loop.rkt"
        (risk . "TUI render loop with streaming state, VDOM diffing, and layout; high visual-coupling")
        (owner . "tui"))
+      ("tui/tui-init.rkt"
+       (risk
+        . "TUI composition root with session startup, extension wiring, and campaign command integration")
+       (owner . "tui"))
       ("runtime/session/session-store-tree.rkt"
        (cycle-resolved . "v0.74.1")
        (risk
