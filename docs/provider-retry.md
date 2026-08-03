@@ -49,6 +49,24 @@ bounds the **total wall-clock** across all retry attempts.
 When the cumulative elapsed time exceeds the ceiling, the turn fails immediately
 with a `retry-exhausted` exception naming the ceiling.
 
+### Adaptive Retry (PN-6)
+
+On the second retry for a timeout or structured network error, q makes the next
+request smaller instead of resending an identical overloaded payload:
+
+- removes the oldest complete user/assistant history pair;
+- preserves every system message and the current user request;
+- keeps at least one complete user/assistant history pair;
+- reduces `max-tokens` by 25% when it is configured.
+
+If the context is already at the minimum floor, q leaves both context and
+`max-tokens` unchanged. Authentication, bad-request, rate-limit, and other
+non-network error classes do not trigger adaptive reduction.
+
+Each adaptive decision emits `provider.adaptive-retry` with the retry attempt,
+error class, original/reduced message counts and token estimates,
+original/reduced `max-tokens`, and `floorReached`.
+
 ## Retry Behavior Summary
 
 | Parameter | Default | Description |

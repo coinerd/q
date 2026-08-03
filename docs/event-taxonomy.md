@@ -69,6 +69,24 @@ Emitted when a message completes streaming.
 | `role` | symbol | Message role |
 | `reason` | string | Stop reason |
 
+## Provider Retry
+
+### `provider.adaptive-retry`
+Emitted when the second retry evaluates adaptive request reduction after a
+timeout or structured network error.
+
+| Payload field | Type | Description |
+|---------------|------|-------------|
+| `attempt` | integer | Retry attempt that triggered adaptation |
+| `errorType` | symbol | Retry classifier (`timeout` or `network`) |
+| `originalMessageCount` | integer | Context message count before reduction |
+| `reducedMessageCount` | integer | Context message count after reduction |
+| `originalTokenEstimate` | integer | Estimated context tokens before reduction |
+| `reducedTokenEstimate` | integer | Estimated context tokens after reduction |
+| `originalMaxTokens` | integer or false | Configured output-token cap before reduction |
+| `reducedMaxTokens` | integer or false | Output-token cap after reduction |
+| `floorReached` | boolean | True when the minimum context floor prevented reduction |
+
 ## Tool Execution
 
 ### `tool-execution-start-event`
