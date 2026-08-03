@@ -1,3 +1,43 @@
+## 0.99.81
+
+Released 2026-08-03.
+
+### Features
+
+- Added truthful application-level SSE heartbeat, yielded-data, and phase metadata without unsupported TCP `SO_KEEPALIVE` or file-descriptor extraction claims.
+- Added a held-request circuit breaker: initial zero-data stream timeouts stop after the first failed request instead of consuming the full retry budget, bounding the common stall path to the configured stream timeout (typically about 130 seconds rather than about 370 seconds).
+- Added a configurable five-minute cumulative retry ceiling (`providers.<name>.retry-ceiling-secs`) across all attempts.
+- Added adaptive retry: on the second timeout/network retry, q removes the oldest safe history pair and reduces configured `max-tokens` by 25%, while preserving the system prompt and minimum context floor.
+- Added `provider.adaptive-retry` telemetry with before/after message counts, token estimates, output-token limits, error class, and floor status.
+
+### Bug Fixes
+
+- Closed response ports before timeout worker termination and moved all four provider adapters to request-scoped custodians for deterministic resource cleanup.
+- Added exception-isolated generator finalization so abandoned SSE streams release owned ports and request resources.
+- Eliminated indeterminate response-port ownership by transferring ownership only after stream finalizer registration succeeds.
+
+### Breaking / Behavior Changes
+
+- Initial zero-data stream timeouts no longer consume retry budget; they fail after the first configured stream timeout.
+- The second retry after timeout/network failures may send a smaller history and 25% lower configured `max-tokens`. Public APIs and stored session formats are unchanged.
+
+### Migration Notes
+
+- No data migration is required. Existing provider settings remain valid.
+- `providers.<name>.retry-ceiling-secs` is optional and defaults to 300 seconds.
+- Telemetry consumers may opt into the new `provider.adaptive-retry` event.
+
+### Testing
+
+- Added provider lifecycle TCP regressions, SSE heartbeat/phase metadata tests, transport boundary guards, circuit-breaker and cumulative-ceiling tests, and end-to-end adaptive request-capture tests.
+- Final W3 fast gate: 1,111 files and 16,374 tests passed.
+- Final W3 broad gate: 1,208 files and 17,374 tests passed, with 8 environment-profile skips and zero failures or timeouts.
+
+### Operational / Release
+
+- Documented streaming resource ownership, retry controls, transport boundaries, and adaptive-retry behavior.
+- Release validation uses fast, broad, security, architecture, and release-dry-run gates; the deprecated full-suite alias is not used.
+
 ## 0.99.80
 
 Released 2026-08-02.
