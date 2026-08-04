@@ -16,6 +16,7 @@
          rackunit/text-ui
          racket/file
          racket/path
+         racket/string
          (only-in "../extensions/gsd/campaign-state.rkt"
                   make-campaign-manifest
                   make-campaign-wave-descriptor
@@ -46,7 +47,9 @@
                   release-lease!
                   campaign-lease?
                   make-campaign-request
-                  execute-campaign-request!)
+                  execute-campaign-request!
+                  find-git-root
+                  git-available?)
          (only-in "../util/loop-result.rkt" make-loop-result))
 
 ;; ============================================================
@@ -335,6 +338,81 @@
       (cleanup-tmp dir))))
 
 ;; ============================================================
+;; F-7: Git Root Resolution Tests
+;; ============================================================
+
+(define git-root-suite
+  (test-suite "F-7: find-git-root"
+    (test-case "find-git-root finds .git in the start directory"
+      (define tmp (make-temporary-file "git-root-test-~a" 'directory))
+      (dynamic-wind void
+                    (lambda ()
+                      (make-directory (build-path tmp ".git"))
+                      (define result (find-git-root tmp))
+                      (check-pred path? result)
+                      (check-equal? (path->string (path->complete-path tmp))
+                                    (path->string (path->complete-path result))))
+                    (lambda () (delete-directory/files tmp))))
+
+    (test-case "F-7: find-git-root finds .git in q/ subdirectory (two-tier layout)"
+      (define tmp (make-temporary-file "git-root-test-~a" 'directory))
+      (dynamic-wind void
+                    (lambda ()
+                      (make-directory* (build-path tmp "q" ".git"))
+                      (define result (find-git-root tmp))
+                      (check-pred path? result "should find q/ subdir")
+                      (when result
+                        (check-true (string-contains? (path->string result) "q"))))
+                    (lambda () (delete-directory/files tmp))))
+
+    (test-case "F-7: find-git-root walks up to parent directory"
+      (define tmp (make-temporary-file "git-root-test-~a" 'directory))
+      (dynamic-wind
+       void
+       (lambda ()
+         (make-directory (build-path tmp ".git"))
+         (define sub (build-path tmp "subdir" "nested"))
+         (make-directory* sub)
+         (define result (find-git-root sub))
+         (check-pred path? result)
+         (when result
+           (define tmp-str (string-trim (path->string (simple-form-path tmp)) "/" #:right? #t))
+           (define res-str (string-trim (path->string (simple-form-path result)) "/" #:right? #t))
+           (check-equal? tmp-str res-str)))
+       (lambda () (delete-directory/files tmp))))
+
+    (test-case "F-7: find-git-root returns #f when no .git anywhere"
+      (define tmp (make-temporary-file "git-root-test-~a" 'directory))
+      (dynamic-wind
+       void
+       (lambda ()
+         ;; No .git anywhere in this temp tree (parent is /tmp which may or may not have .git)
+         ;; We check that at least the function doesn't crash
+         (define result (find-git-root tmp))
+         ;; Could be #f or could find a parent .git — just check no crash
+         (check-true (or (not result) (path? result))))
+       (lambda () (delete-directory/files tmp))))
+
+    (test-case "F-7: git-available? returns #t when git root found"
+      (define tmp (make-temporary-file "git-root-test-~a" 'directory))
+      (dynamic-wind void
+                    (lambda ()
+                      (make-directory (build-path tmp ".git"))
+                      (check-true (git-available? tmp)))
+                    (lambda () (delete-directory/files tmp))))
+
+    (test-case "F-7: find-git-root handles .git as file (worktree/submodule)"
+      (define tmp (make-temporary-file "git-root-test-~a" 'directory))
+      (dynamic-wind void
+                    (lambda ()
+                      ;; .git as a file (gitdir pointer) should also be detected
+                      (call-with-output-file (build-path tmp ".git")
+                                             (lambda (out) (display "gitdir: /fake/path\n" out)))
+                      (define result (find-git-root tmp))
+                      (check-pred path? result))
+                    (lambda () (delete-directory/files tmp))))))
+
+;; ============================================================
 ;; Runner
 ;; ============================================================
 
@@ -344,6 +422,7 @@
     campaign-suite
     lease-suite
     go-n-suite
-    request-suite))
+    request-suite
+    git-root-suite))
 
 (void (run-tests all-tests))

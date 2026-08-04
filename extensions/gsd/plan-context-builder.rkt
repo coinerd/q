@@ -77,33 +77,61 @@
           (set! caps (cons 'git-write caps)))
         caps)))
 
+(define (find-git-root-dir start-dir)
+  (define start-path
+    (path->complete-path (if (path? start-dir)
+                             start-dir
+                             (string->path start-dir))))
+  (define (has-git? dir)
+    (define git-marker (build-path dir ".git"))
+    (or (directory-exists? git-marker) (file-exists? git-marker)))
+  (define q-sub (build-path start-path "q"))
+  (cond
+    [(has-git? start-path) start-path]
+    [(and (directory-exists? q-sub) (has-git? q-sub)) q-sub]
+    [else
+     (let loop ([dir start-path])
+       (cond
+         [(has-git? dir) dir]
+         [else
+          (define-values (parent _sub _dir?) (split-path dir))
+          (if (and parent (path? parent) (not (equal? parent dir)))
+              (loop parent)
+              #f)]))]))
+
 ;; Get a compact git diff excerpt for the wave's files.
 ;; v0.99.24 C-3: Fixed dead code — file paths were computed but never passed to git.
-;; Uses `git show --stat HEAD -- <files>` instead of `git diff --stat` because
-;; at /wave-done time, changes are already committed.
+;; v0.99.83 W1 (F-7): Fixed stderr leak — system* wrote git errors to the terminal.
+;; Now uses subprocess with explicit stderr capture, and resolves the git root
+;; via find-git-root-dir (handles the q-agent two-tier layout).
 ;; Returns a string (possibly empty when no changes or no git).
 (define (get-diff-excerpt base-dir files)
   (if (or (null? files) (not base-dir))
       ""
       (with-handlers ([exn:fail? (lambda (_) "")])
-        (define output
-          (parameterize ([current-directory (if (path? base-dir)
-                                                base-dir
-                                                (string->path base-dir))])
-            (with-output-to-string (lambda ()
-                                     (with-handlers ([exn:fail? void])
-                                       (apply system*
-                                              (find-executable-path "git")
-                                              "show"
-                                              "--stat"
-                                              "--oneline"
-                                              "HEAD"
-                                              "--"
-                                              files))))))
-        (define trimmed (string-trim output))
-        (if (> (string-length trimmed) 2000)
-            (string-append (substring trimmed 0 2000) "...")
-            trimmed))))
+        (define git-root (find-git-root-dir base-dir))
+        (if (not git-root)
+            ""
+            (parameterize ([current-directory git-root])
+              (define-values (sp out in err)
+                (apply subprocess
+                       #f
+                       'out
+                       'in
+                       'err
+                       (find-executable-path "git")
+                       (list* "show" "--stat" "--oneline" "HEAD" "--" files)))
+              (define stdout-str (port->string out))
+              (define stderr-str (port->string err))
+              (close-input-port out)
+              (close-output-port in)
+              (close-input-port err)
+              (subprocess-wait sp)
+              (define code (subprocess-status sp))
+              (define trimmed (string-trim stdout-str))
+              (if (> (string-length trimmed) 2000)
+                  (string-append (substring trimmed 0 2000) "...")
+                  trimmed))))))
 
 ;; Attempt to read test summary from session artifacts.
 ;; v0.99.24 W1: Checks for cached test results file. Returns a descriptive
