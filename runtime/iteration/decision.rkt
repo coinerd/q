@@ -75,7 +75,8 @@
               force-shutdown
               shutdown
               max-iterations-exceeded
-              hook-blocked))
+              hook-blocked
+              empty-response))
 
 (define (decide-next-action ctx result)
   (define term (loop-result-termination-reason result))
@@ -84,6 +85,7 @@
     ['hook-blocked 'stop]
     ['max-iterations-exceeded 'stop]
     ['error 'stop]
+    ['empty-response 'continue]
     ['tool-calls-pending
      (define next-iter (add1 (iteration-ctx-iteration ctx)))
      (define consecutive (iteration-ctx-consecutive-tool-count ctx))
@@ -121,4 +123,10 @@
            (hasheq))]
       ['stop-hard-limit (hasheq 'maxIterationsReached #t)]
       [_ (hasheq)]))
-  (step-result action termination new-counters metadata))
+  ;; v0.99.83 W2: Mark empty-response in metadata so step-interpreter can
+  ;; inject a nudge message and recurse instead of silently completing.
+  (define final-metadata
+    (if (eq? termination 'empty-response)
+        (hash-set metadata 'emptyResponse #t)
+        metadata))
+  (step-result action termination new-counters final-metadata))

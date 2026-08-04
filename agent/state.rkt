@@ -18,7 +18,8 @@
                        [state-add-message! (-> loop-state? any/c void?)]
                        [state-add-event! (-> loop-state? any/c void?)]
                        [current-loop-state-for-error-recovery (parameter/c (or/c loop-state? #f))]
-                       [current-partial-text (parameter/c (or/c string? #f))]))
+                       [current-partial-text (parameter/c (or/c string? #f))]
+                       [current-empty-response-retried? (parameter/c boolean?)]))
 
 ;; ============================================================
 ;; v0.45.10 NF1: Error-path recovery parameter
@@ -38,6 +39,14 @@
 ;; layer to inject partial text as continuation context on retry.
 ;; #f when no partial text is available.
 (define current-partial-text (make-parameter #f))
+
+;; v0.99.83 W2: Empty-response auto-retry tracking
+;; ============================================================
+
+;; Set by the iteration loop when an empty-response retry has been
+;; attempted. Prevents infinite retry loops when the model repeatedly
+;; produces thinking-only responses.
+(define current-empty-response-retried? (make-parameter #f))
 
 ;; ============================================================
 ;; Internal struct — mutable boxes for accumulation

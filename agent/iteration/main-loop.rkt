@@ -23,7 +23,10 @@
                   make-initial-counters
                   loop-counters-iteration
                   loop-counters-consecutive-tool-count
-                  loop-counters-explore-count)
+                  loop-counters-explore-count
+                  loop-counters
+                  loop-counters-stall-retry-count)
+         (only-in "../../agent/state.rkt" current-empty-response-retried?)
          (only-in "../../util/content/content-parts.rkt" make-text-part)
          (only-in "../../util/loop-result.rkt" make-loop-result loop-result-messages)
          (only-in "../../util/message/message.rkt" message? make-message)
@@ -34,6 +37,7 @@
          (only-in "../event-structs/iteration-events.rkt" make-iteration-decision-event)
          (only-in "../queue.rkt" queue-status queue? dequeue-followup! dequeue-all-followups!)
          (only-in "tool-turn-bridge.rkt" dequeue-all-steering! drain-injected-messages!)
+         (only-in "../../runtime/session/session-store.rkt" append-entries!)
          (only-in "../../runtime/runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
          (only-in "../../util/hook-types.rkt" hook-result-action hook-result?)
          (only-in "../../util/event/event-contracts.rkt"
@@ -61,7 +65,8 @@
          (only-in "../../runtime/iteration/decision.rkt"
                   iteration-ctx
                   compute-step-result
-                  step-result-metadata)
+                  step-result-metadata
+                  step-result-new-counters)
          (only-in "step-interpreter.rkt" interpret-step)
          (only-in "../../runtime/iteration/directive.rkt"
                   directive-recurse
@@ -156,6 +161,12 @@
       (or (config-token-budget-threshold config) (config-max-context-tokens config)))
     (define ws
       (or initial-ws (make-working-set #:max-tokens (compute-working-set-budget context-budget))))
+    ;; v0.99.83 W2: Local helper for counter increment
+    (define (make-next-counters base)
+      (struct-copy loop-counters
+                   base
+                   [iteration (add1 (loop-counters-iteration base))]
+                   [stall-retry-count 0]))
     (define agent-start-payload
       (hasheq 'session-id
               session-id
@@ -179,122 +190,163 @@
           ;; R-06/R-07: Track FSM state: idle -> provider-turn
           (current-iteration-fsm-state (next-iteration-state state-idle event-start-loop))
           (log-q-main-loop-info "iteration start")
-          (let loop ([ctx context]
-                     [counters (make-initial-counters)]
-                     [ws ws])
+          (parameterize ([current-empty-response-retried? #f])
+            (let loop ([ctx context]
+                       [counters (make-initial-counters)]
+                       [ws ws])
 
-            (define ctx-with-injected
-              (prepare-iteration-context ctx steering-queue injected-box bus ext-reg session-id))
+              (define ctx-with-injected
+                (prepare-iteration-context ctx steering-queue injected-box bus ext-reg session-id))
 
-            (define cancel-result
-              (check-cancellation token
-                                  force-shutdown-check
-                                  shutdown-check
-                                  bus
-                                  session-id
-                                  (loop-counters-iteration counters)
-                                  ctx-with-injected))
-            (cond
-              [cancel-result cancel-result]
-              [else
-               (define turn-id (generate-id))
-               (define-values (ctx-to-use turn-blocked?)
-                 (dispatch-turn-start-hooks ctx-with-injected ext-reg))
-               (cond
-                 [turn-blocked?
-                  ;; R-06/R-07: FSM: provider-turn + hook-block -> aborted
-                  (current-iteration-fsm-state (next-iteration-state state-provider-turn
-                                                                     event-hook-block))
-                  (log-q-main-loop-info "turn blocked at iteration ~a"
-                                        (loop-counters-iteration counters))
-                  (emit-session-event! bus
-                                       session-id
-                                       "turn.blocked"
-                                       (assert-payload "turn.blocked"
-                                                       (hasheq 'reason "extension-block")
-                                                       reason-payload/c))
-                  (make-loop-result '() 'completed (hasheq 'reason "extension-block"))]
-                 [else
-                  (define config-with-ws (dict-set config 'working-set ws))
-                  (define ctx-final
-                    (build-assembled-context ctx-to-use
-                                             config-with-ws
-                                             ext-reg
-                                             bus
-                                             session-id
-                                             (loop-counters-iteration counters)
-                                             #:session sess))
-                  (define result
-                    (run-provider-turn ctx-final
-                                       prov
-                                       bus
-                                       reg
-                                       ext-reg
-                                       session-id
-                                       turn-id
-                                       token
-                                       config))
-                  (define termination (loop-result-termination-reason result))
-                  (define new-msgs (loop-result-messages result))
-                  ;; R-06/R-07: FSM: provider-turn + model-response -> decision
-                  (current-iteration-fsm-state (next-iteration-state state-provider-turn
-                                                                     event-model-response))
-                  (log-q-main-loop-info "model response received at iteration ~a"
-                                        (loop-counters-iteration counters))
-                  (emit-typed-event! bus
-                                     (make-iteration-decision-event
-                                      #:session-id session-id
-                                      #:turn-id ""
-                                      #:timestamp (current-inexact-milliseconds)
-                                      #:iteration (add1 (loop-counters-iteration counters))
-                                      #:termination termination
-                                      #:consecutive-tools
+              (define cancel-result
+                (check-cancellation token
+                                    force-shutdown-check
+                                    shutdown-check
+                                    bus
+                                    session-id
+                                    (loop-counters-iteration counters)
+                                    ctx-with-injected))
+              (cond
+                [cancel-result cancel-result]
+                [else
+                 (define turn-id (generate-id))
+                 (define-values (ctx-to-use turn-blocked?)
+                   (dispatch-turn-start-hooks ctx-with-injected ext-reg))
+                 (cond
+                   [turn-blocked?
+                    ;; R-06/R-07: FSM: provider-turn + hook-block -> aborted
+                    (current-iteration-fsm-state (next-iteration-state state-provider-turn
+                                                                       event-hook-block))
+                    (log-q-main-loop-info "turn blocked at iteration ~a"
+                                          (loop-counters-iteration counters))
+                    (emit-session-event! bus
+                                         session-id
+                                         "turn.blocked"
+                                         (assert-payload "turn.blocked"
+                                                         (hasheq 'reason "extension-block")
+                                                         reason-payload/c))
+                    (make-loop-result '() 'completed (hasheq 'reason "extension-block"))]
+                   [else
+                    (define config-with-ws (dict-set config 'working-set ws))
+                    (define ctx-final
+                      (build-assembled-context ctx-to-use
+                                               config-with-ws
+                                               ext-reg
+                                               bus
+                                               session-id
+                                               (loop-counters-iteration counters)
+                                               #:session sess))
+                    (define result
+                      (run-provider-turn ctx-final
+                                         prov
+                                         bus
+                                         reg
+                                         ext-reg
+                                         session-id
+                                         turn-id
+                                         token
+                                         config))
+                    (define termination (loop-result-termination-reason result))
+                    (define new-msgs (loop-result-messages result))
+                    ;; R-06/R-07: FSM: provider-turn + model-response -> decision
+                    (current-iteration-fsm-state (next-iteration-state state-provider-turn
+                                                                       event-model-response))
+                    (log-q-main-loop-info "model response received at iteration ~a"
+                                          (loop-counters-iteration counters))
+                    (emit-typed-event! bus
+                                       (make-iteration-decision-event
+                                        #:session-id session-id
+                                        #:turn-id ""
+                                        #:timestamp (current-inexact-milliseconds)
+                                        #:iteration (add1 (loop-counters-iteration counters))
+                                        #:termination termination
+                                        #:consecutive-tools
+                                        (loop-counters-consecutive-tool-count counters)
+                                        #:max-iterations max-iterations
+                                        #:max-iterations-hard max-iterations-hard))
+                    (define step-res
+                      (compute-step-result
+                       (iteration-ctx (loop-counters-iteration counters)
                                       (loop-counters-consecutive-tool-count counters)
-                                      #:max-iterations max-iterations
-                                      #:max-iterations-hard max-iterations-hard))
-                  (define step-res
-                    (compute-step-result
-                     (iteration-ctx (loop-counters-iteration counters)
-                                    (loop-counters-consecutive-tool-count counters)
-                                    (loop-counters-explore-count counters)
-                                    max-iterations
-                                    max-iterations-hard)
-                     result
-                     counters))
-                  ;; v0.99.78 FIX: surface the consecutive-tool circuit breaker
-                  ;; (tool-loop-limit) as a session event so the TUI/caller can
-                  ;; distinguish a circle-stop from a normal turn completion.
-                  (when (hash-ref (step-result-metadata step-res) 'toolLoopLimit #f)
-                    (emit-session-event!
-                     bus
-                     session-id
-                     "tool-loop.limit-reached"
-                     (hasheq
-                      'iteration
-                      (loop-counters-iteration counters)
-                      'consecutive-tools
-                      (loop-counters-consecutive-tool-count counters)
-                      'message
-                      "Consecutive tool-call limit reached; stopping to avoid an unbounded tool loop.")))
-                  (define snapshot
-                    (iteration-snapshot counters ws config sess max-iterations max-iterations-hard))
-                  (define directive
-                    (interpret-step step-res
-                                    result
-                                    new-msgs
-                                    (struct-copy loop-infra infra [ctx ctx-with-injected])
-                                    snapshot))
-                  (match directive
-                    [(directive-stop final-result)
-                     ;; R-06/R-07: FSM: decision + termination -> complete
-                     (current-iteration-fsm-state (next-iteration-state state-decision
-                                                                        event-termination-reason))
-                     (log-q-main-loop-info "iteration complete: ~a at iteration ~a"
-                                           termination
-                                           (loop-counters-iteration counters))
-                     final-result]
-                    [(directive-recurse new-ctx new-counters ws2)
-                     (loop new-ctx new-counters ws2)])])]))))))
+                                      (loop-counters-explore-count counters)
+                                      max-iterations
+                                      max-iterations-hard)
+                       result
+                       counters))
+                    ;; v0.99.78 FIX: surface the consecutive-tool circuit breaker
+                    ;; (tool-loop-limit) as a session event so the TUI/caller can
+                    ;; distinguish a circle-stop from a normal turn completion.
+                    (when (hash-ref (step-result-metadata step-res) 'toolLoopLimit #f)
+                      (emit-session-event!
+                       bus
+                       session-id
+                       "tool-loop.limit-reached"
+                       (hasheq
+                        'iteration
+                        (loop-counters-iteration counters)
+                        'consecutive-tools
+                        (loop-counters-consecutive-tool-count counters)
+                        'message
+                        "Consecutive tool-call limit reached; stopping to avoid an unbounded tool loop.")))
+                    (define snapshot
+                      (iteration-snapshot counters ws config sess max-iterations max-iterations-hard))
+                    ;; v0.99.83 W2: Empty-response auto-retry — intercept and inject nudge
+                    (define empty-response?
+                      (hash-ref (step-result-metadata step-res) 'emptyResponse #f))
+                    (define retried? (current-empty-response-retried?))
+                    (define directive
+                      (cond
+                        [(and empty-response? (not retried?))
+                         ;; First empty-response: inject nudge and retry
+                         (let ([nudge-msg
+                                (make-message
+                                 (format "empty-response-nudge-~a" (gensym))
+                                 #f
+                                 'user
+                                 'message
+                                 (list (make-text-part
+                                        (string-append
+                                         "Your previous response contained extensive reasoning "
+                                         "but produced no output. Please provide a direct response "
+                                         "or tool call.")))
+                                 (current-seconds)
+                                 (hasheq 'ephemeral #t))])
+                           (emit-session-event! bus
+                                                session-id
+                                                "runtime.empty-response.retry"
+                                                (hasheq 'message "Retrying with output nudge."))
+                           (current-empty-response-retried? #t)
+                           ;; Persist the empty-response assistant message to session log
+                           (append-entries! log-path new-msgs)
+                           (directive-recurse (append new-msgs (list nudge-msg))
+                                              (make-next-counters (step-result-new-counters step-res))
+                                              ws))]
+                        [(and empty-response? retried?)
+                         ;; Retry exhausted: stop with empty-response termination
+                         (emit-session-event!
+                          bus
+                          session-id
+                          "runtime.empty-response.retry-exhausted"
+                          (hasheq 'message "Empty response retry limit reached, completing."))
+                         (directive-stop result)]
+                        [else
+                         ;; Normal continue
+                         (interpret-step step-res
+                                         result
+                                         new-msgs
+                                         (struct-copy loop-infra infra [ctx ctx-with-injected])
+                                         snapshot)]))
+                    (match directive
+                      [(directive-stop final-result)
+                       ;; R-06/R-07: FSM: decision + termination -> complete
+                       (current-iteration-fsm-state (next-iteration-state state-decision
+                                                                          event-termination-reason))
+                       (log-q-main-loop-info "iteration complete: ~a at iteration ~a"
+                                             termination
+                                             (loop-counters-iteration counters))
+                       final-result]
+                      [(directive-recurse new-ctx new-counters ws2)
+                       (loop new-ctx new-counters ws2)])])])))))))
 
 ;; ============================================================
 ;; run-iteration-loop (DEPRECATED: use run-iteration-loop/v2 with loop-config struct)
