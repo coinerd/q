@@ -323,10 +323,40 @@
   (and next (= n next)))
 
 ;; ============================================================
+;; Git Root Resolution (F-7)
+(define (find-git-root start-dir)
+  (define start-path
+    (path->complete-path (if (path? start-dir)
+                             start-dir
+                             (string->path start-dir))))
+  (define (has-git? dir)
+    (define git-marker (build-path dir ".git"))
+    (or (directory-exists? git-marker) (file-exists? git-marker)))
+  (define q-sub (build-path start-path "q"))
+  (cond
+    [(has-git? start-path) start-path]
+    [(and (directory-exists? q-sub) (has-git? q-sub)) q-sub]
+    [else (find-git-root-walking-up start-path has-git?)]))
+
+(define (find-git-root-walking-up start-path has-git?)
+  (let loop ([dir start-path])
+    (cond
+      [(has-git? dir) dir]
+      [else
+       (define-values (parent _sub _dir?) (split-path dir))
+       (if (and parent (path? parent) (not (equal? parent dir)))
+           (loop parent)
+           #f)])))
+
+(define (git-available? base-dir)
+  (and (find-git-root base-dir) #t))
+;; ============================================================
 ;; Provide
 ;; ============================================================
 
 (provide campaign-lease
+         find-git-root
+         git-available?
          campaign-lease?
          acquire-lease
          release-lease!

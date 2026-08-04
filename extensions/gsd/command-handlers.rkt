@@ -457,10 +457,15 @@
                               (format "Executing campaign from W~a..." next-wave)))])])))
 
 (define (handle-go-command base-dir input-text)
+  ;; F-7: Warn if no git repository is reachable, but do not block /go.
+  ;; The actual stderr leak is fixed in plan-context-builder.rkt (system*
+  ;; replaced with subprocess that captures stderr).
+  (unless (git-available? base-dir)
+    (log-warning (format "gsd: /go - no git repository found from ~a. Branch operations may fail."
+                         base-dir)))
   (match (validate-plan-for-go base-dir)
     [(list 'error msg) (hook-amend (hasheq 'text msg))]
     [(list 'ok plan _ validation) (prepare-go-campaign base-dir input-text plan validation)]))
-
 ;; ============================================================
 ;; /gsd status handler
 ;; ============================================================
