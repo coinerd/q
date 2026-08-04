@@ -128,11 +128,16 @@
      (define attempt (hash-ref payload 'attempt "?"))
      (define max-attempts (hash-ref payload 'maxRetries "?"))
      (define error-type (hash-ref payload 'errorType #f))
-     (define type-label (retry-error-type-label error-type))
      (define msg
-       (if type-label
-           (format "[retry: ~a, ~a/~a...]" type-label attempt max-attempts)
-           (format "[retry: attempt ~a/~a]" attempt max-attempts)))
+       (cond
+         [(eq? error-type 'circuit-breaker)
+          (format
+           "[circuit-breaker: provider held without responding; stopping auto-retry. Type /retry to resubmit.]")]
+         [else
+          (define type-label (retry-error-type-label error-type))
+          (if type-label
+              (format "[retry: ~a, ~a/~a...]" type-label attempt max-attempts)
+              (format "[retry: attempt ~a/~a]" attempt max-attempts))]))
      (clear-streaming (append-entry state (make-entry 'system msg (event-time evt) (hash))))]
     ["auto-retry.context-reduced"
      (define original (hash-ref payload 'original-messages 0))
