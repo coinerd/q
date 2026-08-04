@@ -125,8 +125,15 @@
                 (emit-retry-event! attempt max-retries delay-ms error-msg error-type)
                 (maybe-adapt-request! attempt error-type)
                 (maybe-inject-partial-recovery!))
-   #:on-circuit-break (lambda (_ original-exn)
-                        (emit-retry-event! 0 0 0 (exn-message original-exn) 'circuit-breaker))
+   #:on-circuit-break
+   (lambda (break-reason original-exn)
+     ;; Emit dedicated circuit-break.tripped trace event for post-hoc analysis
+     (emit-session-event! bus
+                          session-id
+                          "circuit-break.tripped"
+                          (hasheq 'reason break-reason 'sessionId session-id 'turnId turn-id))
+     ;; Emit existing auto-retry.start event for TUI display
+     (emit-retry-event! 0 0 0 (exn-message original-exn) 'circuit-breaker))
    ;; v0.99.82 W2 NR-3: Provider health gate.
    ;; Before each retry, record the failure and check health.
    ;; If the provider is unhealthy (≥ threshold failures in window),
