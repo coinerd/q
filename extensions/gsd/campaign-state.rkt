@@ -211,6 +211,19 @@
   (for/list ([e (parse-plan-index text)])
     (list (wave-index-entry-idx e) (canonical-wave-status (wave-index-entry-status e)))))
 
+;; F-6: Wave identities (idx + title) used to detect new campaigns.
+;; When PLAN.md and STATE.md disagree on rows, we check whether the
+;; wave *identities* differ (new campaign) vs just statuses (corruption).
+(define (plan-wave-identities text)
+  (for/list ([e (parse-plan-index text)])
+    (cons (wave-index-entry-idx e) (wave-index-entry-title e))))
+
+(define (state-wave-identities text)
+  (for/list ([line (string-split text "\n")]
+             #:when (regexp-match state-row-rx line))
+    (define m (regexp-match state-row-rx line))
+    (cons (string->number (cadr m)) (string-trim (list-ref m 2)))))
+
 (define (wave-doc-content-hash base-dir idx slug)
   (define p (build-path base-dir ".planning" "waves" (format "W~a-~a.md" idx slug)))
   (if (file-exists? p)
@@ -260,12 +273,21 @@
      (define state-text (call-with-input-file state-path port->string))
      (define plan-rows* (plan-rows plan-text))
      (define state-rows* (state-rows state-text))
-     (if (equal? plan-rows* state-rows*)
-         (seed-record base-dir plan-text 'plan-and-state)
-         (raise
-          (exn:fail:campaign-migration
-           (format "PLAN.md and STATE.md disagree on wave statuses: ~a vs ~a" plan-rows* state-rows*)
-           (current-continuation-marks))))]
+     (cond
+       [(equal? plan-rows* state-rows*) (seed-record base-dir plan-text 'plan-and-state)]
+       ;; F-6: If wave identities differ (different titles or counts), this is a
+       ;; new campaign. Auto-resolve by re-seeding from PLAN.md rather than
+       ;; failing closed. This prevents /go from crashing after /plan rewrites
+       ;; PLAN.md with a new campaign while STATE.md still has the old one.
+       [(not (equal? (plan-wave-identities plan-text) (state-wave-identities state-text)))
+        (seed-record base-dir plan-text 'plan-and-state)]
+       ;; Same wave identities but different statuses — potential corruption.
+       ;; Keep fail-closed for safety (D3 invariant).
+       [else
+        (raise
+         (exn:fail:campaign-migration
+          (format "PLAN.md and STATE.md disagree on wave statuses: ~a vs ~a" plan-rows* state-rows*)
+          (current-continuation-marks)))])]
     [plan-present? (seed-record base-dir (call-with-input-file plan-path port->string) 'plan)]
     [state-present? (seed-record base-dir "" 'state)]
     [else

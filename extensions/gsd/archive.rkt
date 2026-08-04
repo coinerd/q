@@ -29,6 +29,7 @@
                        [reset-gsd-after-archive! (-> void?)]
                        [cleanup-empty-subdirs! (-> path-string? void?)]
                        [ensure-state-md! (-> path-string? void?)]
+                       [reset-state-md-from-plan! (-> path-string? void?)]
                        [sync-executor-to-plan! (-> path-string? void?)]))
 
 ;; ============================================================
@@ -279,3 +280,27 @@
      (lambda (out)
        (display "# Project State\n\nStatus: Active\n\n## Progress\n\n- [ ] Initial state\n" out))
      #:exists 'error)))
+
+;; F-6: Reset STATE.md to match the current PLAN.md wave list.
+;; Called when the agent writes PLAN.md via planning-write, so that
+;; STATE.md never lags behind a new campaign. All waves start PENDING.
+(define (reset-state-md-from-plan! base-dir)
+  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define state-path (build-path base-dir ".planning" "STATE.md"))
+  (define planning-dir (build-path base-dir ".planning"))
+  (unless (directory-exists? planning-dir)
+    (make-directory* planning-dir))
+  (define plan-text (call-with-input-file plan-path port->string))
+  (define entries (parse-plan-index plan-text))
+  (define title (or (extract-plan-title plan-text) "Active Plan"))
+  (define table-rows
+    (for/list ([e entries])
+      (format "| W~a | ~a | PENDING |" (wave-index-entry-idx e) (wave-index-entry-title e))))
+  (define state-content
+    (string-append (format "# Active STATE - ~a\n\n" title)
+                   "## Wave Status\n\n"
+                   "| Wave | Title | Status |\n"
+                   "|---|---|---|\n"
+                   (string-join table-rows "\n")
+                   (if (null? entries) "" "\n")))
+  (call-with-output-file state-path (lambda (out) (display state-content out)) #:exists 'truncate))

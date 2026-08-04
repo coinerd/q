@@ -245,6 +245,69 @@
                  "PLAN/STATE conflict fails closed")
       (delete-directory/files dir #:must-exist? #f))
 
+    (test-case "F-6: new campaign (different wave titles) auto-resolves from PLAN.md"
+      (define dir (make-temporary-file "campaign-migrate-newcamp-~a" 'directory))
+      (make-directory (build-path dir ".planning"))
+      (make-directory (build-path dir ".planning" "waves"))
+      ;; New PLAN.md has 3 waves with titles Alpha, Beta, Gamma
+      (call-with-output-file (build-path dir ".planning" "PLAN.md")
+                             (lambda (out)
+                               (write-string "# Plan: New Campaign\n\n## Waves\n" out)
+                               (write-string "- [Inbox] W0: Alpha → waves/W0-alpha.md\n" out)
+                               (write-string "- [Inbox] W1: Beta → waves/W1-beta.md\n" out)
+                               (write-string "- [Inbox] W2: Gamma → waves/W2-gamma.md\n" out))
+                             #:exists 'truncate)
+      ;; Old STATE.md has 5 waves with different titles (stale campaign)
+      (call-with-output-file (build-path dir ".planning" "STATE.md")
+                             (lambda (out)
+                               (write-string "| Wave | Title | Status |\n|---|---|---|\n" out)
+                               (write-string "| W0 | OldZero | DONE |\n" out)
+                               (write-string "| W1 | OldOne | DONE |\n" out)
+                               (write-string "| W2 | OldTwo | FAILED |\n" out)
+                               (write-string "| W3 | OldThree | PENDING |\n" out)
+                               (write-string "| W4 | OldFour | PENDING |\n" out))
+                             #:exists 'truncate)
+      ;; Should NOT fail-closed; should auto-resolve from PLAN.md
+      (define rec (migrate-campaign! dir))
+      (check-eq? (campaign-record-provenance rec) 'plan-and-state)
+      (check-equal? (length (campaign-record-waves rec)) 3 "3 waves from new PLAN.md")
+      (check-equal? (campaign-wave-title (list-ref (campaign-record-waves rec) 0))
+                    "Alpha"
+                    "wave 0 title from PLAN.md")
+      (check-equal? (campaign-wave-title (list-ref (campaign-record-waves rec) 2))
+                    "Gamma"
+                    "wave 2 title from PLAN.md")
+      (check-eq? (campaign-wave-status (list-ref (campaign-record-waves rec) 0))
+                 'pending
+                 "all waves pending in new campaign")
+      (delete-directory/files dir #:must-exist? #f))
+
+    (test-case "F-6: new campaign (different wave count, same titles) auto-resolves"
+      (define dir (make-temporary-file "campaign-migrate-newcount-~a" 'directory))
+      (make-directory (build-path dir ".planning"))
+      (make-directory (build-path dir ".planning" "waves"))
+      ;; New PLAN.md has 2 waves
+      (call-with-output-file (build-path dir ".planning" "PLAN.md")
+                             (lambda (out)
+                               (write-string "# Plan: Fewer Waves\n\n## Waves\n" out)
+                               (write-string "- [Inbox] W0: Zero → waves/W0-zero.md\n" out)
+                               (write-string "- [Inbox] W1: One → waves/W1-one.md\n" out))
+                             #:exists 'truncate)
+      ;; Old STATE.md has 3 waves (different count)
+      (call-with-output-file (build-path dir ".planning" "STATE.md")
+                             (lambda (out)
+                               (write-string "| Wave | Title | Status |\n|---|---|---|\n" out)
+                               (write-string "| W0 | Zero | DONE |\n" out)
+                               (write-string "| W1 | One | DONE |\n" out)
+                               (write-string "| W2 | Two | PENDING |\n" out))
+                             #:exists 'truncate)
+      (define rec (migrate-campaign! dir))
+      (check-equal? (length (campaign-record-waves rec)) 2 "2 waves from new PLAN.md")
+      (check-eq? (campaign-wave-status (list-ref (campaign-record-waves rec) 0))
+                 'pending
+                 "new campaign resets statuses to pending")
+      (delete-directory/files dir #:must-exist? #f))
+
     (test-case "exactly one durable source seeds with provenance"
       (define dir (make-temporary-file "campaign-migrate-plan-~a" 'directory))
       (make-directory (build-path dir ".planning"))
