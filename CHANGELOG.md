@@ -1,3 +1,43 @@
+## 0.99.83
+
+Released 2026-08-04.
+
+### Features
+
+- Campaign migration auto-resolves STATE.md when PLAN.md changes: `/plan` now atomically resets STATE.md (all PENDING) when writing a new PLAN.md, so wave execution always has a consistent state view. A `migrate-campaign!` function distinguishes new campaigns from corruption by comparing wave titles and counts.
+- Git root discovery for `/go` executor: `find-git-root` walks up from base-dir to find `.git` and also checks the `q/` subdirectory for two-tier repo layouts (F-7). All git subprocess calls now capture stderr explicitly, preventing stderr leaks into the TUI prompt area.
+- Empty-assistant-response detection with auto-retry nudge: when a provider produces thinking-only output (zero text, zero tool calls), the iteration loop detects this via `emptyResponse` metadata, injects a user-role nudge message into the context, and retries the provider turn once. A one-shot retry limit prevents infinite loops (F-8).
+- Circuit-breaker UX clarity and telemetry: circuit-breaker trips now show a clear user-facing message instead of `[retry: attempt 0/0]`, and a dedicated `circuit-break.tripped` trace event is emitted for post-hoc analysis (F-4).
+
+### Bug Fixes
+
+- `/plan` now atomically resets STATE.md when overwriting PLAN.md, preventing stale state from blocking wave execution (F-6).
+- `/go` resolves git root independently of base-dir, fixing two-tier repo layout detection (F-7).
+- Subprocess stderr no longer leaks into TUI prompt area during `/go` git operations (F-7).
+- Wave executor does not consume a wave attempt for migration repair (F-10).
+- Circuit-breaker message is now distinguishable from normal retry messages in the transcript (F-4).
+
+### Breaking / Behavior Changes
+
+- None in this release.
+
+### Migration Notes
+
+- No data migration is required. All new settings are backward-compatible.
+
+### Operational / Release
+
+- Release v0.99.83.
+
+### Testing
+
+- New tests for campaign migration (test-gsd-campaign-state.rkt).
+- New tests for git-root discovery (test-gsd-go-orchestrator.rkt).
+- New tests for empty-response auto-retry (test-iteration-main-loop.rkt, 2 cases).
+- New tests for circuit-breaker trace event emission.
+
+---
+
 ## 0.99.82
 
 Released 2026-08-03.
