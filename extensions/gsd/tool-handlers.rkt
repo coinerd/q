@@ -28,7 +28,8 @@
                   parse-plan-index
                   wave-index-entry-slug
                   wave-index-entry-idx
-                  wave-exists?))
+                  wave-exists?)
+         (only-in "archive.rkt" reset-state-md-from-plan!))
 
 ;; Schema data (plain)
 (provide planning-read-schema
@@ -220,6 +221,13 @@
                (make-error-result (format "Failed to write artifact '~a'" name))
                (begin
                  (when (and (eq? (gsd-mode) 'planning) (string=? name "PLAN"))
+                   ;; F-6: Reset STATE.md to match the new PLAN.md wave list,
+                   ;; so migrate-campaign! never sees a stale STATE.md.
+                   (with-handlers ([exn:fail? (lambda (e)
+                                                (log-warning
+                                                 (format "reset-state-md-from-plan failed: ~a"
+                                                         (exn-message e))))])
+                     (reset-state-md-from-plan! base-dir))
                    ;; Validate wave docs exist before transitioning to plan-written
                    (define plan-content (read-planning-artifact base-dir "PLAN"))
                    (define entries (and plan-content (parse-plan-index plan-content)))

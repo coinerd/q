@@ -580,3 +580,52 @@
                   (define content (file->string state-path))
                   (check-equal? content "existing content"))
                 (lambda () (cleanup-tmp tmp))))
+
+(test-case "F-6: reset-state-md-from-plan! regenerates STATE.md from PLAN.md"
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind
+   void
+   (lambda ()
+     ;; Write a PLAN.md with 3 waves
+     (call-with-output-file
+      (build-path tmp ".planning" "PLAN.md")
+      (lambda (out)
+        (display
+         "# Plan: New Campaign\n\n## Waves\n\
+- [Inbox] W0: Alpha → waves/W0-alpha.md\n\
+- [Inbox] W1: Beta → waves/W1-beta.md\n\
+- [Inbox] W2: Gamma → waves/W2-gamma.md\n"
+         out))
+      #:exists 'truncate)
+     ;; Write stale STATE.md (old campaign with different waves)
+     (call-with-output-file (build-path tmp ".planning" "STATE.md")
+                            (lambda (out) (display "# Old State\n| W0 | OldZero | DONE |\n" out))
+                            #:exists 'truncate)
+     ;; Reset STATE.md from PLAN.md
+     (reset-state-md-from-plan! tmp)
+     ;; Verify STATE.md now has the new wave list
+     (define content (file->string (build-path tmp ".planning" "STATE.md")))
+     (check-true (string-contains? content "Alpha") "STATE.md has wave 0 title")
+     (check-true (string-contains? content "Beta") "STATE.md has wave 1 title")
+     (check-true (string-contains? content "Gamma") "STATE.md has wave 2 title")
+     (check-true (string-contains? content "PENDING") "STATE.md has PENDING status")
+     (check-false (string-contains? content "OldZero") "STATE.md no longer has old campaign waves")
+     (check-false (string-contains? content "DONE") "STATE.md no longer has old statuses"))
+   (lambda () (cleanup-tmp tmp))))
+
+(test-case "F-6: reset-state-md-from-plan! works when STATE.md does not exist"
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind void
+                (lambda ()
+                  (call-with-output-file
+                   (build-path tmp ".planning" "PLAN.md")
+                   (lambda (out)
+                     (display "# Plan: Fresh\n\n## Waves\n\
+- [Inbox] W0: Only → waves/W0-only.md\n"
+                              out))
+                   #:exists 'truncate)
+                  ;; No STATE.md exists yet
+                  (reset-state-md-from-plan! tmp)
+                  (define content (file->string (build-path tmp ".planning" "STATE.md")))
+                  (check-true (string-contains? content "Only")))
+                (lambda () (cleanup-tmp tmp))))
