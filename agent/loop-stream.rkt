@@ -123,6 +123,12 @@
                                    final-text-box
                                    final-thinking)
   (define final-text (unbox final-text-box))
+  ;; v0.99.83 W2: Detect empty-assistant-response as a distinct termination
+  ;; reason so the iteration loop can auto-retry with a nudge.
+  (define empty-response?
+    (and (string=? (string-trim final-text) "")
+         (null? tool-call-parts)
+         (> (string-length final-thinking) 0)))
   (define final-text-part (make-text-part final-text))
   (define final-content-parts (append (list final-text-part) tool-call-parts))
 
@@ -164,19 +170,25 @@
                                                                    (text-part-text final-text-part))
                         #:state state)
      (state-add-message! state assistant-msg)
-     (emit-typed-event! bus
-                        (make-stream-turn-completed-event #:session-id session-id
-                                                          #:turn-id turn-id
-                                                          #:termination 'completed
-                                                          #:turn-id-str turn-id)
-                        #:state state)
+     (emit-typed-event!
+      bus
+      (make-stream-turn-completed-event #:session-id session-id
+                                        #:turn-id turn-id
+                                        #:termination (if empty-response? 'empty-response 'completed)
+                                        #:turn-id-str turn-id)
+      #:state state)
      (when hook-dispatcher
        (safe-hook-dispatch hook-dispatcher
                            'agent-end
-                           (hasheq 'session-id session-id 'turn-id turn-id 'termination 'completed)))
+                           (hasheq 'session-id
+                                   session-id
+                                   'turn-id
+                                   turn-id
+                                   'termination
+                                   (if empty-response? 'empty-response 'completed))))
      (make-loop-result
       (loop-state-messages state)
-      'completed
+      (if empty-response? 'empty-response 'completed)
       (hasheq 'turnId turn-id 'usage (or effective-usage (hasheq)) 'model "streamed"))]
     [else
      (emit-typed-event! bus
