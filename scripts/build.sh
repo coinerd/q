@@ -1,30 +1,49 @@
 #!/bin/bash
-# scripts/build.sh — Compile q into q/build/q
+# scripts/build.sh — Pre-compile q bytecode into q/build/
+#
+# Racket loads bytecode from compiled/ subdirectories alongside .rkt files.
+# raco make pre-compiles everything so subsequent runs skip compilation.
+# The launcher at q/build/q just invokes racket from the project root.
+#
+# Why not raco exe? raco exe creates a standalone binary that cannot
+# load extensions via dynamic-require (the embedded resolver doesn't
+# consult filesystem paths). Extensions like gsd-planning require
+# filesystem-accessible modules.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 BUILD_DIR="$PROJECT_DIR/build"
-BINARY="$BUILD_DIR/q"
+LAUNCHER="$BUILD_DIR/q"
 
-echo "=== Building q ==="
+echo "=== Building q (pre-compiled bytecode) ==="
 
-# 1. Pre-compile all bytecode (validates the source tree)
-echo "[1/3] Pre-compiling bytecode..."
+# 1. Pre-compile all bytecode
+#    Creates compiled/ subdirectories next to each .rkt file.
+#    Running `racket main.rkt` afterward uses these .zo files.
+echo "[1/2] Pre-compiling bytecode..."
 cd "$PROJECT_DIR"
 racket -l raco make main.rkt
+echo "       Done. Bytecode written to compiled/ directories."
 
-# 2. Create standalone executable
-echo "[2/3] Creating standalone binary..."
-racket -l raco exe -o "$BINARY" main.rkt
-
-# 3. Verify
-echo "[3/3] Verifying binary..."
-"$BINARY" "What is 2+2?" --model deepseek-v4-flash 2>&1 | head -1
+# 2. Create launcher script
+#    Runs racket from the project root directory.
+#    When /go modifies q/ files, the running process is unaffected
+#    because Racket loaded bytecode into memory at startup.
+echo "[2/2] Creating launcher..."
+mkdir -p "$BUILD_DIR"
+cat > "$LAUNCHER" << 'LAUNCHEREOF'
+#!/bin/bash
+# q launcher — runs racket from project root with pre-compiled bytecode
+DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT="$(cd "$DIR/../.." && pwd)"
+cd "$PROJECT"
+exec racket q/main.rkt "$@"
+LAUNCHEREOF
+chmod +x "$LAUNCHER"
 
 echo ""
 echo "=== Build complete ==="
-echo "Binary: $BINARY"
-ls -lh "$BINARY"
+echo "Launcher: $LAUNCHER"
 echo ""
-echo "To run: $BINARY --tui --auto-approve --model deepseek-v4-flash"
+echo "To run: $LAUNCHER --tui --auto-approve --model deepseek-v4-flash"

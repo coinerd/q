@@ -181,7 +181,7 @@
            "\n\n## Available Workflows\n\n"
            "Multi-agent workflows that can be triggered with `skill-route`:\n"
            (string-join (for/list ([s (in-list wf-skills)])
-                           (format "- **~a**: ~a" (hash-ref s 'name "?") (hash-ref s 'description "")))
+                          (format "- **~a**: ~a" (hash-ref s 'name "?") (hash-ref s 'description "")))
                         "\n")
            "\n\nExecute with: skill-route {action: \"workflow\", name: \"<skill-name>\", variables: {...}}"))))
 

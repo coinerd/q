@@ -55,9 +55,7 @@
                   current-verifier-model
                   current-verifier-risk-threshold
                   current-verifier-provider)
-         (only-in "../../runtime/settings-query.rkt"
-                  broker-enabled?
-                  broker-capability-secret))
+         (only-in "../../runtime/settings-query.rkt" broker-enabled? broker-capability-secret))
 
 (provide wire-runtime-parameters!
          reload-config!)
