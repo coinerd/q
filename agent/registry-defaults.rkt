@@ -18,15 +18,15 @@
          (only-in "roles/executor.rkt" make-executor-role))
 
 ;; ── F-11: CWD-independent module path resolution ──
-;; Uses variable-reference to resolve the directory containing this
-;; module, then builds absolute paths from there. This ensures
-;; dynamic-require works regardless of (current-directory).
+;; v0.99.83 W3: Handle embedded modules (raco exe) where resolved-module-path-name
+;; returns a non-path value. Fall back to (current-directory) + relative path.
 (define this-module-dir
-  (let* ([vr (#%variable-reference)]
-         [resolved (variable-reference->resolved-module-path vr)]
-         [path (resolved-module-path-name resolved)])
-    (define-values (dir _name _dir?) (split-path path))
-    dir))
+  (with-handlers ([exn:fail? (lambda (_) (build-path (current-directory) "q" "agent"))])
+    (let* ([vr (#%variable-reference)]
+           [resolved (variable-reference->resolved-module-path vr)]
+           [path (resolved-module-path-name resolved)])
+      (define-values (dir _name _dir?) (split-path path))
+      dir)))
 
 (define (role-module-path role-sym)
   (build-path this-module-dir "roles" (format "~a.rkt" role-sym)))
