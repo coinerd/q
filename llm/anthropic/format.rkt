@@ -15,8 +15,17 @@
          racket/set
          json
          (only-in "../model-defaults.rkt" ANTHROPIC-DEFAULT-MODEL)
-         (only-in "../model.rkt" make-model-response make-stream-chunk model-request-settings model-request-messages model-request-tools validate-tool-call-intent!)
-         (only-in "../anthropic-helpers.rkt" openai-block->anthropic anthropic-translate-tool translate-anthropic-usage)
+         (only-in "../model.rkt"
+                  make-model-response
+                  make-stream-chunk
+                  model-request-settings
+                  model-request-messages
+                  model-request-tools
+                  validate-tool-call-intent!)
+         (only-in "../anthropic-helpers.rkt"
+                  openai-block->anthropic
+                  anthropic-translate-tool
+                  translate-anthropic-usage)
          (only-in "../provider-telemetry.rkt" response-native-identity)
          (only-in "../http-helpers.rkt" translate-stop-reason))
 
@@ -328,8 +337,8 @@
                        model-name
                        stop-reason
                        #:provenance (response-native-identity #:adapter "anthropic"
-                                                               #:native-response-id native-id
-                                                               #:native-model model-name)))
+                                                              #:native-response-id native-id
+                                                              #:native-model model-name)))
 
 ;; ============================================================
 ;; Stream chunk parsing

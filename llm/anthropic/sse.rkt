@@ -18,9 +18,17 @@
          (only-in "../../util/error/error-helpers.rkt" with-logged-error)
          (only-in "../model-defaults.rkt" ANTHROPIC-DEFAULT-MODEL ANTHROPIC-DEFAULT-BASE-URL)
          (only-in "../provider.rkt" make-provider validate-api-key! ensure-model-setting)
-         (only-in "../stream.rkt" close-port-after-stream stream-sse-events call-with-request-timeout read-response-body/timeout)
-         (only-in "../http-helpers.rkt" make-provider-http-request check-provider-status! parse-provider-url)
-         (only-in "format.rkt" anthropic-provider-name
+         (only-in "../stream.rkt"
+                  close-port-after-stream
+                  stream-sse-events
+                  call-with-request-timeout
+                  read-response-body/timeout)
+         (only-in "../http-helpers.rkt"
+                  make-provider-http-request
+                  check-provider-status!
+                  parse-provider-url)
+         (only-in "format.rkt"
+                  anthropic-provider-name
                   ANTHROPIC-VERSION
                   anthropic-build-request-body
                   anthropic-parse-response
