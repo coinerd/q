@@ -88,7 +88,8 @@
             "definitely"
             "error"
             "session"
-            "tests"))
+            "tests"
+            "run-tests"))
 
 ;; Dynamically required with fallbacks — not hard deps
 (define dynamic-packages (set "readline" "tui"))
