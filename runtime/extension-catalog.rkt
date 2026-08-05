@@ -69,11 +69,17 @@
 ;; binary-relative-extensions-dir : -> (or/c path? #f)
 ;; Find extensions/ relative to this module's source directory.
 ;; In dev: q/runtime/extension-catalog.rkt -> parent -> q/extensions/
-;; Uses variable-reference to reliably find the module's own path
-;; even when current-load-relative-directory is #f (e.g., racket main.rkt).
+;; v0.99.83 W3: When running as an embedded binary (raco exe), module-source-dir
+;; returns #f because variable-reference resolves to a non-path value.
+;; In that case, try q/extensions/ relative to (current-directory).
 (define (binary-relative-extensions-dir)
   (define this-dir (or (current-load-relative-directory) (module-source-dir) (current-directory)))
-  (define ext-dir (build-path this-dir ".." "extensions"))
+  (define ext-dir
+    (if (eq? this-dir (current-directory))
+        ;; Binary fallback: extensions live at q/extensions/ from project root
+        (build-path (current-directory) "q" "extensions")
+        ;; Source-mode: extensions live at ../extensions from q/runtime/
+        (build-path this-dir ".." "extensions")))
   (define cleaned (simple-form-path ext-dir))
   (and (directory-exists? cleaned) cleaned))
 
