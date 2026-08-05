@@ -67,7 +67,7 @@
   (define result (summarize-tool-result entry))
   (define result-text (text-part-text (first (message-content result))))
   (check-true (< (string-length result-text) 9000))
-  (check-true (string-contains? result-text "... 1000 chars truncated ...")))
+  (check-true (string-contains? result-text "... 7000 chars truncated ...")))
 
 (test-case "summarize-tool-result preserves text <= 8000 chars"
   (define small-text (make-string 100 #\z))
