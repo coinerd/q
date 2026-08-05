@@ -139,7 +139,7 @@
 ;; v0.28.21 W5: Tool result summarization
 ;; Truncates tool/bash results exceeding max-chars to a summary.
 ;; Preserves first and last lines with a [... N lines truncated ...] indicator.
-(define MAX-TOOL-RESULT-CHARS 8000)
+(define MAX-TOOL-RESULT-CHARS 2000)
 
 ;; ---------------------------------------------------------------------------
 ;; Ephemeral vision context management (W3: strip old image-parts)

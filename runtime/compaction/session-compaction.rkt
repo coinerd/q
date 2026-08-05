@@ -56,7 +56,7 @@
      (cond
        [(and last-compact (< (- now-ms last-compact) 2000))
         context-with-system] ; too soon after last compaction
-       [(not (try-claim-compaction! sess #t)) context-with-system] ; explicit prompt-owned claim
+       [(not (try-claim-compaction! sess)) context-with-system] ; explicit prompt-owned claim
        [else
         (emit-typed-event! bus
                            (make-compaction-event #:session-id sid

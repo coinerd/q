@@ -166,8 +166,7 @@
                                      seq
                                      (exn-message e)))])
          (write-json entry out)
-         (newline out)
-         (flush-output out))])))
+         (newline out))])))
 
 ;; ============================================================
 ;; Helpers
