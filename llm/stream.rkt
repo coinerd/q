@@ -189,6 +189,13 @@
      #f]
     [_ result])) ; string or eof
 
+;; read-line/nonblocking : input-port? -> (or/c string? #f)
+;; Non-blocking read — returns the line if available, #f otherwise (port left open).
+;; Unlike read-line/timeout, this never closes the port.
+(define (read-line/nonblocking port)
+  (define result (sync/timeout 0 (read-line-evt port 'any)))
+  (and result (not (eof-object? result)) result))
+
 ;; read-response-body/timeout : input-port? [#:timeout seconds] -> bytes?
 ;; Like read-response-body but with a per-chunk read timeout.
 ;; Raises exn:fail:network:timeout on timeout.
@@ -454,6 +461,18 @@
    ;; v0.45.11: Consecutive empty/comment line counter.
    ;; Prevents infinite loops when server sends keep-alives indefinitely.
    (define max-consecutive-empty 100)
+   ;; v0.99.83 W3 FIX: Line buffer for aggressive socket draining.
+   ;; After reading one line, we probe for more available data and buffer it.
+   ;; This prevents CLOSE-WAIT buildup when the stream-runner is slow.
+   (define line-buffer (box '()))
+   (define (buf-pop!)
+     (match (unbox line-buffer)
+       ['() #f]
+       [(cons l r)
+        (set-box! line-buffer r)
+        l]))
+   (define (buf-push! lines)
+     (set-box! line-buffer (append (unbox line-buffer) lines)))
    ;; v0.99.81 W1: Liveness metadata accumulated across the stream.
    (let loop ([first-read? #t]
               [consecutive-empty 0]
@@ -487,7 +506,21 @@
          [first-read? initial-secs]
          [(not seen-content?) thinking-secs]
          [else stream-secs]))
-     (define line (read-line/timeout port #:timeout timeout-secs))
+     ;; v0.99.83 W3 FIX: Check buffer first, then drain port aggressively.
+     (define line
+       (let ([cached (buf-pop!)])
+         (if cached
+             cached
+             (let ([l (read-line/timeout port #:timeout timeout-secs)])
+               ;; After reading one line, probe for more data non-blockingly.
+               ;; This prevents CLOSE-WAIT buildup when the consumer is slow.
+               (when (and l (not (eof-object? l)))
+                 (let drain ()
+                   (define extra (read-line/nonblocking port))
+                   (when extra
+                     (buf-push! (list extra))
+                     (drain))))
+               l))))
      (cond
        [(eq? line #f)
         ;; Timeout — raise with liveness metadata

@@ -479,8 +479,12 @@
               [#t
                ;; v0.99.81 W2 PN-7: Cumulative ceiling check.
                ;; Before retrying, check if total wall-clock has exceeded ceiling.
+               ;; v0.99.83 W3 FIX: Only enforce ceiling on retry attempts (attempt > 0).
+               ;; The first attempt's time is legitimate streaming/providers compute time —
+               ;; penalizing it prevents all retries on long-generation turns. The ceiling
+               ;; still bounds the combined retry delay chain.
                (define elapsed (- (now) start-ms))
-               (when (and ceiling-ms (> elapsed ceiling-ms))
+               (when (and ceiling-ms (> attempt 0) (> elapsed ceiling-ms))
                  (raise (retry-exhausted (format "~a (cumulative ceiling ~as exceeded after ~as)"
                                                  (exn-message exn)
                                                  ceiling-secs
