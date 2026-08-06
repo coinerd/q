@@ -23,6 +23,8 @@
          racket/match
          "campaign-state.rkt"
          "wave-completion.rkt"
+         (only-in "wave-docs.rkt" mark-wave-status!)
+         (only-in "wave-status.rkt" STATUS-DONE STATUS-FAILED)
          "../../util/loop-result.rkt"
          (only-in "../../sandbox/gateway-bridge.rkt" shutdown-worker!))
 
@@ -260,12 +262,18 @@
                       [else (campaign-result 'wave-failed '() "unexpected completion state")])])))]
           [(error)
            (if (persist-current-status! 'failed)
-               (campaign-result 'wave-failed '() "runner error")
+               (begin
+                 (mark-wave-status! base-dir wave-idx STATUS-FAILED)
+                 (update-state-table! base-dir wave-idx "FAILED")
+                 (campaign-result 'wave-failed '() "runner error"))
                (campaign-result 'wave-cancelled '() "stale runner result ignored"))]
           [(cancelled) (interrupt-current! "runner cancelled")]
           [else
            (if (persist-current-status! 'failed)
-               (campaign-result 'wave-failed '() "unknown runner result")
+               (begin
+                 (mark-wave-status! base-dir wave-idx STATUS-FAILED)
+                 (update-state-table! base-dir wave-idx "FAILED")
+                 (campaign-result 'wave-failed '() "unknown runner result"))
                (campaign-result 'wave-cancelled '() "stale runner result ignored"))])])]))
 
 ;; ============================================================

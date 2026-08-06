@@ -16,7 +16,12 @@
          racket/path
          racket/format
          racket/match
-         "campaign-state.rkt")
+         racket/port
+         racket/string
+         "campaign-state.rkt"
+         ;; GSD tracking files — update PLAN.md + wave docs on completion
+         (only-in "wave-docs.rkt" mark-wave-status!)
+         (only-in "wave-status.rkt" STATUS-DONE STATUS-FAILED))
 
 ;; ============================================================
 ;; Completion result
@@ -34,6 +39,34 @@
 ;; ============================================================
 ;; Verifier-first wave completion (GC-4)
 ;; ============================================================
+
+;; Update STATE.md table row for a wave (e.g. "| W1 | ... | PENDING |" → "| W1 | ... | DONE |")
+(define (update-state-table! base-dir wave-idx new-status)
+  (define state-path (build-path base-dir ".planning" "STATE.md"))
+  (when (file-exists? state-path)
+    (define content (call-with-input-file state-path port->string))
+    (define lines (string-split content "\n"))
+    (define prefix (format "| W~a |" wave-idx))
+    (define new-lines
+      (for/list ([line lines])
+        (if (string-prefix? line prefix)
+            ;; Format: | W0 | Title | Status |
+            ;; Split with #:trim? #f keeps empty edge strings:
+            ;;   ["" " W0 " " Title " " Status " ""]
+            ;; Replace parts[3] (Status field)
+            (let* ([parts (string-split line "|" #:trim? #f)])
+              (if (>= (length parts) 5)
+                  (string-join (list (list-ref parts 0)
+                                     (list-ref parts 1)
+                                     (list-ref parts 2)
+                                     (string-append " " new-status " ")
+                                     (list-ref parts 4))
+                               "|")
+                  line))
+            line)))
+    (call-with-output-file state-path
+                           (lambda (out) (display (string-join new-lines "\n") out))
+                           #:exists 'truncate)))
 
 ;; Try to complete a wave. The verifier must approve before DONE is persisted.
 ;; On rejection, the wave is marked 'failed — DONE is never written.
@@ -74,6 +107,9 @@
      (persist-campaign! base-dir durable)
      (when caller-wave
        (set-campaign-wave-status! caller-wave 'failed))
+     ;; Update GSD tracking files (PLAN.md + wave doc + STATE.md)
+     (mark-wave-status! base-dir wave-idx STATUS-FAILED)
+     (update-state-table! base-dir wave-idx "FAILED")
      (completion-result 'failed #f)]
     [else
      (set-campaign-wave-status! wave 'done)
@@ -83,6 +119,9 @@
      (persist-campaign! base-dir durable)
      (when caller-wave
        (set-campaign-wave-status! caller-wave 'done))
+     ;; Update GSD tracking files (PLAN.md + wave doc + STATE.md)
+     (mark-wave-status! base-dir wave-idx STATUS-DONE)
+     (update-state-table! base-dir wave-idx "DONE")
      (completion-result 'done event-id)]))
 ;; ============================================================
 
@@ -147,6 +186,7 @@
 
 (provide try-complete-wave!
          skip-wave!
+         update-state-table!
          completion-result
          completion-result-status
          completion-result-event-id
