@@ -23,7 +23,8 @@
          racket/match
          "campaign-state.rkt"
          "wave-completion.rkt"
-         "../../util/loop-result.rkt")
+         "../../util/loop-result.rkt"
+         (only-in "../../sandbox/gateway-bridge.rkt" shutdown-worker!))
 
 ;; ============================================================
 ;; Lease (D5: process-safe OS advisory lock)
@@ -307,6 +308,10 @@
                      (loop refreshed (cons next-idx completed))
                      (campaign-result 'error (reverse completed) "campaign record disappeared"))]
                 [(wave-failed wave-cancelled)
+                 ;; B4: Kill any stuck tool execution worker so pending tools
+                 ;; don't keep running after the campaign stops.
+                 (with-handlers ([exn:fail? void])
+                   (shutdown-worker!))
                  (campaign-result (campaign-result-status result)
                                   (reverse completed)
                                   (campaign-result-message result))]

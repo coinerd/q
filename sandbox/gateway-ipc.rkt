@@ -44,6 +44,12 @@
 
 (define IPC-STDERR-MAX-CHARS 65536) ; 64KB cap
 
+;; B3: Maximum time allowed for writing a request to the worker's stdin.
+;; If the pipe is full (double deadlock: worker blocked on stdout write,
+;; gateway blocked on stdin write), the write would block forever and
+;; sync/timeout would never fire.  This timeout detects that case.
+(define IPC-WRITE-TIMEOUT-MS 10000) ; 10 seconds
+
 ;; ── C1: Module-level semaphore for request-id generation ────────
 
 (define request-id-lock (make-semaphore 1))
@@ -234,29 +240,53 @@
   (define req-id (ipc-request-request-id req))
   (define resp-ch (make-async-channel))
   (register-pending-request! gw req-id resp-ch)
-  ;; Serialize and write (C3: protect with stdin-write-lock)
+  ;; Serialize request
   (define jsexpr (ipc-request->jsexpr req))
   (define json-str (jsexpr->string jsexpr))
   (define out (gateway-worker-stdin gw))
-  ;; C3: Wrap write sequence with lock to prevent concurrent interleaving
-  (call-with-semaphore (gateway-worker-stdin-write-lock gw)
-                       (lambda ()
-                         (display json-str out)
-                         (newline out)
-                         (flush-output out)))
-  ;; Wait for response with timeout (C2: sync works on async-channel)
-  (define result (sync/timeout (/ timeout-ms 1000.0) resp-ch))
-  ;; Unregister
-  (unregister-pending-request! gw req-id)
+  ;; B3: Write in a separate thread with a timeout.  If the pipe is full
+  ;; (double deadlock), the write blocks and sync/timeout below would
+  ;; never fire.  Detect this and kill the stuck worker.
+  (define write-ch (make-channel))
+  (define write-thread
+    (thread (lambda ()
+              (with-handlers ([exn:fail? (lambda (e) (channel-put write-ch (cons 'error e)))])
+                ;; C3: Wrap write sequence with lock to prevent concurrent interleaving
+                (call-with-semaphore (gateway-worker-stdin-write-lock gw)
+                                     (lambda ()
+                                       (display json-str out)
+                                       (newline out)
+                                       (flush-output out)))
+                (channel-put write-ch 'ok)))))
+  (define write-result (sync/timeout (/ IPC-WRITE-TIMEOUT-MS 1000.0) write-ch))
   (cond
-    ;; Timeout
-    [(not result) (make-timeout-response req-id)]
-    [(response-packet? result)
-     (define resp (response-packet-response result))
-     (if (and (pair? resp) (eq? (car resp) 'worker-error))
-         (make-error-response req-id (format "worker error: ~a" (cdr resp)))
-         resp)]
-    [else (make-error-response req-id "unexpected response format")]))
+    ;; B3: Write blocked — pipe deadlock. Kill the worker so the drain
+    ;; thread's EOF handler notifies all pending requests.
+    [(not write-result)
+     (log-gateway-ipc-warning "write to worker stdin blocked (pipe deadlock) — killing worker")
+     (kill-thread write-thread)
+     (unregister-pending-request! gw req-id)
+     (with-handlers ([exn:fail? void])
+       (gateway-shutdown! gw))
+     (make-error-response req-id "worker pipe write deadlock — worker killed")]
+    ;; Write raised an exception (broken pipe, etc.)
+    [(and (pair? write-result) (eq? (car write-result) 'error))
+     (unregister-pending-request! gw req-id)
+     (make-error-response req-id (format "worker write error: ~a" (exn-message (cdr write-result))))]
+    ;; Write succeeded — wait for response with timeout
+    [else
+     (define result (sync/timeout (/ timeout-ms 1000.0) resp-ch))
+     ;; Unregister
+     (unregister-pending-request! gw req-id)
+     (cond
+       ;; Timeout
+       [(not result) (make-timeout-response req-id)]
+       [(response-packet? result)
+        (define resp (response-packet-response result))
+        (if (and (pair? resp) (eq? (car resp) 'worker-error))
+            (make-error-response req-id (format "worker error: ~a" (cdr resp)))
+            resp)]
+       [else (make-error-response req-id "unexpected response format")])]))
 
 ;; ── Status / Lifecycle Queries ──────────────────────────────────
 

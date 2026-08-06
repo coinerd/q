@@ -103,9 +103,17 @@
           (not (event-for-active-turn? state evt))
           (ui-state-interrupt-request-id state))
       state
-      (set-streaming-phase
-       (clear-streaming (set-pending-tool-name (set-busy-since (set-busy state #f) #f) #f))
-       'idle)))
+      ;; B5: Clear tool progress status when turn ends (e.g., "3 tools running").
+      ;; Only clear if a tool was pending — preserves compact status which has
+      ;; its own lifecycle (compaction.started → compaction.completed).
+      (let* ([had-pending-tool? (and (ui-state-pending-tool-name state) #t)]
+             [cleared (set-streaming-phase
+                       (clear-streaming (set-pending-tool-name (set-busy-since (set-busy state #f) #f)
+                                                               #f))
+                       'idle)])
+        (if had-pending-tool?
+            (set-status-message cleared #f)
+            cleared))))
 
 (define (clear-after-turn-terminal state)
   (set-active-model-turn-id
@@ -164,6 +172,7 @@
          (ui-state-interrupt-request-id state))
      state]
     [else
+     (define had-pending-tool? (and (ui-state-pending-tool-name state) #t))
      (define cleared
        (set-streaming-phase
         (clear-streaming (set-pending-tool-name (set-busy-since (set-busy state #f) #f) #f))
@@ -175,7 +184,10 @@
                                                (goal-display-info-turns-used goal)
                                                (goal-display-info-max-turns goal)))
                    #t)
-         cleared)]))
+         ;; B5: No active goal — clear stale tool status only if a tool was pending.
+         (if had-pending-tool?
+             (set-status-message cleared #f)
+             cleared))]))
 
 ;; ============================================================
 ;; Error / compaction handlers
