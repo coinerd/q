@@ -17,6 +17,7 @@
          "../../runtime/auth/auth-store.rkt"
          (only-in "../../runtime/session/session-lifecycle.rkt" exn:fail:session:busy?)
          (only-in "../../runtime/session/session-types.rkt" agent-session? agent-session-config)
+         (only-in "../../sandbox/gateway-bridge.rkt" shutdown-worker!)
          "context.rkt"
          (only-in "../../util/ids.rkt" generate-id))
 
@@ -67,7 +68,20 @@
   (define turn-id (ui-state-active-turn-id state))
   (cond
     [(or (not (ui-state-busy? state)) (not session-id) (not turn-id))
-     (values (add-transcript-entry state (make-system-entry "[interrupt: no active turn]")) #f)]
+     ;; B6: No active turn but session may still have pending tools (e.g.,
+     ;; after wave-failed when the gateway is stuck).  Check if the session
+     ;; shows busy state — if so, offer a force-interrupt that kills the
+     ;; execution-plane worker.
+     (cond
+       [(ui-state-busy? state)
+        (values
+         (add-transcript-entry
+          state
+          (make-system-entry
+           "[interrupt: no active turn, but session is busy — use /interrupt again within 5s to force-kill pending tools]"))
+         #f)]
+       [else
+        (values (add-transcript-entry state (make-system-entry "[interrupt: no active turn]")) #f)])]
     [(ui-state-interrupt-request-id state)
      (values (add-transcript-entry state (make-system-entry "[interrupt: already requested]")) #f)]
     [(not bus)
@@ -87,13 +101,48 @@
        (hasheq 'request-id request-id 'target-session-id session-id 'target-turn-id turn-id)))
      (values (set-status-message (set-interrupt-request-id state request-id) "Interrupting...") #t)]))
 
+;; B6: Track the timestamp of the last "no active turn but busy" interrupt.
+;; A second /interrupt within FORCE-INTERRUPT-WINDOW-MS force-kills the worker.
+(define last-busy-interrupt-box (box #f))
+(define FORCE-INTERRUPT-WINDOW-MS 5000)
+
 ;; Handle /interrupt — interrupt the active correlated turn.
+;; B6: If no active turn but session is busy (stuck tools after wave-failed),
+;; a second /interrupt within 5 seconds force-kills the execution-plane worker.
 (define (handle-interrupt-command cctx state)
-  (define-values (new-state _published?)
-    (request-active-turn-interrupt! (cmd-ctx-event-bus cctx) state))
-  (set-box! (cmd-ctx-state-box cctx) new-state)
-  (set-box! (cmd-ctx-needs-redraw-box cctx) #t)
-  'continue)
+  (define now-ms (current-inexact-milliseconds))
+  (define last-busy (unbox last-busy-interrupt-box))
+  (define force?
+    (and (ui-state-busy? state)
+         (not (ui-state-active-turn-id state))
+         last-busy
+         (< (- now-ms last-busy) FORCE-INTERRUPT-WINDOW-MS)))
+  (cond
+    ;; B6: Force-kill path — second interrupt within window
+    [force?
+     (set-box! last-busy-interrupt-box #f)
+     (with-handlers ([exn:fail? void])
+       (shutdown-worker!))
+     (define entry (make-system-entry "[interrupt: force-killed stuck tool execution worker]"))
+     (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+     (set-box! (cmd-ctx-needs-redraw-box cctx) #t)
+     'continue]
+    ;; B6: First interrupt with no active turn but busy — record timestamp
+    [(and (ui-state-busy? state) (not (ui-state-active-turn-id state)))
+     (set-box! last-busy-interrupt-box now-ms)
+     (define-values (new-state _published?)
+       (request-active-turn-interrupt! (cmd-ctx-event-bus cctx) state))
+     (set-box! (cmd-ctx-state-box cctx) new-state)
+     (set-box! (cmd-ctx-needs-redraw-box cctx) #t)
+     'continue]
+    ;; Normal path
+    [else
+     (set-box! last-busy-interrupt-box #f)
+     (define-values (new-state _published?)
+       (request-active-turn-interrupt! (cmd-ctx-event-bus cctx) state))
+     (set-box! (cmd-ctx-state-box cctx) new-state)
+     (set-box! (cmd-ctx-needs-redraw-box cctx) #t)
+     'continue]))
 
 ;; Handle /retry — resubmit last prompt
 (define (handle-retry-command cctx state)
