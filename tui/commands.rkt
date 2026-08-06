@@ -141,7 +141,12 @@
 ;; Handles campaigns, new-session, submit, and display-text actions
 (define (append-campaign-message! cctx text)
   (define entry (make-system-entry text))
-  (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) entry))
+  (define st (unbox (cmd-ctx-state-box cctx)))
+  ;; v0.99.83: When the campaign finishes (with any result), clear the
+  ;; busy flag.  The campaign runs in a background thread; the TUI's
+  ;; busy-since may persist from the initial /go turn submission.
+  (set-box! (cmd-ctx-state-box cctx)
+            (set-busy-since (set-busy (add-transcript-entry st entry) #f) #f))
   (set-box! (cmd-ctx-needs-redraw-box cctx) #t))
 
 (define (execute-campaign-command cctx campaign-token display-text)
