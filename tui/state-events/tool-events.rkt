@@ -68,8 +68,10 @@
   (define result-raw (hash-ref payload 'result #f))
   (define error-raw (or (hash-ref payload 'resultError #f) (hash-ref payload 'error #f)))
   (define ts (event-time evt))
-  (if (recent-tool-end? state name)
-      (set-pending-tool-name state #f)
+  ;; B5: Clear tool progress status when execution completes.
+  (define state-no-status (set-status-message state #f))
+  (if (recent-tool-end? state-no-status name)
+      (set-pending-tool-name state-no-status #f)
       (if (eq? result-summary 'completed)
           (let* ([result-text
                   (if result-raw
@@ -80,12 +82,12 @@
                       "")]
                  [text result-text]
                  [meta (hasheq 'name name 'result (or result-raw ""))])
-            (set-pending-tool-name (append-entry state (make-entry 'tool-end text ts meta)) #f))
+            (set-pending-tool-name (append-entry state-no-status (make-entry 'tool-end text ts meta)) #f))
           (let* ([err (or error-raw "tool failed")]
                  [text (string-replace err "
 " " | ")]
                  [meta (hasheq 'name name 'error err)])
-            (set-pending-tool-name (append-entry state (make-entry 'tool-fail text ts meta)) #f)))))
+            (set-pending-tool-name (append-entry state-no-status (make-entry 'tool-fail text ts meta)) #f)))))
 
 ;; B3 fix: Show progress during long-running tool batches
 (define (handle-tool-execution-update state evt)
