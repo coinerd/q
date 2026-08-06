@@ -24,6 +24,9 @@ echo "=== Building q (pre-compiled bytecode) ==="
 echo "[1/2] Pre-compiling bytecode..."
 cd "$PROJECT_DIR"
 racket -l raco make main.rkt
+# GSD extension is dynamically loaded — compile explicitly
+echo "       Compiling GSD extension modules..."
+racket -l raco make extensions/gsd/*.rkt 2>/dev/null
 echo "       Done. Bytecode written to compiled/ directories."
 
 # 2. Create launcher script
