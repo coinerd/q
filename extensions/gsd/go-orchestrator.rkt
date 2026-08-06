@@ -83,9 +83,12 @@
   (cond
     [(loop-result? result)
      (define termination (loop-result-termination-reason result))
-     (case termination
-       [(completed) 'ok]
-       [(cancelled force-shutdown shutdown) 'cancelled]
+     (define metadata (loop-result-metadata result))
+     (define tool-loop-limit? (hash-ref metadata 'toolLoopLimit #f))
+     (cond
+       [tool-loop-limit? 'error]
+       [(member termination '(completed tool-calls-pending empty-response)) 'ok]
+       [(member termination '(cancelled force-shutdown shutdown)) 'cancelled]
        [else 'error])]
     [(eq? result 'completed) 'ok]
     [(eq? result 'ok) 'ok]
