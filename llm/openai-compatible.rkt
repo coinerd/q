@@ -33,7 +33,74 @@
                        [openai-parse-response (-> (or/c hash? #f) model-response?)])
          openai-normalize-message
          openai-normalize-tool
-         openai-wrap-stream-error)
+         openai-wrap-stream-error
+         ;; v0.99.84: Stream chunk normalization moved from llm/stream.rkt
+         ;; Provider-specific OpenAI wire-format parsing belongs in the adapter.
+         (contract-out [normalize-openai-chunk (-> hash? (or/c stream-chunk? any/c))]
+                       [normalize-openai-chunks
+                        (-> (listof hash?) (listof (or/c stream-chunk? any/c)))]))
+
+;; ============================================================
+;; Stream chunk normalization (moved from llm/stream.rkt in v0.99.84)
+;; ============================================================
+
+;; normalize-openai-chunks : (listof hash?) -> (listof stream-chunk?)
+;; Convert a list of OpenAI-format streaming response objects
+;; into canonical stream-chunk structs.
+(define (normalize-openai-chunks raw-chunks)
+  (for/list ([chunk (in-list raw-chunks)])
+    (normalize-openai-chunk chunk)))
+
+;; normalize-openai-chunk : hash? -> stream-chunk?
+;; Normalize a single OpenAI-format streaming response object into a stream-chunk.
+;; Provider-specific: parses choices/delta/content/reasoning_content/tool_calls/usage.
+(define (normalize-openai-chunk raw)
+  (define choices (hash-ref raw 'choices '()))
+  ;; DeepSeek and some other OpenAI-compatible endpoints emit "usage": null on
+  ;; intermediate streaming chunks (only the final chunk carries a usage hash).
+  ;; q's strict JSON parser maps JSON null to the symbol 'null, which would
+  ;; violate the (or/c hash? #f) usage contract on make-stream-chunk. Coerce
+  ;; any non-hash usage value (including 'null) to #f.
+  (define usage (let ([u (hash-ref raw 'usage #f)]) (if (hash? u) u #f)))
+  (define choice
+    (if (null? choices)
+        #f
+        (car choices)))
+  (define delta
+    (if choice
+        (hash-ref choice 'delta #f)
+        #f))
+  (define finish-reason
+    (if choice
+        (hash-ref choice 'finish_reason #f)
+        #f))
+  (define delta-content
+    (if delta
+        (hash-ref delta 'content #f)
+        #f))
+  (define delta-text (if (string? delta-content) delta-content #f))
+  ;; Extract reasoning_content for thinking models (glm-5.1, DeepSeek-R1)
+  ;; DeepSeek emits "reasoning_content": null on chunks where no reasoning delta
+  ;; is present (first chunk, after reasoning completes). Coerce non-string
+  ;; values (including 'null) to #f for the (or/c string? #f) delta-thinking
+  ;; contract.
+  (define delta-thinking
+    (if delta
+        (let ([rt (hash-ref delta 'reasoning_content #f)]) (if (string? rt) rt #f))
+        #f))
+  (define delta-tool-call
+    (if delta
+        (let ([tcs (hash-ref delta 'tool_calls #f)])
+          (if (and tcs (pair? tcs))
+              (car tcs)
+              #f))
+        #f))
+  (make-stream-chunk delta-text
+                     delta-tool-call
+                     usage
+                     (and (string? finish-reason) #t)
+                     #:delta-thinking delta-thinking
+                     #:finish-reason finish-reason))
 
 ;; ============================================================
 ;; OpenAI Config struct (T2-4)
@@ -400,44 +467,45 @@
     ;; retried within 2 minutes, and the retry (fresh turn) streams instantly (observed).
     (define held-request-detect-secs 120)
     (define stream-owns-resources? (box #f))
-    (dynamic-wind void
-                  (lambda ()
-                    (define gen
-                      (read-sse-chunks response-port
-                                       #:initial-timeout (min stream-timeout held-request-detect-secs)
-                                       #:thinking-timeout
-                                       (min stream-timeout held-request-detect-secs)
-                                       #:stream-timeout http-stream-timeout-default
-                                       #:max-total-timeout max-total-timeout))
-                    ;; Own the response port for the complete lifetime of the lazy generator.
-                    ;; close-port-after-stream preserves the port across yields and also closes
-                    ;; it when a consumer abandons and collects the returned generator.
-                    (log-stream-setup-timing "openai" _stream-t0)
-                    (define provider-gen
-                      (generator ()
-                                 (with-handlers ([exn:break? (lambda (e)
-                                                               (cleanup-thunk)
-                                                               (raise e))]
-                                                 [exn:fail? (lambda (e)
-                                                              (cleanup-thunk)
-                                                              (openai-wrap-stream-error e))])
-                                   (let loop ()
-                                     (define chunk (gen))
-                                     (match chunk
-                                       [#f
-                                        (cleanup-thunk)
-                                        (yield #f)]
-                                       [_
-                                        (yield chunk)
-                                        (loop)])))))
-                    (define owned-stream
-                      (close-port-after-stream provider-gen response-port #:cleanup cleanup-thunk))
-                    ;; Transfer only after finalizer registration succeeds.
-                    (set-box! stream-owns-resources? #t)
-                    owned-stream)
-                  (lambda ()
-                    (unless (unbox stream-owns-resources?)
-                      (cleanup-thunk)))))
+    (dynamic-wind
+     void
+     (lambda ()
+       (define gen
+         (stream-sse-events response-port
+                            (lambda (parsed) (list (normalize-openai-chunk parsed)))
+                            #:initial-timeout (min stream-timeout held-request-detect-secs)
+                            #:thinking-timeout (min stream-timeout held-request-detect-secs)
+                            #:stream-timeout http-stream-timeout-default
+                            #:max-total-timeout max-total-timeout))
+       ;; Own the response port for the complete lifetime of the lazy generator.
+       ;; close-port-after-stream preserves the port across yields and also closes
+       ;; it when a consumer abandons and collects the returned generator.
+       (log-stream-setup-timing "openai" _stream-t0)
+       (define provider-gen
+         (generator ()
+                    (with-handlers ([exn:break? (lambda (e)
+                                                  (cleanup-thunk)
+                                                  (raise e))]
+                                    [exn:fail? (lambda (e)
+                                                 (cleanup-thunk)
+                                                 (openai-wrap-stream-error e))])
+                      (let loop ()
+                        (define chunk (gen))
+                        (match chunk
+                          [#f
+                           (cleanup-thunk)
+                           (yield #f)]
+                          [_
+                           (yield chunk)
+                           (loop)])))))
+       (define owned-stream
+         (close-port-after-stream provider-gen response-port #:cleanup cleanup-thunk))
+       ;; Transfer only after finalizer registration succeeds.
+       (set-box! stream-owns-resources? #t)
+       owned-stream)
+     (lambda ()
+       (unless (unbox stream-owns-resources?)
+         (cleanup-thunk)))))
 
   (make-provider (lambda () "openai-compatible")
                  (lambda () (hasheq 'streaming #t 'token-counting #f))

@@ -5,7 +5,7 @@
 ;;; test-memory-tool-turn-extraction-g1.rkt — W0 characterization for G1 tool-call extraction gap
 
 (require rackunit
-         "../llm/stream.rkt"
+         "../llm/openai-compatible.rkt"
          "../llm/provider.rkt"
          "../agent/loop-stream.rkt"
          "../agent/state.rkt"

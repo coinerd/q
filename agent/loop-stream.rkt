@@ -140,14 +140,11 @@
                   'message
                   final-content-parts
                   (now-seconds)
-                  ;; v0.99.78 FIX (Bug B, part 2): include accumulated thinking in
-                  ;; message meta. build-final-stream-result is the REAL path that
-                  ;; creates the assistant message persisted to loop-state/session,
-                  ;; but it omitted 'thinking (streaming-message-finalize, which does
-                  ;; set it, is dead code — never called). Without this, provider-
-                  ;; transport's reasoning_content round-trip read #f and deepseek
-                  ;; never received reasoning_content (verified: request dump showed
-                  ;; reasoning_len=0 on every assistant message).
+                  ;; v0.99.78 FIX: Include accumulated thinking in message meta.
+                  ;; build-final-stream-result is the REAL path that creates the
+                  ;; assistant message persisted to loop-state/session. Without
+                  ;; 'thinking in meta, provider-transport cannot round-trip the
+                  ;; reasoning field for thinking-mode providers.
                   (hasheq 'turnId turn-id 'model "streamed" 'thinking final-thinking)))
 
   ;; v0.95.17 W1: Post-turn auto-extraction (non-fatal, gated by parameter)

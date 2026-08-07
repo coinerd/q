@@ -27,7 +27,10 @@
          "provider.rkt"
          "stream.rkt"
          "http-helpers.rkt"
-         (only-in "openai-compatible.rkt" openai-build-request-body openai-parse-response))
+         (only-in "openai-compatible.rkt"
+                  openai-build-request-body
+                  openai-parse-response
+                  normalize-openai-chunk))
 
 (provide (contract-out [make-azure-openai-provider (-> hash? provider?)])
          openai-parse-response-from-jsexpr

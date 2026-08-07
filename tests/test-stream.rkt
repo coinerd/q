@@ -10,8 +10,23 @@
          racket/generator
          json
          "../llm/stream.rkt"
+         "../llm/openai-compatible.rkt"
          "../llm/model.rkt"
          "../agent/loop-stream.rkt")
+
+;; v0.99.84: read-sse-chunks was removed from llm/stream.rkt.
+;; Tests exercise the same code path through stream-sse-events + normalize-openai-chunk.
+(define (read-sse-chunks port
+                         #:initial-timeout [initial-secs 120]
+                         #:stream-timeout [stream-secs 60]
+                         #:thinking-timeout [thinking-secs stream-secs]
+                         #:max-total-timeout [max-total-secs 600])
+  (stream-sse-events port
+                     (lambda (parsed) (list (normalize-openai-chunk parsed)))
+                     #:initial-timeout initial-secs
+                     #:stream-timeout stream-secs
+                     #:thinking-timeout thinking-secs
+                     #:max-total-timeout max-total-secs))
 
 ;; ============================================================
 ;; parse-sse-line tests

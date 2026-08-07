@@ -11,7 +11,7 @@
 ;;; hardcoded meta to (hasheq 'turnId ... 'model ...) with no 'thinking key.)
 
 (require rackunit
-         "../llm/stream.rkt"
+         "../llm/openai-compatible.rkt"
          "../llm/provider.rkt"
          "../agent/loop-stream.rkt"
          "../agent/state.rkt"
