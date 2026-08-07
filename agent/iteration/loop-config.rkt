@@ -46,7 +46,7 @@
          working-set ; (or/c working-set? #f)
          session ; (or/c agent-session? #f)
          ;; v0.99.85: Injected runtime operations — Agent iteration no longer
-         ;; imports turn-orchestrator.rkt directly. The wiring layer supplies
+         ;; imports the runtime orchestration layer directly. The wiring layer supplies
          ;; concrete implementations.
          build-context-fn ; (or/c procedure? #f) — builds assembled context
          run-provider-turn-fn ; (or/c procedure? #f) — executes provider turn
