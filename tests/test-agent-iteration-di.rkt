@@ -13,7 +13,7 @@
          racket/list
          "../agent/iteration/loop-config.rkt"
          "../agent/iteration/loop-state.rkt"
-         (only-in "../agent/iteration/main-loop.rkt" run-iteration-loop/v2)
+         (prefix-in ml: "../agent/iteration/main-loop.rkt")
          (only-in "../util/event/event-bus.rkt" make-event-bus)
          (only-in "../util/loop-result.rkt"
                   loop-result-termination-reason
@@ -62,7 +62,7 @@
                       #:config (hash->session-config (hash))
                       #:build-context-fn fake-build-context
                       #:run-provider-turn-fn fake-run-provider-turn))
-  (define result (run-iteration-loop/v2 cfg))
+  (define result (ml:run-iteration-loop/v2 cfg))
   (check-equal? (loop-result-termination-reason result) 'completed)
   (check-true (pair? (loop-result-messages result))
               "Should have at least one message from the fake provider turn"))
@@ -71,18 +71,18 @@
   (define bus (make-event-bus))
   (define cfg (make-loop-config '() #f bus #f #f "/tmp/test-di-log" "test-di-session" 10))
   (check-exn exn:fail?
-             (lambda () (run-iteration-loop/v2 cfg))
+             (lambda () (ml:run-iteration-loop/v2 cfg))
              "Should error when build-context-fn is not supplied"))
 
-(test-case "v0.99.85: main-loop.rkt does not import turn-orchestrator"
+(test-case "v0.99.85: main-loop.rkt does not import runtime orchestration"
   ;; Structural verification: the agent iteration module should not
-  ;; import from runtime/turn-orchestrator.rkt
+  ;; import from the runtime orchestration layer
   (define src
     (file->string (build-path (current-directory) ".." "agent" "iteration" "main-loop.rkt")))
   (check-false (string-contains? src "turn-orchestrator")
-               "main-loop.rkt must not import turn-orchestrator.rkt"))
+               "main-loop.rkt must not import the runtime orchestration layer"))
 
-(test-case "v0.99.85: step-interpreter does not import state-aware-builder"
+(test-case "v0.99.85: step-interpreter does not import context-assembly impl"
   (define src
     (file->string (build-path (current-directory) ".." "agent" "iteration" "step-interpreter.rkt")))
   (check-false (string-contains? src "state-aware-builder")

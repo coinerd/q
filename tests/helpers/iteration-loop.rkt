@@ -8,7 +8,7 @@
 ;; runtime/turn-orchestrator.rkt. This module provides the same
 ;; positional-argument convenience for tests.
 
-(require (only-in "../../agent/iteration/main-loop.rkt" run-iteration-loop/v2)
+(require (prefix-in ml: "../../agent/iteration/main-loop.rkt")
          (only-in "../../agent/iteration/loop-config.rkt" make-loop-config)
          (only-in "../../runtime/turn-orchestrator.rkt" run-provider-turn build-assembled-context)
          (only-in "../../runtime/session/session-config.rkt" hash->session-config)
@@ -32,21 +32,21 @@
                             #:force-shutdown-check [force-shutdown-check #f]
                             #:working-set [initial-ws #f]
                             #:session [sess #f])
-  (run-iteration-loop/v2 (make-loop-config context
-                                           prov
-                                           bus
-                                           reg
-                                           ext-reg
-                                           log-path
-                                           session-id
-                                           max-iterations
-                                           #:cancellation-token token
-                                           #:config config-raw
-                                           #:queue steering-queue
-                                           #:injected-box injected-box
-                                           #:shutdown-check shutdown-check
-                                           #:force-shutdown-check force-shutdown-check
-                                           #:working-set initial-ws
-                                           #:session sess
-                                           #:build-context-fn build-assembled-context
-                                           #:run-provider-turn-fn run-provider-turn)))
+  (ml:run-iteration-loop/v2 (make-loop-config context
+                                              prov
+                                              bus
+                                              reg
+                                              ext-reg
+                                              log-path
+                                              session-id
+                                              max-iterations
+                                              #:cancellation-token token
+                                              #:config config-raw
+                                              #:queue steering-queue
+                                              #:injected-box injected-box
+                                              #:shutdown-check shutdown-check
+                                              #:force-shutdown-check force-shutdown-check
+                                              #:working-set initial-ws
+                                              #:session sess
+                                              #:build-context-fn build-assembled-context
+                                              #:run-provider-turn-fn run-provider-turn)))
