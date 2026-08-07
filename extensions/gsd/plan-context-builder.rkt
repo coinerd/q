@@ -24,7 +24,27 @@
          infer-capabilities-from-tasks
          get-diff-excerpt
          get-test-summary
+         current-git-root
+         find-git-root-dir
          FILE-EXTENSION->CAPABILITY)
+
+;; ============================================================
+;; Parameterized git root (W1: cwd migration)
+;; ============================================================
+
+;; A parameter that controls the git root used by plan-context-builder.
+;; Defaults to (find-git-root-dir (current-directory)).
+;; Callers can parameterize this for testing or to override resolution.
+(define current-git-root
+  (make-parameter
+   (find-git-root-dir (current-directory))
+   (lambda (val)
+     (cond
+       [(path? val) val]
+       [(string? val) (string->path val)]
+       [(not val) val]
+       [else
+        (raise-argument-error 'current-git-root "path? string? or #f" val)]))))
 
 ;; ============================================================
 ;; Plan Context Enrichment
@@ -109,7 +129,7 @@
   (if (or (null? files) (not base-dir))
       ""
       (with-handlers ([exn:fail? (lambda (_) "")])
-        (define git-root (find-git-root-dir base-dir))
+        (define git-root (or (current-git-root) (find-git-root-dir base-dir)))
         (if (not git-root)
             ""
             (parameterize ([current-directory git-root])

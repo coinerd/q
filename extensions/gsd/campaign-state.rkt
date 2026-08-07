@@ -22,6 +22,8 @@
 ;;
 ;; D5 — Fencing: every transition requires the current fencing token and
 ;;   attempt ID; cancellation is a durable record field.
+;;
+;; v0.99.85 W3: Add contract-out for make-campaign-wave* validated constructor.
 
 (require racket/file
          racket/string
@@ -30,6 +32,7 @@
          racket/list
          racket/match
          racket/format
+         racket/contract
          (only-in "wave-docs.rkt"
                   parse-plan-index
                   wave-index-entry-idx
@@ -37,6 +40,95 @@
                   wave-index-entry-slug
                   wave-index-entry-status)
          (only-in "../../util/json/checksum.rkt" sha256-string))
+
+;; ============================================================
+;; Public API with contracts (§24)
+;; ============================================================
+
+(provide (contract-out
+          [make-campaign-wave*
+           (->i ([index (lambda (i) (and (exact-nonnegative-integer? i) (< i 1000)))]
+                 [title string?]
+                 [status (lambda (s) (and (symbol? s) (memq s CANONICAL-WAVE-STATUSES)))]
+                 [attempt-count exact-nonnegative-integer?]
+                 [current-attempt (lambda (a) (or (not a) (campaign-attempt? a)))])
+                (lambda (index title status attempt-count current-attempt) campaign-wave?))]
+          [canonical-wave-status (-> (or/c string? symbol?) symbol?)]
+          [completed-status? (-> symbol? boolean?)]
+          [retryable-status? (-> symbol? boolean?)]
+          [actionable-status? (-> symbol? boolean?)]
+          [campaign-manifest-hash (-> campaign-manifest? string?)]
+          [plan-changed? (-> campaign-record? campaign-manifest? boolean?)]
+          [select-next-actionable-wave (-> campaign-record? (or/c #f exact-nonnegative-integer?))]
+          [restart-needed? (-> campaign-record? exact-nonnegative-integer? boolean?)]
+          [one-active-wave-violation (-> campaign-record? list?)]
+          [begin-attempt!
+           (-> campaign-record?
+               exact-nonnegative-integer?
+               (or/c #f exact-nonnegative-integer?)
+               void?)]
+          [migrate-campaign! (-> path-string? campaign-record?)]
+          [persist-campaign! (-> path-string? campaign-record? void?)]
+          [load-campaign-record (-> path-string? string? (or/c #f campaign-record?))]
+          [make-campaign-manifest
+           (-> exact-nonnegative-integer?
+               string?
+               (listof string?)
+               (listof campaign-wave-descriptor?)
+               string?
+               campaign-manifest?)]
+          [make-campaign-wave-descriptor
+           (-> exact-nonnegative-integer? string? string? string? campaign-wave-descriptor?)]
+          [make-campaign-wave
+           (-> exact-nonnegative-integer?
+               string?
+               symbol?
+               exact-nonnegative-integer?
+               (or/c #f campaign-attempt?)
+               campaign-wave?)]
+          [make-campaign-record
+           (-> string?
+               campaign-manifest?
+               (listof campaign-wave?)
+               (or/c #f campaign-cancellation?)
+               (or/c #f exact-nonnegative-integer?)
+               (or/c #f string? symbol?)
+               exact-integer?
+               exact-integer?
+               campaign-record?)]
+          [make-campaign-cancellation (-> string? exact-integer? campaign-cancellation?)]
+          [campaign-cancellation? (-> any/c boolean?)]
+          [campaign-cancellation-reason (-> campaign-cancellation? string?)]
+          [campaign-cancellation-timestamp (-> campaign-cancellation? exact-integer?)]
+          [campaign-plan-id (-> campaign-record? string?)]
+          [campaign-fence-token (-> campaign-record? (or/c #f exact-nonnegative-integer?))]
+          [set-campaign-cancellation! (-> campaign-record? any/c void?)]
+          [set-campaign-fence-token! (-> campaign-record? exact-nonnegative-integer? void?)]
+          [campaign-record-waves (-> campaign-record? (listof campaign-wave?))]
+          [campaign-record-manifest (-> campaign-record? campaign-manifest?)]
+          [campaign-record-cancellation (-> campaign-record? (or/c #f campaign-cancellation?))]
+          [campaign-record-provenance (-> campaign-record? (or/c #f string? symbol?))]
+          [campaign-record-created-at (-> campaign-record? exact-integer?)]
+          [campaign-record-updated-at (-> campaign-record? exact-integer?)]
+          [campaign-wave-index (-> campaign-wave? exact-nonnegative-integer?)]
+          [campaign-wave-title (-> campaign-wave? string?)]
+          [campaign-wave-status (-> campaign-wave? symbol?)]
+          [campaign-wave-attempt-count (-> campaign-wave? exact-nonnegative-integer?)]
+          [campaign-wave-current-attempt (-> campaign-wave? (or/c #f campaign-attempt?))]
+          [set-campaign-wave-status! (-> campaign-wave? symbol? void?)]
+          [set-campaign-wave-attempt-count! (-> campaign-wave? exact-nonnegative-integer? void?)]
+          [set-campaign-wave-current-attempt! (-> campaign-wave? (or/c #f campaign-attempt?) void?)]
+          [campaign-attempt-id (-> campaign-attempt? string?)]
+          [campaign-attempt-fence-token (-> campaign-attempt? (or/c #f exact-nonnegative-integer?))]
+          [campaign-attempt-started-at (-> campaign-attempt? exact-integer?)]
+          [campaign-manifest-schema-version (-> campaign-manifest? exact-nonnegative-integer?)]
+          [campaign-manifest-title (-> campaign-manifest? string?)]
+          [campaign-manifest-dependencies (-> campaign-manifest? (listof string?))]
+          [campaign-manifest-waves (-> campaign-manifest? (listof campaign-wave-descriptor?))]
+          [campaign-manifest-constraints-hash (-> campaign-manifest? string?)]
+          [exn:fail:campaign-migration? (-> any/c boolean?)]
+          [CANONICAL-WAVE-STATUSES (listof symbol?)]
+          [canonical-wave-statuses (listof symbol?)]))
 
 ;; ============================================================
 ;; Records
@@ -57,6 +149,18 @@
   #:transparent
   #:mutable
   #:constructor-name make-campaign-wave)
+
+;; Validated constructor for public use — enforces domain constraints per §24.
+(define (make-campaign-wave* index title status attempt-count current-attempt)
+  (unless (and (exact-nonnegative-integer? index) (< index 1000))
+    (raise-argument-error 'make-campaign-wave* "non-negative integer < 1000" index))
+  (unless (string? title)
+    (raise-argument-error 'make-campaign-wave* "string?" title))
+  (unless (and (symbol? status) (memq status CANONICAL-WAVE-STATUSES))
+    (raise-argument-error 'make-campaign-wave* (format "one of ~s" CANONICAL-WAVE-STATUSES) status))
+  (unless (exact-nonnegative-integer? attempt-count)
+    (raise-argument-error 'make-campaign-wave* "non-negative integer" attempt-count))
+  (make-campaign-wave index title status attempt-count current-attempt))
 
 ;; A single run attempt; fence-token guards stale results.
 (struct campaign-attempt (id fence-token started-at) #:transparent)
@@ -387,68 +491,3 @@
   (if (file-exists? target)
       (datum->record (call-with-input-file target read))
       #f))
-
-;; ============================================================
-;; Provide
-;; ============================================================
-
-(provide make-campaign-manifest
-         campaign-manifest?
-         campaign-manifest-schema-version
-         campaign-manifest-title
-         campaign-manifest-dependencies
-         campaign-manifest-waves
-         campaign-manifest-constraints-hash
-         make-campaign-wave-descriptor
-         campaign-wave-descriptor?
-         campaign-wave-descriptor-index
-         campaign-wave-descriptor-title
-         campaign-wave-descriptor-doc-path
-         campaign-wave-descriptor-content-hash
-         make-campaign-wave
-         campaign-wave?
-         campaign-wave-index
-         campaign-wave-title
-         campaign-wave-status
-         campaign-wave-attempt-count
-         campaign-wave-current-attempt
-         set-campaign-wave-status!
-         set-campaign-wave-attempt-count!
-         set-campaign-wave-current-attempt!
-         campaign-attempt
-         campaign-attempt?
-         campaign-attempt-id
-         campaign-attempt-fence-token
-         campaign-attempt-started-at
-         make-campaign-cancellation
-         campaign-cancellation?
-         campaign-cancellation-reason
-         campaign-cancellation-timestamp
-         make-campaign-record
-         campaign-record?
-         campaign-plan-id
-         campaign-record-manifest
-         campaign-record-waves
-         campaign-record-cancellation
-         campaign-fence-token
-         campaign-record-provenance
-         campaign-record-created-at
-         campaign-record-updated-at
-         set-campaign-cancellation!
-         set-campaign-fence-token!
-         exn:fail:campaign-migration
-         exn:fail:campaign-migration?
-         canonical-wave-status
-         canonical-wave-statuses
-         completed-status?
-         retryable-status?
-         actionable-status?
-         campaign-manifest-hash
-         plan-changed?
-         select-next-actionable-wave
-         restart-needed?
-         one-active-wave-violation
-         begin-attempt!
-         migrate-campaign!
-         persist-campaign!
-         load-campaign-record)
