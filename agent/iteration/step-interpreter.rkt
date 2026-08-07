@@ -103,14 +103,13 @@
                   select-highest-priority-action
                   maybe-execute-action
                   rollback-action-type)
-         (only-in "../../runtime/context-assembly/state-aware-builder.rkt" current-reflection-event)
-         ;; v0.99.84: Tool-result extraction is delegated to Runtime via hook parameter.
-         ;; Agent Core no longer imports the memory subsystem.
          (only-in "../../runtime/iteration/decision.rkt"
                   step-result
                   step-result?
                   step-result-action
                   step-result-new-counters)
+         ;; v0.99.85: current-reflection-event moved to agent/state.rkt
+         (only-in "../state.rkt" current-reflection-event)
          (only-in "../../runtime/iteration/internal.rkt" assert-payload)
          (only-in "../../runtime/iteration/directive.rkt"
                   directive-recurse

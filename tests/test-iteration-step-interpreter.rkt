@@ -12,7 +12,7 @@
 
 (require rackunit
          rackunit/text-ui
-         "../agent/iteration/main-loop.rkt"
+         (only-in "helpers/iteration-loop.rkt" run-iteration-loop)
          "../agent/iteration/loop-state.rkt"
          (only-in "../util/event/event-bus.rkt" make-event-bus)
          (only-in "../llm/provider.rkt" make-provider)

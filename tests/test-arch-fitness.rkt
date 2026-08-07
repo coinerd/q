@@ -716,8 +716,8 @@
       (check-true (file-exists? p) "runtime/session/session-lifecycle.rkt must exist")
       (when (file-exists? p)
         (define lines (length (file->lines p)))
-        (check-true (<= lines 530)
-                    (format "session/session-lifecycle.rkt has ~a lines (budget: 530)" lines))))
+        (check-true (<= lines 540)
+                    (format "session/session-lifecycle.rkt has ~a lines (budget: 540)" lines))))
 
     (test-case "Session persistence has contract-out for key functions"
       (define p (build-path q-dir "runtime" "session" "session-persistence.rkt"))

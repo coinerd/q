@@ -62,6 +62,7 @@
          (only-in "../runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
          (only-in "../../agent/iteration/main-loop.rkt" run-iteration-loop/v2)
          (only-in "../../agent/iteration/loop-config.rkt" make-loop-config)
+         (only-in "../turn-orchestrator.rkt" run-provider-turn build-assembled-context)
          (only-in "../../agent/event-emitter.rkt" emit-typed-event!)
          (only-in "../../agent/event-structs/turn-events.rkt" turn-end-event)
          (only-in "../../agent/event-structs/session-events.rkt" make-context-event)
@@ -300,7 +301,11 @@
                          #:queue (agent-session-queue sess)
                          #:shutdown-check (lambda () (agent-session-shutdown-requested? sess))
                          #:force-shutdown-check (lambda () (agent-session-force-shutdown? sess))
-                         #:session sess)))
+                         #:session sess
+                         ;; v0.99.85: Inject runtime operations — Agent iteration
+                         ;; no longer imports turn-orchestrator.rkt directly.
+                         #:build-context-fn build-assembled-context
+                         #:run-provider-turn-fn run-provider-turn)))
     ;; v0.32.0: Stop trace logger on normal completion
     (stop-trace-logger! tracer)
     result))

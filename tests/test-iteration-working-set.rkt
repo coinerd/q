@@ -10,7 +10,7 @@
          rackunit/text-ui
          racket/list
          "../runtime/working-set.rkt"
-         (only-in "../agent/iteration/main-loop.rkt" run-iteration-loop)
+         (only-in "helpers/iteration-loop.rkt" run-iteration-loop)
          "../util/message/protocol-types.rkt"
          "../util/event/event-bus.rkt"
          "../util/ids.rkt"

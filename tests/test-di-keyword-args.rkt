@@ -13,7 +13,7 @@
 
 (require rackunit
          rackunit/text-ui
-         (only-in "../agent/iteration/main-loop.rkt" run-iteration-loop)
+         (only-in "helpers/iteration-loop.rkt" run-iteration-loop)
          (only-in "../runtime/iteration/retry-policy.rkt"
                   call-with-overflow-recovery
                   check-mid-turn-budget!)

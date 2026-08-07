@@ -18,7 +18,7 @@
 (require rackunit
          "../agent/queue.rkt"
          "../util/event/event-bus.rkt"
-         (only-in "../agent/iteration/main-loop.rkt" run-iteration-loop)
+         (only-in "helpers/iteration-loop.rkt" run-iteration-loop)
          "../tui/state.rkt"
          "../util/message/protocol-types.rkt")
 
