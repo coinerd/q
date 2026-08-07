@@ -66,19 +66,31 @@
                     (> (hash-ref m 'handler-count 0) 8)))
               modules))
     (define ci-report
-      (hash 'mode "ci"
-            'total-modules (hash-ref summary 'total-modules)
-            'high-critical-findings (length high-critical-modules)
-            'modules (map (lambda (m)
-                            (hash 'path (hash-ref m 'path)
-                                  'struct-out-count (hash-ref m 'struct-out-count 0)
-                                  'io-count (hash-ref m 'io-count 0)
-                                  'error-count (hash-ref m 'error-count 0)
-                                  'parameter-count (hash-ref m 'parameter-count 0)
-                                  'macro-count (hash-ref m 'macro-count 0)
-                                  'handler-count (hash-ref m 'handler-count 0)))
-                          high-critical-modules)
-            'info "Abstraction Manual: see docs/ABSTRACTION_INSTRUCTION_MANUAL.md"))
+      (hash 'mode
+            "ci"
+            'total-modules
+            (hash-ref summary 'total-modules)
+            'high-critical-findings
+            (length high-critical-modules)
+            'modules
+            (map (lambda (m)
+                   (hash 'path
+                         (hash-ref m 'path)
+                         'struct-out-count
+                         (hash-ref m 'struct-out-count 0)
+                         'io-count
+                         (hash-ref m 'io-count 0)
+                         'error-count
+                         (hash-ref m 'error-count 0)
+                         'parameter-count
+                         (hash-ref m 'parameter-count 0)
+                         'macro-count
+                         (hash-ref m 'macro-count 0)
+                         'handler-count
+                         (hash-ref m 'handler-count 0)))
+                 high-critical-modules)
+            'info
+            "Abstraction Manual: see docs/ABSTRACTION_INSTRUCTION_MANUAL.md"))
     (write-string (jsexpr->json-string ci-report) (current-output-port))
     (newline (current-output-port))
     (exit 0))
