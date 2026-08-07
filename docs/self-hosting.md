@@ -1,4 +1,4 @@
-<!-- verified-against: 0.99.83 -->
+<!-- verified-against: 0.99.84 -->
 # Self-Hosting Guide
 
 q is a self-hosting agent: it uses its own GSD (Get Stuff Done) planning workflow
@@ -131,6 +131,6 @@ is the primary self-hosting extension:
 (load-extension! ext-reg "path/to/extension.rkt" #:event-bus bus)
 ```
 
-## Version 0.99.83
+## Version 0.99.84
 
-This documentation reflects q 0.99.83.
+This documentation reflects q 0.99.84.
