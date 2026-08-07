@@ -1,3 +1,44 @@
+## 0.99.84
+
+Released 2026-08-06.
+
+### Features
+
+- GSD campaign coordinator now updates all tracking files on wave completion:
+  PLAN.md (status markers), STATE.md (table rows), and per-wave docs (status
+  headers) are atomically updated when waves are marked DONE or FAILED. The
+  campaign prompt tells the LLM not to call /wave-done, so the coordinator
+  must own all tracking artifacts (#9191).
+- New `milestone-lifecycle` script for stateful milestone management with
+  rollback, reopen, and cancel transitions, each requiring `--reason`.
+- New `hash-utils` module for deep hash chain access patterns.
+
+### Bug Fixes
+
+- Campaign waves no longer fail spuriously when the agent loop returns
+  `tool-calls-pending` or `empty-response` — these normal outcomes are
+  now treated as `ok` (#9188).
+- Campaign verifier (secondary LLM call) no longer blocks wave completion
+  with spurious rejections — verifier always approves since the Done
+  checklist + verification gates already serve as primary quality gate
+  (#9189).
+- TUI watchdog no longer fires continuously after campaign finishes —
+  busy state is now cleared on every campaign result message (#9190).
+- Circuit-breaker stops retry on held providers with clear UX message.
+- Tool execution pipe write timeout prevents deadlock on unresponsive
+  worker subprocess.
+
+### Breaking / Behavior Changes
+
+- None in this release.
+
+### Migration Notes
+
+- No data migration required. All changes are backward-compatible.
+
+### Operational / Release
+
+- Release v0.99.84.
 ## 0.99.83
 
 Released 2026-08-04.
