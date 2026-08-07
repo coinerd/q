@@ -452,7 +452,42 @@ jobs:
             --policy scripts/required-pr-checks.policy
 
   # ────────────────────────────────────────────────────────────
-  # Gate 8: Release-readiness check (tag pushes only)
+  # Gate 8: Abstraction audit (non-blocking, informational)
+  # Runs on every push/PR — reports but does not fail the build.
+  # ────────────────────────────────────────────────────────────
+  abstraction-audit:
+    needs: lint
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - name: Cache Racket packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.local/share/racket
+          key: racket-pkgs-audit-${{ hashFiles('**/info.rkt') }}
+          restore-keys: racket-pkgs-audit-
+      - uses: ./.github/actions/setup-racket
+        with:
+          racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
+
+      - name: Clear stale bytecode
+        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true
+
+      - name: Run abstraction audit (CI mode)
+        run: |
+          racket scripts/abstraction-audit.rkt --ci-mode 2>&1 | tee audit-output.log
+
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: abstraction-audit-report
+          path: audit-output.log
+          retention-days: 7
+
+  # ────────────────────────────────────────────────────────────
+  # Gate 9: Release-readiness check (tag pushes only)
   # ────────────────────────────────────────────────────────────
   release-readiness:
     if: startsWith(github.ref, 'refs/tags/v')

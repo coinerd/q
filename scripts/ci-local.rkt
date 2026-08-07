@@ -102,7 +102,9 @@
         ;; Group 5: Security (W6.3)
         (list "lint-security" "racket scripts/lint-security.rkt")
         ;; Group 6: CI readiness — stray files, symlinks, gitignore hygiene
-        (list "lint-ci-readiness" "racket scripts/lint-ci-readiness.rkt")))
+        (list "lint-ci-readiness" "racket scripts/lint-ci-readiness.rkt")
+        ;; Group 7: Abstraction audit (CI mode, non-blocking)
+        (list "abstraction-audit" "racket scripts/abstraction-audit.rkt --ci-mode")))
 
 (define quick-checks
   (list (list "sync-version (dry-run)" "racket scripts/sync-version.rkt")
