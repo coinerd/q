@@ -30,7 +30,8 @@ runs:
       with:
         version: ${{ inputs.racket-version }}
 
-    - name: Start Xvfb for TUI tests
+    - name: Start Xvfb for TUI tests (Linux only)
+      if: runner.os == 'Linux'
       shell: bash
       run: |
         sudo apt-get update -qq
