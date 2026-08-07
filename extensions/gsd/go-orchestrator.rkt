@@ -272,7 +272,8 @@
                          [(failed) (campaign-result 'wave-failed '() "verifier rejected")]
                          [(stale-attempt invalid-state)
                           (campaign-result 'wave-cancelled '() "stale completion ignored")]
-                         [else (campaign-result 'wave-failed '() "unexpected completion state")])])))])]
+                         [else
+                          (campaign-result 'wave-failed '() "unexpected completion state")])])))])]
           [(error)
            (if (persist-current-status! 'failed)
                (begin
@@ -375,11 +376,13 @@
     [(has-git? start-path) start-path]
     [(and (directory-exists? q-sub) (has-git? q-sub)) q-sub]
     [else
-     ;; Fallback: use current-git-root parameter if set and valid
-     (define param-root (current-git-root))
-     (if (and param-root (has-git? param-root))
-         param-root
-         (find-git-root-walking-up start-path has-git?))]))
+     ;; Walk up from start-path first (handles nested dirs in temp tests)
+     (define walked (find-git-root-walking-up start-path has-git?))
+     (if walked
+         walked
+         ;; Last resort: use current-git-root parameter if set and valid
+         (let ([param-root (current-git-root)])
+           (if (and param-root (has-git? param-root)) param-root #f)))]))
 
 (define (find-git-root-walking-up start-path has-git?)
   (let loop ([dir start-path])
