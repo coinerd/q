@@ -23,7 +23,7 @@
 (require (only-in racket/dict in-dict)
          (only-in racket/list filter-map)
          racket/contract
-         (only-in "../util/loop-result.rkt" loop-result?)
+         (only-in "../util/loop-result.rkt" loop-result? loop-result-messages)
          (only-in "../util/message/message.rkt"
                   message
                   message-id
@@ -35,7 +35,9 @@
                   tool-call-part?
                   tool-call-part-id
                   tool-result-part?
-                  tool-result-part-tool-call-id)
+                  tool-result-part-tool-call-id
+                  text-part?
+                  text-part-text)
          (only-in "../util/error/errors.rkt" raise-extension-error)
          "../util/event/event-bus.rkt"
          (only-in "../util/cancellation.rkt" cancellation-token?)
@@ -55,6 +57,9 @@
          (only-in "../runtime/auto-retry.rkt" default-cumulative-ceiling-secs)
          (only-in "provider/provider-factory.rkt" provider-is-mock?)
          (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
+         ;; v0.99.84: Post-turn memory extraction moved from agent/ to runtime/
+         (only-in "memory/auto-extraction.rkt" maybe-auto-extract-after-response!)
+         (only-in "memory/reflection.rkt" maybe-reflect-session-memories!)
          "../agent/event-emitter.rkt"
          "../agent/event-structs/iteration-events.rkt"
          "../agent/event-structs/session-events.rkt"
@@ -387,23 +392,42 @@
                           default-partial-recovery-min-chars)])
       (values (and enabled #t) min-chars)))
 
-  (call-with-provider-retry (lambda (retry-ctx retry-settings)
-                              (run-agent-turn retry-ctx
-                                              prov
-                                              bus
-                                              #:session-id session-id
-                                              #:turn-id turn-id
-                                              #:tools tools
-                                              #:cancellation-token token
-                                              #:provider-settings retry-settings))
-                            ctx-final
-                            provider-settings
-                            bus
-                            session-id
-                            turn-id
-                            retry-ceiling-secs
-                            #:health-tracker health-tracker
-                            #:health-window-secs health-window
-                            #:health-failure-threshold health-threshold
-                            #:partial-recovery partial-recovery?
-                            #:partial-recovery-min-chars partial-recovery-min-chars))
+  (define turn-result
+    (call-with-provider-retry (lambda (retry-ctx retry-settings)
+                                (run-agent-turn retry-ctx
+                                                prov
+                                                bus
+                                                #:session-id session-id
+                                                #:turn-id turn-id
+                                                #:tools tools
+                                                #:cancellation-token token
+                                                #:provider-settings retry-settings))
+                              ctx-final
+                              provider-settings
+                              bus
+                              session-id
+                              turn-id
+                              retry-ceiling-secs
+                              #:health-tracker health-tracker
+                              #:health-window-secs health-window
+                              #:health-failure-threshold health-threshold
+                              #:partial-recovery partial-recovery?
+                              #:partial-recovery-min-chars partial-recovery-min-chars))
+  ;; v0.99.84: Post-turn memory extraction and reflection.
+  ;; Moved from agent/loop-stream.rkt — Agent Core must not depend on Runtime Memory.
+  ;; Non-fatal: extraction failures do not affect the turn result.
+  (define assistant-text
+    (for/or ([m (in-list (loop-result-messages turn-result))])
+      (and (eq? (message-role m) 'assistant)
+           (for/or ([p (in-list (message-content m))])
+             (and (text-part? p) (text-part-text p))))))
+  (when assistant-text
+    (with-handlers ([exn:fail? (lambda (e)
+                                 (log-q-turn-orch-warning "auto-extract-after-response failed: ~a"
+                                                          (exn-message e)))])
+      (maybe-auto-extract-after-response! assistant-text #:session-id session-id)))
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-q-turn-orch-warning "reflect-session-memories failed: ~a"
+                                                        (exn-message e)))])
+    (maybe-reflect-session-memories! #:session-id session-id))
+  turn-result)

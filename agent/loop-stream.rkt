@@ -56,10 +56,6 @@
                   make-stream-tool-call-started-event
                   make-stream-assistant-msg-completed-event)
          (only-in "loop-messages.rkt" usage-empty? classify-hook-result)
-         ;; v0.95.16 W3: Post-turn auto-extraction
-         (only-in "../runtime/memory/auto-extraction.rkt" maybe-auto-extract-after-response!)
-         ;; v0.95.21 W3: Post-turn auto-reflection
-         (only-in "../runtime/memory/reflection.rkt" maybe-reflect-session-memories!)
          (only-in "stream-runner.rkt" safe-hook-dispatch))
 
 (provide classify-chunk
@@ -147,16 +143,8 @@
                   ;; reasoning field for thinking-mode providers.
                   (hasheq 'turnId turn-id 'model "streamed" 'thinking final-thinking)))
 
-  ;; v0.95.17 W1: Post-turn auto-extraction (non-fatal, gated by parameter)
-  ;; Must fire for both text-only and tool-call turns.
-  (with-handlers ([exn:fail? (lambda (e)
-                               (log-warning "auto-extract-after-response failed: ~a"
-                                            (exn-message e)))])
-    (maybe-auto-extract-after-response! final-text #:session-id session-id))
-  ;; v0.95.21 W3: Post-turn auto-reflection (non-fatal, gated by parameter)
-  (with-handlers ([exn:fail? (lambda (e)
-                               (log-warning "reflect-session-memories failed: ~a" (exn-message e)))])
-    (maybe-reflect-session-memories! #:session-id session-id))
+  ;; v0.99.84: Post-turn auto-extraction and reflection moved to
+  ;; runtime/turn-orchestrator.rkt — Agent Core must not depend on Runtime Memory.
   (cond
     [(null? tool-call-parts)
      (emit-typed-event! bus

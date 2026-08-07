@@ -109,14 +109,15 @@
               "W1: current-auto-reflection-enabled should exist"))
 
 (test-case "W3 G1: maybe-reflect-session-memories! now exists in reflection.rkt"
-  (define src (file->string (build-path (current-directory) ".." "runtime" "memory" "reflection.rkt")))
+  (define src
+    (file->string (build-path (current-directory) ".." "runtime" "memory" "reflection.rkt")))
   (check-true (string-contains? src "maybe-reflect-session-memories!")
               "W3: maybe-reflect-session-memories! should exist"))
 
-(test-case "W3 G1: auto-reflection now hooked in loop-stream.rkt"
-  (define src (file->string (build-path (current-directory) ".." "agent" "loop-stream.rkt")))
+(test-case "v0.99.84: auto-reflection now hooked in turn-orchestrator.rkt"
+  (define src (file->string (build-path (current-directory) ".." "runtime" "turn-orchestrator.rkt")))
   (check-true (string-contains? src "reflect-session")
-              "W3: auto-reflection should be in loop-stream.rkt"))
+              "v0.99.84: auto-reflection should be in turn-orchestrator.rkt"))
 
 (test-case "W0 G1: reflect-session-memories! exists and works (existing behavior)"
   ;; Verify the underlying reflection function exists and works
@@ -127,15 +128,26 @@
     (for ([i (in-range 3)])
       ((memory-backend-store! backend)
        (memory-item (format "refl-base-~a" i)
-                    'semantic 'session
+                    'semantic
+                    'session
                     (format "shared topic ~a alpha beta gamma" i)
-                    (hasheq 'project-root "/test" 'session-id "sess-w0" 'tags '("shared" "topic")
-                            'source 'test 'origin-message-id (format "m~a" i))
+                    (hasheq 'project-root
+                            "/test"
+                            'session-id
+                            "sess-w0"
+                            'tags
+                            '("shared" "topic")
+                            'source
+                            'test
+                            'origin-message-id
+                            (format "m~a" i))
                     (hasheq 'sensitivity 'public 'confidence 0.9 'supersedes '())
                     "2026-06-07T12:00:00Z"
                     "2026-06-07T12:00:00Z")))
     (define results
-      (reflect-session-memories! backend #:session-id "sess-w0" #:project-root "/test"
+      (reflect-session-memories! backend
+                                 #:session-id "sess-w0"
+                                 #:project-root "/test"
                                  #:min-group-size 2))
     (check-true (and (list? results) (>= (length results) 1))
                 "Reflection should produce at least one merged item")))
@@ -172,22 +184,29 @@
     (for ([i (in-range 3)])
       ((memory-backend-store! backend)
        (memory-item (format "no-op-~a" i)
-                    'semantic 'session
+                    'semantic
+                    'session
                     (format "shared topic ~a alpha beta gamma" i)
-                    (hasheq 'project-root "/test" 'session-id "sess-w3-noop"
-                            'tags '("shared" "topic") 'source 'test
-                            'origin-message-id (format "m~a" i))
+                    (hasheq 'project-root
+                            "/test"
+                            'session-id
+                            "sess-w3-noop"
+                            'tags
+                            '("shared" "topic")
+                            'source
+                            'test
+                            'origin-message-id
+                            (format "m~a" i))
                     (hasheq 'sensitivity 'public 'confidence 0.9 'supersedes '())
                     "2026-06-07T12:00:00Z"
                     "2026-06-07T12:00:00Z")))
     (maybe-reflect-session-memories! #:session-id "sess-w3-noop")
     ;; No reflection items created at project scope
-    (define result ((memory-backend-retrieve backend)
-                    (memory-query "" 'project "/test" #f #f #f 100 #f)))
+    (define result
+      ((memory-backend-retrieve backend) (memory-query "" 'project "/test" #f #f #f 100 #f)))
     (when (memory-result-ok? result)
       (define items (memory-result-value result))
-      (check-equal? (length items) 0
-                    "Should not reflect when disabled"))))
+      (check-equal? (length items) 0 "Should not reflect when disabled"))))
 
 (test-case "W3: maybe-reflect-session-memories! no-ops when no backend"
   (parameterize ([current-auto-reflection-enabled #t]
@@ -224,19 +243,26 @@
     (for ([i (in-range 3)])
       ((memory-backend-store! backend)
        (memory-item (format "fire-~a" i)
-                    'semantic 'session
+                    'semantic
+                    'session
                     (format "shared topic ~a alpha beta gamma" i)
-                    (hasheq 'project-root "/test" 'session-id "sess-w3-fire"
-                            'tags '("shared" "topic") 'source 'test
-                            'origin-message-id (format "m~a" i))
+                    (hasheq 'project-root
+                            "/test"
+                            'session-id
+                            "sess-w3-fire"
+                            'tags
+                            '("shared" "topic")
+                            'source
+                            'test
+                            'origin-message-id
+                            (format "m~a" i))
                     (hasheq 'sensitivity 'public 'confidence 0.9 'supersedes '())
                     "2026-06-07T12:00:00Z"
                     "2026-06-07T12:00:00Z")))
     (maybe-reflect-session-memories! #:session-id "sess-w3-fire" #:project-root "/test")
     ;; Check that a reflection item was created at project scope
-    (define result ((memory-backend-retrieve backend)
-                    (memory-query "" 'project "/test" #f #f #f 100 #f)))
+    (define result
+      ((memory-backend-retrieve backend) (memory-query "" 'project "/test" #f #f #f 100 #f)))
     (when (memory-result-ok? result)
       (define items (memory-result-value result))
-      (check-true (>= (length items) 1)
-                  "Should have created at least one reflection item"))))
+      (check-true (>= (length items) 1) "Should have created at least one reflection item"))))

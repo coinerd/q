@@ -35,9 +35,9 @@
 (test-case "W2: turn-orchestrator.rkt exists and is readable"
   (check-true (file-exists? turn-orch-path)))
 
-(test-case "W2: turn-orchestrator.rkt reduced to <=420 LOC"
+(test-case "W2: turn-orchestrator.rkt reduced to <=450 LOC"
   (define lines (file->lines turn-orch-path))
-  (check-true (<= (length lines) 420) (format "Expected <= 420 LOC, got ~a" (length lines))))
+  (check-true (<= (length lines) 450) (format "Expected <= 450 LOC, got ~a" (length lines))))
 
 (test-case "W2: turn-orchestrator.rkt still contains build-assembled-context"
   (define src (file->string turn-orch-path))
