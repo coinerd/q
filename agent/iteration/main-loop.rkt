@@ -63,16 +63,16 @@
          (only-in "../event-bus.rkt" event-bus?)
          (only-in "../../util/loop-result.rkt" loop-result?)
          (only-in "counters.rkt" check-cancellation)
-         (only-in "../../runtime/iteration/decision.rkt"
+         (only-in "../../util/iteration/decision.rkt"
                   iteration-ctx
-                  compute-step-result
                   step-result-metadata
                   step-result-new-counters)
-         (only-in "../../runtime/iteration/directive.rkt"
+         (only-in "decision.rkt" compute-step-result)
+         (only-in "../../util/iteration/directive.rkt"
                   directive-recurse
                   directive-stop
                   directive-yield)
-         (only-in "../../runtime/iteration/fsm-types.rkt"
+         (only-in "../../util/iteration/fsm-types.rkt"
                   state-idle
                   state-provider-turn
                   state-decision
@@ -87,7 +87,7 @@
                   next-iteration-state
                   state->symbol
                   iteration-state?)
-         (only-in "../../runtime/iteration/internal.rkt" assert-payload)
+         (only-in "../../util/iteration/internal.rkt" assert-payload)
          (only-in "loop-phases.rkt" prepare-iteration-context dispatch-turn-start-hooks)
          (only-in "loop-config.rkt"
                   loop-config?

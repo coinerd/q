@@ -1,6 +1,6 @@
 #lang racket/base
 
-;; runtime/iteration/tool-turn-bridge.rkt — tool call dispatch coordination
+;; agent/iteration/tool-turn-bridge.rkt — tool call dispatch coordination
 ;;
 ;; Helpers for working-set update, seen-paths tracking, exploration counting,
 ;; and tool-turn bridging.

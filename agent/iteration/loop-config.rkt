@@ -1,6 +1,6 @@
 #lang racket/base
 
-;; runtime/iteration/loop-config.rkt — configuration bundle for iteration loop
+;; agent/iteration/loop-config.rkt — configuration bundle for iteration loop
 ;;
 ;; Bundles the many parameters of run-iteration-loop into a single struct,
 ;; reducing parameter coupling and improving call-site ergonomics.

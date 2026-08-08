@@ -7,7 +7,8 @@
 
 (require rackunit
          rackunit/text-ui
-         "../runtime/iteration/decision.rkt"
+         "../agent/iteration/decision.rkt"
+         "../util/iteration/decision.rkt"
          "../agent/iteration/loop-state.rkt"
          "../util/loop-result.rkt")
 

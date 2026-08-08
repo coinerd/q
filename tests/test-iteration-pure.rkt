@@ -12,7 +12,16 @@
 
 (require rackunit
          rackunit/text-ui
-         "../runtime/iteration/decision.rkt"
+         "../agent/iteration/decision.rkt"
+         (only-in "../util/iteration/decision.rkt"
+                  iteration-ctx
+                  step-result
+                  step-result?
+                  step-result-action
+                  step-result-termination
+                  step-result-new-counters
+                  step-result-metadata
+                  step-action?)
          "../agent/iteration/loop-state.rkt"
          (only-in "../util/loop-result.rkt"
                   make-loop-result

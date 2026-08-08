@@ -11,10 +11,8 @@
 (require rackunit
          racket/base
          (only-in "../util/loop-result.rkt" make-loop-result)
-         (only-in "../runtime/iteration/decision.rkt"
-                  decide-next-action
-                  iteration-ctx
-                  known-termination-reasons))
+         (only-in "../agent/iteration/decision.rkt" decide-next-action)
+         (only-in "../util/iteration/decision.rkt" iteration-ctx known-termination-reasons))
 
 ;; Helper: build an iteration-ctx
 (define (make-ictx #:iteration [iteration 0]

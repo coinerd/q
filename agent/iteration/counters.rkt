@@ -1,6 +1,6 @@
 #lang racket/base
 
-;; runtime/iteration/counters.rkt — iteration counter logic + cancellation check
+;; agent/iteration/counters.rkt — iteration counter logic + cancellation check
 ;;
 ;; Extracted from runtime/iteration.rkt (v0.34.6 W0a — A-01 decomposition).
 ;;

@@ -16,11 +16,8 @@
                   interpret-step
                   execute-pending-tool-calls)
          (only-in "../agent/iteration/counters.rkt" compute-next-counters check-cancellation)
-         (only-in "../runtime/iteration/decision.rkt"
-                  decide-next-action
-                  compute-step-result
-                  iteration-ctx
-                  step-result)
+         (only-in "../agent/iteration/decision.rkt" decide-next-action compute-step-result)
+         (only-in "../util/iteration/decision.rkt" iteration-ctx step-result)
          (only-in "../agent/iteration/loop-state.rkt"
                   make-initial-counters
                   loop-infra
@@ -52,18 +49,15 @@
                   cancel-token!
                   cancellation-token-cancelled?)
          (only-in "../util/event/event.rkt" event-ev)
-         (only-in "../runtime/iteration/decision.rkt" step-result)
+         (only-in "../util/iteration/decision.rkt" step-result)
          (only-in "../runtime/iteration/step-executor.rkt"
                   handle-stop-action
                   interpret-step
                   execute-pending-tool-calls)
          (only-in "../agent/iteration/counters.rkt" compute-next-counters check-cancellation)
-         (only-in "../runtime/iteration/decision.rkt"
-                  decide-next-action
-                  compute-step-result
-                  iteration-ctx
-                  step-result)
-         (only-in "../runtime/iteration/directive.rkt"
+         (only-in "../agent/iteration/decision.rkt" decide-next-action compute-step-result)
+         (only-in "../util/iteration/decision.rkt" iteration-ctx step-result)
+         (only-in "../util/iteration/directive.rkt"
                   directive-recurse?
                   directive-stop?
                   directive-recurse-new-ctx
