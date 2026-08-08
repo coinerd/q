@@ -8,6 +8,8 @@
          (only-in "../../llm/token-budget.rkt" estimate-context-tokens)
          (only-in "../../util/content/content-parts.rkt" text-part?)
          (only-in "../../util/message/message.rkt" message? message-content message-role)
+         (only-in "config.rkt" current-conclusion-token-budget)
+         (only-in "rollback-actions.rkt" effective-conclusion-budget current-rollback-state)
          (only-in "../../util/content/content-parts.rkt" text-part-text)
          "context-floor.rkt"
          "state-aware-builder.rkt")
@@ -112,7 +114,9 @@
   (define tier-b-tokens (measure-context-size (tiered-context-tier-b tc)))
   (define tier-c-tokens (measure-context-size (tiered-context-tier-c tc)))
   (define conc-tokens (measure-context-size conclusion-messages))
-  (define budget (current-conclusion-token-budget))
+  ;; v0.99.88: Use effective budget (base + rollback expansion) for remaining computation.
+  (define budget
+    (effective-conclusion-budget (or (current-conclusion-token-budget) 0) (current-rollback-state)))
   (define remaining
     (if (> budget 0)
         (- budget conc-tokens)

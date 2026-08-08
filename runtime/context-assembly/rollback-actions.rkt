@@ -562,5 +562,5 @@
           [tool-error-class->string (-> string? string?)]
           [effective-auto-distill? (-> boolean? rollback-state? boolean?)]
           [effective-conclusion-budget
-           (-> exact-positive-integer? rollback-state? exact-positive-integer?)]
+           (-> exact-nonnegative-integer? rollback-state? exact-nonnegative-integer?)]
           [advance-rollback-state (-> rollback-state? (or/c rollback-plan? #f) rollback-state?)]))

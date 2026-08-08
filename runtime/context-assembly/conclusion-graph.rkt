@@ -12,7 +12,8 @@
          racket/list
          "task-conclusion.rkt"
          (only-in "conclusion-ranker.rkt" rank-and-budget)
-         (only-in "config.rkt" current-conclusion-token-budget))
+         (only-in "config.rkt" current-conclusion-token-budget)
+         (only-in "rollback-actions.rkt" effective-conclusion-budget current-rollback-state))
 
 ;; ── Struct ──
 
@@ -159,7 +160,10 @@
           (filter (λ (c) (hash-has-key? state-set (task-conclusion-fsm-state-origin c)))
                   conclusions))))
   ;; Delegate to rank-and-budget for consistent multi-factor scoring
-  (define budget (or (current-conclusion-token-budget) (* max-count 200)))
+  ;; v0.99.88: Use effective budget (base config + rollback expansion).
+  (define budget
+    (effective-conclusion-budget (or (current-conclusion-token-budget) (* max-count 200))
+                                 (current-rollback-state)))
   (define ranked
     (rank-and-budget filtered
                      #:current-state (and (pair? states) (car states))

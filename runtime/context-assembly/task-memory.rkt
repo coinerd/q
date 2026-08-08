@@ -15,7 +15,8 @@
                   graph-select-by-seeds
                   graph-detect-cycles)
          (only-in "conclusion-ranker.rkt" rank-and-budget)
-         (only-in "config.rkt" current-conclusion-token-budget))
+         (only-in "config.rkt" current-conclusion-token-budget)
+         (only-in "rollback-actions.rkt" effective-conclusion-budget current-rollback-state))
 
 ;; ── Struct ──
 
@@ -103,10 +104,14 @@
     [(null? concs) '()]
     ;; Degraded fallback: no seeds, use semantic ranking
     ;; GAP-D v0.97.10: Use canonical budget parameter instead of magic 200
+    ;; v0.99.88: Use effective budget (base config + rollback expansion).
     [(null? seed-ids)
      (take-at-most (rank-and-budget concs
                                     #:current-state state
-                                    #:max-conclusion-tokens (current-conclusion-token-budget))
+                                    #:max-conclusion-tokens
+                                    (effective-conclusion-budget (or (current-conclusion-token-budget)
+                                                                     2000)
+                                                                 (current-rollback-state)))
                    max-count)]
     [else
      (define g (build-conclusion-graph concs))
@@ -114,11 +119,15 @@
      (cond
        ;; Degraded fallback: graph has cycles, use semantic ranking
        ;; GAP-D v0.97.10: Use canonical budget parameter
+       ;; v0.99.88: Use effective budget (base config + rollback expansion).
        [(pair? cycles)
-        (take-at-most (rank-and-budget concs
-                                       #:current-state state
-                                       #:max-conclusion-tokens (current-conclusion-token-budget))
-                      max-count)]
+        (take-at-most
+         (rank-and-budget concs
+                          #:current-state state
+                          #:max-conclusion-tokens
+                          (effective-conclusion-budget (or (current-conclusion-token-budget) 2000)
+                                                       (current-rollback-state)))
+         max-count)]
        [else
         (define selected-ids (graph-select-by-seeds g seed-ids))
         (define id-set

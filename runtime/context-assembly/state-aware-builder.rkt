@@ -51,6 +51,7 @@
                   maybe-execute-action
                   execute-rollback-plan!
                   apply-rollback-plan!
+                  effective-conclusion-budget
                   current-force-distill-fn
                   current-expand-context-fn
                   current-revert-state-fn
@@ -114,6 +115,14 @@
   (define ws-level (and state-name (context-level-for-state state-name 'working-set)))
   (define conclusions-level (and state-name (context-level-for-state state-name 'conclusions)))
 
+  ;; v0.99.88: Compute effective conclusion budget from base config + rollback state.
+  ;; current-conclusion-token-budget is base configuration ONLY.
+  ;; rollback-state.budget-expansion-level is rollback expansion ONLY.
+  ;; effective-conclusion-budget is the single combination point.
+  (define effective-budget
+    (effective-conclusion-budget (or (current-conclusion-token-budget) 2000)
+                                 (current-rollback-state)))
+
   ;; Adjust working-set based on state relevance
   ;; v0.76.4: conclusion-first replacement when filtered/excluded
   (define effective-ws
@@ -168,7 +177,7 @@
                     (length cycles))
           (rank-and-budget conclusions
                            #:current-state (and (pair? current-states) (car current-states))
-                           #:max-conclusion-tokens (or (current-conclusion-token-budget) 2000))]
+                           #:max-conclusion-tokens effective-budget)]
          [else
           ;; Seed-based subgraph selection (v0.77.10 M4: uses convenience wrapper)
           (define selected-conclusions (graph-select-conclusions graph seed-ids))
@@ -176,7 +185,7 @@
               ;; GAP-D v0.97.9: No seeds matched — use semantic ranking instead of recency
               (rank-and-budget conclusions
                                #:current-state (and (pair? current-states) (car current-states))
-                               #:max-conclusion-tokens (or (current-conclusion-token-budget) 2000))
+                               #:max-conclusion-tokens effective-budget)
               selected-conclusions)])]))
 
   ;; GAP-4: Extract active tags from working-set messages for tag-based ranking
@@ -205,7 +214,7 @@
 
   ;; v0.77.9 T1.2: Apply rank-and-budget when budget is configured (>0)
   (define budgeted-conclusions
-    (let ([budget (current-conclusion-token-budget)])
+    (let ([budget effective-budget])
       (if (and budget (> budget 0) (pair? effective-conclusions))
           (rank-and-budget effective-conclusions
                            #:current-state state-name
@@ -377,10 +386,9 @@
             (lambda (a) (log-warning "context-assembly: force-distill activated via rollback state"))]
            [current-expand-context-fn
             (lambda (a)
-              (define current-budget (current-conclusion-token-budget))
-              (define expanded (* current-budget 2))
-              (log-warning "context-assembly: expanding budget ~a -> ~a" current-budget expanded)
-              (current-conclusion-token-budget expanded))]
+              ;; v0.99.88: Budget expansion tracked in rollback-state.budget-expansion-level.
+              ;; No longer mutates current-conclusion-token-budget.
+              (log-warning "context-assembly: expand-context activated via rollback state"))]
            [current-revert-state-fn
             (lambda (a)
               (log-warning "context-assembly: revert-state action triggered: ~a"
