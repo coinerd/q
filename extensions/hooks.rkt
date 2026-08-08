@@ -41,7 +41,10 @@
          critical-hook?
          critical-hooks
          ;; Hook block guard helper (RA-31)
-         with-hook-block-guard)
+         with-hook-block-guard
+         ;; Safe dispatch wrapper (null-safe)
+         (contract-out [maybe-dispatch-hooks
+                        (->* (any/c any/c any/c) (#:ctx any/c) (values any/c any/c))]))
 
 ;; ============================================================
 ;; Hook criticality classification (#670, #671)
@@ -136,3 +139,15 @@
     [_ (on-pass)]))
 
 ;; v0.31.x milestone placeholder
+
+;; ============================================================
+;; Safe dispatch wrapper
+;; ============================================================
+
+;; Safely dispatch hooks if extension-registry is present.
+;; Returns (values amended-payload hook-result) or (values payload #f) if no registry.
+(define (maybe-dispatch-hooks ext-reg hook-point payload #:ctx [ctx #f])
+  (if ext-reg
+      (let ([result (dispatch-hooks hook-point payload ext-reg #:ctx ctx)])
+        (values (hook-result-payload result) result))
+      (values payload #f)))

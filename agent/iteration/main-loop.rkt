@@ -26,10 +26,9 @@
                   loop-counters-explore-count
                   loop-counters
                   loop-counters-stall-retry-count)
-         (only-in "../../agent/state.rkt" current-empty-response-retried?)
-         (only-in "../../util/content/content-parts.rkt" make-text-part)
          (only-in "../../util/loop-result.rkt" make-loop-result loop-result-messages)
-         (only-in "../../util/message/message.rkt" message? make-message)
+         (only-in "../../agent/state.rkt" current-empty-response-retried?)
+         (only-in "../../util/message/message.rkt" message?)
          (only-in "../../util/loop-result.rkt" loop-result-termination-reason loop-result-metadata)
          (only-in "../../util/ids.rkt" generate-id)
          (only-in "../event-emitter.rkt" emit-typed-event!)
@@ -37,8 +36,8 @@
          (only-in "../event-structs/iteration-events.rkt" make-iteration-decision-event)
          (only-in "../queue.rkt" queue-status queue? dequeue-followup! dequeue-all-followups!)
          (only-in "tool-turn-bridge.rkt" dequeue-all-steering! drain-injected-messages!)
-         (only-in "../../runtime/session/session-store.rkt" append-entries!)
-         (only-in "../../runtime/runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
+         (only-in "../event-emitter.rkt" emit-session-event!)
+         (only-in "../../extensions/hooks.rkt" maybe-dispatch-hooks)
          (only-in "../../util/hook-types.rkt" hook-result-action hook-result?)
          (only-in "../../util/event/event-contracts.rkt"
                   injection-count-payload/c
@@ -69,7 +68,6 @@
                   compute-step-result
                   step-result-metadata
                   step-result-new-counters)
-         (only-in "../../runtime/iteration/step-executor.rkt" interpret-step)
          (only-in "../../runtime/iteration/directive.rkt"
                   directive-recurse
                   directive-stop
@@ -111,6 +109,7 @@
                   loop-config-session
                   loop-config-build-context-fn
                   loop-config-run-provider-turn-fn
+                  loop-config-interpret-step-fn
                   make-loop-config))
 
 (provide (contract-out [run-iteration-loop/v2 (-> loop-config? loop-result?)]))
@@ -152,6 +151,10 @@
       (or (loop-config-run-provider-turn-fn cfg)
           (error 'run-iteration-loop/v2
                  "run-provider-turn-fn not supplied; use wiring layer to construct loop-config")))
+    (define interpret-step-fn
+      (or (loop-config-interpret-step-fn cfg)
+          (error 'run-iteration-loop/v2
+                 "interpret-step-fn not supplied; use wiring layer to construct loop-config")))
     (define max-iterations-hard (resolve-max-iterations-hard config max-iterations))
     (define context-budget
       (or (config-token-budget-threshold config) (config-max-context-tokens config)))
@@ -286,52 +289,12 @@
                         "Consecutive tool-call limit reached; stopping to avoid an unbounded tool loop.")))
                     (define snapshot
                       (iteration-snapshot counters ws config sess max-iterations max-iterations-hard))
-                    ;; v0.99.83 W2: Empty-response auto-retry — intercept and inject nudge
-                    (define empty-response?
-                      (hash-ref (step-result-metadata step-res) 'emptyResponse #f))
-                    (define retried? (current-empty-response-retried?))
                     (define directive
-                      (cond
-                        [(and empty-response? (not retried?))
-                         ;; First empty-response: inject nudge and retry
-                         (let ([nudge-msg
-                                (make-message
-                                 (format "empty-response-nudge-~a" (gensym))
-                                 #f
-                                 'user
-                                 'message
-                                 (list (make-text-part
-                                        (string-append
-                                         "Your previous response contained extensive reasoning "
-                                         "but produced no output. Please provide a direct response "
-                                         "or tool call.")))
-                                 (current-seconds)
-                                 (hasheq 'ephemeral #t))])
-                           (emit-session-event! bus
-                                                session-id
-                                                "runtime.empty-response.retry"
-                                                (hasheq 'message "Retrying with output nudge."))
-                           (current-empty-response-retried? #t)
-                           ;; Persist the empty-response assistant message to session log
-                           (append-entries! log-path new-msgs)
-                           (directive-recurse (append new-msgs (list nudge-msg))
-                                              (make-next-counters (step-result-new-counters step-res))
-                                              ws))]
-                        [(and empty-response? retried?)
-                         ;; Retry exhausted: stop with empty-response termination
-                         (emit-session-event!
-                          bus
-                          session-id
-                          "runtime.empty-response.retry-exhausted"
-                          (hasheq 'message "Empty response retry limit reached, completing."))
-                         (directive-stop result)]
-                        [else
-                         ;; Normal continue
-                         (interpret-step step-res
+                      (interpret-step-fn step-res
                                          result
                                          new-msgs
                                          (struct-copy loop-infra infra [ctx ctx-with-injected])
-                                         snapshot)]))
+                                         snapshot))
                     (match directive
                       [(directive-stop final-result)
                        ;; R-06/R-07: FSM: decision + termination -> complete

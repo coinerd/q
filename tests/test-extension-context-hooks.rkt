@@ -15,7 +15,7 @@
          "../extensions/hooks.rkt"
          "../extensions/api.rkt"
          "../extensions/context.rkt"
-         (only-in "../runtime/runtime-helpers.rkt" maybe-dispatch-hooks)
+         ;; maybe-dispatch-hooks is now provided by extensions/hooks.rkt above
          "../util/hook-types.rkt"
          (only-in "../extensions/gsd/session-state.rkt"
                   make-gsd-context

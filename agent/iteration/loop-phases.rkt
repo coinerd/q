@@ -21,7 +21,8 @@
                   loop-config-session-id
                   loop-config?)
          (only-in "../queue.rkt" queue? queue-status)
-         (only-in "../../runtime/runtime-helpers.rkt" maybe-dispatch-hooks emit-session-event!)
+         (only-in "../event-emitter.rkt" emit-session-event!)
+         (only-in "../../extensions/hooks.rkt" maybe-dispatch-hooks)
          (only-in "../../util/hook-types.rkt" hook-result-action hook-result?)
          (only-in "../../runtime/layer-adapters.rkt" extension-registry?)
          (only-in "../../runtime/iteration/internal.rkt" assert-payload)

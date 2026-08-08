@@ -11,6 +11,7 @@
 (require (prefix-in ml: "../../agent/iteration/main-loop.rkt")
          (only-in "../../agent/iteration/loop-config.rkt" make-loop-config)
          (only-in "../../runtime/turn-orchestrator.rkt" run-provider-turn build-assembled-context)
+         (only-in "../../runtime/iteration/step-executor.rkt" interpret-step)
          (only-in "../../runtime/session/session-config.rkt" hash->session-config)
          (only-in "../../util/loop-result.rkt" loop-result?))
 
@@ -49,4 +50,5 @@
                                               #:working-set initial-ws
                                               #:session sess
                                               #:build-context-fn build-assembled-context
-                                              #:run-provider-turn-fn run-provider-turn)))
+                                              #:run-provider-turn-fn run-provider-turn
+                                              #:interpret-step-fn interpret-step)))

@@ -57,18 +57,56 @@
 (define (file-contains? path pattern)
   (and (file-exists? path) (string-contains? (file->string path) pattern)))
 
-(test-case "agent/iteration/ does not import runtime/tool-coordinator (except counters.rkt)"
-  ;; counters.rkt has a pre-existing coupling for extract-tool-calls-from-messages
-  ;; This is documented as remaining technical debt.
+(test-case "agent/iteration/ does not import runtime/tool-coordinator"
+  ;; v0.99.86: extract-tool-calls-from-messages moved to util/tool/tool-extract.rkt
   (define files (rkt-files-in-dir "agent/iteration"))
   (define violations
     (for/list ([f files]
-               #:when (and (file-contains? f "tool-coordinator")
-                           (not (string-contains? (path->string f) "counters.rkt"))))
+               #:when (file-contains? f "tool-coordinator"))
       (path->string f)))
   (check-equal? violations
                 '()
                 (format "agent/iteration/ still imports tool-coordinator: ~a" violations)))
+
+(test-case "agent/iteration/ does not import runtime/session-store"
+  (define files (rkt-files-in-dir "agent/iteration"))
+  (define violations
+    (for/list ([f files]
+               #:when (file-contains? f "session-store"))
+      (path->string f)))
+  (check-equal? violations
+                '()
+                (format "agent/iteration/ still imports session-store: ~a" violations)))
+
+(test-case "agent/iteration/ does not import runtime/runtime-helpers"
+  (define files (rkt-files-in-dir "agent/iteration"))
+  (define violations
+    (for/list ([f files]
+               #:when (file-contains? f "runtime-helpers"))
+      (path->string f)))
+  (check-equal? violations
+                '()
+                (format "agent/iteration/ still imports runtime-helpers: ~a" violations)))
+
+(test-case "agent/iteration/ does not import runtime/iteration/step-executor"
+  (define files (rkt-files-in-dir "agent/iteration"))
+  (define violations
+    (for/list ([f files]
+               #:when (file-contains? f "step-executor"))
+      (path->string f)))
+  (check-equal? violations
+                '()
+                (format "agent/iteration/ still imports step-executor: ~a" violations)))
+
+(test-case "agent/iteration/ does not import runtime/context/context-policy"
+  (define files (rkt-files-in-dir "agent/iteration"))
+  (define violations
+    (for/list ([f files]
+               #:when (file-contains? f "context-policy"))
+      (path->string f)))
+  (check-equal? violations
+                '()
+                (format "agent/iteration/ still imports context-policy: ~a" violations)))
 
 (test-case "agent/iteration/ does not import runtime/compaction/"
   (define files (rkt-files-in-dir "agent/iteration"))

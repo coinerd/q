@@ -17,7 +17,7 @@
          "../event-bus.rkt"
          (only-in "../queue.rkt" dequeue-steering! dequeue-followup! dequeue-all-followups!)
          "../../runtime/working-set.rkt"
-         (only-in "../../runtime/context/context-policy.rkt" estimate-message-tokens)
+         (only-in "../../util/token-estimate.rkt" estimate-message-tokens)
          (only-in "../../util/event/event-types.rkt" injection-event-topic)
          (only-in "../../util/shared.rkt" take-at-most))
 

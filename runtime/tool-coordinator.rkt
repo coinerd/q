@@ -34,9 +34,13 @@
                   config-project-dir)
          (only-in "../util/tool/tool-types.rkt" tool-call?)
          (only-in "layer-adapters.rkt" tool-result? tool-registry?)
-         (only-in "../util/json/json-helpers.rkt" ensure-hash-args)
          (only-in "../util/content/content-parts.rkt" make-tool-result-part tool-call-part?)
          (only-in "../util/event/event.rkt" make-event)
+         ;; Pure extraction utilities (moved to util/tool/tool-extract.rkt)
+         (only-in "../util/tool/tool-extract.rkt"
+                  extract-tool-calls-from-messages
+                  find-malformed-tool-calls
+                  parse-tool-call-args)
          (only-in "../util/message/message.rkt"
                   message?
                   message-id
@@ -210,44 +214,8 @@
       (tool-call-actions '() #t tool-calls)
       (tool-call-actions amended #f '())))
 
-;; Extract tool-call structs from assistant messages.
-;; Returns the parsed args hash for a tool-call part, or #f when the arguments
-;; are malformed JSON. v0.99.78 Bug A: malformed model-emitted arguments must
-;; not raise here — callers turn them into visible error results so the model
-;; can retry with corrected JSON instead of killing the turn.
-(define (parse-tool-call-args raw)
-  (with-handlers ([exn:fail? (lambda (_) #f)])
-    (ensure-hash-args raw)))
-
-(define (extract-tool-calls-from-messages messages)
-  (for*/list ([msg (in-list messages)]
-              #:when (eq? (message-role msg) 'assistant)
-              [part (in-list (message-content msg))]
-              #:when (tool-call-part? part)
-              [parsed (in-value (parse-tool-call-args (tool-call-part-arguments part)))]
-              #:when parsed)
-    (make-tool-call (tool-call-part-id part) (tool-call-part-name part) parsed)))
-
-;; v0.99.78 Bug A: locate assistant tool-call parts whose arguments are not
-;; valid JSON. Returns (listof (hash 'id _ 'name _ 'raw _)) in message order.
-;; The turn must not die on these: the coordinator emits an error tool-result
-;; for each so the model sees the parse failure and can correct itself.
-(define (find-malformed-tool-calls messages)
-  (for*/list ([msg (in-list messages)]
-              #:when (eq? (message-role msg) 'assistant)
-              [part (in-list (message-content msg))]
-              #:when (tool-call-part? part)
-              [parsed (in-value (parse-tool-call-args (tool-call-part-arguments part)))]
-              #:when (not parsed))
-    (define raw (tool-call-part-arguments part))
-    (hasheq 'id
-            (tool-call-part-id part)
-            'name
-            (tool-call-part-name part)
-            'raw
-            (if (string? raw)
-                raw
-                (format "~a" raw)))))
+;; extract-tool-calls-from-messages, find-malformed-tool-calls, and
+;; parse-tool-call-args are now imported from util/tool/tool-extract.rkt
 
 ;; True for read results whose contents are durable planning artifacts.
 ;; planning-read addresses .planning indirectly by artifact name, while the
