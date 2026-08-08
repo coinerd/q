@@ -6,7 +6,9 @@
 (provide (struct-out lifecycle-state)
          make-lifecycle-state
          lifecycle-state-closed?
-         set-lifecycle-state-closed?!)
+         set-lifecycle-state-closed?!
+         lifecycle-state-rollback-st
+         set-lifecycle-state-rollback-st!)
 
 ;; Lifecycle state: mutable flags that track session lifecycle.
 ;; Extracted from agent-session (24 fields → 15 fields + this struct).
@@ -23,9 +25,12 @@
          [task-fsm-state #:mutable] ; symbol or #f — current task FSM state
          [task-conclusions #:mutable] ; (listof task-conclusion?) — agent task conclusions
          [recent-tool-calls #:mutable] ; (listof symbol?) — recent tool call history
-         [closed? #:mutable]) ; boolean — guard against repeated close
+         [closed? #:mutable] ; boolean — guard against repeated close
+         [rollback-st #:mutable]) ; rollback-state? — per-session rollback state (v0.99.86)
   #:transparent)
 
 ;; Constructor: create a lifecycle-state with safe defaults.
+;; rollback-st defaults to #f; the session lifecycle layer initializes it
+;; from make-default-rollback-state at session creation time.
 (define (make-lifecycle-state)
-  (lifecycle-state #f #f #f #f #f #f 'idle '() '() #f))
+  (lifecycle-state #f #f #f #f #f #f 'idle '() '() #f #f))
