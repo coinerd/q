@@ -398,7 +398,7 @@
                          #:queue (make-queue)
                          #:config cfg
                          #:thinking-level (config-thinking-level cfg)
-                         #:lifecycle (lifecycle-state #f #f #t #f #f #f #f '() '() #f #f)))
+                         #:lifecycle (lifecycle-state #f #f #t #f #f #f #f '() '() #f #f #f #f)))
 
   ;; v0.75.6: Load persisted task state and conclusions
   (when (file-exists? log-path)
@@ -498,7 +498,7 @@
                          #:queue (make-queue)
                          #:config (agent-session-config sess)
                          #:thinking-level (agent-session-thinking-level sess)
-                         #:lifecycle (lifecycle-state #f #f #t #f #f #f #f '() '() #f #f)))
+                         #:lifecycle (lifecycle-state #f #f #t #f #f #f #f '() '() #f #f #f #f)))
 
   (emit-session-event!
    (agent-session-event-bus sess)

@@ -56,7 +56,6 @@
          racket/set
          (only-in "../../util/ids.rkt" generate-id)
          (only-in "../context-assembly/session-walk.rkt" build-session-context)
-         (only-in "../context-assembly/turn-context.rkt" current-pending-force-reset)
          (only-in "../trace-logger.rkt" make-trace-logger start-trace-logger! stop-trace-logger!)
          "session-interruption.rkt"
          (only-in "../../util/event/event.rkt" make-event event-session-id event-turn-id))
@@ -462,9 +461,10 @@
                   (define payload (event-payload evt))
                   (define target (and (hash? payload) (hash-ref payload 'target-state #f)))
                   (define force-reset-val (and (hash? payload) (hash-ref payload 'force-reset #f)))
-                  ;; R0: Set pending force-reset flag for turn-context to consume
+                  ;; R0: Set pending force-reset flag on session lifecycle state.
+                  ;; v0.99.88: Session-owned via lifecycle-state instead of global parameter.
                   (when force-reset-val
-                    (current-pending-force-reset #t))
+                    (set-lifecycle-state-pending-force-reset?! (agent-session-lifecycle sess) #t))
                   (when (and target (or (string? target) (symbol? target)))
                     (define target-sym
                       (if (string? target)

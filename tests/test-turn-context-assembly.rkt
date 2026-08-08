@@ -94,8 +94,7 @@
   (define src (file->string turn-context-path))
   (for ([name '("symbol->task-state" "assemble-context/pure"
                                      "prepare-turn-context-state"
-                                     "emit-context-assembly-events!"
-                                     "current-last-task-fsm-state")])
+                                     "emit-context-assembly-events!")])
     (check-true (string-contains? src name) (format "turn-context.rkt should provide ~a" name))))
 
 (test-case "W2: turn-context.rkt defines the extracted functions"

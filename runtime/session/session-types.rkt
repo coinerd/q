@@ -28,7 +28,9 @@
                   set-lifecycle-state-task-conclusions!
                   set-lifecycle-state-recent-tool-calls!
                   lifecycle-state-rollback-st
-                  set-lifecycle-state-rollback-st!)
+                  set-lifecycle-state-rollback-st!
+                  lifecycle-state-pending-force-reset?
+                  set-lifecycle-state-pending-force-reset?!)
          racket/file)
 ;; STABILITY: internal
 ;;
@@ -74,6 +76,8 @@
          lifecycle-state?
          lifecycle-state-rollback-st
          set-lifecycle-state-rollback-st!
+         lifecycle-state-pending-force-reset?
+         set-lifecycle-state-pending-force-reset?!
          (contract-out [session-log-path-for (-> agent-session? path?)]
                        [session-provider (-> agent-session? any/c)]
                        [session-tool-registry (-> agent-session? any/c)]

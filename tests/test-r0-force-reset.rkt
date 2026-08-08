@@ -2,12 +2,14 @@
 
 ;; tests/test-r0-force-reset.rkt
 ;; R2: Test coverage for force-reset event flow and default budget
+;; v0.99.88: Rewritten for session-owned cross-turn state (lifecycle-state).
 ;;
 ;; Covers:
-;;   - Event flow: tool.set-task-state.completed with force-reset=true
-;;     -> current-pending-force-reset set -> prepare-turn-context-state
-;;     -> reset-working-set! called
-;;   - Current-memory-injection-budget default is 500
+;;   - Force-reset lifecycle: produce (session-events) → pending →
+;;     consume (prepare-turn-context-state) → reset → cleared
+;;   - Session isolation: two sessions don't interfere
+;;   - One-shot consumption: signal is consumed exactly once
+;;   - Default memory-injection-budget is 500
 
 ;; @speed fast  ;; @suite runtime
 
@@ -16,116 +18,107 @@
          "../util/event/event-bus.rkt"
          "../util/event/event.rkt"
          "../runtime/working-set.rkt"
-         (only-in "../runtime/context-assembly/turn-context.rkt"
-                  current-pending-force-reset
-                  prepare-turn-context-state
-                  assemble-context/pure
-                  current-last-task-fsm-state)
+         "../runtime/session/lifecycle-state.rkt"
          (only-in "../runtime/context-assembly/memory-builder.rkt" current-memory-injection-budget))
 
 ;; ============================================================
-;; Helper: minimal session fixture for prepare-turn-context-state
+;; Tests
 ;; ============================================================
-
-(struct test-fsm-state (current) #:transparent)
-
-(define (make-minimal-session)
-  (define bus (make-event-bus))
-  (hasheq 'event-bus bus 'session-id "test-r0" 'task-fsm-state (test-fsm-state #f) 'conclusions '()))
 
 (define r0-tests
   (test-suite "r0-tests"
 
     ;; ============================================================
-    ;; R2a: Event flow — force-reset triggers working-set reset
+    ;; R2a: Force-reset lifecycle via session-owned state
     ;; ============================================================
 
-    (test-suite "r0-force-reset-flow"
+    (test-suite "r0-force-reset-lifecycle"
 
-      (test-case "force-reset=true sets current-pending-force-reset"
-        (define bus (make-event-bus))
-        ;; Reset state before test
-        (current-pending-force-reset #f)
-        ;; Subscribe to simulate session-event handler behavior:
-        ;; When tool.set-task-state.completed arrives with force-reset,
-        ;; set current-pending-force-reset
-        (subscribe! bus
-                    (lambda (evt)
-                      (define payload (event-payload evt))
-                      (define force-reset-val
-                        (and (hash? payload) (hash-ref payload 'force-reset #f)))
-                      (when force-reset-val
-                        (current-pending-force-reset #t))))
-        ;; Publish event as if set-task-state sent it
-        (publish! bus
-                  (make-event
-                   "tool.set-task-state.completed"
-                   (current-inexact-milliseconds)
-                   ""
-                   "test-r0"
-                   (hasheq 'target-state "exploration" 'event-name "begin-explore" 'force-reset #t)))
-        ;; Allow subscriber to run
-        (collect-garbage)
-        (check-true (current-pending-force-reset) "force-reset=true should set pending flag"))
+      (test-case "consume-pending-force-reset! returns #f when not set"
+        (define ls (make-lifecycle-state))
+        (check-false (consume-pending-force-reset! ls)))
 
-      (test-case "force-reset=false does not set current-pending-force-reset"
-        (define bus (make-event-bus))
-        (current-pending-force-reset #f)
-        (subscribe! bus
-                    (lambda (evt)
-                      (define payload (event-payload evt))
-                      (define force-reset-val
-                        (and (hash? payload) (hash-ref payload 'force-reset #f)))
-                      (when force-reset-val
-                        (current-pending-force-reset #t))))
-        (publish! bus
-                  (make-event "tool.set-task-state.completed"
-                              (current-inexact-milliseconds)
-                              ""
-                              "test-r0"
-                              (hasheq 'target-state "exploration" 'event-name "begin-explore")))
-        (collect-garbage)
-        (check-false (current-pending-force-reset) "force-reset absent should not set pending flag"))
+      (test-case "consume-pending-force-reset! returns #t and clears when set"
+        (define ls (make-lifecycle-state))
+        (set-lifecycle-state-pending-force-reset?! ls #t)
+        (check-true (consume-pending-force-reset! ls))
+        ;; Second call should return #f — one-shot
+        (check-false (consume-pending-force-reset! ls)))
 
-      (test-case "prepare-turn-context-state resets working-set when force-reset is pending"
+      (test-case "set + consume + verify cleared (full lifecycle)"
+        (define ls (make-lifecycle-state))
+        ;; Initially false
+        (check-false (lifecycle-state-pending-force-reset? ls))
+        ;; Producer sets it
+        (set-lifecycle-state-pending-force-reset?! ls #t)
+        (check-true (lifecycle-state-pending-force-reset? ls))
+        ;; Consumer reads and clears
+        (check-true (consume-pending-force-reset! ls))
+        (check-false (lifecycle-state-pending-force-reset? ls)))
+
+      (test-case "force-reset resets working-set entries"
         (define ws (make-working-set))
-        (define path "/tmp/test-r0-file.rkt")
-        (current-pending-force-reset #t)
-        ;; Add an entry to the working set
-        (working-set-add! ws path "test-msg-id" 100)
-        (check-equal? (working-set-entry-count ws)
-                      1
-                      "working-set should have 1 entry before force-reset")
-        ;; Call the force-reset handler (the logic in prepare-turn-context-state):
-        ;; Check pending flag and reset if set
-        (when (current-pending-force-reset)
-          (working-set-reset! ws)
-          (current-pending-force-reset #f))
-        (check-equal? (working-set-entry-count ws) 0 "working-set should be empty after force-reset")
-        (check-false (current-pending-force-reset) "pending flag should be cleared after reset"))
-
-      (test-case "force-reset clears existing working-set entries (multi-entry test)"
-        (define ws (make-working-set))
-        (current-pending-force-reset #t)
-        ;; Add multiple entries
+        (define ls (make-lifecycle-state))
+        ;; Set pending
+        (set-lifecycle-state-pending-force-reset?! ls #t)
+        ;; Add entries
         (working-set-add! ws "/tmp/a.rkt" "msg-a" 50)
         (working-set-add! ws "/tmp/b.rkt" "msg-b" 75)
+        (check-equal? (working-set-entry-count ws) 2)
+        ;; Consume signal and reset
+        (when (consume-pending-force-reset! ls)
+          (working-set-reset! ws))
+        (check-equal? (working-set-entry-count ws) 0)
+        ;; Signal is consumed
+        (check-false (lifecycle-state-pending-force-reset? ls)))
+
+      (test-case "one-shot: second consume after reset returns #f"
+        (define ws (make-working-set))
+        (define ls (make-lifecycle-state))
+        (set-lifecycle-state-pending-force-reset?! ls #t)
+        (when (consume-pending-force-reset! ls)
+          (working-set-reset! ws))
+        ;; Add more entries
         (working-set-add! ws "/tmp/c.rkt" "msg-c" 25)
-        (check-equal? (working-set-entry-count ws) 3)
-        ;; Apply force-reset
-        (when (current-pending-force-reset)
-          (working-set-reset! ws)
-          (current-pending-force-reset #f))
-        (check-equal? (working-set-entry-count ws) 0 "all entries should be cleared")))
+        ;; Second consume should NOT trigger reset
+        (when (consume-pending-force-reset! ls)
+          (working-set-reset! ws))
+        (check-equal? (working-set-entry-count ws) 1 "second consume should not reset")))
 
     ;; ============================================================
-    ;; R2b: Default memory-injection-budget is 500
+    ;; R2b: Session isolation
+    ;; ============================================================
+
+    (test-suite "r0-session-isolation"
+
+      (test-case "two sessions have independent pending-force-reset"
+        (define ls-a (make-lifecycle-state))
+        (define ls-b (make-lifecycle-state))
+        ;; Session A gets a force-reset
+        (set-lifecycle-state-pending-force-reset?! ls-a #t)
+        ;; Session B should not see it
+        (check-true (lifecycle-state-pending-force-reset? ls-a))
+        (check-false (lifecycle-state-pending-force-reset? ls-b))
+        ;; Session B consuming should NOT affect session A
+        (check-false (consume-pending-force-reset! ls-b))
+        (check-true (lifecycle-state-pending-force-reset? ls-a) "session A flag should still be set"))
+
+      (test-case "two sessions have independent prev-task-fsm-state"
+        (define ls-a (make-lifecycle-state))
+        (define ls-b (make-lifecycle-state))
+        ;; Session A transitions to 'planning
+        (set-lifecycle-state-prev-task-fsm-state! ls-a 'planning)
+        ;; Session B should not see it
+        (check-eq? (lifecycle-state-prev-task-fsm-state ls-a) 'planning)
+        (check-false (lifecycle-state-prev-task-fsm-state ls-b))))
+
+    ;; ============================================================
+    ;; R2c: Default memory-injection-budget is 500
     ;; ============================================================
 
     (test-suite "r0-default-budget"
 
       (test-case "current-memory-injection-budget defaults to 500"
-        ;; Make sure no stale parameterize is active
         (check-equal? (current-memory-injection-budget) 500 "default budget should be 500"))
 
       (test-case "current-memory-injection-budget can be parameterized"
