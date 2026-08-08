@@ -10,6 +10,10 @@
 ;; v0.45.12 M2: emit-session-event! moved to agent/event-emitter.rkt to fix
 ;; layer violation (agent core should not import from runtime). Re-exported
 ;; here for backward compatibility with existing runtime callers.
+;;
+;; v0.99.86: maybe-dispatch-hooks canonical definition moved to
+;; extensions/hooks.rkt. This file re-exports it for backward compatibility
+;; with existing Runtime callers, going through layer-adapters.rkt.
 
 (require racket/contract
          (only-in "../agent/event-emitter.rkt" emit-session-event!)
@@ -22,9 +26,9 @@
          (contract-out [maybe-dispatch-hooks
                         (->* (any/c any/c any/c) (#:ctx any/c) (values any/c any/c))]))
 
-;; emit-session-event! is now defined in agent/event-emitter.rkt
-;; and re-exported here for backward compatibility.
-;; Runtime callers can continue importing from runtime-helpers.rkt.
+;; emit-session-event! is defined in agent/event-emitter.rkt
+;; maybe-dispatch-hooks is defined here using dispatch-hooks from
+;; layer-adapters.rkt (the documented adapter boundary).
 
 ;; Safely dispatch hooks if extension-registry is present.
 ;; Returns (values amended-payload hook-result) or (values payload #f) if no registry.

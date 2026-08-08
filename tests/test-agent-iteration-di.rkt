@@ -22,11 +22,12 @@
                   make-loop-result)
          (only-in "../util/message/message.rkt" make-message)
          (only-in "../util/content/content-parts.rkt" make-text-part)
-         (only-in "../runtime/session/session-config.rkt" hash->session-config))
+         (only-in "../runtime/session/session-config.rkt" hash->session-config)
+         (only-in "../runtime/iteration/directive.rkt" directive-stop))
 
 ;; ============================================================
 ;; Fake implementations — no runtime/turn-orchestrator.rkt needed
-;; ============================================================
+;; =============================================================
 
 ;; Fake context assembler: returns the context unchanged
 (define (fake-build-context ctx config ext-reg bus session-id iteration #:session [session #f])
@@ -43,6 +44,10 @@
                   (current-seconds)
                   (hasheq)))
   (make-loop-result (list msg) 'completed (hasheq)))
+
+;; Fake step executor: returns directive-stop with the result
+(define (fake-interpret-step step-res result new-msgs infra snapshot)
+  (directive-stop result))
 
 ;; ============================================================
 ;; Tests
@@ -61,7 +66,8 @@
                       10
                       #:config (hash->session-config (hash))
                       #:build-context-fn fake-build-context
-                      #:run-provider-turn-fn fake-run-provider-turn))
+                      #:run-provider-turn-fn fake-run-provider-turn
+                      #:interpret-step-fn fake-interpret-step))
   (define result (ml:run-iteration-loop/v2 cfg))
   (check-equal? (loop-result-termination-reason result) 'completed)
   (check-true (pair? (loop-result-messages result))

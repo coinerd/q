@@ -248,20 +248,79 @@
                     '()
                     (format "Agent iteration importing turn-orchestrator: ~a" actual-violations)))
 
-    (test-case "v0.99.85: Agent iteration must not import runtime context-assembly"
-      ;; After moving current-reflection-event to agent/state.rkt,
-      ;; agent/iteration/ modules must not import from
-      ;; runtime/context-assembly/state-aware-builder.rkt
+    (test-case "v0.99.86: Agent iteration must not import runtime step-executor"
+      ;; After interpret-step-fn injection, agent/iteration/ modules
+      ;; must not import from runtime/iteration/step-executor.rkt
       (define iteration-files (rkt-files-in-recursive "agent/iteration"))
       (define violations
         (for/list ([f (in-list iteration-files)])
           (define reqs (extract-requires f))
-          (if (imports-from? reqs '("state-aware-builder"))
-              (format "~a: imports state-aware-builder" (file-name-from-path f))
+          (if (imports-from? reqs '("step-executor"))
+              (format "~a: imports step-executor" (file-name-from-path f))
               #f)))
       (define actual-violations (filter identity violations))
       (check-equal? actual-violations
                     '()
-                    (format "Agent iteration importing state-aware-builder: ~a" actual-violations)))))
+                    (format "Agent iteration importing step-executor: ~a" actual-violations)))
+
+    (test-case "v0.99.86: Agent iteration must not import runtime session-store"
+      ;; After moving empty-response retry to step-executor, agent/iteration/
+      ;; modules must not import from runtime/session/session-store.rkt
+      (define iteration-files (rkt-files-in-recursive "agent/iteration"))
+      (define violations
+        (for/list ([f (in-list iteration-files)])
+          (define reqs (extract-requires f))
+          (if (imports-from? reqs '("session-store"))
+              (format "~a: imports session-store" (file-name-from-path f))
+              #f)))
+      (define actual-violations (filter identity violations))
+      (check-equal? actual-violations
+                    '()
+                    (format "Agent iteration importing session-store: ~a" actual-violations)))
+
+    (test-case "v0.99.86: Agent iteration must not import runtime runtime-helpers"
+      ;; After fixing event/hook import paths, agent/iteration/ modules
+      ;; must not import from runtime/runtime-helpers.rkt
+      (define iteration-files (rkt-files-in-recursive "agent/iteration"))
+      (define violations
+        (for/list ([f (in-list iteration-files)])
+          (define reqs (extract-requires f))
+          (if (imports-from? reqs '("runtime-helpers"))
+              (format "~a: imports runtime-helpers" (file-name-from-path f))
+              #f)))
+      (define actual-violations (filter identity violations))
+      (check-equal? actual-violations
+                    '()
+                    (format "Agent iteration importing runtime-helpers: ~a" actual-violations)))
+
+    (test-case "v0.99.86: Agent iteration must not import runtime tool-coordinator"
+      ;; After moving extract-tool-calls-from-messages to util/tool/tool-extract.rkt,
+      ;; agent/iteration/ modules must not import from runtime/tool-coordinator.rkt
+      (define iteration-files (rkt-files-in-recursive "agent/iteration"))
+      (define violations
+        (for/list ([f (in-list iteration-files)])
+          (define reqs (extract-requires f))
+          (if (imports-from? reqs '("tool-coordinator"))
+              (format "~a: imports tool-coordinator" (file-name-from-path f))
+              #f)))
+      (define actual-violations (filter identity violations))
+      (check-equal? actual-violations
+                    '()
+                    (format "Agent iteration importing tool-coordinator: ~a" actual-violations)))
+
+    (test-case "v0.99.86: Agent iteration must not import runtime context-policy"
+      ;; After moving estimate-message-tokens to util/token-estimate.rkt,
+      ;; agent/iteration/ modules must not import from runtime/context/context-policy.rkt
+      (define iteration-files (rkt-files-in-recursive "agent/iteration"))
+      (define violations
+        (for/list ([f (in-list iteration-files)])
+          (define reqs (extract-requires f))
+          (if (imports-from? reqs '("context-policy"))
+              (format "~a: imports context-policy" (file-name-from-path f))
+              #f)))
+      (define actual-violations (filter identity violations))
+      (check-equal? actual-violations
+                    '()
+                    (format "Agent iteration importing context-policy: ~a" actual-violations)))))
 
 (run-tests boundary-tests)

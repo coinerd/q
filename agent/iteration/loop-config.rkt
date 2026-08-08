@@ -50,6 +50,7 @@
          ;; concrete implementations.
          build-context-fn ; (or/c procedure? #f) — builds assembled context
          run-provider-turn-fn ; (or/c procedure? #f) — executes provider turn
+         interpret-step-fn ; (or/c procedure? #f) — executes step-result to directive
          )
   #:transparent)
 
@@ -71,7 +72,8 @@
                           #:working-set [working-set #f]
                           #:session [session #f]
                           #:build-context-fn [build-context-fn #f]
-                          #:run-provider-turn-fn [run-provider-turn-fn #f])
+                          #:run-provider-turn-fn [run-provider-turn-fn #f]
+                          #:interpret-step-fn [interpret-step-fn #f])
   (loop-config context
                provider
                bus
@@ -89,7 +91,8 @@
                working-set
                session
                build-context-fn
-               run-provider-turn-fn))
+               run-provider-turn-fn
+               interpret-step-fn))
 
 (provide loop-config
          loop-config?
@@ -111,6 +114,7 @@
          loop-config-session
          loop-config-build-context-fn
          loop-config-run-provider-turn-fn
+         loop-config-interpret-step-fn
          (contract-out [make-loop-config
                         (->* ((listof any/c) (or/c provider? #f)
                                              event-bus?
@@ -128,5 +132,6 @@
                                                    #:working-set (or/c working-set? #f)
                                                    #:session (or/c agent-session? #f)
                                                    #:build-context-fn (or/c procedure? #f)
-                                                   #:run-provider-turn-fn (or/c procedure? #f))
+                                                   #:run-provider-turn-fn (or/c procedure? #f)
+                                                   #:interpret-step-fn (or/c procedure? #f))
                              loop-config?)]))

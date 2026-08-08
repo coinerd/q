@@ -33,7 +33,9 @@
                   message?)
          (only-in "../../util/message/message.rkt" message-meta-safe)
          "../../llm/token-budget.rkt"
-         "../../util/token-estimate-cache.rkt")
+         "../../util/token-estimate-cache.rkt"
+         ;; Pure token estimation (moved to util/token-estimate.rkt)
+         (only-in "../../util/token-estimate.rkt" estimate-message-tokens))
 
 ;; Token estimation
 (provide (contract-out
@@ -62,22 +64,11 @@
          fit-messages-with-importance-rescue)
 
 ;; ============================================================
-;; Token estimation
+;; Token estimation — imported from util/token-estimate.rkt
 ;; ============================================================
 
-;; Estimate token count for a single message struct.
-;; Extracts text from all text-parts AND tool-result-part content in the message.
-;; v0.99.68-hotfix-3 P6A: Include tool-result-part content for non-zero WS token counting.
-(define (estimate-message-tokens msg)
-  (define text-tokens
-    (estimate-text-tokens (string-join (for/list ([part (in-list (message-content msg))]
-                                                  #:when (text-part? part))
-                                         (text-part-text part))
-                                       " ")))
-  (define tool-result-tokens
-    (for/sum ([part (in-list (message-content msg))] #:when (tool-result-part? part))
-             (estimate-text-tokens (tool-result-content->string (tool-result-part-content part)))))
-  (+ text-tokens tool-result-tokens))
+;; estimate-message-tokens is now in util/token-estimate.rkt.
+;; Re-exported here for backward compatibility with existing Runtime callers.
 
 ;; ---------------------------------------------------------------------------
 ;; Memoized token estimation — v0.47.6 → v0.70.6 using token-estimate-cache.rkt

@@ -22,7 +22,7 @@
          (only-in "../../util/message/message.rkt" message-content)
          (only-in "../../util/tool/tool-types.rkt" tool-call-name)
          (only-in "../../util/content/content-parts.rkt" tool-result-part-is-error?)
-         (only-in "../../runtime/tool-coordinator.rkt" extract-tool-calls-from-messages)
+         (only-in "../../util/tool/tool-extract.rkt" extract-tool-calls-from-messages)
          (only-in "tool-turn-bridge.rkt" update-seen-paths take-at-most)
          (only-in "../event-emitter.rkt" emit-typed-event!)
          (only-in "../event-structs/hook-events.rkt" turn-cancelled-event)

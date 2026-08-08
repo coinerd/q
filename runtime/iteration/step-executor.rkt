@@ -118,8 +118,13 @@
                   select-highest-priority-action
                   maybe-execute-action
                   rollback-action-type)
-         (only-in "decision.rkt" step-result step-result? step-result-action step-result-new-counters)
-         (only-in "../../agent/state.rkt" current-reflection-event)
+         (only-in "decision.rkt"
+                  step-result
+                  step-result?
+                  step-result-action
+                  step-result-new-counters
+                  step-result-metadata)
+         (only-in "../../agent/state.rkt" current-reflection-event current-empty-response-retried?)
          (only-in "internal.rkt" assert-payload)
          (only-in "directive.rkt"
                   directive-recurse
@@ -454,6 +459,41 @@
     (emit-session-event! (loop-infra-bus infra) (loop-infra-session-id infra) name payload))
 
   (match action
+    ;; v0.99.86: Empty-response retry — moved from main-loop.rkt to
+    ;; consolidate all Runtime operations (including persistence) in the
+    ;; step executor. The Agent loop no longer imports session-store.rkt.
+    [(? (lambda (_) (hash-ref (step-result-metadata step-res) 'emptyResponse #f)))
+     (define retried? (current-empty-response-retried?))
+     (cond
+       [(not retried?)
+        ;; First empty-response: inject nudge and retry
+        (define nudge-msg
+          (make-message
+           (format "empty-response-nudge-~a" (gensym))
+           #f
+           'user
+           'message
+           (list (make-text-part
+                  (string-append "Your previous response contained extensive reasoning "
+                                 "but produced no output. Please provide a direct response "
+                                 "or tool call.")))
+           (current-seconds)
+           (hasheq 'ephemeral #t)))
+        (emit "runtime.empty-response.retry" (hasheq 'message "Retrying with output nudge."))
+        (current-empty-response-retried? #t)
+        ;; Persist the empty-response assistant message to session log
+        (sink-append-entries! infra new-msgs)
+        (directive-recurse (append new-msgs (list nudge-msg))
+                           (struct-copy loop-counters
+                                        (step-result-new-counters step-res)
+                                        [iteration (add1 (loop-counters-iteration counters))]
+                                        [stall-retry-count 0])
+                           ws)]
+       [else
+        ;; Retry exhausted: stop with empty-response termination
+        (emit "runtime.empty-response.retry-exhausted"
+              (hasheq 'message "Empty response retry limit reached, completing."))
+        (directive-stop result)])]
     ['stop
      (define stop-result (handle-stop-action result new-msgs infra counters ws config))
      (directive-stop stop-result)]

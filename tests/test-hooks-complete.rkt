@@ -17,7 +17,7 @@
          "../extensions/hooks.rkt"
          "../extensions/api.rkt"
          (only-in "helpers/iteration-loop.rkt" run-iteration-loop)
-         (only-in "../runtime/runtime-helpers.rkt" maybe-dispatch-hooks)
+         ;; maybe-dispatch-hooks is provided by extensions/hooks.rkt above
          "../runtime/agent-session.rkt"
          "../skills/types.rkt"
          (only-in "../tools/scheduler.rkt"
