@@ -26,7 +26,9 @@
                   set-lifecycle-state-prompt-running?!
                   set-lifecycle-state-task-fsm-state!
                   set-lifecycle-state-task-conclusions!
-                  set-lifecycle-state-recent-tool-calls!)
+                  set-lifecycle-state-recent-tool-calls!
+                  lifecycle-state-rollback-st
+                  set-lifecycle-state-rollback-st!)
          racket/file)
 ;; STABILITY: internal
 ;;
@@ -70,6 +72,8 @@
          session-log-path
          session-index-path
          lifecycle-state?
+         lifecycle-state-rollback-st
+         set-lifecycle-state-rollback-st!
          (contract-out [session-log-path-for (-> agent-session? path?)]
                        [session-provider (-> agent-session? any/c)]
                        [session-tool-registry (-> agent-session? any/c)]
