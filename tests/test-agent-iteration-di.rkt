@@ -22,7 +22,6 @@
                   make-loop-result)
          (only-in "../util/message/message.rkt" make-message)
          (only-in "../util/content/content-parts.rkt" make-text-part)
-         (only-in "../runtime/session/session-config.rkt" hash->session-config)
          (only-in "../runtime/iteration/directive.rkt" directive-stop))
 
 ;; ============================================================
@@ -30,11 +29,13 @@
 ;; =============================================================
 
 ;; Fake context assembler: returns the context unchanged
-(define (fake-build-context ctx config ext-reg bus session-id iteration #:session [session #f])
+;; (signature: ctx ws ext-reg bus sid iter #:session)
+(define (fake-build-context ctx ws ext-reg bus session-id iteration #:session [session #f])
   ctx)
 
 ;; Fake provider turn: returns a single assistant message and 'completed
-(define (fake-run-provider-turn ctx prov bus reg ext-reg session-id turn-id token config)
+;; (signature: ctx prov bus reg ext-reg sid tid tok)
+(define (fake-run-provider-turn ctx prov bus reg ext-reg session-id turn-id token)
   (define msg
     (make-message "fake-response"
                   #f
@@ -64,7 +65,6 @@
                       "/tmp/test-di-log"
                       "test-di-session"
                       10
-                      #:config (hash->session-config (hash))
                       #:build-context-fn fake-build-context
                       #:run-provider-turn-fn fake-run-provider-turn
                       #:interpret-step-fn fake-interpret-step))

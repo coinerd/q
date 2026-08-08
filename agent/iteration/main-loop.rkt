@@ -13,8 +13,7 @@
 (define-logger q-main-loop)
 ;;   run-iteration-loop — main iteration loop entry point
 
-(require racket/dict
-         racket/match
+(require racket/match
          racket/list
          racket/contract
          (only-in "loop-state.rkt"
@@ -52,12 +51,6 @@
                   compute-working-set-budget)
          (only-in "../../util/cancellation.rkt" cancellation-token?)
          (only-in "../../runtime/session/session-types.rkt" agent-session?)
-         (only-in "../../runtime/session/session-config.rkt"
-                  session-config?
-                  hash->session-config
-                  config-token-budget-threshold
-                  config-max-context-tokens
-                  resolve-max-iterations-hard)
          (only-in "../../llm/provider.rkt" provider?)
          (only-in "../../runtime/layer-adapters.rkt" tool-registry? extension-registry?)
          (only-in "../event-bus.rkt" event-bus?)
@@ -100,7 +93,8 @@
                   loop-config-session-id
                   loop-config-max-iterations
                   loop-config-cancellation-token
-                  loop-config-config
+                  loop-config-max-iterations-hard
+                  loop-config-context-budget
                   loop-config-queue
                   loop-config-injected-box
                   loop-config-shutdown-check
@@ -134,14 +128,14 @@
         [session-id (loop-config-session-id cfg)]
         [max-iterations (loop-config-max-iterations cfg)]
         [token (loop-config-cancellation-token cfg)]
-        [config-raw (loop-config-config cfg)]
+        [max-iterations-hard (loop-config-max-iterations-hard cfg)]
+        [context-budget (loop-config-context-budget cfg)]
         [steering-queue (loop-config-queue cfg)]
         [injected-box (loop-config-injected-box cfg)]
         [shutdown-check (loop-config-shutdown-check cfg)]
         [force-shutdown-check (loop-config-force-shutdown-check cfg)]
         [initial-ws (loop-config-working-set cfg)]
         [sess (loop-config-session cfg)])
-    (define config config-raw)
     ;; v0.99.85: Injected runtime operations — no direct orchestration import
     (define build-assembled-context-fn
       (or (loop-config-build-context-fn cfg)
@@ -155,9 +149,7 @@
       (or (loop-config-interpret-step-fn cfg)
           (error 'run-iteration-loop/v2
                  "interpret-step-fn not supplied; use wiring layer to construct loop-config")))
-    (define max-iterations-hard (resolve-max-iterations-hard config max-iterations))
-    (define context-budget
-      (or (config-token-budget-threshold config) (config-max-context-tokens config)))
+    (define max-iterations-hard-val max-iterations-hard)
     (define ws
       (or initial-ws (make-working-set #:max-tokens (compute-working-set-budget context-budget))))
     ;; v0.99.83 W2: Local helper for counter increment
@@ -226,25 +218,16 @@
                                                          reason-payload/c))
                     (make-loop-result '() 'completed (hasheq 'reason "extension-block"))]
                    [else
-                    (define config-with-ws (dict-set config 'working-set ws))
                     (define ctx-final
                       (build-assembled-context-fn ctx-to-use
-                                                  config-with-ws
+                                                  ws
                                                   ext-reg
                                                   bus
                                                   session-id
                                                   (loop-counters-iteration counters)
                                                   #:session sess))
                     (define result
-                      (run-provider-turn-fn ctx-final
-                                            prov
-                                            bus
-                                            reg
-                                            ext-reg
-                                            session-id
-                                            turn-id
-                                            token
-                                            config))
+                      (run-provider-turn-fn ctx-final prov bus reg ext-reg session-id turn-id token))
                     (define termination (loop-result-termination-reason result))
                     (define new-msgs (loop-result-messages result))
                     ;; R-06/R-07: FSM: provider-turn + model-response -> decision
@@ -262,7 +245,7 @@
                                         #:consecutive-tools
                                         (loop-counters-consecutive-tool-count counters)
                                         #:max-iterations max-iterations
-                                        #:max-iterations-hard max-iterations-hard))
+                                        #:max-iterations-hard max-iterations-hard-val))
                     (define step-res
                       (compute-step-result
                        (iteration-ctx (loop-counters-iteration counters)
@@ -288,7 +271,7 @@
                         'message
                         "Consecutive tool-call limit reached; stopping to avoid an unbounded tool loop.")))
                     (define snapshot
-                      (iteration-snapshot counters ws config sess max-iterations max-iterations-hard))
+                      (iteration-snapshot counters ws #f sess max-iterations max-iterations-hard-val))
                     (define directive
                       (interpret-step-fn step-res
                                          result

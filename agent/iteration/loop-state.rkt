@@ -109,7 +109,7 @@
 ;; to avoid threading 6+ positional parameters through interpret-step.
 (struct iteration-snapshot
         ([counters : loop-counters] [ws : (U WorkingSet #f)]
-                                    [config : SessionConfig]
+                                    [config : (U SessionConfig #f)]
                                     [sess : (U AgentSession #f)]
                                     [max-iterations : Nonnegative-Integer]
                                     [max-iterations-hard : Nonnegative-Integer])
