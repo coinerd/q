@@ -189,10 +189,12 @@
         (define result (auto-distill ws-ids existing 'idle))
         (check-equal? (length result) 3 "3 uncovered entries get fallback conclusions")))
 
-    (test-case "auto-distill returns empty when disabled"
+    (test-case "auto-distill returns results when called directly (caller decides)"
+      ;; v0.99.87: auto-distill no longer internally checks the flag.
+      ;; The caller (prepare-turn-context-state) uses effective-auto-distill?.
       (parameterize ([current-auto-distillation-enabled? #f])
         (define result (auto-distill '("m1" "m2") '() 'idle))
-        (check-equal? result '() "no distillation when flag off")))
+        (check-equal? (length result) 2 "auto-distill produces results; caller decides gating")))
 
     (test-case "rollback action executes when enabled"
       (parameterize ([current-rollback-action-execution? #t])

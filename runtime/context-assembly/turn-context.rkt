@@ -106,6 +106,7 @@
                   rollback-state-budget-expansion-level
                   rollback-state-action-log
                   make-default-rollback-state
+                  effective-auto-distill?
                   tool-error-class->string)
          ;; Auto-distillation
          (only-in "../context-assembly/auto-distillation.rkt"
@@ -415,8 +416,13 @@
   (define task-state (or (symbol->task-state task-state-raw) task-state-raw))
   (define conclusions (and session (agent-session-task-conclusions session)))
   ;; v0.77.9 T2.1: Auto-distill uncovered WS entries when enabled
+  ;; v0.99.87: Use effective-auto-distill? which combines base configuration
+  ;; with rollback-state.force-distill-active?. Rollback no longer mutates
+  ;; current-auto-distillation-enabled?.
+  (define auto-distill-effective?
+    (effective-auto-distill? (current-auto-distillation-enabled?) (current-rollback-state)))
   (define augmented-conclusions
-    (if (and (current-auto-distillation-enabled?) session conclusions task-state ws-early)
+    (if (and auto-distill-effective? session conclusions task-state ws-early)
         (let ([ws-msgs (working-set-resolve-messages ws-early ctx-to-use message-id)])
           ;; v0.79.2 GAP-3: Build content summaries for richer auto-distill text
           ;; GAP-C: Include tool-result-parts in content summaries
@@ -429,7 +435,7 @@
                   (auto-distill (map message-id ws-msgs) conclusions task-state-raw summaries)))
         (or conclusions '())))
   ;; v0.78.2 G3: Persist auto-distilled conclusions back to session
-  (when (and (current-auto-distillation-enabled?)
+  (when (and auto-distill-effective?
              session
              (pair? augmented-conclusions)
              conclusions

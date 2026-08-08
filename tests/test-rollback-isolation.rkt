@@ -513,3 +513,64 @@
   ;; Session B is unaffected
   (check-true (rollback-state-force-distill-active? session-a-after))
   (check-false (rollback-state-force-distill-active? session-b)))
+
+;; ============================================================
+;; B4: effective-auto-distill? Truth Table
+;; ============================================================
+
+(test-case "B4: effective-auto-distill? truth table: all combinations"
+  ;; base=false, rollback=false -> false
+  (check-false (effective-auto-distill? #f (make-default-rollback-state)))
+  ;; base=true, rollback=false -> true
+  (check-true (effective-auto-distill? #t (make-default-rollback-state)))
+  ;; base=false, rollback=true -> true
+  (check-false (effective-auto-distill? #f (make-default-rollback-state)))
+  (check-true (effective-auto-distill? #f (rollback-state 0 #t 0 '())))
+  ;; base=true, rollback=true -> true
+  (check-true (effective-auto-distill? #t (rollback-state 0 #t 0 '()))))
+
+(test-case "B4: two-turn flow: force-distill in Turn N causes auto-distill in Turn N+1"
+  ;; Turn N: force-distill fires
+  (define state-before (make-default-rollback-state))
+  (define plan
+    (rollback-plan (list (list 'amnesia-risk "low")) (make-force-distill-action "amnesia" (hasheq))))
+  (define state-after-turn-N (advance-rollback-state state-before plan))
+  (check-true (rollback-state-force-distill-active? state-after-turn-N)
+              "Turn N: force-distill flag set in rollback state")
+  ;; Turn N+1: base config is #f, but rollback says #t
+  (define base-config #f)
+  (check-true (effective-auto-distill? base-config state-after-turn-N)
+              "Turn N+1: effective-auto-distill? is #t via rollback state"))
+
+(test-case "B4: base config alone enables auto-distill without rollback"
+  (check-true (effective-auto-distill? #t (make-default-rollback-state))))
+
+(test-case "B4: rollback state mutation does not change base config parameter"
+  (parameterize ([current-auto-distillation-enabled? #f]
+                 [current-rollback-state (make-default-rollback-state)])
+    ;; Simulate force-distill callback (now just logs, doesn't mutate base config)
+    (define state-before (current-rollback-state))
+    (define plan
+      (rollback-plan (list (list 'amnesia-risk "low"))
+                     (make-force-distill-action "amnesia" (hasheq))))
+    (parameterize ([current-rollback-action-execution? #t])
+      (apply-rollback-plan! plan))
+    ;; Base config must remain #f
+    (check-false (current-auto-distillation-enabled?) "base config NOT mutated by force-distill")
+    ;; But rollback state has force-distill
+    (check-true (rollback-state-force-distill-active? (current-rollback-state))
+                "rollback state has force-distill flag")))
+
+;; ============================================================
+;; B5: Session Isolation for force-distill
+;; ============================================================
+
+(test-case "B5: two sessions: base config independently applies"
+  ;; Session A: base config #t, no rollback
+  (check-true (effective-auto-distill? #t (make-default-rollback-state)))
+  ;; Session B: base config #f, no rollback
+  (check-false (effective-auto-distill? #f (make-default-rollback-state)))
+  ;; Session A: base config #f, but rollback force-distill
+  (check-true (effective-auto-distill? #f (rollback-state 0 #t 0 '())))
+  ;; Session B: base config #f, no rollback -> still #f
+  (check-false (effective-auto-distill? #f (make-default-rollback-state))))

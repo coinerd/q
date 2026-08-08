@@ -229,4 +229,114 @@
                  "session B starts with fresh state, not session A's")
     (check-equal? (rollback-state-warning-count (current-rollback-state))
                   0
-                  "session B starts with zero warnings")))
+                  "session B starts with zero warnings"))
+
+  ;; ============================================================
+  ;; A3: Exceptional-Exit Lifecycle Tests
+  ;; Simulates the run-prompt! dynamic-wind + parameterize pattern
+  ;; to verify rollback state persists even when prompt raises.
+  ;; ============================================================
+
+  (define (simulate-prompt-with-dynamic-wind ls prompt-thunk)
+    ;; Simulates the run-prompt! pattern: parameterize + dynamic-wind
+    ;; with save-back in the dynamic-wind after thunk.
+    (parameterize ([current-rollback-state (or (lifecycle-state-rollback-st ls)
+                                               (make-default-rollback-state))])
+      (dynamic-wind void
+                    prompt-thunk
+                    (lambda () (set-lifecycle-state-rollback-st! ls (current-rollback-state))))))
+
+  (test-case "A3: rollback state persists when prompt raises exception"
+    (define ls (make-lifecycle-state))
+    ;; Prompt 1: rollback fires, THEN prompt raises
+    (with-handlers ([exn:fail? (lambda (e) (void))])
+      (simulate-prompt-with-dynamic-wind
+       ls
+       (lambda ()
+         (parameterize ([current-rollback-action-execution? #t])
+           (apply-rollback-plan! (rollback-plan (list (list 'amnesia-risk "low"))
+                                                (make-force-distill-action "amnesia" (hasheq)))))
+         ;; Simulate later failure in the same prompt
+         (raise (exn:fail "simulated context-building error" (current-continuation-marks))))))
+    ;; Verify: force-distill committed despite exception
+    (define rs-after (lifecycle-state-rollback-st ls))
+    (check-pred rollback-state? rs-after "rollback state was persisted despite exception")
+    (check-true (rollback-state-force-distill-active? rs-after)
+                "force-distill committed even though prompt raised"))
+
+  (test-case "A3: next prompt sees committed rollback state after exception"
+    (define ls (make-lifecycle-state))
+    ;; Prompt 1: rollback fires + exception
+    (with-handlers ([exn:fail? (lambda (e) (void))])
+      (simulate-prompt-with-dynamic-wind
+       ls
+       (lambda ()
+         (parameterize ([current-rollback-action-execution? #t])
+           (apply-rollback-plan! (rollback-plan (list (list 'amnesia-risk "low"))
+                                                (make-force-distill-action "amnesia" (hasheq)))))
+         (raise (exn:fail "simulated error" (current-continuation-marks))))))
+    ;; Prompt 2: should see force-distill from failed Prompt 1
+    (simulate-prompt-with-dynamic-wind
+     ls
+     (lambda ()
+       (check-true (rollback-state-force-distill-active? (current-rollback-state))
+                   "prompt 2 sees force-distill committed by failed prompt 1"))))
+
+  (test-case "A3: budget expansion persists through exception"
+    (define ls (make-lifecycle-state))
+    (with-handlers ([exn:fail? (lambda (e) (void))])
+      (simulate-prompt-with-dynamic-wind
+       ls
+       (lambda ()
+         (parameterize ([current-rollback-action-execution? #t])
+           (apply-rollback-plan! (rollback-plan (list (list 'excessive-savings "cut"))
+                                                (make-expand-context-action "excessive" (hasheq)))))
+         (raise (exn:fail "simulated error" (current-continuation-marks))))))
+    (define rs-after (lifecycle-state-rollback-st ls))
+    (check-pred rollback-state? rs-after "state persisted despite exception")
+    (check-equal? (rollback-state-budget-expansion-level rs-after)
+                  1
+                  "budget expansion committed despite exception"))
+
+  (test-case "A3: warning escalation persists through exception"
+    (define ls (make-lifecycle-state))
+    (with-handlers ([exn:fail? (lambda (e) (void))])
+      (simulate-prompt-with-dynamic-wind ls
+                                         (lambda ()
+                                           ;; Simulate 2 warnings to trigger escalation
+                                           (increment-loop-warning-count!)
+                                           (increment-loop-warning-count!)
+                                           (raise (exn:fail "simulated error"
+                                                            (current-continuation-marks))))))
+    (define rs-after (lifecycle-state-rollback-st ls))
+    (check-pred rollback-state? rs-after "state persisted despite exception")
+    (check-equal? (rollback-state-warning-count rs-after)
+                  2
+                  "warning count committed despite exception"))
+
+  (test-case "A3: normal completion still persists rollback state"
+    (define ls (make-lifecycle-state))
+    (simulate-prompt-with-dynamic-wind
+     ls
+     (lambda ()
+       (parameterize ([current-rollback-action-execution? #t])
+         (apply-rollback-plan! (rollback-plan (list (list 'amnesia-risk "low"))
+                                              (make-force-distill-action "amnesia" (hasheq)))))))
+    (define rs-after (lifecycle-state-rollback-st ls))
+    (check-true (rollback-state-force-distill-active? rs-after)
+                "force-distill persisted on normal completion"))
+
+  (test-case "A3: exception without rollback action preserves initial state"
+    (define ls (make-lifecycle-state))
+    (set-lifecycle-state-rollback-st! ls (make-default-rollback-state))
+    (with-handlers ([exn:fail? (lambda (e) (void))])
+      (simulate-prompt-with-dynamic-wind
+       ls
+       (lambda () (raise (exn:fail "immediate error" (current-continuation-marks))))))
+    (define rs-after (lifecycle-state-rollback-st ls))
+    (check-pred rollback-state? rs-after "state exists")
+    (check-false (rollback-state-force-distill-active? rs-after)
+                 "no force-distill when no rollback action fired")
+    (check-equal? (rollback-state-warning-count rs-after)
+                  0
+                  "no warnings when no rollback action fired")))
