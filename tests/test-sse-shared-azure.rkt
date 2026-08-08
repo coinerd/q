@@ -10,7 +10,8 @@
          racket/port
          racket/generator
          "../llm/model.rkt"
-         (only-in "../llm/stream.rkt" stream-sse-events normalize-openai-chunk))
+         (only-in "../llm/stream.rkt" stream-sse-events)
+         (only-in "../llm/openai-compatible.rkt" normalize-openai-chunk))
 
 (test-case "normalize-openai-chunk: text delta"
   (define chunk

@@ -80,7 +80,7 @@
          (path->string (find-relative-path base-dir f))))
      (case suite
        [(all broad) all-files]
-       [(fast) (filter (lambda (f) (not (slow-file? f))) all-files)]
+       [(fast) (filter (lambda (f) (and (not (slow-file? f)) (not (tui-file? f)))) all-files)]
        [(unit_fast unit-fast) (filter unit-fast-file? all-files)]
        [(slow) (filter slow-file? all-files)]
        [(tui) (filter tui-file? all-files)]

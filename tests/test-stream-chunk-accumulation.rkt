@@ -14,13 +14,8 @@
          rackunit/text-ui
          (only-in "../agent/stream-reducer.rkt" accumulate-stream-chunks)
          (only-in "../llm/model.rkt" stream-chunk stream-chunk? make-stream-chunk)
-         (only-in "../llm/stream.rkt"
-                  parse-sse-line
-                  parse-sse-lines
-                  parse-sse-data-line
-                  sse-done?
-                  normalize-openai-chunk
-                  normalize-openai-chunks))
+         (only-in "../llm/stream.rkt" parse-sse-line parse-sse-lines parse-sse-data-line sse-done?)
+         (only-in "../llm/openai-compatible.rkt" normalize-openai-chunk normalize-openai-chunks))
 
 (define acc-suite
   (test-suite "Stream chunk accumulation + SSE parsing (AXIS3-F02)"

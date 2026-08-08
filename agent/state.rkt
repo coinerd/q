@@ -19,7 +19,8 @@
                        [state-add-event! (-> loop-state? any/c void?)]
                        [current-loop-state-for-error-recovery (parameter/c (or/c loop-state? #f))]
                        [current-partial-text (parameter/c (or/c string? #f))]
-                       [current-empty-response-retried? (parameter/c boolean?)]))
+                       [current-empty-response-retried? (parameter/c boolean?)]
+                       [current-reflection-event (parameter/c (or/c any/c #f))]))
 
 ;; ============================================================
 ;; v0.45.10 NF1: Error-path recovery parameter
@@ -47,6 +48,17 @@
 ;; attempted. Prevents infinite retry loops when the model repeatedly
 ;; produces thinking-only responses.
 (define current-empty-response-retried? (make-parameter #f))
+
+;; v0.99.85: Reflection event signal — moved from
+;; runtime/context-assembly/state-aware-builder.rkt
+;; ============================================================
+
+;; Set by agent/iteration/step-interpreter.rkt when large tool results
+;; are detected. Read by runtime/context-assembly/state-aware-builder.rkt
+;; when building the preamble for the next turn, then cleared.
+;; Lives here (agent layer) so that the agent does not import from
+;; runtime context-assembly.
+(define current-reflection-event (make-parameter #f))
 
 ;; ============================================================
 ;; Internal struct — mutable boxes for accumulation

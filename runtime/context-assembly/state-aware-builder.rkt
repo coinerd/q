@@ -68,7 +68,8 @@
                   memory-telemetry->jsexpr
                   current-memory-injection-budget
                   inject-memory-for-context)
-         (only-in "blackboard-context.rkt" build-blackboard-context-snippet))
+         (only-in "blackboard-context.rkt" build-blackboard-context-snippet)
+         (only-in "../../agent/state.rkt" current-reflection-event))
 
 (provide current-task-state-aware-assembly?
          build-tiered-context/state-aware
@@ -83,8 +84,8 @@
          current-reflection-event
          current-blackboard-injection-enabled)
 
-;; v0.96.13 W3: Latest reflection event (set by step-interpreter, checked in preamble)
-(define current-reflection-event (make-parameter #f))
+;; v0.99.85: current-reflection-event moved to agent/state.rkt.
+;; Re-exported here for backward compatibility.
 
 ;; v0.99.7 W5: Blackboard context injection into system prompt preamble
 (define current-blackboard-injection-enabled (make-parameter #f))

@@ -231,6 +231,37 @@
       (define decision-file
         (findf (λ (f) (string-suffix? (path->string f) "decision.rkt")) recursive-files))
       (check-not-false decision-file
-                       "runtime/iteration/decision.rkt must be found by recursive scan"))))
+                       "runtime/iteration/decision.rkt must be found by recursive scan"))
+
+    (test-case "v0.99.85: Agent iteration must not import runtime turn-orchestrator"
+      ;; After dependency injection refactoring, agent/iteration/ modules
+      ;; must not import from runtime/turn-orchestrator.rkt
+      (define iteration-files (rkt-files-in-recursive "agent/iteration"))
+      (define violations
+        (for/list ([f (in-list iteration-files)])
+          (define reqs (extract-requires f))
+          (if (imports-from? reqs '("turn-orchestrator"))
+              (format "~a: imports turn-orchestrator" (file-name-from-path f))
+              #f)))
+      (define actual-violations (filter identity violations))
+      (check-equal? actual-violations
+                    '()
+                    (format "Agent iteration importing turn-orchestrator: ~a" actual-violations)))
+
+    (test-case "v0.99.85: Agent iteration must not import runtime context-assembly"
+      ;; After moving current-reflection-event to agent/state.rkt,
+      ;; agent/iteration/ modules must not import from
+      ;; runtime/context-assembly/state-aware-builder.rkt
+      (define iteration-files (rkt-files-in-recursive "agent/iteration"))
+      (define violations
+        (for/list ([f (in-list iteration-files)])
+          (define reqs (extract-requires f))
+          (if (imports-from? reqs '("state-aware-builder"))
+              (format "~a: imports state-aware-builder" (file-name-from-path f))
+              #f)))
+      (define actual-violations (filter identity violations))
+      (check-equal? actual-violations
+                    '()
+                    (format "Agent iteration importing state-aware-builder: ~a" actual-violations)))))
 
 (run-tests boundary-tests)

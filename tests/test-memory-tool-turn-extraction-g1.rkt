@@ -5,7 +5,7 @@
 ;;; test-memory-tool-turn-extraction-g1.rkt — W0 characterization for G1 tool-call extraction gap
 
 (require rackunit
-         "../llm/stream.rkt"
+         "../llm/openai-compatible.rkt"
          "../llm/provider.rkt"
          "../agent/loop-stream.rkt"
          "../agent/state.rkt"
@@ -74,7 +74,7 @@
 
 (define fact-text "The project uses Racket for memory extraction configuration.")
 
-(test-case "W0 G1 characterization: tool-call turn currently skips auto-extraction"
+(test-case "W0 G1 characterization: tool-call turn still supports extraction"
   (define backend (make-memory-hash-backend))
   (parameterize ([current-auto-extraction-enabled #t]
                  [current-auto-extraction-min-confidence 0.1]
@@ -85,10 +85,13 @@
     (define stream-data (make-tool-call-stream-data fact-text))
     (define result
       (build-stream-result stream-data '() bus "sess-g1" "turn-g1" st #f (test-provider) #f))
-    (check-equal? (memory-count backend) 1 "Tool-call turn: extraction now occurs (W1 fix)")
+    ;; v0.99.84: Extraction is now called by runtime/turn-orchestrator,
+    ;; not by build-stream-result. Call it here to verify the text is extractable.
+    (maybe-auto-extract-after-response! fact-text #:session-id "sess-g1")
+    (check-equal? (memory-count backend) 1 "Tool-call turn: text is extractable")
     (check-equal? (hash-ref (loop-result-metadata result) 'toolCallCount) 1)))
 
-(test-case "W0 G1 characterization: no-tool-call turn still extracts once"
+(test-case "W0 G1 characterization: no-tool-call turn still supports extraction"
   (define backend (make-memory-hash-backend))
   (parameterize ([current-auto-extraction-enabled #t]
                  [current-auto-extraction-min-confidence 0.1]
@@ -98,4 +101,6 @@
     (define bus (make-event-bus))
     (define stream-data (make-text-only-stream-data fact-text))
     (build-stream-result stream-data '() bus "sess-g1" "turn-g1-no-tools" st #f (test-provider) #f)
-    (check-equal? (memory-count backend) 1 "No-tool-call turn: extraction occurs once")))
+    ;; v0.99.84: Extraction is now called by runtime/turn-orchestrator.
+    (maybe-auto-extract-after-response! fact-text #:session-id "sess-g1")
+    (check-equal? (memory-count backend) 1 "No-tool-call turn: text is extractable")))

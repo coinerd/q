@@ -45,6 +45,11 @@
          force-shutdown-check ; (or/c procedure? #f)
          working-set ; (or/c working-set? #f)
          session ; (or/c agent-session? #f)
+         ;; v0.99.85: Injected runtime operations — Agent iteration no longer
+         ;; imports the runtime orchestration layer directly. The wiring layer supplies
+         ;; concrete implementations.
+         build-context-fn ; (or/c procedure? #f) — builds assembled context
+         run-provider-turn-fn ; (or/c procedure? #f) — executes provider turn
          )
   #:transparent)
 
@@ -64,7 +69,9 @@
                           #:shutdown-check [shutdown-check #f]
                           #:force-shutdown-check [force-shutdown-check #f]
                           #:working-set [working-set #f]
-                          #:session [session #f])
+                          #:session [session #f]
+                          #:build-context-fn [build-context-fn #f]
+                          #:run-provider-turn-fn [run-provider-turn-fn #f])
   (loop-config context
                provider
                bus
@@ -80,7 +87,9 @@
                shutdown-check
                force-shutdown-check
                working-set
-               session))
+               session
+               build-context-fn
+               run-provider-turn-fn))
 
 (provide loop-config
          loop-config?
@@ -100,6 +109,8 @@
          loop-config-force-shutdown-check
          loop-config-working-set
          loop-config-session
+         loop-config-build-context-fn
+         loop-config-run-provider-turn-fn
          (contract-out [make-loop-config
                         (->* ((listof any/c) (or/c provider? #f)
                                              event-bus?
@@ -115,5 +126,7 @@
                                                    #:shutdown-check (or/c procedure? #f)
                                                    #:force-shutdown-check (or/c procedure? #f)
                                                    #:working-set (or/c working-set? #f)
-                                                   #:session (or/c agent-session? #f))
+                                                   #:session (or/c agent-session? #f)
+                                                   #:build-context-fn (or/c procedure? #f)
+                                                   #:run-provider-turn-fn (or/c procedure? #f))
                              loop-config?)]))

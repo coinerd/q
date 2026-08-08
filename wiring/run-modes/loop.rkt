@@ -26,13 +26,16 @@
          (only-in "../../runtime/context-assembly/memory-builder.rkt" current-memory-injection-budget)
          (only-in "../../runtime/memory/auto-extraction.rkt"
                   current-auto-extraction-enabled
-                  current-auto-extraction-min-confidence)
+                  current-auto-extraction-min-confidence
+                  maybe-auto-extract-tool-results!)
          (only-in "../../runtime/memory/service.rkt"
                   update-memory-policy!
                   current-auto-reflection-enabled
                   current-auto-reflection-min-items
                   current-memory-backend)
-         (only-in "../../agent/iteration/step-interpreter.rkt" current-reflection-prompt-enabled)
+         (only-in "../../agent/iteration/step-interpreter.rkt"
+                  current-reflection-prompt-enabled
+                  current-post-tool-result-hook)
          (only-in "../../runtime/context-assembly/auto-distillation.rkt"
                   current-auto-distillation-enabled?
                   current-llm-distill-fn)
@@ -82,6 +85,11 @@
      (current-memory-injection-budget (quotient max-ctx-tokens 20))])
   (current-auto-extraction-enabled (setting-memory-auto-extraction-enabled? settings))
   (current-auto-extraction-min-confidence (setting-memory-auto-extraction-min-confidence settings))
+  ;; v0.99.84: Wire tool-result extraction hook — Agent Core calls this
+  ;; parameter; Runtime provides the implementation.
+  (current-post-tool-result-hook
+   (lambda (msgs sid root)
+     (maybe-auto-extract-tool-results! msgs #:session-id sid #:project-root root)))
   (update-memory-policy! #:user-scope-enabled? (setting-memory-user-scope-enabled? settings))
   (current-auto-reflection-enabled (setting-memory-auto-reflection-enabled? settings))
   (current-auto-reflection-min-items (setting-memory-auto-reflection-min-items settings))

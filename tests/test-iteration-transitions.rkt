@@ -16,7 +16,7 @@
          "../util/hook-types.rkt"
          "../util/event/event-bus.rkt"
          "../agent/queue.rkt"
-         (only-in "../agent/iteration/main-loop.rkt" run-iteration-loop)
+         (only-in "helpers/iteration-loop.rkt" run-iteration-loop)
          "../llm/model.rkt"
          "../llm/provider.rkt"
          (only-in "../tools/tool.rkt"

@@ -26,7 +26,8 @@
          (only-in "wave-docs.rkt" mark-wave-status!)
          (only-in "wave-status.rkt" STATUS-DONE STATUS-FAILED)
          "../../util/loop-result.rkt"
-         (only-in "../../sandbox/gateway-bridge.rkt" shutdown-worker!))
+         (only-in "../../sandbox/gateway-bridge.rkt" shutdown-worker!)
+         (only-in "plan-context-builder.rkt" current-git-root))
 
 ;; ============================================================
 ;; Lease (D5: process-safe OS advisory lock)
@@ -185,6 +186,7 @@
                            wave-idx
                            #:runner [runner default-runner]
                            #:verifier [verifier default-verifier]
+                           #:meta-fix-predicate [meta-fix-predicate (lambda (_) #f)]
                            #:fence-token [requested-fence #f])
   ;; Reload before beginning so an old request token cannot overwrite a newer
   ;; completion, cancellation, or fence after waiting for the process lock.
@@ -232,34 +234,46 @@
        [else
         (case run-result
           [(ok)
-           (define verifying (persist-current-status! 'verifying))
-           (if (not verifying)
-               (campaign-result 'wave-cancelled '() "stale runner result ignored")
-               (let* ([approved? (with-handlers ([exn:fail? (lambda (_) #f)])
-                                   (and (verifier wave-idx) #t))]
-                      [after-verifier (observe)])
-                 (cond
-                   [(and after-verifier (campaign-record-cancellation after-verifier))
-                    (interrupt-current! "campaign cancelled during verification")]
-                   [(not (current-wave-for-attempt after-verifier wave-idx fence expected-id))
-                    (campaign-result 'wave-cancelled '() "stale verifier result ignored")]
-                   [else
-                    (define result
-                      (try-complete-wave! base-dir
-                                          after-verifier
-                                          wave-idx
-                                          #:verifier-approve? approved?
-                                          #:expected-attempt-id expected-id
-                                          #:expected-fence-token fence))
-                    (define completion-status (completion-result-status result))
-                    (when (memq completion-status '(done failed))
-                      (mirror-status! completion-status))
-                    (case completion-status
-                      [(done) (campaign-result 'wave-done (list wave-idx) "wave completed")]
-                      [(failed) (campaign-result 'wave-failed '() "verifier rejected")]
-                      [(stale-attempt invalid-state)
-                       (campaign-result 'wave-cancelled '() "stale completion ignored")]
-                      [else (campaign-result 'wave-failed '() "unexpected completion state")])])))]
+           (cond
+             [(meta-fix-predicate run-result)
+              ;; Meta-fix: reset wave status to pending, don't consume attempt
+              (log-info "meta-fix detected for wave ~a -- resetting to pending" wave-idx)
+              (define meta-wave (current-wave-for-attempt after-run wave-idx fence expected-id))
+              (when meta-wave
+                (set-campaign-wave-status! meta-wave 'pending)
+                (persist-campaign! base-dir after-run)
+                (mirror-status! 'pending))
+              (campaign-result 'meta-fix (list wave-idx) "meta-fix wave reset")]
+             [else
+              (define verifying (persist-current-status! 'verifying))
+              (if (not verifying)
+                  (campaign-result 'wave-cancelled '() "stale runner result ignored")
+                  (let* ([approved? (with-handlers ([exn:fail? (lambda (_) #f)])
+                                      (and (verifier wave-idx) #t))]
+                         [after-verifier (observe)])
+                    (cond
+                      [(and after-verifier (campaign-record-cancellation after-verifier))
+                       (interrupt-current! "campaign cancelled during verification")]
+                      [(not (current-wave-for-attempt after-verifier wave-idx fence expected-id))
+                       (campaign-result 'wave-cancelled '() "stale verifier result ignored")]
+                      [else
+                       (define result
+                         (try-complete-wave! base-dir
+                                             after-verifier
+                                             wave-idx
+                                             #:verifier-approve? approved?
+                                             #:expected-attempt-id expected-id
+                                             #:expected-fence-token fence))
+                       (define completion-status (completion-result-status result))
+                       (when (memq completion-status '(done failed))
+                         (mirror-status! completion-status))
+                       (case completion-status
+                         [(done) (campaign-result 'wave-done (list wave-idx) "wave completed")]
+                         [(failed) (campaign-result 'wave-failed '() "verifier rejected")]
+                         [(stale-attempt invalid-state)
+                          (campaign-result 'wave-cancelled '() "stale completion ignored")]
+                         [else
+                          (campaign-result 'wave-failed '() "unexpected completion state")])])))])]
           [(error)
            (if (persist-current-status! 'failed)
                (begin
@@ -283,7 +297,8 @@
 (define (run-campaign! base-dir
                        rec
                        #:runner [runner default-runner]
-                       #:verifier [verifier default-verifier])
+                       #:verifier [verifier default-verifier]
+                       #:meta-fix-predicate [meta-fix-predicate (lambda (_) #f)])
   (define plan-id (campaign-plan-id rec))
   (define lease (acquire-lease base-dir plan-id))
   (if (not lease)
@@ -309,6 +324,7 @@
                                    next-idx
                                    #:runner runner
                                    #:verifier verifier
+                                   #:meta-fix-predicate meta-fix-predicate
                                    #:fence-token (add1 (campaign-fence-token current))))
               (define observed (load-campaign-record base-dir plan-id))
               (mirror-durable-statuses! rec observed)
@@ -317,6 +333,12 @@
                  (define refreshed (load-campaign-record base-dir plan-id))
                  (if refreshed
                      (loop refreshed (cons next-idx completed))
+                     (campaign-result 'error (reverse completed) "campaign record disappeared"))]
+                [(meta-fix)
+                 ;; Meta-fix: retry the same wave, attempt not consumed
+                 (define refreshed (load-campaign-record base-dir plan-id))
+                 (if refreshed
+                     (loop refreshed completed)
                      (campaign-result 'error (reverse completed) "campaign record disappeared"))]
                 [(wave-failed wave-cancelled)
                  ;; B4: Kill any stuck tool execution worker so pending tools
@@ -340,6 +362,7 @@
 
 ;; ============================================================
 ;; Git Root Resolution (F-7)
+;; Uses `current-git-root` parameter from plan-context-builder for W1 cwd migration.
 (define (find-git-root start-dir)
   (define start-path
     (path->complete-path (if (path? start-dir)
@@ -352,7 +375,14 @@
   (cond
     [(has-git? start-path) start-path]
     [(and (directory-exists? q-sub) (has-git? q-sub)) q-sub]
-    [else (find-git-root-walking-up start-path has-git?)]))
+    [else
+     ;; Walk up from start-path first (handles nested dirs in temp tests)
+     (define walked (find-git-root-walking-up start-path has-git?))
+     (if walked
+         walked
+         ;; Last resort: use current-git-root parameter if set and valid
+         (let ([param-root (current-git-root)])
+           (if (and param-root (has-git? param-root)) param-root #f)))]))
 
 (define (find-git-root-walking-up start-path has-git?)
   (let loop ([dir start-path])

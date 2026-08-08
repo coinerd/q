@@ -44,7 +44,9 @@
                   injection-count-payload/c
                   iteration-decision-payload/c
                   reason-payload/c)
-         (only-in "../../runtime/turn-orchestrator.rkt" run-provider-turn build-assembled-context)
+         ;; v0.99.85: build-assembled-context and run-provider-turn are now
+         ;; injected via loop-config instead of imported from the runtime
+         ;; orchestration layer.
          (only-in "../../runtime/working-set.rkt"
                   working-set?
                   make-working-set
@@ -107,26 +109,11 @@
                   loop-config-force-shutdown-check
                   loop-config-working-set
                   loop-config-session
+                  loop-config-build-context-fn
+                  loop-config-run-provider-turn-fn
                   make-loop-config))
 
-(provide (contract-out [run-iteration-loop
-                        (->* ((listof message?) (or/c provider? #f)
-                                                event-bus?
-                                                (or/c tool-registry? #f)
-                                                (or/c extension-registry? #f)
-                                                (or/c path-string? path?)
-                                                string?
-                                                exact-nonnegative-integer?)
-                             (#:cancellation-token (or/c cancellation-token? #f)
-                                                   #:config session-config?
-                                                   #:queue (or/c queue? #f)
-                                                   #:injected-box (or/c box? #f)
-                                                   #:shutdown-check (or/c procedure? #f)
-                                                   #:force-shutdown-check (or/c procedure? #f)
-                                                   #:working-set (or/c working-set? #f)
-                                                   #:session (or/c agent-session? #f))
-                             loop-result?)]
-                       [run-iteration-loop/v2 (-> loop-config? loop-result?)]))
+(provide (contract-out [run-iteration-loop/v2 (-> loop-config? loop-result?)]))
 
 (provide (contract-out [current-iteration-fsm-state (parameter/c iteration-state?)]))
 
@@ -156,6 +143,15 @@
         [initial-ws (loop-config-working-set cfg)]
         [sess (loop-config-session cfg)])
     (define config config-raw)
+    ;; v0.99.85: Injected runtime operations — no direct orchestration import
+    (define build-assembled-context-fn
+      (or (loop-config-build-context-fn cfg)
+          (error 'run-iteration-loop/v2
+                 "build-context-fn not supplied; use wiring layer to construct loop-config")))
+    (define run-provider-turn-fn
+      (or (loop-config-run-provider-turn-fn cfg)
+          (error 'run-iteration-loop/v2
+                 "run-provider-turn-fn not supplied; use wiring layer to construct loop-config")))
     (define max-iterations-hard (resolve-max-iterations-hard config max-iterations))
     (define context-budget
       (or (config-token-budget-threshold config) (config-max-context-tokens config)))
@@ -229,23 +225,23 @@
                    [else
                     (define config-with-ws (dict-set config 'working-set ws))
                     (define ctx-final
-                      (build-assembled-context ctx-to-use
-                                               config-with-ws
-                                               ext-reg
-                                               bus
-                                               session-id
-                                               (loop-counters-iteration counters)
-                                               #:session sess))
+                      (build-assembled-context-fn ctx-to-use
+                                                  config-with-ws
+                                                  ext-reg
+                                                  bus
+                                                  session-id
+                                                  (loop-counters-iteration counters)
+                                                  #:session sess))
                     (define result
-                      (run-provider-turn ctx-final
-                                         prov
-                                         bus
-                                         reg
-                                         ext-reg
-                                         session-id
-                                         turn-id
-                                         token
-                                         config))
+                      (run-provider-turn-fn ctx-final
+                                            prov
+                                            bus
+                                            reg
+                                            ext-reg
+                                            session-id
+                                            turn-id
+                                            token
+                                            config))
                     (define termination (loop-result-termination-reason result))
                     (define new-msgs (loop-result-messages result))
                     ;; R-06/R-07: FSM: provider-turn + model-response -> decision
@@ -347,41 +343,3 @@
                        final-result]
                       [(directive-recurse new-ctx new-counters ws2)
                        (loop new-ctx new-counters ws2)])])])))))))
-
-;; ============================================================
-;; run-iteration-loop (DEPRECATED: use run-iteration-loop/v2 with loop-config struct)
-;; Kept for backward compatibility with existing tests.
-;; ============================================================
-
-(define (run-iteration-loop context
-                            prov
-                            bus
-                            reg
-                            ext-reg
-                            log-path
-                            session-id
-                            max-iterations
-                            #:cancellation-token [token #f]
-                            #:config [config-raw (hash->session-config (hash))]
-                            #:queue [steering-queue #f]
-                            #:injected-box [injected-box #f]
-                            #:shutdown-check [shutdown-check #f]
-                            #:force-shutdown-check [force-shutdown-check #f]
-                            #:working-set [initial-ws #f]
-                            #:session [sess #f])
-  (run-iteration-loop/v2 (make-loop-config context
-                                           prov
-                                           bus
-                                           reg
-                                           ext-reg
-                                           log-path
-                                           session-id
-                                           max-iterations
-                                           #:cancellation-token token
-                                           #:config config-raw
-                                           #:queue steering-queue
-                                           #:injected-box injected-box
-                                           #:shutdown-check shutdown-check
-                                           #:force-shutdown-check force-shutdown-check
-                                           #:working-set initial-ws
-                                           #:session sess)))

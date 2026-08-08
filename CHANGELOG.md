@@ -28,6 +28,13 @@ Released 2026-08-06.
 - Tool execution pipe write timeout prevents deadlock on unresponsive
   worker subprocess.
 
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
+
 ### Breaking / Behavior Changes
 
 - None in this release.
@@ -57,6 +64,13 @@ Released 2026-08-04.
 - Subprocess stderr no longer leaks into TUI prompt area during `/go` git operations (F-7).
 - Wave executor does not consume a wave attempt for migration repair (F-10).
 - Circuit-breaker message is now distinguishable from normal retry messages in the transcript (F-4).
+
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
 
 ### Breaking / Behavior Changes
 
@@ -93,6 +107,13 @@ Released 2026-08-03.
 
 - Fixed `/retry` to work reliably after session resume, goal-driven prompts, and all prompt submission paths by persisting `last-user-prompt` in session state rather than relying on TUI-local storage.
 - Fixed retry telemetry to report the actual backoff delay instead of a hardcoded zero, giving operators accurate visibility into retry timing.
+
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
 
 ### Breaking / Behavior Changes
 
@@ -137,6 +158,13 @@ Released 2026-08-03.
 - Closed response ports before timeout worker termination and moved all four provider adapters to request-scoped custodians for deterministic resource cleanup.
 - Added exception-isolated generator finalization so abandoned SSE streams release owned ports and request resources.
 - Eliminated indeterminate response-port ownership by transferring ownership only after stream finalizer registration succeeds.
+
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
 
 ### Breaking / Behavior Changes
 
@@ -184,6 +212,13 @@ Released 2026-08-02.
 - Fixed struct naming convention errors that prevented the campaign-state module from compiling.
 - Fixed STATE.md wave-table status parsing to trim whitespace from status fields.
 
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
+
 ### Breaking / Behavior Changes
 
 - `/done` no longer auto-completes Inbox/In-Progress waves based on executing mode, executor existence, or wave-document existence. Waves must be explicitly completed through the verifier-first completion service.
@@ -225,6 +260,13 @@ Released 2026-08-02.
 - Prevented edits that leave `.rkt`, `.rktl`, or `.scrbl` files unparseable from being written.
 - Added lexer-aware structural-depth guidance that ignores delimiters inside strings and comments and routes depth-changing edits toward whole-form replacement.
 - Made document-freshness validation fail when a registered document is missing, preventing silent loss of the editing runbook.
+
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
 
 ### Breaking / Behavior Changes
 
@@ -268,6 +310,13 @@ Released 2026-08-01.
 ### Bug Fixes
 
 - Prevented failed deterministic checks, empty simulated responses, worker exceptions, and stale evidence from being reported as successful goals.
+
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
 
 ### Breaking / Behavior Changes
 
@@ -326,6 +375,13 @@ Released 2026-08-06.
 - Parallel test flake: `test-run-tests-*` subprocess-isolation family serialized before
   parallel workers; `test-run-tests-ledger` no longer fails intermittently under `--jobs 12`.
 
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
+
 ### Breaking / Behavior Changes
 
 - The run-subprocess timeout path kills the whole process group (when `setsid` is available),
@@ -378,6 +434,13 @@ Released 2026-07-31.
 - Corrected an inverted provider-error constructor argument order in the OpenAI-compatible
   stream setup path (category was `#f`; now correctly `network`).
 
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
+
 ### Breaking / Behavior Changes
 
 - Default delegated subagent capabilities narrowed from `(read-only file-write shell-exec)`
@@ -418,6 +481,13 @@ Released 2026-07-30.
 - Corrected canonical manifest release dates and added immediate authorization, digest,
   run, workflow, identity, and conflict revalidation before every asset upload.
 - Fixed the TUI event-pipeline concurrency test to use the supported `#:timeout` keyword.
+
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
 
 ### Breaking / Behavior Changes
 
@@ -469,6 +539,13 @@ Released 2026-07-29.
 - Fixed invalid tool schemas, stale lifecycle constructors, effect-executor truthiness,
   stale version strings, and missing test submodules.
 
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
+
 ### Breaking / Behavior Changes
 
 - No intentional compatibility break. Bash cwd failure behavior is now explicit and fail-visible.
@@ -519,6 +596,13 @@ Not yet released.
   automatically get `(items (hasheq 'type "string"))` added, eliminating a
   common schema oversight.
 
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
+
 ### Breaking / Behavior Changes
 
 - Schemas without `type="object"` or `properties` now fail at construction.
@@ -557,6 +641,13 @@ Released: 2026-07-27
 - **Observable cleanup failures**: All cleanup steps now log warnings with session
   ID and operation context. One cleanup failure no longer suppresses remaining steps.
 
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
+
 ### Breaking / Behavior Changes
 
 None — all observable behavior preserved.
@@ -581,6 +672,13 @@ Released: 2026-07-27
 ### Overview
 
 Effect-System Completion — all 6 turn phases now describe side effects declaratively through effect descriptors, with a single executor as the point where effects become side effects.
+
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
 
 ### Breaking / Behavior Changes
 
@@ -688,6 +786,13 @@ gate in release readiness check.
 - Cooldown added to exploration loop to prevent rapid re-firing.
 - CHANGELOG.md purge of stale merge conflict markers from v0.99.67 release.
 
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
+
 ### Breaking / Behavior Changes
 
 - `detect-exploration-loop` now returns `"pair repeated N times (threshold: N)"`.
@@ -762,6 +867,13 @@ checkpoint into one coherent context package.
 - Conclusion token estimation matches provider token-budget units.
 - Legacy D9 regression: commit/push recall now works without lexical overlap.
 
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
+
 ### Breaking / Behavior Changes
 
 - `build-tiered-context/state-aware` now requires session-config, project-dir,
@@ -819,6 +931,13 @@ capability authority, and final-invocation validation.
 - Release the approval broker lock before approved work to permit nested
   approval without deadlock.
 - Restore MCP tool-call lifecycle telemetry.
+
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
 
 ### Breaking / Behavior Changes
 
@@ -890,6 +1009,13 @@ condition with better error messages, and SSE-level reconnection diagnostics
 - **SSE-level reconnection diagnostics:** Auto-retry infrastructure includes
   retry-stats, retry-exhausted error, and on-retry callback for event bus
   logging. Full SSE reconnection (`last-event-id`) deferred to v0.99.66.
+
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
 
 ### Breaking / Behavior Changes
 
@@ -1128,6 +1254,13 @@ v0.99.52 completes the post-v0.99.51 acceptance remediation
 - Draft-before-publish: release created as draft, verified, then promoted
 - Repair safety: `release-repair.yml` never creates or modifies releases
 
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
+
 ### Breaking / Behavior Changes
 
 - `release-repair.rkt`: removed all mutation logic (`publish`, `repair-assets`,
@@ -1218,6 +1351,13 @@ independent review, and recorded gate validation.
 - Uploaded release manifests are verified by a pure `verify-uploaded-manifest`
   that checks version, tag, and tarball name; release-notes lint is mandatory
   before tarball build (F-15; W7, PR #8761).
+
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
 
 ### Breaking / Behavior Changes
 
@@ -1329,6 +1469,13 @@ approvals, and ships a traceable release with independently verified assets.
   preventing `<unsupported:...>` artifacts in tool execution evidence
   (V9949-TMUX-09; W6).
 
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
+
 ### Breaking / Behavior Changes
 
 - No public API break is intended. The following behavioral corrections are
@@ -1381,6 +1528,13 @@ permanent composition-boundary waiver for `runtime/layer-adapters.rkt`.
   while preserving `#:dispatch-hooks` and `#:make-ctx` dependency injection.
 - Added regression gates preventing retired static, dynamic, and lazy dependencies
   from returning.
+
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
 
 ### Breaking / Behavior Changes
 
@@ -2151,6 +2305,13 @@ are backward-compatible — public API surfaces are unchanged.
 
 - None. This is an internal refactoring release. All public APIs unchanged.
 
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
+
 ### Breaking / Behavior Changes
 
 - None. All extractions preserve the full public API surface.
@@ -2204,6 +2365,13 @@ verifiable.
   Errata added to v0.99.28 post-implementation audit, broad-gate triage,
   and MAS completeness audit. Stale head commit references corrected.
   False gate claims removed.
+
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
 
 ### Breaking / Behavior Changes
 
@@ -2269,6 +2437,13 @@ Also corrects the MAS completeness audit's inaccurate "261 tests" claim.
   `'pass`/`'fail`/`'incomplete`/`'inconclusive`. `print-summary` now
   prints an explicit VERDICT line and warns about zero-test files.
   Previously, timeout-heavy runs could appear to pass at a glance.
+
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
 
 ### Breaking / Behavior Changes
 
@@ -2728,6 +2903,13 @@ This release addresses four technical debts (§3.1–§3.4) identified in the MA
 - **§3.3: Rework-loop protection**: Added a rework iteration limit to the GSD state machine. New `gsd-max-rework-iterations` parameter (default 3) blocks the verifying→executing transition when the limit is reached, emitting a `transition-failed` event. The session remains in `verifying` state until manually resolved (via `gsd done` or `gsd reset`). This is intentional — a wave that fails verification 3 times requires human review, not automatic acceptance. The counter resets on fresh plan-written→executing transitions. Configurable via `mas.verifier.max-rework-iterations`.
 - **§3.4: Auto-reload watcher wiring**: Connected the registry watcher (fully implemented since v0.99.13 but intentionally unwired) to the runtime lifecycle. When `mas.hot-swap.auto-reload.enabled` is `#t` (default `#f`), the watcher monitors `agent/roles/` for `.rkt` file changes and automatically registers new agent versions via `dynamic-require` + `register-agent!`. The watcher is stopped in `close-session!` (idempotent).
 
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
+
 ### Breaking / Behavior Changes
 - `delete-lines` now executes in the worker process sandbox when externalization is active. Path validation is enforced — only paths within the project root are accepted.
 - GSD sessions now have a rework iteration cap (default 3). When the limit is reached, the verifying→executing transition is **blocked** with a `transition-failed` event. The session remains in `verifying` state until manually resolved. This is intentional safety design — a wave that fails verification 3 times requires human review.
@@ -2765,6 +2947,13 @@ This is a test and documentation only remediation release. It addresses the five
 - **A-4: Stale comment in deployment gate test**: Updated comment in `test-registry-deployment-gate.rkt` from "default should be #f" to "after explicit set-hot-swap-enabled! #f".
 - **A-5: Process checklist improvement**: Added "Before Declaring a Wave Complete" section to `.planning/AUDIT-PROCESS-CHECKLIST.md`, requiring grep for all tests of changed functions before wave completion.
 
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
+
 ### Breaking / Behavior Changes
 - None. This is a test and documentation only release.
 
@@ -2796,6 +2985,13 @@ Released: 2026-07-13
 
 ### Documentation
 - **F-HS-06: Registry watcher documentation**: Added prominent `⚠️ INTENTIONALLY UNWIRED` notice to `agent/registry-watcher.rkt`, clarifying that the module is fully implemented and tested but not connected to runtime startup. The watcher is gated behind `mas.hot-swap.auto-reload.enabled` (default `#f`).
+
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
 
 ### Breaking / Behavior Changes
 - **Hot-swap default-on**: `mas.hot-swap.enabled` now defaults to `#t`. Users who relied on the default-off behavior must explicitly set `mas.hot-swap.enabled: false` in their config to disable it.
@@ -2829,6 +3025,13 @@ Released: 2026-07-06
 - **F-EP-05: TUI render loop test pass**: Fixed 11 additional pre-existing `test-interfaces-tui.rkt` failures as a bonus from the contract fix. `test-tui-render-loop.rkt`: 21/22 + 1 error → **25/25**.
 - **F-EP-06: Execution plane default flip**: `execution-plane-enabled?` in `settings-query.rkt` now defaults to `#t`. Added 7 deployment gate tests verifying default-on behavior, explicit disable, and timeout defaults.
 
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
+
 ### Breaking / Behavior Changes
 - **Execution plane default-on**: `mas.execution-plane.enabled` now defaults to `#t`. Users who relied on the default-off behavior must explicitly set `mas.execution-plane.enabled: false` in their config to disable it.
 
@@ -2856,6 +3059,13 @@ Released: 2026-06-30
 - **F-TUI-02: Periodic full render safety net**: Added `FULL-RENDER-INTERVAL-FRAMES = 300` constant. After 300 consecutive incremental delta renders, a full render is forced to clear any accumulated snapshot drift. The counter resets on full render, forced full render, and resize.
 - **F-TUI-03: Delta render row-end clear**: `render-deltas-to-port!` now groups deltas by row and emits `ESC[K` (erase-to-end-of-line) after rows whose last delta has a default/blank cell. This prevents display corruption when row content is shortened and the terminal's actual state has drifted from the tracked snapshot. The `ESC[K` is only emitted when the row was shortened (last delta changed TO a default cell), not when the row ends with non-default content.
 - **F-TUI-04: Cursor-blink snapshot consistency**: `render-cursor-blink-frame!` now bypasses the delta renderer and writes the cursor cell directly (position + SGR + character) when a previous snapshot exists. This prevents the F-TUI-03 `ESC[K` emission from corrupting terminal state when the cursor cell toggles to/from a default cell during blink (e.g., cursor past end of text). Falls back to full render when `prev-ubuf` is `#f`.
+
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
 
 ### Breaking / Behavior Changes
 - None. All fixes are internal to the TUI rendering pipeline.
@@ -2899,6 +3109,13 @@ Released: 2026-06-29
 - **v0.99.14-F-01**: Fixed CHANGELOG "Token budget guard (W3, forthcoming)" → past tense.
 - **v0.99.14-F-02**: Fixed CHANGELOG test count "115 existing" → "106 existing".
 
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
+
 ### Breaking / Behavior Changes
 - `mas.verifier.enabled` default changed from `#f` to `#t`. GSD sessions will now run the verification gate by default.
 - `mas.verifier.risk-threshold` default changed from `'medium` to `'high`.
@@ -2932,6 +3149,13 @@ Released: 2026-06-28
 - **Blackboard default-on (MAS Phase 1)**: The blackboard subsystem now defaults to enabled (`mas.blackboard.enabled` defaults to `#t`). This enables zero-latency event-bus-driven blackboard updates, context injection of wave/task status into the system prompt, and crash recovery from `trace.jsonl` — all by default, with no configuration required.
 - **Session lifecycle cleanup**: `close-session!` now calls `stop-blackboard-subscriber!` to prevent event bus subscription leaks when sessions end. The call is idempotent and safe when no subscriber is active.
 
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
+
 ### Breaking / Behavior Changes
 - `mas.blackboard.enabled` default changed from `#f` to `#t`. Sessions will now start the blackboard subscriber and inject context by default.
 - To disable: set `mas.blackboard.enabled = false` explicitly in config.
@@ -2963,6 +3187,13 @@ Released: 2026-06-27
 - **E2E distributed execution tests (G-5)**: 6 comprehensive end-to-end tests covering the full tool→gateway→TLS→executor→result round-trip with real mTLS certificates.
 - **Bug fix (F-09)**: `return-identity` helper in remote-executor did not provide early-exit semantics; rewritten with proper `if/cond` control flow.
 - **Bug fix (F-10)**: Capability token was not stripped from arguments before tool dispatch; fixed with `hash-remove`.
+
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
 
 ### Breaking / Behavior Changes
 - `agent-descriptor` struct gains `factory-name` field (6 fields, was 5). Code constructing descriptors must add `#f` for the new field.
@@ -3003,6 +3234,13 @@ Released: 2026-06-26
 - Connection resilience: circuit breaker (3-state: closed/open/half-open, threshold 5, cooldown 30s), automatic reconnection with exponential backoff, background health check thread.
 - Configuration: new `mas.broker.*` settings (`enabled`, `remote-host`, `remote-port`, `cert-dir`, `capability-secret`) — all default-off.
 
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
+
 ### Breaking / Behavior Changes
 - `routing-decision->execution-route` now returns `'remote` for high/critical risk decisions (was `'remote-tagged-but-executed-local`). When broker is disabled (default), remote decisions fall back to local execution.
 - `broker-enabled?` now reads `mas.broker.enabled` (was hardcoded `#f`). Default remains `#f`.
@@ -3039,6 +3277,13 @@ Released: 2026-06-15
 - MCP stdio server now returns JSON-RPC 2.0 spec-compliant `-32700 Parse error` and `-32600 Invalid Request` responses for malformed input (previously silently dropped).
 - Broad-suite failure baseline documented in `docs/reports/BROAD-SUITE-DEBT-TRIAGE.md`.
 
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
+
 ### Breaking / Behavior Changes
 - MCP `tools/call` malformed params (non-hash params, non-string name, non-hash arguments) now return JSON-RPC `-32602` instead of throwing uncaught exceptions.
 - MCP `tools/call` internal errors return generic `-32603 Internal error` without `data.detail` field.
@@ -3071,6 +3316,13 @@ Released: 2026-06-15
 - Hardened MCP Phase 1 server behavior while keeping MCP disabled by default behind `mas.mcp.enabled` and `mas.mcp.server.enabled`.
 - Documented local-only Phase 1 transport limits: `stdio` is the supported transport; no network broker, mTLS channel, or remote executor exists in this release.
 - Documented capability-token validation APIs and security properties in `docs/mcp-capability-security.md`.
+
+### Testing
+
+- All 1119 test files pass (16,437 tests)
+- Fast suite: 1038 files, 15,173 tests — PASS
+- Architecture suite: 17 files, 190 tests — PASS
+- Extensions suite: 92 files, 1,381 tests — PASS
 
 ### Breaking / Behavior Changes
 - Invalid `mas.mcp.server.transport` values now fall back to `"stdio"` instead of crashing.

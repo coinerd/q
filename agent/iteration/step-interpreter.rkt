@@ -103,15 +103,13 @@
                   select-highest-priority-action
                   maybe-execute-action
                   rollback-action-type)
-         (only-in "../../runtime/context-assembly/state-aware-builder.rkt" current-reflection-event)
-         (only-in "../../runtime/memory/auto-extraction.rkt"
-                  maybe-auto-extract-tool-results!
-                  current-auto-extraction-enabled)
          (only-in "../../runtime/iteration/decision.rkt"
                   step-result
                   step-result?
                   step-result-action
                   step-result-new-counters)
+         ;; v0.99.85: current-reflection-event moved to agent/state.rkt
+         (only-in "../state.rkt" current-reflection-event)
          (only-in "../../runtime/iteration/internal.rkt" assert-payload)
          (only-in "../../runtime/iteration/directive.rkt"
                   directive-recurse
@@ -133,11 +131,17 @@
            (-> (listof message?) loop-infra? any/c any/c (listof message?))]
           [sink-append-entries! (->* (loop-infra? (listof message?)) ((or/c any/c #f)) void?)]
           [current-reflection-prompt-enabled (parameter/c boolean?)]
-          [REFLECTION-THRESHOLD-CHARS exact-positive-integer?]))
+          [REFLECTION-THRESHOLD-CHARS exact-positive-integer?]
+          [current-post-tool-result-hook (parameter/c procedure?)]))
 
 ;; ── v0.96.13 W3: Reflection prompt ──
 (define current-reflection-prompt-enabled (make-parameter #f))
 (define REFLECTION-THRESHOLD-CHARS 4000)
+
+;; ── v0.99.84: Tool-result extraction hook (dependency inversion) ──
+;; Called after tool execution with extractable tool-result messages.
+;; Default is a no-op. Runtime sets this to wire memory extraction.
+(define current-post-tool-result-hook (make-parameter (lambda (msgs session-id project-root) (void))))
 
 ;; ============================================================
 ;; R-09/R-10: Sink-aware append helper
@@ -234,35 +238,33 @@
                            payload)
       ;; v0.96.14 F3: Wire reflection event → parameter for preamble consumption
       (current-reflection-event payload)))
-  ;; GAP-3: Auto-extract from tool results (ADR-0023)
-  (when (current-auto-extraction-enabled)
-    ;; GAP-2 fix: Build tool-call-id → tool-name lookup from current tool calls
-    (define tcid->name
-      (for/hash ([tc (in-list current-tool-calls)])
-        (define tcid (tool-call-id tc))
-        (values (or tcid "") (tool-call-name tc))))
-    (define extractable-msgs
-      (for/list ([m (in-list tool-result-msgs)])
-        ;; Extract tool-call-id from tool-result-part content
-        (define parts (message-content m))
-        (define tcid
-          (for/or ([p (in-list parts)]
-                   #:when (tool-result-part? p))
-            (tool-result-part-tool-call-id p)))
-        (define tool-name (hash-ref tcid->name (or tcid "") "unknown"))
-        ;; Extract actual content from tool-result-parts
-        (define content-str
-          (string-join (for/list ([p (in-list parts)]
-                                  #:when (tool-result-part? p))
-                         (define c (tool-result-part-content p))
-                         (if (string? c)
-                             c
-                             (format "~a" c)))
-                       "\n"))
-        (hasheq 'content content-str 'name tool-name)))
-    (maybe-auto-extract-tool-results! extractable-msgs
-                                      #:session-id (loop-infra-session-id infra)
-                                      #:project-root (loop-infra-log-path infra)))
+  ;; v0.99.84: Tool-result extraction delegated to Runtime via hook parameter.
+  ;; The hook is set by the wiring layer to call maybe-auto-extract-tool-results!.
+  ;; Agent Core constructs the extractable messages but does not own the extraction logic.
+  (define tcid->name
+    (for/hash ([tc (in-list current-tool-calls)])
+      (define tcid (tool-call-id tc))
+      (values (or tcid "") (tool-call-name tc))))
+  (define extractable-msgs
+    (for/list ([m (in-list tool-result-msgs)])
+      (define parts (message-content m))
+      (define tcid
+        (for/or ([p (in-list parts)]
+                 #:when (tool-result-part? p))
+          (tool-result-part-tool-call-id p)))
+      (define tool-name (hash-ref tcid->name (or tcid "") "unknown"))
+      (define content-str
+        (string-join (for/list ([p (in-list parts)]
+                                #:when (tool-result-part? p))
+                       (define c (tool-result-part-content p))
+                       (if (string? c)
+                           c
+                           (format "~a" c)))
+                     "\n"))
+      (hasheq 'content content-str 'name tool-name)))
+  ((current-post-tool-result-hook) extractable-msgs
+                                   (loop-infra-session-id infra)
+                                   (loop-infra-log-path infra))
   (values updated-ctx result-classes))
 
 (define (execute-pending-tool-calls new-msgs infra config ws)

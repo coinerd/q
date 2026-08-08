@@ -41,14 +41,59 @@
   (define out-file (make-parameter #f))
   (define json-out-file (make-parameter #f))
   (define strict? (make-parameter #f))
+  (define ci-mode? (make-parameter #f))
 
   (command-line #:program "abstraction-audit"
                 #:once-each [("--root" "-r") dir "Root directory to scan" (root dir)]
                 [("--out" "-o") file "Write report to file (default: stdout)" (out-file file)]
                 [("--json-out" "-j") file "Write JSON report to file" (json-out-file file)]
-                [("--strict") "Fail if any module exceeds thresholds" (strict? #t)])
+                [("--strict") "Fail if any module exceeds thresholds" (strict? #t)]
+                [("--ci-mode") "CI-friendly output: JSON, HIGH/CRITICAL only, exit 0" (ci-mode? #t)])
 
   (define report (audit-directory (root)))
+
+  ;; CI mode: JSON to stdout with only HIGH and CRITICAL findings, exit 0
+  (when (ci-mode?)
+    (define summary (hash-ref report 'summary))
+    (define modules (hash-ref report 'modules))
+    (define high-critical-modules
+      (filter (lambda (m)
+                (or (> (hash-ref m 'struct-out-count 0) 5)
+                    (> (hash-ref m 'io-count 0) 10)
+                    (> (hash-ref m 'error-count 0) 10)
+                    (> (hash-ref m 'parameter-count 0) 15)
+                    (> (hash-ref m 'macro-count 0) 10)
+                    (> (hash-ref m 'handler-count 0) 8)))
+              modules))
+    (define ci-report
+      (hash 'mode
+            "ci"
+            'total-modules
+            (hash-ref summary 'total-modules)
+            'high-critical-findings
+            (length high-critical-modules)
+            'modules
+            (map (lambda (m)
+                   (hash 'path
+                         (hash-ref m 'path)
+                         'struct-out-count
+                         (hash-ref m 'struct-out-count 0)
+                         'io-count
+                         (hash-ref m 'io-count 0)
+                         'error-count
+                         (hash-ref m 'error-count 0)
+                         'parameter-count
+                         (hash-ref m 'parameter-count 0)
+                         'macro-count
+                         (hash-ref m 'macro-count 0)
+                         'handler-count
+                         (hash-ref m 'handler-count 0)))
+                 high-critical-modules)
+            'info
+            "Abstraction Manual: see docs/ABSTRACTION_INSTRUCTION_MANUAL.md"))
+    (write-string (jsexpr->json-string ci-report) (current-output-port))
+    (newline (current-output-port))
+    (exit 0))
 
   ;; Human-readable output
   (if (out-file)

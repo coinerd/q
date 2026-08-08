@@ -24,7 +24,51 @@
          infer-capabilities-from-tasks
          get-diff-excerpt
          get-test-summary
+         current-git-root
+         find-git-root-dir
          FILE-EXTENSION->CAPABILITY)
+
+;; ============================================================
+;; Git Root Resolution (moved before parameter for forward reference)
+;; ============================================================
+
+(define (find-git-root-dir start-dir)
+  (define start-path
+    (path->complete-path (if (path? start-dir)
+                             start-dir
+                             (string->path start-dir))))
+  (define (has-git? dir)
+    (define git-marker (build-path dir ".git"))
+    (or (directory-exists? git-marker) (file-exists? git-marker)))
+  (define q-sub (build-path start-path "q"))
+  (cond
+    [(has-git? start-path) start-path]
+    [(and (directory-exists? q-sub) (has-git? q-sub)) q-sub]
+    [else
+     (let loop ([dir start-path])
+       (cond
+         [(has-git? dir) dir]
+         [else
+          (define-values (parent _sub _dir?) (split-path dir))
+          (if (and parent (path? parent) (not (equal? parent dir)))
+              (loop parent)
+              #f)]))]))
+
+;; ============================================================
+;; Parameterized git root (W1: cwd migration)
+;; ============================================================
+
+;; A parameter that controls the git root used by plan-context-builder.
+;; Defaults to (find-git-root-dir (current-directory)).
+;; Callers can parameterize this for testing or to override resolution.
+(define current-git-root
+  (make-parameter (find-git-root-dir (current-directory))
+                  (lambda (val)
+                    (cond
+                      [(path? val) val]
+                      [(string? val) (string->path val)]
+                      [(not val) val]
+                      [else (raise-argument-error 'current-git-root "path? string? or #f" val)]))))
 
 ;; ============================================================
 ;; Plan Context Enrichment
@@ -77,28 +121,6 @@
           (set! caps (cons 'git-write caps)))
         caps)))
 
-(define (find-git-root-dir start-dir)
-  (define start-path
-    (path->complete-path (if (path? start-dir)
-                             start-dir
-                             (string->path start-dir))))
-  (define (has-git? dir)
-    (define git-marker (build-path dir ".git"))
-    (or (directory-exists? git-marker) (file-exists? git-marker)))
-  (define q-sub (build-path start-path "q"))
-  (cond
-    [(has-git? start-path) start-path]
-    [(and (directory-exists? q-sub) (has-git? q-sub)) q-sub]
-    [else
-     (let loop ([dir start-path])
-       (cond
-         [(has-git? dir) dir]
-         [else
-          (define-values (parent _sub _dir?) (split-path dir))
-          (if (and parent (path? parent) (not (equal? parent dir)))
-              (loop parent)
-              #f)]))]))
-
 ;; Get a compact git diff excerpt for the wave's files.
 ;; v0.99.24 C-3: Fixed dead code — file paths were computed but never passed to git.
 ;; v0.99.83 W1 (F-7): Fixed stderr leak — system* wrote git errors to the terminal.
@@ -109,7 +131,7 @@
   (if (or (null? files) (not base-dir))
       ""
       (with-handlers ([exn:fail? (lambda (_) "")])
-        (define git-root (find-git-root-dir base-dir))
+        (define git-root (or (current-git-root) (find-git-root-dir base-dir)))
         (if (not git-root)
             ""
             (parameterize ([current-directory git-root])
