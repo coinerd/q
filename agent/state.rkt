@@ -17,30 +17,10 @@
                        [loop-state-events (-> loop-state? (listof any/c))]
                        [state-add-message! (-> loop-state? any/c void?)]
                        [state-add-event! (-> loop-state? any/c void?)]
-                       [current-loop-state-for-error-recovery (parameter/c (or/c loop-state? #f))]
-                       [current-partial-text (parameter/c (or/c string? #f))]
                        [current-empty-response-retried? (parameter/c boolean?)]
                        [current-reflection-event (parameter/c (or/c any/c #f))]))
 
 ;; ============================================================
-;; v0.45.10 NF1: Error-path recovery parameter
-;; ============================================================
-
-;; Set by run-agent-turn before streaming, read by dispatch-iteration's
-;; error handler to flush partial messages to session.jsonl.
-;; #f when no turn is active.
-(define current-loop-state-for-error-recovery (make-parameter #f))
-
-;; ============================================================
-;; v0.99.82 W3 NR-4: Partial result text from streaming errors
-;; ============================================================
-
-;; Set by stream-from-provider's error handler when partial output is
-;; accumulated before a mid-stream timeout. Read by the provider retry
-;; layer to inject partial text as continuation context on retry.
-;; #f when no partial text is available.
-(define current-partial-text (make-parameter #f))
-
 ;; v0.99.83 W2: Empty-response auto-retry tracking
 ;; ============================================================
 

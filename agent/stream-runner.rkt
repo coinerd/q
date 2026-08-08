@@ -13,6 +13,7 @@
          "state.rkt"
          (only-in "../util/content/content-parts.rkt" make-text-part)
          (only-in "../util/message/message.rkt" make-message message message-id)
+         (only-in "../util/exn.rkt" exn:fail:stream-error)
          "../util/ids.rkt"
          (only-in "../util/cancellation.rkt" cancellation-token? cancellation-token-cancelled?)
          (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload)
@@ -91,10 +92,11 @@
   (with-handlers ([exn:fail?
                    (lambda (e)
                      ;; AF5 (RC2): Persist partial assistant message before re-raising.
-                     (define partial-text (streaming-message-text sm))
-                     (when (and partial-text (> (string-length partial-text) 0))
-                       ;; v0.99.82 W3 NR-4: Set partial text for retry layer.
-                       (current-partial-text partial-text)
+                     ;; Attach partial text + messages to the exception for
+                     ;; explicit recovery by retry and session-lifecycle layers.
+                     (define raw-text (streaming-message-text sm))
+                     (define partial-text (and raw-text (> (string-length raw-text) 0) raw-text))
+                     (when partial-text
                        (define partial-msg
                          (make-message (generate-id)
                                        #f
@@ -126,7 +128,13 @@
                                                                           #:reason
                                                                           "provider-stream-error")
                                         #:state state)
-                     (raise e))])
+                     ;; Wrap with recovery data for upstream consumers.
+                     ;; The message mirrors the original so error classification works.
+                     (raise (exn:fail:stream-error (exn-message e)
+                                                   (current-continuation-marks)
+                                                   partial-text
+                                                   (loop-state-messages state)
+                                                   e)))])
     (let stream-loop ()
       (define chunk (stream-gen))
       (when (and chunk (not (eq? chunk #f)))

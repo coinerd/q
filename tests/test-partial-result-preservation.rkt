@@ -4,7 +4,7 @@
 ;; W3 NR-4: Partial result preservation tests.
 ;;
 ;; Verifies:
-;; 1. Partial text is captured from streaming errors (transcript preservation).
+;; 1. Partial text is captured from streaming errors via exn:fail:stream-error.
 ;; 2. Opt-in partial recovery feeds partial text as continuation context.
 ;; 3. Min-chars threshold prevents using tiny fragments.
 ;; 4. Partial text always visible in transcript regardless of setting.
@@ -12,7 +12,7 @@
 (require rackunit
          racket/list
          racket/string
-         (only-in "../agent/state.rkt" current-partial-text)
+         "../util/exn.rkt"
          (only-in "../llm/stream.rkt"
                   exn:fail:network:timeout:stream
                   exn:fail:network:timeout:stream?)
@@ -39,43 +39,38 @@
 
 (define base-settings (hasheq 'max-tokens 4096 'model "test-model"))
 
-;; ── Test: partial text captured from stream errors ───────
+;; ── Test: exn:fail:stream-error carries partial text ─────
 
-(test-case "current-partial-text parameter defaults to #f"
-  (check-equal? (parameterize ([current-partial-text #f])
-                  (current-partial-text))
-                #f))
-
-(test-case "partial text is set when stream produces output before timeout"
-  ;; Simulate: stream-from-provider catches error, sets parameter, re-raises
+(test-case "exn:fail:stream-error carries partial text for recovery"
+  ;; Simulate: stream-from-provider catches error, wraps with partial text, re-raises
   (define captured
-    (with-handlers ([exn:fail? (lambda (e) (current-partial-text))])
-      (current-partial-text "500 chars of partial output...")
-      (raise (make-stream-timeout 500))))
-  (check-equal? captured "500 chars of partial output...")
-  ;; Clean up
-  (current-partial-text #f))
+    (with-handlers ([exn:fail:stream-error? (lambda (e) (exn:fail:stream-error-partial-text e))])
+      (raise (exn:fail:stream-error "stream error"
+                                    (current-continuation-marks)
+                                    "500 chars of partial output..."
+                                    '()
+                                    (make-stream-timeout 500)))))
+  (check-equal? captured "500 chars of partial output..."))
 
 ;; ── Test: opt-in partial recovery injects continuation context ──
 
 (test-case "partial recovery injects continuation context on retry"
   (define attempt (box 0))
   (define received-ctxs (box '()))
-  (current-partial-text #f)
 
   (define result
     (call-with-provider-retry (lambda (ctx settings)
                                 (set-box! attempt (add1 (unbox attempt)))
                                 (set-box! received-ctxs (cons ctx (unbox received-ctxs)))
                                 (if (= (unbox attempt) 1)
-                                    ;; First attempt: simulate partial output and timeout
-                                    (begin
-                                      (current-partial-text "I was halfway through explaining")
-                                      (raise (make-stream-timeout 500)))
+                                    ;; First attempt: wrap exception with partial text
+                                    (raise (exn:fail:stream-error "stream timeout"
+                                                                  (current-continuation-marks)
+                                                                  "I was halfway through explaining"
+                                                                  '()
+                                                                  (make-stream-timeout 500)))
                                     ;; Second attempt: succeed
-                                    (begin
-                                      (current-partial-text #f)
-                                      'success)))
+                                    'success))
                               base-ctx
                               base-settings
                               (make-event-bus)
@@ -102,7 +97,6 @@
 (test-case "partial recovery skips when partial text below threshold"
   (define attempt (box 0))
   (define received-ctxs (box '()))
-  (current-partial-text #f)
 
   (define result
     (call-with-provider-retry (lambda (ctx settings)
@@ -110,12 +104,12 @@
                                 (set-box! received-ctxs (cons ctx (unbox received-ctxs)))
                                 (if (= (unbox attempt) 1)
                                     ;; Short partial text (below threshold of 200)
-                                    (begin
-                                      (current-partial-text "hi")
-                                      (raise (make-stream-timeout 2)))
-                                    (begin
-                                      (current-partial-text #f)
-                                      'success)))
+                                    (raise (exn:fail:stream-error "stream timeout"
+                                                                  (current-continuation-marks)
+                                                                  "hi"
+                                                                  '()
+                                                                  (make-stream-timeout 2)))
+                                    'success))
                               base-ctx
                               base-settings
                               (make-event-bus)
@@ -135,7 +129,6 @@
 (test-case "partial recovery disabled by default - no continuation injection"
   (define attempt (box 0))
   (define received-ctxs (box '()))
-  (current-partial-text #f)
 
   (define result
     (call-with-provider-retry
@@ -143,12 +136,12 @@
        (set-box! attempt (add1 (unbox attempt)))
        (set-box! received-ctxs (cons ctx (unbox received-ctxs)))
        (if (= (unbox attempt) 1)
-           (begin
-             (current-partial-text "Lots of partial output that should NOT be used for recovery")
-             (raise (make-stream-timeout 500)))
-           (begin
-             (current-partial-text #f)
-             'success)))
+           (raise (exn:fail:stream-error "stream timeout"
+                                         (current-continuation-marks)
+                                         "Lots of partial output that should NOT be used for recovery"
+                                         '()
+                                         (make-stream-timeout 500)))
+           'success))
      base-ctx
      base-settings
      (make-event-bus)
@@ -160,41 +153,18 @@
   ;; No continuation injection (partial-recovery defaults to #f)
   (check-equal? (length (second (unbox received-ctxs))) (length base-ctx)))
 
-;; ── Test: partial text cleared after consumption ──
-
-(test-case "partial text cleared after being consumed for recovery"
-  (current-partial-text "consumed text")
-  (define attempt (box 0))
-
-  (call-with-provider-retry (lambda (ctx settings)
-                              (set-box! attempt (add1 (unbox attempt)))
-                              (if (= (unbox attempt) 1)
-                                  (raise (make-stream-timeout 500))
-                                  'success))
-                            base-ctx
-                            base-settings
-                            (make-event-bus)
-                            "test-session"
-                            "test-turn-4"
-                            300
-                            #:partial-recovery #t)
-
-  ;; After recovery, the parameter should be cleared
-  (check-equal? (current-partial-text) #f))
-
 ;; ── Test: no partial text - no injection ──
 
 (test-case "no partial text means no continuation injection"
   (define attempt (box 0))
   (define received-ctxs (box '()))
-  (current-partial-text #f)
 
   (define result
     (call-with-provider-retry (lambda (ctx settings)
                                 (set-box! attempt (add1 (unbox attempt)))
                                 (set-box! received-ctxs (cons ctx (unbox received-ctxs)))
                                 (if (= (unbox attempt) 1)
-                                    ;; No partial text set
+                                    ;; No partial text — just raise the original
                                     (raise (make-stream-timeout 0))
                                     'success))
                               base-ctx
@@ -209,3 +179,32 @@
   (check-equal? result 'success)
   ;; No injection (no partial text available)
   (check-equal? (length (second (unbox received-ctxs))) (length base-ctx)))
+
+;; ── Test: partial messages attached to exception for transcript flush ──
+
+(test-case "partial messages attached to exception chain"
+  ;; When retries are exhausted, the exception should carry partial messages
+  ;; so session-lifecycle can flush them to session.jsonl
+  (define partial-msgs (list (hasheq 'role 'assistant 'content "partial")))
+  (define attempt (box 0))
+  (define caught-exn
+    (with-handlers ([exn:fail? (lambda (e) e)])
+      (call-with-provider-retry (lambda (ctx settings)
+                                  (set-box! attempt (add1 (unbox attempt)))
+                                  ;; Always fail with stream error carrying messages
+                                  (raise (exn:fail:stream-error "persistent timeout"
+                                                                (current-continuation-marks)
+                                                                "partial text"
+                                                                partial-msgs
+                                                                (make-stream-timeout 500))))
+                                base-ctx
+                                base-settings
+                                (make-event-bus)
+                                "test-session"
+                                "test-turn-6"
+                                10))) ; very short ceiling
+
+  ;; The final exception should be exn:fail:stream-error wrapping retry-exhausted
+  (check-pred exn:fail:stream-error? caught-exn)
+  ;; And should carry the partial messages
+  (check-equal? (exn:fail:stream-error-partial-messages caught-exn) partial-msgs))

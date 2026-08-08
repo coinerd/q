@@ -159,60 +159,56 @@
   ;; Ensure we have a state for accumulation
   (define st (or state (make-loop-state session-id turn-id)))
 
-  ;; v0.45.10 NF1: Set loop-state parameter so dispatch-iteration's error
-  ;; handler can recover partial messages from stream errors.
-  (parameterize ([current-loop-state-for-error-recovery st])
+  ;; Phase 1: Emit turn-started (via phase pipeline + effect executor)
+  (define-values (ctx1 fx1) (phase-emit-start session-id turn-id st context))
+  (execute-effects! fx1 #:bus bus #:state st #:hook-dispatcher hook-dispatcher)
 
-    ;; Phase 1: Emit turn-started (via phase pipeline + effect executor)
-    (define-values (ctx1 fx1) (phase-emit-start session-id turn-id st context))
-    (execute-effects! fx1 #:bus bus #:state st #:hook-dispatcher hook-dispatcher)
+  ;; Phase 2: Build context (via phase pipeline + effect executor)
+  (define-values (raw-messages fx2) (phase-build-context bus session-id turn-id st ctx1))
+  (execute-effects! fx2 #:bus bus #:state st)
 
-    ;; Phase 2: Build context (via phase pipeline + effect executor)
-    (define-values (raw-messages fx2) (phase-build-context bus session-id turn-id st ctx1))
-    (execute-effects! fx2 #:bus bus #:state st)
+  ;; Phase 3: Build model-request (via phase pipeline) — preserve effects!
+  (define-values (req fx3) (phase-build-request raw-messages tools provider-settings))
+  (execute-effects! fx3 #:bus bus #:state st)
 
-    ;; Phase 3: Build model-request (via phase pipeline) — preserve effects!
-    (define-values (req fx3) (phase-build-request raw-messages tools provider-settings))
-    (execute-effects! fx3 #:bus bus #:state st)
+  ;; Phase 4: Pre-hook (via phase pipeline) — route through effects!
+  (define-values (pre-hook-payload fx4) (phase-pre-hook provider raw-messages req))
+  (define pre-hook-result
+    (execute-effects/return fx4 #:bus bus #:state st #:hook-dispatcher hook-dispatcher))
 
-    ;; Phase 4: Pre-hook (via phase pipeline) — route through effects!
-    (define-values (pre-hook-payload fx4) (phase-pre-hook provider raw-messages req))
-    (define pre-hook-result
-      (execute-effects/return fx4 #:bus bus #:state st #:hook-dispatcher hook-dispatcher))
-
-    ;; v0.43.0: Reducer-driven dispatch
-    ;; pre-hook-result is #f if hook was not dispatched, or hook-result from dispatcher
-    (define d-pre (decide-after-pre-hook pre-hook-result))
-    (match (turn-decision-tag d-pre)
-      ['blocked
-       ;; v0.99.70 W1: Route blocked branch through effects!
-       ;; Use execute-effects/return to capture the build-result from the effect list.
-       (execute-effects/return
-        (list (effect:update-fsm (current-turn-fsm-state) turn-event-hook-block)
-              (effect:emit-event 'model-request-blocked
-                                 (make-model-request-blocked-event #:session-id session-id
-                                                                   #:turn-id turn-id
-                                                                   #:timestamp
-                                                                   (current-inexact-milliseconds)
-                                                                   #:reason "hook"))
-              (effect:emit-event 'turn-end
-                                 (make-turn-end-event #:session-id session-id
-                                                      #:turn-id turn-id
-                                                      #:timestamp (current-inexact-milliseconds)
-                                                      #:reason "hook-blocked"
-                                                      #:duration-ms 0))
-              (effect:build-result st 'hook-blocked (hasheq 'hook 'model-request-pre)))
-        #:bus bus
-        #:state st)]
-      [_
-       ;; v0.46.10 (I-1): Streaming dispatch extracted to run-streaming-phase
-       (run-streaming-phase provider
-                            req
-                            bus
-                            session-id
-                            turn-id
-                            st
-                            raw-messages
-                            tools
-                            hook-dispatcher
-                            cancellation-token)])))
+  ;; v0.43.0: Reducer-driven dispatch
+  ;; pre-hook-result is #f if hook was not dispatched, or hook-result from dispatcher
+  (define d-pre (decide-after-pre-hook pre-hook-result))
+  (match (turn-decision-tag d-pre)
+    ['blocked
+     ;; v0.99.70 W1: Route blocked branch through effects!
+     ;; Use execute-effects/return to capture the build-result from the effect list.
+     (execute-effects/return
+      (list (effect:update-fsm (current-turn-fsm-state) turn-event-hook-block)
+            (effect:emit-event 'model-request-blocked
+                               (make-model-request-blocked-event #:session-id session-id
+                                                                 #:turn-id turn-id
+                                                                 #:timestamp
+                                                                 (current-inexact-milliseconds)
+                                                                 #:reason "hook"))
+            (effect:emit-event 'turn-end
+                               (make-turn-end-event #:session-id session-id
+                                                    #:turn-id turn-id
+                                                    #:timestamp (current-inexact-milliseconds)
+                                                    #:reason "hook-blocked"
+                                                    #:duration-ms 0))
+            (effect:build-result st 'hook-blocked (hasheq 'hook 'model-request-pre)))
+      #:bus bus
+      #:state st)]
+    [_
+     ;; v0.46.10 (I-1): Streaming dispatch extracted to run-streaming-phase
+     (run-streaming-phase provider
+                          req
+                          bus
+                          session-id
+                          turn-id
+                          st
+                          raw-messages
+                          tools
+                          hook-dispatcher
+                          cancellation-token)]))

@@ -7,14 +7,19 @@
          racket/string
          (only-in "../agent/event-emitter.rkt" emit-session-event! emit-typed-event!)
          (only-in "../agent/event-structs/iteration-events.rkt" make-auto-retry-start-event)
-         (only-in "../agent/state.rkt" current-partial-text)
          (only-in "../llm/token-budget.rkt" estimate-context-tokens)
          (only-in "../util/event/event-bus.rkt" event-bus?)
          (only-in "../util/content/content-parts.rkt" make-text-part)
          (only-in "../util/message/message.rkt" make-message)
+         (only-in "../util/exn.rkt"
+                  exn:fail:stream-error
+                  exn:fail:stream-error?
+                  exn:fail:stream-error-partial-text
+                  exn:fail:stream-error-partial-messages
+                  exn:fail:stream-error-original-exn)
          (only-in "../util/ids.rkt" generate-id now-seconds)
          (only-in "adaptive-retry.rkt" adaptive-network-error-type? adapt-provider-request)
-         (only-in "auto-retry.rkt" with-auto-retry)
+         (only-in "auto-retry.rkt" with-auto-retry retry-exhausted? retry-exhausted-original-exn)
          "provider-health.rkt")
 
 (provide (contract-out [call-with-provider-retry
@@ -45,6 +50,24 @@
          #:partial-recovery-min-chars [partial-min-chars default-partial-recovery-min-chars])
   (define ctx-for-retry (box initial-context))
   (define settings-for-retry (box initial-settings))
+
+  ;; Recovery data extracted from exn:fail:stream-error wrappers.
+  ;; These local boxes replace the former current-partial-text parameter.
+  (define partial-text-box (box #f))
+  (define partial-msgs-box (box '()))
+
+  ;; Wrap attempt-proc to intercept exn:fail:stream-error from stream-from-provider.
+  ;; Extracts recovery data into local boxes, then re-raises the original
+  ;; exception so with-auto-retry's error classification works correctly.
+  (define (wrapped-attempt ctx settings)
+    (with-handlers ([exn:fail:stream-error?
+                     (lambda (e)
+                       (set-box! partial-text-box (exn:fail:stream-error-partial-text e))
+                       (set-box! partial-msgs-box (exn:fail:stream-error-partial-messages e))
+                       ;; Re-raise original so retry classification (held-request?,
+                       ;; minimal-output-stall?, etc.) can inspect the real exception.
+                       (raise (exn:fail:stream-error-original-exn e)))])
+      (attempt-proc ctx settings)))
 
   (define (emit-retry-event! attempt max-retries delay-ms error-msg error-type)
     (emit-typed-event! bus
@@ -87,13 +110,13 @@
                                    'floorReached
                                    (not adapted?)))))
 
-  ;; v0.99.82 W3 NR-4: Partial result recovery.
-  ;; When partial-recovery is enabled and partial text exceeds the
-  ;; threshold, prepend it as a continuation prompt so the retry can
-  ;; resume from where the provider left off.
+  ;; Partial result recovery: when partial-recovery is enabled and partial
+  ;; text (from exn:fail:stream-error) exceeds the threshold, prepend it as
+  ;; a continuation prompt so the retry can resume from where the provider
+  ;; left off.
   (define (maybe-inject-partial-recovery!)
     (when partial-recovery?
-      (define partial (current-partial-text))
+      (define partial (unbox partial-text-box))
       (when (and partial (>= (string-length partial) partial-min-chars))
         (define continuation-text
           (format
@@ -114,52 +137,64 @@
          "provider.partial-recovery"
          (hasheq 'partialChars (string-length partial) 'minChars partial-min-chars))))
     ;; Always clear after checking (consumed or not).
-    (current-partial-text #f))
+    (set-box! partial-text-box #f))
 
-  (with-auto-retry
-   (lambda () (attempt-proc (unbox ctx-for-retry) (unbox settings-for-retry)))
-   #:max-retries 2
-   #:base-delay-ms 1000
-   #:cumulative-ceiling-secs ceiling-secs
-   #:on-retry (lambda (attempt max-retries delay-ms error-msg error-type)
-                (emit-retry-event! attempt max-retries delay-ms error-msg error-type)
-                (maybe-adapt-request! attempt error-type)
-                (maybe-inject-partial-recovery!))
-   #:on-circuit-break
-   (lambda (break-reason original-exn)
-     ;; Emit dedicated circuit-break.tripped trace event for post-hoc analysis
-     (emit-session-event! bus
-                          session-id
-                          "circuit-break.tripped"
-                          (hasheq 'reason break-reason 'sessionId session-id 'turnId turn-id))
-     ;; Emit existing auto-retry.start event for TUI display
-     (emit-retry-event! 0 0 0 (exn-message original-exn) 'circuit-breaker))
-   ;; v0.99.82 W2 NR-3: Provider health gate.
-   ;; Before each retry, record the failure and check health.
-   ;; If the provider is unhealthy (≥ threshold failures in window),
-   ;; deny the retry — the provider is consistently failing.
-   #:health-check-proc
-   (if health
-       (lambda (exn attempt)
-         (record-failure! health)
-         (define healthy?
-           (provider-healthy? health #:window-secs health-window #:threshold health-threshold))
-         (unless healthy?
-           (emit-session-event! bus
-                                session-id
-                                "provider.health-gate"
-                                (hasheq 'failures
-                                        (recent-failure-count health #:window-secs health-window)
-                                        'window-secs
-                                        health-window
-                                        'threshold
-                                        health-threshold
-                                        'decision
-                                        'unhealthy)))
-         healthy?)
-       #f)
-   ;; On success, clear partial text and record health.
-   #:on-success (lambda ()
-                  (current-partial-text #f)
-                  (when health
-                    (record-success! health)))))
+  ;; Execute with retry. After with-auto-retry returns or raises,
+  ;; if an exception propagates and we have partial messages,
+  ;; re-wrap with exn:fail:stream-error so session-lifecycle can flush them.
+  (with-handlers ([exn:fail?
+                   (lambda (e)
+                     (define msgs (unbox partial-msgs-box))
+                     (if (pair? msgs)
+                         ;; Attach recovery data for upstream consumers (session-lifecycle).
+                         (raise (exn:fail:stream-error (exn-message e)
+                                                       (current-continuation-marks)
+                                                       #f ; partial-text already consumed or cleared
+                                                       msgs
+                                                       e))
+                         (raise e)))])
+    (with-auto-retry
+     (lambda () (wrapped-attempt (unbox ctx-for-retry) (unbox settings-for-retry)))
+     #:max-retries 2
+     #:base-delay-ms 1000
+     #:cumulative-ceiling-secs ceiling-secs
+     #:on-retry (lambda (attempt max-retries delay-ms error-msg error-type)
+                  (emit-retry-event! attempt max-retries delay-ms error-msg error-type)
+                  (maybe-adapt-request! attempt error-type)
+                  (maybe-inject-partial-recovery!))
+     #:on-circuit-break
+     (lambda (break-reason original-exn)
+       ;; Emit dedicated circuit-break.tripped trace event for post-hoc analysis
+       (emit-session-event! bus
+                            session-id
+                            "circuit-break.tripped"
+                            (hasheq 'reason break-reason 'sessionId session-id 'turnId turn-id))
+       ;; Emit existing auto-retry.start event for TUI display
+       (emit-retry-event! 0 0 0 (exn-message original-exn) 'circuit-breaker))
+     ;; v0.99.82 W2 NR-3: Provider health gate.
+     #:health-check-proc
+     (if health
+         (lambda (exn attempt)
+           (record-failure! health)
+           (define healthy?
+             (provider-healthy? health #:window-secs health-window #:threshold health-threshold))
+           (unless healthy?
+             (emit-session-event! bus
+                                  session-id
+                                  "provider.health-gate"
+                                  (hasheq 'failures
+                                          (recent-failure-count health #:window-secs health-window)
+                                          'window-secs
+                                          health-window
+                                          'threshold
+                                          health-threshold
+                                          'decision
+                                          'unhealthy)))
+           healthy?)
+         #f)
+     ;; On success, clear recovery data and record health.
+     #:on-success (lambda ()
+                    (set-box! partial-text-box #f)
+                    (set-box! partial-msgs-box '())
+                    (when health
+                      (record-success! health))))))
