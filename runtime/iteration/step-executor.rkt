@@ -1,12 +1,27 @@
 #lang racket/base
 
-;; runtime/iteration/step-interpreter.rkt — effectful step interpreter
+;; runtime/iteration/step-executor.rkt — effectful step executor
 ;;
-;; Extracted from runtime/iteration.rkt (v0.34.6 W0a — A-01 decomposition).
+;; v0.99.86: Relocated from agent/iteration/step-interpreter.rkt.
+;;
+;; This module performs EFFECTFUL EXECUTION of step-result directives.
+;; It coordinates tool execution, session persistence, context compaction,
+;; rollback actions, working-set mutation, and event emission.
+;;
+;; ARCHITECTURAL BOUNDARY:
+;;   The PURE DECISION of what to do next lives in decision.rkt
+;;   (compute-step-result, decide-next-action).
+;;
+;;   The EFFECTFUL EXECUTION of that decision lives here.
+;;
+;;   The Agent iteration loop calls compute-step-result to decide,
+;;   then calls interpret-step (below) to execute. This separation
+;;   means the Agent iteration algorithm can be understood without
+;;   reading tool, persistence, compaction, or rollback code.
 ;;
 ;; Provides:
-;;   interpret-step         — effectful interpreter for step-result
-;;   handle-stop-action     — handle 'stop action from decide-next-action
+;;   interpret-step             — effectful executor for step-result
+;;   handle-stop-action         — handle 'stop action
 ;;   execute-pending-tool-calls — execute pending tool calls, update working set
 
 (require racket/contract
@@ -14,7 +29,7 @@
          racket/match
          racket/class
          racket/list
-         (only-in "loop-state.rkt"
+         (only-in "../../agent/iteration/loop-state.rkt"
                   loop-infra
                   loop-infra?
                   iteration-snapshot
@@ -52,19 +67,19 @@
                   tool-result-part-content
                   tool-result-part-is-error?)
          (only-in "../../util/tool/tool-types.rkt" tool-call-name tool-call-id)
-         (only-in "../../runtime/layer-adapters.rkt" permission-config?)
-         (only-in "../../runtime/tool-coordinator.rkt"
+         (only-in "../layer-adapters.rkt" permission-config?)
+         (only-in "../tool-coordinator.rkt"
                   handle-tool-calls-pending/outcome
                   tool-batch-outcome-updated-context
                   tool-batch-outcome-effective-current-calls
                   tool-batch-outcome-current-result-messages)
-         (only-in "../../runtime/runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
-         (only-in "../../runtime/iteration/effect-executor.rkt"
+         (only-in "../runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
+         (only-in "effect-executor.rkt"
                   step-effect:append-entries
                   step-effect:emit-event
                   run-step-effects!)
          (only-in "../../util/hook-types.rkt" hook-result-action hook-result?)
-         (only-in "../event-emitter.rkt" emit-typed-event!)
+         (only-in "../../agent/event-emitter.rkt" emit-typed-event!)
          (only-in "../../util/event/event-contracts.rkt"
                   error-detail-payload/c
                   iteration-decision-payload/c
@@ -76,9 +91,9 @@
                   loop-result-metadata
                   loop-result-termination-reason
                   loop-result-messages)
-         (only-in "../../runtime/session/session-store.rkt" append-entries!)
-         (only-in "../../runtime/session/session-config.rkt" config-max-context-tokens)
-         (only-in "../../runtime/working-set.rkt"
+         (only-in "../session/session-store.rkt" append-entries!)
+         (only-in "../session/session-config.rkt" config-max-context-tokens)
+         (only-in "../working-set.rkt"
                   working-set-update!/actions
                   ws-entry-path
                   ws-entry-token-estimate
@@ -86,14 +101,14 @@
                   working-set-entries
                   working-set-entry-count
                   working-set-token-count)
-         (only-in "tool-turn-bridge.rkt" extract-tool-target-path)
-         (only-in "../../runtime/context/context-policy.rkt" estimate-message-tokens)
-         (only-in "../../runtime/compaction/session-compaction.rkt" compact-context-mid-turn)
-         (only-in "../../runtime/iteration/retry-policy.rkt"
+         (only-in "../../agent/iteration/tool-turn-bridge.rkt" extract-tool-target-path)
+         (only-in "../context/context-policy.rkt" estimate-message-tokens)
+         (only-in "../compaction/session-compaction.rkt" compact-context-mid-turn)
+         (only-in "retry-policy.rkt"
                   estimate-mid-turn-tokens
                   maybe-compact-mid-turn
                   detect-exploration-loop)
-         (only-in "../../runtime/context-assembly/rollback-actions.rkt"
+         (only-in "../context-assembly/rollback-actions.rkt"
                   increment-loop-warning-count!
                   current-loop-warning-count
                   escalation-threshold
@@ -103,15 +118,10 @@
                   select-highest-priority-action
                   maybe-execute-action
                   rollback-action-type)
-         (only-in "../../runtime/iteration/decision.rkt"
-                  step-result
-                  step-result?
-                  step-result-action
-                  step-result-new-counters)
-         ;; v0.99.85: current-reflection-event moved to agent/state.rkt
-         (only-in "../state.rkt" current-reflection-event)
-         (only-in "../../runtime/iteration/internal.rkt" assert-payload)
-         (only-in "../../runtime/iteration/directive.rkt"
+         (only-in "decision.rkt" step-result step-result? step-result-action step-result-new-counters)
+         (only-in "../../agent/state.rkt" current-reflection-event)
+         (only-in "internal.rkt" assert-payload)
+         (only-in "directive.rkt"
                   directive-recurse
                   directive-recurse?
                   directive-stop
@@ -518,15 +528,10 @@
                      (loop-counters-recent-tool-names corrected-counters)
                      'iteration
                      (loop-counters-iteration counters)))
-       ;; v0.96.14 F2: Feed exploration loop into rollback pipeline
+       ;; Feed exploration loop into rollback pipeline
        ;; by incrementing the warning counter (triggers escalation on next check)
        (increment-loop-warning-count!)
-       ;; v0.99.78 FIX: exploration-loop escalation to corrective steering.
-       ;; The detector previously only warned — the model circled for dozens of
-       ;; tool-only turns (observed: 49 iterations re-reading the same goal-*.rkt
-       ;; files). Once the warning count reaches the escalation threshold, inject
-       ;; a steering message into the next iteration's context so the model
-       ;; receives explicit guidance instead of circling silently.
+       ;; exploration-loop escalation to corrective steering.
        (when (>= (current-loop-warning-count) escalation-threshold)
          (current-loop-warning-count 0)
          (emit "iteration.exploration-loop.corrected"

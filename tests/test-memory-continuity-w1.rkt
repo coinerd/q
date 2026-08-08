@@ -33,7 +33,7 @@
                   current-reflection-event
                   build-state-awareness-preamble
                   check-rollback-triggers)
-         (only-in "../agent/iteration/step-interpreter.rkt"
+         (only-in "../runtime/iteration/step-executor.rkt"
                   current-reflection-prompt-enabled
                   REFLECTION-THRESHOLD-CHARS)
          (only-in "../runtime/working-set.rkt" ws-entry ws-entry->text ws-entry?))

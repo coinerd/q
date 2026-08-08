@@ -53,7 +53,7 @@
 ;; runtime/context-assembly/state-aware-builder.rkt
 ;; ============================================================
 
-;; Set by agent/iteration/step-interpreter.rkt when large tool results
+;; Set by runtime/iteration/step-executor.rkt when large tool results
 ;; are detected. Read by runtime/context-assembly/state-aware-builder.rkt
 ;; when building the preamble for the next turn, then cleared.
 ;; Lives here (agent layer) so that the agent does not import from
