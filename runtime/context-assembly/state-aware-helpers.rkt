@@ -30,9 +30,9 @@
                   rollback-plan?
                   rollback-plan-warnings
                   rollback-plan-recommended-action
-                  current-loop-warning-count
                   rollback-state
-                  rollback-state-warning-count))
+                  rollback-state-warning-count
+                  current-rollback-state))
 
 (provide coerce-task-state
          extract-recent-text
@@ -170,10 +170,10 @@
 ;; ============================================================
 
 ;; detect-rollback-plan: pure trigger evaluation that returns a rollback-plan
-;; or #f if no triggers fire. Does NOT mutate current-loop-warning-count.
+;; or #f if no triggers fire. Does NOT mutate any parameter.
 ;; The caller (execute-rollback-plan!) handles the counter side effects.
 ;;
-;; NOTE: This reads current-loop-warning-count from the parameter.
+;; NOTE: This reads the warning count from current-rollback-state.
 ;; Prefer detect-rollback-plan/state for genuinely pure usage.
 (define (detect-rollback-plan #:before-messages before-messages
                               #:after-messages after-messages
@@ -186,10 +186,10 @@
                              #:repeat-tool-count repeat-tool-count))
   (if (null? warnings)
       #f
-      (detect-rollback-plan* warnings (current-loop-warning-count))))
+      (detect-rollback-plan* warnings (rollback-state-warning-count (current-rollback-state)))))
 
 ;; detect-rollback-plan/state: GENUINELY PURE detection.
-;; Takes explicit rollback-state instead of reading current-loop-warning-count.
+;; Takes explicit rollback-state instead of reading from current-rollback-state.
 ;; All inputs are explicit arguments — no hidden parameter reads.
 (define (detect-rollback-plan/state state
                                     #:before-messages before-messages

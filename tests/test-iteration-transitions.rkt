@@ -29,7 +29,9 @@
                   tool-result-is-error?)
          (only-in "../extensions/hooks.rkt" dispatch-hooks)
          (only-in "../extensions/api.rkt" make-extension-registry register-extension! extension)
-         (only-in "../runtime/context-assembly/rollback-actions.rkt" current-loop-warning-count)
+         (only-in "../runtime/context-assembly/rollback-actions.rkt"
+                  current-rollback-state
+                  make-default-rollback-state)
          (only-in "../util/iteration/decision.rkt" current-max-consecutive-tool-calls)
          (only-in "../util/ids.rkt" generate-id)
          "helpers/mock-provider.rkt")
@@ -323,7 +325,7 @@
     ;; ============================================================
     (test-case "I7: exploration-loop escalation injects corrective steering"
       (cleanup-temp-log!)
-      (current-loop-warning-count 0) ; reset global counter
+      (current-rollback-state (make-default-rollback-state)) ; reset rollback state
       (define bus (make-event-bus))
       (define events (box '()))
       (subscribe! bus (lambda (e) (set-box! events (cons e (unbox events)))))

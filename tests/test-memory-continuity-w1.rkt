@@ -27,7 +27,12 @@
                   rollback-action?
                   rollback-action-type
                   rollback-action-severity
-                  current-loop-warning-count
+                  current-rollback-state
+                  make-default-rollback-state
+                  rollback-state
+                  rollback-warning-count
+                  record-rollback-warning!
+                  reset-rollback-warning-count!
                   escalation-threshold)
          (only-in "../runtime/context-assembly/state-aware-builder.rkt"
                   current-reflection-event
@@ -99,22 +104,23 @@
 ;; ══════════════════════════════════════════════════════════════════
 
 (test-case "W2.1: warnings->actions escalation — 1st repeat → warn-only"
-  (parameterize ([current-loop-warning-count 0])
+  (parameterize ([current-rollback-state (make-default-rollback-state)])
     (define actions (warnings->actions '("Repeated tool calls detected: 3 re-reads")))
     (check-true (andmap rollback-action? actions))
     (check-equal? (rollback-action-type (car actions)) 'warn-only)
-    (check-equal? (current-loop-warning-count) 1)))
+    ;; v0.99.86: warnings->actions is now pure — does not increment counter
+    (check-equal? (rollback-warning-count) 0)))
 
 (test-case "W2.1: warnings->actions escalation — 3rd repeat → force-distill"
-  (parameterize ([current-loop-warning-count 2])
+  (parameterize ([current-rollback-state (rollback-state 2 #f 0 '())])
     (define actions (warnings->actions '("Repeated tool calls detected: 3 re-reads")))
     (check-true (andmap rollback-action? actions))
     (check-equal? (rollback-action-type (car actions)) 'force-distill)
-    ;; Counter resets after escalation
-    (check-equal? (current-loop-warning-count) 0)))
+    ;; v0.99.86: pure — counter NOT reset by warnings->actions
+    (check-equal? (rollback-warning-count) 2)))
 
 (test-case "W2.2: exploration loop → force-distill immediately"
-  (parameterize ([current-loop-warning-count 0])
+  (parameterize ([current-rollback-state (make-default-rollback-state)])
     (define actions (warnings->actions '("exploration loop detected: (read edit) repeated 3 times")))
     (check-equal? (rollback-action-type (car actions)) 'force-distill)))
 
@@ -122,11 +128,11 @@
   (define actions (warnings->actions '("stuck: 45 messages with only 3% conclusion coverage")))
   (check-equal? (rollback-action-type (car actions)) 'expand-context))
 
-(test-case "W2.4: current-loop-warning-count parameter works"
-  (parameterize ([current-loop-warning-count 0])
-    (check-equal? (current-loop-warning-count) 0)
-    (current-loop-warning-count (add1 (current-loop-warning-count)))
-    (check-equal? (current-loop-warning-count) 1)))
+(test-case "W2.4: rollback warning count API works"
+  (parameterize ([current-rollback-state (make-default-rollback-state)])
+    (check-equal? (rollback-warning-count) 0)
+    (record-rollback-warning!)
+    (check-equal? (rollback-warning-count) 1)))
 
 ;; ══════════════════════════════════════════════════════════════════
 ;; W3: Forced reflection on tool results
@@ -179,11 +185,11 @@
   (check-true (string-contains? text (number->string ts))))
 
 (test-case "W4.3: warning counter resets on state transition"
-  (parameterize ([current-loop-warning-count 3])
-    (check-equal? (current-loop-warning-count) 3)
+  (parameterize ([current-rollback-state (rollback-state 3 #f 0 '())])
+    (check-equal? (rollback-warning-count) 3)
     ;; Simulating transition reset — the actual reset happens in turn-context.rkt
-    (current-loop-warning-count 0)
-    (check-equal? (current-loop-warning-count) 0)))
+    (reset-rollback-warning-count!)
+    (check-equal? (rollback-warning-count) 0)))
 
 (test-case "W4.4: ws-entry? predicate works"
   (define entry (ws-entry "/a.rkt" "m1" 10 1000 'kept))

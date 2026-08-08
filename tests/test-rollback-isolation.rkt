@@ -84,18 +84,25 @@
 ;; -- Test: Warning escalation via loop-warning-count --
 
 (test-case "warning-escalation: repeat-tool escalates to force-distill at threshold"
-  (parameterize ([current-loop-warning-count 0])
-    ;; escalation-threshold = 2: first call increments to 1, second to 2, third triggers
+  ;; warnings->actions is now PURE — reads count from rollback-state.
+  ;; Counter increment is done by record-rollback-warning! / advance-rollback-state.
+  (parameterize ([current-rollback-state (make-default-rollback-state)])
+    ;; count=0: first warning → warn-only
+    (define actions-0 (warnings->actions (list (list 'repeat-tool "3 repeats"))))
+    (check-equal? (rollback-action-type (car actions-0)) 'warn-only)
+    (check-equal? (rollback-warning-count) 0 "pure: does not increment")
+    ;; Manually increment to 1
+    (record-rollback-warning!)
+    (check-equal? (rollback-warning-count) 1)
     (define actions-1 (warnings->actions (list (list 'repeat-tool "3 repeats"))))
     (check-equal? (rollback-action-type (car actions-1)) 'warn-only)
-    (check-equal? (current-loop-warning-count) 1)
+    ;; Increment to 2 (>= threshold)
+    (record-rollback-warning!)
+    (check-equal? (rollback-warning-count) 2)
     (define actions-2 (warnings->actions (list (list 'repeat-tool "3 repeats"))))
-    (check-equal? (rollback-action-type (car actions-2)) 'warn-only)
-    (check-equal? (current-loop-warning-count) 2)
-    ;; Third occurrence: count 2 >= 2, escalates to force-distill, resets counter
-    (define actions-3 (warnings->actions (list (list 'repeat-tool "3 repeats"))))
-    (check-equal? (rollback-action-type (car actions-3)) 'force-distill)
-    (check-equal? (current-loop-warning-count) 0 "counter resets after escalation")))
+    (check-equal? (rollback-action-type (car actions-2)) 'force-distill)
+    ;; Pure: counter not reset by warnings->actions
+    (check-equal? (rollback-warning-count) 2 "pure: does not reset")))
 
 ;; -- Test: Auto-distillation enablement via force-distill callback --
 
@@ -172,7 +179,7 @@
     (parameterize ([current-task-state-aware-assembly? #t]
                    [current-conclusion-token-budget 2000]
                    [current-auto-distillation-enabled? #f]
-                   [current-loop-warning-count 0])
+                   [current-rollback-state (make-default-rollback-state)])
       (define tc-baseline
         (build-tiered-context/state-aware msgs
                                           #:task-state 'verification
@@ -186,7 +193,7 @@
   (parameterize ([current-task-state-aware-assembly? #t]
                  [current-conclusion-token-budget 2000]
                  [current-auto-distillation-enabled? #f]
-                 [current-loop-warning-count 0])
+                 [current-rollback-state (make-default-rollback-state)])
     (define tc-with-rollback
       (build-tiered-context/state-aware msgs
                                         #:task-state 'verification
@@ -247,7 +254,7 @@
 ;; ============================================================
 
 (test-case "detect-rollback-plan: returns #f for healthy metrics"
-  (parameterize ([current-loop-warning-count 0])
+  (parameterize ([current-rollback-state (make-default-rollback-state)])
     (define plan
       (detect-rollback-plan #:before-messages 10
                             #:after-messages 8
@@ -256,7 +263,7 @@
     (check-false plan "healthy metrics should produce no plan")))
 
 (test-case "detect-rollback-plan: returns plan for amnesia risk"
-  (parameterize ([current-loop-warning-count 0])
+  (parameterize ([current-rollback-state (make-default-rollback-state)])
     (define plan
       (detect-rollback-plan #:before-messages 10
                             #:after-messages 8
@@ -265,15 +272,13 @@
     (check-true (rollback-plan? plan))
     (check-true (pair? (rollback-plan-warnings plan)))))
 
-(test-case "detect-rollback-plan: pure -- does not mutate current-loop-warning-count"
-  (parameterize ([current-loop-warning-count 0])
+(test-case "detect-rollback-plan: pure -- does not mutate rollback-state"
+  (parameterize ([current-rollback-state (make-default-rollback-state)])
     (detect-rollback-plan #:before-messages 10
                           #:after-messages 8
                           #:conclusion-coverage 0.10
                           #:repeat-tool-count 3)
-    (check-equal? (current-loop-warning-count)
-                  0
-                  "pure detection must not mutate loop-warning-count")))
+    (check-equal? (rollback-warning-count) 0 "pure detection must not mutate warning count")))
 
 ;; ============================================================
 ;; Phase 4: Effectful Execution Tests
@@ -318,7 +323,7 @@
 (test-case "execute-rollback-plan!: handles warn-only action"
   (parameterize ([current-rollback-action-execution? #t]
                  [current-rollback-action-log '()]
-                 [current-loop-warning-count 0])
+                 [current-rollback-state (make-default-rollback-state)])
     (define plan
       (rollback-plan (list (list 'repeat-tool "3 repeats")) (make-warn-action "3 repeats")))
     (define result (execute-rollback-plan! plan))
@@ -336,9 +341,9 @@
   (check-equal? (rollback-state-action-log rs) '()))
 
 (test-case "detect-rollback-plan/state: genuinely pure — no parameter reads"
-  ;; Provide explicit state, verify it doesn't read current-loop-warning-count
-  (parameterize ([current-loop-warning-count 99]
-                 [current-rollback-state (make-default-rollback-state)])
+  ;; Provide explicit state with warning-count=0.
+  ;; Set current-rollback-state to a different value to verify no reads.
+  (parameterize ([current-rollback-state (rollback-state 99 #f 0 '())])
     (define plan
       (detect-rollback-plan/state (make-default-rollback-state)
                                   #:before-messages 10
@@ -346,10 +351,9 @@
                                   #:conclusion-coverage 0.10
                                   #:repeat-tool-count 0))
     (check-true (rollback-plan? plan))
-    ;; Detection used the explicit state (warning-count=0), not the parameter (99)
-    ;; If it read the parameter, escalation logic would differ
+    ;; Detection used the explicit state (warning-count=0), not current-rollback-state (99)
     (check-true (rollback-plan? plan)
-                "detection should succeed regardless of current-loop-warning-count parameter")))
+                "detection should succeed regardless of current-rollback-state parameter")))
 
 (test-case "detect-rollback-plan/state: returns #f for healthy metrics"
   (define plan
@@ -468,12 +472,12 @@
     (check-equal? result 'force-distill)
     (check-true (rollback-state-force-distill-active? (current-rollback-state)))))
 
-(test-case "increment-loop-warning-count!: syncs to rollback-state"
+(test-case "record-rollback-warning!: increments rollback-state warning count"
   (parameterize ([current-rollback-state (make-default-rollback-state)])
-    (increment-loop-warning-count!)
-    (check-equal? (rollback-state-warning-count (current-rollback-state)) 1)
-    (increment-loop-warning-count!)
-    (check-equal? (rollback-state-warning-count (current-rollback-state)) 2)))
+    (record-rollback-warning!)
+    (check-equal? (rollback-warning-count) 1)
+    (record-rollback-warning!)
+    (check-equal? (rollback-warning-count) 2)))
 
 (test-case "multiple consecutive rollback actions accumulate state"
   (define state (make-default-rollback-state))
@@ -499,17 +503,14 @@
   (check-true (rollback-state-force-distill-active? state3))
   (check-equal? (rollback-state-budget-expansion-level state3) 2 "expansion level accumulates"))
 
-(test-case "FSM transition resets warning count in rollback-state"
+(test-case "FSM transition resets warning count via API"
   (parameterize ([current-rollback-state (rollback-state 2 #f 0 '())])
-    ;; Simulate the transition reset logic from turn-context.rkt
-    (define rs (current-rollback-state))
-    (current-rollback-state (struct-copy rollback-state rs [warning-count 0]))
-    (check-equal? (rollback-state-warning-count (current-rollback-state)) 0)
+    (reset-rollback-warning-count!)
+    (check-equal? (rollback-warning-count) 0)
     ;; But force-distill and expansion persist
     (parameterize ([current-rollback-state (rollback-state 2 #t 1 '())])
-      (define rs2 (current-rollback-state))
-      (current-rollback-state (struct-copy rollback-state rs2 [warning-count 0]))
-      (check-equal? (rollback-state-warning-count (current-rollback-state)) 0)
+      (reset-rollback-warning-count!)
+      (check-equal? (rollback-warning-count) 0)
       (check-true (rollback-state-force-distill-active? (current-rollback-state)))
       (check-equal? (rollback-state-budget-expansion-level (current-rollback-state)) 1))))
 
