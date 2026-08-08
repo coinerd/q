@@ -99,6 +99,13 @@
          (only-in "../context-assembly/state-aware-builder.rkt" current-ws-evolution-enabled?)
          (only-in "../context-assembly/rollback-actions.rkt"
                   current-loop-warning-count
+                  current-rollback-state
+                  rollback-state
+                  rollback-state-warning-count
+                  rollback-state-force-distill-active?
+                  rollback-state-budget-expansion-level
+                  rollback-state-action-log
+                  make-default-rollback-state
                   tool-error-class->string)
          ;; Auto-distillation
          (only-in "../context-assembly/auto-distillation.rkt"
@@ -453,11 +460,14 @@
       (guarded-set-working-set-evolved! session result)))
   ;; v0.96.13 W4: Transition detection — trigger deterministic distillation on state change
   ;; Also resets the loop warning counter on state transition
+  ;; v0.99.85: Reset warning count in rollback-state (canonical) AND legacy parameter.
   ;; MF1-1 fix: Use ws-old-state (captured before WS mutation) instead of
   ;; re-reading current-last-task-fsm-state, which was already mutated above.
   (when (and task-state ws-old-state (not (eq? ws-old-state task-state)))
-    ;; State transition detected — reset warning counter
-    (current-loop-warning-count 0))
+    ;; State transition detected — reset warning counter in both state objects
+    (current-loop-warning-count 0)
+    (define rs (current-rollback-state))
+    (current-rollback-state (struct-copy rollback-state rs [warning-count 0])))
   (values task-state-raw task-state augmented-conclusions))
 
 ;; ============================================================

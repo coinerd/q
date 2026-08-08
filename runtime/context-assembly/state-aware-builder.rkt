@@ -38,6 +38,7 @@
                   check-rollback-triggers
                   check-rollback-triggers-with-actions
                   detect-rollback-plan
+                  detect-rollback-plan/state
                   ws-entry->conclusion-or-self
                   state-guidance-table)
          "context-floor.rkt"
@@ -49,11 +50,13 @@
          (only-in "rollback-actions.rkt"
                   maybe-execute-action
                   execute-rollback-plan!
+                  apply-rollback-plan!
                   current-force-distill-fn
                   current-expand-context-fn
                   current-revert-state-fn
                   current-rollback-action-execution?
                   current-rollback-action-log
+                  current-rollback-state
                   rollback-action-reason)
          (only-in "auto-distillation.rkt" current-auto-distillation-enabled?)
          (only-in "../../runtime/session/session-config.rkt"
@@ -358,13 +361,16 @@
             (for ([tc (in-list recent-tool-calls)])
               (hash-set! freq tc (add1 (hash-ref freq tc 0))))
             (apply max (hash-values freq)))))
-    ;; Phase 3: Pure detection — no parameter mutation
+    ;; v0.99.85: Use pure detection with explicit rollback-state.
+    ;; The plan is computed from explicit inputs only (no parameter reads).
     (define plan
-      (detect-rollback-plan #:before-messages (length ws-messages)
-                            #:after-messages (length effective-ws)
-                            #:conclusion-coverage coverage
-                            #:repeat-tool-count repeat-count))
-    ;; Phase 4: Effectful execution — callbacks, parameter mutations, logging
+      (detect-rollback-plan/state (current-rollback-state)
+                                  #:before-messages (length ws-messages)
+                                  #:after-messages (length effective-ws)
+                                  #:conclusion-coverage coverage
+                                  #:repeat-tool-count repeat-count))
+    ;; v0.99.85: Apply plan — effects (callbacks, logging) + state transition.
+    ;; Uses apply-rollback-plan! which advances current-rollback-state.
     (when plan
       (parameterize
           ([current-rollback-action-execution? #t]
@@ -382,7 +388,7 @@
             (lambda (a)
               (log-warning "context-assembly: revert-state action triggered: ~a"
                            (rollback-action-reason a)))])
-        (execute-rollback-plan! plan))))
+        (apply-rollback-plan! plan))))
   (if (and (null? preamble-entries) (null? memory-entries) (null? conclusion-entries))
       base-tc
       (tiered-context-with-tier-a base-tc new-tier-a)))
