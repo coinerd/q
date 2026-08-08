@@ -73,6 +73,11 @@
          (only-in "../../agent/event-structs/turn-events.rkt" turn-end-event)
          (only-in "../../agent/event-structs/session-events.rkt" make-context-event)
          "session-types.rkt"
+         (only-in "session-types.rkt" lifecycle-state-rollback-st set-lifecycle-state-rollback-st!)
+         (only-in "../context-assembly/rollback-actions.rkt"
+                  current-rollback-state
+                  make-default-rollback-state
+                  rollback-state?)
          (only-in "session-controls.rkt" set-model! shutdown-requested? force-shutdown-requested?)
          (only-in "../../llm/token-budget.rkt" DEFAULT-TOKEN-BUDGET-THRESHOLD)
          (only-in "../compaction/session-compaction.rkt" maybe-compact-context)
@@ -515,11 +520,23 @@
           (guarded-set-config!
            sess
            (dict-set (agent-session-config sess) 'last-user-prompt effective-input)))
-        (parameterize ([current-prompt-operation-session sess])
+        (parameterize ([current-prompt-operation-session sess]
+                       ;; v0.99.86: Session-scoped rollback state.
+                       ;; Parameterize from lifecycle-state so each session
+                       ;; starts with its own rollback state. Save back
+                       ;; before parameterize exits.
+                       [current-rollback-state
+                        (or (lifecycle-state-rollback-st (agent-session-lifecycle sess))
+                            (make-default-rollback-state))])
           (call-with-values
            (lambda ()
              (run-prompt-internal sess effective-input max-iterations token-budget-threshold ep! ba!))
            (lambda (updated-session result)
+             ;; v0.99.86: Persist rollback state back to lifecycle-state.
+             ;; This runs inside the parameterize scope, so (current-rollback-state)
+             ;; still reflects mutations from the prompt.
+             (set-lifecycle-state-rollback-st! (agent-session-lifecycle sess)
+                                               (current-rollback-state))
              (set-box! termination-reason (loop-result-termination-reason result))
              (set-box! emit-cleanup-turn-completed? #f)
              (values updated-session result))))]))
