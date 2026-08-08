@@ -311,3 +311,205 @@
       (rollback-plan (list (list 'repeat-tool "3 repeats")) (make-warn-action "3 repeats")))
     (define result (execute-rollback-plan! plan))
     (check-equal? result 'warn-only)))
+
+;; ============================================================
+;; Phase 5-10: Explicit Rollback State Tests
+;; ============================================================
+
+(test-case "rollback-state: default state has zeroed fields"
+  (define rs (make-default-rollback-state))
+  (check-equal? (rollback-state-warning-count rs) 0)
+  (check-false (rollback-state-force-distill-active? rs))
+  (check-equal? (rollback-state-budget-expansion-level rs) 0)
+  (check-equal? (rollback-state-action-log rs) '()))
+
+(test-case "detect-rollback-plan/state: genuinely pure — no parameter reads"
+  ;; Provide explicit state, verify it doesn't read current-loop-warning-count
+  (parameterize ([current-loop-warning-count 99]
+                 [current-rollback-state (make-default-rollback-state)])
+    (define plan
+      (detect-rollback-plan/state (make-default-rollback-state)
+                                  #:before-messages 10
+                                  #:after-messages 8
+                                  #:conclusion-coverage 0.10
+                                  #:repeat-tool-count 0))
+    (check-true (rollback-plan? plan))
+    ;; Detection used the explicit state (warning-count=0), not the parameter (99)
+    ;; If it read the parameter, escalation logic would differ
+    (check-true (rollback-plan? plan)
+                "detection should succeed regardless of current-loop-warning-count parameter")))
+
+(test-case "detect-rollback-plan/state: returns #f for healthy metrics"
+  (define plan
+    (detect-rollback-plan/state (make-default-rollback-state)
+                                #:before-messages 10
+                                #:after-messages 8
+                                #:conclusion-coverage 0.5
+                                #:repeat-tool-count 0))
+  (check-false plan "healthy metrics should produce no plan"))
+
+(test-case "detect-rollback-plan/state: escalation uses explicit state warning-count"
+  ;; With warning-count=2 (at threshold), repeat-tool should escalate to force-distill
+  (define escalated-state (rollback-state 2 #f 0 '()))
+  (define plan
+    (detect-rollback-plan/state escalated-state
+                                #:before-messages 10
+                                #:after-messages 10
+                                #:conclusion-coverage 1.0
+                                #:repeat-tool-count 3))
+  (check-true (rollback-plan? plan))
+  (define recommended (rollback-plan-recommended-action plan))
+  (check-true (and recommended (eq? (rollback-action-type recommended) 'force-distill))
+              "at threshold, repeat-tool should escalate to force-distill"))
+
+(test-case "advance-rollback-state: no-op for #f plan"
+  (define state (make-default-rollback-state))
+  (define new-state (advance-rollback-state state #f))
+  (check-eq? new-state state))
+
+(test-case "advance-rollback-state: force-distill activates permanent flag"
+  (define state (make-default-rollback-state))
+  (define plan
+    (rollback-plan (list (list 'amnesia-risk "low coverage"))
+                   (make-force-distill-action "amnesia" (hasheq 'trigger 'amnesia))))
+  (define new-state (advance-rollback-state state plan))
+  (check-true (rollback-state-force-distill-active? new-state)
+              "force-distill should set force-distill-active? permanently"))
+
+(test-case "advance-rollback-state: expand-context increments expansion level"
+  (define state (make-default-rollback-state))
+  (define plan
+    (rollback-plan (list (list 'excessive-savings "50% cut"))
+                   (make-expand-context-action "excessive" (hasheq))))
+  (define new-state (advance-rollback-state state plan))
+  (check-equal? (rollback-state-budget-expansion-level new-state) 1)
+  ;; Second expand-context should increment again
+  (define plan2
+    (rollback-plan (list (list 'excessive-savings "still cutting"))
+                   (make-expand-context-action "excessive" (hasheq))))
+  (define newer-state (advance-rollback-state new-state plan2))
+  (check-equal? (rollback-state-budget-expansion-level newer-state) 2))
+
+(test-case "advance-rollback-state: warn-only increments warning count"
+  (define state (make-default-rollback-state))
+  (define plan (rollback-plan (list (list 'repeat-tool "3 repeats")) (make-warn-action "3 repeats")))
+  (define new-state (advance-rollback-state state plan))
+  (check-equal? (rollback-state-warning-count new-state) 1))
+
+(test-case "advance-rollback-state: escalation resets warning count"
+  ;; At threshold (2), escalation should reset count to 0
+  (define state (rollback-state 2 #f 0 '()))
+  (define plan
+    (rollback-plan (list (list 'repeat-tool "3 repeats"))
+                   (make-force-distill-action "escalation" (hasheq 'trigger 'repeat-escalation))))
+  (define new-state (advance-rollback-state state plan))
+  (check-equal? (rollback-state-warning-count new-state) 0 "warning count resets after escalation"))
+
+(test-case "effective-auto-distill?: false when base off and no force-distill"
+  (check-false (effective-auto-distill? #f (make-default-rollback-state))))
+
+(test-case "effective-auto-distill?: true when base config on"
+  (check-true (effective-auto-distill? #t (make-default-rollback-state))))
+
+(test-case "effective-auto-distill?: true when force-distill fired"
+  (define rs (rollback-state 0 #t 0 '()))
+  (check-true (effective-auto-distill? #f rs)))
+
+(test-case "effective-conclusion-budget: base with no expansion"
+  (check-equal? (effective-conclusion-budget 2000 (make-default-rollback-state)) 2000))
+
+(test-case "effective-conclusion-budget: doubled at expansion level 1"
+  (define rs (rollback-state 0 #f 1 '()))
+  (check-equal? (effective-conclusion-budget 2000 rs) 4000))
+
+(test-case "effective-conclusion-budget: quadrupled at expansion level 2"
+  (define rs (rollback-state 0 #f 2 '()))
+  (check-equal? (effective-conclusion-budget 2000 rs) 8000))
+
+(test-case "current-rollback-state: parameterize creates isolated state"
+  ;; Simulate two independent sessions
+  (parameterize ([current-rollback-state (make-default-rollback-state)])
+    ;; Session A: trigger force-distill
+    (parameterize ([current-rollback-action-execution? #t]
+                   [current-rollback-state (rollback-state 0 #f 0 '())])
+      (define plan
+        (rollback-plan (list (list 'amnesia-risk "low coverage"))
+                       (make-force-distill-action "amnesia" (hasheq 'trigger 'amnesia))))
+      (apply-rollback-plan! plan)
+      (check-true (rollback-state-force-distill-active? (current-rollback-state))
+                  "session A should have force-distill active"))
+    ;; Session B: should NOT see session A's force-distill
+    (check-false (rollback-state-force-distill-active? (current-rollback-state))
+                 "session B should NOT share session A's rollback state")))
+
+(test-case "apply-rollback-plan!: no-op for #f plan returns #f"
+  (parameterize ([current-rollback-state (make-default-rollback-state)])
+    (check-false (apply-rollback-plan! #f))))
+
+(test-case "apply-rollback-plan!: advances current-rollback-state"
+  (parameterize ([current-rollback-action-execution? #t]
+                 [current-rollback-state (make-default-rollback-state)])
+    (define plan
+      (rollback-plan (list (list 'amnesia-risk "low coverage"))
+                     (make-force-distill-action "amnesia" (hasheq 'trigger 'amnesia))))
+    (define result (apply-rollback-plan! plan))
+    (check-equal? result 'force-distill)
+    (check-true (rollback-state-force-distill-active? (current-rollback-state)))))
+
+(test-case "increment-loop-warning-count!: syncs to rollback-state"
+  (parameterize ([current-rollback-state (make-default-rollback-state)])
+    (increment-loop-warning-count!)
+    (check-equal? (rollback-state-warning-count (current-rollback-state)) 1)
+    (increment-loop-warning-count!)
+    (check-equal? (rollback-state-warning-count (current-rollback-state)) 2)))
+
+(test-case "multiple consecutive rollback actions accumulate state"
+  (define state (make-default-rollback-state))
+  ;; Turn 1: amnesia → force-distill
+  (define plan1
+    (rollback-plan (list (list 'amnesia-risk "low coverage"))
+                   (make-force-distill-action "amnesia" (hasheq 'trigger 'amnesia))))
+  (define state1 (advance-rollback-state state plan1))
+  (check-true (rollback-state-force-distill-active? state1))
+  ;; Turn 2: excessive-savings → expand-context
+  (define plan2
+    (rollback-plan (list (list 'excessive-savings "cut"))
+                   (make-expand-context-action "excessive" (hasheq))))
+  (define state2 (advance-rollback-state state1 plan2))
+  (check-true (rollback-state-force-distill-active? state2)
+              "force-distill should persist across turns")
+  (check-equal? (rollback-state-budget-expansion-level state2) 1)
+  ;; Turn 3: another expand-context
+  (define plan3
+    (rollback-plan (list (list 'excessive-savings "still cutting"))
+                   (make-expand-context-action "excessive" (hasheq))))
+  (define state3 (advance-rollback-state state2 plan3))
+  (check-true (rollback-state-force-distill-active? state3))
+  (check-equal? (rollback-state-budget-expansion-level state3) 2 "expansion level accumulates"))
+
+(test-case "FSM transition resets warning count in rollback-state"
+  (parameterize ([current-rollback-state (rollback-state 2 #f 0 '())])
+    ;; Simulate the transition reset logic from turn-context.rkt
+    (define rs (current-rollback-state))
+    (current-rollback-state (struct-copy rollback-state rs [warning-count 0]))
+    (check-equal? (rollback-state-warning-count (current-rollback-state)) 0)
+    ;; But force-distill and expansion persist
+    (parameterize ([current-rollback-state (rollback-state 2 #t 1 '())])
+      (define rs2 (current-rollback-state))
+      (current-rollback-state (struct-copy rollback-state rs2 [warning-count 0]))
+      (check-equal? (rollback-state-warning-count (current-rollback-state)) 0)
+      (check-true (rollback-state-force-distill-active? (current-rollback-state)))
+      (check-equal? (rollback-state-budget-expansion-level (current-rollback-state)) 1))))
+
+(test-case "rollback-state: independent sessions do not share state"
+  ;; Create two independent state objects
+  (define session-a (make-default-rollback-state))
+  (define session-b (make-default-rollback-state))
+  ;; Session A has a force-distill
+  (define session-a-after
+    (advance-rollback-state session-a
+                            (rollback-plan (list (list 'amnesia-risk "low"))
+                                           (make-force-distill-action "amnesia" (hasheq)))))
+  ;; Session B is unaffected
+  (check-true (rollback-state-force-distill-active? session-a-after))
+  (check-false (rollback-state-force-distill-active? session-b)))

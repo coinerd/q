@@ -30,13 +30,16 @@
                   rollback-plan?
                   rollback-plan-warnings
                   rollback-plan-recommended-action
-                  current-loop-warning-count))
+                  current-loop-warning-count
+                  rollback-state
+                  rollback-state-warning-count))
 
 (provide coerce-task-state
          extract-recent-text
          check-rollback-triggers
          check-rollback-triggers-with-actions
          detect-rollback-plan
+         detect-rollback-plan/state
          ws-entry->conclusion-or-self
          state-guidance-table)
 
@@ -169,6 +172,9 @@
 ;; detect-rollback-plan: pure trigger evaluation that returns a rollback-plan
 ;; or #f if no triggers fire. Does NOT mutate current-loop-warning-count.
 ;; The caller (execute-rollback-plan!) handles the counter side effects.
+;;
+;; NOTE: This reads current-loop-warning-count from the parameter.
+;; Prefer detect-rollback-plan/state for genuinely pure usage.
 (define (detect-rollback-plan #:before-messages before-messages
                               #:after-messages after-messages
                               #:conclusion-coverage conclusion-coverage
@@ -181,6 +187,23 @@
   (if (null? warnings)
       #f
       (detect-rollback-plan* warnings (current-loop-warning-count))))
+
+;; detect-rollback-plan/state: GENUINELY PURE detection.
+;; Takes explicit rollback-state instead of reading current-loop-warning-count.
+;; All inputs are explicit arguments — no hidden parameter reads.
+(define (detect-rollback-plan/state state
+                                    #:before-messages before-messages
+                                    #:after-messages after-messages
+                                    #:conclusion-coverage conclusion-coverage
+                                    #:repeat-tool-count repeat-count)
+  (define warnings
+    (check-rollback-triggers #:before-messages before-messages
+                             #:after-messages after-messages
+                             #:conclusion-coverage conclusion-coverage
+                             #:repeat-tool-count repeat-count))
+  (if (null? warnings)
+      #f
+      (detect-rollback-plan* warnings (rollback-state-warning-count state))))
 
 ;; ============================================================
 ;; Conclusion-first working-set replacement (pure)

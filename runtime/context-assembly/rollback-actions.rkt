@@ -55,6 +55,115 @@
          recommended-action) ; (or/c rollback-action? #f)
   #:transparent)
 
+;; ── Explicit Rollback State (cross-turn) ──
+;;
+;; rollback-state bundles the cross-turn consequences of rollback actions.
+;; It replaces scattered global parameters (current-loop-warning-count,
+;; current-rollback-action-log) with a single explicit value object.
+;;
+;; Semantic fields (not mechanical copies of parameter names):
+;; - warning-count: loop-warning escalation accumulator (resets on escalation or FSM transition)
+;; - force-distill-active?: has force-distill ever fired? Persists — makes auto-distill permanent for the session.
+;; - budget-expansion-level: how many times expand-context has doubled the budget (0 = base)
+;; - action-log: observability log of executed actions (ring buffer, max 100)
+
+(struct rollback-state
+        (warning-count ; exact-nonnegative-integer?
+         force-distill-active? ; boolean
+         budget-expansion-level ; exact-nonnegative-integer?
+         action-log) ; (listof hash?)
+  #:transparent)
+
+(define (make-default-rollback-state)
+  (rollback-state 0 #f 0 '()))
+
+;; Per-session canonical state parameter.
+;; Initialized at session start, reset on new session.
+;; All rollback-related cross-turn state lives here.
+(define current-rollback-state (make-parameter (make-default-rollback-state)))
+
+;; Effective values derived from rollback-state + base configuration.
+;; Callers use these instead of directly reading rollback-state fields.
+
+;; Whether auto-distillation should run: base config OR rollback forced it.
+(define (effective-auto-distill? base-config? state)
+  (or base-config? (rollback-state-force-distill-active? state)))
+
+;; Effective conclusion token budget: base × 2^expansion-level.
+(define (effective-conclusion-budget base-budget state)
+  (* base-budget (expt 2 (rollback-state-budget-expansion-level state))))
+
+;; ── Pure State Transition ──
+;;
+;; advance-rollback-state: plan + old state → new state.
+;; Pure — no I/O, no parameter mutation, no logging.
+;; Computes the semantic consequences of executing a rollback plan.
+(define (advance-rollback-state state plan)
+  (cond
+    [(not plan) state]
+    [else
+     (define warnings (rollback-plan-warnings plan))
+     ;; Recompute warning count using pure escalation logic
+     (define new-warning-count
+       (for/fold ([count (rollback-state-warning-count state)]) ([w (in-list warnings)])
+         (define-values (_action nc) (pure-warnings->action w count))
+         nc))
+     ;; Determine rollback consequences from recommended action
+     (define recommended (rollback-plan-recommended-action plan))
+     (define new-force-distill?
+       (or (rollback-state-force-distill-active? state)
+           (and recommended (eq? (rollback-action-type recommended) 'force-distill))))
+     (define new-expansion-level
+       (if (and recommended (eq? (rollback-action-type recommended) 'expand-context))
+           (add1 (rollback-state-budget-expansion-level state))
+           (rollback-state-budget-expansion-level state)))
+     (rollback-state new-warning-count
+                     new-force-distill?
+                     new-expansion-level
+                     (rollback-state-action-log state))]))
+
+;; ── Effectful Application ──
+;;
+;; apply-rollback-plan!: executes external effects (callbacks, logging) and
+;; updates current-rollback-state. Returns the action type if executed, #f.
+(define (apply-rollback-plan! plan)
+  (cond
+    [(not plan) #f]
+    [else
+     (define warnings (rollback-plan-warnings plan))
+     (define recommended (rollback-plan-recommended-action plan))
+     (when (pair? warnings)
+       (log-warning "context-assembly: rollback triggers fired: ~a" warnings))
+     (cond
+       [recommended
+        ;; Execute via callbacks (legacy parameterize-based wiring)
+        (define executed (maybe-execute-action recommended))
+        (when executed
+          (log-warning "context-assembly: executed rollback action: ~a" executed))
+        ;; Advance state and store
+        (define old-state (current-rollback-state))
+        (define new-state (advance-rollback-state old-state plan))
+        ;; Sync warning count to legacy parameter for step-executor compat
+        (current-loop-warning-count (rollback-state-warning-count new-state))
+        ;; Append to action log in state
+        (define logged-state
+          (struct-copy rollback-state
+                       new-state
+                       [action-log
+                        (let ([entry (hasheq 'type
+                                             (rollback-action-type recommended)
+                                             'reason
+                                             (rollback-action-reason recommended)
+                                             'timestamp
+                                             (current-seconds))])
+                          (define new-log (append (rollback-state-action-log new-state) (list entry)))
+                          (if (> (length new-log) max-rollback-log-size)
+                              (drop new-log (- (length new-log) max-rollback-log-size))
+                              new-log))]))
+        (current-rollback-state logged-state)
+        executed]
+       [else #f])]))
+
 ;; ── Prioritization ──
 
 ;; Select the highest-severity action from a list (at most one).
@@ -110,8 +219,14 @@
 ;; They are non-overlapping: exploration-loop fires from detect-exploration-loop
 ;; on consecutive identical tool names; repeat fires from check-rollback-triggers
 ;; on high repeat-tool-count. Both increment toward the same escalation threshold.
+;;
+;; v0.99.85: Also updates current-rollback-state to keep it in sync.
 (define (increment-loop-warning-count! [amount 1])
-  (current-loop-warning-count (+ (current-loop-warning-count) amount)))
+  (define new-count (+ (current-loop-warning-count) amount))
+  (current-loop-warning-count new-count)
+  ;; Sync to rollback-state
+  (define old-state (current-rollback-state))
+  (current-rollback-state (struct-copy rollback-state old-state [warning-count new-count])))
 
 ;; v0.77.10 M2: Execute force-distill action.
 ;; Calls the injectable callback if available, then logs.
@@ -421,6 +536,16 @@
          rollback-plan-recommended-action
          detect-rollback-plan*
          execute-rollback-plan!
+         ;; v0.99.85: Explicit rollback state
+         rollback-state
+         rollback-state?
+         rollback-state-warning-count
+         rollback-state-force-distill-active?
+         rollback-state-budget-expansion-level
+         rollback-state-action-log
+         make-default-rollback-state
+         current-rollback-state
+         apply-rollback-plan!
          (contract-out
           [make-warn-action (-> string? rollback-action?)]
           [make-expand-context-action (-> string? hash? rollback-action?)]
@@ -434,4 +559,8 @@
           [current-error-class-history (parameter/c (listof (list/c symbol? string?)))]
           [detect-repeated-error-class
            (-> (listof (list/c symbol? string?)) (or/c #f (list/c symbol? string?)))]
-          [tool-error-class->string (-> string? string?)]))
+          [tool-error-class->string (-> string? string?)]
+          [effective-auto-distill? (-> boolean? rollback-state? boolean?)]
+          [effective-conclusion-budget
+           (-> exact-positive-integer? rollback-state? exact-positive-integer?)]
+          [advance-rollback-state (-> rollback-state? (or/c rollback-plan? #f) rollback-state?)]))
