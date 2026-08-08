@@ -58,7 +58,8 @@
 ;; ── Explicit Rollback State (cross-turn) ──
 ;;
 ;; rollback-state bundles the cross-turn consequences of rollback actions.
-;; It replaces scattered global parameters (current-loop-warning-count,
+;; It replaces scattered global parameters (the former
+;; loop-warning counter and current-rollback-action-log)
 ;; current-rollback-action-log) with a single explicit value object.
 ;;
 ;; Semantic fields (not mechanical copies of parameter names):
@@ -92,6 +93,28 @@
 ;; Effective conclusion token budget: base × 2^expansion-level.
 (define (effective-conclusion-budget base-budget state)
   (* base-budget (expt 2 (rollback-state-budget-expansion-level state))))
+
+;; ── Rollback-Owned API for Warning Count ──
+;;
+;; These three operations are the ONLY way to read/mutate warning escalation.
+;; They operate on current-rollback-state (the session-scoped projection).
+;; Step-executor and context assembly use these instead of touching parameters.
+
+;; Read the current warning escalation count.
+(define (rollback-warning-count)
+  (rollback-state-warning-count (current-rollback-state)))
+
+;; Record a warning: increments warning-count in current-rollback-state.
+(define (record-rollback-warning! [amount 1])
+  (define old-state (current-rollback-state))
+  (define new-count (+ (rollback-state-warning-count old-state) amount))
+  (current-rollback-state (struct-copy rollback-state old-state [warning-count new-count])))
+
+;; Reset warning-count to 0 in current-rollback-state.
+;; Used on FSM transition or after escalation fires.
+(define (reset-rollback-warning-count!)
+  (define old-state (current-rollback-state))
+  (current-rollback-state (struct-copy rollback-state old-state [warning-count 0])))
 
 ;; ── Pure State Transition ──
 ;;
@@ -143,8 +166,6 @@
         ;; Advance state and store
         (define old-state (current-rollback-state))
         (define new-state (advance-rollback-state old-state plan))
-        ;; Sync warning count to legacy parameter for step-executor compat
-        (current-loop-warning-count (rollback-state-warning-count new-state))
         ;; Append to action log in state
         (define logged-state
           (struct-copy rollback-state
@@ -205,28 +226,12 @@
 ;; Each entry is a hash with 'type, 'reason, 'timestamp.
 (define current-rollback-action-log (make-parameter '()))
 
-;; v0.96.13 W2: Loop warning counter for escalation.
-;; Incremented each time a "repeat" or "loop" warning fires.
-;; When >= escalation-threshold, warnings->actions escalates to force-distill.
-(define current-loop-warning-count (make-parameter 0))
+;; v0.99.85: Canonical counter now lives in rollback-state.warning-count.
+;; The API functions rollback-warning-count, record-rollback-warning!,
+;; and reset-rollback-warning-count! are the only accessors.
 
 ;; v0.96.14 F4: Named constant for escalation threshold (was magic number 2).
 (define escalation-threshold 2)
-
-;; Centralized counter mutation: all increments go through this function.
-;; step-interpreter calls it for exploration-loop detection.
-;; warnings->actions calls it for repeat-pattern escalation.
-;; They are non-overlapping: exploration-loop fires from detect-exploration-loop
-;; on consecutive identical tool names; repeat fires from check-rollback-triggers
-;; on high repeat-tool-count. Both increment toward the same escalation threshold.
-;;
-;; v0.99.85: Also updates current-rollback-state to keep it in sync.
-(define (increment-loop-warning-count! [amount 1])
-  (define new-count (+ (current-loop-warning-count) amount))
-  (current-loop-warning-count new-count)
-  ;; Sync to rollback-state
-  (define old-state (current-rollback-state))
-  (current-rollback-state (struct-copy rollback-state old-state [warning-count new-count])))
 
 ;; v0.77.10 M2: Execute force-distill action.
 ;; Calls the injectable callback if available, then logs.
@@ -301,68 +306,25 @@
 ;; Convert rollback trigger warnings to recommended actions.
 ;; Each warning is a (list symbol string) pair from check-rollback-triggers.
 ;; GAP-H v0.97.11: Symbol-based matching replaces fragile string-contains?.
+;; v0.99.86: Pure — no counter mutations. Warning-count escalation is
+;; handled by advance-rollback-state (which uses pure-warnings->action).
+;; The current warning count is read from rollback-state.
 (define (warnings->actions warnings)
-  (for/list ([w (in-list warnings)])
-    (define sym
-      (if (pair? w)
-          (car w)
-          #f))
-    (define msg
-      (if (pair? w)
-          (cadr w)
-          (format "~a" w)))
-    (cond
-      [(eq? sym 'amnesia-risk) (make-force-distill-action msg (hasheq 'trigger 'amnesia))]
-      [(eq? sym 'excessive-savings)
-       (make-expand-context-action msg (hasheq 'trigger 'excessive-savings))]
-      [(eq? sym 'exploration-loop)
-       (make-force-distill-action msg (hasheq 'trigger 'exploration-loop))]
-      [(eq? sym 'stuck-detected) (make-expand-context-action msg (hasheq 'trigger 'stuck))]
-      [(eq? sym 'stuck-path) (make-expand-context-action msg (hasheq 'trigger 'stuck-path))]
-      [(memq sym '(missing-tool access-denied command-failure timeout generic-error))
-       (make-force-distill-action msg (hasheq 'trigger sym))]
-      [(eq? sym 'task-amnesia-detected)
-       ;; Repeated tool calls indicate amnesia — escalate to distill if threshold reached
-       (if (>= (current-loop-warning-count) escalation-threshold)
-           (begin
-             (current-loop-warning-count 0)
-             (make-force-distill-action msg (hasheq 'trigger 'task-amnesia-escalation)))
-           (begin
-             (increment-loop-warning-count!)
-             (make-warn-action msg)))]
-      [(eq? sym 'repeat-tool)
-       (if (>= (current-loop-warning-count) escalation-threshold)
-           (begin
-             (current-loop-warning-count 0) ; reset after escalation
-             (make-force-distill-action msg (hasheq 'trigger 'repeat-escalation)))
-           (begin
-             (increment-loop-warning-count!)
-             (make-warn-action msg)))]
-      ;; Fallback: string-based matching for backwards compatibility
-      [(and (string? w) (string-contains? w "amnesia"))
-       (make-force-distill-action w (hasheq 'trigger 'amnesia))]
-      [(and (string? w) (string-contains? w "excessive"))
-       (make-expand-context-action w (hasheq 'trigger 'excessive-savings))]
-      [(and (string? w) (string-contains? (string-downcase w) "exploration loop"))
-       (make-force-distill-action w (hasheq 'trigger 'exploration-loop))]
-      [(and (string? w) (string-contains? (string-downcase w) "stuck"))
-       (make-expand-context-action w (hasheq 'trigger 'stuck))]
-      [(and (string? w) (string-contains? (string-downcase w) "repeat"))
-       (if (>= (current-loop-warning-count) escalation-threshold)
-           (begin
-             (current-loop-warning-count 0)
-             (make-force-distill-action w (hasheq 'trigger 'repeat-escalation)))
-           (begin
-             (increment-loop-warning-count!)
-             (make-warn-action w)))]
-      [else (make-warn-action (if (pair? w) msg w))])))
+  (define current-count (rollback-warning-count))
+  (define-values (actions _final-count)
+    (for/fold ([acc '()]
+               [count current-count])
+              ([w (in-list warnings)])
+      (define-values (action new-count) (pure-warnings->action w count))
+      (values (cons action acc) new-count)))
+  (reverse actions))
 
 ;; ── Pure Detection (Phase 3 extraction) ──
 ;;
 ;; detect-rollback-plan is a PURE function that evaluates trigger conditions
 ;; and returns a rollback-plan (or #f if no triggers fire).
 ;;
-;; It does NOT mutate current-loop-warning-count or any other parameter.
+;; It does NOT mutate any parameter — it is genuinely pure.
 ;; The escalation logic from warnings->actions is replicated here in pure form:
 ;; the caller (execute-rollback-plan!) handles the counter mutation.
 
@@ -437,7 +399,7 @@
 ;; execute-rollback-plan! consumes a rollback-plan and performs the side effects:
 ;; - Logs warnings
 ;; - Executes the recommended action via callbacks
-;; - Mutates current-loop-warning-count (escalation/reset)
+;; - Advances rollback-state.warning-count (escalation/reset)
 ;; Returns the action type symbol if executed, #f otherwise.
 
 (define (execute-rollback-plan! plan)
@@ -450,9 +412,7 @@
        (log-warning "context-assembly: rollback triggers fired: ~a" warnings))
      (cond
        [recommended
-        ;; Sync the loop-warning-count by replaying escalation through warnings->actions
-        ;; (which has the real side effects). This preserves existing behavior.
-        (warnings->actions warnings) ; side effect: increments/resets counter
+        ;; Execute the recommended action via callbacks
         (define executed (maybe-execute-action recommended))
         (when executed
           (log-warning "context-assembly: executed rollback action: ~a" executed))
@@ -523,9 +483,10 @@
          make-default-rollback-config
          current-rollback-action-execution?
          current-rollback-action-log
-         current-loop-warning-count
          escalation-threshold
-         increment-loop-warning-count!
+         record-rollback-warning!
+         reset-rollback-warning-count!
+         rollback-warning-count
          current-force-distill-fn
          current-expand-context-fn
          current-revert-state-fn

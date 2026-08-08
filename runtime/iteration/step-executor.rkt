@@ -109,8 +109,9 @@
                   maybe-compact-mid-turn
                   detect-exploration-loop)
          (only-in "../context-assembly/rollback-actions.rkt"
-                  increment-loop-warning-count!
-                  current-loop-warning-count
+                  record-rollback-warning!
+                  reset-rollback-warning-count!
+                  rollback-warning-count
                   escalation-threshold
                   tool-error-class->string
                   error-class->signal
@@ -391,7 +392,7 @@
              [action (select-highest-priority-action (warnings->actions (list (list signal
                                                                                     reason))))])
         (maybe-execute-action action)
-        (increment-loop-warning-count!)
+        (record-rollback-warning!)
         (emit "iteration.error-correction"
               (hasheq 'error-class
                       crossing
@@ -569,11 +570,11 @@
                      'iteration
                      (loop-counters-iteration counters)))
        ;; Feed exploration loop into rollback pipeline
-       ;; by incrementing the warning counter (triggers escalation on next check)
-       (increment-loop-warning-count!)
+       ;; by recording a warning (triggers escalation on next check)
+       (record-rollback-warning!)
        ;; exploration-loop escalation to corrective steering.
-       (when (>= (current-loop-warning-count) escalation-threshold)
-         (current-loop-warning-count 0)
+       (when (>= (rollback-warning-count) escalation-threshold)
+         (reset-rollback-warning-count!)
          (emit "iteration.exploration-loop.corrected"
                (hasheq 'pattern loop-warning 'iteration (loop-counters-iteration counters)))
          (set!

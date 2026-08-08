@@ -154,8 +154,7 @@
                 "session B should NOT have session A's warning count"))
 
 (test-case "pure detection still reads no dynamic parameters"
-  (parameterize ([current-loop-warning-count 99]
-                 [current-rollback-state (rollback-state 99 #t 5 '())])
+  (parameterize ([current-rollback-state (rollback-state 99 #t 5 '())])
     (define plan
       (detect-rollback-plan/state (make-default-rollback-state)
                                   #:before-messages 10
@@ -304,8 +303,8 @@
       (simulate-prompt-with-dynamic-wind ls
                                          (lambda ()
                                            ;; Simulate 2 warnings to trigger escalation
-                                           (increment-loop-warning-count!)
-                                           (increment-loop-warning-count!)
+                                           (record-rollback-warning!)
+                                           (record-rollback-warning!)
                                            (raise (exn:fail "simulated error"
                                                             (current-continuation-marks))))))
     (define rs-after (lifecycle-state-rollback-st ls))
