@@ -1,6 +1,6 @@
 #lang racket/base
 
-;; runtime/iteration/loop-phases.rkt — extracted pure and effectful sub-phases
+;; agent/iteration/loop-phases.rkt — extracted pure and effectful sub-phases
 ;; STABILITY: internal
 ;;
 ;; Extracted from main-loop.rkt to separate concerns:
@@ -25,7 +25,7 @@
          (only-in "../../extensions/hooks.rkt" maybe-dispatch-hooks)
          (only-in "../../util/hook-types.rkt" hook-result-action hook-result?)
          (only-in "../../runtime/layer-adapters.rkt" extension-registry?)
-         (only-in "../../runtime/iteration/internal.rkt" assert-payload)
+         (only-in "../../util/iteration/internal.rkt" assert-payload)
          (only-in "../../util/ids.rkt" generate-id)
          (only-in "../../util/message/message.rkt" make-message message?)
          (only-in "../../util/content/content-parts.rkt" make-text-part))

@@ -30,7 +30,7 @@
          (only-in "../extensions/hooks.rkt" dispatch-hooks)
          (only-in "../extensions/api.rkt" make-extension-registry register-extension! extension)
          (only-in "../runtime/context-assembly/rollback-actions.rkt" current-loop-warning-count)
-         (only-in "../runtime/iteration/decision.rkt" current-max-consecutive-tool-calls)
+         (only-in "../util/iteration/decision.rkt" current-max-consecutive-tool-calls)
          (only-in "../util/ids.rkt" generate-id)
          "helpers/mock-provider.rkt")
 

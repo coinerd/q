@@ -308,19 +308,55 @@
                     '()
                     (format "Agent iteration importing tool-coordinator: ~a" actual-violations)))
 
-    (test-case "v0.99.86: Agent iteration must not import runtime context-policy"
-      ;; After moving estimate-message-tokens to util/token-estimate.rkt,
-      ;; agent/iteration/ modules must not import from runtime/context/context-policy.rkt
+    (test-case "v0.99.86: Agent iteration must not import runtime iteration modules"
+      ;; After protocol extraction, agent/iteration/ must not import
+      ;; from any runtime/iteration/ implementation modules
+      ;; (step-executor, effect-executor, retry-policy)
       (define iteration-files (rkt-files-in-recursive "agent/iteration"))
+      (define runtime-iter-names '("step-executor" "effect-executor" "retry-policy"))
       (define violations
         (for/list ([f (in-list iteration-files)])
           (define reqs (extract-requires f))
-          (if (imports-from? reqs '("context-policy"))
-              (format "~a: imports context-policy" (file-name-from-path f))
+          (if (imports-from? reqs runtime-iter-names)
+              (format "~a: imports runtime/iteration impl" (file-name-from-path f))
               #f)))
       (define actual-violations (filter identity violations))
       (check-equal? actual-violations
                     '()
-                    (format "Agent iteration importing context-policy: ~a" actual-violations)))))
+                    (format "Agent iteration importing runtime implementation: ~a"
+                            actual-violations)))
+
+    (test-case "v0.99.86: Agent iteration must not import runtime/iteration/ protocol shims"
+      ;; After protocol extraction, agent/iteration/ must import protocol
+      ;; types from util/iteration/, not from the runtime re-export shims.
+      ;; We check that no require path contains both "runtime/iteration/"
+      ;; and one of the protocol module names.
+      (define iteration-files (rkt-files-in-recursive "agent/iteration"))
+      (define shim-names '("decision" "directive" "fsm-types" "internal"))
+      (define violations
+        (for/list ([f (in-list iteration-files)])
+          (define reqs (extract-requires f))
+          (define all-paths (append* (map require-spec->paths reqs)))
+          (define has-runtime-shim
+            (for/or ([path all-paths])
+              (and (string-contains? path "runtime/iteration/")
+                   (for/or ([name shim-names])
+                     (string-contains? path name)))))
+          (if has-runtime-shim
+              (format "~a: imports from runtime/iteration/ shim instead of util/iteration/"
+                      (file-name-from-path f))
+              #f)))
+      (define actual-violations (filter identity violations))
+      (check-equal? actual-violations
+                    '()
+                    (format "Agent iteration importing from runtime shims: ~a" actual-violations)))
+
+    (test-case "v0.99.86: Shared iteration protocol lives in util/iteration/"
+      ;; Verify that util/iteration/ contains the expected protocol files
+      (define util-iter-dir (build-path q-dir "util" "iteration"))
+      (for ([expected '("directive.rkt" "fsm-types.rkt" "decision.rkt" "internal.rkt")])
+        (define path (build-path util-iter-dir expected))
+        (check-true (file-exists? path)
+                    (format "util/iteration/~a must exist after protocol extraction" expected))))))
 
 (run-tests boundary-tests)

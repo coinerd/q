@@ -1,15 +1,11 @@
 #lang racket/base
 
-;; runtime/iteration/internal.rkt — Shared internal helpers for iteration sub-modules
+;; runtime/iteration/internal.rkt — COMPATIBILITY RE-EXPORT
 ;;
-;; Extracted from main-loop.rkt and step-interpreter.rkt during v0.34.7
-;; to eliminate duplication (finding A-02).
+;; v0.99.86: assert-payload moved to util/iteration/internal.rkt.
+;; This file re-exports it for backward compatibility.
+;; TODO: Remove once all consumers import from util/iteration/internal.rkt.
 
-(require racket/contract)
+(require (only-in "../../util/iteration/internal.rkt" assert-payload))
 
 (provide assert-payload)
-
-(define (assert-payload topic-name payload ctrct)
-  (unless (ctrct payload)
-    (raise-argument-error topic-name "valid event payload" payload))
-  payload)

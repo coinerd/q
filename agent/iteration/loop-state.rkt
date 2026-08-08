@@ -1,6 +1,6 @@
 #lang typed/racket
 
-;; runtime/iteration/loop-state.rkt — loop state structs
+;; agent/iteration/loop-state.rkt — loop state structs
 ;;
 ;; v0.29.5 W2: Removed parameter indirection and lazy-require.
 ;; v0.29.16 W0: Introduced loop-infra and loop-counters structs.

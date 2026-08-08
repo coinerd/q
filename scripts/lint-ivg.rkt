@@ -55,8 +55,8 @@
          "termination-decision still referenced in runtime/ — dead code removed in v0.29.9")
    ;; decide-next-action must be wired (≥1 call site)
    (list "decide-next-action-wired"
-         (lambda () (>= (grep-count "decide-next-action" "runtime/iteration/decision.rkt") 2))
-         "decide-next-action has fewer than 2 references in iteration.rkt")
+         (lambda () (>= (grep-count "decide-next-action" "agent/iteration/decision.rkt") 2))
+         "decide-next-action has fewer than 2 references in agent/iteration/decision.rkt")
    ;; v0.32.4: classify-hook-result (replaced handle-hook-result) in loop-stream.rkt (≥3 calls)
    (list "classify-hook-result-stream"
          (lambda () (>= (grep-count "classify-hook-result" "agent/loop-stream.rkt") 3))

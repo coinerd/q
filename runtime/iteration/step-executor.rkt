@@ -118,15 +118,15 @@
                   select-highest-priority-action
                   maybe-execute-action
                   rollback-action-type)
-         (only-in "decision.rkt"
+         (only-in "../../util/iteration/decision.rkt"
                   step-result
                   step-result?
                   step-result-action
                   step-result-new-counters
                   step-result-metadata)
          (only-in "../../agent/state.rkt" current-reflection-event current-empty-response-retried?)
-         (only-in "internal.rkt" assert-payload)
-         (only-in "directive.rkt"
+         (only-in "../../util/iteration/internal.rkt" assert-payload)
+         (only-in "../../util/iteration/directive.rkt"
                   directive-recurse
                   directive-recurse?
                   directive-stop
