@@ -15,7 +15,6 @@
          (only-in "../event-bus.rkt" event-bus?)
          (only-in "../../runtime/layer-adapters.rkt" tool-registry? extension-registry?)
          (only-in "../../util/cancellation.rkt" cancellation-token?)
-         (only-in "../../runtime/session/session-config.rkt" session-config? hash->session-config)
          (only-in "../../runtime/working-set.rkt" working-set?)
          (only-in "../../runtime/session/session-types.rkt" agent-session?)
          (only-in "../../util/loop-result.rkt" loop-result?))
@@ -38,16 +37,17 @@
          max-iterations ; exact-nonnegative-integer? — iteration limit
          ;; Optional fields (keyword, default #f)
          cancellation-token ; (or/c cancellation-token? #f)
-         config ; session-config?
+         max-iterations-hard ; exact-nonnegative-integer? — hard iteration ceiling
+         context-budget ; exact-positive-integer? — token budget for working set
          queue ; (or/c queue? #f) — steering message queue
          injected-box ; (or/c box? #f) — injected message box
          shutdown-check ; (or/c procedure? #f)
          force-shutdown-check ; (or/c procedure? #f)
          working-set ; (or/c working-set? #f)
          session ; (or/c agent-session? #f)
-         ;; v0.99.85: Injected runtime operations — Agent iteration no longer
-         ;; imports the runtime orchestration layer directly. The wiring layer supplies
-         ;; concrete implementations.
+         ;; Injected runtime operations — Agent iteration does not import
+         ;; the runtime orchestration layer. The composition root supplies
+         ;; concrete closures that bind Runtime configuration internally.
          build-context-fn ; (or/c procedure? #f) — builds assembled context
          run-provider-turn-fn ; (or/c procedure? #f) — executes provider turn
          interpret-step-fn ; (or/c procedure? #f) — executes step-result to directive
@@ -64,7 +64,8 @@
                           session-id
                           max-iterations
                           #:cancellation-token [cancellation-token #f]
-                          #:config [config (hash->session-config (hash))]
+                          #:max-iterations-hard [max-iterations-hard 80]
+                          #:context-budget [context-budget 128000]
                           #:queue [queue #f]
                           #:injected-box [injected-box #f]
                           #:shutdown-check [shutdown-check #f]
@@ -83,7 +84,8 @@
                session-id
                max-iterations
                cancellation-token
-               config
+               max-iterations-hard
+               context-budget
                queue
                injected-box
                shutdown-check
@@ -105,7 +107,8 @@
          loop-config-session-id
          loop-config-max-iterations
          loop-config-cancellation-token
-         loop-config-config
+         loop-config-max-iterations-hard
+         loop-config-context-budget
          loop-config-queue
          loop-config-injected-box
          loop-config-shutdown-check
@@ -124,7 +127,8 @@
                                              string?
                                              exact-nonnegative-integer?)
                              (#:cancellation-token (or/c cancellation-token? #f)
-                                                   #:config (or/c session-config? #f)
+                                                   #:max-iterations-hard exact-nonnegative-integer?
+                                                   #:context-budget exact-positive-integer?
                                                    #:queue (or/c any/c #f)
                                                    #:injected-box (or/c box? #f)
                                                    #:shutdown-check (or/c procedure? #f)

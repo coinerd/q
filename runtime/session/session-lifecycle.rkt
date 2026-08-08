@@ -25,7 +25,11 @@
 ;;   run-prompt-internal     — internal prompt execution (after input hook)
 
 (require racket/contract
-         (only-in "session-config.rkt" config-working-set)
+         (only-in "session-config.rkt"
+                  config-working-set
+                  config-token-budget-threshold
+                  config-max-context-tokens
+                  resolve-max-iterations-hard)
          "session-mutation.rkt"
          racket/string
          racket/list
@@ -62,6 +66,7 @@
          (only-in "../runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
          (only-in "../../agent/iteration/main-loop.rkt" run-iteration-loop/v2)
          (only-in "../../agent/iteration/loop-config.rkt" make-loop-config)
+         (only-in "../../agent/iteration/loop-state.rkt" iteration-snapshot)
          (only-in "../turn-orchestrator.rkt" run-provider-turn build-assembled-context)
          (only-in "../iteration/step-executor.rkt" interpret-step)
          (only-in "../../agent/event-emitter.rkt" emit-typed-event!)
@@ -291,28 +296,60 @@
           (stop-trace-logger! tracer)
           (make-loop-result context-with-system 'error payload))])
     (define ws (config-working-set cfg))
+    ;; v0.99.87: Bind Runtime configuration into injected closures.
+    ;; The Agent iteration loop no longer receives or imports session-config.
+    ;; These closures capture cfg at the composition root and expose only
+    ;; the semantic Agent inputs (working-set, context, session-id, etc.).
+    (define max-iter-hard (resolve-max-iterations-hard cfg max-iterations))
+    (define ctx-budget (or (config-token-budget-threshold cfg) (config-max-context-tokens cfg)))
     (define result
       (run-iteration-loop/v2
-       (make-loop-config context-with-system
-                         prov
-                         bus
-                         reg
-                         (agent-session-extension-registry sess)
-                         log-path
-                         sid
-                         max-iterations
-                         #:cancellation-token cancellation-tok
-                         #:config cfg
-                         #:working-set ws
-                         #:queue (agent-session-queue sess)
-                         #:shutdown-check (lambda () (agent-session-shutdown-requested? sess))
-                         #:force-shutdown-check (lambda () (agent-session-force-shutdown? sess))
-                         #:session sess
-                         ;; v0.99.85: Inject runtime operations — Agent iteration
-                         ;; no longer imports turn-orchestrator.rkt directly.
-                         #:build-context-fn build-assembled-context
-                         #:run-provider-turn-fn run-provider-turn
-                         #:interpret-step-fn interpret-step)))
+       (make-loop-config
+        context-with-system
+        prov
+        bus
+        reg
+        (agent-session-extension-registry sess)
+        log-path
+        sid
+        max-iterations
+        #:cancellation-token cancellation-tok
+        #:max-iterations-hard max-iter-hard
+        #:context-budget ctx-budget
+        #:working-set ws
+        #:queue (agent-session-queue sess)
+        #:shutdown-check (lambda () (agent-session-shutdown-requested? sess))
+        #:force-shutdown-check (lambda () (agent-session-force-shutdown? sess))
+        #:session sess
+        ;; Injected runtime operations — closures capture cfg
+        ;; so Agent iteration never imports session-config.
+        #:build-context-fn
+        (lambda (ctx-to-use ws-arg ext-reg-arg bus-arg sid-arg iter #:session sess-arg)
+          (build-assembled-context ctx-to-use
+                                   (dict-set cfg 'working-set ws-arg)
+                                   ext-reg-arg
+                                   bus-arg
+                                   sid-arg
+                                   iter
+                                   #:session sess-arg))
+        #:run-provider-turn-fn
+        (lambda (ctx-final prov-arg bus-arg reg-arg ext-reg-arg sid-arg tid-arg tok-arg)
+          (run-provider-turn ctx-final
+                             prov-arg
+                             bus-arg
+                             reg-arg
+                             ext-reg-arg
+                             sid-arg
+                             tid-arg
+                             tok-arg
+                             cfg))
+        #:interpret-step-fn
+        (lambda (step-res step-result new-msgs infra snapshot)
+          (interpret-step step-res
+                          step-result
+                          new-msgs
+                          infra
+                          (struct-copy iteration-snapshot snapshot [config cfg]))))))
     ;; v0.32.0: Stop trace logger on normal completion
     (stop-trace-logger! tracer)
     result))
