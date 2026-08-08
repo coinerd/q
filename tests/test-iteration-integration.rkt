@@ -11,7 +11,7 @@
          (only-in "../runtime/session/session-config.rkt" hash->session-config)
          racket/set
          racket/file
-         (only-in "../agent/iteration/step-interpreter.rkt"
+         (only-in "../runtime/iteration/step-executor.rkt"
                   handle-stop-action
                   interpret-step
                   execute-pending-tool-calls)
@@ -53,7 +53,7 @@
                   cancellation-token-cancelled?)
          (only-in "../util/event/event.rkt" event-ev)
          (only-in "../runtime/iteration/decision.rkt" step-result)
-         (only-in "../agent/iteration/step-interpreter.rkt"
+         (only-in "../runtime/iteration/step-executor.rkt"
                   handle-stop-action
                   interpret-step
                   execute-pending-tool-calls)
@@ -77,7 +77,13 @@
 ;; ============================================================
 
 (define (make-mock-infra)
-  (loop-infra '() #f #f (make-event-bus) "test-session" (format "/tmp/test-~a-iter.log" (random 1000000)) #f))
+  (loop-infra '()
+              #f
+              #f
+              (make-event-bus)
+              "test-session"
+              (format "/tmp/test-~a-iter.log" (random 1000000))
+              #f))
 
 (define (make-msg-with-tool-call name args)
   (make-message (generate-id)

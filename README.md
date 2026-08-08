@@ -295,9 +295,9 @@ q/
 | Metric | Value |
 |--------|-------|
 | Test files | 1265 |
-| Source modules | 790 |
-| Source lines | 134669 |
-| Test lines | 217103 |
+| Source modules | 789 |
+| Source lines | 134110 |
+| Test lines | 217108 |
 | Test assertions | 34115 |
 | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |
 

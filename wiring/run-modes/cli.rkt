@@ -59,7 +59,7 @@
                   current-auto-reflection-enabled
                   current-auto-reflection-min-items
                   current-memory-backend)
-         (only-in "../../agent/iteration/step-interpreter.rkt" current-reflection-prompt-enabled)
+         (only-in "../../runtime/iteration/step-executor.rkt" current-reflection-prompt-enabled)
          (only-in "../../runtime/context-assembly/auto-distillation.rkt"
                   current-auto-distillation-enabled?
                   current-llm-distill-fn)

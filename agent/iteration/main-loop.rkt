@@ -69,7 +69,7 @@
                   compute-step-result
                   step-result-metadata
                   step-result-new-counters)
-         (only-in "step-interpreter.rkt" interpret-step)
+         (only-in "../../runtime/iteration/step-executor.rkt" interpret-step)
          (only-in "../../runtime/iteration/directive.rkt"
                   directive-recurse
                   directive-stop

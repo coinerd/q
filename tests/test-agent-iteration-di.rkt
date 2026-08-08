@@ -82,8 +82,7 @@
   (check-false (string-contains? src "turn-orchestrator")
                "main-loop.rkt must not import the runtime orchestration layer"))
 
-(test-case "v0.99.85: step-interpreter does not import context-assembly impl"
-  (define src
-    (file->string (build-path (current-directory) ".." "agent" "iteration" "step-interpreter.rkt")))
-  (check-false (string-contains? src "state-aware-builder")
-               "step-interpreter.rkt must not import state-aware-builder.rkt"))
+(test-case "v0.99.86: agent/iteration/ no longer has step-interpreter.rkt"
+  (define path (build-path (current-directory) ".." "agent" "iteration" "step-interpreter.rkt"))
+  (check-false (file-exists? path)
+               "step-interpreter.rkt must not exist in agent/iteration/ after relocation"))

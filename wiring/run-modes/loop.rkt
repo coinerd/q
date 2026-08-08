@@ -33,7 +33,7 @@
                   current-auto-reflection-enabled
                   current-auto-reflection-min-items
                   current-memory-backend)
-         (only-in "../../agent/iteration/step-interpreter.rkt"
+         (only-in "../../runtime/iteration/step-executor.rkt"
                   current-reflection-prompt-enabled
                   current-post-tool-result-hook)
          (only-in "../../runtime/context-assembly/auto-distillation.rkt"
