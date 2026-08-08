@@ -112,20 +112,22 @@
 
 ;; -- Test: Conclusion-budget expansion via expand-context callback --
 
-(test-case "expand-context: callback doubles conclusion-token-budget"
+(test-case "expand-context: callback fires and rollback-state tracks expansion"
   (parameterize ([current-rollback-action-execution? #t]
                  [current-rollback-action-log '()]
                  [current-conclusion-token-budget 2000]
-                 [current-expand-context-fn
-                  (lambda (a)
-                    (define current-budget (current-conclusion-token-budget))
-                    (current-conclusion-token-budget (* current-budget 2)))])
+                 [current-rollback-state (make-default-rollback-state)])
     (check-equal? (current-conclusion-token-budget) 2000)
-    (define result (maybe-execute-action (make-expand-context-action "excessive" (hasheq))))
-    (check-equal? result 'expand-context)
-    (check-equal? (current-conclusion-token-budget)
-                  4000
-                  "expand-context callback should double the budget")))
+    (define plan
+      (rollback-plan (list (list 'excessive-savings "low"))
+                     (make-expand-context-action "excessive" (hasheq))))
+    (apply-rollback-plan! plan)
+    ;; v0.99.88: expand-context no longer mutates current-conclusion-token-budget.
+    ;; Expansion tracked in rollback-state.budget-expansion-level.
+    (check-equal? (current-conclusion-token-budget) 2000 "base budget NOT mutated by expand-context")
+    (check-equal? (rollback-state-budget-expansion-level (current-rollback-state))
+                  1
+                  "expansion level tracked in rollback state")))
 
 ;; -- Test: State revert callback fires when wired --
 
@@ -197,10 +199,15 @@
      rollback-tier-a-len
      baseline-tier-a-len
      "tier-a length should be identical -- rollback mutations don't affect current build")
-    ;; After the build, the budget parameter WAS mutated (persists)
-    ;; This proves rollback executed but didn't affect the current context
-    (check-true (> (current-conclusion-token-budget) 2000)
-                "budget was mutated by rollback (persists for next turn)")))
+    ;; v0.99.88: expand-context no longer mutates current-conclusion-token-budget.
+    ;; Budget expansion is tracked in rollback-state.budget-expansion-level.
+    ;; The base config parameter must NOT be mutated.
+    (check-equal? (current-conclusion-token-budget)
+                  2000
+                  "base budget NOT mutated by rollback (persists for next turn)")
+    ;; But rollback-state has expansion level > 0
+    (check-true (> (rollback-state-budget-expansion-level (current-rollback-state)) 0)
+                "expansion level tracked in rollback state")))
 
 ;; -- Test: Rollback action log records execution --
 
@@ -289,19 +296,24 @@
     (check-equal? result 'force-distill)
     (check-true (current-auto-distillation-enabled?))))
 
-(test-case "execute-rollback-plan!: executes expand-context and doubles budget"
+(test-case "apply-rollback-plan!: expand-context tracks expansion"
   (parameterize ([current-rollback-action-execution? #t]
                  [current-rollback-action-log '()]
                  [current-conclusion-token-budget 2000]
-                 [current-expand-context-fn (lambda (a)
-                                              (define cb (current-conclusion-token-budget))
-                                              (current-conclusion-token-budget (* cb 2)))])
+                 [current-rollback-state (make-default-rollback-state)])
     (define plan
       (rollback-plan (list (list 'excessive-savings "50% cut"))
                      (make-expand-context-action "excessive" (hasheq))))
-    (define result (execute-rollback-plan! plan))
-    (check-equal? result 'expand-context)
-    (check-equal? (current-conclusion-token-budget) 4000)))
+    (apply-rollback-plan! plan)
+    ;; v0.99.88: expand-context no longer mutates current-conclusion-token-budget.
+    ;; Budget expansion is tracked in rollback-state.budget-expansion-level.
+    (check-equal? (current-conclusion-token-budget) 2000 "base budget NOT mutated")
+    (check-equal? (rollback-state-budget-expansion-level (current-rollback-state))
+                  1
+                  "expansion level tracked in rollback state")
+    (check-equal? (effective-conclusion-budget 2000 (current-rollback-state))
+                  4000
+                  "effective budget reflects expansion")))
 
 (test-case "execute-rollback-plan!: handles warn-only action"
   (parameterize ([current-rollback-action-execution? #t]
@@ -574,3 +586,106 @@
   (check-true (effective-auto-distill? #f (rollback-state 0 #t 0 '())))
   ;; Session B: base config #f, no rollback -> still #f
   (check-false (effective-auto-distill? #f (make-default-rollback-state))))
+
+;; ============================================================
+;; Phase 3: Budget Expansion Characterization Tests
+;; ============================================================
+
+(test-case "budget: base budget with no expansion = base"
+  (check-equal? (effective-conclusion-budget 2000 (make-default-rollback-state)) 2000))
+
+(test-case "budget: one expansion doubles the budget"
+  (define state (rollback-state 0 #f 1 '()))
+  (check-equal? (effective-conclusion-budget 2000 state) 4000))
+
+(test-case "budget: two expansions quadruple the budget"
+  (define state (rollback-state 0 #f 2 '()))
+  (check-equal? (effective-conclusion-budget 2000 state) 8000))
+
+(test-case "budget: zero base stays zero regardless of expansion"
+  (check-equal? (effective-conclusion-budget 0 (rollback-state 0 #f 5 '())) 0))
+
+(test-case "budget: expand-context action increments expansion level"
+  (define state-before (make-default-rollback-state))
+  (define plan
+    (rollback-plan (list (list 'excessive-savings "low"))
+                   (make-expand-context-action "savings" (hasheq))))
+  (define state-after (advance-rollback-state state-before plan))
+  (check-equal? (rollback-state-budget-expansion-level state-after) 1)
+  (check-equal? (effective-conclusion-budget 2000 state-after) 4000))
+
+(test-case "budget: multiple expand-context actions accumulate"
+  (define plan
+    (rollback-plan (list (list 'stuck-detected "low")) (make-expand-context-action "stuck" (hasheq))))
+  (define state1 (advance-rollback-state (make-default-rollback-state) plan))
+  (define state2 (advance-rollback-state state1 plan))
+  (define state3 (advance-rollback-state state2 plan))
+  (check-equal? (rollback-state-budget-expansion-level state3) 3)
+  (check-equal? (effective-conclusion-budget 1000 state3) 8000))
+
+(test-case "budget: session isolation — expansion in A does not affect B"
+  (define plan
+    (rollback-plan (list (list 'excessive-savings "low"))
+                   (make-expand-context-action "savings" (hasheq))))
+  (define session-a (advance-rollback-state (make-default-rollback-state) plan))
+  (define session-b (make-default-rollback-state))
+  (check-equal? (effective-conclusion-budget 2000 session-a) 4000)
+  (check-equal? (effective-conclusion-budget 2000 session-b) 2000))
+
+(test-case "budget: expand-context callback does NOT mutate current-conclusion-token-budget"
+  (parameterize ([current-conclusion-token-budget 2000]
+                 [current-rollback-state (make-default-rollback-state)])
+    ;; Simulate expand-context callback (now just logs, doesn't mutate)
+    (define plan
+      (rollback-plan (list (list 'excessive-savings "low"))
+                     (make-expand-context-action "savings" (hasheq))))
+    (parameterize ([current-rollback-action-execution? #t])
+      (apply-rollback-plan! plan))
+    ;; Base config parameter must remain 2000
+    (check-equal? (current-conclusion-token-budget) 2000 "base config NOT mutated by expand-context")
+    ;; But rollback state has expansion level 1
+    (check-equal? (rollback-state-budget-expansion-level (current-rollback-state))
+                  1
+                  "expansion level tracked in rollback state")
+    ;; Effective budget is 2000 * 2^1 = 4000
+    (check-equal? (effective-conclusion-budget (current-conclusion-token-budget)
+                                               (current-rollback-state))
+                  4000
+                  "effective budget reflects expansion")))
+
+(test-case "budget: profile/base-budget change with existing expansion"
+  ;; base=2000, expansion=1, effective=4000
+  ;; Profile changes base to 3000
+  ;; Expected: effective = 3000 * 2^1 = 6000 (NOT old 4000)
+  (define state (rollback-state 0 #f 1 '()))
+  (check-equal? (effective-conclusion-budget 3000 state)
+                6000
+                "new base budget × 2^existing-level = new effective"))
+
+(test-case "budget: exceptional persistence of expansion"
+  ;; Simulate: expand-context fires, then exception, next turn sees expansion
+  (define state-before (make-default-rollback-state))
+  (define plan
+    (rollback-plan (list (list 'excessive-savings "low"))
+                   (make-expand-context-action "savings" (hasheq))))
+  ;; Turn N: expand fires
+  (define state-after-turn-N (advance-rollback-state state-before plan))
+  ;; Exception happens (state is committed via dynamic-wind)
+  ;; Turn N+1: sees expanded budget
+  (check-equal? (effective-conclusion-budget 2000 state-after-turn-N)
+                4000
+                "expansion persists across turns"))
+
+(test-case "budget: force-distill and expand-context can coexist"
+  (define plan1
+    (rollback-plan (list (list 'amnesia-risk "low")) (make-force-distill-action "amnesia" (hasheq))))
+  (define plan2
+    (rollback-plan (list (list 'excessive-savings "low"))
+                   (make-expand-context-action "savings" (hasheq))))
+  (define state1 (advance-rollback-state (make-default-rollback-state) plan1))
+  (define state2 (advance-rollback-state state1 plan2))
+  (check-true (rollback-state-force-distill-active? state2))
+  (check-equal? (rollback-state-budget-expansion-level state2) 1)
+  ;; Both consequences apply
+  (check-true (effective-auto-distill? #f state2))
+  (check-equal? (effective-conclusion-budget 2000 state2) 4000))
