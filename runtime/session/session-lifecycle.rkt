@@ -42,7 +42,7 @@
          (only-in "../../util/hook-types.rkt" hook-result-action hook-result-payload)
          (only-in "../../util/error/errors.rkt" raise-session-error)
          "session-store.rkt"
-         (only-in "../../agent/state.rkt" current-loop-state-for-error-recovery loop-state-messages)
+         (only-in "../../util/exn.rkt" exn:fail:stream-error? exn:fail:stream-error-partial-messages)
          "../session-index/schema.rkt"
          "../session-index/mutations.rkt"
          "../session-index/query.rkt"
@@ -77,7 +77,8 @@
                   retry-exhausted?
                   retry-exhausted-attempts
                   retry-exhausted-total-delay-ms
-                  retry-exhausted-error-history)
+                  retry-exhausted-error-history
+                  retry-exhausted-original-exn)
          (only-in "../../llm/token-budget.rkt" estimate-context-tokens)
          (only-in "../context/context-pressure.rkt" check-context-pressure)
          "session-persistence.rkt"
@@ -255,14 +256,18 @@
   (with-handlers
       ([exn:fail?
         (lambda (e)
-          ;; v0.45.10 NF1: Flush any partial messages from stream errors to session.jsonl
-          ;; The loop-state is set via parameter by run-agent-turn; if a stream error
-          ;; occurred after partial text was received, state-add-message! added the
-          ;; partial message to loop-state. We flush it here before the error is
-          ;; swallowed by make-loop-result.
-          (define loop-st (current-loop-state-for-error-recovery))
-          (when (and loop-st (pair? (loop-state-messages loop-st)))
-            (append-session-entries! sess (loop-state-messages loop-st)))
+          ;; Flush partial messages from stream errors to session.jsonl.
+          ;; Recovery data travels explicitly via exn:fail:stream-error,
+          ;; replacing the former current-loop-state-for-error-recovery parameter
+          ;; (which was dead code — parameterize unwinds before handlers fire).
+          (define partial-msgs
+            (let loop ([ex e])
+              (cond
+                [(exn:fail:stream-error? ex) (exn:fail:stream-error-partial-messages ex)]
+                [(retry-exhausted? ex) (loop (retry-exhausted-original-exn ex))]
+                [else '()])))
+          (when (pair? partial-msgs)
+            (append-session-entries! sess partial-msgs))
           ;; Emit runtime.error event with classified error-type
           (define error-type (classify-error e))
           ;; A3: Include retry metadata if retries were attempted

@@ -29,7 +29,6 @@
          (only-in "event-bus.rkt" event-bus?)
          (only-in "loop-stream.rkt")
          (only-in "loop-phases.rkt" phase-msg-hook phase-stream)
-         (only-in "state.rkt" current-loop-state-for-error-recovery)
          (only-in "../util/loop-result.rkt" loop-result loop-result?))
 
 (provide (contract-out [run-streaming-phase

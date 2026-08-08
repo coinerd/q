@@ -21,7 +21,12 @@
          "../llm/provider.rkt"
          "../llm/model.rkt"
          (only-in "../llm/openai-compatible.rkt" openai-wrap-stream-error)
-         (only-in "../agent/loop-stream.rkt" stream-from-provider))
+         (only-in "../agent/loop-stream.rkt" stream-from-provider)
+         (only-in "../util/exn.rkt"
+                  exn:fail:stream-error?
+                  exn:fail:stream-error-partial-text
+                  exn:fail:stream-error-partial-messages
+                  exn:fail:stream-error-original-exn))
 
 (define stream-error-suite
   (test-suite "streaming error wrapping"
@@ -215,31 +220,64 @@
       ;; Verify NO message was added to loop-state
       (check-equal? (loop-state-messages st2) '()))
 
-    (test-case "NF1: current-loop-state-for-error-recovery parameter lifecycle"
-      ;; 1. Default is #f
-      (check-false (current-loop-state-for-error-recovery))
-      ;; 2. parameterize sets and unsets correctly
-      (define st (make-loop-state "test-session" "test-turn"))
-      (parameterize ([current-loop-state-for-error-recovery st])
-        (check-equal? (current-loop-state-for-error-recovery) st)
-        ;; 3. Messages accumulated in loop-state are visible through parameter
-        (state-add-message! st (hasheq 'role 'assistant 'content "partial text"))
-        (define recovered (current-loop-state-for-error-recovery))
-        (check-not-false recovered)
-        (define msgs (loop-state-messages recovered))
-        (check-equal? (length msgs) 1)
-        (check-equal? (hash-ref (car msgs) 'content) "partial text"))
-      ;; 4. After parameterize exits, parameter is back to #f
-      (check-false (current-loop-state-for-error-recovery)))
+    (test-case "NF1: stream-from-provider wraps error with exn:fail:stream-error"
+      ;; When stream-from-provider catches a provider error after partial text,
+      ;; it wraps the exception with recovery data instead of using a parameter.
+      (define error-prov
+        (make-provider (lambda () "wrap-mock")
+                       (lambda () (hash 'streaming #t 'token-counting #t))
+                       (lambda (req) (hasheq))
+                       (lambda (req)
+                         (generator ()
+                                    (yield (make-stream-chunk "Partial text" #f #f #f))
+                                    (raise (exn:fail "stream error" (current-continuation-marks)))))))
+      (define bus (make-event-bus))
+      (define st (make-loop-state "wrap-session" "wrap-turn"))
+      (subscribe! bus (lambda (evt) (void)))
+      (define caught
+        (with-handlers ([exn:fail? (lambda (e) e)])
+          (stream-from-provider error-prov
+                                (make-model-request '() #f (hasheq))
+                                bus
+                                "wrap-session"
+                                "wrap-turn"
+                                st
+                                #f
+                                #f)))
+      ;; Verify the exception is exn:fail:stream-error
+      (check-pred exn:fail:stream-error? caught)
+      ;; Verify it carries partial text
+      (check-equal? (exn:fail:stream-error-partial-text caught) "Partial text")
+      ;; Verify it carries partial messages from loop-state
+      (define msgs (exn:fail:stream-error-partial-messages caught))
+      (check-equal? (length msgs) 1)
+      ;; Verify it wraps the original exception
+      (check-pred exn:fail? (exn:fail:stream-error-original-exn caught)))
 
-    (test-case "NF1: parameter with nested parameterize restores correctly"
-      (define st1 (make-loop-state "s1" "t1"))
-      (define st2 (make-loop-state "s2" "t2"))
-      (parameterize ([current-loop-state-for-error-recovery st1])
-        (check-equal? (current-loop-state-for-error-recovery) st1)
-        (parameterize ([current-loop-state-for-error-recovery st2])
-          (check-equal? (current-loop-state-for-error-recovery) st2))
-        (check-equal? (current-loop-state-for-error-recovery) st1)))
+    (test-case "NF1: stream error without partial text carries #f"
+      ;; When no text was received before the error, partial-text is #f
+      (define error-prov
+        (make-provider
+         (lambda () "empty-mock")
+         (lambda () (hash 'streaming #t 'token-counting #t))
+         (lambda (req) (hasheq))
+         (lambda (req)
+           (generator () (raise (exn:fail "immediate error" (current-continuation-marks)))))))
+      (define bus (make-event-bus))
+      (define st (make-loop-state "empty-session" "empty-turn"))
+      (subscribe! bus (lambda (evt) (void)))
+      (define caught
+        (with-handlers ([exn:fail? (lambda (e) e)])
+          (stream-from-provider error-prov
+                                (make-model-request '() #f (hasheq))
+                                bus
+                                "empty-session"
+                                "empty-turn"
+                                st
+                                #f
+                                #f)))
+      (check-pred exn:fail:stream-error? caught)
+      (check-false (exn:fail:stream-error-partial-text caught)))
 
     ;; ============================================================
 
@@ -322,13 +360,12 @@
                   "partial message contains only text parts, no thinking parts"))
 
     ;; ============================================================
-    ;; v0.45.13 M1: NF1 parameter integration with stream-from-provider
+    ;; v0.45.13 M1: Recovery data attached to exception
     ;; ============================================================
 
-    (test-case "v0.45.13 M1: parameter state matches state passed to stream-from-provider"
-      ;; Verify that when stream-from-provider is called within a parameterize
-      ;; of current-loop-state-for-error-recovery, the state object is accessible
-      ;; through the parameter during error recovery.
+    (test-case "M1: stream-from-provider attaches partial messages to exception"
+      ;; Verify that stream-from-provider wraps errors with exn:fail:stream-error
+      ;; carrying partial messages from the loop-state.
       (define error-prov
         (make-provider (lambda () "integration-mock")
                        (lambda () (hash 'streaming #t 'token-counting #t))
@@ -341,29 +378,22 @@
       (define bus (make-event-bus))
       (define st (make-loop-state "int-session" "int-turn"))
       (subscribe! bus (lambda (evt) (void)))
-      ;; Set the parameter, then call stream-from-provider
-      (parameterize ([current-loop-state-for-error-recovery st])
-        ;; Verify parameter is set
-        (check-equal? (current-loop-state-for-error-recovery) st)
-        ;; Call stream-from-provider — it should error
-        (check-exn exn:fail?
-                   (lambda ()
-                     (stream-from-provider error-prov
-                                           (make-model-request '() #f (hasheq))
-                                           bus
-                                           "int-session"
-                                           "int-turn"
-                                           st
-                                           #f
-                                           #f)))
-        ;; After error, verify partial message was persisted to the same state object
-        (define msgs (loop-state-messages st))
-        (check-equal? (length msgs) 1 "partial message persisted to loop-state")
-        ;; Verify the same state is still accessible through the parameter
-        (check-equal? (current-loop-state-for-error-recovery) st)
-        (define recovered-msgs (loop-state-messages (current-loop-state-for-error-recovery)))
-        (check-equal? (length recovered-msgs) 1 "parameter state has the partial message"))
-      ;; After parameterize exits, parameter is back to #f
-      (check-false (current-loop-state-for-error-recovery)))))
+      (define caught
+        (with-handlers ([exn:fail? (lambda (e) e)])
+          (stream-from-provider error-prov
+                                (make-model-request '() #f (hasheq))
+                                bus
+                                "int-session"
+                                "int-turn"
+                                st
+                                #f
+                                #f)))
+      ;; Verify partial message was persisted to loop-state
+      (define msgs (loop-state-messages st))
+      (check-equal? (length msgs) 1 "partial message persisted to loop-state")
+      ;; Verify the exception carries the same messages
+      (check-pred exn:fail:stream-error? caught)
+      (define recovered-msgs (exn:fail:stream-error-partial-messages caught))
+      (check-equal? (length recovered-msgs) 1 "exception carries partial message"))))
 
 (run-tests stream-error-suite 'verbose)
