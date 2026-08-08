@@ -37,6 +37,7 @@
                   extract-recent-text
                   check-rollback-triggers
                   check-rollback-triggers-with-actions
+                  detect-rollback-plan
                   ws-entry->conclusion-or-self
                   state-guidance-table)
          "context-floor.rkt"
@@ -47,6 +48,7 @@
          (only-in "conclusion-ranker.rkt" rank-and-budget)
          (only-in "rollback-actions.rkt"
                   maybe-execute-action
+                  execute-rollback-plan!
                   current-force-distill-fn
                   current-expand-context-fn
                   current-revert-state-fn
@@ -340,14 +342,14 @@
   (define new-tier-a
     (append preamble-entries memory-entries conclusion-entries (tiered-context-tier-a base-tc)))
   ;; v0.76.7 W6 + v0.77.9 T2.2: Run rollback trigger checks with action execution
+  ;; v0.99.85: Rollback detection and execution extracted to pure + effectful
+  ;; functions in rollback-actions.rkt and state-aware-helpers.rkt.
   (when (current-task-state-aware-assembly?)
     (define n-conclusions (length (filter task-conclusion? conclusions)))
     (define coverage
       (if (> (length ws-messages) 0)
           (/ n-conclusions (length ws-messages))
           0.0))
-    ;; v0.78.0 G9: Compute repeat-tool-count from recent tool calls
-    ;; Count the max frequency of any single tool name in recent history
     (define repeat-count
       (if (null? recent-tool-calls)
           0
@@ -356,15 +358,14 @@
             (for ([tc (in-list recent-tool-calls)])
               (hash-set! freq tc (add1 (hash-ref freq tc 0))))
             (apply max (hash-values freq)))))
-    (define-values (warnings recommended-action)
-      (check-rollback-triggers-with-actions #:before-messages (length ws-messages)
-                                            #:after-messages (length effective-ws)
-                                            #:conclusion-coverage coverage
-                                            #:repeat-tool-count repeat-count))
-    (when (pair? warnings)
-      (log-warning "context-assembly: rollback triggers fired: ~a" warnings))
-    (when recommended-action
-      ;; v0.77.10 M2: Wire real execution callbacks
+    ;; Phase 3: Pure detection — no parameter mutation
+    (define plan
+      (detect-rollback-plan #:before-messages (length ws-messages)
+                            #:after-messages (length effective-ws)
+                            #:conclusion-coverage coverage
+                            #:repeat-tool-count repeat-count))
+    ;; Phase 4: Effectful execution — callbacks, parameter mutations, logging
+    (when plan
       (parameterize
           ([current-rollback-action-execution? #t]
            [current-force-distill-fn
@@ -375,15 +376,13 @@
             (lambda (a)
               (define current-budget (current-conclusion-token-budget))
               (define expanded (* current-budget 2))
-              (log-warning "context-assembly: expanding budget ~a → ~a" current-budget expanded)
+              (log-warning "context-assembly: expanding budget ~a -> ~a" current-budget expanded)
               (current-conclusion-token-budget expanded))]
            [current-revert-state-fn
             (lambda (a)
               (log-warning "context-assembly: revert-state action triggered: ~a"
                            (rollback-action-reason a)))])
-        (define executed (maybe-execute-action recommended-action))
-        (when executed
-          (log-warning "context-assembly: executed rollback action: ~a" executed)))))
+        (execute-rollback-plan! plan))))
   (if (and (null? preamble-entries) (null? memory-entries) (null? conclusion-entries))
       base-tc
       (tiered-context-with-tier-a base-tc new-tier-a)))

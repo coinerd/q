@@ -22,12 +22,21 @@
                   task-conclusion-text
                   task-conclusion-origin-message-ids)
          (only-in "../../util/fsm/fsm.rkt" fsm-state? fsm-state-name)
-         (only-in "rollback-actions.rkt" warnings->actions select-highest-priority-action))
+         (only-in "rollback-actions.rkt"
+                  warnings->actions
+                  select-highest-priority-action
+                  detect-rollback-plan*
+                  rollback-plan
+                  rollback-plan?
+                  rollback-plan-warnings
+                  rollback-plan-recommended-action
+                  current-loop-warning-count))
 
 (provide coerce-task-state
          extract-recent-text
          check-rollback-triggers
          check-rollback-triggers-with-actions
+         detect-rollback-plan
          ws-entry->conclusion-or-self
          state-guidance-table)
 
@@ -152,6 +161,26 @@
   (define actions (warnings->actions warnings))
   (define recommended (select-highest-priority-action actions))
   (values warnings recommended))
+
+;; ============================================================
+;; Pure rollback plan detection (Phase 3 extraction)
+;; ============================================================
+
+;; detect-rollback-plan: pure trigger evaluation that returns a rollback-plan
+;; or #f if no triggers fire. Does NOT mutate current-loop-warning-count.
+;; The caller (execute-rollback-plan!) handles the counter side effects.
+(define (detect-rollback-plan #:before-messages before-messages
+                              #:after-messages after-messages
+                              #:conclusion-coverage conclusion-coverage
+                              #:repeat-tool-count repeat-tool-count)
+  (define warnings
+    (check-rollback-triggers #:before-messages before-messages
+                             #:after-messages after-messages
+                             #:conclusion-coverage conclusion-coverage
+                             #:repeat-tool-count repeat-tool-count))
+  (if (null? warnings)
+      #f
+      (detect-rollback-plan* warnings (current-loop-warning-count))))
 
 ;; ============================================================
 ;; Conclusion-first working-set replacement (pure)

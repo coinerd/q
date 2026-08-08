@@ -45,6 +45,16 @@
 (define (make-revert-state-action reason metadata)
   (rollback-action 'revert-state reason 3 metadata))
 
+;; ── Rollback Plan (Phase 3-4 extraction) ──
+
+;; A rollback-plan bundles trigger warnings with the recommended action (or #f).
+;; This is the output of the pure detection phase (detect-rollback-plan).
+;; The effectful execution phase (execute-rollback-plan!) consumes it.
+(struct rollback-plan
+        (warnings ; (listof (list/c symbol? string?))
+         recommended-action) ; (or/c rollback-action? #f)
+  #:transparent)
+
 ;; ── Prioritization ──
 
 ;; Select the highest-severity action from a list (at most one).
@@ -232,6 +242,108 @@
              (make-warn-action w)))]
       [else (make-warn-action (if (pair? w) msg w))])))
 
+;; ── Pure Detection (Phase 3 extraction) ──
+;;
+;; detect-rollback-plan is a PURE function that evaluates trigger conditions
+;; and returns a rollback-plan (or #f if no triggers fire).
+;;
+;; It does NOT mutate current-loop-warning-count or any other parameter.
+;; The escalation logic from warnings->actions is replicated here in pure form:
+;; the caller (execute-rollback-plan!) handles the counter mutation.
+
+;; Pure version of the escalation logic from warnings->actions.
+;; Returns (values action new-warning-count) without mutating anything.
+(define (pure-warnings->action w current-warning-count)
+  (define sym
+    (if (pair? w)
+        (car w)
+        #f))
+  (define msg
+    (if (pair? w)
+        (cadr w)
+        (format "~a" w)))
+  (define (escalation-for trigger-sym)
+    (if (>= current-warning-count escalation-threshold)
+        (values (make-force-distill-action msg (hasheq 'trigger trigger-sym)) 0)
+        (values (make-warn-action msg) (add1 current-warning-count))))
+  (cond
+    [(eq? sym 'amnesia-risk)
+     (values (make-force-distill-action msg (hasheq 'trigger 'amnesia)) current-warning-count)]
+    [(eq? sym 'excessive-savings)
+     (values (make-expand-context-action msg (hasheq 'trigger 'excessive-savings))
+             current-warning-count)]
+    [(eq? sym 'exploration-loop)
+     (values (make-force-distill-action msg (hasheq 'trigger 'exploration-loop))
+             current-warning-count)]
+    [(eq? sym 'stuck-detected)
+     (values (make-expand-context-action msg (hasheq 'trigger 'stuck)) current-warning-count)]
+    [(eq? sym 'stuck-path)
+     (values (make-expand-context-action msg (hasheq 'trigger 'stuck-path)) current-warning-count)]
+    [(memq sym '(missing-tool access-denied command-failure timeout generic-error))
+     (values (make-force-distill-action msg (hasheq 'trigger sym)) current-warning-count)]
+    [(eq? sym 'task-amnesia-detected) (escalation-for 'task-amnesia-escalation)]
+    [(eq? sym 'repeat-tool) (escalation-for 'repeat-escalation)]
+    [(and (string? w) (string-contains? w "amnesia"))
+     (values (make-force-distill-action w (hasheq 'trigger 'amnesia)) current-warning-count)]
+    [(and (string? w) (string-contains? w "excessive"))
+     (values (make-expand-context-action w (hasheq 'trigger 'excessive-savings))
+             current-warning-count)]
+    [(and (string? w) (string-contains? (string-downcase w) "exploration loop"))
+     (values (make-force-distill-action w (hasheq 'trigger 'exploration-loop)) current-warning-count)]
+    [(and (string? w) (string-contains? (string-downcase w) "stuck"))
+     (values (make-expand-context-action w (hasheq 'trigger 'stuck)) current-warning-count)]
+    [(and (string? w) (string-contains? (string-downcase w) "repeat"))
+     (escalation-for 'repeat-escalation)]
+    [else (values (make-warn-action (if (pair? w) msg w)) current-warning-count)]))
+
+;; Pure trigger evaluation: computes warnings and recommended action WITHOUT
+;; mutating any parameter. Returns rollback-plan or #f if no warnings.
+;; The new-warning-count is stored inside the plan for the execution phase.
+;;
+;; NOTE: This function requires importing check-rollback-triggers from
+;; state-aware-helpers.rkt. To avoid a circular dependency, the trigger
+;; detection logic is imported lazily via the caller.
+(define (detect-rollback-plan* warnings current-warning-count)
+  (if (null? warnings)
+      #f
+      (let loop ([ws warnings]
+                 [count current-warning-count]
+                 [actions '()])
+        (cond
+          [(null? ws)
+           (define recommended (select-highest-priority-action (reverse actions)))
+           (rollback-plan warnings recommended)]
+          [else
+           (define-values (action new-count) (pure-warnings->action (car ws) count))
+           (loop (cdr ws) new-count (cons action actions))]))))
+
+;; ── Effectful Execution (Phase 4 extraction) ──
+;;
+;; execute-rollback-plan! consumes a rollback-plan and performs the side effects:
+;; - Logs warnings
+;; - Executes the recommended action via callbacks
+;; - Mutates current-loop-warning-count (escalation/reset)
+;; Returns the action type symbol if executed, #f otherwise.
+
+(define (execute-rollback-plan! plan)
+  (cond
+    [(not plan) #f]
+    [else
+     (define warnings (rollback-plan-warnings plan))
+     (define recommended (rollback-plan-recommended-action plan))
+     (when (pair? warnings)
+       (log-warning "context-assembly: rollback triggers fired: ~a" warnings))
+     (cond
+       [recommended
+        ;; Sync the loop-warning-count by replaying escalation through warnings->actions
+        ;; (which has the real side effects). This preserves existing behavior.
+        (warnings->actions warnings) ; side effect: increments/resets counter
+        (define executed (maybe-execute-action recommended))
+        (when executed
+          (log-warning "context-assembly: executed rollback action: ~a" executed))
+        executed]
+       [else #f])]))
+
 ;; ── Error-Class Detection (W11, R3/R5) ──
 ;; v0.99.73 W11: Classify tool error output into signal classes for
 ;; semantic loop detection. Maps common error patterns to symbols.
@@ -303,6 +415,12 @@
          current-expand-context-fn
          current-revert-state-fn
          rollback-action-type?
+         rollback-plan
+         rollback-plan?
+         rollback-plan-warnings
+         rollback-plan-recommended-action
+         detect-rollback-plan*
+         execute-rollback-plan!
          (contract-out
           [make-warn-action (-> string? rollback-action?)]
           [make-expand-context-action (-> string? hash? rollback-action?)]
