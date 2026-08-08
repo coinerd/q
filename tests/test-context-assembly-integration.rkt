@@ -39,7 +39,6 @@
                   current-rollback-action-execution?
                   current-force-distill-fn
                   current-expand-context-fn
-                  current-rollback-action-log
                   rollback-action-type)
          (only-in "../runtime/context-assembly/ws-evolution.rkt" evolve-working-set-for-state)
          (only-in "../runtime/context-assembly/state-aware-builder.rkt"
@@ -103,7 +102,6 @@
       (define distilled? (box #f))
       (define expanded? (box #f))
       (parameterize ([current-rollback-action-execution? #t]
-                     [current-rollback-action-log '()]
                      [current-force-distill-fn (lambda (_action)
                                                  (set-box! distilled? #t)
                                                  (list 'force-distill-executed))]
@@ -120,7 +118,6 @@
       ;; Expand-context from budget warning
       (define expanded?2 (box #f))
       (parameterize ([current-rollback-action-execution? #t]
-                     [current-rollback-action-log '()]
                      [current-force-distill-fn (lambda (_action) '())]
                      [current-expand-context-fn (lambda (_action)
                                                   (set-box! expanded?2 #t)

@@ -108,7 +108,6 @@
 
 (test-case "force-distill: callback enables auto-distillation"
   (parameterize ([current-rollback-action-execution? #t]
-                 [current-rollback-action-log '()]
                  [current-auto-distillation-enabled? #f]
                  [current-force-distill-fn (lambda (a) (current-auto-distillation-enabled? #t))])
     (check-false (current-auto-distillation-enabled?))
@@ -121,7 +120,6 @@
 
 (test-case "expand-context: callback fires and rollback-state tracks expansion"
   (parameterize ([current-rollback-action-execution? #t]
-                 [current-rollback-action-log '()]
                  [current-conclusion-token-budget 2000]
                  [current-rollback-state (make-default-rollback-state)])
     (check-equal? (current-conclusion-token-budget) 2000)
@@ -141,7 +139,6 @@
 (test-case "revert-state: callback fires when wired"
   (define executed? (box #f))
   (parameterize ([current-rollback-action-execution? #t]
-                 [current-rollback-action-log '()]
                  [current-revert-state-fn (lambda (a) (set-box! executed? #t))])
     (define result (maybe-execute-action (make-revert-state-action "danger" (hasheq))))
     (check-equal? result 'revert-state)
@@ -151,7 +148,6 @@
 
 (test-case "revert-state: no-op when callback is #f"
   (parameterize ([current-rollback-action-execution? #t]
-                 [current-rollback-action-log '()]
                  [current-revert-state-fn #f])
     (define result (maybe-execute-action (make-revert-state-action "danger" (hasheq))))
     (check-false result)))
@@ -216,38 +212,35 @@
     (check-true (> (rollback-state-budget-expansion-level (current-rollback-state)) 0)
                 "expansion level tracked in rollback state")))
 
-;; -- Test: Rollback action log records execution --
+;; -- Test: Rollback action log via apply-rollback-plan! --
 
-(test-case "rollback-log: executed actions are logged"
+(test-case "rollback-log: executed actions are logged in rollback-state"
   (parameterize ([current-rollback-action-execution? #t]
-                 [current-rollback-action-log '()])
-    (maybe-execute-action (make-force-distill-action "test" (hasheq)))
-    (maybe-execute-action (make-warn-action "minor"))
-    (define log (current-rollback-action-log))
-    (check-equal? (length log) 2)
-    (check-equal? (hash-ref (car log) 'type) 'force-distill)
-    (check-equal? (hash-ref (cadr log) 'type) 'warn-only)))
+                 [current-rollback-state (make-default-rollback-state)])
+    (apply-rollback-plan! (detect-rollback-plan/state (current-rollback-state)
+                                                      #:before-messages 10
+                                                      #:after-messages 8
+                                                      #:conclusion-coverage 0
+                                                      #:repeat-tool-count 8))
+    (define log (rollback-state-action-log (current-rollback-state)))
+    (check-equal? (length log) 1 "action logged in rollback-state")))
 
-;; -- Test: warn-only action logs without calling any callback --
+;; -- Test: warn-only action does not call callbacks --
 
-(test-case "warn-only: logs without calling callbacks"
+(test-case "warn-only: does not call force-distill callback"
   (define force-called? (box #f))
   (parameterize ([current-rollback-action-execution? #t]
-                 [current-rollback-action-log '()]
                  [current-force-distill-fn (lambda (a) (set-box! force-called? #t))])
     (define result (maybe-execute-action (make-warn-action "mild issue")))
     (check-equal? result 'warn-only)
-    (check-false (unbox force-called?) "force-distill callback should NOT be called for warn-only")
-    (check-equal? (length (current-rollback-action-log)) 1)))
+    (check-false (unbox force-called?) "force-distill callback should NOT be called for warn-only")))
 
 ;; -- Test: Rollback disabled by default --
 
 (test-case "rollback-disabled: actions not executed when flag is #f"
-  (parameterize ([current-rollback-action-execution? #f]
-                 [current-rollback-action-log '()])
+  (parameterize ([current-rollback-action-execution? #f])
     (define result (maybe-execute-action (make-force-distill-action "test" (hasheq))))
-    (check-false result)
-    (check-equal? (length (current-rollback-action-log)) 0)))
+    (check-false result)))
 
 ;; ============================================================
 ;; Phase 3: Pure Detection Tests
@@ -285,13 +278,11 @@
 ;; ============================================================
 
 (test-case "execute-rollback-plan!: no-op for #f plan"
-  (parameterize ([current-rollback-action-log '()])
-    (define result (execute-rollback-plan! #f))
-    (check-false result)))
+  (define result (execute-rollback-plan! #f))
+  (check-false result))
 
 (test-case "execute-rollback-plan!: executes force-distill and enables auto-distillation"
   (parameterize ([current-rollback-action-execution? #t]
-                 [current-rollback-action-log '()]
                  [current-auto-distillation-enabled? #f]
                  [current-force-distill-fn (lambda (a) (current-auto-distillation-enabled? #t))])
     (define plan
@@ -303,7 +294,6 @@
 
 (test-case "apply-rollback-plan!: expand-context tracks expansion"
   (parameterize ([current-rollback-action-execution? #t]
-                 [current-rollback-action-log '()]
                  [current-conclusion-token-budget 2000]
                  [current-rollback-state (make-default-rollback-state)])
     (define plan
@@ -322,7 +312,6 @@
 
 (test-case "execute-rollback-plan!: handles warn-only action"
   (parameterize ([current-rollback-action-execution? #t]
-                 [current-rollback-action-log '()]
                  [current-rollback-state (make-default-rollback-state)])
     (define plan
       (rollback-plan (list (list 'repeat-tool "3 repeats")) (make-warn-action "3 repeats")))

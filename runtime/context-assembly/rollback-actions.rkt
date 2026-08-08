@@ -58,9 +58,8 @@
 ;; ── Explicit Rollback State (cross-turn) ──
 ;;
 ;; rollback-state bundles the cross-turn consequences of rollback actions.
-;; It replaces scattered global parameters (the former
-;; loop-warning counter and current-rollback-action-log)
-;; current-rollback-action-log) with a single explicit value object.
+;; It replaces scattered global parameters (the former loop-warning counter
+;; and action log) with a single explicit value object.
 ;;
 ;; Semantic fields (not mechanical copies of parameter names):
 ;; - warning-count: loop-warning escalation accumulator (resets on escalation or FSM transition)
@@ -222,10 +221,6 @@
                            (current-expand-context-fn)
                            (current-revert-state-fn)))
 
-;; v0.77.10 M2: Action execution log for observability.
-;; Each entry is a hash with 'type, 'reason, 'timestamp.
-(define current-rollback-action-log (make-parameter '()))
-
 ;; v0.99.85: Canonical counter now lives in rollback-state.warning-count.
 ;; The API functions rollback-warning-count, record-rollback-warning!,
 ;; and reset-rollback-warning-count! are the only accessors.
@@ -238,16 +233,14 @@
 (define (execute-force-distill! action)
   (define fn (current-force-distill-fn))
   (when fn
-    (fn action))
-  (log-action! action))
+    (fn action)))
 
 ;; v0.77.10 M2: Execute expand-context action.
-;; Calls the injectable callback if available, then logs.
+;; Calls the injectable callback if available.
 (define (execute-expand-context! action)
   (define fn (current-expand-context-fn))
   (when fn
-    (fn action))
-  (log-action! action))
+    (fn action)))
 
 ;; v0.79.1 GAP-6: Execute revert-state action.
 ;; Calls the injectable callback if available, then logs.
@@ -255,26 +248,11 @@
 (define (execute-revert-state! action)
   (define fn (current-revert-state-fn))
   (when fn
-    (fn action))
-  (log-action! action))
+    (fn action)))
 
-;; Log an executed action to the rollback action log.
-;; GAP-M v0.97.12: Cap log at 100 entries (ring buffer semantics).
+;; GAP-M v0.97.12: Cap action log at 100 entries (ring buffer semantics).
+;; Used by apply-rollback-plan! for rollback-state.action-log.
 (define max-rollback-log-size 100)
-
-(define (log-action! action)
-  (define entry
-    (hasheq 'type
-            (rollback-action-type action)
-            'reason
-            (rollback-action-reason action)
-            'timestamp
-            (current-seconds)))
-  (define current-log (current-rollback-action-log))
-  (define new-log (append current-log (list entry)))
-  (current-rollback-action-log (if (> (length new-log) max-rollback-log-size)
-                                   (drop new-log (- (length new-log) max-rollback-log-size))
-                                   new-log)))
 
 ;; Execute a rollback action if execution is enabled.
 ;; v0.77.10 M2: Now dispatches to real execution functions.
@@ -296,9 +274,7 @@
     [(eq? (rollback-action-type action) 'expand-context)
      (execute-expand-context! action)
      'expand-context]
-    [(eq? (rollback-action-type action) 'warn-only)
-     (log-action! action)
-     'warn-only]
+    [(eq? (rollback-action-type action) 'warn-only) 'warn-only]
     [else (rollback-action-type action)]))
 
 ;; ── Trigger to Action Mapping ──
@@ -482,7 +458,6 @@
          current-rollback-actions-config
          make-default-rollback-config
          current-rollback-action-execution?
-         current-rollback-action-log
          escalation-threshold
          record-rollback-warning!
          reset-rollback-warning-count!
