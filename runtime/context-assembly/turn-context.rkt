@@ -6,8 +6,7 @@
 ;;
 ;; Extracted from turn-orchestrator.rkt (v0.96.0 W2) for single-responsibility.
 ;; Contains: symbol->task-state, assemble-context/pure,
-;;           prepare-turn-context-state, emit-context-assembly-events!,
-;;           current-last-task-fsm-state parameter.
+;;           prepare-turn-context-state, emit-context-assembly-events!.
 
 (require racket/format
          racket/list
@@ -82,7 +81,13 @@
          (only-in "../session/session-types.rkt"
                   agent-session-task-fsm-state
                   agent-session-task-conclusions
-                  agent-session-recent-tool-calls)
+                  agent-session-recent-tool-calls
+                  agent-session-lifecycle)
+         ;; Lifecycle state (session-owned cross-turn state)
+         (only-in "../session/lifecycle-state.rkt"
+                  lifecycle-state-prev-task-fsm-state
+                  set-lifecycle-state-prev-task-fsm-state!
+                  consume-pending-force-reset!)
          ;; Session mutation (for auto-distill persistence)
          (only-in "../session/session-mutation.rkt"
                   guarded-set-working-set-evolved!
@@ -116,9 +121,7 @@
                   task-verification
                   task-debugging))
 
-(provide current-last-task-fsm-state
-         current-pending-force-reset
-         symbol->task-state
+(provide symbol->task-state
          assemble-context/pure
          prepare-turn-context-state
          emit-context-assembly-events!
@@ -127,16 +130,6 @@
 ;; ============================================================
 ;; Task state conversion
 ;; ============================================================
-
-;; v0.79.2 GAP-2: Track last task FSM state for WS evolution old-state.
-;; Set each turn from agent-session-task-fsm-state before it gets updated.
-(define current-last-task-fsm-state (make-parameter #f))
-
-;; R0: Pending force-reset flag — set by session-events subscriber when
-;; tool.set-task-state.completed event has force-reset: #t.
-;; Checked by prepare-turn-context-state to call reset-working-set!
-;; before WS evolution. Cleared after check to avoid stale flags.
-(define current-pending-force-reset (make-parameter #f))
 
 ;; Convert a raw state symbol to the canonical fsm-state? struct.
 ;; The runtime stores task-fsm-state as raw symbols, but downstream consumers
@@ -438,16 +431,22 @@
     (guarded-set-task-conclusions! session augmented-conclusions))
   ;; R0: Check pending force-reset flag — set by session-events subscriber
   ;; when tool.set-task-state.completed event had force-reset: #t.
-  ;; When set, reset the working-set before WS evolution.
-  (when (and (current-pending-force-reset) ws-early)
-    (reset-working-set! ws-early)
-    (current-pending-force-reset #f))
+  ;; v0.99.88: Session-owned via lifecycle-state. consume-pending-force-reset!
+  ;; atomically reads+clears the flag (one-shot semantics).
+  ;; Exception semantics: consume-before-reset — if reset throws, the signal
+  ;; is consumed and will NOT retry next turn.
+  (define force-reset?
+    (and session ws-early (consume-pending-force-reset! (agent-session-lifecycle session))))
+  (when force-reset?
+    (reset-working-set! ws-early))
   ;; v0.78.2 G2: WS evolution — evolve working set on state transition
   ;; MF1 (GAP-5): Guard at call site — skip when same state to avoid
   ;; unnecessary snapshot + evolve-working-set overhead.
   ;; GAP-B v0.97.10: Removed idle guard — idle transitions must trigger
   ;; WS reset via the any→idle rule in ws-evolution.rkt.
-  (define ws-old-state (current-last-task-fsm-state))
+  ;; v0.99.88: Previous task state is session-owned via lifecycle-state.
+  (define ws-old-state
+    (and session (lifecycle-state-prev-task-fsm-state (agent-session-lifecycle session))))
   (when (and (current-ws-evolution-enabled?)
              ws-early
              session
@@ -456,14 +455,13 @@
              (or (not ws-old-state) (not (eq? ws-old-state task-state))))
     (define result
       (evolve-working-set-for-state/result ws-early ws-old-state task-state augmented-conclusions))
-    (current-last-task-fsm-state task-state)
+    (set-lifecycle-state-prev-task-fsm-state! (agent-session-lifecycle session) task-state)
     (when (and (evolution-result? result) session)
       (guarded-set-working-set-evolved! session result)))
   ;; v0.96.13 W4: Transition detection — trigger deterministic distillation on state change
   ;; Also resets the loop warning counter on state transition
   ;; v0.99.86: Reset warning count in rollback-state only (canonical).
-  ;; MF1-1 fix: Use ws-old-state (captured before WS mutation) instead of
-  ;; re-reading current-last-task-fsm-state, which was already mutated above.
+  ;; MF1-1 fix: Use ws-old-state (captured before WS mutation).
   (when (and task-state ws-old-state (not (eq? ws-old-state task-state)))
     ;; State transition detected — reset warning counter
     (reset-rollback-warning-count!))

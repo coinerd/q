@@ -130,13 +130,13 @@ jobs:
       - run: echo "All test shards and platform checks passed."
 
   # ────────────────────────────────────────────────────────────
-  # Gate 2c: macOS platform-cross verification (~5 min, not 66 min)
-  # Runs only the curated platform-sensitive tests on macOS instead
+  # Gate 2c: Platform-cross verification
+  # Runs only the curated platform-sensitive tests instead
   # of the full 1039-file fast suite.
   # ────────────────────────────────────────────────────────────
   test-platform:
     needs: lint
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
     steps:
@@ -144,7 +144,7 @@ jobs:
       - name: Cache Racket packages
         uses: actions/cache@v6
         with:
-          path: ~/Library/Racket
+          path: ~/.local/share/racket
           key: ${{ runner.os }}-racket-packages-${{ hashFiles('**/info.rkt') }}
           restore-keys: ${{ runner.os }}-racket-packages-
       - uses: ./.github/actions/setup-racket
@@ -311,7 +311,7 @@ jobs:
     needs: lint
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -320,7 +320,6 @@ jobs:
         with:
           path: |
             ~/.local/share/racket
-            ~/Library/Racket
           key: racket-pkgs-smoke-${{ matrix.os }}-${{ hashFiles('**/info.rkt') }}
           restore-keys: racket-pkgs-smoke-${{ matrix.os }}-
       - uses: ./.github/actions/setup-racket

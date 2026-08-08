@@ -83,7 +83,6 @@
                   ws-entry-message-id
                   ws-entry-token-estimate)
          (only-in "context-assembly/turn-context.rkt"
-                  current-last-task-fsm-state
                   symbol->task-state
                   assemble-context/pure
                   prepare-turn-context-state
@@ -127,8 +126,7 @@
                 (#:hook-dispatcher (or/c procedure? #f)
                                    #:state-aware? (or/c boolean? #f)
                                    #:recent-tool-calls list?)
-                (values list? (or/c hook-result? #f) tiered-context?))])
-         current-last-task-fsm-state)
+                (values list? (or/c hook-result? #f) tiered-context?))]))
 
 ;; ============================================================
 ;; ============================================================
