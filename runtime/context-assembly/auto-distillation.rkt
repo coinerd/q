@@ -108,7 +108,6 @@
   (define uncovered (find-uncovered-entries ws-message-ids conclusions))
   (cond
     [(null? uncovered) '()]
-    [(not (current-auto-distillation-enabled?)) '()]
     [(current-llm-distill-fn)
      (distill-with-llm uncovered current-state (current-llm-distill-fn) 5 content-summaries)]
     [else (generate-fallback-conclusions uncovered current-state content-summaries)]))

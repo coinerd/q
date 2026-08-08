@@ -49,10 +49,12 @@
         (check-equal? (task-conclusion-category c) 'fact)
         (check-not-false (member 'auto-distilled (task-conclusion-relevance-tags c)))))
 
-    (test-case "auto-distill disabled returns empty"
+    (test-case "auto-distill called directly returns results (caller decides)"
+      ;; v0.99.87: auto-distill no longer internally checks current-auto-distillation-enabled?
+      ;; The caller (prepare-turn-context-state) uses effective-auto-distill? to decide.
       (parameterize ([current-auto-distillation-enabled? #f])
         (define result (auto-distill '("m1") '() 'idle))
-        (check-equal? result '())))
+        (check-equal? (length result) 1)))
 
     (test-case "auto-distill enabled with uncovered entries"
       (parameterize ([current-auto-distillation-enabled? #t])

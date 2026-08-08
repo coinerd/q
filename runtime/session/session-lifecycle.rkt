@@ -523,23 +523,30 @@
         (parameterize ([current-prompt-operation-session sess]
                        ;; v0.99.86: Session-scoped rollback state.
                        ;; Parameterize from lifecycle-state so each session
-                       ;; starts with its own rollback state. Save back
-                       ;; before parameterize exits.
+                       ;; starts with its own rollback state.
                        [current-rollback-state
                         (or (lifecycle-state-rollback-st (agent-session-lifecycle sess))
                             (make-default-rollback-state))])
-          (call-with-values
-           (lambda ()
-             (run-prompt-internal sess effective-input max-iterations token-budget-threshold ep! ba!))
-           (lambda (updated-session result)
-             ;; v0.99.86: Persist rollback state back to lifecycle-state.
-             ;; This runs inside the parameterize scope, so (current-rollback-state)
-             ;; still reflects mutations from the prompt.
-             (set-lifecycle-state-rollback-st! (agent-session-lifecycle sess)
-                                               (current-rollback-state))
-             (set-box! termination-reason (loop-result-termination-reason result))
-             (set-box! emit-cleanup-turn-completed? #f)
-             (values updated-session result))))]))
+          ;; v0.99.87: Persist rollback state via dynamic-wind so it survives
+          ;; both normal and exceptional prompt exits. Ensures cross-turn
+          ;; corrective consequences commit even if a later operation raises.
+          (dynamic-wind void
+                        (lambda ()
+                          (call-with-values (lambda ()
+                                              (run-prompt-internal sess
+                                                                   effective-input
+                                                                   max-iterations
+                                                                   token-budget-threshold
+                                                                   ep!
+                                                                   ba!))
+                                            (lambda (updated-session result)
+                                              (set-box! termination-reason
+                                                        (loop-result-termination-reason result))
+                                              (set-box! emit-cleanup-turn-completed? #f)
+                                              (values updated-session result))))
+                        (lambda ()
+                          (set-lifecycle-state-rollback-st! (agent-session-lifecycle sess)
+                                                            (current-rollback-state)))))]))
    ;; Cleanup: always reset prompt-running? even on error
    ;; v0.45.14: Safety-net turn.completed ensures TUI busy? is always cleared,
    ;; even if a regression prevents normal event flow.

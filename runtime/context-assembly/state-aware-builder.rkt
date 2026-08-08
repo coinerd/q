@@ -58,7 +58,6 @@
                   current-rollback-action-log
                   current-rollback-state
                   rollback-action-reason)
-         (only-in "auto-distillation.rkt" current-auto-distillation-enabled?)
          (only-in "../../runtime/session/session-config.rkt"
                   context-assembly-options?
                   context-assembly-options-graph-conclusion-selection?
@@ -375,9 +374,7 @@
       (parameterize
           ([current-rollback-action-execution? #t]
            [current-force-distill-fn
-            (lambda (a)
-              (log-warning "context-assembly: force-distill enabling auto-distillation")
-              (current-auto-distillation-enabled? #t))]
+            (lambda (a) (log-warning "context-assembly: force-distill activated via rollback state"))]
            [current-expand-context-fn
             (lambda (a)
               (define current-budget (current-conclusion-token-budget))
