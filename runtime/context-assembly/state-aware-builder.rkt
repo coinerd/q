@@ -56,7 +56,6 @@
                   current-expand-context-fn
                   current-revert-state-fn
                   current-rollback-action-execution?
-                  current-rollback-action-log
                   current-rollback-state
                   rollback-action-reason)
          (only-in "../../runtime/session/session-config.rkt"
