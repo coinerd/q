@@ -491,6 +491,16 @@
                                                  (if force-reset-val #t #f)))))
                 #:filter (lambda (evt) (equal? (event-ev evt) "tool.set-task-state.completed")))
 
+    ;; v0.99.89: Subscribe to reflection-suggested — store on lifecycle state.
+    ;; Last-write-wins: if multiple events fire before context assembly,
+    ;; the latest payload wins (generic reminder text makes this safe).
+    (subscribe! bus
+                (lambda (evt)
+                  (define payload (event-payload evt))
+                  (set-lifecycle-state-pending-reflection-event! (agent-session-lifecycle sess)
+                                                                 payload))
+                #:filter (lambda (evt) (equal? (event-ev evt) "reflection-suggested")))
+
     ;; v0.77.1 W1.3: WS evolution flag exported for turn-orchestrator wiring
     ;; (subscriber deferred — working-set lives in turn scope, not session)
     ;;

@@ -125,7 +125,7 @@
                   step-result-action
                   step-result-new-counters
                   step-result-metadata)
-         (only-in "../../agent/state.rkt" current-reflection-event current-empty-response-retried?)
+         (only-in "../../agent/state.rkt" current-empty-response-retried?)
          (only-in "../../util/iteration/internal.rkt" assert-payload)
          (only-in "../../util/iteration/directive.rkt"
                   directive-recurse
@@ -251,9 +251,11 @@
       (emit-session-event! (loop-infra-bus infra)
                            (loop-infra-session-id infra)
                            "reflection-suggested"
-                           payload)
-      ;; v0.96.14 F3: Wire reflection event → parameter for preamble consumption
-      (current-reflection-event payload)))
+                           payload)))
+  ;; v0.99.89: Reflection event now session-owned via lifecycle-state.
+  ;; The "reflection-suggested" event handler in wire-session-event-handlers!
+  ;; writes the payload to lifecycle-state.pending-reflection-event.
+  ;; Context assembly consumes it via consume-reflection-event!.
   ;; v0.99.84: Tool-result extraction delegated to Runtime via hook parameter.
   ;; The hook is set by the wiring layer to call maybe-auto-extract-tool-results!.
   ;; Agent Core constructs the extractable messages but does not own the extraction logic.

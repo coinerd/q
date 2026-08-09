@@ -30,7 +30,9 @@
                   lifecycle-state-rollback-st
                   set-lifecycle-state-rollback-st!
                   lifecycle-state-pending-force-reset?
-                  set-lifecycle-state-pending-force-reset?!)
+                  set-lifecycle-state-pending-force-reset?!
+                  lifecycle-state-pending-reflection-event
+                  set-lifecycle-state-pending-reflection-event!)
          racket/file)
 ;; STABILITY: internal
 ;;
@@ -78,6 +80,8 @@
          set-lifecycle-state-rollback-st!
          lifecycle-state-pending-force-reset?
          set-lifecycle-state-pending-force-reset?!
+         lifecycle-state-pending-reflection-event
+         set-lifecycle-state-pending-reflection-event!
          (contract-out [session-log-path-for (-> agent-session? path?)]
                        [session-provider (-> agent-session? any/c)]
                        [session-tool-registry (-> agent-session? any/c)]

@@ -35,7 +35,6 @@
                   reset-rollback-warning-count!
                   escalation-threshold)
          (only-in "../runtime/context-assembly/state-aware-builder.rkt"
-                  current-reflection-event
                   build-state-awareness-preamble
                   check-rollback-triggers)
          (only-in "../runtime/iteration/step-executor.rkt"
@@ -144,28 +143,34 @@
 (test-case "W3.2: REFLECTION-THRESHOLD-CHARS is a positive integer"
   (check-true (exact-positive-integer? REFLECTION-THRESHOLD-CHARS)))
 
-(test-case "W3.3: current-reflection-event parameter exists and defaults to #f"
-  (check-false (current-reflection-event)))
+(test-case "W3.3: build-state-awareness-preamble accepts #:reflection-event keyword"
+  (define preamble (build-state-awareness-preamble 'exploration '() #:reflection-event #f))
+  (check-true (message? preamble)))
 
 (test-case "W3.4: preamble without reflection event — no reminder"
-  (parameterize ([current-reflection-event #f])
-    (define preamble (build-state-awareness-preamble 'exploration '()))
-    (check-true (message? preamble))
-    (define text (format "~a" (message-content preamble)))
-    (check-false (string-contains? text "reflection-suggested"))))
+  (define preamble (build-state-awareness-preamble 'exploration '()))
+  (check-true (message? preamble))
+  (define text (format "~a" (message-content preamble)))
+  (check-false (string-contains? text "reflection-suggested")))
 
 (test-case "W3.5: preamble with reflection event — includes reminder"
-  (parameterize ([current-reflection-event (hasheq 'tools '("read") 'message "Large results")])
-    (define preamble (build-state-awareness-preamble 'exploration '()))
-    (check-true (message? preamble))
-    (define text (format "~a" (message-content preamble)))
-    (check-true (string-contains? text "record_conclusion") "preamble includes reflection reminder")))
+  (define preamble
+    (build-state-awareness-preamble 'exploration
+                                    '()
+                                    #:reflection-event
+                                    (hasheq 'tools '("read") 'message "Large results")))
+  (check-true (message? preamble))
+  (define text (format "~a" (message-content preamble)))
+  (check-true (string-contains? text "record_conclusion") "preamble includes reflection reminder"))
 
-(test-case "W3.6: reflection event consumed after preamble build"
-  (parameterize ([current-reflection-event (hasheq 'tools '("read"))])
-    (define preamble (build-state-awareness-preamble 'exploration '()))
-    ;; After building preamble, the event should be cleared
-    (check-false (current-reflection-event) "reflection event cleared after consumption")))
+(test-case "W3.6: reflection event is explicit arg, not consumed-on-read"
+  ;; v0.99.89: Reflection event is now an explicit keyword argument.
+  ;; The caller consumes it from lifecycle-state before calling.
+  (define evt (hasheq 'tools '("read")))
+  (define preamble (build-state-awareness-preamble 'exploration '() #:reflection-event evt))
+  (check-true (message? preamble))
+  ;; The event value is not mutated by the preamble function
+  (check-equal? evt (hasheq 'tools '("read"))))
 
 ;; ══════════════════════════════════════════════════════════════════
 ;; W4: Transition detection infrastructure
@@ -254,13 +259,12 @@
       (and (eq? (rollback-action-type a) 'expand-context) a)))
   (check-not-false stuck-action "stuck trigger produces expand-context action"))
 
-;; F3: Reflection event wiring — current-reflection-event is settable
-(test-case "F3: current-reflection-event can be set and is consumed by preamble"
-  (parameterize ([current-reflection-event (hasheq 'tools '("read" "grep"))])
-    (check-not-false (current-reflection-event))
-    (define preamble (build-state-awareness-preamble 'implementation '()))
-    (check-true (message? preamble))
-    (define text (format "~a" (message-content preamble)))
-    (check-true (string-contains? text "record_conclusion"))
-    ;; After preamble build, event should be cleared
-    (check-false (current-reflection-event))))
+;; F3: Reflection event wiring — explicit keyword argument
+(test-case "F3: reflection event passed as keyword arg appears in preamble"
+  (define preamble
+    (build-state-awareness-preamble 'implementation
+                                    '()
+                                    #:reflection-event (hasheq 'tools '("read" "grep"))))
+  (check-true (message? preamble))
+  (define text (format "~a" (message-content preamble)))
+  (check-true (string-contains? text "record_conclusion")))
