@@ -24,7 +24,8 @@
          char-count
          count-provides
          q-dir
-         rkt-files-in-recursive)
+         rkt-files-in-recursive
+         extract-parameters)
 
 ;; ============================================================
 ;; Read-based S-expression require parser
@@ -47,8 +48,11 @@
     (define forms (port->list read (open-input-string rest)))
     (append* (for/list ([form forms])
                (cond
-                 [(and (pair? form) (eq? (car form) 'require))
-                  ;; (require x y z) — cdr gives the specs
+                 [(and (pair? form)
+                       (memq (car form)
+                             '(require require/typed
+                                       require/typed/contract)))
+                  ;; (require x y z) / (require/typed path spec ...) — cdr gives the specs
                   (if (and (pair? (cdr form)) (pair? (cadr form)))
                       ;; (require (only-in ...) x y) — flattened
                       (cdr form)
@@ -68,6 +72,11 @@
         (if (and (pair? (cdr spec)) (string? (cadr spec)))
             (list (cadr spec))
             '())]
+       [(require/typed require/typed/contract)
+        ;; (require/typed "path" spec ...) — module path is the second element
+        (if (and (pair? (cdr spec)) (string? (cadr spec)))
+            (list (cadr spec))
+            '())]
        [else (append* (map require-spec->paths (cdr spec)))])]
     [else '()]))
 
@@ -77,6 +86,51 @@
             [path (in-list (require-spec->paths spec))])
     (for/or ([prefix (in-list layer-prefixes)])
       (string-contains? path prefix))))
+
+;; Extract parameter names defined via (make-parameter ...) in a source file.
+;; Returns a list of symbols. Handles define, define/typed, and define/contract.
+;; Walks all top-level forms recursively; only parameters bound by a define
+;; whose value is a (make-parameter ...) form are returned.
+(define (extract-parameters filepath)
+  (with-handlers ([exn:fail? (lambda (e) '())])
+    (define src (file->string filepath))
+    (define lines (string-split src "\n"))
+    (define rest
+      (string-join (if (and (pair? lines) (string-prefix? (car lines) "#lang"))
+                       (cdr lines)
+                       lines)
+                   "\n"))
+    (define forms (port->list read (open-input-string rest)))
+    (define params '())
+    ;; Robust list traversal that tolerates improper (dotted) lists.
+    (define (walk-list l)
+      (let loop ([l l])
+        (when (pair? l)
+          (walk (car l))
+          (loop (cdr l)))))
+    (define (walk form)
+      (cond
+        [(pair? form)
+         (define op (car form))
+         (cond
+           [(and (memq op '(define define/typed define/contract)) (pair? (cdr form)))
+            (define name (cadr form))
+            (define value-form
+              (cond
+                [(pair? name) #f] ; function definition
+                [else
+                 (cond
+                   [(and (pair? (cddr form)) (memq op '(define/typed define/contract)))
+                    (caddr (cdr form))]
+                   [else (caddr form)])]))
+            (when (and value-form (pair? value-form) (eq? (car value-form) 'make-parameter))
+              (set! params (cons name params)))]
+           [else (void)])
+         (walk-list form)]
+        [else (void)]))
+    (for ([f (in-list forms)])
+      (walk f))
+    params))
 
 ;; ============================================================
 ;; File system helpers
