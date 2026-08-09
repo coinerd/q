@@ -180,7 +180,24 @@
                "non-string name must violate the lookup contract")
     (check-exn exn:fail:contract?
                (lambda () ((provider-host-service-unregister-provider! svc) 'symbol-name))
-               "non-string name must violate the unregister! contract")))
+               "non-string name must violate the unregister! contract"))
+
+  (test-case "P5b: contract blame lands on the extension caller"
+    (define svc (make-provider-host-service (make-provider-registry)))
+    (define (blame-message thunk)
+      (with-handlers ([exn:fail:contract? (lambda (e) (exn-message e))]
+                      [exn:fail? (lambda (e) "wrong-exn")])
+        (thunk)
+        "no-exn"))
+    (define msg
+      (blame-message (lambda ()
+                       ((provider-host-service-register-provider! svc) 42 (make-test-provider)))))
+    (check-true (string-contains? msg "blaming:")
+                (format "violation must carry a blame party: ~a" msg))
+    (check-true (string-contains? msg "test-extension-host-service-protocol.rkt")
+                (format "blame must name the extension caller module: ~a" msg))
+    (check-true (string-contains? msg "register-provider!")
+                (format "blame must name the violated operation: ~a" msg))))
 
 ;; ---------------------------------------------------------------------------
 ;; P6 — dynamic-require boundary

@@ -1,17 +1,17 @@
 # State: v0.99.88 — Extension Host/Runtime Service Boundary
 
-**Campaign status:** ACTIVE — W1 review-ready
+**Campaign status:** ACTIVE — W1 ready for PR/CI
 **Plan-ID / Hash:** generated at campaign start
 **Baseline SHA:** `0e78c51f` (v0.99.87 release)
 **Current main:** `61fc7057` (W0 merge)
 **Current wave:** W1 — Neutral Extension Host Service Protocol (#9222)
-**Next:** independent W1 review, PR/CI/merge; then W2 provider-registry
+**Next:** open W1 PR, wait for CI, squash merge; then W2 provider-registry
 service isolation from `extensions/context.rkt`
 
 | Wave | Status | PR | Merge SHA | Review | Evidence |
 |---|---|---|---|---|---|
 | W0 | ✅ DONE | #9249 | `61fc7057` | ✅ APPROVED (2 passes) | characterization 12/12; focused 257/257; Fast 15369 |
-| W1 | REVIEW | — | — | PENDING | protocol 10/10; focused 75/75; Arch 231/231; Fast 15381 |
+| W1 | READY | — | — | ✅ APPROVED | protocol 11/11; focused 76/76; Arch 231/231; Fast 15382 |
 | W2 | PENDING | — | — | — | — |
 | W3 | PENDING | — | — | — | — |
 | W4 | PENDING | — | — | — | — |

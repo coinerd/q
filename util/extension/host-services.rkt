@@ -58,14 +58,14 @@
 ;; Runtime adapter (runtime/extension-host-adapter.rkt) which closes over
 ;; the concrete provider registry; consumed through the ctx-* facade
 ;; (extensions/context.rkt) or directly by extension code.
-(struct provider-host-service (register-provider! unregister-provider! list-providers lookup-provider)
-  #:transparent)
+(struct provider-host-service
+        (register-provider! unregister-provider! list-providers lookup-provider))
 
 ;; ============================================================
 ;; Capability metadata — name, contract, lifetime, owner
 ;; ============================================================
 
-(struct host-capability-descriptor (name lifetime owner summary) #:transparent)
+(struct host-capability-descriptor (name lifetime owner summary))
 
 ;; Normative capability table for the provider-registry host service.
 ;; Contracts are stated in the struct field contracts above; this table is

@@ -1,12 +1,12 @@
 # Validation: v0.99.88 — Extension Host/Runtime Service Boundary
 
-**Status:** ACTIVE — W1 gates green; review pending
+**Status:** ACTIVE — W1 gates green; review APPROVED
 **Validated SHA:** W1 feature head (pre-review)
 
 | Wave | Focused/TDD | Fast | Specific gate | Broad/Arch | Review | Result |
 |---|---|---|---|---|---|---|
 | W0 | ✅ 257/257 (9 files) | ✅ 1053/15369 | characterization 12/12 | Arch informational | ✅ APPROVED | ✅ DONE — merged `61fc7057` |
-| W1 | ✅ 75/75 (4 files) | ✅ 1054/15381 | protocol 10/10 + Typed/dynamic-require | ✅ Arch 21/231 | PENDING | REVIEW |
+| W1 | ✅ 76/76 (4 files) | ✅ 1054/15382 | protocol 11/11 + Typed/dynamic-require | ✅ Arch 21/231 | ✅ APPROVED | READY |
 | W2 | PENDING | PENDING | negative exception probe | Broad + Arch required | PENDING | PENDING |
 | W3 | PENDING | PENDING | package + Security | Arch required | PENDING | PENDING |
 | W4 | PENDING | PENDING | Security + Smoke + Release | Broad + Arch required | PENDING | PENDING |
@@ -21,14 +21,14 @@
 
 ## W1 evidence record
 
-1. Protocol: `test-extension-host-service-protocol.rkt` → 10/10 (contracts,
+1. Protocol: `test-extension-host-service-protocol.rkt` → 11/11 (contracts,
    registry dual-run, dynamic-require, Typed Racket, compatibility facade).
 2. Focused: protocol + provider-registry + extension-context + W0
    characterization → 4 files / 75 tests.
 3. Arch: `--suite arch` → 21 files / 231 tests.
-4. Fast: `--suite fast` → 1054 files / 15381 tests.
+4. Fast: `--suite fast` → 1054 files / 15382 tests.
 5. Format: 2079 files, 0 errors, 0 warnings.
-6. Independent review: pending.
+6. Independent review: APPROVED (1 pass; 3 MINOR hardening items folded in).
 
 ## Release acceptance (W4)
 

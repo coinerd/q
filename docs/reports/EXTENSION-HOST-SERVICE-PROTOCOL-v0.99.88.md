@@ -112,7 +112,23 @@ cutover.
 - [x] Existing ctx-* facade remains behaviorally unchanged (P7).
 - [x] Contract, registry parity, fresh-namespace dynamic-require, and Typed
       Racket boundaries pinned (P1–P6c).
-- [x] Focused: 4 files / 75 tests, all green.
+- [x] Contract blame pinned to the extension caller (P5b).
+- [x] Focused: 4 files / 76 tests, all green.
 - [x] Arch: 21 files / 231 tests, all green.
-- [x] Fast: 1054 files / 15381 tests, all green.
+- [x] Fast: 1054 files / 15382 tests, all green.
 - [x] `racket scripts/lint-format.rkt`: 2079 files, 0 errors, 0 warnings.
+
+## 7. Reviewer remediation (W1)
+
+Independent review: **APPROVED** (one pass; no REQUEST_CHANGES round). Three
+non-blocking MINOR findings were folded in as hardening:
+
+1. `#:transparent` removed from `provider-host-service` and
+   `host-capability-descriptor` so the neutral structs are opaque by default,
+   matching the opaque-value boundary narrative (no test depended on
+   transparency).
+2. Capability metadata drift risk consciously accepted: descriptors carry
+   name/lifetime/owner/summary per spec; operation contracts live on the
+   struct fields. P1 pins names; P5 pins contract enforcement; P5b pins blame.
+3. P5b added: contract violations must name `blaming:` + the caller module +
+   the violated operation (`register-provider!`), guarding blame regression.
