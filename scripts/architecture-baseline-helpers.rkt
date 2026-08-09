@@ -289,7 +289,7 @@
                                                                  (eq? (car datum) 'provide)))
            (for/sum ([spec (in-list (cdr datum))]) (spec-count spec))))
 
-(define (require-path-strings source)
+(define (collected-module-path-strings source)
   (define result '())
   (define (collect-module-paths value)
     (cond
@@ -327,7 +327,7 @@
                                     #f))))
 
 (define (source-dependencies path source tracked-paths)
-  (sort (remove-duplicates (for/list ([required (in-list (require-path-strings source))]
+  (sort (remove-duplicates (for/list ([required (in-list (collected-module-path-strings source))]
                                       #:do [(define normalized (normal-require-path path required))]
                                       #:when (and normalized
                                                   (member normalized tracked-paths string=?)))
