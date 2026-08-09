@@ -62,7 +62,7 @@
   (unless (= status-code 200)
     (define body-str
       (if (bytes? body-bytes)
-          (bytes->string/utf-8 body-bytes #:error-replacement "?")
+          (bytes->string/utf-8 body-bytes #\?)
           ""))
     (raise-provider-error
      (format "HTTP ~a: ~a" status-code (substring body-str 0 (min (string-length body-str) 200)))
